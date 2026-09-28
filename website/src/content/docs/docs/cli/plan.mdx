@@ -54,6 +54,8 @@ First run (12)
 
 Seeds (1)
   waffle_types
+
+✓ Plan complete  13 selected
 ```
 
 Steady state:
@@ -71,9 +73,23 @@ Normal (12)
 
 Seeds (1)
   waffle_types
+
+✓ Plan complete  13 selected
 ```
 
 When query or schema changes are detected, the plan shows the affected models with backfill actions and cascade information.
+
+Warnings and maintenance notices, such as `migrate_from can be removed`, are listed in a `Warnings` section before the final `Plan complete` line. `sqb plan --json` output is unchanged.
+
+Work that runs before models build is listed first. [Model migrations](/docs/concepts/models/migrations) appear under `Migrations`, and in-place [column renames](/docs/concepts/models/column-migrations) under `Column migrations`:
+
+```
+Column migrations (1)
+└── fact_orders  migrate columns
+    └── amount -> revenue  rename in place
+```
+
+When a removed column and an added column look related but are not an exact rename, the schema diff shows a hint such as `similar to amount; if this is a rename, add revenue (migrate_from amount)` until the change is built.
 
 ## Missing upstream dependencies
 

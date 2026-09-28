@@ -23,7 +23,7 @@ Online: https://sqlbuild.com/docs/concepts/models/configuration/
 | `materialized` | `view`, `table`, `incremental`, `snapshot`, or a custom materialization name |
 | `tags` | Tags used by selectors |
 | `description` | Human-readable model description |
-| `columns` | Model-local column declarations or inherited-column audit augmentation |
+| `columns` | Model-local column declarations, inherited-column audit augmentation, or column renames with `migrate_from` (incremental and snapshot models; see [Column migrations](column-migrations.md)) |
 | `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
 | `enums` | Model-local enum declarations; names must begin with `_` |

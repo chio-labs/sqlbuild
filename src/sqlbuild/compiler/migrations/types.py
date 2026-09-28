@@ -82,3 +82,61 @@ class MigrationCompatibility(StrEnum):
     COMPATIBLE = "compatible"
     INCOMPATIBLE = "incompatible"
     NOT_CHECKED = "not_checked"
+
+
+class ColumnMigrationDecision(StrEnum):
+    """Per-run decision for one declared or detected column rename."""
+
+    RENAME = "rename"
+    RECORD = "record"
+    DONE = "done"
+    CONFLICT = "conflict"
+    SOURCE_MISSING = "source_missing"
+    STILL_PRODUCED = "still_produced"
+    UNSUPPORTED = "unsupported"
+
+    @property
+    def renames(self) -> bool:
+        """Return whether this decision renames the warehouse column."""
+
+        return self == ColumnMigrationDecision.RENAME
+
+    @property
+    def records_event(self) -> bool:
+        """Return whether this decision appends a column migration event."""
+
+        return self in _RECORDING_COLUMN_DECISIONS
+
+    @property
+    def blocks_build(self) -> bool:
+        """Return whether this decision stops a build before any execution."""
+
+        return self in _BLOCKING_COLUMN_DECISIONS
+
+    @property
+    def label(self) -> str:
+        """Return the human-readable plan label for this decision."""
+
+        return _COLUMN_DECISION_LABELS[self]
+
+
+_RECORDING_COLUMN_DECISIONS: frozenset[ColumnMigrationDecision] = frozenset(
+    {ColumnMigrationDecision.RENAME, ColumnMigrationDecision.RECORD}
+)
+_BLOCKING_COLUMN_DECISIONS: frozenset[ColumnMigrationDecision] = frozenset(
+    {
+        ColumnMigrationDecision.CONFLICT,
+        ColumnMigrationDecision.SOURCE_MISSING,
+        ColumnMigrationDecision.STILL_PRODUCED,
+        ColumnMigrationDecision.UNSUPPORTED,
+    }
+)
+_COLUMN_DECISION_LABELS: dict[ColumnMigrationDecision, str] = {
+    ColumnMigrationDecision.RENAME: "rename in place",
+    ColumnMigrationDecision.RECORD: "already renamed, record",
+    ColumnMigrationDecision.DONE: "done",
+    ColumnMigrationDecision.CONFLICT: "conflict",
+    ColumnMigrationDecision.SOURCE_MISSING: "source missing",
+    ColumnMigrationDecision.STILL_PRODUCED: "source still produced",
+    ColumnMigrationDecision.UNSUPPORTED: "unsupported",
+}

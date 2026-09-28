@@ -110,7 +110,7 @@ def _normalized_query_sql(
         ).to_dict()
     except polyglot.PolyglotError:
         return None
-    stripped: Any = _strip_formatting(parsed)
+    stripped: Any = strip_ast_formatting(parsed)
     if not _has_unambiguous_local_scopes(stripped):
         return None
     definitions: list[tuple[str, bool]] = _local_names(stripped)
@@ -130,15 +130,17 @@ def _ref_placeholder(*, identity: str) -> str:
     return f"{MIGRATION_REF_PLACEHOLDER_PREFIX}{digest}"
 
 
-def _strip_formatting(node: Any) -> Any:
+def strip_ast_formatting(node: Any) -> Any:
+    """Drop source spans and comments from a parsed SQL tree."""
+
     if isinstance(node, dict):
         return {
-            key: [] if key.endswith(_COMMENTS_SUFFIX) else _strip_formatting(value)
+            key: [] if key.endswith(_COMMENTS_SUFFIX) else strip_ast_formatting(value)
             for key, value in node.items()
             if key != _SPAN_KEY
         }
     if isinstance(node, list):
-        return [_strip_formatting(value) for value in node]
+        return [strip_ast_formatting(value) for value in node]
     return node
 
 

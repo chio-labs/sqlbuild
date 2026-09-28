@@ -4,11 +4,22 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from sqlbuild.compiler.migrations.main.deterministic_column_event_id import (
+    deterministic_column_migration_event_id,
+)
 from sqlbuild.compiler.migrations.main.deterministic_event_id import (
     deterministic_migration_event_id,
 )
-from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
-from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
+from sqlbuild.compiler.migrations.models import (
+    ColumnMigrationEvent,
+    MigrationEvent,
+    MigrationRelation,
+)
+from sqlbuild.compiler.migrations.types import (
+    ColumnMigrationDecision,
+    MigrationDecision,
+    MigrationDiscovery,
+)
 
 _STARTED_AT: datetime = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -37,6 +48,30 @@ def migration_event(*, origin: str, destination: str, day: int) -> MigrationEven
         origin_version_hash=f"hash-{origin}",
         discovery=MigrationDiscovery.MANUAL,
         decision=MigrationDecision.MIGRATE,
+        run_id=f"run-{day}",
+        created_at=_STARTED_AT + timedelta(days=day),
+    )
+
+
+def column_migration_event(*, origin: str, destination: str, day: int) -> ColumnMigrationEvent:
+    """Return a manual column rename on main.fct_orders recorded on the given day."""
+
+    relation: MigrationRelation = main_relation("fct_orders")
+    return ColumnMigrationEvent(
+        event_id=deterministic_column_migration_event_id(
+            run_id=f"run-{day}",
+            target_name="dev",
+            relation=relation,
+            origin_column=origin,
+            destination_column=destination,
+        ),
+        target_name="dev",
+        model_name="fct_orders",
+        relation=relation,
+        origin_column=origin,
+        destination_column=destination,
+        discovery=MigrationDiscovery.MANUAL,
+        decision=ColumnMigrationDecision.RENAME,
         run_id=f"run-{day}",
         created_at=_STARTED_AT + timedelta(days=day),
     )

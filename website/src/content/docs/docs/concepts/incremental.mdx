@@ -382,3 +382,5 @@ Controls how schema differences are handled at execution time when the increment
 | `sync_all_columns` | Add, drop, and alter columns to match the delta |
 | `ignore` | Log and continue without schema changes |
 | `fail` | Reject the build with an error |
+
+Columns are compared by name, so a renamed column looks like one column removed and one added. [Column migrations](/docs/concepts/models/column-migrations) rename the warehouse column in place before `on_schema_change` runs, so its history keeps its values; the policy then applies only to the differences that remain. Pure renames such as `amount` becoming `amount AS revenue` are detected automatically, and `sqb plan` suggests `migrate_from` for near matches.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+from sqlbuild.compiler.planner._helpers.migrations.columns import plan_column_migrations
 from sqlbuild.compiler.planner._helpers.migrations.planning import plan_model_migrations
 from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
@@ -11,6 +12,7 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
 )
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
+    ColumnMigrationPlanning,
     CursorSnapshotScope,
     DeferralInputs,
     ModelMigrationPlanning,
@@ -73,14 +75,33 @@ def gather_planner_warehouse_state(
         project_config=runtime.project_config,
         local_config=runtime.local_config,
     )
+    columns: ColumnMigrationPlanning = plan_column_migrations(
+        runtime=runtime,
+        scope=scopes.selected_scope,
+        snapshot=migrations.snapshot,
+        full_refresh_model_names=effectively_full_refreshed_model_names(
+            project=runtime.project,
+            cli_full_refresh=overrides.full_refresh,
+        ),
+        physical_relations={
+            entry.model_name: entry.origin.qualified_name or entry.origin.name
+            for entry in migrations.entries
+            if entry.decision.moves_data
+        },
+        overrides=overrides,
+        deferral=deferral,
+        source_columns=inspection_relations.source_warehouse_columns,
+    )
     if runtime.on_progress is not None:
         runtime.on_progress(
             f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)"
         )
         runtime.on_progress("Generating plan...")
     return PlannerWarehouseState(
-        snapshot=migrations.snapshot,
+        snapshot=columns.snapshot,
         inspection_relations=inspection_relations,
         migration_entries=migrations.entries,
-        migration_warnings=migrations.warnings,
+        migration_warnings=(*migrations.warnings, *columns.warnings),
+        column_migration_entries=columns.entries,
+        column_rename_hints=columns.hints,
     )

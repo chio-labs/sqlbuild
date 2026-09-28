@@ -6,6 +6,13 @@
 
 Online: https://sqlbuild.com/docs/cli/plan/
 
+## Contents
+
+- Usage
+- Flags
+- Output
+- Missing upstream dependencies
+
 Shows the execution plan without making any changes. Useful for inspecting change detection, backfill policies, and selector scope before building.
 
 ## Usage
@@ -55,6 +62,8 @@ First run (12)
 
 Seeds (1)
   waffle_types
+
+✓ Plan complete  13 selected
 ```
 
 Steady state:
@@ -72,9 +81,23 @@ Normal (12)
 
 Seeds (1)
   waffle_types
+
+✓ Plan complete  13 selected
 ```
 
 When query or schema changes are detected, the plan shows the affected models with backfill actions and cascade information.
+
+Warnings and maintenance notices, such as `migrate_from can be removed`, are listed in a `Warnings` section before the final `Plan complete` line. `sqb plan --json` output is unchanged.
+
+Work that runs before models build is listed first. [Model migrations](../concepts/models/migrations.md) appear under `Migrations`, and in-place [column renames](../concepts/models/column-migrations.md) under `Column migrations`:
+
+```
+Column migrations (1)
+└── fact_orders  migrate columns
+    └── amount -> revenue  rename in place
+```
+
+When a removed column and an added column look related but are not an exact rename, the schema diff shows a hint such as `similar to amount; if this is a rename, add revenue (migrate_from amount)` until the change is built.
 
 ## Missing upstream dependencies
 

@@ -125,3 +125,125 @@ def migration_events(*, project_dir: Path) -> tuple[tuple[str, str, str], ...]:
             ),
         )
     )
+
+
+_REPLAY_LINES: dict[bool, str] = {True: "  replay_on_change full,\n", False: ""}
+
+
+def fct_orders_sql(*, columns: str, extra_config: str = "", replay: bool = True) -> str:
+    """Return an incremental orders fact model projecting the given value columns."""
+
+    return (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+        f"{_REPLAY_LINES[replay]}"
+        f"{extra_config}"
+        ");\n\n"
+        f'SELECT order_id, order_date, {columns} FROM __source("raw_orders")\n'
+    )
+
+
+def write_fct_orders_project(*, tmp_path: Path, model_sql: str) -> Path:
+    """Write a project containing exactly the incremental orders fact model."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="orders_project",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_TOML,
+            "sources/raw.yml": _SOURCES_YML,
+            "models/fct_orders.sql": model_sql,
+        },
+    )
+
+
+def load_raw_order_amounts(
+    *,
+    project_dir: Path,
+    last_day: int,
+    changed_day: int = 0,
+    failing_day: int = 0,
+) -> None:
+    """Replace raw orders with a view whose amounts can change or fail for one day."""
+
+    amount: str = (
+        f"CASE WHEN i = {failing_day} THEN CAST('broken' AS BIGINT) "
+        f"WHEN i = {changed_day} THEN 999 ELSE 100 + i END"
+    )
+    execute_duckdb(db_path=project_dir / DATABASE_FILE, sql="DROP VIEW IF EXISTS main.raw_orders")
+    execute_duckdb(
+        db_path=project_dir / DATABASE_FILE,
+        sql=(
+            "CREATE VIEW main.raw_orders AS SELECT i AS order_id, "
+            "TIMESTAMP '2026-01-01' + to_days(CAST(i - 1 AS INTEGER)) AS order_date, "
+            f"{amount} AS amount FROM range(1, {last_day + 1}) AS t(i)"
+        ),
+    )
+
+
+def plan_payload(*, project_dir: Path) -> dict[str, Any]:
+    """Run sqb plan --json in a subprocess and parse stdout."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--json"), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return json.loads(result.stdout)
+
+
+def plan_output(*, project_dir: Path) -> str:
+    """Run sqb plan in a subprocess and return its text output."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout
+
+
+def fct_order_values(*, project_dir: Path, column: str) -> tuple[tuple[int, int], ...]:
+    """Return (order_id, value) for every built order."""
+
+    return tuple(
+        (int(row[0]), int(row[1]))
+        for row in query_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=f"SELECT order_id, {column} FROM main.fct_orders ORDER BY 1",
+        )
+    )
+
+
+def fct_order_columns(*, project_dir: Path) -> tuple[str, ...]:
+    """Return the physical columns of the orders fact table in order."""
+
+    return tuple(
+        str(row[0])
+        for row in query_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=(
+                "SELECT column_name FROM information_schema.columns WHERE table_schema = 'main' "
+                "AND table_name = 'fct_orders' ORDER BY ordinal_position"
+            ),
+        )
+    )
+
+
+def column_migration_events(*, project_dir: Path) -> tuple[tuple[str, str, str, str], ...]:
+    """Return (origin, destination, discovery, decision) for every recorded column rename."""
+
+    return tuple(
+        (str(row[0]), str(row[1]), str(row[2]), str(row[3]))
+        for row in query_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=(
+                "SELECT origin_column, destination_column, discovery, decision "
+                "FROM main._sqlbuild_column_migrations ORDER BY created_at, event_id"
+            ),
+        )
+    )

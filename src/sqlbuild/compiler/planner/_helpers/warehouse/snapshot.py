@@ -134,6 +134,13 @@ class _CursorModelInfo:
     has_start_override: bool = False
     cursor_watermark_mode: CursorWatermarkMode = CursorWatermarkMode.ALL
     microbatch_strategy: str | None = None
+    origin_cursor_column: str | None = None
+
+    @property
+    def physical_cursor_column(self) -> str:
+        """Return the target column holding the cursor now, before any pending rename."""
+
+        return self.origin_cursor_column or self.cursor_column
 
 
 @dataclass(frozen=True)
@@ -148,6 +155,8 @@ class _CursorGatherInputs:
     start_cursor_config: StartCursorsConfig | None
     cursor_overrides: CursorOverrides | None
     target_relation_overrides: dict[str, str] | None = None
+    origin_cursor_column_overrides: dict[str, str] | None = None
+    existing_columns: dict[str, tuple[ColumnInfo, ...]] | None = None
 
 
 def build_warehouse_snapshot(
@@ -275,6 +284,7 @@ def gather_warehouse_snapshot(
                 cursor_scope.start_cursor_config if cursor_scope is not None else None
             ),
             cursor_overrides=(cursor_scope.cursor_overrides if cursor_scope is not None else None),
+            existing_columns=columns,
         ),
     )
 
@@ -299,8 +309,9 @@ def gather_redirected_cursor_snapshots(
     full_refresh_model_names: frozenset[str],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     on_progress: Callable[[str], None] | None = None,
+    origin_cursor_columns: dict[str, str] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
-    """Gather cursor snapshots for models whose target history lives in another relation."""
+    """Gather cursor snapshots for models whose history lives in another relation or column."""
 
     if not target_relations:
         return {}
@@ -324,6 +335,7 @@ def gather_redirected_cursor_snapshots(
             start_cursor_config=cursor_scope.start_cursor_config,
             cursor_overrides=cursor_scope.cursor_overrides,
             target_relation_overrides=target_relations,
+            origin_cursor_column_overrides=origin_cursor_columns,
         ),
     )
     model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
@@ -759,7 +771,15 @@ def _collect_cursor_models(
             and target_relation_info is not None
             and target_relation_info.name == model.name
         ):
-            target_tag = f"{model.name}__target__max"
+            target_tag = (
+                f"{model.name}__target__max"
+                if _target_has_cursor_column(
+                    model_name=model.name,
+                    cursor_column=cursor_column,
+                    existing_columns=inputs.existing_columns,
+                )
+                else None
+            )
             target_relation = model.destination.qualified_name
 
         cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
@@ -840,6 +860,7 @@ def _collect_cursor_models(
                 model_name=model.name,
                 target_tag=target_tag,
                 target_relation=target_relation,
+                origin_cursor_column=(inputs.origin_cursor_column_overrides or {}).get(model.name),
                 cursor_column=cursor_column,
                 upstreams=tuple(upstreams),
                 cursor_type=cursor_type,
@@ -871,6 +892,29 @@ def _collect_cursor_models(
     return cursor_models
 
 
+def _target_has_cursor_column(
+    *,
+    model_name: str,
+    cursor_column: str,
+    existing_columns: dict[str, tuple[ColumnInfo, ...]] | None,
+) -> bool:
+    """Return whether the target may hold the cursor column, skipping reads known to fail."""
+
+    columns: tuple[ColumnInfo, ...] | None = (existing_columns or {}).get(model_name)
+    if not columns:
+        return True
+    wanted: str = cursor_column.strip('"`[]').lower()
+    if any(column.name.strip('"`[]').lower() == wanted for column in columns):
+        return True
+    log_debug_event(
+        logger=_DEBUG_LOGGER,
+        message="target relation lacks the cursor column; skipping its cursor bounds read",
+        sqlbuild_model=model_name,
+        sqlbuild_cursor_column=cursor_column,
+    )
+    return False
+
+
 def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_PhysicalCursorQuery]:
     """Group logical cursor requests by physical relation and column."""
 
@@ -880,7 +924,7 @@ def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_Physic
         if info.target_tag is not None and info.target_relation is not None:
             target_key: tuple[str, str, str] = (
                 info.target_relation,
-                info.cursor_column,
+                info.physical_cursor_column,
                 info.cursor_type or CursorType.TIMESTAMP,
             )
             target_tags: tuple[list[str], list[str]] = grouped_tags.setdefault(target_key, ([], []))
@@ -1086,7 +1130,7 @@ def _gather_eligible_target_maxes(
         horizon_is_date: bool = isinstance(horizon, DateValue)
         eligible_sql: str = adapter.render_max_cursor_at_or_before(
             relation=info.target_relation,
-            cursor_column=info.cursor_column,
+            cursor_column=info.physical_cursor_column,
             maximum_allowed=render(value=horizon),
             cursor_type=info.cursor_type,
             is_date=horizon_is_date,

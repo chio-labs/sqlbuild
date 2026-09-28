@@ -97,6 +97,8 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
+    DELTA_COLUMN_MAPPING_NAME_MODE,
+    DELTA_COLUMN_MAPPING_PROPERTY,
     DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS,
     DELTA_DEFAULT_LOG_RETENTION_DAYS,
     DELTA_RELATION_FORMAT,
@@ -424,6 +426,20 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
         return build_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_column_migration_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        from sqlbuild.compiler.migrations.main.column_create_table_sql import (
+            build_column_migration_state_create_table_sql,
+        )
+
+        return build_column_migration_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -1810,6 +1826,21 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             for column_name in column_names
         )
 
+    def render_rename_column(
+        self, *, destination: str, old_name: str, new_name: str
+    ) -> tuple[str, ...]:
+        from sqlbuild.adapter.contract.main.render_rename_column_sql import (
+            render_alter_rename_column_sql,
+        )
+
+        return (
+            render_alter_rename_column_sql(
+                destination=destination,
+                old_identifier=self.render_exact_identifier(old_name),
+                new_identifier=self.render_identifier(new_name),
+            ),
+        )
+
     def render_alter_column_types(
         self,
         *,
@@ -2229,6 +2260,53 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement: str
         for statement in statements:
             self.execute(connection=connection, sql=statement)
+
+    def rename_column(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        old_name: str,
+        new_name: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        reason: str | None = self.column_rename_unavailable_reason(
+            connection=connection, destination=destination
+        )
+        if reason is not None:
+            raise AdapterUserError(message=reason)
+        statements: tuple[str, ...] = self.render_rename_column(
+            destination=destination, old_name=old_name, new_name=new_name
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
+
+    def column_rename_unavailable_reason(self, *, connection: Any, destination: str) -> str | None:
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=f"SHOW TBLPROPERTIES {destination} ('{DELTA_COLUMN_MAPPING_PROPERTY}')",
+        ).fetchall()
+        mode: str | None = next(
+            (
+                str(row[1]).strip().lower()
+                for row in rows
+                if len(row) > 1 and str(row[0]) == DELTA_COLUMN_MAPPING_PROPERTY
+            ),
+            None,
+        )
+        if mode == DELTA_COLUMN_MAPPING_NAME_MODE:
+            return None
+        return (
+            f"Databricks renames a column in place only when the Delta table uses column "
+            f"mapping ('{DELTA_COLUMN_MAPPING_PROPERTY}' = '{DELTA_COLUMN_MAPPING_NAME_MODE}'), "
+            f"and {destination} has {'no column mapping' if mode is None else repr(mode)}. "
+            f"Enable it with ALTER TABLE {destination} SET TBLPROPERTIES "
+            f"('{DELTA_COLUMN_MAPPING_PROPERTY}' = '{DELTA_COLUMN_MAPPING_NAME_MODE}', "
+            "'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5'), which upgrades "
+            "the table protocol, or full-refresh the model"
+        )
 
     def alter_column_types(
         self,

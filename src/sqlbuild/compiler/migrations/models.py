@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
+from sqlbuild.compiler.migrations.types import (
+    ColumnMigrationDecision,
+    MigrationDecision,
+    MigrationDiscovery,
+)
 
 
 @dataclass(frozen=True)
@@ -56,3 +60,34 @@ class MigrationEvent:
         """Return whether this event names the relation as origin or destination."""
 
         return self.origin.matches(relation) or self.destination.matches(relation)
+
+
+@dataclass(frozen=True)
+class ColumnMigrationEvent:
+    """One immutable fact that a column of a model relation was renamed in place."""
+
+    event_id: str
+    target_name: str | None
+    model_name: str
+    relation: MigrationRelation
+    origin_column: str
+    destination_column: str
+    discovery: MigrationDiscovery
+    decision: ColumnMigrationDecision
+    run_id: str
+    created_at: datetime
+
+    def mentions(self, *, relation: MigrationRelation, columns: frozenset[str]) -> bool:
+        """Return whether this event renamed one of the columns of the relation."""
+
+        return self.relation.matches(relation) and bool(
+            {self.origin_column.lower(), self.destination_column.lower()} & columns
+        )
+
+    def renamed(self, *, origin_column: str, destination_column: str) -> bool:
+        """Return whether this event renamed exactly this origin column to this destination."""
+
+        return (
+            self.origin_column.lower() == origin_column.lower()
+            and self.destination_column.lower() == destination_column.lower()
+        )

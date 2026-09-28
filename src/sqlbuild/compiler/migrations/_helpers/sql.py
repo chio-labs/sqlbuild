@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -57,22 +57,44 @@ def build_existing_event_sql(
     *, event: MigrationEvent, render_qualified_name: Callable[..., str | None]
 ) -> str:
     table: str = _event_table(event=event, render_qualified_name=render_qualified_name)
-    event_id_literal: str = render_state_sql_literal(
-        value=event.event_id, declared_type=StateSqlValueType.STRING
-    )
-    return f"SELECT event_id FROM {table} WHERE event_id = {event_id_literal}"
+    return render_event_exists_sql(table=table, event_id=event.event_id)
 
 
 def build_insert_sql(
     *, event: MigrationEvent, render_qualified_name: Callable[..., str | None]
 ) -> str:
     table: str = _event_table(event=event, render_qualified_name=render_qualified_name)
-    values: tuple[object | None, ...] = _event_values(event)
-    literals: str = ", ".join(
-        render_state_sql_literal(value=value, declared_type=MIGRATION_COLUMN_TYPES[column])
-        for column, value in zip(MIGRATION_COLUMNS, values, strict=True)
+    return render_event_insert_sql(
+        table=table,
+        columns=MIGRATION_COLUMNS,
+        column_types=MIGRATION_COLUMN_TYPES,
+        values=_event_values(event),
     )
-    return f"INSERT INTO {table} ({', '.join(MIGRATION_COLUMNS)}) VALUES ({literals})"
+
+
+def render_event_exists_sql(*, table: str, event_id: str) -> str:
+    """Render the lookup that makes an append-only event write idempotent."""
+
+    event_id_literal: str = render_state_sql_literal(
+        value=event_id, declared_type=StateSqlValueType.STRING
+    )
+    return f"SELECT event_id FROM {table} WHERE event_id = {event_id_literal}"
+
+
+def render_event_insert_sql(
+    *,
+    table: str,
+    columns: tuple[str, ...],
+    column_types: Mapping[str, StateSqlValueType],
+    values: tuple[object | None, ...],
+) -> str:
+    """Render one append-only event row as INSERT ... VALUES with typed literals."""
+
+    literals: str = ", ".join(
+        render_state_sql_literal(value=value, declared_type=column_types[column])
+        for column, value in zip(columns, values, strict=True)
+    )
+    return f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({literals})"
 
 
 def _event_table(*, event: MigrationEvent, render_qualified_name: Callable[..., str | None]) -> str:
@@ -96,27 +118,20 @@ def build_read_sql(
 
 def decode_event_row(row: tuple[Any, ...]) -> MigrationEvent:
     values: dict[str, Any] = dict(zip(MIGRATION_COLUMNS, row, strict=False))
-    raw_created_at: Any = values["created_at"]
-    created_at: datetime = (
-        raw_created_at
-        if isinstance(raw_created_at, datetime)
-        else datetime.fromisoformat(str(raw_created_at))
-    )
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=UTC)
+    created_at: datetime = decode_event_timestamp(values["created_at"])
     return MigrationEvent(
         event_id=str(values["event_id"]),
-        target_name=_optional_text(values["target_name"]),
-        origin_model=_optional_text(values["origin_model"]),
+        target_name=optional_text(values["target_name"]),
+        origin_model=optional_text(values["origin_model"]),
         origin=MigrationRelation(
-            database=_optional_text(values["origin_database"]),
-            schema=_optional_text(values["origin_schema"]),
+            database=optional_text(values["origin_database"]),
+            schema=optional_text(values["origin_schema"]),
             name=str(values["origin_name"]),
         ),
         destination_model=str(values["destination_model"]),
         destination=MigrationRelation(
-            database=_optional_text(values["destination_database"]),
-            schema=_optional_text(values["destination_schema"]),
+            database=optional_text(values["destination_database"]),
+            schema=optional_text(values["destination_schema"]),
             name=str(values["destination_name"]),
         ),
         origin_version_hash=str(values["origin_version_hash"] or ""),
@@ -147,5 +162,16 @@ def _event_values(event: MigrationEvent) -> tuple[object | None, ...]:
     )
 
 
-def _optional_text(value: object | None) -> str | None:
+def decode_event_timestamp(raw: object) -> datetime:
+    """Decode a stored event timestamp as an aware UTC datetime."""
+
+    created_at: datetime = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw))
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    return created_at
+
+
+def optional_text(value: object | None) -> str | None:
+    """Return a stored nullable text value as a string or None."""
+
     return None if value is None else str(value)

@@ -775,6 +775,16 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             for col in columns
         )
 
+    def render_rename_column(
+        self, *, destination: str, old_name: str, new_name: str
+    ) -> tuple[str, ...]:
+        """Render SQL that renames one table column in place, keeping its data."""
+
+        return (
+            f"ALTER TABLE {destination} RENAME COLUMN {self.render_identifier(old_name)} "
+            f"TO {self.render_identifier(new_name)}",
+        )
+
     def render_merge(
         self,
         *,
@@ -1349,6 +1359,23 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         raise AdapterUserError(message="drop_columns requires an engine-specific implementation")
+
+    def rename_column(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        old_name: str,
+        new_name: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        raise AdapterUserError(message="rename_column requires an engine-specific implementation")
+
+    def column_rename_unavailable_reason(self, *, connection: Any, destination: str) -> str | None:
+        """Return why this table cannot rename a column in place, or None when it can."""
+
+        del connection, destination
+        return None
 
     def alter_column_types(
         self,
@@ -2126,6 +2153,23 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         )
 
         return build_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_create_column_migration_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        """Render DDL that creates the column migration event table when it is missing."""
+
+        from sqlbuild.compiler.migrations.main.column_create_table_sql import (
+            build_column_migration_state_create_table_sql,
+        )
+
+        return build_column_migration_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

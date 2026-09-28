@@ -9,12 +9,15 @@ from typing import cast
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_named_bool import optional_named_bool
 from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
-from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
+from sqlbuild.compiler.compile.constants import COLUMN_MIGRATE_FROM_KEY, NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn, SourceLocation
 
 type _SchemaColumnParseError = type[CompileInputError] | type[DeclarationParseError]
+
+_SCHEMA_COLUMN_KEYS: frozenset[str] = frozenset({"type", "nullable", "description", "audits"})
+_MODEL_COLUMN_KEYS: frozenset[str] = _SCHEMA_COLUMN_KEYS | {COLUMN_MIGRATE_FROM_KEY}
 
 
 def parse_schema_columns(
@@ -25,6 +28,7 @@ def parse_schema_columns(
     error_class: _SchemaColumnParseError,
     column_locations: dict[str, SourceLocation] | None = None,
     require_columns: bool = False,
+    allow_migrate_from: bool = False,
 ) -> tuple[SchemaColumn, ...]:
     """Parse one MODEL or SCHEMA columns mapping into shared contract columns."""
 
@@ -58,12 +62,10 @@ def parse_schema_columns(
                 f"{file_path} {label} column '{raw_column_name}' metadata must be a mapping"
             )
         column_metadata: dict[str, object] = cast(dict[str, object], raw_column_metadata)
-        unknown_keys: set[str] = set(column_metadata) - {
-            "type",
-            "nullable",
-            "description",
-            "audits",
-        }
+        allowed_keys: frozenset[str] = (
+            _MODEL_COLUMN_KEYS if allow_migrate_from else _SCHEMA_COLUMN_KEYS
+        )
+        unknown_keys: set[str] = set(column_metadata) - allowed_keys
         if unknown_keys:
             raise error_class(
                 f"{file_path} {label} column '{raw_column_name}' has unknown metadata keys: "
@@ -122,6 +124,13 @@ def parse_schema_columns(
                 ),
                 audits=audits,
                 location=column_location,
+                migrate_from=optional_named_string(
+                    raw_value=column_metadata.get(COLUMN_MIGRATE_FROM_KEY),
+                    file_path=file_path,
+                    label=f"{label} column '{raw_column_name}'",
+                    key=COLUMN_MIGRATE_FROM_KEY,
+                    error_class=error_class,
+                ),
             )
         )
     return tuple(parsed_columns)

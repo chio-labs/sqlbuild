@@ -8,7 +8,7 @@ Online: https://sqlbuild.com/docs/concepts/models/migrations/
 
 Renaming an incremental or snapshot model normally means rebuilding it from scratch under the new name, which loses any history the source data can no longer reproduce. A model migration moves the existing relation's data to the new name instead, then continues building incrementally.
 
-Migrations apply to incremental and snapshot models.
+Migrations apply to incremental and snapshot models. To keep a column's history when you rename the column, see [Column migrations](column-migrations.md).
 
 ## Declaring a migration
 

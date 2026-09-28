@@ -80,3 +80,5 @@ MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
 )
 SNAPSHOT_DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
 SNAPSHOT_DEFAULT_VALID_TO_COLUMN: str = "valid_to"
+SOURCE_INPUT_FUNCTION: str = "__source"
+REF_INPUT_FUNCTION: str = "__ref"

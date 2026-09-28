@@ -39,6 +39,6 @@ def write_plan_command_output(
             display_options=display_options,
             python_plan_entries=pipeline_result.python_plan_entries,
             include_direct_freshness_diagnostics=(False),
+            include_completion=True,
         )
-        + "\n"
     )

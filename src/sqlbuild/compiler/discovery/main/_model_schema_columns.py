@@ -20,6 +20,7 @@ def parse_schema_columns(
     error_class: type[CompileInputError] | type[DeclarationParseError],
     column_locations: dict[str, SourceLocation] | None = None,
     require_columns: bool = False,
+    allow_migrate_from: bool = False,
 ) -> tuple[SchemaColumn, ...]:
     """Parse authored model columns through the discovery-owned implementation."""
 
@@ -30,4 +31,5 @@ def parse_schema_columns(
         error_class=error_class,
         column_locations=column_locations,
         require_columns=require_columns,
+        allow_migrate_from=allow_migrate_from,
     )

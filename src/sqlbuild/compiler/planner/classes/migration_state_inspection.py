@@ -10,9 +10,17 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME
+from sqlbuild.compiler.migrations.constants import (
+    COLUMN_MIGRATION_TABLE_NAME,
+    MIGRATION_TABLE_NAME,
+)
+from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
 from sqlbuild.compiler.migrations.main._read_events import read_migration_events
-from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
+from sqlbuild.compiler.migrations.models import (
+    ColumnMigrationEvent,
+    MigrationEvent,
+    MigrationRelation,
+)
 
 
 class MigrationStateInspection:
@@ -27,6 +35,8 @@ class MigrationStateInspection:
         self._events: list[MigrationEvent] = []
         self._relations: dict[tuple[str, str], RelationInfo] = {}
         self._columns: dict[tuple[str, str], tuple[ColumnInfo, ...]] = {}
+        self._column_event_schemas: set[str] = set()
+        self._column_events: list[ColumnMigrationEvent] = []
 
     @property
     def database(self) -> str | None:
@@ -39,6 +49,45 @@ class MigrationStateInspection:
         """Return every migration event read so far."""
 
         return tuple(self._events)
+
+    @property
+    def column_events(self) -> tuple[ColumnMigrationEvent, ...]:
+        """Return every column migration event read so far."""
+
+        return tuple(self._column_events)
+
+    def inspect_column_events(self, *, schemas: set[str]) -> None:
+        """Read the column migration state table once for every schema not inspected yet."""
+
+        pending: tuple[str, ...] = tuple(
+            sorted(schema for schema in schemas if schema.lower() not in self._column_event_schemas)
+        )
+        if not pending:
+            return
+        self._column_event_schemas.update(schema.lower() for schema in pending)
+        listed: tuple[RelationInfo, ...] = self._adapter.list_relations(
+            connection=self._connection,
+            database=self._database,
+            schemas=pending,
+            names=(COLUMN_MIGRATION_TABLE_NAME,),
+        )
+        present: set[str] = {
+            (relation.schema or "").lower()
+            for relation in listed
+            if relation.name.lower() == COLUMN_MIGRATION_TABLE_NAME
+        }
+        schema: str
+        for schema in pending:
+            if schema.lower() in present:
+                self._column_events.extend(
+                    read_column_migration_events(
+                        connection=self._connection,
+                        execute=self._adapter.execute,
+                        database=self._database,
+                        schema=schema,
+                        render_qualified_name=self._adapter.render_qualified_name,
+                    )
+                )
 
     def inspect_schemas(self, *, schemas: set[str]) -> None:
         """Read state tables once for every schema not inspected yet."""

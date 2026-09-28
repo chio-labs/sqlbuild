@@ -12,3 +12,15 @@ class MigrationLifecycleE2ETestCase:
     expected_final_ids: tuple[int, ...]
     expected_previous_archive_ids: tuple[tuple[int, ...], ...]
     expected_events: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class ColumnMigrationLifecycleE2ETestCase:
+    description: str
+    expected_automatic_plan: str
+    expected_retry_decisions: tuple[str, ...]
+    expected_revenue: tuple[tuple[int, int], ...]
+    expected_declared_notice: str
+    expected_near_match_hint: str
+    expected_final_columns: tuple[str, ...]
+    expected_events: tuple[tuple[str, str, str, str], ...]

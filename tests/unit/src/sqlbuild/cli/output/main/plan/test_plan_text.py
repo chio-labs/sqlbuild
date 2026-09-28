@@ -12,6 +12,7 @@ from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeCause,
     CascadeResult,
+    ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
 )
@@ -426,6 +427,39 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "schema diff:",
                 "+ discount",
                 "added",
+            ),
+        ),
+        FormatPlanTestCase(
+            description="near-match rename hint follows the added column",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="fct_orders",
+                        action=PlanAction.INCREMENTAL_APPEND,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        schema_findings=(
+                            build_schema_finding(
+                                kind=SchemaChangeKind.COLUMN_ADDED, column_name="revenue"
+                            ),
+                            build_schema_finding(
+                                kind=SchemaChangeKind.COLUMN_REMOVED, column_name="amount"
+                            ),
+                        ),
+                        column_rename_hints=(
+                            ColumnRenameHint(
+                                model_name="fct_orders",
+                                added_column="revenue",
+                                candidate_columns=("amount",),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "+ revenue   (added)\n        similar to amount; if this is a rename, add "
+                "revenue (migrate_from amount)\n      - amount   (removed)",
             ),
         ),
         FormatPlanTestCase(

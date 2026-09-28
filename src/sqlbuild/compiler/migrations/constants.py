@@ -30,3 +30,25 @@ MIGRATION_COLUMN_TYPES: dict[str, StateSqlValueType] = {
     **{column: StateSqlValueType.STRING for column in MIGRATION_COLUMNS},
     "created_at": StateSqlValueType.TEXT_TIMESTAMP,
 }
+
+COLUMN_MIGRATION_TABLE_NAME: str = "_sqlbuild_column_migrations"
+
+COLUMN_MIGRATION_COLUMNS: tuple[str, ...] = (
+    "event_id",
+    "target_name",
+    "model_name",
+    "relation_database",
+    "relation_schema",
+    "relation_name",
+    "origin_column",
+    "destination_column",
+    "discovery",
+    "decision",
+    "run_id",
+    "created_at",
+)
+
+COLUMN_MIGRATION_COLUMN_TYPES: dict[str, StateSqlValueType] = {
+    **{column: StateSqlValueType.STRING for column in COLUMN_MIGRATION_COLUMNS},
+    "created_at": StateSqlValueType.TEXT_TIMESTAMP,
+}

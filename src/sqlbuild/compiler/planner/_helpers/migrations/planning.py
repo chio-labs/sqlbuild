@@ -648,28 +648,13 @@ def _overlay_snapshot(
             redirected[entry.model_name] = entry.origin.qualified_name
     cursor_snapshots: dict[str, ModelCursorSnapshot] = {
         **snapshot.cursor_snapshots,
-        **gather_redirected_cursor_snapshots(
-            project=runtime.project,
-            adapter=runtime.adapter,
-            connection=runtime.connection,
+        **redirected_cursor_snapshots(
+            runtime=runtime,
+            scope=scope,
             existing_relations=relations,
             target_relations=redirected,
-            cursor_scope=CursorSnapshotScope(
-                model_keys=scope.selected_keys,
-                runtime_producer_keys=scope.selected_keys,
-                invocation_time=runtime.invocation_time,
-                start_cursor_config=(
-                    runtime.project_config.cursors.start
-                    if runtime.project_config is not None
-                    else None
-                ),
-                cursor_overrides=overrides.cursor_overrides,
-            ),
-            full_refresh_model_names=effectively_full_refreshed_model_names(
-                project=runtime.project, cli_full_refresh=overrides.full_refresh
-            ),
-            deferred_locations=deferral.deferred_locations,
-            on_progress=runtime.on_progress,
+            overrides=overrides,
+            deferral=deferral,
         ),
     }
     return replace(
@@ -683,6 +668,42 @@ def _overlay_snapshot(
             python_nodes=snapshot.fingerprints.python_nodes,
         ),
         cursor_snapshots=cursor_snapshots,
+    )
+
+
+def redirected_cursor_snapshots(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    existing_relations: dict[str, RelationInfo],
+    target_relations: dict[str, str],
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    origin_cursor_columns: dict[str, str] | None = None,
+) -> dict[str, ModelCursorSnapshot]:
+    """Re-read target cursors from where history lives before this run's migrations."""
+
+    return gather_redirected_cursor_snapshots(
+        project=runtime.project,
+        adapter=runtime.adapter,
+        connection=runtime.connection,
+        existing_relations=existing_relations,
+        target_relations=target_relations,
+        cursor_scope=CursorSnapshotScope(
+            model_keys=scope.selected_keys,
+            runtime_producer_keys=scope.selected_keys,
+            invocation_time=runtime.invocation_time,
+            start_cursor_config=(
+                runtime.project_config.cursors.start if runtime.project_config is not None else None
+            ),
+            cursor_overrides=overrides.cursor_overrides,
+        ),
+        full_refresh_model_names=effectively_full_refreshed_model_names(
+            project=runtime.project, cli_full_refresh=overrides.full_refresh
+        ),
+        deferred_locations=deferral.deferred_locations,
+        on_progress=runtime.on_progress,
+        origin_cursor_columns=origin_cursor_columns,
     )
 
 

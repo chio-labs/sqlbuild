@@ -18,3 +18,20 @@ class RepeatedEventWriteTestCase:
     description: str
     write_count: int
     expected_stored_count: int
+
+
+@dataclass(frozen=True)
+class ColumnEventStorageTestCase:
+    description: str
+    write_count: int
+    foreign_decisions: tuple[str, ...]
+    expected_stored_count: int
+
+
+@dataclass(frozen=True)
+class NewestColumnEventTestCase:
+    description: str
+    renames: tuple[tuple[str, str], ...]
+    origin_column: str
+    destination_column: str
+    expected_newest_index: int | None

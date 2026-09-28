@@ -98,6 +98,7 @@ def format_plan_json(
         "retention": retention,
         "table_type_conversions": table_type_conversions,
         "migrations": _serialize_model_migrations(plan),
+        "column_migrations": _serialize_column_migrations(plan),
     }
     if plan.metadata:
         result["metadata"] = plan.metadata
@@ -191,6 +192,17 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
 
     if entry.destination.qualified_name is not None:
         model["qualified_name"] = entry.destination.qualified_name
+
+    if entry.column_rename_hints:
+        model["column_rename_hints"] = [
+            {
+                "column": hint.added_column,
+                "candidates": list(hint.candidate_columns),
+                "identical": hint.identical,
+                "hint": hint.message,
+            }
+            for hint in entry.column_rename_hints
+        ]
 
     return model
 
@@ -463,6 +475,25 @@ def _serialize_provider_usage(usage: PlanProviderUsage) -> dict[str, object]:
             "module": usage.annotation_module,
         }
     return payload
+
+
+def _serialize_column_migrations(plan: PlanOutput) -> list[dict[str, object]]:
+    return [
+        {
+            "kind": "column_migration",
+            "model": entry.model_name,
+            "relation": entry.destination.qualified_name or entry.destination.name,
+            "origin_column": entry.origin_column,
+            "destination_column": entry.destination_column,
+            "discovery": entry.discovery.value,
+            "decision": entry.decision.value,
+            "target": entry.target_name,
+            "completed_at": (
+                entry.completed_at.isoformat() if entry.completed_at is not None else None
+            ),
+        }
+        for entry in plan.column_migration_entries
+    ]
 
 
 def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
