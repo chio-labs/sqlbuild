@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.125.0](https://github.com/chio-labs/sqlbuild/compare/v0.124.2...v0.125.0) (2026-09-28)
+
+
+### Features
+
+* enforce custom rule hermeticity at runtime ([#868](https://github.com/chio-labs/sqlbuild/issues/868)) ([5fdb062](https://github.com/chio-labs/sqlbuild/commit/5fdb062ab8b94aa5cf9d4b9ab1278e222ebb0381))
+
 ## [0.124.2](https://github.com/chio-labs/sqlbuild/compare/v0.124.1...v0.124.2) (2026-09-28)
 
 
