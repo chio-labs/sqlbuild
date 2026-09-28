@@ -622,6 +622,11 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
     "test_case",
     [
         ParseModelSqlErrorTestCase(
+            description="reports an unterminated string with many escaped quotes",
+            contents='MODEL (description "' + '\\"' * 20000 + "); SELECT 1",
+            expected_error_fragment="unterminated double-quoted string",
+        ),
+        ParseModelSqlErrorTestCase(
             description="raises when the model header is missing",
             contents="SELECT 1\n",
             expected_error_fragment="must start with a MODEL",
