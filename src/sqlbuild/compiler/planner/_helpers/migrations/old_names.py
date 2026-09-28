@@ -65,6 +65,9 @@ _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
 _ALIAS_DECISIONS: frozenset[ColumnMigrationDecision] = frozenset(
     {ColumnMigrationDecision.RENAME, ColumnMigrationDecision.RECORD}
 )
+_RESUMED_STATUSES: frozenset[OldNameViewStatus] = frozenset(
+    {OldNameViewStatus.PENDING_ARCHIVE, OldNameViewStatus.PENDING_VIEW}
+)
 _PENDING_ACTIONS: dict[OldNameViewStatus, OldNameViewAction] = {
     OldNameViewStatus.PENDING_ARCHIVE: OldNameViewAction.ARCHIVE_AND_VIEW,
     OldNameViewStatus.PENDING_VIEW: OldNameViewAction.VIEW_ONLY,
@@ -192,7 +195,13 @@ class _OldNamePlanner:
                 destination=migration_relation_for_location(entry.destination),
                 origin=migration_relation_for_location(entry.origin),
             )
-            return None if history is None else self._from_history(history=history, model=model)
+            return (
+                None
+                if history is None
+                else self._from_history(
+                    history=history, model=model, origin_tracked=entry.origin_tracked
+                )
+            )
         return None
 
     def pending_for(self, model: CompiledModel) -> OldNameViewPlanEntry | None:
@@ -201,8 +210,12 @@ class _OldNamePlanner:
         )
         if history is None or history.move.destination_model != model.name:
             return None
-        planned: OldNameViewPlanEntry | None = self._from_history(history=history, model=model)
-        return planned if planned is not None and planned.runs_steps else None
+        planned: OldNameViewPlanEntry | None = self._from_history(
+            history=history, model=model, origin_tracked=None
+        )
+        if planned is None or not (planned.runs_steps or _skips_pending(planned)):
+            return None
+        return planned
 
     def _new_move(
         self, *, entry: ModelMigrationPlanEntry, model: CompiledModel
@@ -210,7 +223,9 @@ class _OldNamePlanner:
         retention: str | None = resolve_old_name_view_retention(
             config_values=model.config.values, project_retention=self._project_retention
         )
-        reason: str | None = self._skip_reason(entry=entry, retention=retention)
+        reason: str | None = self._skip_reason(
+            origin=entry.origin, origin_tracked=entry.origin_tracked, retention=retention
+        )
         if reason is not None or retention is None:
             return _skipped_entry(entry=entry, reason=reason or "old_name_view false")
         duration: Duration | None = Duration.parse(retention)
@@ -228,32 +243,53 @@ class _OldNamePlanner:
             grants_supported=self._runtime.adapter.relation_grants_supported,
         )
 
-    def _skip_reason(self, *, entry: ModelMigrationPlanEntry, retention: str | None) -> str | None:
+    def _skip_reason(
+        self,
+        *,
+        origin: CompiledRelationLocation,
+        origin_tracked: bool | None,
+        retention: str | None,
+    ) -> str | None:
+        """Return why the old name gets no steps; ``origin_tracked`` None means unknown."""
+
         if retention is None:
             return "old_name_view false"
-        origin: MigrationRelation = migration_relation_for_location(entry.origin)
+        old: MigrationRelation = migration_relation_for_location(origin)
         reuser: CompiledModel | None = next(
             (
                 model
                 for model in self._models_by_name.values()
-                if migration_relation_for_location(model.destination).matches(origin)
+                if migration_relation_for_location(model.destination).matches(old)
             ),
             None,
         )
         if reuser is not None:
             return f"name reused by model:{reuser.name}"
-        if any(migration_relation_for_location(view.old).matches(origin) for view in self._views):
+        if any(migration_relation_for_location(view.old).matches(old) for view in self._views):
             return "old name is a compatibility view"
-        if not entry.origin_tracked:
+        if origin_tracked is False:
             return "not built by SQLBuild"
         return None
 
     def _from_history(
-        self, *, history: OldNameViewHistory, model: CompiledModel
+        self, *, history: OldNameViewHistory, model: CompiledModel, origin_tracked: bool | None
     ) -> OldNameViewPlanEntry | None:
-        action: OldNameViewAction | None = _PENDING_ACTIONS.get(history.status(now=self._now))
+        status: OldNameViewStatus = history.status(now=self._now)
+        action: OldNameViewAction | None = _PENDING_ACTIONS.get(status)
         if action is None:
             return None
+        if status in _RESUMED_STATUSES:
+            reason: str | None = self._skip_reason(
+                origin=_location(runtime=self._runtime, relation=history.old),
+                origin_tracked=(
+                    origin_tracked if status == OldNameViewStatus.PENDING_ARCHIVE else None
+                ),
+                retention=resolve_old_name_view_retention(
+                    config_values=model.config.values, project_retention=self._project_retention
+                ),
+            )
+            if reason is not None:
+                return _skipped_resume(runtime=self._runtime, history=history, reason=reason)
         duration: Duration | None = Duration.parse(history.required.view_retention or "")
         expires_at: datetime | None = (
             history.created.expires_at
@@ -329,6 +365,24 @@ def _starts_move(entry: ModelMigrationPlanEntry) -> bool:
         return False
     return entry.decision.moves_data or (
         entry.decision == MigrationDecision.RENAMED and entry.completed_at is None
+    )
+
+
+def _skips_pending(entry: OldNameViewPlanEntry) -> bool:
+    return entry.action == OldNameViewAction.NONE and entry.migration_event_id is not None
+
+
+def _skipped_resume(
+    *, runtime: PlannerRuntime, history: OldNameViewHistory, reason: str
+) -> OldNameViewPlanEntry:
+    return OldNameViewPlanEntry(
+        model_name=history.move.destination_model,
+        origin=_location(runtime=runtime, relation=history.old),
+        destination=_location(runtime=runtime, relation=history.new),
+        action=OldNameViewAction.NONE,
+        target_name=history.move.target_name,
+        migration_event_id=history.move.event_id,
+        reason=reason,
     )
 
 

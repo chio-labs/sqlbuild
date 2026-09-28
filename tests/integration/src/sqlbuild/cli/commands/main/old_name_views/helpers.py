@@ -194,3 +194,20 @@ def fail_janitor_drop_fact(monkeypatch: pytest.MonkeyPatch) -> None:
         "sqlbuild.executor.old_name_views._helpers.janitor.write_old_name_view_event",
         _raise_interruption,
     )
+
+
+def disabled_table_sql(*, migrate_from: str) -> str:
+    """Return a table model that declares its rename with old-name views turned off."""
+
+    return (
+        f"MODEL (materialized table, migrate_from {migrate_from}, old_name_view false);\n"
+        'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
+    )
+
+
+def plan_text(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    """Run sqb plan and return its text output."""
+
+    from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import run_sqb
+
+    return run_sqb(project_dir=project_dir, args=("plan",), capsys=capsys).output

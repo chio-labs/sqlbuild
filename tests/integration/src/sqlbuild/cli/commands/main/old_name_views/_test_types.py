@@ -26,3 +26,14 @@ class OldNameJanitorResumeTestCase:
     expected_facts_after_crash: tuple[str, ...]
     expected_retry_fragment: str
     expected_final_facts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldNameResumeSkipTestCase:
+    description: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    retry_models: dict[str, str]
+    expected_plan_fragment: str
+    expected_facts: tuple[str, ...]
+    expected_old_name_type: str | None
+    expected_old_name_ids: tuple[int, ...] | None
