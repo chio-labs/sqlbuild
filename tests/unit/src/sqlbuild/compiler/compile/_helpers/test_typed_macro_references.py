@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MacroGeneratedReferenceCollectionTestCase,
     MacroGeneratedReferenceErrorTestCase,
     MacroGeneratedReferenceSwitchTestCase,
     MalformedTypedMacroReferenceTestCase,
+    TypedMacroArgumentDependencyTestCase,
     TypedMacroReferenceTestCase,
     TypedReferenceAdapterRenderingTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     collect_typed_macro_violations,
+    compile_and_assemble,
     expand_typed_macro_sql,
     resolve_model_references_for_adapter,
 )
@@ -27,6 +30,16 @@ _UNION_MACRO: str = (
 )
 _BASE_MACRO: str = "def base(relation):\n    return f'SELECT * FROM {relation}'\n"
 _EMITTING_MACRO: str = "def orders_base():\n    return 'SELECT * FROM __ref(\"stg_orders\")'\n"
+
+
+_DEPENDENCY_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_analysis = false\n'
+        "sql_validation = false\n"
+    ),
+    "models/orders_eu.sql": "MODEL ();\nSELECT 1 AS order_id",
+    "models/orders_us.sql": "MODEL ();\nSELECT 2 AS order_id",
+}
 
 
 @pytest.mark.parametrize(
@@ -338,3 +351,52 @@ def test_given_adapter_when_resolving_typed_macro_reference_then_uses_adapter_qu
     )
 
     assert resolved == test_case.expected_resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TypedMacroArgumentDependencyTestCase(
+            description="argument the macro ignores",
+            macro_file_contents="def unused(relation):\n    return 'SELECT 1 AS order_id'\n",
+            sql='@unused(__ref("orders_eu"))',
+            expected_dependency_names=frozenset({"orders_eu"}),
+        ),
+        TypedMacroArgumentDependencyTestCase(
+            description="unchosen dictionary entry",
+            macro_file_contents=(
+                "def pick(relations, key):\n    return f'SELECT * FROM {relations[key]}'\n"
+            ),
+            sql='@pick({"eu": __ref("orders_eu"), "us": __ref("orders_us")}, key="eu")',
+            expected_dependency_names=frozenset({"orders_eu", "orders_us"}),
+        ),
+        TypedMacroArgumentDependencyTestCase(
+            description="unchosen list entry inside a nested macro argument",
+            macro_file_contents=(
+                "def first(relations):\n    return str(relations[0])\n\n"
+                "def base(relation):\n    return f'SELECT * FROM {relation}'\n"
+            ),
+            sql='@base(@first([__ref("orders_eu"), __ref("orders_us")]))',
+            expected_dependency_names=frozenset({"orders_eu", "orders_us"}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_macro_arguments_when_compiling_then_every_argument_is_a_dependency(
+    test_case: TypedMacroArgumentDependencyTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        _DEPENDENCY_PROJECT_FILES
+        | {
+            "macros/common.py": test_case.macro_file_contents,
+            "models/order_summary.sql": f"MODEL ();\n{test_case.sql}",
+        },
+    )
+
+    project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+
+    summary: CompiledModel = {model.name: model for model in project.models}["order_summary"]
+    assert frozenset(dep.name for dep in summary.deps) == test_case.expected_dependency_names

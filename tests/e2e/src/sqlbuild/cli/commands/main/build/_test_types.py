@@ -1087,3 +1087,13 @@ class PythonSourceDeferralE2ETestCase:
     select: tuple[str, ...]
     expected_counts: dict[str, int]
     expected_check_pattern: str
+
+
+@dataclass(frozen=True)
+class UnrenderedMacroArgumentE2ETestCase:
+    """A model passing typed references its macro does not render."""
+
+    description: str
+    model_sql: str
+    expected_dag_edges: tuple[tuple[str, str], ...]
+    expected_built: tuple[str, ...]

@@ -22,6 +22,9 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_audit_references,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
+from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
+    merge_call_site_references,
+)
 from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     declaration_file_expansion,
     named_declaration_usages,
@@ -200,8 +203,9 @@ def build_audit_inputs(
                     sql=expanded_evidence_sql,
                     context=f"Audit '{audit_block.name or audit_file.file_path.stem}' evidence",
                 )
-            references: tuple[CompileSqlReference, ...] = _combined_references(
-                expanded_sql_body, expanded_evidence_sql
+            references: tuple[CompileSqlReference, ...] = merge_call_site_references(
+                references=_combined_references(expanded_sql_body, expanded_evidence_sql),
+                argument_references=_argument_references(expansion, evidence_expansion),
             )
             validate_audit_references(
                 references=references,
@@ -624,8 +628,9 @@ def build_attached_audit_input(
             sql=expanded_evidence_sql,
             context=f"Audit '{audit_instance.definition_name}' evidence",
         )
-    references: tuple[CompileSqlReference, ...] = _combined_references(
-        expanded_sql_body, expanded_evidence_sql
+    references: tuple[CompileSqlReference, ...] = merge_call_site_references(
+        references=_combined_references(expanded_sql_body, expanded_evidence_sql),
+        argument_references=_argument_references(expansion, evidence_expansion),
     )
     validate_audit_references(
         references=references,
@@ -934,6 +939,16 @@ def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, bool) else False
+
+
+def _argument_references(
+    *expansions: AuthoredSqlExpansionResult | None,
+) -> tuple[CompileSqlReference, ...]:
+    references: list[CompileSqlReference] = []
+    for expansion in expansions:
+        if expansion is not None:
+            references.extend(expansion.argument_references)
+    return tuple(references)
 
 
 def _combined_references(*sql_values: str | None) -> tuple[CompileSqlReference, ...]:

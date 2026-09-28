@@ -17,6 +17,7 @@ from types import MappingProxyType, ModuleType
 from typing import cast
 
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
+    call_site_sql_references,
     evaluate_typed_reference,
     reference_call_text,
     reject_macro_generated_references,
@@ -1273,6 +1274,7 @@ def expand_sql_macros_result(
     return MacroExpansionResult(
         sql=expanded_sql,
         spans=spans,
+        argument_references=call_site_sql_references(tuple(facts.argument_references)),
         dependencies=tuple(dict.fromkeys(facts.dependencies)),
         usages=tuple(dict.fromkeys(facts.usages)),
     )

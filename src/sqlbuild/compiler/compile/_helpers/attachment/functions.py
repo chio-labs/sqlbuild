@@ -21,6 +21,9 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
+from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
+    merge_call_site_references,
+)
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
@@ -222,7 +225,10 @@ def build_sql_function_inputs(
                     return_columns=return_columns,
                     function_file=function_file,
                 )
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_body_sql)
+        references: tuple[CompileSqlReference, ...] = merge_call_site_references(
+            references=extract_sql_references(expanded_body_sql),
+            argument_references=expansion.argument_references,
+        )
         validate_function_references(
             references=references,
             function_file=function_file,

@@ -82,6 +82,18 @@ def call_site_sql_references(
     return extract_sql_references(" ".join(reference_call_text(ref) for ref in refs))
 
 
+def merge_call_site_references(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    argument_references: tuple[CompileSqlReference, ...],
+) -> tuple[CompileSqlReference, ...]:
+    """Add typed macro arguments to the references found in expanded SQL, once each."""
+
+    if not argument_references:
+        return references
+    return tuple(dict.fromkeys((*references, *argument_references)))
+
+
 def reject_macro_generated_references(
     *,
     loaded_macro: LoadedMacro,

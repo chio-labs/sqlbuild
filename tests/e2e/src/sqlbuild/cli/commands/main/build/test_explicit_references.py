@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     ExplicitReferenceFailureE2ETestCase,
     ExplicitReferencePythonDependencyE2ETestCase,
     ExplicitReferenceRuntimeWarningE2ETestCase,
+    UnrenderedMacroArgumentE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     EXPLICIT_REFERENCE_HOOK_PATH,
@@ -115,6 +116,21 @@ _RAW_SOURCES: str = (
 )
 
 
+_PICK_MACROS: str = EXPLICIT_REFERENCE_MACROS + (
+    "\n\ndef pick(relations, key):\n    return f'SELECT order_id FROM {relations[key]}'\n"
+)
+_SIBLING_TASKS: str = (
+    "from sqlbuild.refs import model\n"
+    "from sqlbuild.tasks import task\n\n\n"
+    '@task(depends_on=model("all_orders"))\n'
+    "def export_summary(ctx):\n"
+    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_summary_ran AS SELECT 1 AS n")\n\n\n'
+    '@task(depends_on=model("stg_orders_eu"))\n'
+    "def export_eu(ctx):\n"
+    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_eu_ran AS SELECT 1 AS n")\n'
+)
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -183,16 +199,55 @@ def test_given_python_seed_and_model_dependencies_when_building_then_graph_selec
     assert re.search(test_case.expected_check_row_pattern, checked.stdout), checked.stdout
 
 
-_SIBLING_TASKS: str = (
-    "from sqlbuild.refs import model\n"
-    "from sqlbuild.tasks import task\n\n\n"
-    '@task(depends_on=model("all_orders"))\n'
-    "def export_summary(ctx):\n"
-    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_summary_ran AS SELECT 1 AS n")\n\n\n'
-    '@task(depends_on=model("stg_orders_eu"))\n'
-    "def export_eu(ctx):\n"
-    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_eu_ran AS SELECT 1 AS n")\n'
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnrenderedMacroArgumentE2ETestCase(
+            description="unchosen dictionary entry is a dependency the build selects",
+            model_sql=(
+                "MODEL (materialized table);\n"
+                '@pick({"eu": __ref("stg_orders_eu"), "us": __ref("stg_orders_us")}, key="eu")\n'
+            ),
+            expected_dag_edges=(
+                ("model:stg_orders_eu", "model:order_pick"),
+                ("model:stg_orders_us", "model:order_pick"),
+            ),
+            expected_built=("stg_orders_eu", "stg_orders_us", "order_pick"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
+def test_given_unrendered_macro_argument_when_building_then_it_is_still_a_dependency(
+    test_case: UnrenderedMacroArgumentE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="explicit_refs",
+        repo_files=explicit_reference_project_files(
+            overrides={
+                EXPLICIT_REFERENCE_MACRO_PATH: _PICK_MACROS,
+                f"{EXPLICIT_REFERENCE_MODELS}/order_pick.sql": test_case.model_sql,
+            }
+        ),
+    )
+
+    dag: subprocess.CompletedProcess[str] = run_sqb(
+        command=("dag", "--json"), project_dir=project_dir
+    )
+    build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+order_pick"), project_dir=project_dir
+    )
+
+    assert dag.returncode == 0, dag.stdout + dag.stderr
+    payload: dict[str, object] = json.loads(dag.stdout)
+    edges: set[tuple[str, str]] = {
+        (edge["from_id"], edge["to_id"]) for edge in cast(list[dict[str, str]], payload["edges"])
+    }
+    assert set(test_case.expected_dag_edges) <= edges
+    assert build.returncode == 0, build.stdout + build.stderr
+    database: Path = project_dir / "warehouse.duckdb"
+    assert all(table_exists(db_path=database, table_name=name) for name in test_case.expected_built)
 
 
 @pytest.mark.parametrize(

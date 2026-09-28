@@ -1032,3 +1032,13 @@ class MacroGeneratedReferenceCollectionTestCase:
     macro_file_contents: str
     sql: str
     expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypedMacroArgumentDependencyTestCase:
+    """A model passing typed references to a macro that may not render all of them."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_dependency_names: frozenset[str]

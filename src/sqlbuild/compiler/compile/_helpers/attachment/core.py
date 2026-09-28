@@ -48,6 +48,9 @@ from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_storage_policies
+from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
+    merge_call_site_references,
+)
 from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     named_declaration_usages,
 )
@@ -583,6 +586,7 @@ def _build_model_inputs(
             expanded_query_sql=expanded_query_sql,
             sql_validation_placeholders=sql_validation_placeholders,
             model_schema_columns=model_schema_columns,
+            argument_references=macro_expansion.argument_references,
         )
         hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
             values=effective_config.values,
@@ -744,6 +748,7 @@ def _validate_model_input(
     expanded_query_sql: str,
     sql_validation_placeholders: dict[str, str] | None,
     model_schema_columns: tuple[SchemaColumn, ...] | None,
+    argument_references: tuple[CompileSqlReference, ...],
 ) -> tuple[bool, tuple[CompileSqlReference, ...]]:
     model_name: str = model_file.file_path.stem
     sql_validation_enabled: bool = _model_sql_validation_gate(
@@ -761,7 +766,10 @@ def _validate_model_input(
             file_path=model_file.file_path,
             placeholders=sql_validation_placeholders,
         )
-    references: tuple[CompileSqlReference, ...] = context.extract_references(expanded_query_sql)
+    references: tuple[CompileSqlReference, ...] = merge_call_site_references(
+        references=context.extract_references(expanded_query_sql),
+        argument_references=argument_references,
+    )
     validate_model_references(
         references=references,
         model_file=model_file,

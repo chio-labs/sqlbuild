@@ -374,6 +374,7 @@ class MacroExpansionResult:
     spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
     dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -391,6 +392,7 @@ class AuthoredSqlExpansionResult:
 
     sql: str
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

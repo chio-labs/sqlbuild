@@ -97,6 +97,7 @@ def expand_authored_sql_result(  # noqa: PLR0913
     return AuthoredSqlExpansionResult(
         sql=macro_result.sql,
         usages=tuple(dict.fromkeys((*declaration_result.usages, *macro_result.usages))),
+        argument_references=macro_result.argument_references,
     )
 
 
