@@ -50,6 +50,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffColumnResult,
     RowDiffCoverage,
@@ -86,7 +87,10 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
-from sqlbuild.adapters.sqlserver._helpers.grants import render_sqlserver_view_grants
+from sqlbuild.adapters.sqlserver._helpers.grants import (
+    render_sqlserver_view_grants,
+    sqlserver_relation_grants,
+)
 from sqlbuild.adapters.sqlserver.classes.sqlserver_connection import _SqlServerConnection
 from sqlbuild.adapters.sqlserver.constants import (
     BOOLEAN_RETURN_TYPE,
@@ -1850,7 +1854,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -1858,23 +1862,33 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
-    ) -> tuple[str, ...]:
+    ) -> tuple[RelationGrant, ...]:
         del relation_type
         relation: str = ".".join(
             self.render_identifier(part) for part in (database, schema, name) if part
         ).replace("'", "''")
         query: str = (
-            "SELECT permission.state_desc, permission.permission_name, grantee.name "
+            "SELECT permission.state_desc, permission.permission_name, grantee.name, "
+            "COL_NAME(permission.major_id, NULLIF(permission.minor_id, 0)) "
             "FROM sys.database_permissions AS permission "
             "JOIN sys.database_principals AS grantee "
             "ON grantee.principal_id = permission.grantee_principal_id "
-            "WHERE permission.class = 1 AND permission.minor_id = 0 "
+            "WHERE permission.class = 1 "
             f"AND permission.major_id = OBJECT_ID(N'{relation}') "
-            "ORDER BY grantee.name, permission.permission_name"
+            "ORDER BY permission.minor_id, grantee.name, permission.permission_name"
         )
         rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=query).fetchall()
-        return render_sqlserver_view_grants(rows=rows, destination=destination)
+        return sqlserver_relation_grants(rows)
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        return render_sqlserver_view_grants(grants=grants, destination=destination, columns=columns)
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        return (f"ALTER VIEW {destination} AS {sql}",)
 
     def rename_view(
         self,

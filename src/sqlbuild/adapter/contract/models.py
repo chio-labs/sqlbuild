@@ -145,6 +145,18 @@ class TableFreshnessMetadata:
 
 
 @dataclass(frozen=True)
+class RelationGrant:
+    """One privilege granted or denied on a relation, or on one of its columns."""
+
+    privilege: str
+    grantee: str | None
+    column: str | None = None
+    grantable: bool = False
+    denied: bool = False
+    grantee_kind: str = ""
+
+
+@dataclass(frozen=True)
 class TableFreshnessRequest:
     """Physical table identity for adapter metadata freshness lookup."""
 

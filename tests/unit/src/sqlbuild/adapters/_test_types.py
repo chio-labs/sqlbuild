@@ -103,7 +103,15 @@ class RelationGrantCaptureTestCase:
     description: str
     adapter: BaseAdapter
     relation_type: str
-    rows: list[tuple[object, ...]]
+    answers: tuple[list[tuple[object, ...]], ...]
     destination: str
+    columns: tuple[str, ...]
     expected_query_fragment: str
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ViewReplaceTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_statements: tuple[str, ...] | None

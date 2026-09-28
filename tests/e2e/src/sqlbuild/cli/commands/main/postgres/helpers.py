@@ -838,3 +838,15 @@ def reader_error(*, config: dict[str, object], role: str, sql: str) -> str:
     except Exception as error:
         return str(error).splitlines()[0]
     return ""
+
+
+def create_login_role(*, role: str, config: dict[str, object]) -> None:
+    """Create a login role whose password is its name, unless it exists."""
+
+    execute_postgres_sql(
+        sql=(
+            f"DO $$ BEGIN CREATE ROLE {role} LOGIN PASSWORD '{role}'; "
+            "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+        ),
+        config=config,
+    )

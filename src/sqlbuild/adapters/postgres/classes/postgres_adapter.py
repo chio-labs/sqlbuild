@@ -48,6 +48,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffColumnResult,
     RowDiffCoverage,
@@ -86,7 +87,10 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.adapters.postgres._helpers.grants import render_postgres_grant
+from sqlbuild.adapters.postgres._helpers.grants import (
+    postgres_relation_grants,
+    render_postgres_grants,
+)
 from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
 from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
@@ -640,7 +644,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         cursor: Any = connection.execute(query)
         return tuple(f"{row[0]}.{row[1]}" for row in cursor.fetchall())
 
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -648,31 +652,50 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
-    ) -> tuple[str, ...]:
+    ) -> tuple[RelationGrant, ...]:
         del database, relation_type
-        query: str = (
-            "SELECT acl.privilege_type, "
-            "CASE WHEN acl.grantee = 0 THEN NULL ELSE pg_get_userbyid(acl.grantee) END, "
-            "acl.is_grantable "
+        relation_filter: str = (
             "FROM pg_class AS relation "
             "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
-            "CROSS JOIN LATERAL aclexplode(relation.relacl) AS acl "
+        )
+        where: str = (
             f"WHERE namespace.nspname = {_quote_sql_string(schema)} "
             f"AND relation.relname = {_quote_sql_string(name)} "
             "AND acl.grantee <> relation.relowner "
-            "ORDER BY 2 NULLS FIRST, 1"
         )
-        rows: list[tuple[Any, ...]] = connection.execute(query).fetchall()
-        return tuple(
-            render_postgres_grant(
-                privilege=str(row[0]),
-                grantee=None if row[1] is None else self.render_identifier(str(row[1])),
-                grantable=bool(row[2]),
-                destination=destination,
-            )
-            for row in rows
+        grantee: str = "CASE WHEN acl.grantee = 0 THEN NULL ELSE pg_get_userbyid(acl.grantee) END"
+        relation_rows: list[tuple[Any, ...]] = connection.execute(
+            f"SELECT acl.privilege_type, {grantee}, acl.is_grantable "
+            + relation_filter
+            + "CROSS JOIN LATERAL aclexplode(relation.relacl) AS acl "
+            + where
+            + "ORDER BY 2 NULLS FIRST, 1"
+        ).fetchall()
+        column_rows: list[tuple[Any, ...]] = connection.execute(
+            f"SELECT attribute.attname, acl.privilege_type, {grantee}, acl.is_grantable "
+            + relation_filter
+            + "JOIN pg_attribute AS attribute ON attribute.attrelid = relation.oid "
+            "AND attribute.attnum > 0 AND NOT attribute.attisdropped "
+            "CROSS JOIN LATERAL aclexplode(attribute.attacl) AS acl "
+            + where
+            + "ORDER BY attribute.attnum, 3 NULLS FIRST, 2"
+        ).fetchall()
+        return postgres_relation_grants(relation_rows=relation_rows, column_rows=column_rows)
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        return render_postgres_grants(
+            grants=grants,
+            destination=destination,
+            columns=columns,
+            render_identifier=self.render_identifier,
         )
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        return self.render_create_view_as(destination=destination, sql=sql)
 
     def rename_view(
         self,

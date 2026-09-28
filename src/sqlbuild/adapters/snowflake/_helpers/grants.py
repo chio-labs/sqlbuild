@@ -1,9 +1,10 @@
-"""Render Snowflake grants replayed onto a compatibility view."""
+"""Read and replay Snowflake grants onto a compatibility view."""
 
 from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.contract.models import RelationGrant
 from sqlbuild.adapter.contract.types import RelationType
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
 
@@ -13,28 +14,46 @@ _PRIVILEGE_COLUMN: int = 1
 _GRANTED_TO_COLUMN: int = 4
 _GRANTEE_COLUMN: int = 5
 _GRANT_OPTION_COLUMN: int = 6
-_GRANT_OPTION_CLAUSES: dict[str, str] = {"true": " WITH GRANT OPTION"}
+_GRANT_OPTIONS: dict[str, bool] = {"true": True}
 _OBJECT_KEYWORDS: dict[RelationType, str] = {RelationType.VIEW: "VIEW"}
 
 
-def render_snowflake_view_grants(
-    *, rows: list[tuple[Any, ...]], destination: str
-) -> tuple[str, ...]:
-    """Replay SHOW GRANTS rows that apply to a view, skipping OWNERSHIP and shares."""
+def snowflake_relation_grants(rows: list[tuple[Any, ...]]) -> tuple[RelationGrant, ...]:
+    """Keep SHOW GRANTS rows that apply to a view, skipping OWNERSHIP and shares."""
 
-    statements: list[str] = []
+    grants: list[RelationGrant] = []
     row: tuple[Any, ...]
     for row in rows:
         privilege: str = str(row[_PRIVILEGE_COLUMN]).upper()
         keyword: str | None = _GRANTEE_KEYWORDS.get(str(row[_GRANTED_TO_COLUMN]).upper())
         if privilege not in _VIEW_PRIVILEGES or keyword is None:
             continue
-        grantee: str = ".".join(
-            '"' + part.replace('"', '""') + '"' for part in str(row[_GRANTEE_COLUMN]).split(".")
+        grants.append(
+            RelationGrant(
+                privilege=privilege,
+                grantee=str(row[_GRANTEE_COLUMN]),
+                grantable=_GRANT_OPTIONS.get(str(row[_GRANT_OPTION_COLUMN]).lower(), False),
+                grantee_kind=keyword,
+            )
         )
-        option: str = _GRANT_OPTION_CLAUSES.get(str(row[_GRANT_OPTION_COLUMN]).lower(), "")
-        statements.append(f"GRANT {privilege} ON VIEW {destination} TO {keyword} {grantee}{option}")
-    return tuple(statements)
+    return tuple(grants)
+
+
+def render_snowflake_view_grants(
+    *, grants: tuple[RelationGrant, ...], destination: str
+) -> tuple[str, ...]:
+    """Render role and database-role grants on ``destination``."""
+
+    return tuple(
+        f"GRANT {grant.privilege} ON VIEW {destination} TO {grant.grantee_kind} "
+        + _quoted_grantee(grant.grantee or "")
+        + (" WITH GRANT OPTION" if grant.grantable else "")
+        for grant in grants
+    )
+
+
+def _quoted_grantee(grantee: str) -> str:
+    return ".".join('"' + part.replace('"', '""') + '"' for part in grantee.split("."))
 
 
 def show_grants_object_kind(relation_type: str) -> str:

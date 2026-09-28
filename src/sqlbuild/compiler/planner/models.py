@@ -987,7 +987,6 @@ class OldNameView:
     column_aliases: tuple[tuple[str, str], ...]
     migration_event_id: str
     target_name: str | None
-    grant_statements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

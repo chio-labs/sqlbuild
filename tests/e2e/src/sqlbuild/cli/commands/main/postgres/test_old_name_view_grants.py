@@ -10,11 +10,13 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresOldNameGrantsE2ETestCase,
+    PostgresOldNameRevokeE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     build_ok,
     build_unique_schema_name,
     cleanup_postgres_schema,
+    create_login_role,
     ensure_postgres_schema_ready,
     execute_postgres_sql,
     fetch_postgres_rows,
@@ -126,3 +128,109 @@ def test_given_reader_of_old_table_when_model_is_renamed_then_reader_keeps_acces
     assert tuple(json.loads(str(recorded[0][0]))) == tuple(
         grant.format(view=view) for grant in test_case.expected_grants
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresOldNameRevokeE2ETestCase(
+            description="table rebuild replaces the view in place",
+            materialized="table",
+            rebuilt_columns="order_id, order_date, amount_cents",
+            revoked_role="orders_revoked_table",
+            granted_role="orders_granted_table",
+            expected_revoked_error="permission denied for view revenue",
+            expected_granted_ids=_SIX,
+        ),
+        PostgresOldNameRevokeE2ETestCase(
+            description="dropped column re-creates the view with its current privileges",
+            materialized="incremental_sync",
+            rebuilt_columns="order_id, order_date",
+            revoked_role="orders_revoked_sync",
+            granted_role="orders_granted_sync",
+            expected_revoked_error="permission denied for view revenue",
+            expected_granted_ids=_SIX,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_privileges_changed_when_destination_rebuilds_then_current_privileges_stay(
+    tmp_path: Path,
+    test_case: PostgresOldNameRevokeE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    """A rebuild never restores a revoked privilege and never loses one granted on the view."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_old_name_revoke")
+    raw_schema_name: str = f"{schema_name}_raw"
+    view: str = f"{schema_name}.revenue"
+    revoked: str = test_case.revoked_role
+    granted: str = test_case.granted_role
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    load_raw_orders(raw_schema_name=raw_schema_name, config=postgres_e2e_config)
+    create_login_role(role=revoked, config=postgres_e2e_config)
+    create_login_role(role=granted, config=postgres_e2e_config)
+    try:
+        project_dir: Path = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={"revenue": old_name_model_sql(materialized=test_case.materialized)},
+        )
+        _ = build_ok(project_dir)
+        execute_postgres_sql(
+            sql=f"GRANT USAGE ON SCHEMA {schema_name} TO {revoked}, {granted}",
+            config=postgres_e2e_config,
+        )
+        execute_postgres_sql(sql=f"GRANT SELECT ON {view} TO {revoked}", config=postgres_e2e_config)
+        project_dir = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={
+                "daily_revenue": old_name_model_sql(
+                    materialized=test_case.materialized, migrate_from="revenue"
+                )
+            },
+        )
+        _ = build_ok(project_dir)
+        execute_postgres_sql(
+            sql=f"REVOKE SELECT ON {view} FROM {revoked}", config=postgres_e2e_config
+        )
+        execute_postgres_sql(sql=f"GRANT SELECT ON {view} TO {granted}", config=postgres_e2e_config)
+        execute_postgres_sql(
+            sql=(
+                f"INSERT INTO {raw_schema_name}.raw_orders VALUES (6, TIMESTAMP '2026-01-06', 106)"
+            ),
+            config=postgres_e2e_config,
+        )
+        project_dir = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={
+                "daily_revenue": old_name_model_sql(
+                    materialized=test_case.materialized,
+                    migrate_from="revenue",
+                    columns=test_case.rebuilt_columns,
+                )
+            },
+        )
+        _ = build_ok(project_dir)
+        revoked_error: str = reader_error(
+            config=postgres_e2e_config, role=revoked, sql=f"SELECT order_id FROM {view}"
+        )
+        granted_ids: tuple[tuple[object, ...], ...] = reader_rows(
+            config=postgres_e2e_config,
+            role=granted,
+            sql=f"SELECT order_id FROM {view} ORDER BY 1",
+        )
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_postgres_schema(schema_name=raw_schema_name, config=postgres_e2e_config)
+
+    assert revoked_error == test_case.expected_revoked_error
+    assert granted_ids == test_case.expected_granted_ids

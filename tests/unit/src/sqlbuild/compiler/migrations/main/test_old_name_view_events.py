@@ -242,7 +242,9 @@ def test_given_state_table_without_optional_columns_when_planning_then_absent_co
     assert tuple(history.status(now=_NOW).value for history in histories) == (
         test_case.expected_statuses
     )
-    assert [history.created.grants_copied for history in histories if history.created] == [None]
-    assert [history.archived.archive_name for history in histories if history.archived] == [
-        test_case.expected_archive_name
-    ]
+    created: OldNameViewEvent | None = histories[0].created
+    archived: OldNameViewEvent | None = histories[0].archived
+    assert created is not None
+    assert created.grants_copied is None
+    assert archived is not None
+    assert archived.archive_name == test_case.expected_archive_name

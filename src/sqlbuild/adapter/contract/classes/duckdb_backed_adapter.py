@@ -43,6 +43,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffColumnResult,
     RowDiffCoverage,
@@ -1565,7 +1566,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -1573,10 +1574,20 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
-    ) -> tuple[str, ...]:
-        del connection, database, schema, name, relation_type, destination
+    ) -> tuple[RelationGrant, ...]:
+        del connection, database, schema, name, relation_type
         return ()
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        del grants, destination, columns
+        return ()
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        return self.render_create_view_as(destination=destination, sql=sql)
 
     def rename_view(
         self,

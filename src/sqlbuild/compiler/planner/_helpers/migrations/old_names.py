@@ -579,11 +579,6 @@ def _recorded_view(*, runtime: PlannerRuntime, history: OldNameViewHistory) -> O
         column_aliases=() if history.created is None else history.created.column_aliases,
         migration_event_id=history.move.event_id,
         target_name=history.move.target_name,
-        grant_statements=(
-            ()
-            if history.created is None or history.created.grants_copied is None
-            else history.created.grants_copied
-        ),
     )
 
 

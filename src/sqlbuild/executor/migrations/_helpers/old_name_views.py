@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationGrant, RelationInfo
 from sqlbuild.adapter.contract.types import RelationType
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
@@ -118,13 +119,15 @@ def run_old_name_steps(
                 create_table=False,
                 attempts=attempts,
             )
-        grants: tuple[str, ...] = _create_compatibility_view(
+        copied: tuple[tuple[str, ...], tuple[RelationGrant, ...]] = _create_compatibility_view(
             adapter=adapter,
             connection=connection,
             entry=entry,
+            source=source,
             sql=select_sql,
             archive_name=archive_name,
         )
+        grants: tuple[str, ...] = copied[0]
         record_old_name_fact(
             adapter=adapter,
             connection=connection,
@@ -142,7 +145,7 @@ def run_old_name_steps(
             attempts=attempts,
         )
         _ = rebind_old_name_views(adapter=adapter, connection=connection, sources=chained)
-    return warnings
+    return (*warnings, *reader_access_warning(adapter=adapter, entry=entry, grants=copied[1]))
 
 
 def run_planned_old_name_steps(
@@ -179,10 +182,67 @@ def run_planned_old_name_steps(
     return tuple(warnings)
 
 
+def present_old_name_views(
+    *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
+) -> tuple[OldNameViewSource, ...]:
+    """Keep views that exist at their old names; a recorded, absent view is left for janitor."""
+
+    present: list[OldNameViewSource] = []
+    source: OldNameViewSource
+    for source in sources:
+        relation: RelationInfo | None = _listed(
+            adapter=adapter, connection=connection, location=source.old
+        )
+        if relation is not None and _is_view(relation):
+            present.append(source)
+    return tuple(present)
+
+
 def refresh_old_name_views(
     *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
 ) -> int:
-    """Re-create compatibility views in order, each against its source's current columns."""
+    """Redefine existing compatibility views in order, keeping each view's current privileges."""
+
+    source: OldNameViewSource
+    for source in sources:
+        destination: str = _qualified(adapter=adapter, location=source.old)
+        sql: str = render_old_name_view_select(
+            adapter=adapter, connection=connection, source=source
+        )
+        native: tuple[str, ...] | None = adapter.render_replace_view_keeping_grants(
+            destination=destination, sql=sql
+        )
+        if native is not None:
+            _execute_all(adapter=adapter, connection=connection, statements=native)
+            continue
+        current: tuple[RelationGrant, ...] = _view_grants(
+            adapter=adapter, connection=connection, location=source.old
+        )
+        _create_view(adapter=adapter, connection=connection, old=source.old, sql=sql)
+        _reapply(adapter=adapter, connection=connection, source=source, grants=current)
+    return len(sources)
+
+
+def release_old_name_views(
+    *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
+) -> tuple[OldNameViewSource, ...]:
+    """Capture each view's current privileges, then drop the views, dependents first."""
+
+    released: tuple[OldNameViewSource, ...] = tuple(
+        dataclasses.replace(
+            source,
+            grants=_view_grants(adapter=adapter, connection=connection, location=source.old),
+        )
+        for source in sources
+    )
+    _ = drop_old_name_views(adapter=adapter, connection=connection, sources=released)
+    return released
+
+
+def recreate_old_name_views(
+    *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
+) -> int:
+    """Re-create released views in order with the privileges captured before their drop."""
 
     source: OldNameViewSource
     for source in sources:
@@ -192,22 +252,29 @@ def refresh_old_name_views(
             old=source.old,
             sql=render_old_name_view_select(adapter=adapter, connection=connection, source=source),
         )
-        _apply_grants(adapter=adapter, connection=connection, statements=source.grant_statements)
+        _reapply(adapter=adapter, connection=connection, source=source, grants=source.grants)
     return len(sources)
 
 
 def rebind_old_name_views(
     *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
 ) -> int:
-    """Point compatibility views at their relations' current columns, in dependency order."""
+    """Point existing compatibility views at their relations' current columns, in order."""
 
-    if not sources:
+    present: tuple[OldNameViewSource, ...] = present_old_name_views(
+        adapter=adapter, connection=connection, sources=sources
+    )
+    if not present:
         return 0
     if adapter.views_bind_to_relation_identity() and not all(
-        _replaceable(adapter=adapter, connection=connection, source=source) for source in sources
+        _replaceable(adapter=adapter, connection=connection, source=source) for source in present
     ):
-        _ = drop_old_name_views(adapter=adapter, connection=connection, sources=sources)
-    return refresh_old_name_views(adapter=adapter, connection=connection, sources=sources)
+        return recreate_old_name_views(
+            adapter=adapter,
+            connection=connection,
+            sources=release_old_name_views(adapter=adapter, connection=connection, sources=present),
+        )
+    return refresh_old_name_views(adapter=adapter, connection=connection, sources=present)
 
 
 def rebind_old_name_views_atomically(
@@ -217,6 +284,55 @@ def rebind_old_name_views_atomically(
 
     with _ddl_transaction(adapter=adapter, connection=connection):
         return rebind_old_name_views(adapter=adapter, connection=connection, sources=sources)
+
+
+def exposed_columns(
+    *, adapter: BaseAdapter, connection: Any, source: OldNameViewSource
+) -> tuple[str, ...]:
+    """Return the column names the view presents: old names for aliased columns."""
+
+    old_by_new: dict[str, str] = {new.lower(): old for old, new in source.column_aliases}
+    return tuple(
+        old_by_new.get(column.name.lower(), column.name)
+        for column in adapter.get_columns(
+            connection=connection,
+            database=source.new.database,
+            schema=source.new.schema,
+            name=source.new.name,
+        )
+    )
+
+
+def _view_grants(
+    *, adapter: BaseAdapter, connection: Any, location: CompiledRelationLocation
+) -> tuple[RelationGrant, ...]:
+    return adapter.read_relation_grants(
+        connection=connection,
+        database=location.database,
+        schema=location.schema or "",
+        name=location.name,
+        relation_type=RelationType.VIEW.value,
+    )
+
+
+def _reapply(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    source: OldNameViewSource,
+    grants: tuple[RelationGrant, ...],
+) -> None:
+    if not grants:
+        return
+    _execute_all(
+        adapter=adapter,
+        connection=connection,
+        statements=adapter.render_relation_grants(
+            grants=grants,
+            destination=_qualified(adapter=adapter, location=source.old),
+            columns=exposed_columns(adapter=adapter, connection=connection, source=source),
+        ),
+    )
 
 
 def _replaceable(*, adapter: BaseAdapter, connection: Any, source: OldNameViewSource) -> bool:
@@ -290,12 +406,7 @@ def views_reading(
                 continue
             seen.add(identity)
             ordered.append(
-                OldNameViewSource(
-                    old=view.old,
-                    new=view.new,
-                    column_aliases=view.column_aliases,
-                    grant_statements=view.grant_statements,
-                )
+                OldNameViewSource(old=view.old, new=view.new, column_aliases=view.column_aliases)
             )
             frontier.append(view.old)
     return tuple(ordered)
@@ -506,14 +617,15 @@ def _create_compatibility_view(
     adapter: BaseAdapter,
     connection: Any,
     entry: OldNameViewPlanEntry,
+    source: OldNameViewSource,
     sql: str,
     archive_name: str | None,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], tuple[RelationGrant, ...]]:
     """Publish the view at the old name with the archived relation's grants; return them."""
 
     _create_view(adapter=adapter, connection=connection, old=entry.origin, sql=sql)
     if archive_name is None:
-        return ()
+        return (), ()
     archive: RelationInfo | None = _listed(
         adapter=adapter,
         connection=connection,
@@ -525,20 +637,41 @@ def _create_compatibility_view(
         ),
     )
     if archive is None:
-        return ()
-    grants: tuple[str, ...] = adapter.capture_relation_grants(
+        return (), ()
+    grants: tuple[RelationGrant, ...] = adapter.read_relation_grants(
         connection=connection,
         database=archive.database,
         schema=archive.schema or entry.origin.schema or "",
         name=archive.name,
         relation_type=normalize_relation_type(archive.relation_type).value,
-        destination=_qualified(adapter=adapter, location=entry.origin),
     )
-    _apply_grants(adapter=adapter, connection=connection, statements=grants)
-    return grants
+    statements: tuple[str, ...] = adapter.render_relation_grants(
+        grants=grants,
+        destination=_qualified(adapter=adapter, location=entry.origin),
+        columns=exposed_columns(adapter=adapter, connection=connection, source=source),
+    )
+    _execute_all(adapter=adapter, connection=connection, statements=statements)
+    return statements, grants
 
 
-def _apply_grants(*, adapter: BaseAdapter, connection: Any, statements: tuple[str, ...]) -> None:
+def reader_access_warning(
+    *, adapter: BaseAdapter, entry: OldNameViewPlanEntry, grants: tuple[RelationGrant, ...]
+) -> tuple[str, ...]:
+    """Warn that principals given the view by copied grants also need the destination."""
+
+    principals: tuple[str, ...] = tuple(
+        sorted({grant.grantee for grant in grants if grant.grantee and not grant.denied})
+    )
+    if not adapter.views_read_with_reader_access or not principals:
+        return ()
+    return (
+        f"M118: {_display(entry.origin)} now reads {_display(entry.destination)} with each "
+        f"reader's own access. {', '.join(principals)} kept their access to the old name but "
+        f"also need read access on {_display(entry.destination)}; SQLBuild does not grant it",
+    )
+
+
+def _execute_all(*, adapter: BaseAdapter, connection: Any, statements: tuple[str, ...]) -> None:
     statement: str
     for statement in statements:
         _ = adapter.execute(connection=connection, sql=statement)

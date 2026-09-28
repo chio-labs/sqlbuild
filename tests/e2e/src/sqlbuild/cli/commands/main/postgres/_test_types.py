@@ -205,3 +205,14 @@ class PostgresOldNameGrantsE2ETestCase:
     expected_grants: tuple[str, ...]
     expected_new_table_error: str
     expected_plan_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresOldNameRevokeE2ETestCase:
+    description: str
+    materialized: str
+    rebuilt_columns: str
+    revoked_role: str
+    granted_role: str
+    expected_revoked_error: str
+    expected_granted_ids: tuple[tuple[object, ...], ...]

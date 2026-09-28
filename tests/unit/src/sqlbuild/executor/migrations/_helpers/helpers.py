@@ -15,8 +15,12 @@ from sqlbuild.compiler.migrations.main.deterministic_column_event_id import (
     deterministic_column_migration_event_id,
 )
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent, MigrationRelation
-from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDiscovery
-from sqlbuild.compiler.planner.models import ColumnMigrationPlanEntry
+from sqlbuild.compiler.migrations.types import (
+    ColumnMigrationDecision,
+    MigrationDiscovery,
+    OldNameViewAction,
+)
+from sqlbuild.compiler.planner.models import ColumnMigrationPlanEntry, OldNameViewPlanEntry
 
 RELATION: str = "main.fct_orders"
 
@@ -114,4 +118,16 @@ def adapter_location(
         qualified_name=adapter.render_qualified_name(
             database=database, schema="analytics", name=name
         ),
+    )
+
+
+def old_name_plan_entry(*, adapter: BaseAdapter) -> OldNameViewPlanEntry:
+    """Return a planned move of analytics.revenue to analytics.daily_revenue."""
+
+    return OldNameViewPlanEntry(
+        model_name="daily_revenue",
+        origin=adapter_location(adapter=adapter, database=None, name="revenue"),
+        destination=adapter_location(adapter=adapter, database=None, name="daily_revenue"),
+        action=OldNameViewAction.ARCHIVE_AND_VIEW,
+        target_name="prod",
     )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 
@@ -44,19 +44,19 @@ class GrantRows:
 
 
 class GrantConnection:
-    """A connection that records SQL, answers every query with fixed rows, and names a project."""
+    """A connection that records SQL, answers queries in order, and names a project."""
 
-    def __init__(self, rows: list[tuple[object, ...]]) -> None:
-        self.rows: list[tuple[object, ...]] = rows
+    def __init__(self, answers: tuple[list[tuple[object, ...]], ...]) -> None:
+        self.answers: Iterator[list[tuple[object, ...]]] = iter(answers)
         self.executed: list[str] = []
         self.location: str = "US"
         self.client: GrantClient = GrantClient()
 
     def execute(self, sql: str) -> GrantRows:
-        """Record the SQL and return the fixed rows."""
+        """Record the SQL and return the next answer, or no rows once they run out."""
 
         self.executed.append(sql)
-        return GrantRows(self.rows)
+        return GrantRows(next(self.answers, []))
 
 
 class GrantClient:

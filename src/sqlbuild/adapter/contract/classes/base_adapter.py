@@ -38,6 +38,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -102,6 +103,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     max_identifier_length: ClassVar[int] = 63
     state_tables_transient: ClassVar[bool] = False
     relation_grants_supported: ClassVar[bool] = True
+    views_read_with_reader_access: ClassVar[bool] = False
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
@@ -721,7 +723,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         del connection, database, schema, name
         return ()
 
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -729,12 +731,27 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
-    ) -> tuple[str, ...]:
-        """Return statements that give ``destination`` the privileges granted on the relation."""
+    ) -> tuple[RelationGrant, ...]:
+        """Return the privileges granted or denied on a relation and its columns."""
 
-        del connection, database, schema, name, relation_type, destination
+        del connection, database, schema, name, relation_type
         return ()
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        """Render grants onto ``destination``, keeping column grants only for ``columns``."""
+
+        del grants, destination, columns
+        return ()
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        """Return statements that redefine an existing view keeping its privileges, if any."""
+
+        del destination, sql
+        return None
 
     def rename_view(
         self,

@@ -30,10 +30,19 @@ from tests.integration.src.sqlbuild.cli.commands.main.old_name_views.helpers imp
         OldNameJanitorResumeTestCase(
             description="early drop interrupted before its record",
             early_drop=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
+            builds_after_crash=0,
             expected_facts_after_crash=("required", "origin_archived", "view_created"),
             expected_retry_fragment="└── record  dropped  (the view no longer exists)",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
-        )
+        ),
+        OldNameJanitorResumeTestCase(
+            description="destination build after the interrupted drop leaves the view absent",
+            early_drop=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
+            builds_after_crash=1,
+            expected_facts_after_crash=("required", "origin_archived", "view_created"),
+            expected_retry_fragment="└── record  dropped  (the view no longer exists)",
+            expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -55,11 +64,14 @@ def test_given_janitor_crash_after_drop_when_rerunning_then_drop_is_recorded_as_
         except RuntimeError as error:
             first = CliRun(exit_code=1, output=str(error))
     facts_after_crash: tuple[str, ...] = old_name_facts(project_dir=tmp_path, schema="dev")
+    for _ in range(test_case.builds_after_crash):
+        _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    names_before_retry: list[str] = relation_names(project_dir=tmp_path, schema="dev")
     retry: CliRun = run_sqb(project_dir=tmp_path, args=("janitor", "--auto-approve"), capsys=capsys)
 
     assert first.exit_code != 0, first.output
     assert facts_after_crash == test_case.expected_facts_after_crash
-    assert ORIGIN_MODEL not in relation_names(project_dir=tmp_path, schema="dev")
+    assert ORIGIN_MODEL not in names_before_retry
     assert retry.exit_code == 0, retry.output
     assert test_case.expected_retry_fragment in retry.output
     assert old_name_facts(project_dir=tmp_path, schema="dev") == test_case.expected_final_facts

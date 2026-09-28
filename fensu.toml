@@ -282,5 +282,10 @@ reason = "tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_s
 [[targets.python.rule_exceptions]]
 rule = "XSB051"
 path = "src/sqlbuild/executor/migrations/_helpers/old_name_views.py"
-symbols = ["refresh_old_name_views", "run_planned_old_name_steps"]
-reason = "Old-name steps re-read facts and physical state per move so a retry never repeats a completed step, and compatibility views are re-created in dependency order, so a chained view must read the columns of the view it selects from after that view is re-created."
+symbols = [
+  "present_old_name_views",
+  "recreate_old_name_views",
+  "refresh_old_name_views",
+  "run_planned_old_name_steps",
+]
+reason = "Old-name steps re-read facts and physical state per move so a retry never repeats a completed step, and compatibility views are re-created in dependency order, so a chained view must read the columns of the view it selects from after that view is re-created. Each view's existence is checked right before it is redefined, and a model has only its own short chain of old names."

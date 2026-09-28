@@ -48,6 +48,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RenderedRetentionChange,
     RetentionRequest,
@@ -98,6 +99,7 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.bigquery._helpers.clone_refusal import is_bigquery_clone_refusal
 from sqlbuild.adapters.bigquery._helpers.grants import (
+    bigquery_relation_grants,
     render_bigquery_view_grants,
     render_bigquery_view_move,
 )
@@ -145,6 +147,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
+    views_read_with_reader_access: ClassVar[bool] = True
     max_identifier_length: ClassVar[int] = 1024
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
@@ -1830,7 +1833,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -1838,8 +1841,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
-    ) -> tuple[str, ...]:
+    ) -> tuple[RelationGrant, ...]:
         del relation_type
         location: str = self._metadata_location(
             connection=connection,
@@ -1858,9 +1860,21 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 "ORDER BY grantee, privilege_type"
             ),
         ).fetchall()
+        return bigquery_relation_grants(rows)
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        del columns
         return render_bigquery_view_grants(
-            rows=rows, destination=self._quote_identifier_path(destination)
+            grants=grants, destination=self._quote_identifier_path(destination)
         )
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        del destination, sql
+        return None
 
     def rename_view(
         self,
@@ -1881,10 +1895,20 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         ).fetchall()
         if not rows:
             raise AdapterUserError(message=f"BigQuery view {origin} does not exist")
+        view_grants: tuple[RelationGrant, ...] = self.read_relation_grants(
+            connection=connection,
+            database=".".join(parts[:-2]) or None,
+            schema=parts[-2],
+            name=parts[-1],
+            relation_type="view",
+        )
         statements: tuple[str, ...] = render_bigquery_view_move(
             origin=self._quote_identifier_path(origin),
             destination=self._quote_identifier_path(destination),
             definition=str(rows[0][0]),
+            grants=self.render_relation_grants(
+                grants=view_grants, destination=destination, columns=()
+            ),
         )
         statement_recorder.record_many(statements)
         statement: str

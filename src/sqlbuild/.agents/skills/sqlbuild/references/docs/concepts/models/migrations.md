@@ -95,13 +95,21 @@ On DuckDB, MotherDuck, PostgreSQL, and SQL Server these steps and their records 
 | Adapter | Privileges copied to the view |
 |---------|-------------------------------|
 | Snowflake | `SHOW GRANTS` on the archive, replayed to roles and database roles, keeping `WITH GRANT OPTION`. `OWNERSHIP`, grants to shares, and privileges that don't apply to views are skipped |
-| PostgreSQL | Table privileges from the catalog, including grants to `PUBLIC` and `WITH GRANT OPTION`. The owner's own privileges are not copied |
-| BigQuery | Table IAM role bindings from `INFORMATION_SCHEMA.OBJECT_PRIVILEGES`, replayed with `GRANT` |
+| PostgreSQL | Table and column privileges from the catalog, including grants to `PUBLIC` and `WITH GRANT OPTION`. The owner's own privileges are not copied |
+| BigQuery | Table IAM role bindings from `INFORMATION_SCHEMA.OBJECT_PRIVILEGES`, replayed with `GRANT`. See the note below |
 | Databricks | Unity Catalog grants on the table itself that apply to views, such as `SELECT`. `OWN`, `MODIFY`, and inherited catalog or schema grants are skipped |
-| SQL Server | Object permissions, including `DENY` and `WITH GRANT OPTION`, that apply to views. Column-level permissions are not copied |
+| SQL Server | Object and column permissions, including `DENY` and `WITH GRANT OPTION`, that apply to views |
 | DuckDB, MotherDuck | No object privileges exist |
 
-The copied grants are recorded with the view and reapplied whenever SQLBuild re-creates it, even after janitor has deleted the archive. BigQuery cannot rename views, so an old view model is re-created under the archive name and then dropped.
+Column privileges are copied to the view's column of the same name, which is the old name when the view aliases a renamed column. A column privilege on a column the view no longer exposes is not copied; the view shows nothing of that column.
+
+The copied grants are recorded on the view's creation. After that, the view's own privileges are what counts: when SQLBuild redefines the view after a rebuild, it keeps the privileges the view has at that moment, so a privilege you revoke from the view stays revoked and one you grant on the view is kept. SQLBuild uses `CREATE OR REPLACE VIEW` on PostgreSQL, `COPY GRANTS` on Snowflake, and `ALTER VIEW` on SQL Server and Databricks. On BigQuery, and on PostgreSQL when the view must be dropped and re-created, it reads the view's current grants just before and reapplies them.
+
+A recorded view that no longer exists at the old name is not re-created by a build; [janitor](../../cli/janitor.md) records it as dropped.
+
+BigQuery cannot rename views, so an old view model is re-created under the archive name with its IAM bindings, and then dropped.
+
+On BigQuery, a view reads its tables with the permissions of whoever queries it. A principal that could read the old table keeps access to the old name through the copied bindings, but also needs read access on the new table. SQLBuild does not grant that and does not create authorized views; the build warns with `M118` and names the principals.
 
 If columns were renamed, the view presents them under their old names, for example `SELECT order_id, revenue AS amount FROM analytics.daily_revenue`. Incremental and snapshot models alias every recorded [column migration](column-migrations.md). A table or view model that declares `migrate_from` can declare old column names the same way, as `revenue (migrate_from amount)`; this only aliases the column in the compatibility view, since the table is rebuilt with the new name anyway. The view is updated to the new relation's current columns after every build of the model.
 
@@ -148,7 +156,7 @@ The compatibility view is for consumers outside the project. Project code must u
 
 ### PostgreSQL views
 
-PostgreSQL views are bound to the table they read, not its name. When a build replaces the renamed model's table, or drops or retypes its columns, SQLBuild points its compatibility views at the new table in the same transaction, so they are never missing, even if the build is interrupted. A view is replaced in place when its columns allow it, so views you build on top of the compatibility view keep working; otherwise it is dropped and re-created with its grants, which fails if another view depends on it.
+PostgreSQL views are bound to the table they read, not its name. When a build replaces the renamed model's table, or drops or retypes its columns, SQLBuild points its compatibility views at the new table in the same transaction, so they are never missing, even if the build is interrupted. A view is replaced in place when its columns allow it, so views you build on top of the compatibility view keep working; otherwise it is dropped and re-created with the privileges it had, which fails if another view depends on it.
 
 Views outside SQLBuild that read the old relation follow it into the archive and keep reading its old data; the build warns with `M115` and names them. Re-create them against the old name or the new relation. On the other adapters, views read relations by name, so no rebinding is needed.
 

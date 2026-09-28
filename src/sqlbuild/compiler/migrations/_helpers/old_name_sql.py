@@ -118,7 +118,7 @@ def build_old_name_read_sql(
 
 
 def decode_old_name_event_row(
-    row: tuple[Any, ...], *, columns: tuple[str, ...] = OLD_NAME_VIEW_COLUMNS
+    *, row: tuple[Any, ...], columns: tuple[str, ...] = OLD_NAME_VIEW_COLUMNS
 ) -> OldNameViewEvent | None:
     """Decode one row of ``columns``, reading absent ones as NULL; skip unknown event types."""
 

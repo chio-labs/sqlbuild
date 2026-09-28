@@ -23,6 +23,7 @@ class OldNameResumeTestCase:
 class OldNameJanitorResumeTestCase:
     description: str
     early_drop: tuple[str, ...]
+    builds_after_crash: int
     expected_facts_after_crash: tuple[str, ...]
     expected_retry_fragment: str
     expected_final_facts: tuple[str, ...]

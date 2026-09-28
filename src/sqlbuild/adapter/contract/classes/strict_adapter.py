@@ -16,6 +16,7 @@ from sqlbuild.adapter.contract.models import (
     CursorValue,
     ExpressionInferenceProfile,
     MigrationStagePlan,
+    RelationGrant,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -371,7 +372,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -379,9 +380,22 @@ class StrictAdapter(
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
+    ) -> tuple[RelationGrant, ...]:
+        """Return the privileges granted or denied on a relation and its columns."""
+        ...
+
+    @abstractmethod
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
     ) -> tuple[str, ...]:
-        """Return statements that give ``destination`` the privileges granted on the relation."""
+        """Render grants onto ``destination``, keeping column grants only for ``columns``."""
+        ...
+
+    @abstractmethod
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        """Return statements that redefine an existing view keeping its privileges, if any."""
         ...
 
     @abstractmethod

@@ -1,26 +1,39 @@
-"""Render BigQuery table IAM bindings replayed onto a compatibility view."""
+"""Read and replay BigQuery table IAM bindings onto a compatibility view."""
 
 from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.contract.models import RelationGrant
+
 _ROLE_COLUMN: int = 0
 _GRANTEE_COLUMN: int = 1
 
 
-def render_bigquery_view_grants(
-    *, rows: list[tuple[Any, ...]], destination: str
-) -> tuple[str, ...]:
-    """Replay OBJECT_PRIVILEGES role bindings as DCL grants on the view."""
+def bigquery_relation_grants(rows: list[tuple[Any, ...]]) -> tuple[RelationGrant, ...]:
+    """Decode OBJECT_PRIVILEGES role bindings."""
 
     return tuple(
-        f"GRANT `{str(row[_ROLE_COLUMN]).replace('`', '')}` ON VIEW {destination} "
-        f'TO "{str(row[_GRANTEE_COLUMN]).replace(chr(34), "")}"'
+        RelationGrant(privilege=str(row[_ROLE_COLUMN]), grantee=str(row[_GRANTEE_COLUMN]))
         for row in rows
     )
 
 
-def render_bigquery_view_move(*, origin: str, destination: str, definition: str) -> tuple[str, ...]:
-    """Re-create a view under a new name, since BigQuery cannot rename views, then drop it."""
+def render_bigquery_view_grants(
+    *, grants: tuple[RelationGrant, ...], destination: str
+) -> tuple[str, ...]:
+    """Render role bindings as DCL grants on ``destination``."""
 
-    return (f"CREATE VIEW {destination} AS {definition}", f"DROP VIEW {origin}")
+    return tuple(
+        f"GRANT `{grant.privilege.replace('`', '')}` ON VIEW {destination} "
+        f'TO "{(grant.grantee or "").replace(chr(34), "")}"'
+        for grant in grants
+    )
+
+
+def render_bigquery_view_move(
+    *, origin: str, destination: str, definition: str, grants: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Re-create a view under a new name with its grants, since BigQuery cannot rename views."""
+
+    return (f"CREATE VIEW {destination} AS {definition}", *grants, f"DROP VIEW {origin}")

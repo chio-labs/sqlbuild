@@ -9,11 +9,8 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.migrations._helpers.old_name_views import (
-    drop_old_name_views,
-    rebind_old_name_views,
-    views_reading,
-)
+from sqlbuild.executor.migrations._helpers.old_name_views import views_reading
+from sqlbuild.executor.migrations.classes.bound_old_name_views import BoundOldNameViews
 from sqlbuild.executor.migrations.models import OldNameViewSource
 from sqlbuild.executor.run.models import BoundViewGuard
 
@@ -34,13 +31,12 @@ def bound_old_name_view_guard(
     )
     if not sources:
         return BoundViewGuard()
+    views: BoundOldNameViews = BoundOldNameViews(
+        adapter=adapter, connection=connection, sources=sources
+    )
     transaction: partial[AbstractContextManager[object]] = partial(adapter.transaction, connection)
     return BoundViewGuard(
         transaction=transaction if adapter.supports_transactional_ddl() else nullcontext,
-        release=partial(
-            drop_old_name_views, adapter=adapter, connection=connection, sources=sources
-        ),
-        rebind=partial(
-            rebind_old_name_views, adapter=adapter, connection=connection, sources=sources
-        ),
+        release=views.release,
+        rebind=views.rebind,
     )

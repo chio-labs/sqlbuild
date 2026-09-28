@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.models import RelationGrant
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 
@@ -26,4 +27,4 @@ class OldNameViewSource:
     old: CompiledRelationLocation
     new: CompiledRelationLocation
     column_aliases: tuple[tuple[str, str], ...]
-    grant_statements: tuple[str, ...] = ()
+    grants: tuple[RelationGrant, ...] = ()

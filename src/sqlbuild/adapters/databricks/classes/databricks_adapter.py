@@ -46,6 +46,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RenderedRetentionChange,
     RetentionRequest,
@@ -96,6 +97,7 @@ from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nu
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.databricks._helpers.grants import (
+    databricks_relation_grants,
     render_databricks_view_grants,
     show_grants_object_kind,
 )
@@ -1805,7 +1807,7 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def capture_relation_grants(
+    def read_relation_grants(
         self,
         *,
         connection: Any,
@@ -1813,8 +1815,7 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         name: str,
         relation_type: str,
-        destination: str,
-    ) -> tuple[str, ...]:
+    ) -> tuple[RelationGrant, ...]:
         relation: str | None = self.render_qualified_name(
             database=database, schema=schema, name=name
         )
@@ -1822,7 +1823,18 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         rows: list[tuple[Any, ...]] = self.execute(
             connection=connection, sql=f"SHOW GRANTS ON {kind} {relation}"
         ).fetchall()
-        return render_databricks_view_grants(rows=rows, destination=destination)
+        return databricks_relation_grants(rows)
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        del columns
+        return render_databricks_view_grants(grants=grants, destination=destination)
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        return (f"ALTER VIEW {destination} AS {sql}",)
 
     def rename_view(
         self,

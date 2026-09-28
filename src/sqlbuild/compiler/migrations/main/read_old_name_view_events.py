@@ -42,7 +42,7 @@ def read_old_name_view_events(
     events: list[OldNameViewEvent] = []
     row: tuple[Any, ...]
     for row in rows:
-        event: OldNameViewEvent | None = decode_old_name_event_row(tuple(row), columns=columns)
+        event: OldNameViewEvent | None = decode_old_name_event_row(row=tuple(row), columns=columns)
         if event is not None:
             events.append(event)
     return tuple(events)

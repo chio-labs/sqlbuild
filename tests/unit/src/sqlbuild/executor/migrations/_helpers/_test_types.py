@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationGrant
 
 
 @dataclass(frozen=True)
@@ -31,3 +32,11 @@ class AdapterOldNameSqlTestCase:
     expected_statements: tuple[str, ...]
     expected_state_table_prefix: str
     expected_transactional: bool
+
+
+@dataclass(frozen=True)
+class ReaderAccessWarningTestCase:
+    description: str
+    adapter: BaseAdapter
+    grants: tuple[RelationGrant, ...]
+    expected_warnings: tuple[str, ...]
