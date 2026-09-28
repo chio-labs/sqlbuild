@@ -612,3 +612,71 @@ def view_catalog(
         ),
         config=config,
     )
+
+
+FACT_ORDERS_MODEL: str = "fct_orders"
+_COLUMN_MIGRATION_TEXT_COLUMNS: tuple[str, ...] = (
+    "event_id",
+    "target_name",
+    "model_name",
+    "relation_database",
+    "relation_schema",
+    "relation_name",
+    "origin_column",
+    "destination_column",
+    "discovery",
+    "decision",
+    "run_id",
+)
+
+
+def fact_orders_sql(*, amount: str = "amount_cents", columns: str = "") -> str:
+    """Return an incremental orders fact model with an optional column migrations block."""
+
+    declarations: str = {"": ""}.get(columns, f"  columns ({columns}),\n")
+    return (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+        "  replay_on_change full,\n"
+        f"{declarations}"
+        ");\n\n"
+        f'SELECT order_id, order_date, {amount} FROM __source("raw_orders")\n'
+    )
+
+
+def fact_order_columns(
+    *, schema_name: str, config: dict[str, object]
+) -> tuple[tuple[object, ...], ...]:
+    """Return the physical column names of the orders fact table in order."""
+
+    return fetch_postgres_rows(
+        sql=(
+            "SELECT column_name FROM information_schema.columns "
+            f"WHERE table_schema = '{schema_name}' AND table_name = '{FACT_ORDERS_MODEL}' "
+            "ORDER BY ordinal_position"
+        ),
+        config=config,
+    )
+
+
+def create_unwritable_column_migration_table(
+    *, schema_name: str, config: dict[str, object]
+) -> None:
+    """Occupy the column migration state name with a read-only view so the insert fails."""
+
+    columns: str = ", ".join(
+        f"CAST(NULL AS TEXT) AS {column}" for column in _COLUMN_MIGRATION_TEXT_COLUMNS
+    )
+    execute_postgres_sql(
+        sql=(
+            f"CREATE VIEW {schema_name}._sqlbuild_column_migrations AS SELECT {columns}, "
+            "CAST(NULL AS TIMESTAMP) AS created_at WHERE false"
+        ),
+        config=config,
+    )

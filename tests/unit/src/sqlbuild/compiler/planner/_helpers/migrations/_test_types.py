@@ -23,3 +23,37 @@ class IneligibleFingerprintTestCase:
     description: str
     query_sql: str
     expected_fingerprint: str | None
+
+
+@dataclass(frozen=True)
+class IdenticalRenameTestCase:
+    description: str
+    previous_sql: str
+    current_sql: str
+    expected_renames: tuple[tuple[str, str], ...]
+    excluded: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class RenameHintTestCase:
+    description: str
+    previous_sql: str
+    current_sql: str
+    live_columns: frozenset[str]
+    expected_hints: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RenameExplainsChangeTestCase:
+    description: str
+    previous_sql: str
+    current_sql: str
+    renames: dict[str, str]
+    expected_explained: bool
+
+
+@dataclass(frozen=True)
+class UnreadableQueryShapeTestCase:
+    description: str
+    query_sql: str
+    expected_shape: None = None

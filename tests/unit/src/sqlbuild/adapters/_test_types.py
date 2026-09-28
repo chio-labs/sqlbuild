@@ -72,3 +72,27 @@ class AdapterTransactionalDdlTestCase:
     description: str
     adapter: BaseAdapter
     expected_transactional: bool
+
+
+@dataclass(frozen=True)
+class AdapterRenameColumnSqlTestCase:
+    description: str
+    adapter: StrictAdapter
+    destination: str
+    old_name: str
+    new_name: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AdapterColumnMigrationStateTableTestCase:
+    description: str
+    adapter: StrictAdapter
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksColumnMappingTestCase:
+    description: str
+    property_rows: list[tuple[str, str]]
+    expected_available: bool

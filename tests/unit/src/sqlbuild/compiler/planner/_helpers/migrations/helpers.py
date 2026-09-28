@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
+from sqlbuild.compiler.planner._helpers.migrations.projections import parse_query_shape
+from sqlbuild.compiler.planner.models import QueryShape
 
 BASE_CONFIG: dict[str, object] = {
     "materialized": "incremental",
@@ -26,3 +28,11 @@ def model_fingerprint(
         ref_identities=ref_identities,
         dialect="duckdb",
     )
+
+
+def query_shape(query_sql: str) -> QueryShape:
+    """Return the DuckDB query shape of one readable model query."""
+
+    shape: QueryShape | None = parse_query_shape(query_sql=query_sql, dialect="duckdb")
+    assert shape is not None, query_sql
+    return shape

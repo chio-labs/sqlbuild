@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
+    ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
     FunctionPlanEntry,
@@ -74,6 +75,7 @@ def build_model_entry(
     microbatch_limit_count: int | None = None,
     microbatch_limit_action: MicrobatchLimitAction | None = None,
     microbatch_limit_warning: str | None = None,
+    column_rename_hints: tuple[ColumnRenameHint, ...] = (),
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for formatter tests."""
 
@@ -119,6 +121,7 @@ def build_model_entry(
         microbatch_limit_count=microbatch_limit_count,
         microbatch_limit_action=microbatch_limit_action,
         microbatch_limit_warning=microbatch_limit_warning,
+        column_rename_hints=column_rename_hints,
     )
 
 

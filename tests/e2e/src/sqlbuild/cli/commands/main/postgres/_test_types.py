@@ -153,3 +153,21 @@ class PostgresMigrationRollbackE2ETestCase:
     expected_destination_ids_after_failure: tuple[tuple[object, ...], ...]
     expected_previous_archives_after_failure: int
     expected_final_destination_ids: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresColumnMigrationE2ETestCase:
+    description: str
+    expected_columns: tuple[tuple[object, ...], ...]
+    expected_amounts: tuple[tuple[object, ...], ...]
+    expected_view_amounts: tuple[tuple[object, ...], ...]
+    expected_events: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresColumnMigrationRollbackE2ETestCase:
+    description: str
+    expected_failure_fragment: str
+    expected_columns_after_failure: tuple[tuple[object, ...], ...]
+    expected_final_columns: tuple[tuple[object, ...], ...]
+    expected_events: tuple[tuple[object, ...], ...]
