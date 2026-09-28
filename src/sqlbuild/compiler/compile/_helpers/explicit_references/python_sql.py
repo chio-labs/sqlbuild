@@ -34,6 +34,7 @@ from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.models import SourceLocation
 
 _SQL_METHOD_NAMES: frozenset[str] = frozenset({"query", "execute_sql"})
+_SQL_PARAMETER_NAME: str = "sql"
 _CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx", "hook_context"})
 _VALUE_PLACEHOLDER: str = "__sqlbuild_python_value_"
 
@@ -197,12 +198,25 @@ def _literal_sql_calls(function: Callable[..., object]) -> Iterator[_LiteralSql]
             and node.func.attr in _SQL_METHOD_NAMES
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id == context_name
-            and node.args
         ):
             continue
-        sql: str | None = _literal_text(node.args[0])
+        argument: ast.expr | None = _sql_argument(node)
+        sql: str | None = _literal_text(argument) if argument is not None else None
         if sql is not None:
             yield _LiteralSql(method=node.func.attr, sql=sql, line=start_line + node.lineno - 1)
+
+
+def _sql_argument(call: ast.Call) -> ast.expr | None:
+    if call.args:
+        return call.args[0]
+    for keyword in call.keywords:
+        if keyword.arg == _SQL_PARAMETER_NAME:
+            return keyword.value
+        if keyword.arg is None and isinstance(keyword.value, ast.Dict):
+            for key, value in zip(keyword.value.keys, keyword.value.values, strict=True):
+                if isinstance(key, ast.Constant) and key.value == _SQL_PARAMETER_NAME:
+                    return value
+    return None
 
 
 def _literal_text(node: ast.expr) -> str | None:

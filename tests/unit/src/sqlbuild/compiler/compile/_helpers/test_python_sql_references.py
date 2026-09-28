@@ -110,6 +110,47 @@ _RAW_SOURCES: dict[str, str] = {
             ),
         ),
         PythonSqlReferenceErrorTestCase(
+            description="task literal SQL passed as the sql keyword",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(),
+                _TASK_PATH: python_task_source(
+                    body='    ctx.query(sql="SELECT count(*) FROM customers")\n'
+                ),
+            },
+            expected_error_fragments=(
+                "[P008] task:export_orders names model:customers as 'customers' in SQL passed to "
+                "ctx.query() --> python/tasks/export.py:7",
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="hook literal SQL passed to execute_sql as the sql keyword",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(
+                    body='    ctx.execute_sql(sql="DELETE FROM customers")\n'
+                ),
+            },
+            expected_error_fragments=(
+                "[P008]",
+                "names model:customers as 'customers' in SQL passed to ctx.execute_sql()",
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="task literal SQL unpacked from a keyword dictionary",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(),
+                _TASK_PATH: python_task_source(
+                    body='    ctx.query(**{"sql": "SELECT count(*) FROM customers"})\n'
+                ),
+            },
+            expected_error_fragments=(
+                "[P008] task:export_orders names model:customers as 'customers' in SQL passed to "
+                "ctx.query()",
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
             description="task literal SQL naming a seed",
             files={
                 **_MODELS,
