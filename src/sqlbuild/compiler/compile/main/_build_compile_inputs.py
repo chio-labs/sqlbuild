@@ -31,6 +31,9 @@ from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_t
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
+from sqlbuild.compiler.compile._helpers.explicit_references.collector import (
+    with_explicit_reference_diagnostics,
+)
 from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_declaration_indexes,
@@ -71,6 +74,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 from sqlbuild.spec.contracts.models import SettingsConfig, TargetConfig
 
 
+@with_explicit_reference_diagnostics
 def build_compile_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,

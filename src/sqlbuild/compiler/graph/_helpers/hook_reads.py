@@ -45,12 +45,12 @@ def hook_read_edges_impl(*, project: CompiledProject) -> tuple[HookReadEdge, ...
     return tuple(edges)
 
 
-def hook_read_cycle_impl(*, project: CompiledProject) -> HookReadEdge | None:
-    """Return the first declared hook read that depends on the model running the hook."""
+def hook_read_cycles_impl(*, project: CompiledProject) -> tuple[HookReadEdge, ...]:
+    """Return every declared hook read that depends on the model running the hook."""
 
     edges: tuple[HookReadEdge, ...] = hook_read_edges_impl(project=project)
     if not edges:
-        return None
+        return ()
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {
         key: list(deps) for key, deps in build_lineage_upstream_deps_impl(project).items()
     }
@@ -58,9 +58,11 @@ def hook_read_cycle_impl(*, project: CompiledProject) -> HookReadEdge | None:
         upstream.setdefault(gate.gated, []).append(gate.read)
     for edge in edges:
         upstream.setdefault(edge.gated, []).append(edge.read)
-    for edge in sorted(edges, key=lambda item: (item.gated.name, item.hook_name, item.read.name)):
-        if edge.gated in transitive_closure_many_impl(
-            starts=(edge.read,), edges=upstream, include_starts=False
-        ):
-            return edge
-    return None
+    return tuple(
+        edge
+        for edge in sorted(
+            edges, key=lambda item: (item.gated.name, item.hook_name, item.read.name)
+        )
+        if edge.gated
+        in transitive_closure_many_impl(starts=(edge.read,), edges=upstream, include_starts=False)
+    )

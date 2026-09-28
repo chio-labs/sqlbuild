@@ -1921,7 +1921,7 @@ def _build_test_model_query_overrides(
         return {}
     if not test_input.payload.macro_mocks:
         return {}
-    macro_context: MacroContext = inputs.macro_context or MacroContext(
+    model_macro_context: MacroContext = inputs.macro_context or MacroContext(
         adapter_name=resolve_effective_adapter_name(
             project_config=inputs.project_config,
             local_config=inputs.local_config,
@@ -1929,8 +1929,8 @@ def _build_test_model_query_overrides(
         sql_analysis_enabled=inputs.effective_settings.sql_analysis,
         target_name=inputs.effective_target_name,
         vars=inputs.effective_vars,
-        _enforce_explicit_references=inputs.project_config.references.enforce_explicit,
     )
+    macro_context: MacroContext = replace(model_macro_context, _enforce_explicit_references=False)
     overrides: dict[str, str] = {}
     model_input: CompileModelInput
     for model_input in model_inputs:

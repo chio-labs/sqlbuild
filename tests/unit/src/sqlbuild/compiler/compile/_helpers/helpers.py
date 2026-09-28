@@ -11,6 +11,9 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
+from sqlbuild.compiler.compile._helpers.explicit_references.collector import (
+    collect_explicit_reference_violations,
+)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
@@ -30,6 +33,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompiledSqlTest,
     CompileProjectInputs,
+    CompilerDiagnostic,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
     DeclarationRuntimeProjection,
@@ -398,4 +402,24 @@ def python_loader_source(*, depends_on: str, body: str) -> str:
         "def raw_customers(ctx):\n"
         f"{body}"
         "    return [{'id': 1}]\n"
+    )
+
+
+def collect_typed_macro_violations(
+    *, tmp_path: Path, macro_file_contents: str, sql: str
+) -> tuple[CompilerDiagnostic, ...]:
+    """Expand ``order_summary`` SQL and return the explicit-reference violations it reports."""
+
+    with collect_explicit_reference_violations() as violations:
+        expand_typed_macro_sql(tmp_path=tmp_path, macro_file_contents=macro_file_contents, sql=sql)
+    return violations.diagnostics
+
+
+def render_compile_diagnostics(*, project: CompiledProject) -> str:
+    """Render every project diagnostic with its code, message, location, and help."""
+
+    return "\n".join(
+        f"[{diagnostic.code}] {diagnostic.message} --> {diagnostic.path}:{diagnostic.line} "
+        f"= help: {diagnostic.help}"
+        for diagnostic in project.diagnostics
     )

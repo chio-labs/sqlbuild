@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    ExplicitReferenceAllDiagnosticsE2ETestCase,
     ExplicitReferenceBuildE2ETestCase,
     ExplicitReferenceFailureE2ETestCase,
     ExplicitReferencePythonDependencyE2ETestCase,
@@ -36,6 +37,9 @@ _EMITTING_MACROS: str = (
     + "\n\ndef orders_base():\n    return 'SELECT * FROM __ref(\"stg_orders_eu\")'\n"
 )
 _EMITTING_MODEL: str = "MODEL (materialized table);\n@orders_base()\n"
+_SECOND_EMITTING_MACROS: str = (
+    "def customers_base():\n    return 'SELECT * FROM __ref(\"stg_customers\")'\n"
+)
 _UNDECLARED_HOOKS: str = EXPLICIT_REFERENCE_HOOKS + '    ctx.relation(model("all_orders"))\n'
 _LITERAL_TASK: str = (
     "from sqlbuild.refs import model\n"
@@ -421,4 +425,72 @@ def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_wit
     assert all(
         fragment in warning
         for warning, fragment in zip(stored, test_case.expected_warning_fragments, strict=True)
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExplicitReferenceAllDiagnosticsE2ETestCase(
+            description="two ref-emitting macros and a hard-coded task name all report at once",
+            overrides={
+                EXPLICIT_REFERENCE_MACRO_PATH: _EMITTING_MACROS,
+                "models/sales/_sqlbuild/_macros/customers.py": _SECOND_EMITTING_MACROS,
+                f"{EXPLICIT_REFERENCE_MODELS}/hidden.sql": _EMITTING_MODEL,
+                f"{EXPLICIT_REFERENCE_MODELS}/hidden_customers.sql": (
+                    "MODEL (materialized table);\n@customers_base()\n"
+                ),
+                "python/tasks/export.py": _LITERAL_TASK,
+            },
+            expected_output_fragments=(
+                "error[P006]: model:hidden depends on model:stg_orders_eu through macro "
+                "orders_base()",
+                "error[P006]: model:hidden_customers depends on model:stg_customers through macro "
+                "customers_base()",
+                "error[P008]: task:export_orders names model:stg_customers as 'stg_customers'",
+                "3 errors",
+            ),
+            expected_json_diagnostics=(
+                ("P006", "model:hidden depends on model:stg_orders_eu through macro orders_base()"),
+                (
+                    "P006",
+                    "model:hidden_customers depends on model:stg_customers through macro "
+                    "customers_base()",
+                ),
+                (
+                    "P008",
+                    "task:export_orders names model:stg_customers as 'stg_customers' in SQL "
+                    "passed to ctx.query()",
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_several_implicit_references_when_compiling_then_one_compile_reports_all(
+    test_case: ExplicitReferenceAllDiagnosticsE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="explicit_refs",
+        repo_files=explicit_reference_project_files(overrides=test_case.overrides),
+    )
+
+    text: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project_dir
+    )
+    machine: subprocess.CompletedProcess[str] = run_sqb(
+        command=("compile", "--json", "--no-cache"), project_dir=project_dir
+    )
+
+    assert text.returncode == 1, text.stdout + text.stderr
+    output: str = text.stdout + text.stderr
+    assert all(fragment in output for fragment in test_case.expected_output_fragments), output
+    assert machine.returncode == 1, machine.stdout + machine.stderr
+    payload: dict[str, object] = json.loads(machine.stdout)
+    assert payload["has_errors"] is True
+    assert (
+        tuple((item["code"], item["message"]) for item in payload["diagnostics"])
+        == test_case.expected_json_diagnostics
     )

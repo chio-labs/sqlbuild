@@ -443,6 +443,9 @@ Every reference to a model, source, or seed must be explicit and typed. By defau
 - The same check runs on SQL sent at run time and reports a `P008` warning; the query still runs.
   See [Hard-coded relation names](python-nodes/sql-references.md#hard-coded-relation-names).
 
+One compile reports every `P006`, `P007`, and `P008` violation in the project, in the terminal and in
+`sqb compile --json`.
+
 While migrating a project from another tool, turn these checks off for the whole project:
 
 ```toml

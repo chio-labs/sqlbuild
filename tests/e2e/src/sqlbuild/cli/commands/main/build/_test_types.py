@@ -1037,6 +1037,16 @@ class ExplicitReferencePythonDependencyE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ExplicitReferenceAllDiagnosticsE2ETestCase:
+    """A project with several explicit-reference violations, all reported by one compile."""
+
+    description: str
+    overrides: dict[str, str]
+    expected_output_fragments: tuple[str, ...]
+    expected_json_diagnostics: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class ExplicitReferenceFailureE2ETestCase:
     """A project whose references are not explicit, and the failure it reports."""
 

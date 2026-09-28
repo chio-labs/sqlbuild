@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import HARD_CODED_PROJECT_RELATION_CODE
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main._model_python_hook_names import model_python_hook_names
 from sqlbuild.compiler.references.main._compiled_project_relations import (
@@ -31,6 +31,7 @@ from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
 from sqlbuild.python_nodes.models import LoaderDefinition, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
+from sqlbuild.spec.contracts.models import SourceLocation
 
 _SQL_METHOD_NAMES: frozenset[str] = frozenset({"query", "execute_sql"})
 _CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx", "hook_context"})
@@ -54,29 +55,40 @@ class _LiteralSql:
     line: int
 
 
-def validate_python_sql_references(
+def python_sql_reference_diagnostics(
     *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
-) -> None:
-    """Reject literal SQL in Python nodes and hooks that names a project relation."""
+) -> tuple[CompilerDiagnostic, ...]:
+    """Return a P008 error for each project relation literal SQL in Python code names."""
 
     owners: tuple[_PythonSqlOwner, ...] = _owners(
         project=project, discovered_inputs=discovered_inputs
     )
     if not owners:
-        return
+        return ()
     index: ProjectRelationIndex = compiled_project_relations(project=project)
     if not index.relations:
-        return
+        return ()
+    diagnostics: dict[tuple[str, int, str, str], CompilerDiagnostic] = {}
     for owner in owners:
         temporary: frozenset[str] = frozenset()
         for literal in sorted(_literal_sql_calls(owner.function), key=lambda item: item.line):
-            temporary = _reject_hard_coded_relation(
+            found: dict[tuple[str, int, str, str], CompilerDiagnostic]
+            temporary, found = _hard_coded_relations(
                 owner=owner,
                 literal=literal,
                 index=index,
                 dialect=project.sql_analysis_dialect,
                 temporary=temporary,
             )
+            for key, diagnostic in found.items():
+                diagnostics.setdefault(key, diagnostic)
+    return tuple(
+        diagnostics[key]
+        for key in sorted(
+            diagnostics,
+            key=lambda key: (diagnostics[key].path or Path(), key[1], key[0], key[2], key[3]),
+        )
+    )
 
 
 def _owners(
@@ -207,19 +219,20 @@ def _literal_text(node: ast.expr) -> str | None:
     return "".join(parts)
 
 
-def _reject_hard_coded_relation(
+def _hard_coded_relations(
     *,
     owner: _PythonSqlOwner,
     literal: _LiteralSql,
     index: ProjectRelationIndex,
     dialect: str | None,
     temporary: frozenset[str],
-) -> frozenset[str]:
+) -> tuple[frozenset[str], dict[tuple[str, int, str, str], CompilerDiagnostic]]:
     extracted: tuple[tuple[RelationName, ...], frozenset[str]] | None = extract_relation_names(
         sql=literal.sql, dialect=dialect
     )
+    found: dict[tuple[str, int, str, str], CompilerDiagnostic] = {}
     if extracted is None:
-        return temporary
+        return temporary, found
     relations, created = extracted
     temporary = temporary | created
     for relation in relations:
@@ -232,29 +245,54 @@ def _reject_hard_coded_relation(
         match: ProjectRelation | None = match_project_relation(index=index, relation=relation)
         if match is None or match.ref in owner.own_refs:
             continue
-        written: str = ".".join(
-            part for part in (relation.database, relation.schema, relation.name) if part
+        key: tuple[str, int, str, str] = (
+            owner.label,
+            literal.line,
+            match.ref.kind.value,
+            match.ref.name,
         )
-        remedy: str = hard_coded_relation_remedy(
-            owner_kind=owner.kind,
-            ref=match.ref,
-            upstream_loader_by_source=owner.upstream_loader_by_source,
-        )
-        qualify_help: str = (
-            f"\n  = help: if '{written}' is an external table that shares the name, qualify it "
-            "with its schema"
-            if relation.schema is None
-            else ""
-        )
-        raise CompileInputError(
-            f"{owner.label} names {match.ref.kind.value}:{match.ref.name} as '{written}' in SQL "
-            f"passed to ctx.{literal.method}()\n  --> {owner.relative_path.as_posix()}:"
-            f"{literal.line}",
-            code=HARD_CODED_PROJECT_RELATION_CODE,
-            help=(
-                f"{remedy}{qualify_help}\n"
-                "  = help: while migrating a project, allow hard-coded relation names with "
-                "[references] enforce_explicit = false in sqlbuild_project.toml"
+        found.setdefault(
+            key,
+            _hard_coded_relation_diagnostic(
+                owner=owner, literal=literal, relation=relation, match=match
             ),
         )
-    return temporary
+    return temporary, found
+
+
+def _hard_coded_relation_diagnostic(
+    *,
+    owner: _PythonSqlOwner,
+    literal: _LiteralSql,
+    relation: RelationName,
+    match: ProjectRelation,
+) -> CompilerDiagnostic:
+    written: str = ".".join(
+        part for part in (relation.database, relation.schema, relation.name) if part
+    )
+    remedy: str = hard_coded_relation_remedy(
+        owner_kind=owner.kind,
+        ref=match.ref,
+        upstream_loader_by_source=owner.upstream_loader_by_source,
+    )
+    qualify_help: str = (
+        f"\n  = help: if '{written}' is an external table that shares the name, qualify it "
+        "with its schema"
+        if relation.schema is None
+        else ""
+    )
+    return CompilerDiagnostic(
+        phase=DiagnosticPhase.COMPILE,
+        severity=DiagnosticSeverity.ERROR,
+        code=HARD_CODED_PROJECT_RELATION_CODE,
+        message=(
+            f"{owner.label} names {match.ref.kind.value}:{match.ref.name} as '{written}' in SQL "
+            f"passed to ctx.{literal.method}()"
+        ),
+        location=SourceLocation(path=owner.relative_path, line=literal.line, column=1),
+        help=(
+            f"{remedy}{qualify_help}\n"
+            "  = help: while migrating a project, allow hard-coded relation names with "
+            "[references] enforce_explicit = false in sqlbuild_project.toml"
+        ),
+    )

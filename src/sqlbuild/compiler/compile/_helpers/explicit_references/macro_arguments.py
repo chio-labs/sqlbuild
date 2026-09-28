@@ -6,10 +6,18 @@ import ast
 import re
 from pathlib import Path
 
+from sqlbuild.compiler.compile._helpers.explicit_references.collector import (
+    report_explicit_reference_violation,
+)
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.constants import MACRO_GENERATED_REFERENCE_CODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlReference, LoadedMacro
+from sqlbuild.compiler.compile.models import CompilerDiagnostic, CompileSqlReference, LoadedMacro
+from sqlbuild.compiler.compile.types import (
+    CompiledResourceType,
+    DiagnosticPhase,
+    DiagnosticSeverity,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
@@ -28,6 +36,11 @@ _EXPLICIT_REFERENCE_KINDS: dict[str, SqlResourceRefKind] = {
     SqlReferenceKind.REF.value: SqlResourceRefKind.MODEL,
     SqlReferenceKind.SOURCE.value: SqlResourceRefKind.SOURCE,
     SqlReferenceKind.SEED.value: SqlResourceRefKind.SEED,
+}
+_RESOURCE_TYPE_BY_CONSUMER_KIND: dict[ResourceKind, CompiledResourceType] = {
+    ResourceKind.MODEL: CompiledResourceType.MODEL,
+    ResourceKind.SOURCE: CompiledResourceType.SOURCE,
+    ResourceKind.SEED: CompiledResourceType.SEED,
 }
 _REFERENCE_CALL_MARKERS: tuple[str, ...] = tuple(f"{name}(" for name in _TYPED_REFERENCE_KINDS)
 _RELATION_PLACEHOLDER_PREFIX: str = "__sqlbuild_relation_"
@@ -64,10 +77,9 @@ def reject_macro_generated_references(
     file_path: Path,
     consumer: ResourceIdentity | DeclarationIdentity | None,
 ) -> None:
+    """Report each typed reference a macro emitted instead of receiving it as an argument."""
+
     if not any(marker in macro_result for marker in _REFERENCE_CALL_MARKERS):
-        return
-    generated: SqlResourceRef | None = _first_generated_reference(macro_result)
-    if generated is None:
         return
     consumer_label: str = (
         f"{consumer.kind.value}:{consumer.name}" if consumer is not None else f"'{file_path}'"
@@ -77,29 +89,48 @@ def reject_macro_generated_references(
         if isinstance(consumer, ResourceIdentity) and consumer.kind is ResourceKind.MODEL
         else "the calling SQL"
     )
-    raise CompileInputError(
-        f"{consumer_label} depends on {generated.kind.value}:{generated.name} through macro "
-        f"{loaded_macro.name}()\n  --> {loaded_macro.relative_path.as_posix()}",
-        code=MACRO_GENERATED_REFERENCE_CODE,
-        help=(
-            f"write the reference in {location}, or pass it in: "
-            f"@{loaded_macro.name}({_reference_call_text(generated)})\n"
-            "  = help: while migrating a project, allow macro-generated references with "
-            "[references] enforce_explicit = false in sqlbuild_project.toml"
-        ),
+    resource: ResourceIdentity | None = consumer if isinstance(consumer, ResourceIdentity) else None
+    resource_type: CompiledResourceType | None = (
+        _RESOURCE_TYPE_BY_CONSUMER_KIND.get(resource.kind) if resource is not None else None
     )
+    generated: SqlResourceRef
+    for generated in _generated_references(macro_result):
+        report_explicit_reference_violation(
+            key=(consumer_label, loaded_macro.name, generated.kind.value, generated.name),
+            diagnostic=CompilerDiagnostic(
+                phase=DiagnosticPhase.COMPILE,
+                severity=DiagnosticSeverity.ERROR,
+                code=MACRO_GENERATED_REFERENCE_CODE,
+                message=(
+                    f"{consumer_label} depends on {generated.kind.value}:{generated.name} "
+                    f"through macro {loaded_macro.name}()"
+                ),
+                resource_type=resource_type,
+                resource_name=(
+                    resource.name if resource is not None and resource_type is not None else None
+                ),
+                path=loaded_macro.relative_path,
+                help=(
+                    f"write the reference in {location}, or pass it in: "
+                    f"@{loaded_macro.name}({_reference_call_text(generated)})\n"
+                    "  = help: while migrating a project, allow macro-generated references with "
+                    "[references] enforce_explicit = false in sqlbuild_project.toml"
+                ),
+            ),
+        )
 
 
-def _first_generated_reference(sql: str) -> SqlResourceRef | None:
+def _generated_references(sql: str) -> tuple[SqlResourceRef, ...]:
     try:
         references: tuple[CompileSqlReference, ...] = extract_sql_references(sql)
     except CompileInputError:
-        return None
+        return ()
+    generated: dict[SqlResourceRef, None] = {}
     for reference in references:
         kind: SqlResourceRefKind | None = _EXPLICIT_REFERENCE_KINDS.get(str(reference.ref_kind))
         if kind is not None:
-            return SqlResourceRef(kind=kind, name=reference.ref_name)
-    return None
+            generated[SqlResourceRef(kind=kind, name=reference.ref_name)] = None
+    return tuple(generated)
 
 
 def evaluate_typed_reference(*, node: ast.Call, file_path: Path) -> SqlResourceRef:

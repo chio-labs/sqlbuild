@@ -17,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     execution_edge_names,
     gate_model,
     python_hook_source,
+    render_compile_diagnostics,
 )
 
 _PROJECT_FILE: str = """
@@ -99,6 +100,45 @@ def test_given_hook_reads_when_compiling_then_hooked_model_runs_after_reads(
                 "which depends on 'orders'",
             ),
         ),
+        HookReadErrorTestCase(
+            description="every hook read of its own dependant is reported",
+            files={
+                _HOOK_PATH: python_hook_source(
+                    reads='[model("order_rollup"), model("order_count")]'
+                ),
+                "models/marts/orders.sql": gate_model(
+                    sql="SELECT 1 AS order_id", header=_HOOKED_HEADER
+                ),
+                "models/marts/order_rollup.sql": gate_model(
+                    sql='SELECT count(*) AS n FROM __ref("orders")'
+                ),
+                "models/marts/order_count.sql": gate_model(
+                    sql='SELECT count(*) AS n FROM __ref("orders")'
+                ),
+            },
+            expected_error_fragments=(
+                "[P007] Python hook 'refresh_lookup' on model 'orders' reads model 'order_count'",
+                "[P007] Python hook 'refresh_lookup' on model 'orders' reads model 'order_rollup'",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_hook_reading_its_own_dependant_when_compiling_then_it_reports_p007(
+    test_case: HookReadErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
+
+    rendered: str = render_compile_diagnostics(project=compile_and_assemble(project_dir=tmp_path))
+
+    assert all(fragment in rendered for fragment in test_case.expected_error_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         HookReadErrorTestCase(
             description="hook reading an unknown model",
             files={

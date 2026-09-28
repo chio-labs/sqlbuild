@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     python_hook_source,
     python_loader_source,
     python_task_source,
+    render_compile_diagnostics,
 )
 
 _PROJECT_FILE: str = """
@@ -79,6 +80,33 @@ _RAW_SOURCES: dict[str, str] = {
                 "if 'customers' is an external table that shares the name, qualify it with its "
                 "schema",
                 "[references] enforce_explicit = false",
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="every hard-coded relation across Python nodes is reported",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(),
+                _TASK_PATH: python_task_source(
+                    body=(
+                        '    ctx.query("SELECT count(*) FROM customers")\n'
+                        '    ctx.query("SELECT * FROM customers JOIN orders ON true")\n'
+                    )
+                ),
+                _CHECK_PATH: python_check_source(
+                    depends_on='model("orders")',
+                    body='    ctx.query("SELECT count(*) FROM customers")\n',
+                ),
+            },
+            expected_error_fragments=(
+                "[P008] check:orders_present names model:customers as 'customers' in SQL passed "
+                "to ctx.query() --> python/checks/orders.py:7",
+                "[P008] task:export_orders names model:customers as 'customers' in SQL passed to "
+                "ctx.query() --> python/tasks/export.py:7",
+                "[P008] task:export_orders names model:customers as 'customers' in SQL passed to "
+                "ctx.query() --> python/tasks/export.py:8",
+                "[P008] task:export_orders names model:orders as 'orders' in SQL passed to "
+                "ctx.query() --> python/tasks/export.py:8",
             ),
         ),
         PythonSqlReferenceErrorTestCase(
@@ -200,19 +228,15 @@ _RAW_SOURCES: dict[str, str] = {
     ),
     ids=lambda case: case.description,
 )
-def test_given_hard_coded_project_relation_when_compiling_then_it_fails(
+def test_given_hard_coded_project_relation_when_compiling_then_it_reports_p008(
     test_case: PythonSqlReferenceErrorTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    with pytest.raises(ValueError) as error:
-        compile_and_assemble(project_dir=tmp_path)
+    rendered: str = render_compile_diagnostics(project=compile_and_assemble(project_dir=tmp_path))
 
-    rendered: str = (
-        f"[{getattr(error.value, 'code', '')}] {error.value} {getattr(error.value, 'help', '')}"
-    )
     assert all(fragment in rendered for fragment in test_case.expected_error_fragments)
     assert not any(fragment in rendered for fragment in test_case.unexpected_error_fragments)
 

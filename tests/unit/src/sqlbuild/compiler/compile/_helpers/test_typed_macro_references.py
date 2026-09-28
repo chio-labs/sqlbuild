@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    MacroGeneratedReferenceCollectionTestCase,
     MacroGeneratedReferenceErrorTestCase,
     MacroGeneratedReferenceSwitchTestCase,
     MalformedTypedMacroReferenceTestCase,
@@ -14,6 +16,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     TypedReferenceAdapterRenderingTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    collect_typed_macro_violations,
     expand_typed_macro_sql,
     resolve_model_references_for_adapter,
 )
@@ -152,6 +155,38 @@ def test_given_macro_output_reference_when_expanding_then_raises_explicit_refere
     assert error.value.code == "P006"
     rendered: str = f"{error.value.message}\n{error.value.help}"
     assert all(fragment in rendered for fragment in test_case.expected_error_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroGeneratedReferenceCollectionTestCase(
+            description="every emitted reference is reported once, in order",
+            macro_file_contents=(
+                "def pair():\n"
+                '    return \'SELECT * FROM __ref("stg_orders") JOIN __seed("country_codes") ON 1\'\n\n'
+                "def raw_orders():\n    return 'SELECT * FROM __source(\"raw_orders\")'\n"
+            ),
+            sql="@pair() UNION ALL @pair() UNION ALL @raw_orders()",
+            expected_messages=(
+                "model:order_summary depends on model:stg_orders through macro pair()",
+                "model:order_summary depends on seed:country_codes through macro pair()",
+                "model:order_summary depends on source:raw_orders through macro raw_orders()",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_several_macro_output_references_when_collecting_then_reports_each_once(
+    test_case: MacroGeneratedReferenceCollectionTestCase, tmp_path: Path
+) -> None:
+    diagnostics: tuple[CompilerDiagnostic, ...] = collect_typed_macro_violations(
+        tmp_path=tmp_path, macro_file_contents=test_case.macro_file_contents, sql=test_case.sql
+    )
+
+    assert tuple(diagnostic.message for diagnostic in diagnostics) == test_case.expected_messages
+    assert {diagnostic.code for diagnostic in diagnostics} == {"P006"}
+    assert {diagnostic.resource_name for diagnostic in diagnostics} == {"order_summary"}
 
 
 @pytest.mark.parametrize(

@@ -1022,3 +1022,13 @@ class PythonSqlReferenceAllowedTestCase:
     description: str
     files: dict[str, str]
     expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MacroGeneratedReferenceCollectionTestCase:
+    """Model SQL whose macros emit several references, all reported by one expansion."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_messages: tuple[str, ...]
