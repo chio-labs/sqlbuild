@@ -61,6 +61,7 @@ class CompilePipelineOptions:
     max_microbatches: int | None = None
     selection_diagnostics: bool = False
     plan_sql_tests: bool = True
+    record_migration_fingerprints: bool = True
 
 
 @dataclass(frozen=True)

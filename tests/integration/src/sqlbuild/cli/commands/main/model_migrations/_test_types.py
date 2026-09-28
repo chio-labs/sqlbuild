@@ -132,3 +132,14 @@ class CompletedMigrationPlanTextTestCase:
     description: str
     project_toml: str
     expected_target_label: str
+
+
+@dataclass(frozen=True)
+class MigrationFingerprintWorkTestCase:
+    description: str
+    prior_models: tuple[Callable[[], dict[str, str]], ...]
+    models: Callable[[], dict[str, str]]
+    command: tuple[str, ...]
+    expected_computations: int
+    expected_migrations: int
+    expected_stored_models: tuple[str, ...] = ()

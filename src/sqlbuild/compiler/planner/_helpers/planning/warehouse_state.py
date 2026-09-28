@@ -12,6 +12,9 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
 )
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
+from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
+    MigrationFingerprintCache,
+)
 from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanning,
     CursorSnapshotScope,
@@ -37,6 +40,7 @@ def gather_planner_warehouse_state(
     """Gather the warehouse snapshot and inspection relations in one pass."""
 
     warehouse_start: float = time.monotonic()
+    fingerprints: MigrationFingerprintCache = MigrationFingerprintCache()
     if runtime.on_progress is not None:
         runtime.on_progress("Inspecting warehouse state...")
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
@@ -67,6 +71,7 @@ def gather_planner_warehouse_state(
         snapshot=snapshot,
         overrides=overrides,
         deferral=deferral,
+        fingerprints=fingerprints,
     )
     inspection_relations: PlannerRelationsContext = build_planner_relations_context(
         project=runtime.project,
@@ -115,4 +120,5 @@ def gather_planner_warehouse_state(
         column_rename_hints=columns.hints,
         old_name_view_entries=old_names.entries,
         old_name_views=old_names.views,
+        migration_fingerprints=fingerprints,
     )

@@ -7,3 +7,10 @@ class BackgroundSqlTestPlanningTestCase:
     enabled: bool
     expected_planner_calls: int
     expected_error: str | None = None
+
+
+@dataclass(frozen=True)
+class MigrationFingerprintCacheTestCase:
+    description: str
+    requests: tuple[tuple[str, dict[str, str], str], ...]
+    expected_computations: int

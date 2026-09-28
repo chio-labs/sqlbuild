@@ -6,11 +6,9 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import replace
 from typing import Any
 
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
-from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.planner._helpers.changes.metadata import version_identity_metadata_payload
 from sqlbuild.compiler.planner.constants import (
     MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
@@ -18,7 +16,6 @@ from sqlbuild.compiler.planner.constants import (
     MIGRATION_MODEL_NAME_METADATA_KEY,
     MIGRATION_REF_PLACEHOLDER_PREFIX,
 )
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _REF_MARKER: re.Pattern[str] = re.compile(r"""__ref\(\s*(?:"([^"]+)"|'([^']+)')\s*\)""")
@@ -65,6 +62,28 @@ def build_migration_fingerprint(
         default=str,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]:
+    """Return every model name whose rename identity can change the migration fingerprint."""
+
+    names: set[str] = {
+        match.group(1) or match.group(2) for match in _REF_MARKER.finditer(query_sql)
+    }
+    payload: Any = version_identity_metadata_payload(metadata_json)
+    config: Any = (
+        {str(key): value for key, value in payload.items()}.get(_CONFIG_KEY)
+        if isinstance(payload, dict)
+        else None
+    )
+    cursor_inputs: Any = (
+        {str(key): value for key, value in config.items()}.get(CURSOR_INPUTS_CONFIG_KEY)
+        if isinstance(config, dict)
+        else None
+    )
+    if isinstance(cursor_inputs, dict):
+        names.update(str(name) for name in cursor_inputs)
+    return frozenset(names)
 
 
 def _identity_metadata(*, metadata_json: str, ref_identities: Mapping[str, str]) -> Any:
@@ -314,32 +333,3 @@ def _is_identifier(node: Any) -> bool:
         and isinstance(node.get(_IDENTIFIER_NAME_KEY), str)
         and _IDENTIFIER_QUOTED_KEY in node
     )
-
-
-def with_migration_fingerprints(
-    *,
-    entries: tuple[ModelPlanEntry, ...],
-    models_by_name: Mapping[str, CompiledModel],
-    dialect: str | None,
-) -> tuple[ModelPlanEntry, ...]:
-    """Attach the current-name migration fingerprint each build stores with its fingerprint."""
-
-    attached: list[ModelPlanEntry] = []
-    entry: ModelPlanEntry
-    for entry in entries:
-        model: CompiledModel | None = models_by_name.get(entry.name)
-        if model is None or entry.fingerprint_metadata_json is None:
-            attached.append(entry)
-            continue
-        attached.append(
-            replace(
-                entry,
-                migration_fingerprint=build_migration_fingerprint(
-                    query_sql=model.query_sql,
-                    metadata_json=entry.fingerprint_metadata_json,
-                    ref_identities={},
-                    dialect=dialect,
-                ),
-            )
-        )
-    return tuple(attached)
