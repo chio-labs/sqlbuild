@@ -6,8 +6,8 @@ import ast
 import re
 from pathlib import Path
 
-from sqlbuild.compiler.compile._helpers.explicit_references.collector import (
-    report_explicit_reference_violation,
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
+    report_compile_diagnostic,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.constants import MACRO_GENERATED_REFERENCE_CODE
@@ -95,8 +95,14 @@ def reject_macro_generated_references(
     )
     generated: SqlResourceRef
     for generated in _generated_references(macro_result):
-        report_explicit_reference_violation(
-            key=(consumer_label, loaded_macro.name, generated.kind.value, generated.name),
+        report_compile_diagnostic(
+            key=(
+                MACRO_GENERATED_REFERENCE_CODE,
+                consumer_label,
+                loaded_macro.name,
+                generated.kind.value,
+                generated.name,
+            ),
             diagnostic=CompilerDiagnostic(
                 phase=DiagnosticPhase.COMPILE,
                 severity=DiagnosticSeverity.ERROR,

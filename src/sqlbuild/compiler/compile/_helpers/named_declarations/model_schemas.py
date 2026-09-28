@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     named_declaration_record,
     named_declaration_usages,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import DeclarationScopeResolver
+from sqlbuild.compiler.compile.models import CompilerDiagnostic, DeclarationScopeResolver
+from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import (
     DiscoveredModelSchemaFile,
     EnumDeclaration,
@@ -94,15 +97,28 @@ def _enum_type_records(
             continue
         if declaration_visibility(declaration=enum_record, consumer=record) is None:
             owner: str = enum_record.owning_path or enum_record.ownership_root.path
-            raise CompileInputError(
-                f"Schema '{declaration.name}' in {record.path} column '{column.name}' uses enum "
-                f"'{column.type}', which is not visible from the schema's location. The enum is "
-                f"defined at {enum_record.path} with {enum_record.scope.value} scope owned by "
-                f"'{owner}'",
-                code=ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
-                help=(
-                    "move the enum to a role visible from the schema's owning folder, or move "
-                    "the schema next to the enum"
+            report_compile_diagnostic(
+                key=(
+                    ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
+                    record.path,
+                    declaration.name,
+                    column.name,
+                ),
+                diagnostic=CompilerDiagnostic(
+                    phase=DiagnosticPhase.COMPILE,
+                    severity=DiagnosticSeverity.ERROR,
+                    code=ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
+                    message=(
+                        f"Schema '{declaration.name}' in {record.path} column '{column.name}' "
+                        f"uses enum '{column.type}', which is not visible from the schema's "
+                        f"location. The enum is defined at {enum_record.path} with "
+                        f"{enum_record.scope.value} scope owned by '{owner}'"
+                    ),
+                    path=Path(record.path),
+                    help=(
+                        "move the enum to a role visible from the schema's owning folder, or "
+                        "move the schema next to the enum"
+                    ),
                 ),
             )
         records.append(enum_record)

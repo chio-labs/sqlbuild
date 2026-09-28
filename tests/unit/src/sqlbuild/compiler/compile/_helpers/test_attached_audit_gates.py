@@ -17,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     execution_edge_names,
     gate_audit,
     gate_model,
+    render_compile_diagnostics,
 )
 
 _PROJECT_FILE: str = """
@@ -178,19 +179,15 @@ def test_given_attached_audit_reading_another_resource_when_compiling_then_it_ad
     ),
     ids=lambda case: case.description,
 )
-def test_given_attached_audit_reading_its_targets_dependant_when_compiling_then_it_fails(
+def test_given_attached_audit_reading_its_targets_dependant_when_compiling_then_it_reports_p005(
     test_case: AttachedAuditGateCycleTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    with pytest.raises(ValueError) as error:
-        compile_and_assemble(project_dir=tmp_path)
+    rendered: str = render_compile_diagnostics(project=compile_and_assemble(project_dir=tmp_path))
 
-    rendered: str = (
-        f"[{getattr(error.value, 'code', '')}] {error.value} {getattr(error.value, 'help', '')}"
-    )
     for fragment in test_case.expected_error_fragments:
         assert fragment in rendered
 

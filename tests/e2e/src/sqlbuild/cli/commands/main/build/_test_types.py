@@ -1037,8 +1037,8 @@ class ExplicitReferencePythonDependencyE2ETestCase:
 
 
 @dataclass(frozen=True)
-class ExplicitReferenceAllDiagnosticsE2ETestCase:
-    """A project with several explicit-reference violations, all reported by one compile."""
+class CollectedCompileDiagnosticsE2ETestCase:
+    """A project with several compile violations, all reported by one compile."""
 
     description: str
     overrides: dict[str, str]

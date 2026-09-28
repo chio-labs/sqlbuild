@@ -112,13 +112,16 @@ def _extra_reads(
     )
 
 
-def attached_audit_gate_cycle_impl(*, project: CompiledProject) -> AttachedAuditGateEdge | None:
-    """Return the first attached-audit read that depends on the audit's own target."""
+def attached_audit_gate_cycles_impl(
+    *, project: CompiledProject
+) -> tuple[AttachedAuditGateEdge, ...]:
+    """Return every attached-audit read that depends on the audit's own target."""
 
     edges: tuple[AttachedAuditGateEdge, ...] = attached_audit_gate_edges_impl(project=project)
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {
         key: list(deps) for key, deps in build_lineage_upstream_deps_impl(project).items()
     }
+    cycles: dict[AttachedAuditGateEdge, None] = {}
     edge: AttachedAuditGateEdge
     for edge in edges:
         upstream.setdefault(edge.gated, []).append(edge.read)
@@ -135,7 +138,11 @@ def attached_audit_gate_cycle_impl(*, project: CompiledProject) -> AttachedAudit
             if target in transitive_closure_many_impl(
                 starts=(read,), edges=upstream, include_starts=False
             ):
-                return AttachedAuditGateEdge(
-                    audit_name=audit.name, target=target, gated=target, read=read
-                )
-    return None
+                cycles[
+                    AttachedAuditGateEdge(
+                        audit_name=audit.name, target=target, gated=target, read=read
+                    )
+                ] = None
+    return tuple(
+        sorted(cycles, key=lambda item: (item.audit_name, item.target.name, item.read.name))
+    )

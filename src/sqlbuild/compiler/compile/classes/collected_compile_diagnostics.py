@@ -1,18 +1,18 @@
-"""Explicit-reference violations gathered during one compile phase."""
+"""Compile diagnostics collected during one compile phase instead of raised."""
 
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 
 
-class ExplicitReferenceViolations:
-    """Deduplicated explicit-reference diagnostics gathered during one compile phase."""
+class CollectedCompileDiagnostics:
+    """Deduplicated compile diagnostics gathered during one compile phase."""
 
     def __init__(self) -> None:
         self._by_key: dict[tuple[str, ...], CompilerDiagnostic] = {}
 
     def add(self, *, key: tuple[str, ...], diagnostic: CompilerDiagnostic) -> None:
-        """Record one violation; a repeated key keeps the first diagnostic."""
+        """Record one diagnostic; a repeated key keeps the first diagnostic."""
 
         self._by_key.setdefault(key, diagnostic)
 

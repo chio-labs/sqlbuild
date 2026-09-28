@@ -17,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compile_and_assemble,
     model_header,
+    render_compile_diagnostics,
     singular_audit_files,
 )
 
@@ -211,6 +212,80 @@ def test_given_valid_named_declaration_layout_when_compiling_then_project_is_acc
     "test_case",
     (
         NamedDeclarationErrorTestCase(
+            "audit file directly under audits/",
+            {"models/orders.sql": _ORDERS, "audits/check.sql": _GENERIC_AUDIT},
+            ("Unsupported entries in audits/", "audits/generic/ or audits/singular/"),
+        ),
+        NamedDeclarationErrorTestCase(
+            "audit folder other than generic or singular",
+            {"models/orders.sql": _ORDERS, "audits/checks/check.sql": _GENERIC_AUDIT},
+            ("Unsupported entries in audits/: audits/checks",),
+        ),
+        NamedDeclarationErrorTestCase(
+            "folder-only singular audit role",
+            {
+                "models/marts/orders.sql": _ORDERS,
+                "models/marts/_sqlbuild/_audits/singular/check.sql": _GENERIC_AUDIT,
+            },
+            ("models/marts/_sqlbuild/_audits/singular/ is invalid",),
+        ),
+        NamedDeclarationErrorTestCase(
+            "_sqlbuild directly under a resource tree root",
+            {
+                "models/orders.sql": model_header(key="audits", value="[order_check]"),
+                "models/_sqlbuild/audits/generic/order_check.sql": _GENERIC_AUDIT,
+            },
+            ("Grouped declaration root models/_sqlbuild/ must be below a concrete owner",),
+        ),
+        NamedDeclarationErrorTestCase(
+            "unsupported hook language folder",
+            {
+                "models/marts/orders.sql": _ORDERS,
+                "models/marts/_sqlbuild/hooks/shell/touch.sql": _SQL_HOOK,
+            },
+            ("hooks/ accepts only python/, sql/",),
+        ),
+        NamedDeclarationErrorTestCase(
+            "scoped audit uses a constant that is not visible from the audit's folder",
+            {
+                "models/staging/_sqlbuild/_constants/order_limit.sql": (
+                    "CONSTANT (name order_limit, value 10);"
+                ),
+                "models/staging/orders_stage.sql": (
+                    'MODEL ();\nSELECT @const("order_limit") AS order_id'
+                ),
+                "models/marts/_sqlbuild/_audits/generic/order_check.sql": (
+                    'AUDIT ();\nSELECT * FROM __ref("@model") '
+                    'WHERE order_id > @const("order_limit")'
+                ),
+                "models/marts/orders.sql": model_header(key="audits", value="[order_check]"),
+            },
+            ("order_limit", "known but inaccessible"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_named_declaration_layout_when_compiling_then_error_names_the_fix(
+    test_case: NamedDeclarationErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
+
+    with pytest.raises(ValueError) as error:
+        compile_and_assemble(project_dir=tmp_path)
+
+    rendered: str = (
+        f"[{getattr(error.value, 'code', '')}] {error.value} {getattr(error.value, 'help', '')}"
+    )
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        NamedDeclarationErrorTestCase(
             "singular audit over one model",
             singular_audit_files(
                 base=_SINGULAR_BASE_FILES,
@@ -247,40 +322,6 @@ def test_given_valid_named_declaration_layout_when_compiling_then_project_is_acc
                 base=_SINGULAR_BASE_FILES, sql="SELECT * FROM information_schema.tables"
             ),
             ("[P004]", "references no SQLBuild resource"),
-        ),
-        NamedDeclarationErrorTestCase(
-            "audit file directly under audits/",
-            {"models/orders.sql": _ORDERS, "audits/check.sql": _GENERIC_AUDIT},
-            ("Unsupported entries in audits/", "audits/generic/ or audits/singular/"),
-        ),
-        NamedDeclarationErrorTestCase(
-            "audit folder other than generic or singular",
-            {"models/orders.sql": _ORDERS, "audits/checks/check.sql": _GENERIC_AUDIT},
-            ("Unsupported entries in audits/: audits/checks",),
-        ),
-        NamedDeclarationErrorTestCase(
-            "folder-only singular audit role",
-            {
-                "models/marts/orders.sql": _ORDERS,
-                "models/marts/_sqlbuild/_audits/singular/check.sql": _GENERIC_AUDIT,
-            },
-            ("models/marts/_sqlbuild/_audits/singular/ is invalid",),
-        ),
-        NamedDeclarationErrorTestCase(
-            "_sqlbuild directly under a resource tree root",
-            {
-                "models/orders.sql": model_header(key="audits", value="[order_check]"),
-                "models/_sqlbuild/audits/generic/order_check.sql": _GENERIC_AUDIT,
-            },
-            ("Grouped declaration root models/_sqlbuild/ must be below a concrete owner",),
-        ),
-        NamedDeclarationErrorTestCase(
-            "unsupported hook language folder",
-            {
-                "models/marts/orders.sql": _ORDERS,
-                "models/marts/_sqlbuild/hooks/shell/touch.sql": _SQL_HOOK,
-            },
-            ("hooks/ accepts only python/, sql/",),
         ),
         NamedDeclarationErrorTestCase(
             "top-level generic audit used under one folder",
@@ -375,6 +416,19 @@ def test_given_valid_named_declaration_layout_when_compiling_then_project_is_acc
             ),
         ),
         NamedDeclarationErrorTestCase(
+            "every consumer of an invisible scoped audit is reported",
+            {
+                "models/marts/_sqlbuild/audits/generic/order_check.sql": _GENERIC_AUDIT,
+                "models/staging/orders.sql": model_header(key="audits", value="[order_check]"),
+                "models/staging/customers.sql": model_header(key="audits", value="[order_check]"),
+            },
+            (
+                "[S006] Generic audit 'order_check' is not visible from "
+                "'models/staging/customers.sql'",
+                "[S006] Generic audit 'order_check' is not visible from 'models/staging/orders.sql'",
+            ),
+        ),
+        NamedDeclarationErrorTestCase(
             "scoped generic audit used from a parent folder",
             {
                 "models/marts/daily/_sqlbuild/audits/generic/order_check.sql": _GENERIC_AUDIT,
@@ -465,39 +519,18 @@ def test_given_valid_named_declaration_layout_when_compiling_then_project_is_acc
             },
             ("[S006]", "uses enum 'order_status', which is not visible from the schema's location"),
         ),
-        NamedDeclarationErrorTestCase(
-            "scoped audit uses a constant that is not visible from the audit's folder",
-            {
-                "models/staging/_sqlbuild/_constants/order_limit.sql": (
-                    "CONSTANT (name order_limit, value 10);"
-                ),
-                "models/staging/orders_stage.sql": (
-                    'MODEL ();\nSELECT @const("order_limit") AS order_id'
-                ),
-                "models/marts/_sqlbuild/_audits/generic/order_check.sql": (
-                    'AUDIT ();\nSELECT * FROM __ref("@model") '
-                    'WHERE order_id > @const("order_limit")'
-                ),
-                "models/marts/orders.sql": model_header(key="audits", value="[order_check]"),
-            },
-            ("order_limit", "known but inaccessible"),
-        ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_invalid_named_declaration_layout_when_compiling_then_error_names_the_fix(
+def test_given_invalid_named_declaration_use_when_compiling_then_diagnostics_name_the_fix(
     test_case: NamedDeclarationErrorTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    with pytest.raises(ValueError) as error:
-        compile_and_assemble(project_dir=tmp_path)
+    rendered: str = render_compile_diagnostics(project=compile_and_assemble(project_dir=tmp_path))
 
-    rendered: str = (
-        f"[{getattr(error.value, 'code', '')}] {error.value} {getattr(error.value, 'help', '')}"
-    )
     for fragment in test_case.expected_error_fragments:
         assert fragment in rendered
 

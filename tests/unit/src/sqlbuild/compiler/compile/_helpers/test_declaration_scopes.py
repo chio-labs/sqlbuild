@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from itertools import chain
@@ -49,6 +50,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
     compile_project_inputs,
+    render_compile_diagnostics,
     visible_declarations_without_runtime_values,
 )
 
@@ -709,7 +711,7 @@ def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consu
     ),
     ids=lambda case: case.description,
 )
-def test_given_invalid_declaration_placement_when_assembling_then_project_is_rejected(
+def test_given_invalid_declaration_placement_when_assembling_then_it_reports_an_error(
     test_case: ScopePlacementCompileTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -720,8 +722,12 @@ def test_given_invalid_declaration_placement_when_assembling_then_project_is_rej
     )
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
 
-    with pytest.raises(CompileInputError, match=cast(str, test_case.expected_fragment)):
-        _ = assemble_project(inputs=inputs, skip_column_inference=True)
+    project: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+
+    assert re.search(
+        cast(str, test_case.expected_fragment),
+        render_compile_diagnostics(project=project),
+    )
 
 
 @pytest.mark.parametrize(

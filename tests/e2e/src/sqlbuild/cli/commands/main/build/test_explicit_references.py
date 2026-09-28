@@ -7,11 +7,12 @@ import re
 import subprocess
 from itertools import chain
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
-    ExplicitReferenceAllDiagnosticsE2ETestCase,
+    CollectedCompileDiagnosticsE2ETestCase,
     ExplicitReferenceBuildE2ETestCase,
     ExplicitReferenceFailureE2ETestCase,
     ExplicitReferencePythonDependencyE2ETestCase,
@@ -41,6 +42,15 @@ _SECOND_EMITTING_MACROS: str = (
     "def customers_base():\n    return 'SELECT * FROM __ref(\"stg_customers\")'\n"
 )
 _UNDECLARED_HOOKS: str = EXPLICIT_REFERENCE_HOOKS + '    ctx.relation(model("all_orders"))\n'
+_AUDITS: str = "models/sales/_sqlbuild"
+_AUDIT_READING: str = (
+    "AUDIT ();\nSELECT s.order_id FROM @relation s\n"
+    'LEFT JOIN __ref("{read}") a USING (order_id) WHERE a.order_id IS NULL\n'
+)
+_AUDITED_MODEL: str = "MODEL (materialized table, audits [{audit}]);\nSELECT 1 AS order_id\n"
+_SUMMARY_MODEL: str = 'MODEL (materialized table);\nSELECT * FROM __ref("{read}")\n'
+_ONE_MODEL_AUDIT: str = 'AUDIT ();\nSELECT * FROM __ref("{read}") WHERE order_id IS NULL\n'
+_NULL_AUDIT: str = 'AUDIT ();\nSELECT * FROM __ref("@model") WHERE order_id IS NULL\n'
 _LITERAL_TASK: str = (
     "from sqlbuild.refs import model\n"
     "from sqlbuild.tasks import task\n\n\n"
@@ -431,7 +441,7 @@ def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_wit
 @pytest.mark.parametrize(
     "test_case",
     [
-        ExplicitReferenceAllDiagnosticsE2ETestCase(
+        CollectedCompileDiagnosticsE2ETestCase(
             description="two ref-emitting macros and a hard-coded task name all report at once",
             overrides={
                 EXPLICIT_REFERENCE_MACRO_PATH: _EMITTING_MACROS,
@@ -464,11 +474,85 @@ def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_wit
                 ),
             ),
         ),
+        CollectedCompileDiagnosticsE2ETestCase(
+            description="two single-model singular audits and two gating audits all report",
+            overrides={
+                f"{_AUDITS}/audits/singular/one_orders.sql": _ONE_MODEL_AUDIT.format(
+                    read="orders_a"
+                ),
+                f"{_AUDITS}/audits/singular/one_customers.sql": _ONE_MODEL_AUDIT.format(
+                    read="customers_b"
+                ),
+                f"{_AUDITS}/_audits/generic/a_check.sql": _AUDIT_READING.format(
+                    read="orders_a_summary"
+                ),
+                f"{_AUDITS}/_audits/generic/b_check.sql": _AUDIT_READING.format(
+                    read="customers_b_summary"
+                ),
+                f"{EXPLICIT_REFERENCE_MODELS}/orders_a.sql": _AUDITED_MODEL.format(audit="a_check"),
+                f"{EXPLICIT_REFERENCE_MODELS}/customers_b.sql": _AUDITED_MODEL.format(
+                    audit="b_check"
+                ),
+                f"{EXPLICIT_REFERENCE_MODELS}/orders_a_summary.sql": _SUMMARY_MODEL.format(
+                    read="orders_a"
+                ),
+                f"{EXPLICIT_REFERENCE_MODELS}/customers_b_summary.sql": _SUMMARY_MODEL.format(
+                    read="customers_b"
+                ),
+            },
+            expected_output_fragments=(
+                "error[P004]: Singular audit 'one_customers'",
+                "error[P004]: Singular audit 'one_orders'",
+                "--> models/sales/_sqlbuild/audits/singular/one_orders.sql",
+                "error[P005]: Audit 'a_check' on model 'orders_a' reads model 'orders_a_summary'",
+                "error[P005]: Audit 'b_check' on model 'customers_b' reads model "
+                "'customers_b_summary'",
+                "--> models/sales/_sqlbuild/_audits/generic/a_check.sql",
+                "4 errors",
+            ),
+            expected_json_diagnostics=(
+                ("P004", "Singular audit 'one_customers'"),
+                ("P004", "Singular audit 'one_orders'"),
+                ("P005", "Audit 'a_check' on model 'orders_a' reads model 'orders_a_summary'"),
+                (
+                    "P005",
+                    "Audit 'b_check' on model 'customers_b' reads model 'customers_b_summary'",
+                ),
+            ),
+        ),
+        CollectedCompileDiagnosticsE2ETestCase(
+            description="every declaration placement error reports on its own",
+            overrides={
+                "audits/generic/eu_check.sql": _NULL_AUDIT,
+                "audits/generic/us_check.sql": _NULL_AUDIT,
+                f"{_AUDITS}/audits/generic/unused_check.sql": _NULL_AUDIT,
+                f"{EXPLICIT_REFERENCE_MODELS}/stg_orders_eu.sql": (
+                    "MODEL (materialized table, audits [eu_check]);\n"
+                    "SELECT 1 AS order_id, 10 AS amount\n"
+                ),
+                f"{EXPLICIT_REFERENCE_MODELS}/stg_orders_us.sql": (
+                    "MODEL (materialized table, audits [us_check]);\n"
+                    "SELECT 2 AS order_id, 20 AS amount\n"
+                ),
+            },
+            expected_output_fragments=(
+                "error[S010]: Unused inherited declaration 'audit:unused_check'",
+                "error[S024]: Declaration 'audit:eu_check'",
+                "error[S024]: Declaration 'audit:us_check'",
+                "--> audits/generic/eu_check.sql",
+                "3 errors",
+            ),
+            expected_json_diagnostics=(
+                ("S010", "Unused inherited declaration 'audit:unused_check'"),
+                ("S024", "Declaration 'audit:eu_check'"),
+                ("S024", "Declaration 'audit:us_check'"),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_several_implicit_references_when_compiling_then_one_compile_reports_all(
-    test_case: ExplicitReferenceAllDiagnosticsE2ETestCase,
+def test_given_several_compile_violations_when_compiling_then_one_compile_reports_all(
+    test_case: CollectedCompileDiagnosticsE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
@@ -490,7 +574,23 @@ def test_given_several_implicit_references_when_compiling_then_one_compile_repor
     assert machine.returncode == 1, machine.stdout + machine.stderr
     payload: dict[str, object] = json.loads(machine.stdout)
     assert payload["has_errors"] is True
-    assert (
-        tuple((item["code"], item["message"]) for item in payload["diagnostics"])
-        == test_case.expected_json_diagnostics
+    diagnostics: list[dict[str, str]] = cast(list[dict[str, str]], payload["diagnostics"])
+    assert [item["code"] for item in diagnostics] == [
+        code for code, _ in test_case.expected_json_diagnostics
+    ]
+    assert all(
+        fragment in item["message"]
+        for item, (_, fragment) in zip(
+            diagnostics, test_case.expected_json_diagnostics, strict=True
+        )
     )
+    build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert build.returncode == 1, build.stdout + build.stderr
+    assert all(
+        f"[{code}]" in build.stdout + build.stderr and fragment in build.stdout + build.stderr
+        for code, fragment in test_case.expected_json_diagnostics
+    )
+    assert "Project compilation failed." in build.stdout + build.stderr
+    assert "Compiled project." not in build.stdout + build.stderr

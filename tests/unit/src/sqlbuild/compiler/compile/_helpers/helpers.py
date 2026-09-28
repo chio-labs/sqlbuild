@@ -11,8 +11,8 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
-from sqlbuild.compiler.compile._helpers.explicit_references.collector import (
-    collect_explicit_reference_violations,
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
+    collect_compile_diagnostics,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
@@ -410,7 +410,7 @@ def collect_typed_macro_violations(
 ) -> tuple[CompilerDiagnostic, ...]:
     """Expand ``order_summary`` SQL and return the explicit-reference violations it reports."""
 
-    with collect_explicit_reference_violations() as violations:
+    with collect_compile_diagnostics() as violations:
         expand_typed_macro_sql(tmp_path=tmp_path, macro_file_contents=macro_file_contents, sql=sql)
     return violations.diagnostics
 

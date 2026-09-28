@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_source_names,
     validate_audit_references,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     declaration_file_expansion,
     named_declaration_usages,
@@ -39,6 +40,7 @@ from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileAuditInput,
     CompileModelInput,
+    CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlReference,
@@ -48,6 +50,9 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledResourceType,
+    DiagnosticPhase,
+    DiagnosticSeverity,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -725,7 +730,7 @@ def singular_audit_resources(
     audit_file: DiscoveredAuditFile,
     audit_name: str,
 ) -> tuple[ResourceIdentity, ...]:
-    """Require a singular audit to check more than one resource and return what it references."""
+    """Return the resources a singular audit references, reporting P004 if not cross-resource."""
 
     model_names: frozenset[str] = frozenset(
         reference.ref_name for reference in references if reference.ref_kind == SqlReferenceKind.REF
@@ -740,44 +745,55 @@ def singular_audit_resources(
         for reference in references
         if reference.ref_kind in companion_kinds
     )
-    label: str = f"Singular audit '{audit_name}' in {audit_file.relative_path}"
-    if len(model_names) >= _CROSS_MODEL_MINIMUM or (model_names and companions):
-        return tuple(
-            sorted(
-                {
-                    *(ResourceIdentity(ResourceKind.MODEL, name) for name in model_names),
-                    *companions,
-                }
-            )
+    resources: tuple[ResourceIdentity, ...] = tuple(
+        sorted({*(ResourceIdentity(ResourceKind.MODEL, name) for name in model_names), *companions})
+    )
+    if len(model_names) < _CROSS_MODEL_MINIMUM and not (model_names and companions):
+        message, help_text = _single_resource_problem(
+            model_names=model_names, companions=companions
         )
-    if len(model_names) == 1:
-        model_name: str = next(iter(model_names))
-        raise CompileInputError(
-            f"{label} checks only model '{model_name}'; singular audits must be cross-resource",
-            code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
-            help=(
-                f"attach a generic audit to '{model_name}' instead: write it in an "
-                "audits/generic/ role and select FROM @relation, joining @relation to itself for "
-                "self-join checks"
+        report_compile_diagnostic(
+            key=(
+                SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
+                audit_file.relative_path.as_posix(),
+                audit_name,
+            ),
+            diagnostic=CompilerDiagnostic(
+                phase=DiagnosticPhase.COMPILE,
+                severity=DiagnosticSeverity.ERROR,
+                code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
+                message=f"Singular audit '{audit_name}' in {audit_file.relative_path} {message}",
+                resource_type=CompiledResourceType.AUDIT,
+                resource_name=audit_name,
+                path=audit_file.relative_path,
+                help=help_text,
             ),
         )
-    if companions:
-        raise CompileInputError(
-            f"{label} checks only sources or seeds; singular audits must reference at least one "
-            "model",
-            code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
-            help="attach YAML audits to the source or seed instead",
+    return resources
+
+
+def _single_resource_problem(
+    *, model_names: frozenset[str], companions: frozenset[ResourceIdentity]
+) -> tuple[str, str]:
+    if len(model_names) == 1:
+        model_name: str = next(iter(model_names))
+        return (
+            f"checks only model '{model_name}'; singular audits must be cross-resource",
+            f"attach a generic audit to '{model_name}' instead: write it in an audits/generic/ "
+            "role and select FROM @relation, joining @relation to itself for self-join checks",
         )
-    raise CompileInputError(
-        f"{label} references no SQLBuild resource; singular audits must reference two or more "
-        f"models, or a model plus a source, seed, or table function via "
+    if companions:
+        return (
+            "checks only sources or seeds; singular audits must reference at least one model",
+            "attach YAML audits to the source or seed instead",
+        )
+    return (
+        "references no SQLBuild resource; singular audits must reference two or more models, or "
+        "a model plus a source, seed, or table function via "
         f"{SqlReferenceKind.REF.placeholder_call()}, {SqlReferenceKind.SOURCE.placeholder_call()}, "
         f"or {SqlReferenceKind.SEED.placeholder_call()}",
-        code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
-        help=(
-            "reference resources through SQLBuild calls instead of hard-coded relation names, or "
-            "attach a generic audit to the resource being checked"
-        ),
+        "reference resources through SQLBuild calls instead of hard-coded relation names, or "
+        "attach a generic audit to the resource being checked",
     )
 
 
