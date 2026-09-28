@@ -327,6 +327,21 @@ def column_events(*, project_dir: Path) -> tuple[tuple[str, str, str, str], ...]
     )
 
 
+def load_descending_amounts(*, project_dir: Path, last_day: int) -> None:
+    """Replace raw orders so amounts fall while tax rises, making the two orderings differ."""
+
+    execute(project_dir=project_dir, sql="DROP VIEW IF EXISTS main.raw_orders")
+    execute(project_dir=project_dir, sql="DROP TABLE IF EXISTS main.raw_orders")
+    execute(
+        project_dir=project_dir,
+        sql=(
+            "CREATE VIEW main.raw_orders AS SELECT i AS order_id, "
+            "TIMESTAMP '2026-01-01' + to_days(CAST(i - 1 AS INTEGER)) AS order_date, "
+            f"100 - i AS amount, i AS tax FROM range(1, {last_day + 1}) AS t(i)"
+        ),
+    )
+
+
 def change_historical_amount(*, project_dir: Path) -> None:
     """Change day one's raw amount so any replay would be visible in built history."""
 

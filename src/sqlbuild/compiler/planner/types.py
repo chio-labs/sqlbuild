@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 type FixtureKey = tuple[CompiledResourceType, str]
+type InputColumns = Callable[[str, str], frozenset[str] | None]
 type FixtureGroups = tuple[tuple[CompiledResourceType, dict[str, str]], ...]
 
 if TYPE_CHECKING:

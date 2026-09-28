@@ -66,6 +66,15 @@ def gather_planner_warehouse_state(
         overrides=overrides,
         deferral=deferral,
     )
+    inspection_relations: PlannerRelationsContext = build_planner_relations_context(
+        project=runtime.project,
+        adapter=runtime.adapter,
+        connection=runtime.connection,
+        scope=scopes.inspection_scope,
+        deferral=deferral,
+        project_config=runtime.project_config,
+        local_config=runtime.local_config,
+    )
     columns: ColumnMigrationPlanning = plan_column_migrations(
         runtime=runtime,
         scope=scopes.selected_scope,
@@ -81,15 +90,7 @@ def gather_planner_warehouse_state(
         },
         overrides=overrides,
         deferral=deferral,
-    )
-    inspection_relations: PlannerRelationsContext = build_planner_relations_context(
-        project=runtime.project,
-        adapter=runtime.adapter,
-        connection=runtime.connection,
-        scope=scopes.inspection_scope,
-        deferral=deferral,
-        project_config=runtime.project_config,
-        local_config=runtime.local_config,
+        source_columns=inspection_relations.source_warehouse_columns,
     )
     if runtime.on_progress is not None:
         runtime.on_progress(

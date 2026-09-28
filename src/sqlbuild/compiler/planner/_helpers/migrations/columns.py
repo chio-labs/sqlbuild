@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner._helpers.migrations.projections import (
     parse_query_shape,
     renames_explain_change,
 )
+from sqlbuild.compiler.planner.classes.known_input_columns import KnownInputColumns
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
@@ -44,7 +45,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
+from sqlbuild.compiler.planner.types import InputColumns, MaterializationType, WarningSeverity
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
@@ -82,6 +83,7 @@ def plan_column_migrations(
     physical_relations: Mapping[str, str],
     overrides: PlannerOverrides,
     deferral: DeferralInputs,
+    source_columns: Mapping[str, tuple[ColumnInfo, ...]],
 ) -> ColumnMigrationPlanning:
     """Decide declared and detected column renames and project the renamed snapshot."""
 
@@ -114,6 +116,10 @@ def plan_column_migrations(
             if candidate.model.destination.schema is not None
         }
     )
+    input_columns: InputColumns = KnownInputColumns(
+        model_columns=snapshot.existing_columns,
+        source_columns=source_columns,
+    )
     entries: list[ColumnMigrationPlanEntry] = []
     hints: list[ColumnRenameHint] = []
     warnings: list[PlanWarning] = []
@@ -124,7 +130,12 @@ def plan_column_migrations(
         model_entries, model_warnings = _checked_entries(
             runtime=runtime,
             candidate=candidate,
-            entries=_decide(runtime=runtime, candidate=candidate, events=state.column_events),
+            entries=_decide(
+                runtime=runtime,
+                candidate=candidate,
+                events=state.column_events,
+                input_columns=input_columns,
+            ),
             physical_relation=physical_relations.get(candidate.model.name),
         )
         entries.extend(model_entries)
@@ -132,7 +143,10 @@ def plan_column_migrations(
         hints.extend(_hints(candidate=candidate, entries=model_entries))
     warnings.extend(warning for entry in entries if (warning := _entry_warning(entry)))
     overlaid: WarehouseSnapshot = _overlay_snapshot(
-        snapshot=snapshot, candidates=candidates, entries=tuple(entries)
+        snapshot=snapshot,
+        candidates=candidates,
+        entries=tuple(entries),
+        input_columns=input_columns,
     )
     return ColumnMigrationPlanning(
         snapshot=_with_renamed_cursors(
@@ -200,10 +214,14 @@ def _decide(
     runtime: PlannerRuntime,
     candidate: _ModelColumns,
     events: tuple[ColumnMigrationEvent, ...],
+    input_columns: InputColumns,
 ) -> tuple[ColumnMigrationPlanEntry, ...]:
     entries: list[ColumnMigrationPlanEntry] = []
     pair: _Pair
-    for pair in (*_declared_pairs(candidate), *_detected_pairs(candidate)):
+    for pair in (
+        *_declared_pairs(candidate),
+        *_detected_pairs(candidate=candidate, input_columns=input_columns),
+    ):
         entry: ColumnMigrationPlanEntry | None = _decide_pair(
             runtime=runtime, candidate=candidate, pair=pair, events=events
         )
@@ -219,7 +237,7 @@ def _declared_pairs(candidate: _ModelColumns) -> tuple[_Pair, ...]:
     )
 
 
-def _detected_pairs(candidate: _ModelColumns) -> tuple[_Pair, ...]:
+def _detected_pairs(*, candidate: _ModelColumns, input_columns: InputColumns) -> tuple[_Pair, ...]:
     if candidate.previous is None or candidate.current is None:
         return ()
     declared: dict[str, str] = {
@@ -232,6 +250,7 @@ def _detected_pairs(candidate: _ModelColumns) -> tuple[_Pair, ...]:
             current=candidate.current,
             excluded=_declared_names(candidate),
             declared=declared,
+            input_columns=input_columns,
         )
     )
 
@@ -374,6 +393,7 @@ def _overlay_snapshot(
     snapshot: WarehouseSnapshot,
     candidates: tuple[_ModelColumns, ...],
     entries: tuple[ColumnMigrationPlanEntry, ...],
+    input_columns: InputColumns,
 ) -> WarehouseSnapshot:
     """Plan each model as if its columns were already renamed and its query unchanged."""
 
@@ -405,7 +425,10 @@ def _overlay_snapshot(
             and candidate.previous is not None
             and candidate.current is not None
             and renames_explain_change(
-                previous=candidate.previous, current=candidate.current, renames=renames
+                previous=candidate.previous,
+                current=candidate.current,
+                renames=renames,
+                input_columns=input_columns,
             )
         ):
             fingerprints[candidate.model.name] = replace(

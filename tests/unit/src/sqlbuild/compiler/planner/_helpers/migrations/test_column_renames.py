@@ -19,7 +19,10 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types im
     RenameHintTestCase,
     UnreadableQueryShapeTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import query_shape
+from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import (
+    input_lookup,
+    query_shape,
+)
 
 _ORDERS: str = 'FROM __source("raw_orders")'
 
@@ -128,6 +131,7 @@ def test_given_previous_and_current_queries_when_detecting_renames_then_returns_
         current=query_shape(test_case.current_sql),
         excluded=test_case.excluded,
         declared=test_case.declared,
+        input_columns=input_lookup(test_case.input_columns),
     )
 
     assert renames == test_case.expected_renames
@@ -252,6 +256,82 @@ def test_given_changed_columns_when_building_hints_then_suggests_explicit_migrat
             expected_explained=False,
         ),
         RenameExplainsChangeTestCase(
+            description="QUALIFY on a new name that is also an input column binds the input",
+            previous_sql=(
+                f"SELECT order_id, order_date, amount {_ORDERS} "
+                "QUALIFY row_number() OVER (ORDER BY amount) = 1"
+            ),
+            current_sql=(
+                f"SELECT order_id, order_date, amount AS tax {_ORDERS} "
+                "QUALIFY row_number() OVER (ORDER BY tax) = 1"
+            ),
+            renames={"amount": "tax"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="ORDER BY on a new name that is also an input column binds the input",
+            previous_sql=f"SELECT order_id, amount {_ORDERS} ORDER BY amount LIMIT 1",
+            current_sql=f"SELECT order_id, amount AS tax {_ORDERS} ORDER BY tax LIMIT 1",
+            renames={"amount": "tax"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="an old name that is a different input column fails closed",
+            previous_sql=f"SELECT order_id, amount * 2 AS tax {_ORDERS} ORDER BY tax",
+            current_sql=f"SELECT order_id, amount * 2 AS doubled {_ORDERS} ORDER BY doubled",
+            renames={"tax": "doubled"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="unknown source columns fail closed for alias references",
+            previous_sql=f"SELECT order_id, amount {_ORDERS} ORDER BY amount",
+            current_sql=f"SELECT order_id, amount AS revenue {_ORDERS} ORDER BY revenue",
+            renames={"amount": "revenue"},
+            input_columns={},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="an unresolvable FROM relation fails closed for alias references",
+            previous_sql="SELECT order_id, amount FROM main.raw_orders ORDER BY amount",
+            current_sql="SELECT order_id, amount AS revenue FROM main.raw_orders ORDER BY revenue",
+            renames={"amount": "revenue"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="a star CTE has unknown columns and fails closed",
+            previous_sql=(
+                f"WITH o AS (SELECT * {_ORDERS}) SELECT order_id, amount FROM o ORDER BY amount"
+            ),
+            current_sql=(
+                f"WITH o AS (SELECT * {_ORDERS}) "
+                "SELECT order_id, amount AS revenue FROM o ORDER BY revenue"
+            ),
+            renames={"amount": "revenue"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="a CTE with named outputs proves the alias binding on its own",
+            previous_sql=(
+                f"WITH o AS (SELECT order_id, amount {_ORDERS}) "
+                "SELECT order_id, amount FROM o ORDER BY amount"
+            ),
+            current_sql=(
+                f"WITH o AS (SELECT order_id, amount {_ORDERS}) "
+                "SELECT order_id, amount AS revenue FROM o ORDER BY revenue"
+            ),
+            renames={"amount": "revenue"},
+            input_columns={},
+            expected_explained=True,
+        ),
+        RenameExplainsChangeTestCase(
+            description="a rename nothing else references needs no input columns",
+            previous_sql=f"SELECT order_id, amount {_ORDERS} ORDER BY order_id",
+            current_sql=f"SELECT order_id, amount AS revenue {_ORDERS} ORDER BY order_id",
+            renames={"amount": "revenue"},
+            input_columns={},
+            expected_explained=True,
+        ),
+        RenameExplainsChangeTestCase(
             description="a WHERE on a renamed alias is not treated as an alias reference",
             previous_sql=f"SELECT order_id, amount {_ORDERS} WHERE amount > 0",
             current_sql=f"SELECT order_id, amount AS revenue {_ORDERS} WHERE revenue > 0",
@@ -268,6 +348,7 @@ def test_given_renames_when_comparing_queries_then_reports_whether_they_explain_
         previous=query_shape(test_case.previous_sql),
         current=query_shape(test_case.current_sql),
         renames=test_case.renames,
+        input_columns=input_lookup(test_case.input_columns),
     )
 
     assert explained is test_case.expected_explained

@@ -987,6 +987,7 @@ class QueryProjection:
     name: str
     expression: str
     references: frozenset[str]
+    passthrough: bool = False
 
     @property
     def key(self) -> str:
@@ -1003,6 +1004,9 @@ class QueryShape:
     body: str
     alias_clauses: str = "{}"
     positional: bool = False
+    input_relations: tuple[tuple[str, str], ...] | None = None
+    local_input_columns: frozenset[str] = frozenset()
+    clause_references: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

@@ -140,3 +140,13 @@ class UnprovenRenameReplayTestCase:
     declared_sql: str
     expected_backfill: dict[str, Any]
     expected_values: tuple[tuple[int, Any], ...]
+
+
+@dataclass(frozen=True)
+class CollidingAliasRenameTestCase:
+    description: str
+    initial_sql: str
+    renamed_sql: str
+    expected_planned: tuple[tuple[str, str, str, str], ...]
+    expected_backfill: dict[str, Any]
+    expected_values: tuple[tuple[int, Any], ...]

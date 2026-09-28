@@ -6,6 +6,7 @@ from collections.abc import Mapping
 
 from sqlbuild.compiler.planner._helpers.migrations.projections import renames_explain_change
 from sqlbuild.compiler.planner.models import ColumnRenameHint, QueryProjection, QueryShape
+from sqlbuild.compiler.planner.types import InputColumns
 
 
 def identical_renames(
@@ -14,6 +15,7 @@ def identical_renames(
     current: QueryShape,
     excluded: frozenset[str],
     declared: Mapping[str, str],
+    input_columns: InputColumns,
 ) -> tuple[tuple[str, str], ...]:
     """Return same-expression (old, new) pairs only when renaming is the whole change."""
 
@@ -32,7 +34,10 @@ def identical_renames(
         if claims == 1:
             pairs.append((matches[0].name, column.name))
     if not pairs or not renames_explain_change(
-        previous=previous, current=current, renames={**declared, **dict(pairs)}
+        previous=previous,
+        current=current,
+        renames={**declared, **dict(pairs)},
+        input_columns=input_columns,
     ):
         return ()
     return tuple(pairs)

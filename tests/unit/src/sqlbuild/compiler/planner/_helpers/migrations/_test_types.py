@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import BASE_CONFIG
+from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import (
+    BASE_CONFIG,
+    ORDERS_INPUTS,
+)
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,9 @@ class IdenticalRenameTestCase:
     expected_renames: tuple[tuple[str, str], ...]
     excluded: frozenset[str] = frozenset()
     declared: dict[str, str] = field(default_factory=dict)
+    input_columns: dict[tuple[str, str], frozenset[str]] = field(
+        default_factory=lambda: dict(ORDERS_INPUTS)
+    )
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,9 @@ class RenameExplainsChangeTestCase:
     current_sql: str
     renames: dict[str, str]
     expected_explained: bool
+    input_columns: dict[tuple[str, str], frozenset[str]] = field(
+        default_factory=lambda: dict(ORDERS_INPUTS)
+    )
 
 
 @dataclass(frozen=True)

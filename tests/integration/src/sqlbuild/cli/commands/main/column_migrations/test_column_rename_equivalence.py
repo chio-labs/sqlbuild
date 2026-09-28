@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from tests.integration.src.sqlbuild.cli.commands.main.column_migrations._test_types import (
+    CollidingAliasRenameTestCase,
     EquivalentRenameTestCase,
     RebindingRenameTestCase,
     UnprovenRenameReplayTestCase,
@@ -22,6 +23,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.column_migrations.helpers 
     column_names,
     column_values,
     incremental_sql,
+    load_descending_amounts,
     migrate_columns,
     model_plan,
     orders_sql,
@@ -35,6 +37,13 @@ _ORDERS: str = 'FROM __source("raw_orders")'
 _REBOUND_BODY: str = (
     f"WITH changed AS (SELECT order_id, order_date, tax AS amount {_ORDERS}) "
     "SELECT order_id, order_date, amount AS revenue FROM changed"
+)
+_QUALIFY_BEFORE: str = (
+    f"SELECT order_id, order_date, amount {_ORDERS} QUALIFY row_number() OVER (ORDER BY amount) = 1"
+)
+_QUALIFY_AFTER: str = (
+    f"SELECT order_id, order_date, amount AS tax {_ORDERS} "
+    "QUALIFY row_number() OVER (ORDER BY tax) = 1"
 )
 _FILTERED_BODY: str = f"SELECT order_id, order_date, amount AS revenue {_ORDERS} WHERE amount > 0"
 _REPLAY_BOUNDED: str = "  replay_on_change bounded-2d,\n"
@@ -190,6 +199,62 @@ def test_given_rename_with_other_query_changes_when_building_then_replay_matches
     assert model_plan(undeclared)["backfill"] == test_case.expected_backfill
     assert model_plan(declared)["backfill"] == test_case.expected_backfill
     assert column_values(project_dir=tmp_path, column="revenue") == test_case.expected_values
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CollidingAliasRenameTestCase(
+            description="QUALIFY on a new name that is an input column replays as configured",
+            initial_sql=incremental_sql(body=_QUALIFY_BEFORE, extra_config=REPLAY_FULL),
+            renamed_sql=incremental_sql(body=_QUALIFY_AFTER, extra_config=REPLAY_FULL),
+            expected_planned=(),
+            expected_backfill={"action": "full", "duration": None},
+            expected_values=((1, 99),),
+        ),
+        CollidingAliasRenameTestCase(
+            description="a declared rename with a colliding QUALIFY name still replays fully",
+            initial_sql=incremental_sql(body=_QUALIFY_BEFORE, extra_config=REPLAY_FULL),
+            renamed_sql=incremental_sql(
+                body=_QUALIFY_AFTER,
+                extra_config=REPLAY_FULL + migrate_columns("tax (migrate_from amount)"),
+            ),
+            expected_planned=(("amount", "tax", "manual", "rename"),),
+            expected_backfill={"action": "full", "duration": None},
+            expected_values=((1, 99),),
+        ),
+        CollidingAliasRenameTestCase(
+            description="ORDER BY on a new name that is an input column replays as configured",
+            initial_sql=incremental_sql(
+                body=f"SELECT order_id, order_date, amount {_ORDERS} ORDER BY amount LIMIT 1",
+                extra_config=REPLAY_FULL,
+            ),
+            renamed_sql=incremental_sql(
+                body=f"SELECT order_id, order_date, amount AS tax {_ORDERS} ORDER BY tax LIMIT 1",
+                extra_config=REPLAY_FULL,
+            ),
+            expected_planned=(),
+            expected_backfill={"action": "full", "duration": None},
+            expected_values=((5, 95),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_renamed_alias_colliding_with_an_input_column_when_building_then_it_replays(
+    test_case: CollidingAliasRenameTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_model(project_dir=tmp_path, sql=test_case.initial_sql)
+    load_descending_amounts(project_dir=tmp_path, last_day=3)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    load_descending_amounts(project_dir=tmp_path, last_day=5)
+    write_model(project_dir=tmp_path, sql=test_case.renamed_sql)
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_column_migrations(plan) == test_case.expected_planned
+    assert model_plan(plan)["backfill"] == test_case.expected_backfill
+    assert column_values(project_dir=tmp_path, column="tax") == test_case.expected_values
 
 
 if __name__ == "__main__":
