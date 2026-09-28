@@ -32,7 +32,7 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
         request.project_dir if request.project_dir is not None else Path.cwd()
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=effective_project_dir
+        project_dir=effective_project_dir, extract_output_column_locations=False
     )
     _validate_preview_target(discovered_inputs=discovered_inputs, as_target=request.as_target)
     adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(

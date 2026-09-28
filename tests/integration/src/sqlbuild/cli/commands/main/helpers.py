@@ -19,6 +19,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
 from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
+from sqlbuild.compiler.discovery._helpers.filesystem import core as discovery_core_module
+from sqlbuild.spec.contracts.models import SourceLocation
 
 
 def unavailable_artifact_directory(*, prefix: str) -> TemporaryDirectory[str]:
@@ -440,3 +442,19 @@ def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[st
         source_bindings_module, "analyze_columns_and_lineage_with_polyglot", recording
     )
     return analysed
+
+
+def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Record every model file whose output columns discovery locates eagerly."""
+
+    scanned: list[Path] = []
+    original: Callable[..., dict[str, SourceLocation]] = (
+        discovery_core_module.model_output_column_locations
+    )
+
+    def recording(**kwargs: Any) -> dict[str, SourceLocation]:
+        scanned.append(cast(Path, kwargs["relative_path"]))
+        return original(**kwargs)
+
+    monkeypatch.setattr(discovery_core_module, "model_output_column_locations", recording)
+    return scanned
