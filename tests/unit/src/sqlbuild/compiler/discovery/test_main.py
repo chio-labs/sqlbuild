@@ -559,6 +559,33 @@ def generated_tasks():
             },
             expected_task_names=("prepare_orders",),
         ),
+        DiscoverFactoryValidationTestCase(
+            description="generated check and task may depend on a model and a seed",
+            repo_files=base_repo_files()
+            | {
+                "python/factories/generated.py": """
+from sqlbuild.checks import check
+from sqlbuild.factories import factory
+from sqlbuild.refs import model, seed
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_nodes():
+    @task(name="export_countries", depends_on=seed("country_codes"))
+    def export_countries(ctx):
+        return None
+
+    @check(name="check_orders", depends_on=[model("orders"), seed("country_codes")])
+    def check_orders(ctx):
+        return True
+
+    return [export_countries, check_orders]
+""",
+            },
+            expected_task_names=("export_countries",),
+            expected_check_names=("check_orders",),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -815,26 +842,6 @@ def generated_loaders():
 """,
             },
             expected_error_fragment="Loader 'raw_orders' depends on SQL resource 'orders'",
-        ),
-        DiscoverFactoryValidationTestCase(
-            description="generated check SQL dependency fails validation",
-            repo_files=base_repo_files()
-            | {
-                "python/checks/generated.py": """
-from sqlbuild.checks import check
-from sqlbuild.factories import factory
-from sqlbuild.refs import model
-
-
-@factory
-def generated_checks():
-    @check(name="check_orders", depends_on=model("orders"))
-    def check_orders(ctx):
-        return True
-    return check_orders
-""",
-            },
-            expected_error_fragment="Check 'check_orders' depends on SQL resource 'orders'",
         ),
         DiscoverFactoryValidationTestCase(
             description="generated managed source loader mismatch fails validation",
@@ -1427,21 +1434,6 @@ def load_orders(ctx):
 """,
             },
             expected_error_fragment="Loader 'load_orders' depends on SQL resource 'stg_orders'",
-        ),
-        DiscoverProjectInputsErrorTestCase(
-            description="raises when check declares SQL model dependency",
-            repo_files=base_repo_files()
-            | {
-                "python/checks/orders.py": """
-from sqlbuild.checks import check
-from sqlbuild.refs import model
-
-@check(depends_on=model('stg_orders'))
-def check_orders(ctx):
-    return True
-""",
-            },
-            expected_error_fragment="Check 'check_orders' depends on SQL resource 'stg_orders'",
         ),
         DiscoverProjectInputsErrorTestCase(
             description="raises when check depends on check",

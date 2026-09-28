@@ -80,6 +80,7 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     sql_test_scope_deps,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
+from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
 )
@@ -101,7 +102,6 @@ from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
     build_sql_test_case_fingerprint,
 )
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
@@ -161,8 +161,6 @@ from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
-from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
-from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
@@ -347,10 +345,7 @@ def assemble_compiled_project(
                 complete_binding_schemas=complete_binding_schemas,
             )
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
-    try:
-        validate_scope_index(index=scope_index)
-    except ScopeValidationError as error:
-        raise CompileInputError(str(error)) from error
+    report_scope_index_errors(index=scope_index)
     effective_target_values: dict[str, object] = resolve_early_model_templates(
         values={
             "database": (
@@ -444,6 +439,7 @@ def assemble_compiled_project(
         ),
         loader_functions=inputs.discovered_inputs.loader_functions,
         hook_functions=inputs.discovered_inputs.hook_functions,
+        enforce_explicit_references=inputs.project_config.references.enforce_explicit,
         sql_hook_files=inputs.discovered_inputs.sql_hook_files,
         materialization_files=inputs.discovered_inputs.materialization_files,
         public_enums=inputs.public_enums,
@@ -1920,7 +1916,7 @@ def _build_test_model_query_overrides(
         return {}
     if not test_input.payload.macro_mocks:
         return {}
-    macro_context: MacroContext = inputs.macro_context or MacroContext(
+    model_macro_context: MacroContext = inputs.macro_context or MacroContext(
         adapter_name=resolve_effective_adapter_name(
             project_config=inputs.project_config,
             local_config=inputs.local_config,
@@ -1929,6 +1925,7 @@ def _build_test_model_query_overrides(
         target_name=inputs.effective_target_name,
         vars=inputs.effective_vars,
     )
+    macro_context: MacroContext = replace(model_macro_context, _enforce_explicit_references=False)
     overrides: dict[str, str] = {}
     model_input: CompileModelInput
     for model_input in model_inputs:

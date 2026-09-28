@@ -48,6 +48,10 @@ from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_storage_policies
+from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
+    merge_call_site_references,
+    resource_references,
+)
 from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     named_declaration_usages,
 )
@@ -55,6 +59,7 @@ from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import 
     model_schema_enum_declarations,
 )
 from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_extractor
+from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     apply_environment_database_schema_overrides,
@@ -143,6 +148,7 @@ from sqlbuild.compiler.scopes.types import (
     UsageKind,
     VisibilityReason,
 )
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -254,9 +260,16 @@ class _HookExpansionContext:
 @dataclass
 class _HookExpansionFacts:
     usages: list[UsageRecord]
+    references: list[CompileSqlReference] = field(default_factory=list)
 
     def add(self, usages: tuple[UsageRecord, ...]) -> None:
         self.usages.extend(usages)
+
+    def add_references(self, references: tuple[CompileSqlReference, ...]) -> None:
+        self.references.extend(references)
+
+    def reads_since(self, start: int) -> tuple[SqlResourceRef, ...]:
+        return resource_references(tuple(self.references[start:]))
 
 
 @dataclass
@@ -583,6 +596,7 @@ def _build_model_inputs(
             expanded_query_sql=expanded_query_sql,
             sql_validation_placeholders=sql_validation_placeholders,
             model_schema_columns=model_schema_columns,
+            argument_references=macro_expansion.argument_references,
         )
         hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
             values=effective_config.values,
@@ -611,15 +625,11 @@ def _build_model_inputs(
             sql_hook_definitions=sql_hook_definitions,
             consumer=model_identity,
         )
-        expanded_config: CompileModelConfig = CompileModelConfig(
-            values=hook_expansion.values,
-            model_header_keys=effective_config.model_header_keys,
-            matched_path_default=effective_config.matched_path_default,
-            logical_schema=effective_config.logical_schema,
-            layer_schema=effective_config.layer_schema,
-            logical_database=effective_config.logical_database,
-            time_travel_retention=effective_config.time_travel_retention,
-            table_type=effective_config.table_type,
+        expanded_config: CompileModelConfig = _hook_expanded_config(
+            config=effective_config,
+            hook_expansion=hook_expansion,
+            model_file=model_file,
+            validation_context=validation_context,
         )
         hook_name: str
         for hook_name in ("pre_hooks", "post_hooks"):
@@ -736,6 +746,35 @@ def _build_model_inputs(
     return tuple(model_inputs)
 
 
+def _hook_expanded_config(
+    *,
+    config: CompileModelConfig,
+    hook_expansion: HookExpansionResult,
+    model_file: DiscoveredSqlModelFile,
+    validation_context: _ModelValidationContext,
+) -> CompileModelConfig:
+    validate_model_references(
+        references=hook_expansion.references,
+        model_file=model_file,
+        known_model_names=validation_context.known_model_names,
+        known_seed_names=validation_context.known_seed_names,
+        known_source_names=validation_context.known_source_names,
+        known_function_names=validation_context.known_function_names,
+        known_table_function_names=validation_context.known_table_function_names,
+        external_sql_reference_resolver=validation_context.external_sql_reference_resolver,
+    )
+    return CompileModelConfig(
+        values=hook_expansion.values,
+        model_header_keys=config.model_header_keys,
+        matched_path_default=config.matched_path_default,
+        logical_schema=config.logical_schema,
+        layer_schema=config.layer_schema,
+        logical_database=config.logical_database,
+        time_travel_retention=config.time_travel_retention,
+        table_type=config.table_type,
+    )
+
+
 def _validate_model_input(
     *,
     context: _ModelValidationContext,
@@ -744,6 +783,7 @@ def _validate_model_input(
     expanded_query_sql: str,
     sql_validation_placeholders: dict[str, str] | None,
     model_schema_columns: tuple[SchemaColumn, ...] | None,
+    argument_references: tuple[CompileSqlReference, ...],
 ) -> tuple[bool, tuple[CompileSqlReference, ...]]:
     model_name: str = model_file.file_path.stem
     sql_validation_enabled: bool = _model_sql_validation_gate(
@@ -761,7 +801,10 @@ def _validate_model_input(
             file_path=model_file.file_path,
             placeholders=sql_validation_placeholders,
         )
-    references: tuple[CompileSqlReference, ...] = context.extract_references(expanded_query_sql)
+    references: tuple[CompileSqlReference, ...] = merge_call_site_references(
+        references=context.extract_references(expanded_query_sql),
+        argument_references=argument_references,
+    )
     validate_model_references(
         references=references,
         model_file=model_file,
@@ -1190,7 +1233,11 @@ def expand_model_hook_macros_result(
             ),
             hook_key=hook_key,
         )
-    return HookExpansionResult(values=expanded_values, usages=tuple(dict.fromkeys(facts.usages)))
+    return HookExpansionResult(
+        values=expanded_values,
+        usages=tuple(dict.fromkeys(facts.usages)),
+        references=tuple(dict.fromkeys(facts.references)),
+    )
 
 
 def validate_model_hook_config(*, values: dict[str, object], model_name: str) -> None:
@@ -1428,8 +1475,15 @@ def expand_sql_macros_in_value(
         )
         facts: _HookExpansionFacts = context.facts
         facts.add(expansion.usages)
+        facts.add_references(
+            merge_call_site_references(
+                references=extract_sql_references(expansion.sql),
+                argument_references=expansion.argument_references,
+            )
+        )
         return expansion.sql
     if isinstance(value, SqlHookEntry):
+        inline_start: int = len(context.facts.references)
         expanded_statement: object = expand_sql_macros_in_value(
             value=value.statement,
             context=context,
@@ -1449,6 +1503,7 @@ def expand_sql_macros_in_value(
             definition_sql=value.definition_sql,
             kwargs=value.kwargs,
             description=value.description,
+            reads=context.facts.reads_since(inline_start),
         )
     if isinstance(value, NamedSqlHookEntry):
         hook_definition: DiscoveredSqlHookFile | None = context.sql_hook_definitions.get(value.name)
@@ -1490,6 +1545,7 @@ def expand_sql_macros_in_value(
             definition_label=(f"SQL hook '{value.name}' in {hook_definition.relative_path}"),
             reject_unused=True,
         )
+        named_start: int = len(hook_facts.references)
         expanded_statement = expand_sql_macros_in_value(
             value=rendered_statement,
             context=replace(
@@ -1517,6 +1573,7 @@ def expand_sql_macros_in_value(
             definition_sql=hook_definition.sql_body,
             kwargs=dict(value.kwargs),
             description=hook_definition.description,
+            reads=hook_facts.reads_since(named_start),
         )
     if isinstance(value, PythonHookEntry):
         return value

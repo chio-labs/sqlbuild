@@ -10,11 +10,20 @@ import re
 import sys
 import threading
 from collections.abc import Callable, Iterator, Mapping
+from contextvars import Token
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
+from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
+    call_site_sql_references,
+    evaluate_typed_reference,
+    reference_call_text,
+    reject_macro_generated_references,
+    relation_placeholder_text,
+    render_relation_placeholders,
+)
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
@@ -61,6 +70,7 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.python_nodes.models import RELATION_RENDERER, SqlResourceRef
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
@@ -97,6 +107,10 @@ class _MacroAnalysisInputs:
 class _ExpansionFacts:
     dependencies: list[DeclarationIdentity] = field(default_factory=list)
     usages: list[UsageRecord] = field(default_factory=list)
+    relations: dict[SqlResourceRef, int] = field(default_factory=dict)
+    argument_references: dict[SqlResourceRef, None] = field(default_factory=dict)
+    call_site_refs: list[set[SqlResourceRef]] = field(default_factory=list)
+    rendering_approved: list[frozenset[SqlResourceRef]] = field(default_factory=list)
 
     def add_dependency(self, identity: DeclarationIdentity) -> _ExpansionFacts:
         """Record a resolved dependency in encounter order."""
@@ -109,6 +123,50 @@ class _ExpansionFacts:
 
         self.usages.append(usage)
         return self
+
+    def record_call_site_refs(self, refs: tuple[SqlResourceRef, ...]) -> None:
+        """Record references written as arguments of every macro call being expanded."""
+
+        self.argument_references.update(dict.fromkeys(refs))
+        for approved in self.call_site_refs:
+            approved.update(refs)
+
+    def open_call_site(self) -> _ExpansionFacts:
+        """Start collecting the references written as one macro call's arguments."""
+
+        self.call_site_refs.append(set())
+        return self
+
+    def close_call_site(self) -> frozenset[SqlResourceRef]:
+        """Stop collecting for the innermost macro call and return its argument references."""
+
+        return frozenset(self.call_site_refs.pop())
+
+    def begin_rendering(self, approved: frozenset[SqlResourceRef]) -> _ExpansionFacts:
+        """Approve the call-site argument references of the macro about to run."""
+
+        self.rendering_approved.append(approved)
+        return self
+
+    def end_rendering(self) -> _ExpansionFacts:
+        """Restore the approvals of the enclosing macro after one macro returns."""
+
+        self.rendering_approved.pop()
+        return self
+
+    def render_relation(self, ref: object) -> str:
+        """Render a reference a macro formats; only call-site arguments become placeholders."""
+
+        if not isinstance(ref, SqlResourceRef):
+            raise CompileInputError("Only typed resource references render as relations")
+        if not self.rendering_approved or ref not in self.rendering_approved[-1]:
+            return reference_call_text(ref)
+        return relation_placeholder_text(self.relations.setdefault(ref, len(self.relations)))
+
+    def render_relation_placeholders(self, sql: str) -> str:
+        """Replace typed reference placeholders with the reference call written at the call site."""
+
+        return render_relation_placeholders(sql=sql, relations=self.relations)
 
 
 @dataclass(frozen=True)
@@ -1216,6 +1274,7 @@ def expand_sql_macros_result(
     return MacroExpansionResult(
         sql=expanded_sql,
         spans=spans,
+        argument_references=call_site_sql_references(tuple(facts.argument_references)),
         dependencies=tuple(dict.fromkeys(facts.dependencies)),
         usages=tuple(dict.fromkeys(facts.usages)),
     )
@@ -1269,6 +1328,7 @@ def _expand_sql_macros(
                 f"Macro '@{_parse_macro_name(sql=sql, call_start_index=macro_start_index)}' in "
                 f"'{consumer_path}' must return a SQL string when used directly in SQL"
             )
+        macro_result = state.facts.render_relation_placeholders(macro_result)
         rendered_sql_parts.append(macro_result)
         spans.append(
             ExpansionSpan(
@@ -1417,13 +1477,17 @@ def _evaluate_macro_call(
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]
-    args, kwargs = _parse_macro_arguments(
-        args_source=args_source,
-        file_path=file_path,
-        state=state,
-        declarations=declarations,
-        stack=stack,
-    )
+    _ = state.facts.open_call_site()
+    try:
+        args, kwargs = _parse_macro_arguments(
+            args_source=args_source,
+            file_path=file_path,
+            state=state,
+            declarations=declarations,
+            stack=stack,
+        )
+    finally:
+        approved: frozenset[SqlResourceRef] = state.facts.close_call_site()
     try:
         invocation_context: MacroContext = _build_macro_invocation_context(
             macro_context=state.macro_context,
@@ -1431,12 +1495,19 @@ def _evaluate_macro_call(
             file_path=file_path,
             state=state,
         )
-        macro_result: object = _call_loaded_macro(
-            loaded_macro=loaded_macro,
-            macro_context=invocation_context,
-            args=args,
-            kwargs=kwargs,
+        renderer_token: Token[Callable[[object], str] | None] = RELATION_RENDERER.set(
+            state.facts.begin_rendering(approved).render_relation
         )
+        try:
+            macro_result: object = _call_loaded_macro(
+                loaded_macro=loaded_macro,
+                macro_context=invocation_context,
+                args=args,
+                kwargs=kwargs,
+            )
+        finally:
+            RELATION_RENDERER.reset(renderer_token)
+            _ = state.facts.end_rendering()
     except CompileInputError:
         raise
     except TypeError as error:
@@ -1456,6 +1527,13 @@ def _evaluate_macro_call(
         _validate_final_macro_sql(
             macro_name=macro_name, file_path=file_path, macro_result=macro_result
         )
+        if state.macro_context._enforce_explicit_references:
+            reject_macro_generated_references(
+                loaded_macro=loaded_macro,
+                macro_result=macro_result,
+                file_path=file_path,
+                consumer=state.consumer,
+            )
     return macro_result, closing_paren_index + 1
 
 
@@ -1704,6 +1782,13 @@ def _parse_macro_arguments(
             placeholder_values=placeholder_values,
             file_path=file_path,
         )
+    state.facts.record_call_site_refs(
+        tuple(
+            evaluate_typed_reference(node=node, file_path=file_path)
+            for node in ast.walk(call_expression)
+            if isinstance(node, ast.Call) and node is not call_expression
+        )
+    )
     return args, kwargs
 
 
@@ -1752,6 +1837,8 @@ def _evaluate_literal_ast_node(
 ) -> object:
     if isinstance(node, ast.Constant):
         return node.value
+    if isinstance(node, ast.Call):
+        return evaluate_typed_reference(node=node, file_path=file_path)
     if isinstance(node, ast.Name):
         if node.id in placeholder_values:
             return placeholder_values[node.id]
@@ -1798,7 +1885,8 @@ def _evaluate_literal_ast_node(
             raise CompileInputError(f"Macro arguments in '{file_path}' use unsupported unary value")
         return -operand if isinstance(node.op, ast.USub) else operand
     raise CompileInputError(
-        f"Macro arguments in '{file_path}' must use only Python literals and nested macro calls"
+        f"Macro arguments in '{file_path}' must use only Python literals, nested macro calls, "
+        "and __ref(), __source(), or __seed() references"
     )
 
 

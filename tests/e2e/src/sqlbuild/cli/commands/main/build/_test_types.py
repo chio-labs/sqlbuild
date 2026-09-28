@@ -1009,3 +1009,110 @@ class AuditReadPlanE2ETestCase:
     description: str
     select: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExplicitReferenceBuildE2ETestCase:
+    """A build of a project using typed macro references and Python hook reads."""
+
+    description: str
+    overrides: dict[str, str]
+    expected_exit_code: int
+    expected_dag_edges: tuple[tuple[str, str], ...]
+    expected_customer_counts: tuple[tuple[object, ...], ...]
+    expected_order_before: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class ExplicitReferencePythonDependencyE2ETestCase:
+    """Python nodes declaring seed and model dependencies, built and checked end to end."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_dag_edges: tuple[tuple[str, str], ...]
+    expected_checked_asset_ids: tuple[str, ...]
+    expected_order_before: tuple[str, str]
+    expected_country_counts: tuple[tuple[object, ...], ...]
+    expected_check_row_pattern: str
+
+
+@dataclass(frozen=True)
+class CollectedCompileDiagnosticsE2ETestCase:
+    """A project with several compile violations, all reported by one compile."""
+
+    description: str
+    overrides: dict[str, str]
+    expected_output_fragments: tuple[str, ...]
+    expected_json_diagnostics: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ExplicitReferenceFailureE2ETestCase:
+    """A project whose references are not explicit, and the failure it reports."""
+
+    description: str
+    overrides: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExplicitReferenceRuntimeWarningE2ETestCase:
+    """A build whose Python SQL hard-codes a project relation only at run time."""
+
+    description: str
+    overrides: dict[str, str]
+    enforce_explicit: bool
+    expected_exit_code: int
+    expected_warning_fragments: tuple[str, ...]
+    expected_final_line_prefix: str
+
+
+@dataclass(frozen=True)
+class CrossBoundarySelectionE2ETestCase:
+    """A both-way selector over tasks that read a model and, separately, its upstream."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_ran: tuple[str, ...]
+    expected_not_ran: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonSourceDeferralE2ETestCase:
+    """Python reads of a managed source under a target that defers source reads."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_counts: dict[str, int]
+    expected_check_pattern: str
+
+
+@dataclass(frozen=True)
+class UnrenderedMacroArgumentE2ETestCase:
+    """A model passing typed references its macro does not render."""
+
+    description: str
+    model_sql: str
+    expected_dag_edges: tuple[tuple[str, str], ...]
+    expected_built: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlHookReadBuildE2ETestCase:
+    """SQL hooks whose references a build must resolve and order like model SQL."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_counts: dict[str, int]
+    expected_order_before: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class SqlHookReadCycleE2ETestCase:
+    """A SQL hook that reads a model built from the model running the hook."""
+
+    description: str
+    overrides: dict[str, str]
+    expected_output_fragments: tuple[str, ...]

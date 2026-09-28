@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -14,6 +15,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CursorInputRoles,
 )
+from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
 )
@@ -39,6 +41,10 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
 )
 from sqlbuild.compiler.planner._helpers.resolve.sources import (
     resolve_source_references,
+)
+from sqlbuild.compiler.planner.constants import (
+    MODEL_POST_HOOKS_CONFIG_KEY,
+    MODEL_PRE_HOOKS_CONFIG_KEY,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
@@ -172,42 +178,21 @@ def resolve_function_sql(
 ) -> str:
     """Resolve relation and function references in a SQL function body."""
 
-    query_sql: str = resolve_source_references(
-        query_sql=function.body_sql,
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
-        star_exclude_keyword=star_exclude_keyword,
-        cursor_bounds=None,
-        cursor_filter_inputs={},
+    return _resolve_unbounded_sql(
+        sql=function.body_sql,
+        context=ModelPlanContext(
+            model_locations=model_locations,
+            models_by_name={},
+            seed_locations=seed_locations,
+            function_locations=function_locations,
+            source_map=source_map,
+            source_warehouse_columns=source_warehouse_columns,
+            star_exclude_keyword=star_exclude_keyword,
+        ),
         adapter=adapter,
-        cursor_type=None,
-        lower_bound_inclusive=True,
+        external_sql_reference_resolver=None,
+        label=f"Function '{function.name}'",
     )
-    query_sql = resolve_ref_references(
-        query_sql=query_sql,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        cursor_bounds=None,
-        cursor_filter_inputs={},
-        adapter=adapter,
-        cursor_type=None,
-        lower_bound_inclusive=True,
-    )
-    query_sql = resolve_dbt_ref_references(query_sql=query_sql)
-    query_sql = resolve_udf_references(
-        query_sql=query_sql,
-        function_locations=function_locations,
-        adapter=adapter,
-    )
-    query_sql = resolve_table_function_references(
-        query_sql=query_sql,
-        function_locations=function_locations,
-        adapter=adapter,
-    )
-    assert_no_unresolved_sql_markers(
-        sql=query_sql, context=f"Function '{function.name}' planned SQL"
-    )
-    return query_sql
 
 
 def _compute_model_cursor_bounds(
@@ -323,3 +308,101 @@ def _compute_model_cursor_bounds(
         ),
         input_evidence=cursor_snapshot.input_evidence,
     )
+
+
+def resolve_model_hook_entries(
+    *,
+    model: CompiledModel,
+    adapter: BaseAdapter,
+    context: ModelPlanContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+) -> tuple[object, object]:
+    """Return the model's pre and post hooks with SQL hook references resolved like model SQL."""
+
+    pre_hooks, post_hooks = (
+        _resolve_hook_value(
+            value=model.config.values.get(hook_key),
+            label=f"Model '{model.name}' {hook_key}",
+            adapter=adapter,
+            context=context,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+        )
+        for hook_key in (MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY)
+    )
+    return pre_hooks, post_hooks
+
+
+def _resolve_hook_value(
+    *,
+    value: object,
+    label: str,
+    adapter: BaseAdapter,
+    context: ModelPlanContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+) -> object:
+    if isinstance(value, SqlHookEntry):
+        return replace(
+            value,
+            statement=_resolve_unbounded_sql(
+                sql=value.statement,
+                label=label,
+                adapter=adapter,
+                context=context,
+                external_sql_reference_resolver=external_sql_reference_resolver,
+            ),
+        )
+    if isinstance(value, list | tuple):
+        resolved: list[object] = [
+            _resolve_hook_value(
+                value=item,
+                label=f"{label}[{index}]",
+                adapter=adapter,
+                context=context,
+                external_sql_reference_resolver=external_sql_reference_resolver,
+            )
+            for index, item in enumerate(value)
+        ]
+        return resolved if isinstance(value, list) else tuple(resolved)
+    return value
+
+
+def _resolve_unbounded_sql(
+    *,
+    sql: str,
+    label: str,
+    adapter: BaseAdapter,
+    context: ModelPlanContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+) -> str:
+    resolved: str = resolve_source_references(
+        query_sql=sql,
+        source_map=context.source_map,
+        source_warehouse_columns=context.source_warehouse_columns,
+        star_exclude_keyword=context.star_exclude_keyword,
+        cursor_bounds=None,
+        cursor_filter_inputs={},
+        adapter=adapter,
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+    resolved = resolve_ref_references(
+        query_sql=resolved,
+        model_locations=context.model_locations,
+        seed_locations=context.seed_locations,
+        cursor_bounds=None,
+        cursor_filter_inputs={},
+        adapter=adapter,
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+    resolved = resolve_dbt_ref_references(
+        query_sql=resolved, external_sql_reference_resolver=external_sql_reference_resolver
+    )
+    resolved = resolve_udf_references(
+        query_sql=resolved, function_locations=context.function_locations or {}, adapter=adapter
+    )
+    resolved = resolve_table_function_references(
+        query_sql=resolved, function_locations=context.function_locations or {}, adapter=adapter
+    )
+    assert_no_unresolved_sql_markers(sql=resolved, context=f"{label} planned SQL")
+    return resolved

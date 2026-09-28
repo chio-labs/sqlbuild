@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, ExecutionPhase
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
@@ -440,3 +441,32 @@ class ReusedFinalAuditResultsTestCase:
     description: str
     reads_outside_target_lineage: bool
     expected_reused: bool
+
+
+@dataclass(frozen=True)
+class PythonHookReadsTestCase:
+    """A Python hook resolving relations, and the relation or error it gets."""
+
+    description: str
+    reads: tuple[SqlResourceRef, ...]
+    requested: SqlResourceRef
+    expected_relation: str
+
+
+@dataclass(frozen=True)
+class PythonHookUndeclaredReadTestCase:
+    """A Python hook resolving a relation it did not declare."""
+
+    description: str
+    reads: tuple[SqlResourceRef, ...]
+    requested: SqlResourceRef
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonHookHardCodedRelationTestCase:
+    """A Python hook sending SQL that names a project relation directly."""
+
+    description: str
+    enforce_explicit_references: bool
+    expected_warning_fragments: tuple[str, ...]

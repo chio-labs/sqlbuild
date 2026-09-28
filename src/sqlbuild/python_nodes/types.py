@@ -39,7 +39,8 @@ class PythonCheckSeverity(StrEnum):
 
 
 class SqlResourceRefKind(StrEnum):
-    """Python-node typed dependency target for SQL graph resources."""
+    """Typed reference target for SQL graph resources."""
 
     MODEL = "model"
     SOURCE = "source"
+    SEED = "seed"

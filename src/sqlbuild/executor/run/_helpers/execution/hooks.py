@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -19,9 +20,12 @@ from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.main._fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -29,7 +33,9 @@ from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import (
     HookContext,
     HookExecutionResult,
+    HookInvocation,
     HookRelation,
+    HookRelationLookup,
     HookRunContext,
     HookSkipResult,
 )
@@ -39,7 +45,10 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_hooks(
@@ -215,16 +224,27 @@ def _invoke_python_hook(
         )
         raise ExecutorInputError(error_message)
 
-    context: HookContext = build_hook_context(
-        connection=connection,
-        adapter=adapter,
-        hook_entry=hook_entry,
-        hook_index=hook_index,
-        phase=phase,
-        model_name=model_name,
-        destination=destination,
-        hook_run=hook_run,
-    )
+    try:
+        context: HookContext = build_hook_context(
+            connection=connection,
+            adapter=adapter,
+            hook_function=hook_function,
+            invocation=HookInvocation(entry=hook_entry, index=hook_index, phase=phase),
+            model_name=model_name,
+            destination=destination,
+            hook_run=hook_run,
+        )
+    except ExecutorInputError as exc:
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message=f"{hook_label} failed: {exc}",
+        )
+        raise ExecutorInputError(f"{hook_label} failed: {exc}") from exc
     with OperationLifecycle(
         operation_kind="python_node",
         operation_name="python_hook",
@@ -423,13 +443,12 @@ def _sql_hook_preview(statement: str) -> str:
     return normalized[:77] + "..."
 
 
-def build_hook_context(
+def build_hook_context(  # noqa: PLR0913
     *,
     connection: Any,
     adapter: BaseAdapter,
-    hook_entry: PythonHookEntry,
-    hook_index: int,
-    phase: HookPhase,
+    hook_function: DiscoveredHookFunction,
+    invocation: HookInvocation,
     model_name: str,
     destination: CompiledRelationLocation,
     hook_run: HookRunContext,
@@ -442,9 +461,9 @@ def build_hook_context(
     )
     return HookContext(
         model_name=model_name,
-        phase=phase,
-        hook_name=hook_entry.name,
-        hook_index=hook_index,
+        phase=invocation.phase,
+        hook_name=invocation.entry.name,
+        hook_index=invocation.index,
         run_id=hook_run.run_id,
         target=hook_run.target,
         vars=hook_run.effective_vars if hook_run.effective_vars is not None else {},
@@ -458,7 +477,70 @@ def build_hook_context(
         providers=hook_run.providers
         if hook_run.providers is not None
         else _empty_provider_container(),
+        relations=_resolve_hook_relations(
+            adapter=adapter, refs=hook_function.reads, lookup=hook_run.relation_lookup
+        ),
+        relation_guard=_hook_relation_guard(
+            adapter=adapter,
+            hook_name=hook_function.name,
+            model_name=model_name,
+            hook_run=hook_run,
+        ),
     )
+
+
+def _hook_relation_guard(
+    *, adapter: BaseAdapter, hook_name: str, model_name: str, hook_run: HookRunContext
+) -> RuntimeRelationGuard | None:
+    if not hook_run.enforce_explicit_references or hook_run.warnings is None:
+        return None
+    lookup: HookRelationLookup = hook_run.relation_lookup
+    all_refs: tuple[SqlResourceRef, ...] = (
+        *(
+            SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=name)
+            for name in lookup.model_locations
+        ),
+        *(
+            SqlResourceRef(kind=SqlResourceRefKind.SEED, name=name)
+            for name in lookup.seed_locations
+        ),
+        *(SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=name) for name in lookup.source_map),
+    )
+    return RuntimeRelationGuard(
+        owner_label=f"hook '{hook_name}' on model '{model_name}'",
+        owner_kind=HardCodedRelationOwnerKind.HOOK,
+        project_relations=_resolve_hook_relations(adapter=adapter, refs=all_refs, lookup=lookup),
+        dialect=adapter.sql_analysis_dialect(),
+        default_database=adapter.default_database(),
+        default_schema=adapter.default_schema(),
+        warnings=hook_run.warnings,
+        own_refs=frozenset({SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=model_name)}),
+    )
+
+
+def _resolve_hook_relations(
+    *, adapter: BaseAdapter, refs: tuple[SqlResourceRef, ...], lookup: HookRelationLookup
+) -> dict[SqlResourceRef, str]:
+    relations: dict[SqlResourceRef, str] = {}
+    for ref in refs:
+        if ref.kind is SqlResourceRefKind.SOURCE:
+            entry: SourceEntry | None = lookup.source_map.get(ref.name)
+            if entry is None:
+                raise ExecutorInputError(f"No runtime relation found for source '{ref.name}'")
+            relations[ref] = render_source_relation(entry=entry, adapter=adapter)
+            continue
+        locations: Mapping[str, CompiledRelationLocation] = (
+            lookup.model_locations
+            if ref.kind is SqlResourceRefKind.MODEL
+            else lookup.seed_locations
+        )
+        location: CompiledRelationLocation | None = locations.get(ref.name)
+        if location is None:
+            raise ExecutorInputError(f"No runtime relation found for {ref.kind.value} '{ref.name}'")
+        relations[ref] = resolve_relation_location_qualified_name(
+            adapter=adapter, location=location
+        )
+    return relations
 
 
 def _find_hook_function(

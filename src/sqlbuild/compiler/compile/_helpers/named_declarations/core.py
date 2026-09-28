@@ -5,9 +5,15 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
+from sqlbuild.compiler.compile._helpers.diagnostics.scope import compiled_resource_type
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import DeclarationExpansionContext, DeclarationScopeResolver
+from sqlbuild.compiler.compile.models import (
+    CompilerDiagnostic,
+    DeclarationExpansionContext,
+    DeclarationScopeResolver,
+)
+from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.scopes.constants import DECLARATION_ROLE_PARTS
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
@@ -79,14 +85,35 @@ def named_declaration_usages(
         )
         owner: str = record.owning_path or record.ownership_root.path
         role: str = "/".join(DECLARATION_ROLE_PARTS[kind])
-        raise CompileInputError(
-            f"{_KIND_LABELS[kind]} '{name}' is not visible from '{consumer_label}'. It is "
-            f"defined at {record.path} with {record.scope.value} scope owned by '{owner}'",
-            code=ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
-            help=(
-                f"move '{record.path}' to a {role}/ role owned by '{consumer_folder}' or one of "
-                f"its parent folders, or to the project-wide {role}/ when consumers span "
-                "resource trees"
+        resource: ResourceIdentity | None = (
+            consumer if isinstance(consumer, ResourceIdentity) else None
+        )
+        report_compile_diagnostic(
+            key=(
+                ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
+                consumer_label,
+                kind.value,
+                name,
+            ),
+            diagnostic=CompilerDiagnostic(
+                phase=DiagnosticPhase.COMPILE,
+                severity=DiagnosticSeverity.ERROR,
+                code=ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
+                message=(
+                    f"{_KIND_LABELS[kind]} '{name}' is not visible from '{consumer_label}'. It "
+                    f"is defined at {record.path} with {record.scope.value} scope owned by "
+                    f"'{owner}'"
+                ),
+                resource_type=(
+                    compiled_resource_type(resource.kind) if resource is not None else None
+                ),
+                resource_name=resource.name if resource is not None else None,
+                path=Path(consumer_label),
+                help=(
+                    f"move '{record.path}' to a {role}/ role owned by '{consumer_folder}' or one "
+                    f"of its parent folders, or to the project-wide {role}/ when consumers span "
+                    "resource trees"
+                ),
             ),
         )
     return (UsageRecord(consumer=consumer, declaration=record.identity),)

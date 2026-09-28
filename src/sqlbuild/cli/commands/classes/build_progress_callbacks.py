@@ -816,7 +816,9 @@ def _count_build_footer_results(
 
     model_result: ModelExecutionResult
     for model_result in result.model_results:
-        if model_result.status == ExecutionStatus.SUCCESS:
+        if model_result.status == ExecutionStatus.SUCCESS and model_result.warning_messages:
+            warn_count += 1
+        elif model_result.status == ExecutionStatus.SUCCESS:
             pass_count += 1
         elif model_result.status == ExecutionStatus.FAILED:
             fail_count += 1
@@ -852,7 +854,9 @@ def _count_build_footer_results(
 
     load_result: LoadExecutionResult
     for load_result in result.load_results:
-        if load_result.status == ExecutionStatus.SUCCESS:
+        if load_result.status == ExecutionStatus.SUCCESS and load_result.warning_messages:
+            warn_count += 1
+        elif load_result.status == ExecutionStatus.SUCCESS:
             pass_count += 1
         elif load_result.status == ExecutionStatus.FAILED:
             fail_count += 1
@@ -868,7 +872,9 @@ def _count_build_footer_results(
 
     python_result: PythonNodeExecutionResult
     for python_result in python_node_results:
-        if python_result.status == PythonNodeStatus.SUCCESS:
+        if python_result.status == PythonNodeStatus.SUCCESS and python_result.warning_messages:
+            warn_count += 1
+        elif python_result.status == PythonNodeStatus.SUCCESS:
             pass_count += 1
         elif python_result.status == PythonNodeStatus.FAILED:
             fail_count += 1
@@ -918,12 +924,17 @@ def format_build_footer(
     if result.status == BuildStatus.FAILED or python_fail_count:
         state: CompletionState = CompletionState.FAIL
         label: str = "Completed with errors"
-    elif result.warning_count > 0:
+    elif result.warning_count > 0 or counts.warn_count > 0:
         state = CompletionState.WARN
         label = "Completed with warnings"
     else:
         state = CompletionState.OK
         label = "Completed successfully"
+    warning_lines: list[str] = _format_warning_details(
+        result=result, python_node_results=python_node_results, style=style
+    )
+    if warning_lines:
+        lines.extend(warning_lines)
     lines.append(
         format_completion_line(style=style, state=state, label=label, summary=counts_summary)
     )
@@ -938,10 +949,6 @@ def format_build_footer(
     )
     if skipped_lines:
         lines.extend(skipped_lines)
-
-    warning_lines: list[str] = _format_warning_details(result=result, style=style)
-    if warning_lines:
-        lines.extend(warning_lines)
 
     return "\n".join(lines)
 
@@ -1170,7 +1177,12 @@ def _format_audit_error_details(
     return lines
 
 
-def _format_warning_details(*, result: BuildExecutionResult, style: CliStyle) -> list[str]:
+def _format_warning_details(
+    *,
+    result: BuildExecutionResult,
+    python_node_results: tuple[PythonNodeExecutionResult, ...],
+    style: CliStyle,
+) -> list[str]:
     lines: list[str] = []
     has_warnings: bool = False
 
@@ -1205,18 +1217,33 @@ def _format_warning_details(*, result: BuildExecutionResult, style: CliStyle) ->
                 lines.append(line)
             lines.append("")
 
-    function_result: FunctionExecutionResult
-    for function_result in result.function_results:
-        if not function_result.warning_messages:
-            continue
+    labelled_warnings: tuple[tuple[str, tuple[str, ...]], ...] = (
+        *(
+            (f"{function_result.function_name}  ({function_result.function_kind})", messages)
+            for function_result in result.function_results
+            if (messages := function_result.warning_messages)
+        ),
+        *(
+            (f"{load_result.source_name}  (loader {load_result.loader_name})", messages)
+            for load_result in result.load_results
+            if (messages := load_result.warning_messages)
+        ),
+        *(
+            (f"{python_result.node_name}  ({python_result.kind.value})", messages)
+            for python_result in python_node_results
+            if (messages := python_result.warning_messages)
+        ),
+    )
+    label: str
+    messages: tuple[str, ...]
+    for label, messages in labelled_warnings:
         if not has_warnings:
             lines.append("")
             lines.append(style.warning_strong("Warnings:"))
             lines.append("")
             has_warnings = True
-        lines.append(f"  {function_result.function_name}  ({function_result.function_kind})")
-        warning_msg: str
-        for warning_msg in function_result.warning_messages:
+        lines.append(f"  {label}")
+        for warning_msg in messages:
             lines.append(f"    {warning_msg}")
         lines.append("")
 

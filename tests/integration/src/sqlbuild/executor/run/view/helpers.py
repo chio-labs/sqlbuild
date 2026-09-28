@@ -236,6 +236,7 @@ def _execute_view_test(
             model_locations=model_locations,
             seed_locations={},
             source_map={},
+            python_source_read_map={},
             model_audits=model_audits,
             run_id="test_run",
             query_change_tracking=getattr(test_case, "query_change_tracking", True),

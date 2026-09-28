@@ -6,6 +6,17 @@
 
 Online: https://sqlbuild.com/docs/concepts/models/hooks/python/
 
+## Contents
+
+- Define a Python hook
+- Declared reads
+- Invoke a Python hook
+- Signature validation
+- Hook context
+- Providers
+- Skips and failures
+- Identity and diagnostics
+
 Python hooks run model lifecycle logic that needs Python control flow, providers, warehouse queries, logging, or explicit skip decisions.
 
 For shared lifecycle ordering, failure timing, naming, and identity rules, see the [Hooks overview](../hooks.md).
@@ -29,7 +40,47 @@ def notify_complete(ctx, channel="#data-builds"):
     )
 ```
 
-By default, the hook name is the function name. The decorator accepts optional `name` and `description` arguments. A Python file may define multiple decorated hooks.
+By default, the hook name is the function name. The decorator accepts optional `name`, `description`, and `reads` arguments. A Python file may define multiple decorated hooks.
+
+## Declared reads
+
+A hook that queries other models, sources, or seeds declares them with `reads` and resolves each
+one with `ctx.relation(...)`:
+
+```python
+from sqlbuild.hooks import hook
+from sqlbuild.refs import model
+
+@hook(reads=model("dim_customers"))
+def refresh_lookup(ctx):
+    customers = ctx.relation(model("dim_customers"))
+    ctx.execute_sql(f"CREATE OR REPLACE TABLE customer_lookup AS SELECT * FROM {customers}")
+```
+
+`reads` accepts one reference or a list of `model(...)`, `source(...)`, and `seed(...)`
+references from `sqlbuild.refs`. `ctx.relation(...)` returns the adapter-qualified relation for
+the current run, following deferral like SQL references do. Resolving a reference that is not
+declared raises, as it does for [Python nodes](../../python-nodes/sql-references.md).
+
+Declared reads order the build: a model that runs the hook waits for the resources the hook reads
+when both are in the build. In a partial build, unselected reads are not built, and the hook reads
+their existing relations. A hook cannot read a resource built from the model that runs it, because
+that model would have to wait for its own dependants; that fails to compile with `P007`. Reading
+an unknown model, source, or seed fails to compile. Use `ctx.destination` for the hook's own model.
+
+The Dagster integration does not add declared reads to its asset graph, the same as reads of
+attached audits. Within one `sqb build` the ordering holds; when Dagster runs the hooked model in a
+separate build from the resources it reads, the hook reads their existing relations.
+
+Declaring reads does not change who may call the hook: the model must still see the hook under the
+usual [scope rules](../hooks.md#project-layout).
+
+SQL hooks declare reads by referencing resources in their SQL; see
+[Read models, sources, and seeds](sql.md#read-models-sources-and-seeds).
+
+Literal project relation names in `ctx.query()` and `ctx.execute_sql()` SQL fail to compile, and
+dynamically built names produce run-time warnings; see
+[Hard-coded relation names](../../python-nodes/sql-references.md#hard-coded-relation-names).
 
 Files named `__init__.py` or beginning with `_` are skipped. Imported decorated functions are not registered again from the importing module.
 
@@ -73,6 +124,7 @@ Python hooks declare a `HookContext` parameter named `ctx`, `context`, `_ctx`, o
 | `ctx.target` | Active target |
 | `ctx.vars` | Effective project variables |
 | `ctx.destination` | Destination relation metadata |
+| `ctx.relation(ref)` | Adapter-qualified relation for a [declared read](#declared-reads) |
 | `ctx.adapter_name` | Active adapter name |
 | `ctx.adapter` | Adapter instance |
 | `ctx.connection` | Live connection |

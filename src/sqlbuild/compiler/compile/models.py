@@ -330,6 +330,7 @@ class MacroContext:
     _constant_declarations: Mapping[str, ConstantDeclaration] = field(
         default_factory=dict, repr=False, compare=False
     )
+    _enforce_explicit_references: bool = field(default=True, repr=False, compare=False)
 
     def render_constant(self, name: str) -> str:
         """Render one visible constant as an adapter-safe SQL value."""
@@ -373,6 +374,7 @@ class MacroExpansionResult:
     spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
     dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -390,6 +392,7 @@ class AuthoredSqlExpansionResult:
 
     sql: str
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -398,6 +401,7 @@ class HookExpansionResult:
 
     values: dict[str, object]
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -1046,6 +1050,7 @@ class CompiledProject:
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    enforce_explicit_references: bool = True
     sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)

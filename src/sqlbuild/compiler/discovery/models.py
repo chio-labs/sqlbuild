@@ -46,6 +46,7 @@ class SqlHookEntry:
     definition_sql: str | None = None
     kwargs: dict[str, object] | None = None
     description: str | None = None
+    reads: tuple[SqlResourceRef, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -501,6 +502,7 @@ class DiscoveredHookFunction:
     name: str
     function: Callable[..., object]
     description: str | None = None
+    reads: tuple[SqlResourceRef, ...] = field(default_factory=tuple)
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
     scope_kind: ScopeKind = ScopeKind.GLOBAL
     ownership_root: Path | None = None

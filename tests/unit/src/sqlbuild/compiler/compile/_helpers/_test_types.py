@@ -937,3 +937,108 @@ class AttachedAuditGateCycleTestCase:
     description: str
     files: dict[str, str]
     expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypedMacroReferenceTestCase:
+    """A macro call passing typed references, and the SQL it expands to."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class MacroGeneratedReferenceErrorTestCase:
+    """A macro call whose expanded output contains a reference it was not given."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MacroGeneratedReferenceSwitchTestCase:
+    """A macro emitting a reference while explicit-reference enforcement is disabled."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class MalformedTypedMacroReferenceTestCase:
+    """A macro argument that looks like a reference call but is not a valid typed reference."""
+
+    description: str
+    sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class TypedReferenceAdapterRenderingTestCase:
+    """An adapter resolving a typed macro reference with its own relation quoting."""
+
+    description: str
+    adapter_name: str
+    expected_resolved_sql: str
+
+
+@dataclass(frozen=True)
+class HookReadEdgeTestCase:
+    """A Python hook declaring reads, and the ordering edges its model gains."""
+
+    description: str
+    files: dict[str, str]
+    expected_edges: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class HookReadErrorTestCase:
+    """A Python hook declaring reads that cannot be satisfied."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonSqlReferenceErrorTestCase:
+    """A Python node or hook whose literal SQL hard-codes a project relation name."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+    unexpected_error_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PythonSqlReferenceAllowedTestCase:
+    """Python SQL that compiles because it names no undeclared project relation literally."""
+
+    description: str
+    files: dict[str, str]
+    expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MacroGeneratedReferenceCollectionTestCase:
+    """Model SQL whose macros emit several references, all reported by one expansion."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypedMacroArgumentDependencyTestCase:
+    """A model passing typed references to a macro that may not render all of them."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_dependency_names: frozenset[str]

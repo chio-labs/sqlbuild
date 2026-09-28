@@ -66,6 +66,7 @@ from sqlbuild.spec.contracts.models import (
     MicrobatchesConfig,
     MicrobatchLimitsConfig,
     ProjectConfig,
+    ReferencesConfig,
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
     ScopesConfig,
@@ -127,6 +128,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     )
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
     scopes: ScopesConfig = _load_scopes(payload=payload.get("scopes"), file_path=file_path)
+    references: ReferencesConfig = _load_references(
+        payload=payload.get("references"), file_path=file_path
+    )
     cost: CostConfig = _load_cost(payload=payload.get("cost"), file_path=file_path)
     constants: ConstantsConfig = _load_constants(
         payload=payload.get("constants"), file_path=file_path
@@ -172,6 +176,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         connections=connections,
         settings=settings,
         scopes=scopes,
+        references=references,
         cost=cost,
         constants=constants,
         cursors=cursors,
@@ -684,6 +689,21 @@ def _load_scopes(*, payload: object, file_path: Path) -> ScopesConfig:
     )
     return ScopesConfig(
         enforce_placement=_optional_bool(mapping=mapping, key="enforce_placement", default=True)
+    )
+
+
+def _load_references(*, payload: object, file_path: Path) -> ReferencesConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="references", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"enforce_explicit"}),
+        label="references",
+        file_path=file_path,
+    )
+    return ReferencesConfig(
+        enforce_explicit=_optional_bool(mapping=mapping, key="enforce_explicit", default=True)
     )
 
 

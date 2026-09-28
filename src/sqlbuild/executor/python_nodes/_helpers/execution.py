@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -19,6 +20,7 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
+from sqlbuild.executor.python_nodes._helpers.relation_guard import build_python_node_relation_guard
 from sqlbuild.executor.python_nodes._helpers.results import (
     build_python_node_failure_result,
     evaluate_python_node_fan_in,
@@ -177,6 +179,7 @@ def _execute_ready_node_in_cost_scope(
         )
         _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
         return result, None
+    warnings: list[str] = []
     context: TaskContext | AssetContext = _build_context(
         node=node,
         node_kind=node_kind,
@@ -185,6 +188,7 @@ def _execute_ready_node_in_cost_scope(
         logger=logger,
         run_state=run_state,
         result_store=result_store,
+        warnings=warnings,
     )
     try:
         result: PythonNodeExecutionResult = _call_node_with_retry(
@@ -201,8 +205,10 @@ def _execute_ready_node_in_cost_scope(
             kind=node_kind,
             error=error,
         )
+        result = replace(result, warning_messages=tuple(warnings))
         _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
         return result, None
+    result = replace(result, warning_messages=tuple(warnings))
     _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
     return result, "explicit" if result.status == PythonNodeStatus.SKIPPED else None
 
@@ -348,6 +354,7 @@ def _build_context(
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
     result_store: Any | None,
+    warnings: list[str],
 ) -> TaskContext | AssetContext:
     context_logger: logging.Logger = logger or logging.getLogger(
         f"sqlbuild.{node_kind.value}.{node.name}"
@@ -377,6 +384,9 @@ def _build_context(
         default_schema=runtime.default_schema,
         relation_targets=runtime.resolved_relation_targets,
         allowed_sql_refs=allowed_sql_refs,
+        relation_guard=build_python_node_relation_guard(
+            owner_label=f"{node_kind.value} '{node.name}'", runtime=runtime, warnings=warnings
+        ),
         providers=providers,
         start_cursor_ts=runtime.start_cursor_ts,
         end_cursor_ts=runtime.end_cursor_ts,

@@ -7,14 +7,20 @@ from fnmatch import fnmatchcase
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
+from sqlbuild.compiler.planner.constants import (
+    PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
+    SELECTOR_EXPANSION_MARKER,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection._build_resources import (
     expand_build_resource_selection,
 )
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
@@ -30,7 +36,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlSelection,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 _PYTHON_SELECTOR_KINDS: frozenset[SelectorKind] = frozenset(
     {
@@ -181,21 +186,10 @@ def _validate_python_sql_refs(
                 raise PlannerInputError(
                     f"Python node '{node.name}' depends on unknown SQL resource '{sql_ref.name}'"
                 )
-            if (
-                sql_ref.kind == SqlResourceRefKind.MODEL
-                and sql_key.resource_type != CompiledResourceType.MODEL
-            ):
+            if sql_key.resource_type != sql_ref_key(sql_ref).resource_type:
                 raise PlannerInputError(
-                    f"Python node '{node.name}' declares model('{sql_ref.name}') but "
-                    f"'{sql_ref.name}' is a {sql_key.resource_type}"
-                )
-            if (
-                sql_ref.kind == SqlResourceRefKind.SOURCE
-                and sql_key.resource_type != CompiledResourceType.SOURCE
-            ):
-                raise PlannerInputError(
-                    f"Python node '{node.name}' declares source('{sql_ref.name}') but "
-                    f"'{sql_ref.name}' is a {sql_key.resource_type}"
+                    f"Python node '{node.name}' declares {sql_ref.kind.value}('{sql_ref.name}') "
+                    f"but '{sql_ref.name}' is a {sql_key.resource_type}"
                 )
 
 
@@ -266,6 +260,99 @@ def _resolve_token(
 
 
 def _resolve_single(
+    *, raw: str, project_graph: ProjectGraph, python_graph: PythonNodeGraph
+) -> frozenset[_SelectionAtom]:
+    parsed: ParsedSelector | PathSelector = parse_project_selector(raw)
+    if isinstance(parsed, PathSelector) or not (parsed.upstream or parsed.downstream):
+        return _resolve_single_side(raw=raw, project_graph=project_graph, python_graph=python_graph)
+    core: str = split_selector_expansion(raw).core
+    atoms: frozenset[_SelectionAtom] = frozenset()
+    if parsed.upstream:
+        upstream: frozenset[_SelectionAtom] = _resolve_single_side(
+            raw=f"{SELECTOR_EXPANSION_MARKER}{core}",
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+        atoms = (
+            atoms
+            | upstream
+            | _sql_dependency_upstream_atoms(
+                atoms=upstream, project_graph=project_graph, python_graph=python_graph
+            )
+        )
+    if parsed.downstream:
+        downstream: frozenset[_SelectionAtom] = _resolve_single_side(
+            raw=f"{core}{SELECTOR_EXPANSION_MARKER}",
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+        atoms = (
+            atoms
+            | downstream
+            | _sql_dependent_python_atoms(atoms=downstream, python_graph=python_graph)
+        )
+    return atoms
+
+
+def _sql_dependency_upstream_atoms(
+    *,
+    atoms: frozenset[_SelectionAtom],
+    project_graph: ProjectGraph,
+    python_graph: PythonNodeGraph,
+) -> frozenset[_SelectionAtom]:
+    """Return the SQL resources selected Python nodes declare, with their SQL upstream."""
+
+    dependency_keys: set[CompiledObjectKey] = set()
+    atom: _SelectionAtom
+    for atom in atoms:
+        if isinstance(atom.value, str):
+            dependency_keys.update(_sql_dependency_keys(python_graph.nodes_by_name[atom.value]))
+    if not dependency_keys:
+        return frozenset()
+    sql_atoms: set[_SelectionAtom] = {
+        _sql_atom(key)
+        for key in transitive_closure_many(
+            starts=dependency_keys, edges=project_graph.upstream_deps, include_starts=True
+        )
+    }
+    return frozenset(
+        sql_atoms
+        | _required_terminal_loader_atoms(
+            selected_atoms=sql_atoms, project_graph=project_graph, python_graph=python_graph
+        )
+    )
+
+
+def _sql_dependent_python_atoms(
+    *, atoms: frozenset[_SelectionAtom], python_graph: PythonNodeGraph
+) -> frozenset[_SelectionAtom]:
+    """Return runnable Python nodes that declare a selected SQL resource, with their downstream."""
+
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        atom.value for atom in atoms if isinstance(atom.value, CompiledObjectKey)
+    )
+    dependent_names: frozenset[str] = frozenset(
+        node.name
+        for node in python_graph.nodes
+        if node.kind != PythonNodeKind.CHECK
+        and not _sql_dependency_keys(node).isdisjoint(selected_keys)
+    )
+    if not dependent_names:
+        return frozenset()
+    return frozenset(
+        _python_atom(name)
+        for name in transitive_closure_many(
+            starts=dependent_names, edges=python_graph.downstream_deps, include_starts=True
+        )
+        if python_graph.nodes_by_name[name].kind != PythonNodeKind.CHECK
+    )
+
+
+def _sql_dependency_keys(node: DiscoveredPythonNode) -> frozenset[CompiledObjectKey]:
+    return frozenset(sql_ref_key(sql_ref) for sql_ref in node.sql_deps)
+
+
+def _resolve_single_side(
     *, raw: str, project_graph: ProjectGraph, python_graph: PythonNodeGraph
 ) -> frozenset[_SelectionAtom]:
     parsed: ParsedSelector | PathSelector = parse_project_selector(raw)

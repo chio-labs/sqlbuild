@@ -80,6 +80,7 @@ def execute_build_source_node(
             providers=runtime.providers,
             result_store=result_store,
             schema_prepared=schema_prepared,
+            project_relations=runtime.project_relations,
         ),
         statement_recorder=StatementRecorder(),
         loader_ref_entries=loader_ref_entries,

@@ -78,6 +78,7 @@ def build_retention_planner_inputs(
             function_locations={},
             source_map={},
             source_read_map={},
+            python_source_read_map={},
             source_warehouse_columns={},
             star_exclude_keyword="EXCLUDE",
         ),

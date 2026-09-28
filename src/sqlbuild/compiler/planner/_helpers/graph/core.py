@@ -13,10 +13,11 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.graph.main._attached_audit_gate_edges import attached_audit_gate_edges
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
+from sqlbuild.compiler.graph.main._hook_read_edges import hook_read_edges
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.compiler.graph.models import AttachedAuditGateEdge
+from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
@@ -51,6 +52,12 @@ def build_execution_upstream_deps(
         if edge.read not in gated_upstream:
             gated_upstream.append(edge.read)
 
+    hook_edge: HookReadEdge
+    for hook_edge in hook_read_edges(project=project):
+        hook_upstream: list[CompiledObjectKey] = upstream.setdefault(hook_edge.gated, [])
+        if hook_edge.read not in hook_upstream:
+            hook_upstream.append(hook_edge.read)
+
     return {k: tuple(v) for k, v in upstream.items()}
 
 
@@ -76,6 +83,14 @@ def build_execution_edge_origins(
         origins.setdefault(
             (edge.gated, edge.read),
             f"audit '{edge.audit_name}' on '{edge.target.name}' reads '{edge.read.name}'",
+        )
+    hook_edge: HookReadEdge
+    for hook_edge in hook_read_edges(project=project):
+        if hook_edge.read in lineage_upstream.get(hook_edge.gated, ()):
+            continue
+        origins.setdefault(
+            (hook_edge.gated, hook_edge.read),
+            f"{hook_edge.label} on '{hook_edge.gated.name}' reads '{hook_edge.read.name}'",
         )
     return origins
 

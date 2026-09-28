@@ -294,6 +294,7 @@ def _execute_ingress_loader(
                     use_color=callbacks.use_color,
                     providers=runtime.providers,
                     result_store=runtime.result_store,
+                    project_relations=runtime.project_relations,
                 ),
                 statement_recorder=StatementRecorder(),
                 loader_ref_entries=_loader_ref_entries(

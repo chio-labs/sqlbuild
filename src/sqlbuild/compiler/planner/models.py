@@ -739,6 +739,7 @@ class PlannerRelationsContext:
     function_locations: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
     source_read_map: dict[str, SourceEntry]
+    python_source_read_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
 
@@ -1355,11 +1356,19 @@ class PlanOutput:
     function_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
+    python_source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    enforce_explicit_references: bool = True
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
     source_freshness: DirectSourceFreshnessPlanningResult | None = None
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)
+
+    @property
+    def python_source_entries(self) -> dict[str, SourceEntry]:
+        """Return the source entries Python reads resolve, as a selected SQL read sees them."""
+
+        return self.python_source_read_map or self.source_read_map or self.source_map
 
 
 @dataclass(frozen=True)

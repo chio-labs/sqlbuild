@@ -33,12 +33,12 @@ from sqlbuild.compiler.dag.models import (
 )
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.python_nodes.models import ColumnLineageRef, SqlResourceRef
-from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
 from sqlbuild.spec.contracts.models import (
     LoaderDestinationParts,
@@ -437,7 +437,7 @@ def _build_python_check(*, node: DiscoveredPythonNode, python_graph: PythonNodeG
         )
         for edge in python_graph.dependency_edges
         if edge.downstream_name == node.name
-    )
+    ) + tuple(_sql_ref_node_id(sql_dep) for sql_dep in node.sql_deps)
     return DagCheck(
         id=_python_node_id(kind=node.kind, node_name=node.name),
         kind=NodeKind.PYTHON_CHECK.value,
@@ -495,12 +495,7 @@ def _python_node_id(*, kind: PythonNodeKind, node_name: str) -> str:
 
 
 def _sql_ref_node_id(ref: SqlResourceRef) -> str:
-    resource_type: CompiledResourceType = (
-        CompiledResourceType.MODEL
-        if ref.kind == SqlResourceRefKind.MODEL
-        else CompiledResourceType.SOURCE
-    )
-    return _node_id(CompiledObjectKey(resource_type, ref.name))
+    return _node_id(sql_ref_key(ref))
 
 
 def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:

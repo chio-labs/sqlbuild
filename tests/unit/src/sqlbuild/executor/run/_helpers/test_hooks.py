@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
+from sqlbuild.refs import model, source
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     python_operation_events,
 )
@@ -40,13 +42,19 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     PublicHookContextExportTestCase,
     PythonHookContextParameterTestCase,
     PythonHookExecutionTestCase,
+    PythonHookHardCodedRelationTestCase,
     PythonHookInvalidReturnTestCase,
     PythonHookInvocationTestCase,
+    PythonHookReadsTestCase,
     PythonHookRuntimeErrorTestCase,
     PythonHookSkipTestCase,
+    PythonHookUndeclaredReadTestCase,
     RenderHooksTestCase,
 )
-from tests.unit.src.sqlbuild.executor.run._helpers.helpers import build_result_model_plan_entry
+from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
+    build_result_model_plan_entry,
+    run_python_hook_with_relations,
+)
 
 
 @pytest.mark.parametrize(
@@ -428,6 +436,7 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
             model_locations={},
             seed_locations={},
             source_map={},
+            python_source_read_map={},
             model_audits=(),
             run_id="run-1",
             query_change_tracking=False,
@@ -669,3 +678,101 @@ def test_given_invalid_hook_entry_when_executing_then_it_reports_hook_index(
             hooks=test_case.hooks,
             phase=HookPhase.POST_HOOKS,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookReadsTestCase(
+            description="declared model read resolves to the planned relation",
+            reads=(model("customers"),),
+            requested=model("customers"),
+            expected_relation="main.customers",
+        ),
+        PythonHookReadsTestCase(
+            description="declared source read resolves to the planned source relation",
+            reads=(source("raw_orders"),),
+            requested=source("raw_orders"),
+            expected_relation="raw.orders",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_hook_reads_when_resolving_relation_then_returns_declared_relations_only(
+    test_case: PythonHookReadsTestCase,
+) -> None:
+    resolved: list[str] = []
+
+    def refresh_lookup(ctx: HookContext) -> None:
+        resolved.append(ctx.relation(test_case.requested))
+
+    run_python_hook_with_relations(function=refresh_lookup, reads=test_case.reads)
+
+    assert resolved == [test_case.expected_relation]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookUndeclaredReadTestCase(
+            description="undeclared read raises",
+            reads=(model("customers"),),
+            requested=model("orders"),
+            expected_error_fragment=(
+                "SQL relation ref 'orders' must be declared in @hook(reads=...) before use"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_hook_undeclared_read_when_resolving_relation_then_raises(
+    test_case: PythonHookUndeclaredReadTestCase,
+) -> None:
+    def refresh_lookup(ctx: HookContext) -> None:
+        ctx.relation(test_case.requested)
+
+    with pytest.raises(ExecutorInputError, match=re.escape(test_case.expected_error_fragment)):
+        run_python_hook_with_relations(function=refresh_lookup, reads=test_case.reads)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookHardCodedRelationTestCase(
+            description="hard-coded model name warns and the query still runs",
+            enforce_explicit_references=True,
+            expected_warning_fragments=(
+                "[P008] hook 'refresh_lookup' on model 'orders' named model:customers",
+            ),
+        ),
+        PythonHookHardCodedRelationTestCase(
+            description="enforcement disabled does not warn",
+            enforce_explicit_references=False,
+            expected_warning_fragments=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_hook_hard_coding_a_project_relation_when_running_then_warns_only(
+    test_case: PythonHookHardCodedRelationTestCase,
+) -> None:
+    rows: list[list[tuple[object, ...]]] = []
+    warnings: list[str] = []
+
+    def refresh_lookup(ctx: HookContext) -> None:
+        name: str = "customers"
+        rows.append(ctx.query(f"SELECT customer_id FROM {name}"))
+
+    run_python_hook_with_relations(
+        function=refresh_lookup,
+        reads=(),
+        enforce_explicit_references=test_case.enforce_explicit_references,
+        warnings=warnings,
+    )
+
+    assert rows == [[(1,)]]
+    assert len(warnings) == len(test_case.expected_warning_fragments)
+    assert all(
+        fragment in warning
+        for warning, fragment in zip(warnings, test_case.expected_warning_fragments, strict=True)
+    )

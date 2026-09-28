@@ -179,6 +179,13 @@ class ScopesConfig:
 
 
 @dataclass(frozen=True)
+class ReferencesConfig:
+    """Explicit-reference enforcement policy configuration."""
+
+    enforce_explicit: bool = True
+
+
+@dataclass(frozen=True)
 class CostConfig:
     """Snowflake compute estimate configuration."""
 
@@ -377,6 +384,7 @@ class ProjectConfig:
     connections: dict[str, dict[str, object]] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scopes: ScopesConfig = field(default_factory=ScopesConfig)
+    references: ReferencesConfig = field(default_factory=ReferencesConfig)
     cost: CostConfig = field(default_factory=CostConfig)
     constants: ConstantsConfig = field(default_factory=ConstantsConfig)
     cursors: CursorsConfig = field(default_factory=CursorsConfig)

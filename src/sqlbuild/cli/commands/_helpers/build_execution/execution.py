@@ -30,6 +30,7 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
+from sqlbuild.compiler.pipeline.main.project_relation_targets import build_project_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.build.models import (
@@ -164,6 +165,9 @@ def execute_build_plan(
             end_cursor_int=preparation.end_cursor_int,
             use_color=invocation.use_color,
             providers=providers,
+            project_relations=build_project_relation_targets(
+                adapter=invocation.adapter, plan_output=pipeline_result.plan_output
+            ),
         ),
         callbacks=BuildCallbacks(
             on_migration_progress=lambda message: _write_progress_line(

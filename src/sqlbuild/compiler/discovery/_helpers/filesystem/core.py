@@ -980,6 +980,7 @@ def discover_hook_functions(
                         name=hook_definition.name,
                         function=value,
                         description=hook_definition.description,
+                        reads=hook_definition.reads,
                         provider_usages=_provider_usages(
                             function=value,
                             provider_by_name=provider_by_name,

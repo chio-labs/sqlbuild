@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     CursorBounds,
@@ -27,8 +27,10 @@ from sqlbuild.cursor_algebra.main.compare import compare
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.types import (
     AuditGateMetadataParseFailure,
@@ -43,6 +45,7 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
@@ -91,15 +94,33 @@ class HookContext:
     connection: Any = field(repr=False)
     statement_recorder: StatementRecorder = field(repr=False)
     providers: ProviderContainer = field(default_factory=_empty_provider_container, repr=False)
+    relations: Mapping[SqlResourceRef, str] = field(default_factory=dict, repr=False)
+    relation_guard: RuntimeRelationGuard | None = field(default=None, repr=False)
 
     def execute_sql(self, sql: str) -> None:
+        if self.relation_guard is not None:
+            self.relation_guard.check(sql)
         self.statement_recorder.record(sql)
         self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> list[tuple[object, ...]]:
+        if self.relation_guard is not None:
+            self.relation_guard.check(sql)
         self.statement_recorder.record(sql)
         result: QueryResult = self.adapter.query(connection=self.connection, sql=sql, limit=None)
         return list(result.rows)
+
+    def relation(self, ref: SqlResourceRef) -> str:
+        """Return the adapter-qualified runtime relation for a declared hook read."""
+
+        relation: str | None = self.relations.get(ref)
+        if relation is None:
+            raise ExecutorInputError(
+                f"SQL relation ref '{ref.name}' must be declared in @hook(reads=...) before use"
+            )
+        if self.relation_guard is not None:
+            self.relation_guard.record_resolved(ref)
+        return relation
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
@@ -255,6 +276,7 @@ class ModelMaterializationContext:
     model_locations: dict[str, CompiledRelationLocation]
     seed_locations: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
+    python_source_read_map: dict[str, SourceEntry]
     model_audits: tuple[AuditPlanEntry, ...]
     run_id: str
     query_change_tracking: bool
@@ -273,6 +295,7 @@ class ModelMaterializationContext:
     microbatch_global_concurrency: int = 1
     microbatch_batch_runner: MicrobatchBatchRunner | None = None
     watermark_resolver: WatermarkResolver | None = None
+    enforce_explicit_references: bool = False
 
 
 @dataclass(frozen=True, kw_only=True, init=False)
@@ -446,6 +469,24 @@ class RuntimeCursorSpec:
 
 
 @dataclass(frozen=True)
+class HookInvocation:
+    """One Python hook entry being invoked in a lifecycle phase."""
+
+    entry: PythonHookEntry
+    index: int
+    phase: HookPhase
+
+
+@dataclass(frozen=True)
+class HookRelationLookup:
+    """Planned relation locations Python hooks resolve declared reads against."""
+
+    model_locations: Mapping[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_locations: Mapping[str, CompiledRelationLocation] = field(default_factory=dict)
+    source_map: Mapping[str, SourceEntry] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class HookRunContext:
     """Model-scoped runtime inputs shared by lifecycle hook execution."""
 
@@ -457,6 +498,9 @@ class HookRunContext:
     statement_recorder: StatementRecorder | None = None
     providers: ProviderContainer | None = None
     python_identity_recorder: PythonIdentityRecorder | None = None
+    relation_lookup: HookRelationLookup = field(default_factory=HookRelationLookup)
+    warnings: list[str] | None = None
+    enforce_explicit_references: bool = False
 
 
 @dataclass(frozen=True)

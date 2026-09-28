@@ -26,6 +26,7 @@ from sqlbuild.executor.custom.models import (
     MaterializationResult,
 )
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_scope_audits
+from sqlbuild.executor.run._helpers.execution.hook_phases import build_model_hook_run
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
@@ -38,7 +39,6 @@ from sqlbuild.executor.run.models import (
     CustomMaterializationPhaseOutcome,
     CustomMaterializationSetup,
     FinalAuditRun,
-    HookRunContext,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
@@ -150,15 +150,11 @@ def _run_custom_pre_hooks(
                 phase=HookPhase.PRE_HOOKS,
                 hook_functions=context.hook_functions,
                 hook_results=state.hook_results,
-                hook_run=HookRunContext(
-                    model_name=entry.name,
-                    destination=entry.destination,
-                    run_id=context.run_id,
-                    target=context.effective_target_name,
-                    effective_vars=effective_vars,
+                hook_run=build_model_hook_run(
+                    context=context,
                     statement_recorder=state.statement_recorder,
-                    providers=context.providers,
-                    python_identity_recorder=context.python_identity_recorder,
+                    warnings=state.warnings,
+                    effective_vars=effective_vars,
                 ),
             )
         if pre_hook_skipped:
@@ -336,15 +332,11 @@ def _run_custom_post_hooks(
                 phase=HookPhase.POST_HOOKS,
                 hook_functions=context.hook_functions,
                 hook_results=state.hook_results,
-                hook_run=HookRunContext(
-                    model_name=entry.name,
-                    destination=entry.destination,
-                    run_id=context.run_id,
-                    target=context.effective_target_name,
-                    effective_vars=effective_vars,
+                hook_run=build_model_hook_run(
+                    context=context,
                     statement_recorder=state.statement_recorder,
-                    providers=context.providers,
-                    python_identity_recorder=context.python_identity_recorder,
+                    warnings=state.warnings,
+                    effective_vars=effective_vars,
                 ),
             )
         if post_hook_skipped:

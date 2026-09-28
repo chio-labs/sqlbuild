@@ -12,6 +12,7 @@ from sqlbuild.cli.commands._helpers.planning.external_refs import (
 from sqlbuild.cli.commands.models import CheckCommandRequest, CheckInvocation
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
 from sqlbuild.compiler.pipeline.main.static_command import compile_static_command_context
 from sqlbuild.compiler.pipeline.main.static_result import build_static_pipeline_result
 from sqlbuild.compiler.pipeline.models import (
@@ -24,7 +25,6 @@ from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_no
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 
 def compile_check_plan(
@@ -56,16 +56,7 @@ def compile_check_plan(
         required_loader_names=required_loader_names,
     )
     selected_keys: frozenset[CompiledObjectKey] = frozenset(
-        CompiledObjectKey(
-            resource_type=(
-                CompiledResourceType.MODEL
-                if ref.kind == SqlResourceRefKind.MODEL
-                else CompiledResourceType.SOURCE
-            ),
-            name=ref.name,
-        )
-        for ref in required_refs
-        if ref.kind in {SqlResourceRefKind.MODEL, SqlResourceRefKind.SOURCE}
+        sql_ref_key(ref) for ref in required_refs
     ) | frozenset(
         CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=name)
         for name in required_source_names
@@ -76,7 +67,6 @@ def compile_check_plan(
         options=CompilePipelineOptions(
             selected_target=request.selected_target,
             no_sql_validation=request.no_sql_validation,
-            source_deferral_enabled=False,
             connection_config=invocation.connection_config,
             cli_vars=request.cli_vars,
             external_sql_reference_resolver=resolve_external_sql_reference_resolver(

@@ -63,7 +63,10 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_model_locations,
     build_seed_locations,
 )
-from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
+from sqlbuild.compiler.planner._helpers.resolve.resolve import (
+    resolve_model_hook_entries,
+    resolve_model_sql,
+)
 from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
     get_semantic_source_columns,
 )
@@ -124,7 +127,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
-from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
@@ -246,12 +249,26 @@ def build_planner_relations_context(
         if effective_deferral.source_deferral_enabled
         else source_map
     )
+    python_source_read_map: dict[str, SourceEntry] = (
+        build_source_read_map(
+            project=project,
+            source_map=source_map,
+            selected_keys=scope.selected_keys,
+            project_config=project_config,
+            local_config=local_config,
+            defer_sources_to=effective_deferral.defer_sources_to,
+            read_source_names=frozenset(source_map),
+        )
+        if effective_deferral.source_deferral_enabled
+        else source_map
+    )
     return PlannerRelationsContext(
         model_locations=model_locations,
         seed_locations=seed_locations,
         function_locations=function_locations,
         source_map=source_map,
         source_read_map=source_read_map,
+        python_source_read_map=python_source_read_map,
         source_warehouse_columns=get_semantic_source_columns(
             project=project,
             adapter=adapter,
@@ -732,9 +749,11 @@ def plan_model_from_change(
         type_enforcement=type_enforcement,
     )
 
-    pre_hooks, post_hooks = (
-        model.config.values.get("pre_hooks"),
-        model.config.values.get("post_hooks"),
+    pre_hooks, post_hooks = resolve_model_hook_entries(
+        model=model,
+        adapter=adapter,
+        context=context,
+        external_sql_reference_resolver=external_sql_reference_resolver,
     )
     cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     cursor_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")

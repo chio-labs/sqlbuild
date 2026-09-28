@@ -75,7 +75,7 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     MicrobatchStrategy,
 )
-from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError

@@ -21,6 +21,9 @@ from sqlbuild.cli.commands.models import DirectLifecycleCallbacks
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.project_relation_targets import (
+    build_project_relation_targets,
+)
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.selection.loader_dag import build_intermediate_source_map
@@ -100,6 +103,9 @@ def prepare_direct_python_lifecycle(
             ),
         ),
     )
+    project_relations: dict[SqlResourceRef, str] | None = build_project_relation_targets(
+        adapter=adapter, plan_output=plan_output
+    )
     default_database: str | None = pipeline_result.project.effective_target_database
     if default_database is None:
         default_database = adapter.default_database()
@@ -141,6 +147,7 @@ def prepare_direct_python_lifecycle(
                     start_cursor_int=start_cursor_int,
                     end_cursor_int=end_cursor_int,
                     relation_targets=relation_targets,
+                    project_relations=project_relations,
                     providers=providers,
                 ),
                 callbacks=IngressCallbacks(
@@ -181,6 +188,7 @@ def prepare_direct_python_lifecycle(
                 default_database=default_database,
                 default_schema=default_schema,
                 relation_targets=relation_targets,
+                project_relations=project_relations,
                 start_cursor_ts=start_cursor_ts,
                 end_cursor_ts=end_cursor_ts,
                 start_cursor_int=start_cursor_int,

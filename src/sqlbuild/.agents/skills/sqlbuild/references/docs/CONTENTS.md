@@ -88,10 +88,10 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Loaders](concepts/python-nodes/loaders.md) (`concepts/python-nodes/loaders`) - Load external data into source tables with Python functions.
 - [Tasks](concepts/python-nodes/tasks.md) (`concepts/python-nodes/tasks`) - Run Python computation and side effects as nodes in the SQLBuild graph.
 - [Assets](concepts/python-nodes/assets.md) (`concepts/python-nodes/assets`) - Produce or observe external artifacts as nodes in the SQLBuild graph.
-- [Checks](concepts/python-nodes/checks.md) (`concepts/python-nodes/checks`) - Validate tasks, assets, and loaders with Python checks.
+- [Checks](concepts/python-nodes/checks.md) (`concepts/python-nodes/checks`) - Validate tasks, assets, loaders, and SQL relations with Python checks.
 - [Factories](concepts/python-nodes/factories.md) (`concepts/python-nodes/factories`) - Generate Python nodes programmatically with @factory.
 - [Providers](concepts/python-nodes/providers.md) (`concepts/python-nodes/providers`) - Shared runtime services for Python nodes and hooks.
-- [SQL References](concepts/python-nodes/sql-references.md) (`concepts/python-nodes/sql-references`) - Read SQL models and sources from Python nodes without creating SQL dependencies.
+- [SQL References](concepts/python-nodes/sql-references.md) (`concepts/python-nodes/sql-references`) - Read SQL models, sources, and seeds from Python nodes without creating SQL dependencies.
 
 ## Integrations
 

@@ -4,9 +4,20 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
-from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
+    collect_compile_diagnostics,
+)
+from sqlbuild.compiler.compile._helpers.render.macros import (
+    expand_sql_macros,
+    load_project_macros,
+)
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -19,20 +30,25 @@ from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
+    CompiledRelationLocation,
     CompiledSqlTest,
     CompileProjectInputs,
+    CompilerDiagnostic,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
     DeclarationRuntimeProjection,
     DeclarationScopeResolver,
     LoadedMacro,
+    MacroContext,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
+from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -290,3 +306,138 @@ def execution_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, st
     for key, deps in build_execution_upstream_deps(project).items():
         edges.update((key.name, dep.name) for dep in deps)
     return frozenset(edges)
+
+
+def inline_sql_hook_header(sql: str) -> str:
+    """Return a MODEL header running one inline SQL pre-hook."""
+
+    return f"MODEL (pre_hooks [inline_sql('{sql}')]);"
+
+
+def lineage_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]]:
+    """Return (node, upstream) name pairs of the project's lineage graph used for selection."""
+
+    edges: set[tuple[str, str]] = set()
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    for key, deps in build_lineage_upstream_deps(project).items():
+        edges.update((key.name, dep.name) for dep in deps)
+    return frozenset(edges)
+
+
+def expand_typed_macro_sql(
+    *, tmp_path: Path, macro_file_contents: str, sql: str, enforce_explicit: bool = True
+) -> str:
+    """Expand model SQL for the ``order_summary`` model against one macro module."""
+
+    loaded_macros: dict[str, LoadedMacro] = build_loaded_macros(tmp_path, macro_file_contents)
+    return expand_sql_macros(
+        sql=sql,
+        file_path=tmp_path / "models" / "order_summary.sql",
+        loaded_macros=loaded_macros,
+        macro_context=MacroContext(
+            adapter_name="duckdb",
+            sql_analysis_enabled=True,
+            target_name="dev",
+            _enforce_explicit_references=enforce_explicit,
+        ),
+        consumer=ResourceIdentity(kind=ResourceKind.MODEL, name="order_summary"),
+    )
+
+
+def resolve_model_references_for_adapter(*, sql: str, adapter_name: str) -> str:
+    """Resolve ``__ref("orders")`` to ``analytics.sales.orders`` with one adapter's quoting."""
+
+    adapters: dict[str, Callable[[], BaseAdapter]] = {
+        "bigquery": BigQueryAdapter,
+        "duckdb": DuckDbAdapter,
+        "postgres": PostgresAdapter,
+        "snowflake": SnowflakeAdapter,
+        "sqlserver": SqlServerAdapter,
+    }
+    return resolve_ref_references(
+        query_sql=sql,
+        model_locations={
+            "orders": CompiledRelationLocation(
+                database="analytics", schema="sales", name="orders", qualified_name=None
+            )
+        },
+        seed_locations={},
+        cursor_bounds=None,
+        cursor_filter_inputs={},
+        adapter=adapters[adapter_name](),
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+
+
+def python_hook_source(*, reads: str = "()", body: str = "    return None\n") -> str:
+    """Return a Python hook module defining ``refresh_lookup`` with declared reads."""
+
+    return (
+        "from sqlbuild.hooks import hook\n"
+        "from sqlbuild.refs import model, seed, source\n\n\n"
+        f"@hook(reads={reads})\n"
+        "def refresh_lookup(ctx):\n"
+        f"{body}"
+    )
+
+
+def python_task_source(*, body: str) -> str:
+    """Return a Python task module defining ``export_orders`` that depends on ``orders``."""
+
+    return (
+        "from sqlbuild.refs import model\n"
+        "from sqlbuild.tasks import task\n\n\n"
+        '@task(depends_on=model("orders"))\n'
+        "def export_orders(ctx):\n"
+        f"{body}"
+    )
+
+
+def python_check_source(*, depends_on: str, body: str) -> str:
+    """Return a Python check module defining ``orders_present`` with the given dependencies."""
+
+    return (
+        "from sqlbuild.checks import check\n"
+        "from sqlbuild.refs import model\n\n\n"
+        f"@check(depends_on={depends_on})\n"
+        "def orders_present(ctx):\n"
+        f"{body}"
+        "    return ctx.pass_()\n"
+    )
+
+
+def python_loader_source(*, depends_on: str, body: str) -> str:
+    """Return loaders ``raw_regions`` and ``raw_customers``; the latter runs ``body``."""
+
+    return (
+        "from sqlbuild.loaders import loader\n\n\n"
+        "@loader\n"
+        "def raw_regions(ctx):\n"
+        "    return [{'id': 1}]\n\n\n"
+        f"@loader(depends_on=[{depends_on}])\n"
+        "def raw_customers(ctx):\n"
+        f"{body}"
+        "    return [{'id': 1}]\n"
+    )
+
+
+def collect_typed_macro_violations(
+    *, tmp_path: Path, macro_file_contents: str, sql: str
+) -> tuple[CompilerDiagnostic, ...]:
+    """Expand ``order_summary`` SQL and return the explicit-reference violations it reports."""
+
+    with collect_compile_diagnostics() as violations:
+        expand_typed_macro_sql(tmp_path=tmp_path, macro_file_contents=macro_file_contents, sql=sql)
+    return violations.diagnostics
+
+
+def render_compile_diagnostics(*, project: CompiledProject) -> str:
+    """Render every project diagnostic with its code, message, location, and help."""
+
+    return "\n".join(
+        f"[{diagnostic.code}] {diagnostic.message} --> {diagnostic.path}:{diagnostic.line} "
+        f"= help: {diagnostic.help}"
+        for diagnostic in project.diagnostics
+    )

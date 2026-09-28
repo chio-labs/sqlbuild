@@ -88,6 +88,9 @@ def build_sql_expansion_context(
                 project_config=effective_discovered_inputs.project_config,
                 declaration_override=None,
             ),
+            _enforce_explicit_references=(
+                effective_discovered_inputs.project_config.references.enforce_explicit
+            ),
         ),
         enums=enums,
         constants=constants,

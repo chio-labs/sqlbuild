@@ -2,7 +2,7 @@
 
 # Checks
 
-> Validate tasks, assets, and loaders with Python checks.
+> Validate tasks, assets, loaders, and SQL relations with Python checks.
 
 Online: https://sqlbuild.com/docs/concepts/python-nodes/checks/
 
@@ -16,7 +16,7 @@ Online: https://sqlbuild.com/docs/concepts/python-nodes/checks/
 - Running checks
 - Checks vs audits
 
-Checks are Python nodes that validate other Python nodes. They are the Python analog of SQL [audits](../audits.md): audits validate SQL relations, checks validate the output of tasks, assets, and loaders. See [Python Nodes](overview.md) for the shared model.
+Checks are Python nodes that validate the output of tasks, assets, and loaders, or the data in SQL models, sources, and seeds. They are the Python analog of SQL [audits](../audits.md). See [Python Nodes](overview.md) for the shared model.
 
 Checks are separate graph nodes, not callbacks embedded in a task or asset. A check declares what it validates through `depends_on`.
 
@@ -38,6 +38,21 @@ def check_orders_exported(ctx: CheckContext):
 ```
 
 The check receives a `CheckContext` and reads its dependencies' persisted results with `ctx.result_of(...)`.
+
+A check can also validate SQL relations. Declare them with `model()`, `source()`, or `seed()` from `sqlbuild.refs`, and resolve them with `ctx.relation(...)`:
+
+```python
+from sqlbuild.checks import check
+from sqlbuild.refs import model
+
+@check(depends_on=model("fact_orders"))
+def orders_present(ctx):
+    orders = ctx.relation(model("fact_orders"))
+    count = ctx.query(f"SELECT count(*) FROM {orders}").fetchone()[0]
+    return ctx.pass_() if count else ctx.fail("no orders")
+```
+
+Do not hard-code relation names in check SQL; see [Hard-coded relation names](sql-references.md#hard-coded-relation-names).
 
 ## Results
 
@@ -79,7 +94,7 @@ def orders_freshness(ctx):
 ## What checks can depend on
 
 - Checks may depend on **tasks, assets, and loaders**.
-- Checks may **not** depend on SQL models, sources, seeds, or functions. Use SQL [audits](../audits.md) to validate SQL relations.
+- Checks may depend on SQL **models, sources, and seeds** through `model()`, `source()`, and `seed()` references. They may **not** depend on functions.
 - Checks may **not** depend on other checks.
 - Checks may **not** depend on a terminal source loader directly. Validate loaded source data with a source audit instead.
 
@@ -89,7 +104,7 @@ A check that depends on a single node is displayed grouped under that node. Mult
 
 | Parameter | Description |
 |-----------|-------------|
-| `depends_on` | Required. Tasks/assets/loaders to validate (function, tuple, or list) |
+| `depends_on` | Required. Tasks/assets/loaders to validate, and `model()`/`source()`/`seed()` references (function, reference, tuple, or list) |
 | `name` | Override the node name (defaults to the function name) |
 | `severity` | `error` (default) or `warn` |
 | `tags` | Labels for selection and grouping |
@@ -101,7 +116,7 @@ Checks do not support `columns`, `column_lineage`, or `retry`.
 
 ## Running checks
 
-Checks run automatically during `sqb build` when their Python dependencies run. They are skipped when `--no-audits` is passed. To run checks on their own, use [`sqb check`](../../cli/check.md):
+Checks run automatically at the end of `sqb build` when all their Python and SQL dependencies ran in that build. They are skipped when `--no-audits` is passed. To run checks on their own, use [`sqb check`](../../cli/check.md):
 
 ```bash
 # Run all checks
@@ -114,13 +129,13 @@ sqb check --select +check_orders_exported
 sqb check --select tag:exports
 ```
 
-`sqb check` rejects selecting non-check nodes; use `sqb build` to run tasks and assets. Check results are written to `target/run/checks/python_checks.json`, and `sqb check --json` prints them to stdout.
+`sqb check` rejects selecting non-check nodes; use `sqb build` to run tasks and assets. The models, sources, and seeds a check depends on must already exist; `sqb check` does not build them. Check results are written to `target/run/checks/python_checks.json`, and `sqb check --json` prints them to stdout.
 
 ## Checks vs audits
 
 | | Checks | Audits |
 |---|--------|--------|
-| Validates | Python tasks, assets, loaders | SQL relations |
+| Validates | Python tasks, assets, loaders, and SQL relations | SQL relations |
 | Authored in | `python/` (Python) | `MODEL()` headers / `audits/` (SQL) |
 | Run by | `sqb build`, `sqb check` | `sqb build`, `sqb audit` |
 | Severity | `error`, `warn` | `error`, `warn` |

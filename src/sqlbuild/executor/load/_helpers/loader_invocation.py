@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.execution import (
     is_untargeted_self_managed_intermediate,
@@ -28,8 +29,11 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
+from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
@@ -121,6 +125,38 @@ def build_loader_context(
         ),
         result_store=runtime.result_store,
         on_progress=on_progress,
+        relation_guard=ref_bindings.relation_guard,
+    )
+
+
+def build_loader_relation_guard(
+    *,
+    source_entry: SourceEntry,
+    loader_function: DiscoveredLoaderFunction,
+    adapter: BaseAdapter,
+    runtime: LoadRuntimeParams,
+    loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None,
+    warnings: list[str],
+) -> RuntimeRelationGuard | None:
+    """Return the hard-coded relation guard for one loader run, or None when enforcement is off."""
+
+    if runtime.project_relations is None:
+        return None
+    return RuntimeRelationGuard(
+        owner_label=f"loader '{loader_function.name}'",
+        owner_kind=HardCodedRelationOwnerKind.LOADER,
+        project_relations=runtime.project_relations,
+        dialect=adapter.sql_analysis_dialect(),
+        default_database=adapter.default_database(),
+        default_schema=adapter.default_schema(),
+        warnings=warnings,
+        own_refs=frozenset(
+            {SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=source_entry.name)}
+        ),
+        upstream_loader_by_source={
+            entry.name: getattr(function, "__name__", entry.name)
+            for function, entry in (loader_ref_entries or {}).items()
+        },
     )
 
 

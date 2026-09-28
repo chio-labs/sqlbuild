@@ -291,6 +291,7 @@ class LoadProjectConfigTestCase:
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_auto_load_sources: bool = True
     expected_enforce_placement: bool = True
+    expected_enforce_explicit_references: bool = True
 
 
 @dataclass(frozen=True)

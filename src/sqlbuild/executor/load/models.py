@@ -22,9 +22,12 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.constants import LOADER_RELATION_QUALIFIER_SEPARATOR
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
+from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 
@@ -121,12 +124,17 @@ class LoaderContext:
     result_store: Any | None = None
     runtime_dir: Path = Path("target")
     on_progress: Callable[[str], None] | None = None
+    relation_guard: RuntimeRelationGuard | None = field(default=None, repr=False)
 
     def execute_sql(self, sql: str) -> Any:
+        if self.relation_guard is not None:
+            self.relation_guard.check(sql)
         self.statement_recorder.record(sql)
         return self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
+        if self.relation_guard is not None:
+            self.relation_guard.check(sql)
         self.statement_recorder.record(sql)
         return self.adapter.execute(connection=self.connection, sql=sql)
 
@@ -224,6 +232,7 @@ class LoaderContext:
         relation_ref: LoaderRelationRef | None = self.loader_refs.get(loader_fn)
         if relation_ref is None:
             raise ExecutorInputError("Unknown loader reference passed to ctx.loader(...)")
+        self._record_resolved(relation_ref)
         return relation_ref
 
     def source(self, source_name: str) -> LoaderRelationRef:
@@ -234,7 +243,14 @@ class LoaderContext:
             raise ExecutorInputError(
                 f"Unknown source reference passed to ctx.source(...): {source_name}"
             )
+        self._record_resolved(relation_ref)
         return relation_ref
+
+    def _record_resolved(self, relation_ref: LoaderRelationRef) -> None:
+        if self.relation_guard is not None:
+            self.relation_guard.record_resolved(
+                SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=relation_ref.name)
+            )
 
     def _result_dependency_identity(self, node_function: Callable[..., object]) -> tuple[str, str]:
         task_definition: object = getattr(node_function, "__sqlbuild_task__", None)
@@ -274,6 +290,7 @@ class LoadExecutionResult:
     result_payload: object | None = None
     result_metadata: dict[str, object] = field(default_factory=dict)
     result_materialized: bool | None = None
+    warning_messages: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -305,6 +322,7 @@ class LoadRuntimeParams:
     providers: ProviderContainer | None = None
     result_store: Any | None = None
     schema_prepared: bool = False
+    project_relations: Mapping[SqlResourceRef, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -327,10 +345,11 @@ class LoaderDestination:
 
 @dataclass(frozen=True)
 class LoaderRefBindings:
-    """Loader and source relation-ref entry maps for one loader run."""
+    """Loader and source relation bindings, and the hard-coded name guard, for one loader run."""
 
     loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None
     source_ref_entries: Mapping[str, SourceEntry] | None = None
+    relation_guard: RuntimeRelationGuard | None = None
 
 
 @dataclass(frozen=True)

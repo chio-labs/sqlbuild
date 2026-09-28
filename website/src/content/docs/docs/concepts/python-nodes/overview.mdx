@@ -52,7 +52,7 @@ The most important rule: **SQL models never depend on Python nodes.** The depend
 - SQL models depend only on other SQL resources (models, sources, seeds, functions).
 - Python nodes may depend on other Python nodes.
 - The only way Python data reaches SQL is through a **loader populating a source**: `loader -> source -> model`.
-- Python nodes may **read** SQL models and sources at runtime through typed references (see [SQL references](/docs/concepts/python-nodes/sql-references)), but reading a model does not make it a SQL dependency.
+- Tasks, assets, and checks may **read** SQL models, sources, and seeds at runtime through typed references (see [SQL references](/docs/concepts/python-nodes/sql-references)), but reading a model does not make it a SQL dependency.
 
 This keeps the SQL graph fully analyzable and testable on its own, while letting Python participate around the edges.
 
@@ -63,7 +63,7 @@ This keeps the SQL graph fully analyzable and testable on its own, while letting
    | (read only)           v
    |                     asset
    v                       |
- source <-- loader         | check (validates tasks/assets/loaders)
+ source <-- loader         | check (validates tasks/assets/loaders/SQL)
    |
    v
  model (SQL) ----> model (SQL)
@@ -75,7 +75,7 @@ Every decorator accepts the same organizational metadata:
 
 | Argument | Description |
 |----------|-------------|
-| `depends_on` | A single function, tuple, or list of upstream nodes (and, where allowed, `model()`/`source()` references) |
+| `depends_on` | A single function, tuple, or list of upstream nodes (and, where allowed, `model()`/`source()`/`seed()` references) |
 | `tags` | Labels for selection, filtering, and catalog grouping |
 | `group` | A display/catalog grouping string |
 | `description` | Human-readable docs (defaults to the function docstring) |

@@ -423,15 +423,12 @@ def _validate_check_dependencies(
         dependency: object
         for dependency in check_function.depends_on:
             if isinstance(dependency, SqlResourceRef):
-                raise DiscoveryConflictError(
-                    f"Check '{check_function.name}' depends on SQL resource '{dependency.name}'; "
-                    "checks may depend on loaders, tasks, and assets only"
-                )
+                continue
             dependency_key: object | tuple[str, str] = _python_node_dependency_key(dependency)
             if dependency_key in check_dependency_keys:
                 raise DiscoveryConflictError(
                     f"Check '{check_function.name}' depends on another check; checks may "
-                    "depend on loaders, tasks, and assets only"
+                    "depend on loaders, tasks, assets, models, sources, and seeds only"
                 )
             if dependency_key not in allowed_dependency_keys:
                 raise DiscoveryConflictError(

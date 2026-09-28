@@ -31,6 +31,9 @@ from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_t
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
+    with_collected_compile_diagnostics,
+)
 from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_declaration_indexes,
@@ -71,6 +74,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 from sqlbuild.spec.contracts.models import SettingsConfig, TargetConfig
 
 
+@with_collected_compile_diagnostics
 def build_compile_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -115,6 +119,7 @@ def build_compile_inputs(
         vars=effective_vars,
         _value_renderer=adapter_context.value_renderer,
         _collection_rendering=adapter_context.collection_rendering,
+        _enforce_explicit_references=(discovered_inputs.project_config.references.enforce_explicit),
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)

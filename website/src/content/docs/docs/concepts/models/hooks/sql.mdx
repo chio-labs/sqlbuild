@@ -151,6 +151,46 @@ LANGUAGE SQL
 AS 'SELECT 1'
 ```
 
+## Read models, sources, and seeds
+
+SQL hooks reference other resources the same way model SQL does, with `__ref("...")`,
+`__source("...")`, and `__seed("...")`, written directly or passed as typed macro arguments:
+
+```sql
+MODEL (
+  materialized table,
+  pre_hooks [
+    inline_sql('DELETE FROM @@CTX:destination.qualified WHERE order_id IN (SELECT order_id FROM __ref("cancelled_orders"))'),
+  ],
+  post_hooks [sql("record_counts")],
+);
+
+SELECT order_id FROM __ref("stg_orders")
+```
+
+**`models/marts/_sqlbuild/_hooks/sql/record_counts.sql`**
+
+```sql
+HOOK ();
+
+@count_rows(__ref("stg_orders"))
+```
+
+At plan time each reference resolves exactly like one in model SQL: adapter quoting, source
+deferral, `--defer`, and target overrides all apply. Every reference is also a hook read, with the
+same rules as [declared Python hook reads](/docs/concepts/models/hooks/python#declared-reads):
+
+- The model that runs the hook waits for the resources it reads when both are in the build. Reads
+  do not change selection; in a partial build the hook reads the existing relations.
+- A hook cannot read a resource built from its own model; that fails to compile with `P007`. Use
+  `@@CTX:destination.qualified` for the hook's own model.
+- Referencing an unknown model, source, or seed fails to compile.
+- A reference passed to a macro is a read even when the macro does not render it. A reference a
+  macro writes into its output instead fails with `P006`, as in model SQL.
+
+The model must still see a named hook under the usual
+[scope rules](/docs/concepts/models/hooks#project-layout).
+
 ## Validation and diagnostics
 
 SQLBuild strictly validates hook resource syntax, arguments, interpolation, macros, metadata, and non-empty payloads. It does not classify executable statement kinds or implement vendor SQL grammar. Each rendered hook payload is passed to the adapter in one `execute` call; whether a driver accepts multiple statements or client-side batch separators is adapter and warehouse behavior. Use separate hook entries when portable ordering between statements matters.

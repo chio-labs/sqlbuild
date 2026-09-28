@@ -768,7 +768,8 @@ def test_given_model_and_task_selector_when_running_run_then_task_can_read_built
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def summarize_orders(ctx):\n"
-                "    rows = ctx.query('SELECT COUNT(*) FROM fact_orders').fetchall()[0][0]\n"
+                "    orders = ctx.relation(model('fact_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
                 "    Path(__file__).parents[2].joinpath('summary.txt').write_text(str(rows))\n"
                 "    return ctx.result(metadata={'rows': rows})\n"
             ),
@@ -839,7 +840,8 @@ def test_given_asset_depends_on_terminal_model_when_running_run_then_asset_reads
                 "from sqlbuild.refs import model\n\n"
                 "@asset(depends_on=model('fact_orders'))\n"
                 "def export_fact_orders(ctx):\n"
-                "    rows = ctx.query('SELECT COUNT(*) FROM fact_orders').fetchall()[0][0]\n"
+                "    orders = ctx.relation(model('fact_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
                 "    Path(__file__).parents[2].joinpath('export.txt').write_text(str(rows))\n"
                 "    return ctx.result(metadata={'rows': rows}, materialized=True)\n"
             ),
@@ -976,10 +978,12 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
                 "        type: INTEGER\n"
             ),
             "python/tasks/orders.py": (
+                "from sqlbuild.refs import source\n"
                 "from sqlbuild.tasks import task\n\n"
-                "@task\n"
+                "@task(depends_on=source('raw_orders'))\n"
                 "def summarize_loaded_orders(ctx):\n"
-                "    rows = ctx.query('SELECT COUNT(*) FROM raw_orders').fetchall()[0][0]\n"
+                "    orders = ctx.relation(source('raw_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
                 "    return ctx.result(payload={'rows': rows}, metadata={'rows': rows})\n"
             ),
             "python/assets/orders.py": (
@@ -1213,7 +1217,8 @@ def test_given_task_depends_on_model_when_running_run_then_task_runs_before_down
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('stg_orders'))\n"
                 "def profile_stg_orders(ctx):\n"
-                "    rows = ctx.query('SELECT COUNT(*) FROM stg_orders').fetchall()[0][0]\n"
+                "    orders = ctx.relation(model('stg_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
                 "    return ctx.result(payload={'rows': rows})\n"
             ),
         },
@@ -1288,7 +1293,8 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=source('raw_orders'))\n"
                 "def profile_raw_orders(ctx):\n"
-                "    rows = ctx.query('SELECT COUNT(*) FROM raw_orders').fetchall()[0][0]\n"
+                "    orders = ctx.relation(source('raw_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
                 "    return ctx.result(payload={'rows': rows})\n"
             ),
         },
@@ -1953,7 +1959,8 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def profile_fact_orders(ctx):\n"
-                "    order_id = ctx.query('SELECT order_id FROM fact_orders').fetchall()[0][0]\n"
+                "    orders = ctx.relation(model('fact_orders'))\n"
+                "    order_id = ctx.query(f'SELECT order_id FROM {orders}').fetchall()[0][0]\n"
                 "    return ctx.result(payload={'order_id': order_id}, metadata={'rows': 1})\n"
             ),
             "python/assets/export.py": (

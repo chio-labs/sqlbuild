@@ -682,3 +682,72 @@ def prepare_audit_read_plan_project(*, tmp_path: Path) -> Path:
             ),
         },
     )
+
+
+EXPLICIT_REFERENCE_MODELS: str = "models/sales"
+EXPLICIT_REFERENCE_MACRO_PATH: str = "models/sales/_sqlbuild/_macros/unions.py"
+EXPLICIT_REFERENCE_HOOK_PATH: str = "models/sales/_sqlbuild/_hooks/python/lookups.py"
+EXPLICIT_REFERENCE_MACROS: str = (
+    "def union_all(relations):\n"
+    "    return ' UNION ALL '.join(\n"
+    "        f'SELECT order_id, amount FROM {relation}' for relation in relations\n"
+    "    )\n"
+)
+EXPLICIT_REFERENCE_HOOKS: str = (
+    "from sqlbuild.hooks import hook\n"
+    "from sqlbuild.refs import model\n\n\n"
+    '@hook(reads=model("stg_customers"))\n'
+    "def record_customers(ctx):\n"
+    '    customers = ctx.relation(model("stg_customers"))\n'
+    "    ctx.execute_sql(\n"
+    '        f"CREATE OR REPLACE TABLE customer_counts AS SELECT count(*) AS n FROM {customers}"\n'
+    "    )\n"
+)
+
+
+def explicit_reference_project_files(
+    *, overrides: dict[str, str], enforce_explicit: bool = True
+) -> dict[str, str]:
+    """Return a DuckDB project using typed macro references and a hook with declared reads."""
+
+    references: str = f"\n[references]\nenforce_explicit = {str(enforce_explicit).lower()}\n"
+    return {
+        "sqlbuild_project.toml": (
+            'name = "explicit_refs"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "warehouse.duckdb"\n' + references
+        ),
+        f"{EXPLICIT_REFERENCE_MODELS}/stg_orders_eu.sql": (
+            "MODEL (materialized table);\nSELECT 1 AS order_id, 10 AS amount\n"
+        ),
+        f"{EXPLICIT_REFERENCE_MODELS}/stg_orders_us.sql": (
+            "MODEL (materialized table);\nSELECT 2 AS order_id, 20 AS amount\n"
+        ),
+        f"{EXPLICIT_REFERENCE_MODELS}/stg_customers.sql": (
+            "MODEL (materialized table);\nSELECT 1 AS customer_id\n"
+        ),
+        f"{EXPLICIT_REFERENCE_MODELS}/all_orders.sql": (
+            "MODEL (materialized table);\n"
+            '@union_all([__ref("stg_orders_eu"), __ref("stg_orders_us")])\n'
+        ),
+        f"{EXPLICIT_REFERENCE_MODELS}/orders_summary.sql": (
+            'MODEL (materialized table, post_hooks [python("record_customers")]);\n'
+            'SELECT count(*) AS order_count FROM __ref("all_orders")\n'
+        ),
+        EXPLICIT_REFERENCE_MACRO_PATH: EXPLICIT_REFERENCE_MACROS,
+        EXPLICIT_REFERENCE_HOOK_PATH: EXPLICIT_REFERENCE_HOOKS,
+    } | overrides
+
+
+def explicit_reference_literal_loader(*, table: str) -> str:
+    """Return loaders ``raw_regions`` and ``raw_customers``; the latter queries ``table``."""
+
+    return (
+        "from sqlbuild.loaders import loader\n\n\n"
+        "@loader\n"
+        "def raw_regions(ctx):\n"
+        "    return [{'id': 1}]\n\n\n"
+        "@loader\n"
+        "def raw_customers(ctx):\n"
+        f'    ctx.query("SELECT count(*) FROM {table}")\n'
+        "    return [{'id': 1}]\n"
+    )

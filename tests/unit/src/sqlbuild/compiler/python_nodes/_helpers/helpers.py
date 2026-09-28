@@ -270,6 +270,33 @@ def build_sql_ref_python_node_graph(*, dependency: SqlResourceRef) -> PythonNode
     )
 
 
+def build_sibling_sql_ref_python_node_graph() -> PythonNodeGraph:
+    """Return tasks reading orders and, separately, its upstream raw_orders source."""
+
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("python/tasks/orders.py"),
+                    name="export_orders",
+                    function=prepare_orders,
+                    depends_on=(model_ref("orders"),),
+                ),
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/raw.py"),
+                    relative_path=Path("python/tasks/raw.py"),
+                    name="export_raw_orders",
+                    function=prepare_orders,
+                    depends_on=(source_ref("raw_orders"),),
+                ),
+            ),
+        )
+    )
+
+
 def build_sql_downstream_task_to_loader_python_node_graph() -> PythonNodeGraph:
     return build_python_node_graph(
         discovered_inputs=DiscoveredProjectInputs(
