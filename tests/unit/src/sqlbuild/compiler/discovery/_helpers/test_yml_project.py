@@ -1635,6 +1635,28 @@ archive_retention_days = -1
             expected_error_fragment="janitor.archive_retention_days must be >= 0",
         ),
         LoadProjectConfigErrorTestCase(
+            description="raises when old name view retention is not a duration",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[migrations]
+old_name_views = 30
+""".strip(),
+            expected_error_fragment="migrations.old_name_views must be a positive duration",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when migrations contain unknown key",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[migrations]
+old_name_view = "7d"
+""".strip(),
+            expected_error_fragment=r"migrations contains unknown key\(s\): old_name_view",
+        ),
+        LoadProjectConfigErrorTestCase(
             description="raises when project settings contain unknown key",
             project_file_contents="""
 name = "demo"

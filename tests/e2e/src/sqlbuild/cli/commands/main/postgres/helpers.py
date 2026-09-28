@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
+    run_sqb,
     stringify_warehouse_rows,
 )
 
@@ -680,3 +681,37 @@ def create_unwritable_column_migration_table(
         ),
         config=config,
     )
+
+
+_OLD_NAME_HEADERS: dict[str, str] = {
+    "table": "  materialized table,\n",
+    "incremental": (
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+    ),
+}
+
+
+def old_name_model_sql(*, materialized: str, migrate_from: str = "") -> str:
+    """Return a table or incremental orders model with an optional migrate_from header."""
+
+    migration: str = {"": ""}.get(migrate_from, f"  migrate_from {migrate_from},\n")
+    return (
+        f"MODEL (\n{_OLD_NAME_HEADERS[materialized]}{migration});\n\n"
+        'SELECT order_id, order_date, amount_cents FROM __source("raw_orders")\n'
+    )
+
+
+def build_ok(project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run sqb build and require success."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result

@@ -471,6 +471,14 @@ def test_given_replay_on_change_full_when_migrating_then_destination_is_not_repl
             expected_fragment="migrate_force is only valid for incremental and snapshot models",
         ),
         MigrationCompileErrorTestCase(
+            description="column alias on a table that is not migrating",
+            model_sql=(
+                "MODEL (materialized table, columns (revenue (migrate_from amount)));\n"
+                "SELECT 1 AS revenue\n"
+            ),
+            expected_fragment="or for table and view models that declare migrate_from themselves",
+        ),
+        MigrationCompileErrorTestCase(
             description="invalid old name view retention",
             model_sql=incremental_orders_sql(extra_config="  old_name_view soon,\n"),
             expected_fragment="old_name_view must be a positive duration",

@@ -171,3 +171,13 @@ class PostgresColumnMigrationRollbackE2ETestCase:
     expected_columns_after_failure: tuple[tuple[object, ...], ...]
     expected_final_columns: tuple[tuple[object, ...], ...]
     expected_events: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresOldNameViewE2ETestCase:
+    description: str
+    materialized: str
+    expected_old_name_kind: str
+    expected_ids_after_rebuild: tuple[tuple[object, ...], ...]
+    expected_warning_fragment: str
+    expected_external_ids: tuple[tuple[object, ...], ...]

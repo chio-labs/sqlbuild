@@ -35,3 +35,20 @@ class NewestColumnEventTestCase:
     origin_column: str
     destination_column: str
     expected_newest_index: int | None
+
+
+@dataclass(frozen=True)
+class OldNameViewStorageTestCase:
+    description: str
+    write_count: int
+    foreign_event_types: tuple[str, ...]
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldNameViewProjectionTestCase:
+    description: str
+    recorded_types: tuple[str, ...]
+    recorded_moves: int
+    expires_in_days: int
+    expected_statuses: tuple[str, ...]
