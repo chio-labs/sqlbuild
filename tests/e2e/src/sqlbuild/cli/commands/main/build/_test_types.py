@@ -1134,3 +1134,11 @@ class SqlHookReadCycleE2ETestCase:
     description: str
     overrides: dict[str, str]
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AwareCursorDateWatermarkE2ETestCase:
+    description: str
+    plan_args: tuple[str, ...]
+    expected_plan_fragment: str
+    expected_event_ids: tuple[int, ...]

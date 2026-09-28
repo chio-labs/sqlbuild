@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
+    aligned_timestamp_bounds,
+)
 from sqlbuild.compiler.planner.models import CursorBounds, Duration
 from sqlbuild.compiler.planner.types import CursorType
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
@@ -37,16 +40,9 @@ def count_microbatches(
         bounds.end, DateValue | TimestampValue
     ):
         return 0
-    current: datetime = (
-        bounds.start.value
-        if isinstance(bounds.start, TimestampValue)
-        else datetime.combine(bounds.start.value, datetime.min.time())
-    )
-    end_at: datetime = (
-        bounds.end.value
-        if isinstance(bounds.end, TimestampValue)
-        else datetime.combine(bounds.end.value, datetime.min.time())
-    )
+    current: datetime
+    end_at: datetime
+    current, end_at = aligned_timestamp_bounds(start=bounds.start, end=bounds.end)
     if equal_bounds_are_batch and current == end_at:
         return 1
     count: int = 0

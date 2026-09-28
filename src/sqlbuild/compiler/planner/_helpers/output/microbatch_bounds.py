@@ -12,6 +12,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
+from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
+    aligned_timestamp_bounds,
+)
 from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
     _resolve_microbatch_limit_config,
 )
@@ -73,16 +76,7 @@ def cap_microbatch_bounds(
         bounds.end, DateValue | TimestampValue
     ):
         return bounds
-    start_at: datetime = (
-        bounds.start.value
-        if isinstance(bounds.start, TimestampValue)
-        else datetime.combine(bounds.start.value, datetime.min.time())
-    )
-    end_at: datetime = (
-        bounds.end.value
-        if isinstance(bounds.end, TimestampValue)
-        else datetime.combine(bounds.end.value, datetime.min.time())
-    )
+    start_at, end_at = aligned_timestamp_bounds(start=bounds.start, end=bounds.end)
     if action == MicrobatchLimitAction.CAP_FROM_START:
         capped_end: datetime = start_at
         for _ in range(max_batches):

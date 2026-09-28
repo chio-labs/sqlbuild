@@ -6,10 +6,11 @@ import re
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 
 _FUNCTION_HEADER_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*FUNCTION\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    r"^\s*FUNCTION\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,
 )
 

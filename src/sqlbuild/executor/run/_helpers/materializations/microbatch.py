@@ -21,6 +21,9 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
+    aligned_timestamp_bounds,
+)
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
     resolve_effective_microbatch_batch_size,
@@ -3450,16 +3453,7 @@ def _compute_timestamp_batches(
         end, TimestampValue | DateValue
     ):
         return ()
-    start_dt: datetime = (
-        start.value
-        if isinstance(start, TimestampValue)
-        else datetime.combine(start.value, datetime.min.time())
-    )
-    end_dt: datetime = (
-        end.value
-        if isinstance(end, TimestampValue)
-        else datetime.combine(end.value, datetime.min.time())
-    )
+    start_dt, end_dt = aligned_timestamp_bounds(start=start, end=end)
 
     if start_dt >= end_dt:
         return ()

@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,
     prepare_model_header_tokens,
 )
+from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
@@ -26,11 +27,11 @@ from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
 _TEST_HEADER_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*TEST\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    r"^\s*TEST\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,
 )
 _TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*TEST\s*\((?P<header>.*?)\)\s*;\s*",
+    r"^\s*TEST\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*",
     re.DOTALL | re.MULTILINE,
 )
 _TEST_NAME_HEADER_KEY: str = "name"
