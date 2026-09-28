@@ -156,6 +156,7 @@ class _CursorGatherInputs:
     cursor_overrides: CursorOverrides | None
     target_relation_overrides: dict[str, str] | None = None
     origin_cursor_column_overrides: dict[str, str] | None = None
+    existing_columns: dict[str, tuple[ColumnInfo, ...]] | None = None
 
 
 def build_warehouse_snapshot(
@@ -283,6 +284,7 @@ def gather_warehouse_snapshot(
                 cursor_scope.start_cursor_config if cursor_scope is not None else None
             ),
             cursor_overrides=(cursor_scope.cursor_overrides if cursor_scope is not None else None),
+            existing_columns=columns,
         ),
     )
 
@@ -769,7 +771,15 @@ def _collect_cursor_models(
             and target_relation_info is not None
             and target_relation_info.name == model.name
         ):
-            target_tag = f"{model.name}__target__max"
+            target_tag = (
+                f"{model.name}__target__max"
+                if _target_has_cursor_column(
+                    model_name=model.name,
+                    cursor_column=cursor_column,
+                    existing_columns=inputs.existing_columns,
+                )
+                else None
+            )
             target_relation = model.destination.qualified_name
 
         cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
@@ -880,6 +890,29 @@ def _collect_cursor_models(
         )
 
     return cursor_models
+
+
+def _target_has_cursor_column(
+    *,
+    model_name: str,
+    cursor_column: str,
+    existing_columns: dict[str, tuple[ColumnInfo, ...]] | None,
+) -> bool:
+    """Return whether the target may hold the cursor column, skipping reads known to fail."""
+
+    columns: tuple[ColumnInfo, ...] | None = (existing_columns or {}).get(model_name)
+    if not columns:
+        return True
+    wanted: str = cursor_column.strip('"`[]').lower()
+    if any(column.name.strip('"`[]').lower() == wanted for column in columns):
+        return True
+    log_debug_event(
+        logger=_DEBUG_LOGGER,
+        message="target relation lacks the cursor column; skipping its cursor bounds read",
+        sqlbuild_model=model_name,
+        sqlbuild_cursor_column=cursor_column,
+    )
+    return False
 
 
 def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_PhysicalCursorQuery]:

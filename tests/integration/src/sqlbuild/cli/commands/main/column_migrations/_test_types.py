@@ -94,6 +94,7 @@ class CursorColumnRenameTestCase:
     renamed_sql: str
     expected_planned: tuple[tuple[str, str, str, str], ...]
     expected_order_ids: tuple[int, ...]
+    expected_failure_lines: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -102,3 +103,11 @@ class FirstRunDeclarationTestCase:
     model_sql: str
     expected_planned: tuple[tuple[str, str, str, str], ...]
     expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MaintenanceNoticeOrderTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_notices: tuple[str, ...]
+    expected_final_line: str

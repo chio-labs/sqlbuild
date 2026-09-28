@@ -27,6 +27,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.column_migrations.helpers 
     column_events,
     column_names,
     column_values,
+    failure_lines,
     last_visible_line,
     load_orders,
     migrate_columns,
@@ -35,6 +36,8 @@ from tests.integration.src.sqlbuild.cli.commands.main.column_migrations.helpers 
     plan_json,
     plan_text,
     planned_column_migrations,
+    run_log_text,
+    run_sqb,
     snapshot_sql,
     state_table_names,
     warning_codes,
@@ -354,6 +357,7 @@ def test_given_microbatch_rename_when_building_then_batches_write_the_renamed_co
             ),
             expected_planned=(("order_date", "ordered_at", "manual", "rename"),),
             expected_order_ids=(2, 3, 4, 5),
+            expected_failure_lines=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -377,10 +381,15 @@ def test_given_renamed_cursor_column_when_appending_then_no_history_is_reprocess
     )
 
     plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
-    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    planned: CliRun = run_sqb(project_dir=tmp_path, args=("plan",), capsys=capsys)
+    built: CliRun = build_ok(project_dir=tmp_path, capsys=capsys)
 
     assert planned_column_migrations(plan) == test_case.expected_planned
     assert model_plan(plan)["cursor_bounds"]["start"].startswith("2026-01-03")
+    assert (
+        failure_lines(planned.output + built.output + run_log_text(project_dir=tmp_path))
+        == test_case.expected_failure_lines
+    )
     assert (
         tuple(
             int(row[0])

@@ -121,10 +121,48 @@ def build_initial(
     load_orders(project_dir=project_dir, last_day=5)
 
 
+def build_with_completed_migrations(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Apply one model rename and one column rename, keeping both migrate_from declarations."""
+
+    write_project(
+        project_dir=project_dir,
+        models={MODEL_NAME: orders_sql(), "old_orders": orders_sql()},
+    )
+    load_orders(project_dir=project_dir, last_day=3)
+    _ = build_ok(project_dir=project_dir, capsys=capsys)
+    write_project(
+        project_dir=project_dir,
+        models={
+            MODEL_NAME: orders_sql(
+                columns="amount AS revenue",
+                extra_config=migrate_columns("revenue (migrate_from amount)"),
+            ),
+            "new_orders": orders_sql(extra_config='  migrate_from "old_orders",\n'),
+        },
+    )
+    _ = build_ok(project_dir=project_dir, capsys=capsys)
+
+
 def last_visible_line(output: str) -> str:
     """Return the final non-blank line of command output."""
 
     return output.rstrip().splitlines()[-1]
+
+
+def failure_lines(output: str) -> tuple[str, ...]:
+    """Return every output line that reports a failure."""
+
+    return tuple(filter(lambda line: "Failed" in line, output.splitlines()))
+
+
+def run_log_text(*, project_dir: Path) -> str:
+    """Return the concatenated text of every persisted run log."""
+
+    return "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted((project_dir / "logs").rglob("*.log"))
+    )
 
 
 def migrate_columns(declarations: str) -> str:
