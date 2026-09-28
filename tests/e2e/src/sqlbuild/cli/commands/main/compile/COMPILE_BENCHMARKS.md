@@ -53,3 +53,19 @@ Both guards initialize the process-local SQL runtime with an unrelated 32-model 
 measurement. “Cold” means the measured project has no compiler cache or target artifacts; it does
 not include one-time lazy initialization noise from the Python test worker. Phase timings are
 attribution spans rather than additive buckets.
+
+## Inspection command guard
+
+The semantic benchmark's model graph is a spine plus independent chains, so it has no shared
+dependencies. `test_inspection_command_performance.py` adds an opt-in lattice to the 3,000-model
+semantic project: `shared_orders_hub` reads the end of the spine and fans out to eight models,
+sixteen layers each join two neighbouring slots of the previous layer, and `shared_orders_rollup`
+fans the last layer back in. Every lattice model is reachable along exponentially many paths. The
+compile guards do not enable the lattice, so their fingerprints and budgets are unchanged.
+
+After one compile and warm lineage and scope caches, the guard runs `sqb lineage` downstream from
+the hub and upstream from the rollup as text and JSON, `sqb dag --json` and `sqb scope --json`,
+each in a fresh process. Every command
+has a wall-time ceiling, a peak-RSS ceiling and an output-line bound linear in the model count, so
+a renderer or graph walk that re-expands shared nodes per path fails on size before it can hide
+behind a loose timing budget. It runs in the 3,000-model fresh-process compile job.

@@ -10,6 +10,13 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     DagJsonBuildE2ETestCase,
+    DiamondDagE2ETestCase,
+    DiamondDagJsonE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.lineage.helpers import (
+    DIAMOND_EDGE_COUNT,
+    diamond_model_names,
+    prepare_diamond_lineage_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop, run_sqb
 
@@ -84,3 +91,73 @@ def test_given_waffle_shop_when_running_dag_json_then_it_reports_static_graph(
         assert fragment not in result.stdout
     assert "query_sql" not in result.stdout
     assert "action" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiamondDagE2ETestCase(
+            description="dag text summarizes a layered diamond graph",
+            command=("--no-color", "dag"),
+            expected_fragments=(
+                f"DAG ready ({len(diamond_model_names())} nodes, "
+                f"{DIAMOND_EDGE_COUNT} edges, 0 checks)",
+            ),
+            expected_max_lines_per_node=1,
+        ),
+        DiamondDagE2ETestCase(
+            description="dag json lists a layered diamond graph once per node and edge",
+            command=("--no-color", "dag", "--json"),
+            expected_fragments=('"project_name": "diamond_lineage"',),
+            expected_max_lines_per_node=40,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_layered_diamonds_when_running_dag_then_output_stays_linear(
+    test_case: DiamondDagE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diamond_lineage_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout, result.stdout
+    assert len(result.stdout.splitlines()) <= test_case.expected_max_lines_per_node * len(
+        diamond_model_names()
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiamondDagJsonE2ETestCase(
+            description="dag json lists every diamond model and dependency exactly once",
+            expected_node_ids=tuple(f"model:{name}" for name in diamond_model_names()),
+            expected_edge_count=DIAMOND_EDGE_COUNT,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_layered_diamonds_when_running_dag_json_then_lists_each_node_and_edge_once(
+    test_case: DiamondDagJsonE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diamond_lineage_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dag", "--json"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload: dict[str, list[dict[str, object]]] = json.loads(result.stdout)
+    node_ids: list[str] = [str(node["id"]) for node in payload["nodes"]]
+    edge_pairs: list[tuple[str, str]] = [
+        (str(edge["from_id"]), str(edge["to_id"])) for edge in payload["edges"]
+    ]
+    assert sorted(node_ids) == sorted(test_case.expected_node_ids)
+    assert len(edge_pairs) == len(set(edge_pairs)) == test_case.expected_edge_count
