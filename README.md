@@ -79,9 +79,6 @@ models. See the [docs](https://sqlbuild.com/docs/) for everything else.
 
 ## In the terminal
 
-Each demo runs on local DuckDB with the projects in [`website/examples`](website/examples). The
-tapes that record them are in [`website/recordings`](website/recordings).
-
 ### A renamed column breaks the contract
 
 `daily_revenue` declares `contract enforced`. Renaming `waffles_sold` to `units_sold` in the
