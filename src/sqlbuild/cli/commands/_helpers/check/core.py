@@ -36,7 +36,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
-from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
@@ -46,12 +45,10 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRunState,
     PythonNodeRuntime,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 
 _IGNORED_EXCLUDE_SELECTOR_ERROR_CODES: frozenset[str] = frozenset({"S007", "S008", "S009"})
@@ -234,6 +231,7 @@ def run_check_read_side_dependencies(
     tracker: Any = create_read_side_python_execution_tracker(
         python_graph=python_graph,
         selected_python_names=read_side_names,
+        scheduled_sql_names=frozenset(),
         runtime=PythonNodeRuntime(
             adapter=adapter,
             connection_config=connection_config,
@@ -249,25 +247,6 @@ def run_check_read_side_dependencies(
             providers=providers,
         ),
     )
-    for sql_ref in sorted(read_side_refs, key=_sql_ref_sort_key):
-        if sql_ref.kind == SqlResourceRefKind.MODEL:
-            tracker.record_sql_result(
-                ModelExecutionResult(model_name=sql_ref.name, status=ExecutionStatus.SUCCESS)
-            )
-        elif sql_ref.kind == SqlResourceRefKind.SEED:
-            tracker.record_sql_result(
-                SeedExecutionResult(seed_name=sql_ref.name, status=ExecutionStatus.SUCCESS)
-            )
-        elif sql_ref.kind == SqlResourceRefKind.SOURCE:
-            tracker.record_sql_result(
-                LoadExecutionResult(
-                    source_name=sql_ref.name,
-                    loader_name=sql_ref.name,
-                    status=ExecutionStatus.SUCCESS,
-                    target=relation_targets[sql_ref],
-                    resource_kind=ExecutionResourceKind.SOURCE,
-                )
-            )
     tracker.dispatch_ready_python_nodes()
     tracker.finalize_unrun_python_nodes()
     return tracker.results

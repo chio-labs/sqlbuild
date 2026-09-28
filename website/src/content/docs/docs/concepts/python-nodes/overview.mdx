@@ -154,6 +154,12 @@ Python nodes run in two phases relative to SQL:
 - **Ingress (pre-SQL):** loaders, and tasks/assets that feed sources, run before SQL models are built.
 - **Read-side (post-SQL):** tasks/assets that read SQL run after their SQL dependencies are built.
 
+Read-side tasks and assets follow the same selection rule as SQL models. A SQL dependency that is
+part of the run gates the node: it waits for that model, seed, or source load, and is skipped if the
+dependency fails or is skipped. A dependency that is not part of the run (not selected, or an
+unmanaged source) is read as it currently exists, so `sqb build --select task:export_orders` runs
+the task against the relations already in the warehouse.
+
 The commands differ in what they include by default:
 
 | Command | SQL | Loaders / tasks / assets | Checks | Audits |

@@ -751,3 +751,68 @@ def explicit_reference_literal_loader(*, table: str) -> str:
         f'    ctx.query("SELECT count(*) FROM {table}")\n'
         "    return [{'id': 1}]\n"
     )
+
+
+PYTHON_NODE_SELECTION_DATABASE: str = "warehouse.duckdb"
+
+
+def _counting_python_node(*, decorator: str, name: str, ref: str, returned: str) -> str:
+    return (
+        f"@{decorator}(depends_on={ref})\n"
+        f"def {name}(ctx):\n"
+        f"    relation = ctx.relation({ref})\n"
+        f'    ctx.execute_sql(f"CREATE OR REPLACE TABLE main.{name}_result AS '
+        f'SELECT count(*) AS n FROM {{relation}}")\n'
+        f"    return {returned}\n\n\n"
+    )
+
+
+def python_node_selection_project_files(*, orders_sql: str) -> dict[str, str]:
+    """Return a DuckDB project whose tasks and assets count managed, unmanaged, and model rows."""
+
+    task_nodes: str = "".join(
+        _counting_python_node(decorator="task", name=name, ref=ref, returned="None")
+        for name, ref in (
+            ("count_customers", 'source("raw_customers")'),
+            ("count_raw_orders", 'source("raw_orders")'),
+            ("count_orders", 'model("orders")'),
+            ("count_order_summary", 'model("order_summary")'),
+        )
+    )
+    asset_nodes: str = "".join(
+        _counting_python_node(
+            decorator="asset", name=name, ref=ref, returned="ctx.result(materialized=True)"
+        )
+        for name, ref in (
+            ("customers_extract", 'source("raw_customers")'),
+            ("orders_extract", 'model("orders")'),
+        )
+    )
+    return {
+        "sqlbuild_project.toml": (
+            'name = "order_nodes"\nadapter = "duckdb"\n\n'
+            f'[connection]\ndatabase = "{PYTHON_NODE_SELECTION_DATABASE}"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "  - name: raw_customers\n    managed: true\n    write_strategy: table\n"
+            "    columns:\n      - name: customer_id\n        type: INTEGER\n"
+        ),
+        "python/loaders/customers.py": (
+            "from sqlbuild.loaders import loader\n\n\n"
+            "@loader\ndef raw_customers(ctx):\n    return [{'customer_id': 99}]\n"
+        ),
+        "python/tasks/counts.py": (
+            "from sqlbuild.refs import model, source\nfrom sqlbuild.tasks import task\n\n\n"
+            + task_nodes
+        ),
+        "python/assets/extracts.py": (
+            "from sqlbuild.assets import asset\nfrom sqlbuild.refs import model, source\n\n\n"
+            + asset_nodes
+        ),
+        "models/orders.sql": orders_sql,
+        "models/order_summary.sql": (
+            'MODEL (materialized table);\nSELECT count(*) AS order_count FROM __ref("orders")\n'
+        ),
+    }

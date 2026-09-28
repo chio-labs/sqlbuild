@@ -40,7 +40,17 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
             expected_call_order=("profile_stg_orders", "export_stg_profile"),
             expected_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SUCCESS),
             expected_skip_reasons=(None, None),
-        )
+        ),
+        ReadSidePythonTrackerTestCase(
+            description="runs Python on an unscheduled SQL dependency without waiting",
+            selected_names=frozenset({"profile_stg_orders", "export_stg_profile"}),
+            completed_sql_names=(),
+            scheduled_sql_names=frozenset(),
+            expected_result_names=("profile_stg_orders", "export_stg_profile"),
+            expected_call_order=("profile_stg_orders", "export_stg_profile"),
+            expected_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SUCCESS),
+            expected_skip_reasons=(None, None),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -52,6 +62,7 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
     tracker: ReadSidePythonExecutionTracker = ReadSidePythonExecutionTracker(
         python_graph=graph,
         selected_python_names=test_case.selected_names,
+        scheduled_sql_names=test_case.scheduled_sql_names,
         runtime=PythonNodeRuntime(
             adapter=PythonNodeContextTestAdapter(),
             connection_config={},
@@ -64,6 +75,7 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
         ),
     )
 
+    tracker.dispatch_ready_python_nodes()
     sql_name: str
     for sql_name in test_case.completed_sql_names:
         tracker.record_sql_result(
@@ -93,7 +105,19 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
                 "Upstream Python node did not complete: profile_stg_orders",
                 "Upstream SQL resource did not succeed: stg_orders",
             ),
-        )
+        ),
+        ReadSidePythonTrackerTestCase(
+            description="finalizes Python nodes whose scheduled SQL never reported as skipped",
+            selected_names=frozenset({"profile_stg_orders", "export_stg_profile"}),
+            completed_sql_names=(),
+            expected_result_names=("export_stg_profile", "profile_stg_orders"),
+            expected_call_order=(),
+            expected_statuses=(PythonNodeStatus.SKIPPED, PythonNodeStatus.SKIPPED),
+            expected_skip_reasons=(
+                "Upstream Python node did not complete: profile_stg_orders",
+                "Upstream SQL resource did not complete: stg_orders",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -108,6 +132,7 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
     tracker: ReadSidePythonExecutionTracker = ReadSidePythonExecutionTracker(
         python_graph=graph,
         selected_python_names=test_case.selected_names,
+        scheduled_sql_names=test_case.scheduled_sql_names,
         runtime=PythonNodeRuntime(
             adapter=PythonNodeContextTestAdapter(),
             connection_config={},

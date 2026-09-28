@@ -31,18 +31,20 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
 
 
 class ReadSidePythonExecutionTracker:
-    """Dispatch selected read-only Python nodes as SQL dependencies complete."""
+    """Dispatch selected read-only Python nodes as SQL dependencies scheduled in this run finish."""
 
     def __init__(
         self,
         *,
         python_graph: PythonNodeGraph,
         selected_python_names: frozenset[str],
+        scheduled_sql_names: frozenset[str],
         runtime: PythonNodeRuntime,
         identity_recorder: PythonIdentityRecorder | None = None,
     ) -> None:
         self._python_graph: PythonNodeGraph = python_graph
         self._selected_python_names: frozenset[str] = selected_python_names
+        self._scheduled_sql_names: frozenset[str] = scheduled_sql_names
         self._runtime: PythonNodeRuntime = runtime
         self._identity_recorder: PythonIdentityRecorder | None = identity_recorder
         self._result_store: Any | None = (
@@ -133,7 +135,10 @@ class ReadSidePythonExecutionTracker:
         for sql_dep_name in (dependency.name for dependency in node.sql_deps):
             if sql_dep_name in self._failed_sql_names:
                 return False
-            if sql_dep_name not in self._completed_sql_names:
+            if (
+                sql_dep_name in self._scheduled_sql_names
+                and sql_dep_name not in self._completed_sql_names
+            ):
                 return False
         return True
 
@@ -191,7 +196,10 @@ class ReadSidePythonExecutionTracker:
         for sql_dep_name in (dependency.name for dependency in node.sql_deps):
             if sql_dep_name in self._failed_sql_names:
                 return f"Upstream SQL resource did not succeed: {sql_dep_name}"
-            if sql_dep_name not in self._completed_sql_names:
+            if (
+                sql_dep_name in self._scheduled_sql_names
+                and sql_dep_name not in self._completed_sql_names
+            ):
                 return f"Upstream SQL resource did not complete: {sql_dep_name}"
         upstream_name: str
         for upstream_name in self._python_graph.upstream_deps.get(node.name, ()):

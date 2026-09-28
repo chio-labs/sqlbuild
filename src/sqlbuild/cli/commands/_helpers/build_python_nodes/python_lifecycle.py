@@ -9,6 +9,7 @@ from typing import Any, TextIO
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle_selection import (
     python_node_result_names,
+    scheduled_sql_resource_names,
     task_asset_python_node_names,
 )
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import (
@@ -177,6 +178,8 @@ def prepare_direct_python_lifecycle(
         read_side_tracker = create_read_side_python_execution_tracker(
             python_graph=python_graph,
             selected_python_names=read_side_names,
+            scheduled_sql_names=scheduled_sql_resource_names(plan_output)
+            | frozenset(result.source_name for result in ingress_load_results),
             runtime=PythonNodeRuntime(
                 adapter=adapter,
                 connection_config=connection_config,
