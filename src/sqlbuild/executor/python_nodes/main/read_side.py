@@ -14,6 +14,7 @@ def create_read_side_python_execution_tracker(
     *,
     python_graph: PythonNodeGraph,
     selected_python_names: frozenset[str],
+    scheduled_sql_names: frozenset[str],
     runtime: PythonNodeRuntime,
     identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ReadSidePythonExecutionTracker:
@@ -22,6 +23,7 @@ def create_read_side_python_execution_tracker(
     return ReadSidePythonExecutionTracker(
         python_graph=python_graph,
         selected_python_names=selected_python_names,
+        scheduled_sql_names=scheduled_sql_names,
         runtime=runtime,
         identity_recorder=identity_recorder,
     )

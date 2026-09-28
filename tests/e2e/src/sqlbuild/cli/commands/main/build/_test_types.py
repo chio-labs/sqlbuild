@@ -1104,7 +1104,7 @@ class PythonSourceTaskOnlyE2ETestCase:
 
     description: str
     target_config: str
-    expected_task_pattern: str
+    expected_task_count: int
 
 
 @dataclass(frozen=True)
@@ -1142,3 +1142,18 @@ class AwareCursorDateWatermarkE2ETestCase:
     plan_args: tuple[str, ...]
     expected_plan_fragment: str
     expected_event_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class PythonNodeSelectionE2ETestCase:
+    """Python nodes selected with or without their SQL upstreams."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_patterns: tuple[str, ...]
+    expected_row_counts: dict[str, int]
+    expected_node_counts: dict[str, int]
+    expected_missing_tables: tuple[str, ...] = ()
+    orders_sql: str = 'MODEL (materialized table);\nSELECT order_id FROM __source("raw_orders")\n'
+    existing_sql: str = ""

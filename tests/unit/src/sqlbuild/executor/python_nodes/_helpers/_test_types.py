@@ -150,6 +150,7 @@ class ReadSidePythonTrackerTestCase:
     expected_statuses: tuple[PythonNodeStatus, ...]
     expected_skip_reasons: tuple[str | None, ...] = ()
     failed_sql_names: tuple[str, ...] = ()
+    scheduled_sql_names: frozenset[str] = frozenset({"stg_orders"})
 
 
 @dataclass(frozen=True)

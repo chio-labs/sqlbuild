@@ -23,6 +23,17 @@ def task_asset_python_node_names(
     return frozenset(name for name in selected_names if name in task_asset_names)
 
 
+def scheduled_sql_resource_names(plan: PlanOutput) -> frozenset[str]:
+    """Return the models, seeds, and source loads this run executes and reports results for."""
+
+    scheduled_keys: frozenset[CompiledObjectKey] = frozenset(plan.execution_order)
+    return frozenset(
+        entry.name
+        for entry in (*plan.model_entries, *plan.seed_entries, *plan.source_load_entries)
+        if entry.key in scheduled_keys
+    )
+
+
 def sql_loader_functions_for_lifecycle_handoff(
     *,
     discovered_inputs: DiscoveredProjectInputs,

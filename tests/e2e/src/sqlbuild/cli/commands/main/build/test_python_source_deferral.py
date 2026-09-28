@@ -74,9 +74,7 @@ _ENVIRONMENT_ROWS: str = (
     "INSERT INTO raw_prod.raw_orders VALUES (1), (2);"
 )
 _CHECK_PASSED: str = r"check\s+two_raw_orders\s+PASS"
-_TASK_WAITS_FOR_SOURCE: str = (
-    r"count_task\s+SKIP\s+Upstream SQL resource did not complete: raw_orders"
-)
+_TASK_RAN: str = r"count_task\s+OK"
 
 
 @pytest.mark.parametrize(
@@ -129,17 +127,17 @@ def test_given_deferred_source_reads_when_python_reads_the_source_then_it_reads_
         PythonSourceTaskOnlyE2ETestCase(
             description="with source deferral",
             target_config='defer_sources_to = "prod"\n',
-            expected_task_pattern=_TASK_WAITS_FOR_SOURCE,
+            expected_task_count=2,
         ),
         PythonSourceTaskOnlyE2ETestCase(
             description="without source deferral",
             target_config="",
-            expected_task_pattern=_TASK_WAITS_FOR_SOURCE,
+            expected_task_count=1,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_only_a_task_selected_when_building_then_its_declared_source_is_planned(
+def test_given_only_a_task_selected_when_building_then_it_reads_its_source_like_sql(
     test_case: PythonSourceTaskOnlyE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -150,7 +148,8 @@ def test_given_only_a_task_selected_when_building_then_its_declared_source_is_pl
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path, project_name="deferred_sources", repo_files=files
     )
-    execute_duckdb(db_path=project_dir / _DATABASE, sql=_ENVIRONMENT_ROWS)
+    database: Path = project_dir / _DATABASE
+    execute_duckdb(db_path=database, sql=_ENVIRONMENT_ROWS)
 
     build: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--select", "task:count_task"), project_dir=project_dir
@@ -160,7 +159,11 @@ def test_given_only_a_task_selected_when_building_then_its_declared_source_is_pl
     assert build.returncode == 0, output
     assert "G000" not in output
     assert "missing from the resolved plan source map" not in output
-    assert re.search(test_case.expected_task_pattern, output), output
+    assert re.search(_TASK_RAN, output), output
+    assert (
+        query_duckdb(db_path=database, sql="SELECT n FROM main.task_counts")[0][0]
+        == test_case.expected_task_count
+    )
 
 
 if __name__ == "__main__":

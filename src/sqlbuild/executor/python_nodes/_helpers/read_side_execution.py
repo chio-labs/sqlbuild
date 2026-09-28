@@ -19,6 +19,8 @@ def _sql_result_name(result: object) -> str | None:
 
 
 def _sql_result_failed(result: object) -> bool:
-    if isinstance(result, ModelExecutionResult | LoadExecutionResult | SeedExecutionResult):
+    if isinstance(result, ModelExecutionResult):
+        return result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
+    if isinstance(result, LoadExecutionResult | SeedExecutionResult):
         return result.status == ExecutionStatus.FAILED
     return False
