@@ -77,8 +77,17 @@ struct PlanBatchRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChainBatchRequest {
-    models: Vec<ModelInput>,
+    models: Vec<ChainModelInput>,
     tests: Vec<TestInput>,
+}
+
+/// Chain ordering reads only declared dependencies, so chain requests omit model SQL.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChainModelInput {
+    name: String,
+    #[serde(default)]
+    model_dependencies: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -529,7 +538,7 @@ pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> 
             (
                 model.name,
                 ModelInputOwned {
-                    query_sql: model.query_sql,
+                    query_sql: String::new(),
                     model_dependencies: model.model_dependencies,
                 },
             )

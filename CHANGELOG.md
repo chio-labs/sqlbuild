@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.126.4](https://github.com/chio-labs/sqlbuild/compare/v0.126.3...v0.126.4) (2026-09-29)
+
+
+### Performance Improvements
+
+* **compile:** cut cache-write overhead and fresh compile preparation cost ([#882](https://github.com/chio-labs/sqlbuild/issues/882)) ([aea4484](https://github.com/chio-labs/sqlbuild/commit/aea44842d030695e6e2e67977666fc63bc02ccd4))
+
 ## [0.126.3](https://github.com/chio-labs/sqlbuild/compare/v0.126.2...v0.126.3) (2026-09-29)
 
 

@@ -56,6 +56,8 @@ _COMPACT_TRANSFORM_CODES: dict[str, int] = {
 _COMPACT_CONFIDENCE_CODES: dict[str, int] = {
     CompactLineageFacts.confidence(code).value: code for code in range(3)
 }
+_COMPACT_TRANSFORM_VALUES: tuple[str, ...] = tuple(_COMPACT_TRANSFORM_CODES)
+_COMPACT_CONFIDENCE_VALUES: tuple[str, ...] = tuple(_COMPACT_CONFIDENCE_CODES)
 _RESOURCE_TYPE_VALUES: frozenset[str] = frozenset(item.value for item in CompiledResourceType)
 _NULLABILITY_BY_VALUE: dict[str, InferredNullability] = {
     item.value: item for item in InferredNullability
@@ -586,9 +588,23 @@ def write_model_analyses(
 ) -> None:
     """Transactionally persist deterministic analyses; cache failures never fail compilation."""
 
+    signed_analyses: dict[int, PolyglotAnalysisResult] = {
+        id(analysis): analysis
+        for analysis in (*analyses_by_key.values(), *(latest_analyses_by_model or {}).values())
+    }
+    output_signatures: dict[int, str] = {
+        key: model_analysis_output_signature(analysis) for key, analysis in signed_analyses.items()
+    }
     rows: list[tuple[str, str]] = []
     for cache_key, analysis in analyses_by_key.items():
-        contents: str = _analysis_contents(cache_key=cache_key, analysis=analysis)
+        try:
+            contents: str = _analysis_contents(
+                cache_key=cache_key,
+                analysis=analysis,
+                output_signature=output_signatures[id(analysis)],
+            )
+        except orjson.JSONEncodeError:
+            continue
         if len(contents.encode()) <= _MAX_CACHE_ENTRY_BYTES:
             rows.append((cache_key, contents))
     signature_rows: list[tuple[str, str, str, str]] = [
@@ -596,7 +612,7 @@ def write_model_analyses(
             context.shared_fingerprint,
             context.signature_namespace,
             model_name,
-            model_analysis_output_signature(analysis),
+            output_signatures[id(analysis)],
         )
         for model_name, analysis in (latest_analyses_by_model or {}).items()
     ]
@@ -793,12 +809,18 @@ def _referenced_analysis_tables(
     return tuple(sorted(names))
 
 
-def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> dict[str, object]:
+def _analysis_payload(
+    *, cache_key: str, analysis: PolyglotAnalysisResult, output_signature: str | None = None
+) -> dict[str, object]:
     return {
         "v": _ANALYSIS_CACHE_VERSION,
         "k": cache_key,
         "a": analysis.analysis_succeeded,
-        "s": model_analysis_output_signature(analysis),
+        "s": (
+            model_analysis_output_signature(analysis)
+            if output_signature is None
+            else output_signature
+        ),
         "c": (
             None
             if analysis.columns is None
@@ -806,7 +828,7 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
                 [column.name, column.type, column.nullability.value] for column in analysis.columns
             ]
         ),
-        "l": [_lineage_column_payload(column) for column in analysis.lineage_columns],
+        "l": _lineage_payload(analysis.lineage_columns),
         "h": analysis.has_star,
         "sr": analysis.star_resolved,
         "b": [
@@ -823,6 +845,39 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
         ],
         "bv": analysis.binding_validated,
     }
+
+
+def _lineage_payload(lineage_columns: Sequence[CompiledLineageColumnFact]) -> list[list[object]]:
+    if isinstance(lineage_columns, CompactLineageFacts):
+        compact: list[list[object]] | None = _compact_lineage_payload(lineage_columns)
+        if compact is not None:
+            return compact
+    return [_lineage_column_payload(column) for column in lineage_columns]
+
+
+def _compact_lineage_payload(lineage: CompactLineageFacts) -> list[list[object]] | None:
+    """Serialise indexed rows without projecting facts; None defers to the validating projection."""
+
+    pool: tuple[str, ...] = lineage.string_pool
+    payload: list[list[object]] = []
+    for name_index, transform_code, confidence_code, sources in lineage.rows:
+        upstream_columns: list[list[str]] = []
+        for resource_type_index, resource_name_index, column_index in sources:
+            resource_type: str = pool[resource_type_index]
+            if resource_type not in _RESOURCE_TYPE_VALUES:
+                return None
+            upstream_columns.append(
+                [resource_type, lineage.resource_name(resource_name_index), pool[column_index]]
+            )
+        payload.append(
+            [
+                pool[name_index],
+                _COMPACT_TRANSFORM_VALUES[transform_code],
+                _COMPACT_CONFIDENCE_VALUES[confidence_code],
+                upstream_columns,
+            ]
+        )
+    return payload
 
 
 def _lineage_column_payload(column: CompiledLineageColumnFact) -> list[object]:
@@ -1054,13 +1109,15 @@ def _cache_database_path(*, context: AnalysisCacheContext) -> Path:
     return context.root / f"v{_ANALYSIS_CACHE_VERSION}" / _CACHE_DATABASE_NAME
 
 
-def _analysis_contents(*, cache_key: str, analysis: PolyglotAnalysisResult) -> str:
-    serialized_payload: str = json.dumps(
-        _analysis_payload(cache_key=cache_key, analysis=analysis),
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+def _analysis_contents(
+    *, cache_key: str, analysis: PolyglotAnalysisResult, output_signature: str | None = None
+) -> str:
+    serialized_payload: str = orjson.dumps(
+        _analysis_payload(
+            cache_key=cache_key, analysis=analysis, output_signature=output_signature
+        ),
+        option=orjson.OPT_SORT_KEYS,
+    ).decode()
     return _CACHE_ENTRY_SEPARATOR.join(
         (
             _cache_entry_digest(cache_key=cache_key, serialized_payload=serialized_payload),

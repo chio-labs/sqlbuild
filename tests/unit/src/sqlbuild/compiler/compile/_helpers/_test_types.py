@@ -1057,3 +1057,19 @@ class RebindDeclarationScopeTestCase:
     macro_name: str
     expected_rebound: bool
     private_macro_source: str | None = None
+
+
+@dataclass(frozen=True)
+class QualifiedReferenceScanTestCase:
+    description: str
+    query_sql: str
+    reference_names: tuple[str, ...]
+    expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CompactLineageCacheEncodingTestCase:
+    description: str
+    output_column: str
+    resource_names: dict[int, str]
+    expected_lineage_columns: int = 2

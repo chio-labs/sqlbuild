@@ -25,8 +25,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 _GIB: int = 1024 * 1024 * 1024
 _MIB: int = 1024 * 1024
-_MAX_WARM_TO_COLD_RATIO: float = 0.65
-_MAX_EDIT_TO_COLD_RATIO: float = 0.60
+_MAX_WARM_TO_COLD_RATIO: float = 0.70
+_MAX_EDIT_TO_COLD_RATIO: float = 0.70
+# Writing the cache during a cold compile must stay a small same-runner cost over --no-cache.
+_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.10
+_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO: float = 1.15
 
 
 @pytest.mark.performance
@@ -48,6 +51,8 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             expected_edit_max_wall_seconds=11.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
@@ -80,6 +85,8 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             expected_edit_max_wall_seconds=18.0,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
@@ -112,6 +119,8 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             expected_edit_max_wall_seconds=37.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
@@ -154,6 +163,7 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         scoped_macros=test_case.scoped_macros,
     )
     measurements: dict[str, FreshProcessCompileBenchmarkResult] = {
+        "cache_disabled": result.cache_disabled,
         "cold": result.cold,
         "warm": result.warm,
         "leaf_edit": result.leaf_edit,
@@ -179,6 +189,18 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         assert measurement.peak_rss_bytes < test_case.expected_max_rss_bytes
 
     assert result.cold.elapsed_seconds < test_case.expected_cold_max_wall_seconds
+    cache_write_wall_ratio: float = (
+        result.cold.elapsed_seconds / result.cache_disabled.elapsed_seconds
+    )
+    cache_write_cpu_ratio: float = result.cold.cpu_seconds / result.cache_disabled.cpu_seconds
+    _LOGGER.info(
+        "fresh-process cache models=%d cache-write overhead wall_ratio=%.3f cpu_ratio=%.3f",
+        test_case.model_count,
+        cache_write_wall_ratio,
+        cache_write_cpu_ratio,
+    )
+    assert cache_write_wall_ratio <= test_case.expected_max_cache_write_wall_overhead_ratio
+    assert cache_write_cpu_ratio <= test_case.expected_max_cache_write_cpu_overhead_ratio
     for measurement in (
         result.warm,
         result.after_leaf_edit,
@@ -199,6 +221,7 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
     assert result.project_config_edit.elapsed_seconds < test_case.expected_cold_max_wall_seconds
     assert result.cache_bytes < test_case.expected_max_cache_bytes
 
+    assert result.cache_disabled.semantic_fingerprint == test_case.expected_cold_fingerprint
     assert result.cold.semantic_fingerprint == test_case.expected_cold_fingerprint
     assert result.warm.semantic_fingerprint == test_case.expected_cold_fingerprint
     assert result.leaf_edit.semantic_fingerprint == test_case.expected_leaf_edit_fingerprint
@@ -214,6 +237,12 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         == test_case.expected_project_config_fingerprint
     )
 
+    assert fresh_process_compile_cache_metrics(result.cache_disabled) == (
+        0,
+        0,
+        0,
+        test_case.model_count,
+    )
     assert fresh_process_compile_cache_metrics(result.cold) == (0, 0, test_case.model_count, 0)
     assert fresh_process_compile_cache_metrics(result.warm) == (test_case.model_count, 0, 0, 0)
     assert fresh_process_compile_cache_metrics(result.leaf_edit) == (

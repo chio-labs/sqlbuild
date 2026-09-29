@@ -1,3 +1,4 @@
+import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -21,6 +22,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
+    AnalysisCacheContext,
     CompileAdapterContext,
     CompileAnalysisSelection,
     CompiledDirectLogicSqlTestPayload,
@@ -470,3 +472,14 @@ def write_scoped_macro_orders_project(project_dir: Path) -> None:
         "SELECT 1\n",
         encoding="utf-8",
     )
+
+
+def stored_analysis_contents(*, context: AnalysisCacheContext, cache_key: str) -> str:
+    """Return the raw stored payload of one analysis cache entry."""
+
+    database_path: Path = next(context.root.rglob("model-analysis.sqlite3"))
+    with sqlite3.connect(database_path) as connection:
+        row: tuple[str] = connection.execute(
+            "SELECT payload FROM model_analysis WHERE cache_key = ?", (cache_key,)
+        ).fetchone()
+    return row[0]
