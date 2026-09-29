@@ -132,6 +132,7 @@ class FreshProcessCompileBenchmarkResult(NamedTuple):
 
 
 class FreshProcessCompileCacheBenchmarkResult(NamedTuple):
+    cache_disabled: FreshProcessCompileBenchmarkResult
     cold: FreshProcessCompileBenchmarkResult
     warm: FreshProcessCompileBenchmarkResult
     leaf_edit: FreshProcessCompileBenchmarkResult
@@ -515,6 +516,13 @@ def run_fresh_process_compile_cache_benchmark(
     )
     target_dir: Path = project_dir / "target"
     assert not target_dir.exists()
+    cache_disabled: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-disabled-cold-{model_count}",
+        expected_max_wall_seconds=expected_cold_max_wall_seconds,
+        compile_args=("--no-cache",),
+    )
+    shutil.rmtree(target_dir)
     cold: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
         project_dir=project_dir,
         label=f"cache-cold-{model_count}",
@@ -583,6 +591,7 @@ def run_fresh_process_compile_cache_benchmark(
         path.stat().st_size for path in cache_dir.rglob("*.sqlite3")
     )
     return FreshProcessCompileCacheBenchmarkResult(
+        cache_disabled=cache_disabled,
         cold=cold,
         warm=warm,
         leaf_edit=leaf_edit,
