@@ -15,7 +15,10 @@ from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_d
 from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from tests.integration.src.sqlbuild.compiler.pipeline._test_types import SemanticTriageCase
+from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
+    FunctionArgumentTypeCase,
+    SemanticTriageCase,
+)
 
 
 @pytest.mark.parametrize(
@@ -274,3 +277,67 @@ def test_given_repeated_root_messages_when_recovering_then_preserves_each_output
 
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FunctionArgumentTypeCase(
+            "matching qualified argument", projection='__udf("add_one")(o.amount) AS total'
+        ),
+        FunctionArgumentTypeCase(
+            "mismatched argument through a join alias",
+            projection='__udf("add_one")(c.customer_name) AS total',
+            expected_codes=("B301",),
+        ),
+        FunctionArgumentTypeCase(
+            "mismatched argument matches the column case-insensitively",
+            projection='__udf("add_one")(O.STATUS) AS total',
+            expected_codes=("B301",),
+        ),
+        FunctionArgumentTypeCase(
+            "several calls in one select report each mismatch",
+            projection=(
+                '__udf("add_one")(o.amount) AS total, __udf("add_one")(status) AS a, '
+                '__udf("add_one")(customer_name) AS b'
+            ),
+            expected_codes=("B301", "B301"),
+        ),
+        FunctionArgumentTypeCase(
+            "argument in a nested select uses the nested relations",
+            projection=(
+                '(SELECT __udf("add_one")(i.status) FROM __source("orders") i LIMIT 1) AS total'
+            ),
+            expected_codes=("B301",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_udf_argument_columns_when_compiling_then_checks_declared_argument_types(
+    test_case: FunctionArgumentTypeCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "models").mkdir()
+    (tmp_path / "functions/sql").mkdir(parents=True)
+    (tmp_path / "sources/raw.yml").write_text(
+        "sources:\n"
+        "  - name: orders\n    table: orders\n    contract: enforced\n    columns:\n"
+        "      - name: id\n        type: INTEGER\n"
+        "      - name: customer_id\n        type: INTEGER\n"
+        "      - name: status\n        type: VARCHAR\n"
+        "      - name: amount\n        type: DOUBLE\n"
+        "  - name: customers\n    table: customers\n    contract: enforced\n    columns:\n"
+        "      - name: id\n        type: INTEGER\n"
+        "      - name: customer_name\n        type: VARCHAR\n"
+    )
+    (tmp_path / "functions/sql/add_one.sql").write_text(
+        "FUNCTION (\n  arguments (input_value DOUBLE),\n  returns DOUBLE,\n);\n\ninput_value + 1\n"
+    )
+    (tmp_path / "models/order_totals.sql").write_text(
+        f"MODEL (materialized table);\n\nSELECT {test_case.projection}\n"
+        'FROM __source("orders") o JOIN __source("customers") c ON o.customer_id = c.id\n'
+    )
+    main(["--project-dir", str(tmp_path), "compile", "--no-cache", "--json"])
+    result: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert tuple(item["code"] for item in result["diagnostics"]) == test_case.expected_codes

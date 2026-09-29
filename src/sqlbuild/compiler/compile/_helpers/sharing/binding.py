@@ -213,8 +213,9 @@ def _shared_reference_names(
     if SQL_QUOTED_IDENTIFIER_DELIMITER in cleaned_sql:
         return None
     for relation, columns in binding_schema.items():
-        if SQL_QUOTED_IDENTIFIER_DELIMITER in relation or any(
-            SQL_QUOTED_IDENTIFIER_DELIMITER in column for column in columns
+        if (
+            SQL_QUOTED_IDENTIFIER_DELIMITER in relation
+            or SQL_QUOTED_IDENTIFIER_DELIMITER in "".join(columns)
         ):
             return None
     if _qualified_reference_names(query_sql=cleaned_sql, reference_names=names):

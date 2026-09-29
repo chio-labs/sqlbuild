@@ -1049,3 +1049,19 @@ class TypedMacroArgumentDependencyTestCase:
     macro_file_contents: str
     sql: str
     expected_dependency_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class QualifiedReferenceScanTestCase:
+    description: str
+    query_sql: str
+    reference_names: tuple[str, ...]
+    expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CompactLineageCacheEncodingTestCase:
+    description: str
+    output_column: str
+    resource_names: dict[int, str]
+    expected_lineage_columns: int = 2
