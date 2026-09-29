@@ -82,7 +82,7 @@ def get_source_binding_diagnostics(
     for name, value in columns.items():
         if value:
             raw_shape: dict[str, str] = {column.name: column.type for column in value}
-            if raw_shape != shapes.get(name) or (
+            if _adds_physical_evidence(physical=raw_shape, known=shapes.get(name)) or (
                 profile.sql_analysis_dialect in CASE_SENSITIVE_BINDING_DIALECTS
                 and not profile.quoted_identifiers_ignore_case
             ):
@@ -200,6 +200,16 @@ def get_source_binding_diagnostics(
                 )
             )
     return tuple(diagnostics)
+
+
+def _adds_physical_evidence(*, physical: dict[str, str], known: dict[str, str] | None) -> bool:
+    """Return whether inspected columns differ from the shape; untyped names match any type."""
+
+    if known is None or physical.keys() != known.keys():
+        return True
+    return any(
+        physical_type and physical_type != known[name] for name, physical_type in physical.items()
+    )
 
 
 def _placeholders(model: CompiledModel) -> dict[str, str] | None:

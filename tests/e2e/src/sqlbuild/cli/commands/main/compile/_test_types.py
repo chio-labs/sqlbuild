@@ -289,3 +289,36 @@ class InspectionCommandPerformanceGuardTestCase:
     expected_max_output_lines: int
     expected_max_wall_seconds: float
     expected_max_rss_bytes: int
+
+
+@dataclass(frozen=True)
+class PlanComparedToCompileGuardTestCase:
+    description: str
+    expected_max_compile_ratio: float
+    expected_max_plan_wall_seconds: float
+    expected_max_rss_bytes: int
+
+
+@dataclass(frozen=True)
+class PlanScalingGuardTestCase:
+    description: str
+    small_model_count: int
+    expected_max_linear_factor: float
+
+
+@dataclass(frozen=True)
+class BuildPerformanceGuardTestCase:
+    description: str
+    expected_max_wall_seconds: float
+    expected_max_rss_bytes: int
+
+
+@dataclass(frozen=True)
+class ExistingStatePlanGuardTestCase:
+    description: str
+    edited_models: tuple[str, ...]
+    renamed_models: tuple[tuple[str, str], ...]
+    expected_query_changed: tuple[str, ...]
+    expected_migrations: tuple[tuple[str, str, str], ...]
+    expected_max_wall_seconds: float
+    expected_max_rss_bytes: int

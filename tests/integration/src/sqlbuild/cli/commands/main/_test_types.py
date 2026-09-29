@@ -787,3 +787,25 @@ class UnicodeRuleLocationTestCase:
     rule_code: str
     sql: str
     expected_anchors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceRebindingTestCase:
+    """Expression-source inspection that must rebind downstream models only on new evidence."""
+
+    description: str
+    source_expression: str
+    model_sql: str
+    expected_exit_code: int
+    expected_rebinding: bool
+    expected_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class DiscoveryWorkTestCase:
+    """Commands that must discover a project with the same work as compile."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_eager_output_column_scans: int

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import heapq
+
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
@@ -156,14 +158,14 @@ def topologically_order_keys(
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream
     )
-    ready: list[CompiledObjectKey] = sorted(
-        (key for key, count in indegree.items() if count == 0),
-        key=_key_sort_key,
-    )
+    ready: list[tuple[tuple[str, str], CompiledObjectKey]] = [
+        (_key_sort_key(key), key) for key, count in indegree.items() if count == 0
+    ]
+    heapq.heapify(ready)
     ordered: list[CompiledObjectKey] = []
 
     while ready:
-        current: CompiledObjectKey = ready.pop(0)
+        current: CompiledObjectKey = heapq.heappop(ready)[1]
         ordered.append(current)
         downstream_key: CompiledObjectKey
         for downstream_key in downstream.get(current, ()):
@@ -171,8 +173,7 @@ def topologically_order_keys(
                 continue
             indegree[downstream_key] -= 1
             if indegree[downstream_key] == 0:
-                ready.append(downstream_key)
-                ready.sort(key=_key_sort_key)
+                heapq.heappush(ready, (_key_sort_key(downstream_key), downstream_key))
 
     if len(ordered) != len(node_keys):
         ordered_set: set[CompiledObjectKey] = set(ordered)

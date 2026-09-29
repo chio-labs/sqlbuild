@@ -53,6 +53,7 @@ def compile_plan_pipeline(
             resolve_python_run_selectors=request.include_python,
             max_microbatches=request.max_microbatches,
             selection_diagnostics=request.selection_diagnostics,
+            record_migration_fingerprints=False,
         ),
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,

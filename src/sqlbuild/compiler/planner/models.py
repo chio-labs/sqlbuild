@@ -39,6 +39,10 @@ from sqlbuild.compiler.migrations.types import (
     MigrationPromotion,
     OldNameViewAction,
 )
+from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
+from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
+    MigrationFingerprintCache,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -144,6 +148,9 @@ class RelationFixturePlanningContext:
     relations: dict[FixtureKey, FixtureRelationMetadata]
     authoritative_columns: dict[FixtureKey, frozenset[str]]
     expected_types: dict[FixtureKey, dict[str, str]]
+    fixture_inferences: FixtureColumnInferences = field(
+        default_factory=FixtureColumnInferences, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -1538,6 +1545,7 @@ class PlannerPolicies:
     auto_load_sources: bool = False
     selection_diagnostics: bool = False
     plan_sql_tests: bool = True
+    record_migration_fingerprints: bool = True
 
 
 @dataclass(frozen=True)
@@ -1574,6 +1582,9 @@ class PlannerWarehouseState:
     column_rename_hints: tuple[ColumnRenameHint, ...] = ()
     old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = ()
     old_name_views: tuple[OldNameView, ...] = ()
+    migration_fingerprints: MigrationFingerprintCache = field(
+        default_factory=MigrationFingerprintCache
+    )
 
 
 @dataclass(frozen=True)

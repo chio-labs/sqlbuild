@@ -36,6 +36,9 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     gather_redirected_cursor_snapshots,
 )
+from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
+    MigrationFingerprintCache,
+)
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
@@ -130,6 +133,7 @@ def plan_model_migrations(
     snapshot: WarehouseSnapshot,
     overrides: PlannerOverrides,
     deferral: DeferralInputs,
+    fingerprints: MigrationFingerprintCache,
 ) -> ModelMigrationPlanning:
     """Decide every declared or discovered migration and project the post-migration snapshot."""
 
@@ -153,6 +157,7 @@ def plan_model_migrations(
         declarations=_project_declarations(runtime=runtime, state=state),
         state=state,
         project_schemas=schemas,
+        fingerprints=fingerprints,
     )
     if not discovery.requests:
         return ModelMigrationPlanning(snapshot=snapshot, warnings=discovery.warnings)

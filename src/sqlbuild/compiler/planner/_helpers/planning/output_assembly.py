@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import with_migration_fingerprints
+from sqlbuild.compiler.planner._helpers.migrations.entry_fingerprints import (
+    with_migration_fingerprints,
+)
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
 from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
@@ -80,6 +82,7 @@ def with_storage_policies(
     runtime: PlannerRuntime,
     warehouse: PlannerWarehouseState,
     scopes: PlannerScopeResolution,
+    policies: PlannerPolicies,
 ) -> PlanOutput:
     """Attach migrations and selected Snowflake table-type and retention work to the plan."""
 
@@ -89,8 +92,11 @@ def with_storage_policies(
             entries=with_migration_fingerprints(
                 entries=plan_output.model_entries,
                 models_by_name={model.name: model for model in runtime.project.models},
+                fingerprints=warehouse.migration_fingerprints,
                 dialect=runtime.adapter.sql_analysis_dialect(),
-            ),
+            )
+            if policies.record_migration_fingerprints
+            else plan_output.model_entries,
             hints=warehouse.column_rename_hints,
         ),
         migration_entries=warehouse.migration_entries,

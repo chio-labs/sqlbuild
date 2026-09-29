@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlTest,
@@ -84,7 +83,7 @@ def build_validated_test_fixtures(
                         f"expected output '{name}' {empty_error}"
                     )
                 completed_expected_outputs[name] = completed_sql
-                inference: FixtureColumnInference | None = infer_fixture_column_facts(
+                inference: FixtureColumnInference | None = fixture_context.fixture_inferences.infer(
                     query_sql=completed_sql,
                     inference_profile=adapter.expression_inference_profile(),
                 )

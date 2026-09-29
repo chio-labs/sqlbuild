@@ -166,7 +166,11 @@ def build_execution_plan(
             planned_sql_tests=planned_sql_tests,
         )
         plan_output = with_storage_policies(
-            plan_output=plan_output, runtime=runtime, warehouse=warehouse, scopes=scopes
+            plan_output=plan_output,
+            runtime=runtime,
+            warehouse=warehouse,
+            scopes=scopes,
+            policies=policies,
         )
         plan_output = with_plan_warnings(
             runtime=runtime,

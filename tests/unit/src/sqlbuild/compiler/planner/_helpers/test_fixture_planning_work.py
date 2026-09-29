@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.fixtures import completion as fixture_completion
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
 from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
+from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
     FixtureRelationMetadata,
@@ -235,9 +236,9 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
         "analyze_resolved_column_reads",
         fallback_analyzer,
     )
-    fixture_inference: Mock = Mock(wraps=fixture_completion.infer_fixture_column_facts)
+    fixture_inference: Mock = Mock(wraps=fixture_inferences.infer_fixture_column_facts)
     monkeypatch.setattr(
-        fixture_completion,
+        fixture_inferences,
         "infer_fixture_column_facts",
         fixture_inference,
     )

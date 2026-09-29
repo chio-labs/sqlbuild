@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from sqlbuild.compiler.compile._helpers.analysis.required_columns import (
@@ -9,6 +11,7 @@ from sqlbuild.compiler.compile.models import CompiledLineageSourceFact, CompileS
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    LongUnionRequiredColumnsTestCase,
     RequiredExternalColumnsTestCase,
 )
 
@@ -175,6 +178,26 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             ),
         ),
         RequiredExternalColumnsTestCase(
+            description="resolves set operation branches matched by name",
+            query_sql=(
+                "WITH combined AS ("
+                'SELECT order_id, payload FROM __source("web_orders") '
+                "UNION ALL BY NAME "
+                'SELECT payload, order_id FROM __source("partner_orders")'
+                ") SELECT order_id FROM combined"
+            ),
+            references=(
+                CompileSqlReference(SqlReferenceKind.SOURCE, "web_orders"),
+                CompileSqlReference(SqlReferenceKind.SOURCE, "partner_orders"),
+            ),
+            expected_columns=(
+                ("source", "web_orders", "order_id"),
+                ("source", "web_orders", "payload"),
+                ("source", "partner_orders", "payload"),
+                ("source", "partner_orders", "order_id"),
+            ),
+        ),
+        RequiredExternalColumnsTestCase(
             description="does not resolve generated local columns against an outer scope",
             query_sql=(
                 "WITH generated AS (SELECT 1 AS status) "
@@ -215,6 +238,40 @@ def test_given_query_when_resolving_required_columns_then_returns_external_reads
     )
     assert len(received) == len(test_case.expected_columns)
     assert frozenset(received) == frozenset(test_case.expected_columns)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LongUnionRequiredColumnsTestCase(
+            description="two hundred branch union stays linear",
+            branch_count=200,
+            expected_max_seconds=3.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_long_union_chain_when_resolving_required_columns_then_finishes_quickly(
+    test_case: LongUnionRequiredColumnsTestCase,
+) -> None:
+    branch_count: int = test_case.branch_count
+    branches: str = " UNION ALL ".join(
+        f'SELECT order_id, amount_{index} AS amount FROM __source("orders")'
+        for index in range(branch_count)
+    )
+    started: float = time.perf_counter()
+
+    result: tuple[CompiledLineageSourceFact, ...] = resolve_required_external_columns(
+        query_sql=f"WITH combined AS ({branches}) SELECT order_id, amount FROM combined",
+        references=(CompileSqlReference(SqlReferenceKind.SOURCE, "orders"),),
+        dialect="duckdb",
+    )
+
+    elapsed: float = time.perf_counter() - started
+    assert frozenset(source.column_name for source in result) == frozenset(
+        {"order_id", *(f"amount_{index}" for index in range(branch_count))}
+    )
+    assert elapsed < test_case.expected_max_seconds
 
 
 if __name__ == "__main__":

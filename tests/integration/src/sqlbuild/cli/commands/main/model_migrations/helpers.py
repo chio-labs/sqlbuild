@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
@@ -13,6 +13,7 @@ import duckdb
 import pytest
 from _pytest.capture import CaptureResult
 
+import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache_module
 from sqlbuild.adapter.contract.models import MigrationStagePlan
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -728,3 +729,63 @@ def state_tables(*, project_dir: Path, schema: str) -> tuple[str, ...]:
             ),
         )
     )
+
+
+type FingerprintComputation = tuple[str, str, tuple[tuple[str, str], ...], str | None]
+
+
+def record_fingerprint_computations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[FingerprintComputation]:
+    """Record every migration fingerprint the planner actually computes."""
+
+    computed: list[FingerprintComputation] = []
+    original: Callable[..., str | None] = fingerprint_cache_module.build_migration_fingerprint
+
+    def recording(
+        *,
+        query_sql: str,
+        metadata_json: str,
+        ref_identities: Mapping[str, str],
+        dialect: str | None,
+    ) -> str | None:
+        computed.append((query_sql, metadata_json, tuple(sorted(ref_identities.items())), dialect))
+        return original(
+            query_sql=query_sql,
+            metadata_json=metadata_json,
+            ref_identities=ref_identities,
+            dialect=dialect,
+        )
+
+    monkeypatch.setattr(fingerprint_cache_module, "build_migration_fingerprint", recording)
+    return computed
+
+
+def models_with_stored_migration_fingerprints(project_dir: Path) -> tuple[str, ...]:
+    """Return model names whose stored fingerprint rows carry a migration fingerprint."""
+
+    return tuple(
+        str(row[0])
+        for row in query(
+            project_dir=project_dir,
+            sql=(
+                "SELECT DISTINCT node_name FROM main._sqlbuild_fingerprints "
+                "WHERE json_extract_string(decode(from_base64(metadata_json_b64)), "
+                "'$.migration_fingerprint') IS NOT NULL ORDER BY 1"
+            ),
+        )
+    )
+
+
+def build_each(
+    *,
+    project_dir: Path,
+    model_sets: tuple[Callable[[], dict[str, str]], ...],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Build each model set in turn over the current raw orders."""
+
+    models: Callable[[], dict[str, str]]
+    for models in model_sets:
+        write_project(project_dir=project_dir, models=models())
+        _ = build_ok(project_dir=project_dir, capsys=capsys)

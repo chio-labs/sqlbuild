@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
+from typing import Any, cast
 
 import duckdb
 import pytest
@@ -16,6 +17,10 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
+from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
+from sqlbuild.compiler.discovery._helpers.filesystem import core as discovery_core_module
+from sqlbuild.spec.contracts.models import SourceLocation
 
 
 def unavailable_artifact_directory(*, prefix: str) -> TemporaryDirectory[str]:
@@ -396,3 +401,60 @@ def compile_duckdb_projection(
     result: dict[str, object] = json.loads(capsys.readouterr().out)
     diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
     return exit_code, tuple(item["code"] for item in diagnostics)
+
+
+def write_expression_source_project(
+    *, project_dir: Path, source_expression: str, model_sql: str
+) -> None:
+    """Write a DuckDB project with one typed expression source and one reading model."""
+
+    (project_dir / "sources").mkdir(parents=True)
+    (project_dir / "models").mkdir()
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[connection]\ndatabase = "orders.duckdb"\n',
+        encoding="utf-8",
+    )
+    (project_dir / "sources" / "orders.yml").write_text(
+        "sources:\n"
+        "  - name: typed_orders\n"
+        f'    expression: "{source_expression}"\n'
+        "    columns:\n"
+        "      - name: order_id\n"
+        "        type: INTEGER\n",
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "orders.sql").write_text(model_sql, encoding="utf-8")
+
+
+def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record every model query analysed again against inspected source columns."""
+
+    analysed: list[str] = []
+    original: Callable[..., PolyglotAnalysisResult] = (
+        source_bindings_module.analyze_columns_and_lineage_with_polyglot
+    )
+
+    def recording(**kwargs: Any) -> PolyglotAnalysisResult:
+        analysed.append(str(kwargs["query_sql"]))
+        return original(**kwargs)
+
+    monkeypatch.setattr(
+        source_bindings_module, "analyze_columns_and_lineage_with_polyglot", recording
+    )
+    return analysed
+
+
+def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Record every model file whose output columns discovery locates eagerly."""
+
+    scanned: list[Path] = []
+    original: Callable[..., dict[str, SourceLocation]] = (
+        discovery_core_module.model_output_column_locations
+    )
+
+    def recording(**kwargs: Any) -> dict[str, SourceLocation]:
+        scanned.append(cast(Path, kwargs["relative_path"]))
+        return original(**kwargs)
+
+    monkeypatch.setattr(discovery_core_module, "model_output_column_locations", recording)
+    return scanned

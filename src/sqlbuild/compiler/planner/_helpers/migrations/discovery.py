@@ -19,7 +19,9 @@ from sqlbuild.compiler.migrations.main.relation_for_location import (
 )
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
 from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
+from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
+    MigrationFingerprintCache,
+)
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
@@ -62,6 +64,7 @@ def discover_model_migrations(
     declarations: tuple[ModelMigrationDeclaration, ...],
     state: MigrationStateInspection,
     project_schemas: set[str],
+    fingerprints: MigrationFingerprintCache,
 ) -> ModelMigrationDiscovery:
     """Add unique one-to-one fingerprint matches to the explicit migration requests."""
 
@@ -89,6 +92,7 @@ def discover_model_migrations(
                 variants=seed_variants,
                 metadata_jsons=metadata_jsons,
                 dialect=dialect,
+                fingerprints=fingerprints,
             ),
         )
     unbuilt: frozenset[str] = frozenset(
@@ -115,6 +119,7 @@ def discover_model_migrations(
         candidates=candidates,
         metadata_jsons=metadata_jsons,
         dialect=dialect,
+        fingerprints=fingerprints,
     )
     requests: tuple[ModelMigrationRequest, ...] = (
         *manual_requests,
@@ -126,7 +131,11 @@ def discover_model_migrations(
         requests=requests,
         warnings=_ambiguity_warnings(models=models, scope=scope, ambiguous=ambiguous),
         destination_fingerprints=_destination_fingerprints(
-            requests=requests, variants=variants, metadata_jsons=metadata_jsons, dialect=dialect
+            requests=requests,
+            variants=variants,
+            metadata_jsons=metadata_jsons,
+            dialect=dialect,
+            fingerprints=fingerprints,
         ),
     )
 
@@ -405,9 +414,12 @@ def _match(
     candidates: tuple[Fingerprint, ...],
     metadata_jsons: dict[str, str],
     dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
 ) -> tuple[tuple[dict[str, str], ...], dict[str, Fingerprint], dict[str, str]]:
     """Match unbuilt models to candidates under every rename-map variant."""
 
+    if not candidates:
+        return tuple(dict(seed) for seed in seed_variants), {}, {}
     by_fingerprint: dict[str, list[Fingerprint]] = defaultdict(list)
     candidate: Fingerprint
     for candidate in candidates:
@@ -428,6 +440,7 @@ def _match(
                     metadata_json=metadata_jsons[model.name],
                     variants=variants,
                     dialect=dialect,
+                    fingerprints=fingerprints,
                 ),
                 by_fingerprint=by_fingerprint,
                 blocked=blocked,
@@ -460,11 +473,12 @@ def _variant_fingerprints(
     metadata_json: str,
     variants: tuple[dict[str, str], ...],
     dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
 ) -> tuple[str, ...]:
     """Return the distinct migration fingerprints of one model under each rename map."""
 
-    fingerprints: list[str | None] = [
-        build_migration_fingerprint(
+    computed: list[str | None] = [
+        fingerprints.fingerprint(
             query_sql=model.query_sql,
             metadata_json=metadata_json,
             ref_identities=variant,
@@ -472,7 +486,7 @@ def _variant_fingerprints(
         )
         for variant in variants
     ]
-    return tuple(dict.fromkeys(item for item in fingerprints if item is not None))
+    return tuple(dict.fromkeys(item for item in computed if item is not None))
 
 
 def _match_options(
@@ -514,17 +528,22 @@ def _destination_fingerprints(
     variants: tuple[dict[str, str], ...],
     metadata_jsons: dict[str, str],
     dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
 ) -> dict[str, tuple[str, ...]]:
-    fingerprints: dict[str, tuple[str, ...]] = {}
+    destinations: dict[str, tuple[str, ...]] = {}
     request: ModelMigrationRequest
     for request in requests:
         metadata_json: str | None = metadata_jsons.get(request.model.name)
         if metadata_json is None:
             continue
-        fingerprints[request.model.name] = _variant_fingerprints(
-            model=request.model, metadata_json=metadata_json, variants=variants, dialect=dialect
+        destinations[request.model.name] = _variant_fingerprints(
+            model=request.model,
+            metadata_json=metadata_json,
+            variants=variants,
+            dialect=dialect,
+            fingerprints=fingerprints,
         )
-    return fingerprints
+    return destinations
 
 
 def _moves_history(*, model: CompiledModel, origin: Fingerprint) -> bool:

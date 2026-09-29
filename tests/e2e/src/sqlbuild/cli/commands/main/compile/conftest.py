@@ -9,7 +9,11 @@ from scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit i
     assert_required_cgroup_memory_limit,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    BuiltBenchmark,
+    InspectionCommandMeasurement,
+    prepare_build_benchmark_project,
     prepare_inspection_benchmark_project,
+    run_fresh_process_inspection_command,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
@@ -35,3 +39,17 @@ def inspection_benchmark_project(tmp_path_factory: pytest.TempPathFactory) -> Pa
     project_dir: Path = tmp_path_factory.mktemp("inspection") / "semantic_inspection"
     prepare_inspection_benchmark_project(project_dir=project_dir)
     return project_dir
+
+
+@pytest.fixture(scope="module")
+def built_benchmark(tmp_path_factory: pytest.TempPathFactory) -> BuiltBenchmark:
+    assert_required_cgroup_memory_limit()
+    project_dir: Path = tmp_path_factory.mktemp("build") / "semantic_build"
+    prepare_build_benchmark_project(project_dir=project_dir)
+    build: InspectionCommandMeasurement = run_fresh_process_inspection_command(
+        project_dir=project_dir,
+        label="build-benchmark-build",
+        sqb_args=("build",),
+        expected_max_wall_seconds=300.0,
+    )
+    return BuiltBenchmark(project_dir=project_dir, build=build)

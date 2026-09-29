@@ -247,6 +247,7 @@ def _build_result(
             auto_load_sources=options.auto_load_sources,
             selection_diagnostics=options.selection_diagnostics,
             plan_sql_tests=options.plan_sql_tests,
+            record_migration_fingerprints=options.record_migration_fingerprints,
         ),
         on_progress=on_progress,
         project_config=discovered_inputs.project_config,

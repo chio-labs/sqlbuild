@@ -35,7 +35,7 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
         request.project_dir if request.project_dir is not None else Path.cwd()
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=effective_project_dir
+        project_dir=effective_project_dir, extract_output_column_locations=False
     )
     effective_defer_clone_from: str | None = _resolve_defer_clone_from(
         discovered_inputs=discovered_inputs,
