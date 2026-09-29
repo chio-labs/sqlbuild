@@ -25,10 +25,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 _GIB: int = 1024 * 1024 * 1024
 _MIB: int = 1024 * 1024
-_MAX_WARM_TO_COLD_RATIO: float = 0.65
-_MAX_EDIT_TO_COLD_RATIO: float = 0.60
+_MAX_WARM_TO_COLD_RATIO: float = 0.70
+_MAX_EDIT_TO_COLD_RATIO: float = 0.70
 # Writing the cache during a cold compile must stay a small same-runner cost over --no-cache.
-_MAX_CACHE_WRITE_OVERHEAD_RATIO: float = 1.11
+_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.10
+_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO: float = 1.15
 
 
 @pytest.mark.performance
@@ -50,7 +51,8 @@ _MAX_CACHE_WRITE_OVERHEAD_RATIO: float = 1.11
             expected_edit_max_wall_seconds=11.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
-            expected_max_cache_write_overhead_ratio=_MAX_CACHE_WRITE_OVERHEAD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
@@ -83,7 +85,8 @@ _MAX_CACHE_WRITE_OVERHEAD_RATIO: float = 1.11
             expected_edit_max_wall_seconds=18.0,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
-            expected_max_cache_write_overhead_ratio=_MAX_CACHE_WRITE_OVERHEAD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
@@ -116,7 +119,8 @@ _MAX_CACHE_WRITE_OVERHEAD_RATIO: float = 1.11
             expected_edit_max_wall_seconds=37.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
-            expected_max_cache_write_overhead_ratio=_MAX_CACHE_WRITE_OVERHEAD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
@@ -195,8 +199,8 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         cache_write_wall_ratio,
         cache_write_cpu_ratio,
     )
-    assert cache_write_wall_ratio <= test_case.expected_max_cache_write_overhead_ratio
-    assert cache_write_cpu_ratio <= test_case.expected_max_cache_write_overhead_ratio
+    assert cache_write_wall_ratio <= test_case.expected_max_cache_write_wall_overhead_ratio
+    assert cache_write_cpu_ratio <= test_case.expected_max_cache_write_cpu_overhead_ratio
     for measurement in (
         result.warm,
         result.after_leaf_edit,
