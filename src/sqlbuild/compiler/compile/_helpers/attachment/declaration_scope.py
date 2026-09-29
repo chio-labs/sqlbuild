@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Mapping
 from dataclasses import replace
+from types import CodeType
 
 from sqlbuild.compiler.compile._helpers.attachment.scope_relationships import (
     build_scope_relationship_grants,
@@ -63,4 +66,42 @@ def build_declaration_scope(
             scope_index=index,
             loaded_macros=loaded_macros,
         ),
+    )
+
+
+def rebind_declaration_scope(
+    *,
+    scope: DeclarationScopeBuild,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: dict[str, LoadedMacro],
+) -> DeclarationScopeBuild | None:
+    """Pair a built index with private macro instances, or return None if their metadata differs."""
+
+    if _indexed_macro_metadata(loaded_macros) != _indexed_macro_metadata(scope.loaded_macros):
+        return None
+    return DeclarationScopeBuild(
+        loaded_macros=loaded_macros,
+        index=scope.index,
+        resolver=build_declaration_scope_resolver(
+            discovered_inputs=discovered_inputs,
+            scope_index=scope.index,
+            loaded_macros=loaded_macros,
+        ),
+    )
+
+
+def _indexed_macro_metadata(loaded_macros: Mapping[str, LoadedMacro]) -> tuple[object, ...]:
+    return tuple(
+        (
+            key,
+            macro.name,
+            macro.relative_path,
+            macro.raw_source,
+            macro.dependencies,
+            code.co_firstlineno
+            if isinstance(code := getattr(macro.function, "__code__", None), CodeType)
+            else None,
+            tuple(inspect.signature(macro.function).parameters),
+        )
+        for key, macro in loaded_macros.items()
     )

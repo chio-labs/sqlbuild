@@ -83,6 +83,7 @@ def build_lint_expansion_context(
     value_renderer: TypedSqlValueRenderer | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
     declaration_scope: DeclarationScopeBuild | None = None,
+    static_declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext:
     """Build the expansion context, reporting compile failures as lint failures."""
 
@@ -105,6 +106,7 @@ def build_lint_expansion_context(
             discovered_inputs=effective_discovered_inputs,
             value_renderer=effective_renderer,
             declaration_scope=declaration_scope,
+            static_declaration_scope=static_declaration_scope,
         )
     except (AdapterUserError, CompileInputError, DiscoveryError) as error:
         raise ProjectCompileError(

@@ -210,6 +210,7 @@ def prepare_sql_rules(
                 dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
             ),
             discovered_inputs=inputs.discovered_inputs,
+            static_declaration_scope=inputs.declaration_scope,
             compiled_expansions={
                 model.model_file.file_path: model.sql_expansion
                 for model in inputs.model_inputs
@@ -224,10 +225,13 @@ def _prepare_sql_lint(
     project_dir: Path,
     config: LintConfig,
     discovered_inputs: DiscoveredProjectInputs,
+    static_declaration_scope: DeclarationScopeBuild | None,
     compiled_expansions: dict[Path, CompiledSqlExpansion],
 ) -> PreparedSqlLintResult:
     context: SqlExpansionContext = build_expansion_context(
-        project_dir=project_dir, discovered_inputs=discovered_inputs
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        static_declaration_scope=static_declaration_scope,
     )
     result: LintRunResult = run_lint(
         project_dir=project_dir,
