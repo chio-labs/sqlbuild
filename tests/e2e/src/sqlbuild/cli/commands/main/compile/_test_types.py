@@ -13,6 +13,14 @@ class SourceSemanticBindingCase:
 
 
 @dataclass(frozen=True)
+class RelationStubNameCase:
+    description: str
+    stub_cte_name: str
+    expected_downstream_type: str
+    expected_ghost_column_diagnostics: frozenset[tuple[str, str]]
+
+
+@dataclass(frozen=True)
 class SemanticCorpusCase:
     description: str
     category: str
@@ -104,6 +112,19 @@ class LayeredProductionCompilePerformanceGuardTestCase:
     expected_warm_max_seconds: float
     expected_edit_max_seconds: float
     expected_config_edit_max_seconds: float
+
+
+@dataclass(frozen=True)
+class LayeredProductionCompileTestCase:
+    description: str
+    model_count: int
+    source_count: int
+    seed_count: int
+    function_count: int
+    macro_count: int
+    test_count: int
+    audit_count: int
+    expected_diagnostic_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -30,6 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     SemanticCorpusCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
@@ -1483,8 +1484,12 @@ def _scope_single_folder_macros(*, project_dir: Path) -> None:
 
 
 def _layered_write_schemas(*, project_dir: Path) -> None:
-    schemas_dir: Path = project_dir / "schemas"
-    schemas_dir.mkdir()
+    """Write the contract schema beside its only consumer, the first staging model."""
+
+    schemas_dir: Path = (
+        project_dir / "models" / _layered_model_folder(index=0) / "_sqlbuild" / "_schemas"
+    )
+    schemas_dir.mkdir(parents=True)
     (schemas_dir / "benchmark_row.sql").write_text(
         """SCHEMA (
   name benchmark_row,
@@ -1628,16 +1633,17 @@ def _layered_dependent_model_sql(
     previous_name: str = f"model_{index - 1:05d}"
     macro_index: int = (index // _MACRO_INTERVAL) % macro_count
     id_expression: str = {
-        True: f'@macro_{macro_index:05d}("id")',
-        False: f"id + {index % 7}",
+        True: f'@macro_{macro_index:05d}("previous.id")',
+        False: f"previous.id + {index % 7}",
     }[index % _MACRO_INTERVAL == 0]
     generated_amount_expression: str = (
-        f"amount + {index % 11} + {_layered_generated_mapping_expression()} "
+        f"previous.amount + {index % 11} + "
+        f"{_layered_generated_mapping_expression(column='previous.id')} "
         "+ CAST(@@benchmark_revision AS INTEGER)"
     )
     function_index: int = index % function_count
     amount_expression: str = {
-        True: f'__udf("fn_{function_index:05d}")(amount)',
+        True: f'__udf("fn_{function_index:05d}")(previous.amount)',
         False: generated_amount_expression,
     }[index % _FUNCTION_INTERVAL == 0]
     seed_index: int = index % seed_count
@@ -1648,7 +1654,7 @@ def _layered_dependent_model_sql(
     query: str = f'''SELECT
   {id_expression} AS id,
   {amount_expression} AS amount,
-  CASE WHEN id % 2 = 0 THEN 'even' ELSE 'odd' END AS status
+  CASE WHEN previous.id % 2 = 0 THEN 'even' ELSE 'odd' END AS status
 FROM __ref("{previous_name}") AS previous{join_sql}
 '''
     direct_sql: str = f"{_layered_model_header(index=index, audit_count=audit_count)}\n\n{query}"
@@ -2070,8 +2076,10 @@ def _layered_model_sql_size_target(*, index: int, model_count: int) -> int:
     return round(lower_size + position * (upper_size - lower_size))
 
 
-def _layered_generated_mapping_expression() -> str:
-    clauses: str = "".join(f"WHEN id = {value:05d} THEN {value % 13:02d} " for value in range(45))
+def _layered_generated_mapping_expression(*, column: str = "id") -> str:
+    clauses: str = "".join(
+        f"WHEN {column} = {value:05d} THEN {value % 13:02d} " for value in range(45)
+    )
     return f"CASE {clauses} ELSE 0 END"
 
 
@@ -2285,3 +2293,44 @@ def plan_reasons_and_migrations(
 
 def _query_changed(model: dict[str, Any]) -> bool:
     return model["reason"] == "query_changed"
+
+
+def write_relation_stub_project(
+    *, tmp_path: Path, stub_cte_name: str, selected_column: str
+) -> Path:
+    """Write a project whose middle model authors a CTE named like a relation stub."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="relation_stub_names",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "relation_stub_names"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                'database = "orders.duckdb"\n\n'
+                "[targets.dev]\n"
+                'schema = "main"\n'
+            ),
+            "models/orders.sql": (
+                "MODEL (materialized table);\n\nSELECT CAST(7 AS INTEGER) AS order_id\n"
+            ),
+            "models/order_status.sql": (
+                "MODEL (materialized table);\n\n"
+                f"WITH {stub_cte_name} AS (\n"
+                "  SELECT 'pending' AS order_id, 'pending' AS ghost_status\n"
+                ")\n"
+                f'SELECT {selected_column} FROM __ref("orders")\n'
+            ),
+            "models/next_order.sql": (
+                "MODEL (\n"
+                "  materialized table,\n"
+                "  contract enforced,\n"
+                "  columns (order_id (type INTEGER), next_order_id (type INTEGER)),\n"
+                ");\n\n"
+                "SELECT order_id, order_id + 1 AS next_order_id\n"
+                'FROM __ref("order_status")\n'
+            ),
+        },
+    )

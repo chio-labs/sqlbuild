@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any, cast
 
@@ -190,6 +190,15 @@ def shared_result_is_exact(*, validation: object, template: object) -> bool:
     return isinstance(validation, dict) and cast(dict[str, object], validation).get("errors") == []
 
 
+def relation_stubs_collide(*, cleaned_sql: str, names: Iterable[str]) -> bool:
+    """Return whether authored SQL or relation names already use the relation stub prefix."""
+
+    return (
+        any(name.startswith(COMPACT_RELATION_STUB_PREFIX) for name in names)
+        or COMPACT_RELATION_STUB_PREFIX.casefold() in cleaned_sql.casefold()
+    )
+
+
 def _shared_reference_names(
     *,
     cleaned_sql: str,
@@ -199,9 +208,7 @@ def _shared_reference_names(
     names: list[str] = list(lineage_reference_map(references))
     if not names or len({name.casefold() for name in names}) != len(names):
         return None
-    if any(name.startswith(COMPACT_RELATION_STUB_PREFIX) for name in names):
-        return None
-    if COMPACT_RELATION_STUB_PREFIX.casefold() in cleaned_sql.casefold():
+    if relation_stubs_collide(cleaned_sql=cleaned_sql, names=names):
         return None
     if SQL_QUOTED_IDENTIFIER_DELIMITER in cleaned_sql:
         return None

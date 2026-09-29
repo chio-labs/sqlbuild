@@ -31,6 +31,7 @@ from sqlbuild.compiler.compile._helpers.sharing.binding import (
     binding_query_fields,
     lineage_reference_map,
     prepare_binding_queries,
+    relation_stubs_collide,
     remembered_shared_results,
     reused_shared_results,
     shared_result_is_exact,
@@ -723,22 +724,24 @@ def _prepare_compact_analysis_batch(
         shared: SharedBindingQuery | None = (
             binding_query.shared if binding_query is not None else None
         )
-        qualified_reference_names: frozenset[str] = (
-            _qualified_reference_names(
+        stubbed_reference_names: frozenset[str] = (
+            frozenset()
+            if binding_schema is not None
+            or relation_stubs_collide(cleaned_sql=cleaned_sql, names=lineage_references)
+            else frozenset(lineage_references)
+            - _qualified_reference_names(
                 query_sql=cleaned_sql,
                 reference_names=lineage_references.keys(),
             )
-            if binding_schema is None
-            else frozenset()
         )
         canonical_stubs: dict[str, str] = (
             shared.stubs
             if shared is not None
             else {
                 name: (
-                    name
-                    if binding_schema is not None or name in qualified_reference_names
-                    else f"{COMPACT_RELATION_STUB_PREFIX}{index}"
+                    f"{COMPACT_RELATION_STUB_PREFIX}{index}"
+                    if name in stubbed_reference_names
+                    else name
                 )
                 for index, name in enumerate(lineage_references)
             }

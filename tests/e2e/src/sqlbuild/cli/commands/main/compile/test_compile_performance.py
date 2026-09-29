@@ -237,7 +237,7 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
             macro_count=12,
             test_count=130,
             expected_audit_count=700,
-            expected_hook_count=2,
+            expected_hook_count=0,
             expected_min_model_sql_bytes=5_500_000,
             expected_max_model_sql_bytes=7_000_000,
             expected_min_compiled_test_bytes=3_000_000,

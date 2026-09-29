@@ -233,6 +233,73 @@ def test_given_cte_cast_when_batch_analyzing_then_cast_type_overrides_input_type
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        InferColumnsTestCase(
+            description="lowercase authored stub-named CTE",
+            query_sql=(
+                "WITH __sqlbuild_project_input_0 AS (SELECT 'pending' AS order_id) "
+                'SELECT order_id FROM __ref("orders")'
+            ),
+            expected_columns=(
+                InferredColumn(
+                    name="order_id", type="BIGINT", nullability=InferredNullability.NON_NULL
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
+            description="uppercase authored stub-named CTE",
+            query_sql=(
+                "WITH __SQLBUILD_PROJECT_INPUT_0 AS (SELECT 'pending' AS order_id) "
+                'SELECT order_id FROM __ref("orders")'
+            ),
+            expected_columns=(
+                InferredColumn(
+                    name="order_id", type="BIGINT", nullability=InferredNullability.NON_NULL
+                ),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_authored_stub_named_cte_when_batch_analyzing_without_binding_then_uses_input(
+    test_case: InferColumnsTestCase,
+) -> None:
+    references: tuple[CompileSqlReference, ...] = (
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+    )
+    nullability: dict[str, dict[str, InferredNullability]] = {
+        "orders": {"order_id": InferredNullability.NON_NULL}
+    }
+    types: dict[str, dict[str, str]] = {"orders": {"order_id": "BIGINT"}}
+    profile: ExpressionInferenceProfile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+
+    prepared: NativeCompactAnalysis = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(test_case.query_sql,),
+        references=(references,),
+        placeholders=(None,),
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        recover_cte_facts=(False,),
+    )[0]
+    result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=references,
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        allow_compact_analysis=True,
+        precomputed=prepared,
+    )
+
+    assert result.analysis_succeeded
+    assert result.columns == test_case.expected_columns
+    lineage_column: CompiledLineageColumnFact = tuple(result.lineage_columns)[0]
+    assert [source.resource_name for source in lineage_column.upstream_columns] == ["orders"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         QualifiedReferenceAnalysisTestCase(
             description="plain qualified reference",
