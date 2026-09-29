@@ -949,6 +949,8 @@ def _replace_refs_with_stubs(
 
 
 def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]) -> frozenset[str]:
+    """Return qualifier reference names, searching names directly when no token can hide one."""
+
     if SQL_QUALIFIER_SEPARATOR_TOKEN not in query_sql:
         return frozenset()
     names_by_normalized: dict[str, list[str]] = {}
@@ -964,8 +966,6 @@ def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]
             query_sql=query_sql, names_by_normalized=names_by_normalized
         )
 
-    # Without quoted identifiers or comments, a regex match consumes only an identifier,
-    # whitespace, and the separator, so searching for each name alone finds the same matches.
     folded_sql: str = query_sql.lower()
     qualified: set[str] = set()
     for normalized, names in names_by_normalized.items():

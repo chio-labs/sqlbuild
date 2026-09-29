@@ -588,20 +588,20 @@ def write_model_analyses(
 ) -> None:
     """Transactionally persist deterministic analyses; cache failures never fail compilation."""
 
-    output_signatures: dict[int, str] = {}
-
-    def output_signature(analysis: PolyglotAnalysisResult) -> str:
-        signature: str | None = output_signatures.get(id(analysis))
-        if signature is None:
-            signature = model_analysis_output_signature(analysis)
-            output_signatures[id(analysis)] = signature
-        return signature
-
+    signed_analyses: dict[int, PolyglotAnalysisResult] = {
+        id(analysis): analysis
+        for analysis in (*analyses_by_key.values(), *(latest_analyses_by_model or {}).values())
+    }
+    output_signatures: dict[int, str] = {
+        key: model_analysis_output_signature(analysis) for key, analysis in signed_analyses.items()
+    }
     rows: list[tuple[str, str]] = []
     for cache_key, analysis in analyses_by_key.items():
         try:
             contents: str = _analysis_contents(
-                cache_key=cache_key, analysis=analysis, output_signature=output_signature(analysis)
+                cache_key=cache_key,
+                analysis=analysis,
+                output_signature=output_signatures[id(analysis)],
             )
         except orjson.JSONEncodeError:
             continue
@@ -612,7 +612,7 @@ def write_model_analyses(
             context.shared_fingerprint,
             context.signature_namespace,
             model_name,
-            output_signature(analysis),
+            output_signatures[id(analysis)],
         )
         for model_name, analysis in (latest_analyses_by_model or {}).items()
     ]
