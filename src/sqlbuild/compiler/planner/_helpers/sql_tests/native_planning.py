@@ -161,7 +161,7 @@ def resolve_sql_test_model_chains(
     if not tests:
         return ()
     request: dict[str, object] = {
-        "models": _model_requests(project=project),
+        "models": _chain_model_requests(project=project),
         "tests": [_test_request(test=test) for test in tests],
     }
     try:
@@ -426,30 +426,34 @@ def _test_request(
     }
 
 
-def _model_requests(
-    *, project: CompiledProject, adapter: BaseAdapter | None = None
-) -> list[dict[str, object]]:
-    requests: list[dict[str, object]] = []
-    for model in project.models:
-        dependencies: list[str] = []
-        for dependency in model.deps:
-            if dependency.resource_type == CompiledResourceType.MODEL:
-                dependencies.append(dependency.name)
-        query_sql: str = (
-            model.query_sql
-            if adapter is None
-            else render_test_cursor_intrinsics(
+def _model_requests(*, project: CompiledProject, adapter: BaseAdapter) -> list[dict[str, object]]:
+    return [
+        {
+            "name": model.name,
+            "querySql": render_test_cursor_intrinsics(
                 sql=model.query_sql, model=model, adapter=adapter, test=None
-            )
-        )
-        requests.append(
-            {
-                "name": model.name,
-                "querySql": query_sql,
-                "modelDependencies": dependencies,
-            }
-        )
-    return requests
+            ),
+            "modelDependencies": _model_dependencies(model=model),
+        }
+        for model in project.models
+    ]
+
+
+def _chain_model_requests(*, project: CompiledProject) -> list[dict[str, object]]:
+    """Chain ordering reads only declared dependencies, so model SQL is not sent."""
+
+    return [
+        {"name": model.name, "modelDependencies": _model_dependencies(model=model)}
+        for model in project.models
+    ]
+
+
+def _model_dependencies(*, model: CompiledModel) -> list[str]:
+    return [
+        dependency.name
+        for dependency in model.deps
+        if dependency.resource_type == CompiledResourceType.MODEL
+    ]
 
 
 def _cte_request(*, cte: CompileSqlTestCte) -> dict[str, str]:
