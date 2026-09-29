@@ -17,8 +17,9 @@ import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context
 import sqlbuild.rule_engine._helpers.engine.native as native_module
 import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
+from sqlbuild.compiler.compile.models import CompiledProject, DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.rule_engine.models import Rule
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
@@ -906,9 +907,20 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
         original_write(project_dir=project_dir, bucket=bucket)
         sql_cache_written.set()
 
-    def delayed_payloads(**kwargs: object) -> list[dict[str, object]]:
+    def delayed_payloads(
+        *,
+        catalogue: tuple[Rule, ...],
+        project: CompiledProject,
+        project_dir: Path,
+        cache_enabled: bool,
+    ) -> list[dict[str, object]]:
         _ = sql_cache_written.wait(timeout=30)
-        return original_payloads(**kwargs)
+        return original_payloads(
+            catalogue=catalogue,
+            project=project,
+            project_dir=project_dir,
+            cache_enabled=cache_enabled,
+        )
 
     def recording_request(request: dict[str, object]) -> str:
         requests.append(request["custom_host"] is not None)
