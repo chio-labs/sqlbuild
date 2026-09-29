@@ -1,0 +1,193 @@
+"""Prepare identical benchmark projects per version and time interleaved command runs."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+from pathlib import Path
+from typing import cast
+
+from scripts.release_performance.constants import (
+    BUILD_PROJECT,
+    BUILD_WARMUPS,
+    COMMAND_TIMEOUT_SECONDS,
+    COMPILE_COMMAND,
+    EXCLUDED_ENVIRONMENT_KEYS,
+    EXCLUDED_ENVIRONMENT_PREFIX,
+    INSPECTION_PROJECT,
+    INSPECTION_WARMUPS,
+    STDERR_TAIL_CHARACTERS,
+    TIME_FORMAT,
+)
+from scripts.release_performance.exceptions import ReleasePerformanceError
+from scripts.release_performance.models import (
+    BenchmarkCommand,
+    CommandComparison,
+    CommandSample,
+    InstalledVersion,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    write_build_benchmark_project,
+    write_inspection_benchmark_project,
+)
+
+_MIB: int = 1024 * 1024
+_TEMPLATE_SUFFIX: str = "-template"
+
+
+def write_pristine_projects(*, root: Path, inspection_models: int, build_models: int) -> Path:
+    """Generate the inspection and build benchmarks once so every version reads the same files."""
+
+    pristine: Path = root / "pristine"
+    write_inspection_benchmark_project(
+        project_dir=pristine / INSPECTION_PROJECT, model_count=inspection_models
+    )
+    write_build_benchmark_project(project_dir=pristine / BUILD_PROJECT, model_count=build_models)
+    return pristine
+
+
+def prepare_version_projects(
+    *, version: InstalledVersion, pristine: Path, root: Path
+) -> dict[str, Path]:
+    """Copy the pristine projects for one version and warm its caches with untimed runs."""
+
+    projects: dict[str, Path] = {
+        INSPECTION_PROJECT: root / version.label / INSPECTION_PROJECT,
+        BUILD_PROJECT: root / version.label / BUILD_PROJECT,
+    }
+    logs: Path = root / version.label / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    for name, warmups in ((INSPECTION_PROJECT, INSPECTION_WARMUPS), (BUILD_PROJECT, BUILD_WARMUPS)):
+        _ = shutil.copytree(pristine / name, projects[name])
+        for index, sqb_args in enumerate(warmups):
+            output: Path = _run_sqb(
+                version=version,
+                project_dir=projects[name],
+                sqb_args=sqb_args,
+                log_prefix=logs / f"warmup-{name}-{index}",
+            )[1]
+            if sqb_args[0] == COMPILE_COMMAND:
+                _assert_clean_compile(version=version, output=output)
+    _ = shutil.copytree(
+        projects[BUILD_PROJECT], projects[BUILD_PROJECT].with_name(BUILD_PROJECT + _TEMPLATE_SUFFIX)
+    )
+    return projects
+
+
+def compare_command(
+    *,
+    command: BenchmarkCommand,
+    versions: tuple[InstalledVersion, InstalledVersion],
+    projects: dict[str, dict[str, Path]],
+    root: Path,
+    runs: int,
+) -> CommandComparison:
+    """Time baseline and candidate alternately runs times each and keep every sample."""
+
+    samples: dict[str, list[CommandSample]] = {version.label: [] for version in versions}
+    for run in range(runs):
+        for version in versions:
+            project_dir: Path = projects[version.label][command.project]
+            if command.project == BUILD_PROJECT:
+                _reset_build_project(project_dir=project_dir)
+            sample: CommandSample = _run_sqb(
+                version=version,
+                project_dir=project_dir,
+                sqb_args=command.sqb_args,
+                log_prefix=root / version.label / "logs" / "measured",
+            )[0]
+            samples[version.label].append(sample)
+            print(
+                f"{command.name} run {run + 1}/{runs} {version.label} {version.version}: "
+                f"wall {sample.wall_seconds:.2f}s, CPU {sample.cpu_seconds:.2f}s, "
+                f"peak RSS {sample.peak_rss_bytes / _MIB:.0f} MiB",
+                file=sys.stderr,
+                flush=True,
+            )
+    baseline, candidate = versions
+    return CommandComparison(
+        name=command.name,
+        baseline=tuple(samples[baseline.label]),
+        candidate=tuple(samples[candidate.label]),
+    )
+
+
+def _reset_build_project(*, project_dir: Path) -> None:
+    shutil.rmtree(project_dir, ignore_errors=True)
+    _ = shutil.copytree(project_dir.with_name(BUILD_PROJECT + _TEMPLATE_SUFFIX), project_dir)
+
+
+def _assert_clean_compile(*, version: InstalledVersion, output: Path) -> None:
+    payload: dict[str, object] = cast(dict[str, object], json.loads(output.read_bytes()))
+    diagnostics: list[object] = cast(list[object], payload.get("diagnostics", []))
+    if diagnostics:
+        raise ReleasePerformanceError(
+            f"The benchmark is not valid for {version.label} {version.version}: compile reported "
+            f"{len(diagnostics)} diagnostics, first {json.dumps(diagnostics[0])[:500]}"
+        )
+
+
+def _run_sqb(
+    *,
+    version: InstalledVersion,
+    project_dir: Path,
+    sqb_args: tuple[str, ...],
+    log_prefix: Path,
+) -> tuple[CommandSample, Path]:
+    measurement: Path = log_prefix.with_suffix(".time")
+    output: Path = log_prefix.with_suffix(".out")
+    errors: Path = log_prefix.with_suffix(".err")
+    command: list[str] = [
+        "/usr/bin/time",
+        "--quiet",
+        "--output",
+        str(measurement),
+        "--format",
+        TIME_FORMAT,
+        str(version.sqb),
+        "--project-dir",
+        str(project_dir),
+        "--no-color",
+        *sqb_args,
+    ]
+    with output.open("wb") as stdout, errors.open("wb") as stderr:
+        with subprocess.Popen(
+            command, stdout=stdout, stderr=stderr, env=_environment(), start_new_session=True
+        ) as process:
+            try:
+                returncode: int = process.wait(timeout=COMMAND_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                _ = process.wait()
+                raise ReleasePerformanceError(
+                    f"{version.label} {version.version} `sqb {' '.join(sqb_args)}` exceeded "
+                    f"{COMMAND_TIMEOUT_SECONDS:.0f}s"
+                ) from None
+    if returncode != 0:
+        tail: str = errors.read_text(encoding="utf-8", errors="replace")[-STDERR_TAIL_CHARACTERS:]
+        raise ReleasePerformanceError(
+            f"{version.label} {version.version} `sqb {' '.join(sqb_args)}` exited with "
+            f"{returncode}. If the command needs a feature newer than this version, declare "
+            f"minimum_version for it in scripts/release_performance/constants.py.\n{tail}"
+        )
+    wall, rss_kib, user, system = measurement.read_text(encoding="utf-8").split()[-4:]
+    return (
+        CommandSample(
+            wall_seconds=float(wall),
+            cpu_seconds=float(user) + float(system),
+            peak_rss_bytes=int(rss_kib) * 1024,
+        ),
+        output,
+    )
+
+
+def _environment() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in EXCLUDED_ENVIRONMENT_KEYS and not key.startswith(EXCLUDED_ENVIRONMENT_PREFIX)
+    }

@@ -113,8 +113,10 @@ jobs:
           fi
           head_sha="$(git rev-parse HEAD)"
 
-          workflows=(pull-request-metadata.yml version-guard.yml)
-          contexts=("Pull Request Metadata" "Block automatic 1.0 releases")
+          # Verify is the required status, so it only succeeds after every trusted check passes,
+          # including the same-runner comparison with the previous release.
+          workflows=(pull-request-metadata.yml version-guard.yml release-performance.yml)
+          contexts=("Pull Request Metadata" "Block automatic 1.0 releases" "Release performance")
           for context in "${contexts[@]}"; do
             gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
               -f state=pending -f "context=${context}" \
@@ -122,11 +124,12 @@ jobs:
           done
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
             -f state=pending -f context=Verify \
-            -f description="Validating trusted release metadata" >/dev/null
+            -f description="Validating trusted release metadata and performance" >/dev/null
 
           gh workflow run pull-request-metadata.yml --ref "${RELEASE_BRANCH}" \
             -f "pr_number=${release_pr}"
           gh workflow run version-guard.yml --ref "${RELEASE_BRANCH}"
+          gh workflow run release-performance.yml --ref "${RELEASE_BRANCH}"
           for index in "${!workflows[@]}"; do
             workflow="${workflows[${index}]}"
             context="${contexts[${index}]}"
@@ -142,10 +145,13 @@ jobs:
               gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
                 -f state=failure -f "context=${context}" \
                 -f description="Trusted release check did not start" >/dev/null
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+                -f state=failure -f context=Verify \
+                -f description="${context} did not start" >/dev/null
               exit 1
             fi
             run_url="$(gh run view "${run_id}" --json url --jq .url)"
-            if gh run watch "${run_id}" --exit-status; then
+            if gh run watch "${run_id}" --exit-status --interval 30; then
               gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
                 -f state=success -f "context=${context}" -f target_url="${run_url}" \
                 -f description="Trusted release check passed" >/dev/null
@@ -153,6 +159,9 @@ jobs:
               gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
                 -f state=failure -f "context=${context}" -f target_url="${run_url}" \
                 -f description="Trusted release check failed" >/dev/null
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+                -f state=failure -f context=Verify -f target_url="${run_url}" \
+                -f description="${context} failed" >/dev/null
               exit 1
             fi
           done
