@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.126.2](https://github.com/chio-labs/sqlbuild/compare/v0.126.1...v0.126.2) (2026-09-29)
+
+
+### Performance Improvements
+
+* **lineage:** analyse traced columns against only referenced relations ([#877](https://github.com/chio-labs/sqlbuild/issues/877)) ([9655a4e](https://github.com/chio-labs/sqlbuild/commit/9655a4e7d7e0f34db423e937cbd4cec4bbed0557))
+
 ## [0.126.1](https://github.com/chio-labs/sqlbuild/compare/v0.126.0...v0.126.1) (2026-09-29)
 
 
