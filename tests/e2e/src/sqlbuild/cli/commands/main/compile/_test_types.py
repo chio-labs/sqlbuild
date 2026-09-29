@@ -107,6 +107,19 @@ class LayeredProductionCompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
+class LayeredProductionCompileTestCase:
+    description: str
+    model_count: int
+    source_count: int
+    seed_count: int
+    function_count: int
+    macro_count: int
+    test_count: int
+    audit_count: int
+    expected_diagnostic_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SemanticCompilePerformanceGuardTestCase:
     description: str
     model_count: int
