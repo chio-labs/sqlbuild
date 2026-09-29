@@ -45,6 +45,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compile_project_with_cache,
+    stored_analysis_contents,
 )
 
 _CACHE_REPO_FILES: dict[str, str] = {
@@ -547,12 +548,12 @@ def test_given_cached_lineage_when_reading_then_facts_round_trip_exactly(
         CompactLineageCacheEncodingTestCase(
             description="canonical relation names",
             output_column="order_id",
-            resource_name_override=None,
+            resource_names={},
         ),
         CompactLineageCacheEncodingTestCase(
             description="shared result projected onto member relation names",
             output_column='caf\u00e9 "note"\n\t\x01\u2028',
-            resource_name_override="orders_archive",
+            resource_names={4: "orders_archive"},
         ),
     ),
     ids=lambda case: case.description,
@@ -567,11 +568,7 @@ def test_given_compact_lineage_when_writing_then_entry_matches_projected_fact_en
             (2, 1, 1, ((0, 1, 2),)),
             (2, 2, 2, ((0, 1, 2), (3, 4, 2))),
         ),
-        resource_names=(
-            {}
-            if test_case.resource_name_override is None
-            else {4: test_case.resource_name_override}
-        ),
+        resource_names=test_case.resource_names,
     )
     compact_analysis: PolyglotAnalysisResult = PolyglotAnalysisResult(
         analysis_succeeded=True, lineage_columns=compact
@@ -590,9 +587,9 @@ def test_given_compact_lineage_when_writing_then_entry_matches_projected_fact_en
     write_model_analyses(context=compact_context, analyses_by_key={cache_key: compact_analysis})
     write_model_analyses(context=projected_context, analyses_by_key={cache_key: projected_analysis})
 
-    compact_contents: str = _stored_analysis_contents(context=compact_context, cache_key=cache_key)
+    compact_contents: str = stored_analysis_contents(context=compact_context, cache_key=cache_key)
     serialized_payload: str = compact_contents.partition("\n")[2]
-    assert compact_contents == _stored_analysis_contents(
+    assert compact_contents == stored_analysis_contents(
         context=projected_context, cache_key=cache_key
     )
     assert serialized_payload == json.dumps(
@@ -605,15 +602,7 @@ def test_given_compact_lineage_when_writing_then_entry_matches_projected_fact_en
         upstream_model_names_by_key={cache_key: ()},
     )
     assert tuple(analyses[cache_key].lineage_columns) == tuple(compact)
-
-
-def _stored_analysis_contents(*, context: AnalysisCacheContext, cache_key: str) -> str:
-    database_path: Path = next(context.root.rglob("model-analysis.sqlite3"))
-    with sqlite3.connect(database_path) as connection:
-        row: tuple[str] = connection.execute(
-            "SELECT payload FROM model_analysis WHERE cache_key = ?", (cache_key,)
-        ).fetchone()
-    return row[0]
+    assert len(analyses[cache_key].lineage_columns) == test_case.expected_lineage_columns
 
 
 @pytest.mark.parametrize(

@@ -1056,11 +1056,12 @@ class QualifiedReferenceScanTestCase:
     description: str
     query_sql: str
     reference_names: tuple[str, ...]
-    expected: frozenset[str]
+    expected_names: frozenset[str]
 
 
 @dataclass(frozen=True)
 class CompactLineageCacheEncodingTestCase:
     description: str
     output_column: str
-    resource_name_override: str | None
+    resource_names: dict[int, str]
+    expected_lineage_columns: int = 2
