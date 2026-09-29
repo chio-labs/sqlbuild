@@ -203,6 +203,7 @@ def prepare_sql_rules(
         return None
     return PreparedSqlLint(
         codes=codes,
+        project_dir=project_dir,
         future=executor.submit(
             _prepare_sql_lint,
             project_dir=project_dir,
@@ -291,6 +292,21 @@ def _selected_project(
     )
 
 
+def _prepared_project_files(
+    *, prepared_sql: PreparedSqlLint | None, project_dir: Path, codes: tuple[str, ...]
+) -> dict[Path, str] | None:
+    """Reuse the full-project read of a matching early SQL lint for this invocation."""
+
+    if (
+        prepared_sql is None
+        or prepared_sql.project_dir != project_dir
+        or set(prepared_sql.codes) != set(codes)
+        or prepared_sql.future.exception() is not None
+    ):
+        return None
+    return dict(prepared_sql.future.result().result.source_texts)
+
+
 def _run_prepared_lint(
     *,
     project_dir: Path,
@@ -339,6 +355,7 @@ def _run_prepared_lint(
             compiled_expansions=compiled_expansions,
             dynamic_output_paths=proof_paths,
             expansion_context=completed.context,
+            source_files=dict(prepared.source_texts),
         )
         violations = (*violations, *proven.violations)
     return replace(prepared, violations=violations, files_checked=len(selected_paths))
@@ -388,7 +405,11 @@ def _run_sql_rules(
         model_paths: frozenset[Path] = frozenset(
             project_dir / model.relative_path for model in project.models
         )
-        project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
+        project_files = _prepared_project_files(
+            prepared_sql=prepared_sql, project_dir=project_dir, codes=codes
+        )
+        if project_files is None:
+            project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
         file_path: Path
         contents: str
         for file_path, contents in project_files.items():

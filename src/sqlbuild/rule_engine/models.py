@@ -332,6 +332,7 @@ class PreparedSqlLint:
 
     codes: tuple[str, ...]
     future: Future[PreparedSqlLintResult]
+    project_dir: Path | None = None
 
 
 @dataclass(frozen=True)
