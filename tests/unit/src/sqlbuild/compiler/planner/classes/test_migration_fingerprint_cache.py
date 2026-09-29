@@ -24,6 +24,7 @@ from tests.unit.src.sqlbuild.compiler.planner.classes.helpers import (
     corrupt_database,
     count_fingerprint_computations,
     keep_cache,
+    replace_digests_with_non_ascii,
     tamper_entries,
     upgrade_sqlbuild,
 )
@@ -147,6 +148,11 @@ def test_given_fingerprint_requests_when_cached_then_matches_direct_build_with_m
         PersistedMigrationFingerprintTestCase(
             description="tampered entries are recomputed",
             between_runs=tamper_entries,
+            expected_second_run_computations=2,
+        ),
+        PersistedMigrationFingerprintTestCase(
+            description="non-ASCII digests are recomputed",
+            between_runs=replace_digests_with_non_ascii,
             expected_second_run_computations=2,
         ),
         PersistedMigrationFingerprintTestCase(

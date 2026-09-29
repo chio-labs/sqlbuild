@@ -172,8 +172,12 @@ def _fingerprint_from_contents(
     if not isinstance(contents, str) or len(contents) > _MAX_CACHE_ENTRY_BYTES:
         return False, None
     stored_digest, separator, serialized = contents.partition(_CACHE_ENTRY_SEPARATOR)
-    if not separator or not hmac.compare_digest(
-        stored_digest, _entry_digest(cache_key=expected_cache_key, serialized=serialized)
+    if (
+        not separator
+        or not stored_digest.isascii()
+        or not hmac.compare_digest(
+            stored_digest, _entry_digest(cache_key=expected_cache_key, serialized=serialized)
+        )
     ):
         return False, None
     try:

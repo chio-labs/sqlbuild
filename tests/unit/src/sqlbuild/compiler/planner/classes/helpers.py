@@ -80,6 +80,21 @@ def tamper_entries(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         connection.close()
 
 
+def replace_digests_with_non_ascii(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace every stored digest with non-ASCII text, keeping the entry separator."""
+
+    del monkeypatch
+    connection: sqlite3.Connection = sqlite3.connect(next(root.glob(DATABASE_GLOB)))
+    try:
+        _ = connection.execute(
+            "UPDATE migration_fingerprint "
+            "SET payload = 'é' || substr(payload, instr(payload, char(10)))"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
 def upgrade_sqlbuild(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Report a different installed sqlbuild version for the next run."""
 
