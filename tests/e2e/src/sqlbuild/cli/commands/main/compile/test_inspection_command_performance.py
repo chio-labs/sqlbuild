@@ -102,6 +102,35 @@ _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
             expected_max_rss_bytes=128 * _MIB,
         ),
         InspectionCommandPerformanceGuardTestCase(
+            description="models_3000_lineage_column_text_upstream_from_fan_in_rollup",
+            sqb_args=("lineage", f"{SHARED_DIAMOND_ROLLUP}.amount", "--direction", "upstream"),
+            expected_fragments=(
+                f"Column trace  {SHARED_DIAMOND_ROLLUP}.amount  upstream",
+                "shared_orders_l15_s00.amount (cast)",
+            ),
+            expected_max_output_lines=_MODEL_COUNT,
+            expected_max_wall_seconds=8.0,
+            expected_max_rss_bytes=512 * _MIB,
+        ),
+        InspectionCommandPerformanceGuardTestCase(
+            description="models_3000_lineage_column_json_downstream_from_fan_out_hub",
+            sqb_args=(
+                "lineage",
+                f"{SHARED_DIAMOND_HUB}.amount",
+                "--direction",
+                "downstream",
+                "--format",
+                "json",
+            ),
+            expected_fragments=(
+                '"direction": "downstream"',
+                f'"resource_name": "{SHARED_DIAMOND_ROLLUP}"',
+            ),
+            expected_max_output_lines=20 * _MODEL_COUNT,
+            expected_max_wall_seconds=8.0,
+            expected_max_rss_bytes=512 * _MIB,
+        ),
+        InspectionCommandPerformanceGuardTestCase(
             description="models_3000_dag_json",
             sqb_args=("dag", "--json"),
             expected_fragments=(
