@@ -380,3 +380,10 @@ class PythonSourceReadPlanTestCase:
     description: str
     target_config: str
     expected_schema: str
+
+
+@dataclass(frozen=True)
+class FunctionArgumentTypeCase:
+    description: str
+    projection: str
+    expected_codes: tuple[str, ...] = ()

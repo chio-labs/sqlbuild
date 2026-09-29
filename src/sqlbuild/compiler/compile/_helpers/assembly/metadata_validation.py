@@ -66,12 +66,22 @@ def get_semantic_metadata_diagnostics(
     if not project.settings.sql_analysis:
         return ()
     shapes: dict[str, dict[str, str]] = semantic_shapes(project=project, profile=profile)
+    functions: dict[str, CompiledFunction] = {
+        function.name.casefold(): function for function in project.functions
+    }
+    folded_shapes: dict[str, dict[str, list[str]]] = {}
     diagnostics: list[CompilerDiagnostic] = []
     for model in project.models:
         if model.config.values.get("sql_analysis") is False or not model.binding_validated:
             continue
         diagnostics.extend(
-            _function_errors(model=model, project=project, shapes=shapes, profile=profile)
+            _function_errors(
+                model=model,
+                functions=functions,
+                shapes=shapes,
+                folded_shapes=folded_shapes,
+                profile=profile,
+            )
         )
         shape: dict[str, str] | None = shapes.get(model.name)
         if shape is None:
@@ -428,16 +438,35 @@ def _names(value: object) -> tuple[str, ...]:
     return ()
 
 
+def _folded_shape(
+    *,
+    name: str,
+    shapes: dict[str, dict[str, str]],
+    folded_shapes: dict[str, dict[str, list[str]]],
+) -> dict[str, list[str]] | None:
+    """Return one relation's column types by case-folded name, indexed on first use."""
+
+    folded: dict[str, list[str]] | None = folded_shapes.get(name)
+    if folded is not None:
+        return folded
+    shape: dict[str, str] | None = shapes.get(name)
+    if shape is None:
+        return None
+    folded = {}
+    for key, value in shape.items():
+        folded.setdefault(key.casefold(), []).append(value)
+    folded_shapes[name] = folded
+    return folded
+
+
 def _function_errors(
     *,
     model: CompiledModel,
-    project: CompiledProject,
+    functions: dict[str, CompiledFunction],
     shapes: dict[str, dict[str, str]],
+    folded_shapes: dict[str, dict[str, list[str]]],
     profile: ExpressionInferenceProfile,
 ) -> tuple[CompilerDiagnostic, ...]:
-    functions: dict[str, CompiledFunction] = {
-        function.name.casefold(): function for function in project.functions
-    }
     if not functions or not any(
         reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}
         for reference in model.references
@@ -455,6 +484,7 @@ def _function_errors(
     except module.PolyglotError:
         return ()
     diagnostics: list[CompilerDiagnostic] = []
+    relations_by_select: dict[int, tuple[Any, list[dict[str, Any]]]] = {}
     for call, select in _function_scopes(parsed):
         payload: dict[str, Any] = call.to_dict().get("function", {})
         name: str = str(payload.get("name", "")).removeprefix("__sqlbuild_udf_")
@@ -490,7 +520,12 @@ def _function_errors(
                     literal.get("literal_type"), "UNKNOWN"
                 )
             elif column:
-                actual = _argument_column_type(column=column, select=select, shapes=shapes)
+                actual = _argument_column_type(
+                    column=column,
+                    relations=_select_relations(select=select, cache=relations_by_select),
+                    shapes=shapes,
+                    folded_shapes=folded_shapes,
+                )
             if actual != _UNKNOWN_TYPE and _different_argument_families(
                 left=actual, right=declaration.type, profile=profile
             ):
@@ -523,16 +558,35 @@ def _function_scopes(root: Any) -> Iterator[tuple[Any, Any]]:
         pending.extend((child, select) for child in reversed(node.children()))
 
 
-def _argument_column_type(
-    *, column: dict[str, Any], select: Any, shapes: dict[str, dict[str, str]]
-) -> str:
+def _select_relations(
+    *, select: Any, cache: dict[int, tuple[Any, list[dict[str, Any]]]]
+) -> list[dict[str, Any]] | None:
+    """Return one select's FROM and JOIN relations, serialising each select only once."""
+
     if select is None:
-        return _UNKNOWN_TYPE
+        return None
+    cached: tuple[Any, list[dict[str, Any]]] | None = cache.get(id(select))
+    if cached is not None:
+        return cached[1]
     payload: dict[str, Any] = select.to_dict().get("select", {})
     relations: list[dict[str, Any]] = list((payload.get("from") or {}).get("expressions", []))
     relations.extend(join.get("this", {}) for join in payload.get("joins", []))
+    cache[id(select)] = (select, relations)
+    return relations
+
+
+def _argument_column_type(
+    *,
+    column: dict[str, Any],
+    relations: list[dict[str, Any]] | None,
+    shapes: dict[str, dict[str, str]],
+    folded_shapes: dict[str, dict[str, list[str]]],
+) -> str:
+    if relations is None:
+        return _UNKNOWN_TYPE
     qualifier: str | None = (column.get("table") or {}).get("name")
     name: str = str(column.get("name", {}).get("name", ""))
+    folded_name: str = name.casefold()
     candidates: list[str] = []
     for relation in relations:
         table: dict[str, Any] = relation.get("table", {})
@@ -540,12 +594,12 @@ def _argument_column_type(
         alias: str = str((table.get("alias") or {}).get("name", table_name))
         if qualifier is not None and qualifier.casefold() != alias.casefold():
             continue
-        shape: dict[str, str] | None = shapes.get(table_name)
+        shape: dict[str, list[str]] | None = _folded_shape(
+            name=table_name, shapes=shapes, folded_shapes=folded_shapes
+        )
         if shape is None:
             return _UNKNOWN_TYPE
-        candidates.extend(
-            value for key, value in shape.items() if key.casefold() == name.casefold()
-        )
+        candidates.extend(shape.get(folded_name, ()))
     return candidates[0] if len(candidates) == 1 else _UNKNOWN_TYPE
 
 
