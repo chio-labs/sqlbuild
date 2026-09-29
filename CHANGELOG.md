@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.126.1](https://github.com/chio-labs/sqlbuild/compare/v0.126.0...v0.126.1) (2026-09-29)
+
+
+### Performance Improvements
+
+* **plan:** cut plan and build planning time on large projects ([#875](https://github.com/chio-labs/sqlbuild/issues/875)) ([d6be114](https://github.com/chio-labs/sqlbuild/commit/d6be114589f75bc2d907a47938cd20aa157b8d2c))
+
 ## [0.126.0](https://github.com/chio-labs/sqlbuild/compare/v0.125.1...v0.126.0) (2026-09-28)
 
 
