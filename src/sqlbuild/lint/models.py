@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
 from sqlbuild.lint.types import LintSeverity
 
@@ -18,6 +19,15 @@ class HeaderSpan:
     kind: str
     start: int
     end: int
+
+
+@dataclass(frozen=True)
+class LintFileRole:
+    """Path-derived classification of one lint input, derived once per file."""
+
+    declaration_kind: DeclarationKind | None = None
+    in_project: bool = False
+    in_hook_directory: bool = False
 
 
 @dataclass(frozen=True)
