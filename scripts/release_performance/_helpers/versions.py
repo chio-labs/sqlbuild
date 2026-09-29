@@ -38,13 +38,19 @@ _DISTRIBUTION_VERSION: re.Pattern[str] = re.compile(
 def release_versions(*, index: dict[str, object]) -> tuple[str, ...]:
     """Return the X.Y.Z versions in a PEP 691 index that have a file that is not yanked."""
 
-    versions: set[str] = set()
-    files: list[dict[str, object]] = cast(list[dict[str, object]], index.get("files", []))
-    for entry in files:
-        match: re.Match[str] | None = _DISTRIBUTION_VERSION.match(str(entry.get("filename", "")))
-        if match is not None and not entry.get("yanked"):
-            versions.add(match.group(1))
-    return tuple(sorted(versions, key=lambda version: version_key(version=version)))
+    return _index_versions(index=index, include_yanked=False)
+
+
+def choose_baseline(
+    *, candidate: str, index: dict[str, object], tags: tuple[str, ...]
+) -> str | None:
+    """Return the highest installable or still-publishing release below the candidate."""
+
+    listed: frozenset[str] = frozenset(_index_versions(index=index, include_yanked=True))
+    publishing: tuple[str, ...] = tuple(tag for tag in tags if tag not in listed)
+    return previous_version(
+        candidate=candidate, versions=(*release_versions(index=index), *publishing)
+    )
 
 
 def previous_version(*, candidate: str, versions: tuple[str, ...]) -> str | None:
@@ -113,13 +119,13 @@ def tagged_versions(*, repo_dir: Path) -> tuple[str, ...]:
 
 
 def resolve_baseline(*, candidate: str, repo_dir: Path) -> str:
-    """Return the highest published or release-tagged version below the candidate."""
+    """Return the highest published or not-yet-published tagged release below the candidate."""
 
-    known: tuple[str, ...] = (
-        *release_versions(index=fetch_simple_index()),
-        *tagged_versions(repo_dir=repo_dir),
+    baseline: str | None = choose_baseline(
+        candidate=candidate,
+        index=fetch_simple_index(),
+        tags=tagged_versions(repo_dir=repo_dir),
     )
-    baseline: str | None = previous_version(candidate=candidate, versions=known)
     if baseline is None:
         raise ReleasePerformanceError(f"No published sqlbuild release precedes {candidate}")
     return baseline
@@ -184,6 +190,16 @@ def existing_sqb(*, venv_dir: Path) -> Path:
     """Return the sqb entry point of an existing virtual environment."""
 
     return _sqb(venv_dir=venv_dir)
+
+
+def _index_versions(*, index: dict[str, object], include_yanked: bool) -> tuple[str, ...]:
+    versions: set[str] = set()
+    files: list[dict[str, object]] = cast(list[dict[str, object]], index.get("files", []))
+    for entry in files:
+        match: re.Match[str] | None = _DISTRIBUTION_VERSION.match(str(entry.get("filename", "")))
+        if match is not None and (include_yanked or not entry.get("yanked")):
+            versions.add(match.group(1))
+    return tuple(sorted(versions, key=lambda version: version_key(version=version)))
 
 
 def _install_from_wheel_urls(*, version: str, venv_dir: Path) -> bool:

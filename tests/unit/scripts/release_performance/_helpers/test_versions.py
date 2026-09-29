@@ -3,11 +3,13 @@
 import pytest
 
 from scripts.release_performance._helpers.versions import (
+    choose_baseline,
     compatible_wheels,
     previous_version,
     release_versions,
 )
 from tests.unit.scripts.release_performance._helpers._test_types import (
+    ChooseBaselineTestCase,
     CompatibleWheelsTestCase,
     PreviousVersionTestCase,
     ReleaseVersionsTestCase,
@@ -126,6 +128,56 @@ def test_given_release_files_when_selecting_wheel_urls_then_matches_runner_platf
     )
 
     assert tuple(entry["filename"] for entry in wheels) == test_case.expected_filenames
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ChooseBaselineTestCase(
+            description="a tagged release that is still publishing is the baseline",
+            candidate="0.126.3",
+            files=(release_file(filename="sqlbuild-0.126.1.tar.gz"),),
+            tags=("0.126.1", "0.126.2"),
+            expected_baseline="0.126.2",
+        ),
+        ChooseBaselineTestCase(
+            description="a yanked release is skipped even though its tag exists",
+            candidate="0.126.3",
+            files=(
+                release_file(filename="sqlbuild-0.126.1.tar.gz"),
+                {"filename": "sqlbuild-0.126.2.tar.gz", "yanked": "broken build", "url": ""},
+            ),
+            tags=("0.126.1", "0.126.2"),
+            expected_baseline="0.126.1",
+        ),
+        ChooseBaselineTestCase(
+            description="a published release without a local tag is still a baseline",
+            candidate="0.126.3",
+            files=(
+                release_file(filename="sqlbuild-0.126.1.tar.gz"),
+                release_file(filename="sqlbuild-0.126.2.tar.gz"),
+            ),
+            tags=(),
+            expected_baseline="0.126.2",
+        ),
+        ChooseBaselineTestCase(
+            description="nothing precedes the first release",
+            candidate="0.1.0",
+            files=(release_file(filename="sqlbuild-0.1.0.tar.gz"),),
+            tags=("0.1.0",),
+            expected_baseline=None,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_index_and_release_tags_when_choosing_baseline_then_skips_yanked_releases(
+    test_case: ChooseBaselineTestCase,
+) -> None:
+    baseline: str | None = choose_baseline(
+        candidate=test_case.candidate, index={"files": list(test_case.files)}, tags=test_case.tags
+    )
+
+    assert baseline == test_case.expected_baseline
 
 
 if __name__ == "__main__":

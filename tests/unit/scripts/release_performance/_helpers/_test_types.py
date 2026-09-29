@@ -51,3 +51,12 @@ class CompatibleWheelsTestCase:
     machine: str
     system: str
     expected_filenames: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ChooseBaselineTestCase:
+    description: str
+    candidate: str
+    files: tuple[dict[str, object], ...]
+    tags: tuple[str, ...]
+    expected_baseline: str | None
