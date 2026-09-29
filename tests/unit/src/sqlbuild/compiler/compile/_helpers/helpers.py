@@ -441,3 +441,32 @@ def render_compile_diagnostics(*, project: CompiledProject) -> str:
         f"= help: {diagnostic.help}"
         for diagnostic in project.diagnostics
     )
+
+
+def write_scoped_macro_orders_project(project_dir: Path) -> None:
+    """Write a project with one global macro and one test-scoped macro."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = project_dir / "models" / "orders.sql"
+    model.parent.mkdir(parents=True)
+    model.write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id WHERE @order_filter("1")\n',
+        encoding="utf-8",
+    )
+    (project_dir / "macros").mkdir()
+    (project_dir / "macros" / "order_filter.py").write_text(
+        'def order_filter(column: str) -> str:\n    return f"{column} > 0"\n', encoding="utf-8"
+    )
+    tests_dir: Path = project_dir / "tests" / "unit"
+    (tests_dir / "_macros").mkdir(parents=True)
+    (tests_dir / "_macros" / "row_limit.py").write_text(
+        'def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8"
+    )
+    (tests_dir / "test_orders.sql").write_text(
+        "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )

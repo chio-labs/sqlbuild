@@ -70,6 +70,21 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             expected_kinds=("MODEL",),
         ),
         ScanHeadersTestCase(
+            description="unterminated header paren is not a header",
+            contents="MODEL (\n  description 'x'\nSELECT (1\n",
+            expected_kinds=(),
+        ),
+        ScanHeadersTestCase(
+            description="unterminated quote inside header is not a header",
+            contents="MODEL (\n  description 'x)\nSELECT 1\n",
+            expected_kinds=(),
+        ),
+        ScanHeadersTestCase(
+            description="trailing escape inside header quote is not a header",
+            contents="MODEL (description '\\",
+            expected_kinds=(),
+        ),
+        ScanHeadersTestCase(
             description="standard SQL backslash does not escape closing quote",
             contents="SCENARIO ();\nSELECT 'C:\\temp\\'\nTEST ();\nSELECT 1\n",
             expected_kinds=("SCENARIO", "TEST"),
@@ -117,6 +132,21 @@ def test_given_single_header_resource_when_scanning_first_only_then_body_is_not_
             description="span without terminator ends at close paren",
             contents="MODEL (\n  materialized table\n)\nSELECT 1\n",
             expected_span_text="MODEL (\n  materialized table\n)",
+        ),
+        HeaderSpanTextTestCase(
+            description="escaped quotes and quoted parens stay inside the span",
+            contents=(
+                "MODEL (\n  description 'it\\'s (open', note \"a \\\" ) b\", x ((1))\n);"
+                "\nSELECT ')'\n"
+            ),
+            expected_span_text=(
+                "MODEL (\n  description 'it\\'s (open', note \"a \\\" ) b\", x ((1))\n);"
+            ),
+        ),
+        HeaderSpanTextTestCase(
+            description="other quote kind does not close the open quote",
+            contents='TEST (name "a \' ) b")  \n ;\nSELECT 1\n',
+            expected_span_text='TEST (name "a \' ) b")  \n ;',
         ),
     ],
     ids=lambda case: case.description,

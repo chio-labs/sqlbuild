@@ -1049,3 +1049,11 @@ class TypedMacroArgumentDependencyTestCase:
     macro_file_contents: str
     sql: str
     expected_dependency_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RebindDeclarationScopeTestCase:
+    description: str
+    macro_name: str
+    expected_rebound: bool
+    private_macro_source: str | None = None
