@@ -13,6 +13,14 @@ class SourceSemanticBindingCase:
 
 
 @dataclass(frozen=True)
+class RelationStubNameCase:
+    description: str
+    stub_cte_name: str
+    expected_downstream_type: str
+    expected_ghost_column_diagnostics: frozenset[tuple[str, str]]
+
+
+@dataclass(frozen=True)
 class SemanticCorpusCase:
     description: str
     category: str

@@ -30,6 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     SemanticCorpusCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
@@ -2283,3 +2284,44 @@ def plan_reasons_and_migrations(
 
 def _query_changed(model: dict[str, Any]) -> bool:
     return model["reason"] == "query_changed"
+
+
+def write_relation_stub_project(
+    *, tmp_path: Path, stub_cte_name: str, selected_column: str
+) -> Path:
+    """Write a project whose middle model authors a CTE named like a relation stub."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="relation_stub_names",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "relation_stub_names"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                'database = "orders.duckdb"\n\n'
+                "[targets.dev]\n"
+                'schema = "main"\n'
+            ),
+            "models/orders.sql": (
+                "MODEL (materialized table);\n\nSELECT CAST(7 AS INTEGER) AS order_id\n"
+            ),
+            "models/order_status.sql": (
+                "MODEL (materialized table);\n\n"
+                f"WITH {stub_cte_name} AS (\n"
+                "  SELECT 'pending' AS order_id, 'pending' AS ghost_status\n"
+                ")\n"
+                f'SELECT {selected_column} FROM __ref("orders")\n'
+            ),
+            "models/next_order.sql": (
+                "MODEL (\n"
+                "  materialized table,\n"
+                "  contract enforced,\n"
+                "  columns (order_id (type INTEGER), next_order_id (type INTEGER)),\n"
+                ");\n\n"
+                "SELECT order_id, order_id + 1 AS next_order_id\n"
+                'FROM __ref("order_status")\n'
+            ),
+        },
+    )
