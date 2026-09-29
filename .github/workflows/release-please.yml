@@ -19,6 +19,10 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-24.04
+    outputs:
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      release_branch: ${{ steps.release_branch.outputs.name }}
+      release_pr: ${{ steps.release_branch.outputs.pr }}
     steps:
       - name: Create delivery token
         id: delivery-token
@@ -56,11 +60,13 @@ jobs:
           RELEASE_PRS: ${{ steps.release.outputs.prs }}
         run: |
           release_branch="$(jq -r '.[0].headBranchName // empty' <<< "${RELEASE_PRS}")"
-          if [[ -z "${release_branch}" ]]; then
-            echo "Release Please reported a created PR without a head branch" >&2
+          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
+          if [[ -z "${release_branch}" || -z "${release_pr}" ]]; then
+            echo "Release Please reported a created PR without a head branch or number" >&2
             exit 1
           fi
           echo "name=${release_branch}" >> "${GITHUB_OUTPUT}"
+          echo "pr=${release_pr}" >> "${GITHUB_OUTPUT}"
 
       - uses: actions/checkout@v4
         if: steps.release.outputs.prs_created == 'true'
@@ -99,84 +105,114 @@ jobs:
           git commit -m "chore: refresh release lockfiles"
           git push origin "HEAD:${RELEASE_BRANCH}"
 
+  # A separate job so that "Re-run failed jobs" re-dispatches and re-evaluates every trusted check
+  # and repaints their statuses and Verify on the current head of the release branch.
+  release-checks:
+    name: Release pull request checks
+    needs: release-please
+    if: needs.release-please.outputs.prs_created == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.release_branch }}
+
       - name: Run release pull request checks
-        if: steps.release.outputs.prs_created == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_BRANCH: ${{ steps.release_branch.outputs.name }}
-          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+          RELEASE_BRANCH: ${{ needs.release-please.outputs.release_branch }}
+          RELEASE_PR: ${{ needs.release-please.outputs.release_pr }}
+          REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
-          if [[ -z "${release_pr}" ]]; then
-            echo "Release Please reported a created PR without a number" >&2
-            exit 1
-          fi
           head_sha="$(git rev-parse HEAD)"
-
-          workflows=(pull-request-metadata.yml version-guard.yml)
-          contexts=("Pull Request Metadata" "Block automatic 1.0 releases")
-          for context in "${contexts[@]}"; do
+          recovery="rerun the failed Release Please job to re-check"
+          post_status() {
             gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-              -f state=pending -f "context=${context}" \
-              -f description="Trusted release check is running" >/dev/null
-          done
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-            -f state=pending -f context=Verify \
-            -f description="Validating trusted release metadata" >/dev/null
+              -f "state=$1" -f "context=$2" -f "description=$3" ${4:+-f "target_url=$4"} >/dev/null
+          }
+          fail_verify() {
+            post_status failure Verify "$1; ${recovery}" "${2:-}"
+            {
+              echo "### Release pull request checks failed"
+              echo
+              echo "$1. After fixing or confirming a transient cause, use **Re-run failed jobs**"
+              echo "on this workflow run: it re-dispatches every trusted check and repaints Verify."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          }
 
+          # Verify is the required status, so it only succeeds after every trusted check passes,
+          # including the same-runner comparison with the previous release. Each dispatched run
+          # carries this attempt's request id in its run name and is matched on it exactly.
+          workflows=(pull-request-metadata.yml version-guard.yml release-performance.yml)
+          contexts=("Pull Request Metadata" "Block automatic 1.0 releases" "Release performance")
+          for context in "${contexts[@]}"; do
+            post_status pending "${context}" "Trusted release check is running"
+          done
+          post_status pending Verify "Validating trusted release metadata and performance"
+
+          dispatched_after="$(date -u -d '-2 minutes' +%Y-%m-%dT%H:%M:%SZ)"
           gh workflow run pull-request-metadata.yml --ref "${RELEASE_BRANCH}" \
-            -f "pr_number=${release_pr}"
-          gh workflow run version-guard.yml --ref "${RELEASE_BRANCH}"
+            -f "pr_number=${RELEASE_PR}" -f "request_id=${REQUEST_ID}"
+          gh workflow run version-guard.yml --ref "${RELEASE_BRANCH}" \
+            -f "request_id=${REQUEST_ID}"
+          gh workflow run release-performance.yml --ref "${RELEASE_BRANCH}" \
+            -f "request_id=${REQUEST_ID}"
           for index in "${!workflows[@]}"; do
             workflow="${workflows[${index}]}"
             context="${contexts[${index}]}"
             run_id=""
             for _ in {1..30}; do
               run_id="$(gh run list --workflow "${workflow}" --branch "${RELEASE_BRANCH}" \
-                --event workflow_dispatch --limit 20 --json databaseId,headSha \
-                --jq ".[] | select(.headSha == \"${head_sha}\") | .databaseId" | head -n 1)"
+                --event workflow_dispatch --limit 50 \
+                --json databaseId,headSha,displayTitle,createdAt \
+                --jq ".[] | select(.headSha == \"${head_sha}\"
+                  and (.displayTitle | endswith(\" [${REQUEST_ID}]\"))
+                  and .createdAt >= \"${dispatched_after}\") | .databaseId" | head -n 1)"
               [[ -n "${run_id}" ]] && break
               sleep 2
             done
             if [[ -z "${run_id}" ]]; then
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-                -f state=failure -f "context=${context}" \
-                -f description="Trusted release check did not start" >/dev/null
-              exit 1
+              post_status failure "${context}" "Trusted release check did not start"
+              fail_verify "${context} did not start"
             fi
             run_url="$(gh run view "${run_id}" --json url --jq .url)"
-            if gh run watch "${run_id}" --exit-status; then
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-                -f state=success -f "context=${context}" -f target_url="${run_url}" \
-                -f description="Trusted release check passed" >/dev/null
+            if gh run watch "${run_id}" --exit-status --interval 30; then
+              post_status success "${context}" "Trusted release check passed" "${run_url}"
             else
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-                -f state=failure -f "context=${context}" -f target_url="${run_url}" \
-                -f description="Trusted release check failed" >/dev/null
-              exit 1
+              post_status failure "${context}" "Trusted release check failed" "${run_url}"
+              fail_verify "${context} failed" "${run_url}"
             fi
           done
 
-          unexpected_files="$(gh pr view "${release_pr}" --repo "${GITHUB_REPOSITORY}" \
+          unexpected_files="$(gh pr view "${RELEASE_PR}" --repo "${GITHUB_REPOSITORY}" \
             --json files --jq '[.files[].path | select(. != ".release-please-manifest.json" and . != "CHANGELOG.md" and . != "pyproject.toml" and . != "uv.lock" and . != "Cargo.lock" and . != "crates/sqlbuild-rules-native/Cargo.toml")] | join("\n")')"
           if [[ -n "${unexpected_files}" ]]; then
             echo "Release pull request contains non-metadata changes:" >&2
             echo "${unexpected_files}" >&2
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-              -f state=failure -f context=Verify \
-              -f description="Release pull request contains non-metadata changes" >/dev/null
+            post_status failure Verify "Release pull request contains non-metadata changes"
             exit 1
           fi
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
-            -f state=success -f context=Verify \
-            -f description="Product changes passed verification before release metadata update" >/dev/null
+          post_status success Verify \
+            "Product changes passed verification before release metadata update"
+
+      # The checks can wait longer than an installation token lives, so mint one just before use.
+      - name: Create delivery token
+        id: delivery-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CHIO_DELIVERY_APP_ID }}
+          private-key: ${{ secrets.CHIO_DELIVERY_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
 
       - name: Enable release pull request auto-merge
-        if: steps.release.outputs.prs_created == 'true'
         env:
           # The delivery app merges, so the resulting push to main starts the tag and publish runs.
           GH_TOKEN: ${{ steps.delivery-token.outputs.token }}
-          RELEASE_PRS: ${{ steps.release.outputs.prs }}
-        run: |
-          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
-          gh pr merge "${release_pr}" --repo "${GITHUB_REPOSITORY}" --auto --squash
+          RELEASE_PR: ${{ needs.release-please.outputs.release_pr }}
+        run: gh pr merge "${RELEASE_PR}" --repo "${GITHUB_REPOSITORY}" --auto --squash

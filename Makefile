@@ -121,6 +121,7 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \
 	tests/e2e/scripts/compile_performance_ratio \
+	tests/e2e/scripts/release_performance \
 	tests/e2e/src/sqlbuild/cli/commands/main/adapters \
 	tests/e2e/src/sqlbuild/cli/commands/main/audit \
 	tests/e2e/src/sqlbuild/cli/commands/main/bigquery \

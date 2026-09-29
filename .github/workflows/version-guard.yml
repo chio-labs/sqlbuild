@@ -1,4 +1,7 @@
 name: Version Guard
+run-name: >-
+  ${{ inputs.request_id && format('{0} [{1}]', github.workflow, inputs.request_id)
+  || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -8,6 +11,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: "Release Please attempt that dispatched this run; leave empty for manual runs"
+        required: false
+        type: string
 
 permissions:
   contents: read

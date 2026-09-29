@@ -735,21 +735,28 @@ INSPECTION_BENCHMARK_MODEL_COUNT: int = (
 )
 
 
-def prepare_inspection_benchmark_project(*, project_dir: Path) -> None:
-    """Write and compile the shared-dependency benchmark, then warm lineage and scope caches."""
+def write_inspection_benchmark_project(*, project_dir: Path, model_count: int = 3_000) -> None:
+    """Write the semantic benchmark scaled to model_count models plus the shared lattice."""
 
+    scale: float = model_count / 3_000
     write_semantic_compile_project(
         project_dir=project_dir,
-        model_count=3_000,
-        source_count=713,
-        seed_count=141,
-        function_count=71,
-        macro_count=37,
-        test_count=2_945,
-        audit_count=5_056,
+        model_count=model_count,
+        source_count=max(1, round(713 * scale)),
+        seed_count=max(1, round(141 * scale)),
+        function_count=max(1, round(71 * scale)),
+        macro_count=max(1, round(37 * scale)),
+        test_count=max(1, round(2_945 * scale)),
+        audit_count=max(1, round(5_056 * scale)),
         shared_diamond_layers=INSPECTION_DIAMOND_LAYERS,
         shared_diamond_width=INSPECTION_DIAMOND_WIDTH,
     )
+
+
+def prepare_inspection_benchmark_project(*, project_dir: Path) -> None:
+    """Write and compile the shared-dependency benchmark, then warm lineage and scope caches."""
+
+    write_inspection_benchmark_project(project_dir=project_dir)
     compiled: InspectionCommandMeasurement = run_fresh_process_inspection_command(
         project_dir=project_dir,
         label="inspection-compile",
@@ -2190,16 +2197,19 @@ _BUILD_BENCHMARK_CONNECTION: str = '\n[connection]\ndatabase = "benchmark.duckdb
 _BUILD_BENCHMARK_EDIT: tuple[str, str] = ("amount + 0 WHEN", "amount + 100 WHEN")
 
 
-def prepare_build_benchmark_project(*, project_dir: Path) -> None:
-    """Write a 1,000-model benchmark without tests or audits and warm its compile cache."""
+def write_build_benchmark_project(
+    *, project_dir: Path, model_count: int = BUILD_BENCHMARK_MODEL_COUNT
+) -> None:
+    """Write the build benchmark without tests or audits, scaled to model_count models."""
 
+    scale: float = model_count / BUILD_BENCHMARK_MODEL_COUNT
     write_semantic_compile_project(
         project_dir=project_dir,
-        model_count=BUILD_BENCHMARK_MODEL_COUNT,
-        source_count=238,
-        seed_count=47,
-        function_count=24,
-        macro_count=12,
+        model_count=model_count,
+        source_count=max(1, round(238 * scale)),
+        seed_count=max(1, round(47 * scale)),
+        function_count=max(1, round(24 * scale)),
+        macro_count=max(1, round(12 * scale)),
         test_count=0,
         audit_count=0,
     )
@@ -2207,6 +2217,12 @@ def prepare_build_benchmark_project(*, project_dir: Path) -> None:
     config.write_text(
         config.read_text(encoding="utf-8") + _BUILD_BENCHMARK_CONNECTION, encoding="utf-8"
     )
+
+
+def prepare_build_benchmark_project(*, project_dir: Path) -> None:
+    """Write a 1,000-model benchmark without tests or audits and warm its compile cache."""
+
+    write_build_benchmark_project(project_dir=project_dir)
     _ = run_fresh_process_inspection_command(
         project_dir=project_dir,
         label="build-benchmark-compile",

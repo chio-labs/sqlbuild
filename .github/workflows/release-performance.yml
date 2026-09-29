@@ -1,0 +1,84 @@
+name: Release Performance
+run-name: >-
+  ${{ inputs.request_id && format('{0} [{1}]', github.workflow, inputs.request_id)
+  || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+
+# Release Please dispatches this workflow for each release pull request and reports its result
+# through the required Verify status. Pull requests that change the comparison itself run it too.
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: "Published sqlbuild version to compare against (default: the release before the candidate)"
+        required: false
+        type: string
+      request_id:
+        description: "Release Please attempt that dispatched this run; leave empty for manual runs"
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/release-performance.yml
+      - scripts/compare_release_performance.py
+      - scripts/release_performance/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-performance-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  compare:
+    name: Compare with the previous release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Release tags identify the previous release before its wheels reach PyPI.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Build candidate wheel
+        run: uv build --wheel --out-dir "${RUNNER_TEMP}/candidate"
+      - name: Compare candidate and previous release on this runner
+        env:
+          BASELINE: ${{ inputs.baseline }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          if [[ -n "${REQUEST_ID}" && -n "${BASELINE}" ]]; then
+            echo "Release Please runs always compare with the previous release; drop baseline" >&2
+            exit 1
+          fi
+          wheels=("${RUNNER_TEMP}"/candidate/sqlbuild-*.whl)
+          args=(
+            --candidate "${wheels[0]}"
+            --work-dir "${RUNNER_TEMP}/release-performance"
+            --output "${RUNNER_TEMP}/release-performance.json"
+          )
+          if [[ -n "${BASELINE}" ]]; then
+            args+=(--baseline "${BASELINE}")
+          fi
+          uv run python -m scripts.compare_release_performance "${args[@]}"
+      - name: Upload comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-performance.json
+          if-no-files-found: warn
+          retention-days: 90

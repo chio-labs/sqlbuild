@@ -15,7 +15,7 @@ def comparison_markdown(*, comparison: CompileComparison, runs: int, max_ratio: 
     lines: list[str] = [
         f"### {comparison.kind} {comparison.models} models: head vs base (same runner)",
         "",
-        f"Runner CPU: {_cpu_model()}; {runs} alternating runs each; limit {max_ratio:.2f}x.",
+        f"Runner CPU: {cpu_model()}; {runs} alternating runs each; limit {max_ratio:.2f}x.",
         "",
         "| Metric | Base | Head | Ratio |",
         "|---|---:|---:|---:|",
@@ -41,7 +41,9 @@ def append_summary(*, path: Path | None, markdown: str) -> None:
         summary.write(markdown + "\n")
 
 
-def _cpu_model() -> str:
+def cpu_model() -> str:
+    """Return the runner CPU model name."""
+
     cpuinfo: Path = Path("/proc/cpuinfo")
     if cpuinfo.exists():
         for line in cpuinfo.read_text(encoding="utf-8").splitlines():

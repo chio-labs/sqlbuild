@@ -84,3 +84,40 @@ empty warehouse once per module, with wall and peak-RSS limits. Its existing-sta
 built project, change the queries of a few models (and rename one table in the second case so
 rename discovery matches it against stored fingerprints), and bound the next `sqb plan --json`.
 All cases carry `models_3000` identifiers so they run only in the 3,000-model fresh-process job.
+
+## Release comparison with the previous release
+
+Fixed ceilings miss gradual creep and slowdowns that stay under a loose limit, so every release
+pull request also compares the candidate with the previous published release on the same runner.
+`scripts/compare_release_performance.py` installs the candidate wheel and the baseline from PyPI
+into separate Python 3.12 environments, generates the inspection and build benchmarks above once,
+and gives each version its own copy with compile, lineage and scope caches warmed by that version.
+It then runs each command alternately for baseline and candidate, three times each, and compares
+the medians of wall time, CPU time (user+sys) and peak RSS:
+
+- warm and uncached `sqb compile --json`, `sqb plan --json`, `sqb dag --json` and
+  `sqb scope --json` on the 3,000-model inspection benchmark;
+- `sqb lineage` downstream from the hub, upstream from the rollup, and the upstream column trace of
+  `shared_orders_rollup.amount`;
+- `sqb build` of the 1,000-model build benchmark from an empty warehouse, restored before each run.
+
+A command fails when its candidate median exceeds the baseline by more than 25% and by more than
+0.5 s (wall and CPU) or 32 MiB (peak RSS); the limits live in
+`scripts/release_performance/constants.py`. The baseline defaults to the highest version below
+the candidate that is installable from PyPI, or release-tagged but not yet on PyPI; yanked releases
+never count. A freshly tagged baseline is awaited until its wheels
+are on PyPI, installing from the uncompressed simple index's wheel URL when the CDN still lags. A
+command that needs a feature newer than a compared version declares `minimum_version` and appears
+as skipped, with the reason, in the job summary; any other failure of either version fails the
+check.
+
+Release Please dispatches `.github/workflows/release-performance.yml` with the metadata and version
+checks and posts the required `Verify` status only after it passes, so a regressed release pull
+request cannot auto-merge. Each dispatch carries a request id in its run name, and Release Please
+waits only on the runs it started. After a transient failure, use **Re-run failed jobs** on the
+Release Please run: it re-dispatches all three checks and repaints `Verify` on the current head.
+Run the comparison manually with an optional `baseline` input, or locally:
+
+```bash
+uv run python -m scripts.compare_release_performance --candidate 0.121.0 --baseline 0.119.1
+```
