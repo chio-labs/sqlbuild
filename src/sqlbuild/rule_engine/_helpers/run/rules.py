@@ -39,6 +39,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     evaluate_native,
     finalize_native_findings,
     native_catalogue,
+    rules_cache_exists,
 )
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
@@ -126,6 +127,7 @@ def evaluate_rules(
             catalogue=catalogue,
             dialect=dialect,
             defer_suppressions=True,
+            rules_cache_present_at_start=rules_cache_exists(resolved_project_dir),
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
