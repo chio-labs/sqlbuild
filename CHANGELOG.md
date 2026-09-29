@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.126.3](https://github.com/chio-labs/sqlbuild/compare/v0.126.2...v0.126.3) (2026-09-29)
+
+
+### Bug Fixes
+
+* keep stub-named CTEs from capturing references and the layered benchmark compiling ([#880](https://github.com/chio-labs/sqlbuild/issues/880)) ([5adf6a4](https://github.com/chio-labs/sqlbuild/commit/5adf6a4e202b7a045ceea893de9ec1f88c09fd5d))
+
 ## [0.126.2](https://github.com/chio-labs/sqlbuild/compare/v0.126.1...v0.126.2) (2026-09-29)
 
 
