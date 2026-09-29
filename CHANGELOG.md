@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.126.5](https://github.com/chio-labs/sqlbuild/compare/v0.126.4...v0.126.5) (2026-09-29)
+
+
+### Performance Improvements
+
+* **rules:** reuse compile front-end work in lint and SQL rules ([#884](https://github.com/chio-labs/sqlbuild/issues/884)) ([ba67825](https://github.com/chio-labs/sqlbuild/commit/ba67825db0d2020b9a6e2dc5572d3b6ae613632c))
+
 ## [0.126.4](https://github.com/chio-labs/sqlbuild/compare/v0.126.3...v0.126.4) (2026-09-29)
 
 
