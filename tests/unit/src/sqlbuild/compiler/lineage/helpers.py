@@ -90,3 +90,30 @@ def make_compiled_seed(*, name: str, columns: tuple[str, ...]) -> CompiledSeed:
 
 def edge_label(source_name: str, source_column: str, target_name: str, target_column: str) -> str:
     return f"{source_name}.{source_column}->{target_name}.{target_column}"
+
+
+def make_chain_models(
+    *, chain_length: int, unrelated_model_count: int
+) -> tuple[CompiledModel, ...]:
+    root: CompiledModel = make_compiled_model(
+        name="orders_0",
+        query_sql="SELECT 1 AS order_id, 10 AS amount",
+        inferred_columns=("order_id", "amount"),
+    )
+    chain: tuple[CompiledModel, ...] = tuple(
+        make_compiled_model(
+            name=f"orders_{index}",
+            query_sql=f'SELECT order_id, amount + 1 AS amount FROM __ref("orders_{index - 1}")',
+            inferred_columns=("order_id", "amount"),
+        )
+        for index in range(1, chain_length)
+    )
+    unrelated: tuple[CompiledModel, ...] = tuple(
+        make_compiled_model(
+            name=f"inventory_{index}",
+            query_sql="SELECT 1 AS product_id, 5 AS quantity",
+            inferred_columns=("product_id", "quantity"),
+        )
+        for index in range(unrelated_model_count)
+    )
+    return (root, *chain, *unrelated)

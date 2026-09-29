@@ -85,6 +85,7 @@ def build_rich_project_column_lineage(
         return None
 
     schema: dict[str, dict[str, str]] = _build_schema_mapping(project)
+    polyglot_tables: dict[str, dict[str, object]] = _polyglot_schema_tables(schema)
     model_results: dict[str, ModelColumnLineage] = {}
     collapsed_edges: list[ColumnLineageEdge] = []
 
@@ -94,6 +95,7 @@ def build_rich_project_column_lineage(
         result: ModelColumnLineage | None = _build_polyglot_model_column_lineage(
             model=model,
             schema=schema,
+            polyglot_tables=polyglot_tables,
             dialect=dialect,
         )
         if result is None:
@@ -123,6 +125,7 @@ def _build_polyglot_model_column_lineage(
     *,
     model: CompiledModel,
     schema: dict[str, dict[str, str]],
+    polyglot_tables: dict[str, dict[str, object]],
     dialect: str | None,
 ) -> ModelColumnLineage | None:
     normalized_sql: str
@@ -137,7 +140,10 @@ def _build_polyglot_model_column_lineage(
             normalized_sql,
             {
                 "dialect": _polyglot_dialect(dialect),
-                "schema": _polyglot_schema(schema),
+                "schema": _referenced_polyglot_schema(
+                    polyglot_tables=polyglot_tables,
+                    physical_resources=physical_resources,
+                ),
             },
         )
     except polyglot_module.PolyglotError as error:
@@ -292,14 +298,29 @@ def _star_expanded_columns(analysis: dict[str, Any]) -> frozenset[str]:
     return frozenset(expanded)
 
 
-def _polyglot_schema(schema: dict[str, dict[str, str]]) -> dict[str, object]:
-    tables: list[dict[str, object]] = []
-    for table_name, columns in sorted(schema.items()):
+def _polyglot_schema_tables(schema: dict[str, dict[str, str]]) -> dict[str, dict[str, object]]:
+    tables: dict[str, dict[str, object]] = {}
+    for table_name, columns in schema.items():
         table_columns: list[dict[str, str]] = []
         for column_name, column_type in sorted(columns.items()):
             table_columns.append({"name": column_name, "type": column_type or "UNKNOWN"})
-        tables.append({"name": table_name, "columns": table_columns})
-    return {"tables": tables}
+        tables[table_name] = {"name": table_name, "columns": table_columns}
+    return tables
+
+
+def _referenced_polyglot_schema(
+    *,
+    polyglot_tables: dict[str, dict[str, object]],
+    physical_resources: tuple[PhysicalResource, ...],
+) -> dict[str, object]:
+    referenced: set[str] = {resource.physical_name for resource in physical_resources}
+    return {
+        "tables": [
+            polyglot_tables[table_name]
+            for table_name in sorted(referenced)
+            if table_name in polyglot_tables
+        ]
+    }
 
 
 def _polyglot_dialect(dialect: str | TypeDialect | None) -> PolyglotAnalysisDialect:

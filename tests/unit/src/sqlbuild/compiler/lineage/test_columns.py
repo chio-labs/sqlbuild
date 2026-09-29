@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -11,6 +12,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage._helpers import rich_columns
+from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ColumnLineage, ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import (
@@ -18,14 +21,17 @@ from sqlbuild.compiler.lineage.types import (
     ColumnLineageMode,
     ColumnTransformKind,
 )
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from tests.unit.src.sqlbuild.compiler.lineage._test_types import (
     ColumnLineageAnalyzerTestCase,
     ExpectedCountTestCase,
     ProjectLineageGraphTestCase,
+    RichLineageAnalysisScalingTestCase,
     SqlAnalysisDisabledLineageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
     edge_label,
+    make_chain_models,
     make_compiled_model,
     make_compiled_project,
     make_compiled_seed,
@@ -653,3 +659,78 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
     result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert (result is None) is test_case.expected_result_is_none
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RichLineageAnalysisScalingTestCase(
+            description="builds the schema once and analyses each traced model against its refs",
+            chain_length=4,
+            unrelated_model_counts=(0, 250),
+            expected_schema_builds=1,
+            expected_analysis_calls=4,
+            expected_schema_tables_per_call=(
+                (),
+                ("__sqlbuild_model__orders_0",),
+                ("__sqlbuild_model__orders_1",),
+                ("__sqlbuild_model__orders_2",),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unrelated_models_when_tracing_rich_lineage_then_analysis_work_stays_linear(
+    test_case: RichLineageAnalysisScalingTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    polyglot_module: Any = import_polyglot_sql()
+    analyze_query: Any = polyglot_module.analyze_query
+    schema_builds: list[CompiledProject] = []
+    analysed_tables: list[tuple[str, ...]] = []
+
+    def counting_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]:
+        schema_builds.append(project)
+        return _build_schema_mapping(project)
+
+    def recording_analyze_query(sql: str, options: dict[str, Any]) -> object:
+        analysed_tables.append(tuple(table["name"] for table in options["schema"]["tables"]))
+        return analyze_query(sql, options)
+
+    monkeypatch.setattr(rich_columns, "_build_schema_mapping", counting_schema_mapping)
+    monkeypatch.setattr(polyglot_module, "analyze_query", recording_analyze_query)
+    chain_names: frozenset[str] = frozenset(
+        f"orders_{index}" for index in range(test_case.chain_length)
+    )
+    edges_by_project_size: list[tuple[str, ...]] = []
+    for unrelated_model_count in test_case.unrelated_model_counts:
+        schema_builds.clear()
+        analysed_tables.clear()
+        project: CompiledProject = make_compiled_project(
+            models=make_chain_models(
+                chain_length=test_case.chain_length,
+                unrelated_model_count=unrelated_model_count,
+            )
+        )
+
+        result: ProjectColumnLineage | None = build_project_column_lineage(
+            project=project, model_names=chain_names
+        )
+
+        assert result is not None
+        assert len(schema_builds) == test_case.expected_schema_builds
+        assert len(analysed_tables) == test_case.expected_analysis_calls
+        assert tuple(analysed_tables) == test_case.expected_schema_tables_per_call
+        edges_by_project_size.append(
+            tuple(
+                edge_label(
+                    edge.source.resource_name,
+                    edge.source.column_name,
+                    edge.target.resource_name,
+                    edge.target.column_name,
+                )
+                for edge in result.edges
+            )
+        )
+    assert len(set(edges_by_project_size)) == 1
+    assert "orders_2.amount->orders_3.amount" in edges_by_project_size[0]
