@@ -1,4 +1,7 @@
 name: Release Performance
+run-name: >-
+  ${{ inputs.request_id && format('{0} [{1}]', github.workflow, inputs.request_id)
+  || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 
 # Release Please dispatches this workflow for each release pull request and reports its result
 # through the required Verify status. Pull requests that change the comparison itself run it too.
@@ -7,6 +10,10 @@ on:
     inputs:
       baseline:
         description: "Published sqlbuild version to compare against (default: the release before the candidate)"
+        required: false
+        type: string
+      request_id:
+        description: "Release Please attempt that dispatched this run; leave empty for manual runs"
         required: false
         type: string
   pull_request:
@@ -51,7 +58,12 @@ jobs:
       - name: Compare candidate and previous release on this runner
         env:
           BASELINE: ${{ inputs.baseline }}
+          REQUEST_ID: ${{ inputs.request_id }}
         run: |
+          if [[ -n "${REQUEST_ID}" && -n "${BASELINE}" ]]; then
+            echo "Release Please runs always compare with the previous release; drop baseline" >&2
+            exit 1
+          fi
           wheels=("${RUNNER_TEMP}"/candidate/sqlbuild-*.whl)
           args=(
             --candidate "${wheels[0]}"

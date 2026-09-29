@@ -103,8 +103,9 @@ the medians of wall time, CPU time (user+sys) and peak RSS:
 
 A command fails when its candidate median exceeds the baseline by more than 25% and by more than
 0.5 s (wall and CPU) or 32 MiB (peak RSS); the limits live in
-`scripts/release_performance/constants.py`. The baseline defaults to the highest published or
-release-tagged version below the candidate. A freshly tagged baseline is awaited until its wheels
+`scripts/release_performance/constants.py`. The baseline defaults to the highest version below
+the candidate that is installable from PyPI, or release-tagged but not yet on PyPI; yanked releases
+never count. A freshly tagged baseline is awaited until its wheels
 are on PyPI, installing from the uncompressed simple index's wheel URL when the CDN still lags. A
 command that needs a feature newer than a compared version declares `minimum_version` and appears
 as skipped, with the reason, in the job summary; any other failure of either version fails the
@@ -112,7 +113,10 @@ check.
 
 Release Please dispatches `.github/workflows/release-performance.yml` with the metadata and version
 checks and posts the required `Verify` status only after it passes, so a regressed release pull
-request cannot auto-merge. Run it manually with an optional `baseline` input, or locally:
+request cannot auto-merge. Each dispatch carries a request id in its run name, and Release Please
+waits only on the runs it started. After a transient failure, use **Re-run failed jobs** on the
+Release Please run: it re-dispatches all three checks and repaints `Verify` on the current head.
+Run the comparison manually with an optional `baseline` input, or locally:
 
 ```bash
 uv run python -m scripts.compare_release_performance --candidate 0.121.0 --baseline 0.119.1
