@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
     build_declaration_scope,
+    rebind_declaration_scope,
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
@@ -40,8 +41,9 @@ def build_sql_expansion_context(
     cli_vars: dict[str, object] | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
     declaration_scope: DeclarationScopeBuild | None = None,
+    static_declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext:
-    """Assemble project vars, macros and declarations for SQL expansion."""
+    """Assemble SQL expansion inputs; a static scope lends only its index to private macros."""
 
     effective_discovered_inputs: DiscoveredProjectInputs = (
         discovered_inputs
@@ -55,7 +57,7 @@ def build_sql_expansion_context(
         cli_vars={} if cli_vars is None else cli_vars,
     )
     scope: DeclarationScopeBuild = declaration_scope or _build_declaration_scope(
-        discovered_inputs=effective_discovered_inputs
+        discovered_inputs=effective_discovered_inputs, static_scope=static_declaration_scope
     )
     loaded_macros: dict[str, LoadedMacro] = scope.loaded_macros
     enums: dict[str, EnumDeclaration]
@@ -105,9 +107,16 @@ def build_sql_expansion_context(
 
 
 def _build_declaration_scope(
-    *, discovered_inputs: DiscoveredProjectInputs
+    *, discovered_inputs: DiscoveredProjectInputs, static_scope: DeclarationScopeBuild | None
 ) -> DeclarationScopeBuild:
-    return build_declaration_scope(
-        discovered_inputs=discovered_inputs,
-        loaded_macros=load_project_macros(discovered_inputs.macro_files),
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    rebound: DeclarationScopeBuild | None = (
+        None
+        if static_scope is None
+        else rebind_declaration_scope(
+            scope=static_scope, discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
+        )
+    )
+    return rebound or build_declaration_scope(
+        discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
     )

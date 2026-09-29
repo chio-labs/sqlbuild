@@ -8,10 +8,7 @@ from pathlib import Path
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
-from sqlbuild.compiler.compile.constants import (
-    HOOK_DIRECTORY_NAME,
-    MACRO_TOKEN,
-)
+from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with_spans
 from sqlbuild.compiler.compile.main.sql_expansion_context import build_sql_expansion_context
@@ -24,9 +21,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.main.named_declaration_role_kind import (
-    named_declaration_role_kind,
-)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint._helpers.sqlbuild_tokens import (
@@ -37,7 +31,7 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import (
 )
 from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
 from sqlbuild.lint.exceptions import ProjectCompileError
-from sqlbuild.lint.models import InterpolationSite, LintBody
+from sqlbuild.lint.models import InterpolationSite, LintBody, LintFileRole
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -89,6 +83,7 @@ def build_lint_expansion_context(
     value_renderer: TypedSqlValueRenderer | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
     declaration_scope: DeclarationScopeBuild | None = None,
+    static_declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext:
     """Build the expansion context, reporting compile failures as lint failures."""
 
@@ -111,6 +106,7 @@ def build_lint_expansion_context(
             discovered_inputs=effective_discovered_inputs,
             value_renderer=effective_renderer,
             declaration_scope=declaration_scope,
+            static_declaration_scope=static_declaration_scope,
         )
     except (AdapterUserError, CompileInputError, DiscoveryError) as error:
         raise ProjectCompileError(
@@ -134,7 +130,7 @@ def _resolve_value_renderer(
 
 def prepare_lint_body(
     *,
-    project_dir: Path,
+    role: LintFileRole,
     file_path: Path,
     contents: str,
     body_range: tuple[int, int],
@@ -153,11 +149,11 @@ def prepare_lint_body(
     authored_body: str = contents[body_start:body_end]
     pre_expansion_sites: tuple[InterpolationSite, ...] = ()
     expansion_input: str = authored_body
-    if _is_generic_audit_path(file_path=file_path, project_dir=project_dir):
+    if _is_generic_audit_path(role=role):
         expansion_input, pre_expansion_sites = neutralize_generic_audit_parameters(
             body=authored_body
         )
-    elif _is_sql_hook_path(file_path=file_path, project_dir=project_dir):
+    elif _is_sql_hook_path(role=role):
         expansion_input, pre_expansion_sites = neutralize_context_interpolation(body=authored_body)
     expanded: str
     expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
@@ -232,19 +228,13 @@ def prepare_lint_body(
     )
 
 
-def _is_generic_audit_path(*, file_path: Path, project_dir: Path) -> bool:
+def _is_generic_audit_path(*, role: LintFileRole) -> bool:
     """Return whether a lint input is an authored generic-audit definition."""
 
-    return (
-        file_path.is_relative_to(project_dir)
-        and named_declaration_role_kind(relative_path=file_path.relative_to(project_dir))
-        is DeclarationKind.AUDIT
-    )
+    return role.in_project and role.declaration_kind is DeclarationKind.AUDIT
 
 
-def _is_sql_hook_path(*, file_path: Path, project_dir: Path) -> bool:
-    return file_path.is_relative_to(project_dir / HOOK_DIRECTORY_NAME) or (
-        file_path.is_relative_to(project_dir)
-        and named_declaration_role_kind(relative_path=file_path.relative_to(project_dir))
-        is DeclarationKind.SQL_HOOK
+def _is_sql_hook_path(*, role: LintFileRole) -> bool:
+    return role.in_hook_directory or (
+        role.in_project and role.declaration_kind is DeclarationKind.SQL_HOOK
     )

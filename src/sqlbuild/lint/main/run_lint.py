@@ -15,13 +15,20 @@ from sqlbuild.compiler.scopes.constants import (
     LOCAL_DECLARATION_DIRECTORIES,
 )
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
-from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
+from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role, scan_headers
 from sqlbuild.lint._helpers.native import external_identifiers_for_headers, lint_native_headers
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.constants import HEADER_KIND_SCENARIO, HEADER_KIND_TEST
-from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
+from sqlbuild.lint.models import (
+    HeaderSpan,
+    LintBody,
+    LintConfig,
+    LintFileRole,
+    LintRunResult,
+    LintViolation,
+)
 
 
 def run_lint(
@@ -52,7 +59,8 @@ def run_lint(
     file_path: Path
     contents: str
     for file_path, contents in sorted(files.items()):
-        relative_parts: tuple[str, ...] = file_path.relative_to(project_dir).parts
+        relative_path: Path = file_path.relative_to(project_dir)
+        relative_parts: tuple[str, ...] = relative_path.parts
         declaration_directories: frozenset[str] = (
             INHERITED_DECLARATION_DIRECTORIES
             | LOCAL_DECLARATION_DIRECTORIES
@@ -83,7 +91,8 @@ def run_lint(
                     context=context,
                     dialect=config.dialect,
                     project_dir=project_dir,
-                    allows_dynamic_output_star=file_path.resolve() in dynamic_output_paths,
+                    relative_path=relative_path,
+                    dynamic_output_paths=dynamic_output_paths,
                     compiled_expansions=compiled_expansions,
                 )
             )
@@ -130,10 +139,17 @@ def _prepared_bodies(
     context: SqlExpansionContext,
     dialect: str,
     project_dir: Path,
-    allows_dynamic_output_star: bool,
+    relative_path: Path,
+    dynamic_output_paths: frozenset[Path],
     compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
 ) -> tuple[LintBody, ...]:
     bodies: list[LintBody] = []
+    role: LintFileRole = lint_file_role(
+        file_path=file_path, project_dir=project_dir, relative_path=relative_path
+    )
+    allows_dynamic_output_star: bool = (
+        bool(dynamic_output_paths) and file_path.resolve() in dynamic_output_paths
+    )
     compiled_expansion: CompiledSqlExpansion | None = (compiled_expansions or {}).get(file_path)
     external_identifiers: tuple[str, ...] = external_identifiers_for_headers(
         contents=contents, headers=headers
@@ -149,11 +165,12 @@ def _prepared_bodies(
         headers=headers,
         file_path=file_path,
         project_dir=project_dir,
+        role=role,
     ):
         bodies.append(
             replace(
                 prepare_lint_body(
-                    project_dir=project_dir,
+                    role=role,
                     file_path=file_path,
                     contents=contents,
                     body_range=(body_start, body_end),

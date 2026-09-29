@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -13,9 +14,12 @@ from _pytest.capture import CaptureResult
 import sqlbuild.compiler.compile._helpers.attachment.declaration_scope as declaration_scope_module
 import sqlbuild.compiler.compile.main._build_compile_inputs as compile_inputs_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
+import sqlbuild.rule_engine._helpers.engine.native as native_module
+import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.compile.models import CompiledProject, DeclarationScopeBuild, LoadedMacro
+from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.rule_engine.models import Rule
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
@@ -741,6 +745,199 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
     assert macro_finding in cold
     assert warm == cold
     assert len(scope_builds) == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("cold SQL rules rebind the compiler scope index", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_private_macros(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    tests_dir: Path = tmp_path / "tests" / "unit"
+    macro: Path = tests_dir / "_macros" / "row_limit.py"
+    macro.parent.mkdir(parents=True)
+    macro.write_text('def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8")
+    (tests_dir / "test_macro_orders.sql").write_text(
+        "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+    scope_builds: list[Path] = []
+    macro_loads: list[dict[str, LoadedMacro]] = []
+    original_build: Callable[..., DeclarationScopeBuild] = (
+        declaration_scope_module.build_declaration_scope
+    )
+    original_load: Callable[..., dict[str, LoadedMacro]] = (
+        expansion_context_module.load_project_macros
+    )
+
+    def counting_build(
+        *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: dict[str, LoadedMacro]
+    ) -> DeclarationScopeBuild:
+        scope_builds.append(tmp_path)
+        return original_build(discovered_inputs=discovered_inputs, loaded_macros=loaded_macros)
+
+    def recording_load(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
+        loaded: dict[str, LoadedMacro] = original_load(macro_files)
+        macro_loads.append(loaded)
+        return loaded
+
+    monkeypatch.setattr(compile_inputs_module, "build_declaration_scope", counting_build)
+    monkeypatch.setattr(expansion_context_module, "build_declaration_scope", counting_build)
+    monkeypatch.setattr(compile_inputs_module, "load_project_macros", recording_load)
+    monkeypatch.setattr(expansion_context_module, "load_project_macros", recording_load)
+
+    cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+
+    assert f"tests/unit/test_macro_orders.sql:{test_case.expected_code}" in cold
+    assert len(scope_builds) == 1
+    assert len(macro_loads) == 2
+    assert macro_loads[0]["row_limit"].function is not macro_loads[1]["row_limit"].function
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("cold SQL rules reuse the early file read", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_file_read(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    test_file: Path = tmp_path / "tests" / "unit" / "test_orders.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_bytes(
+        b"TEST ();\r\nWITH\r\n__ref__orders AS (SELECT 1 AS order_id),\r\n"
+        b"__expected__orders AS (SELECT order_id FROM __ref__orders LIMIT 1)\r\n"
+        b"SELECT 1\r\n"
+    )
+    collections: list[frozenset[Path] | None] = []
+    original_collect: Callable[..., dict[Path, str]] = rules_module.collect_project_files
+
+    def counting_collect(
+        *, project_dir: Path, selected_paths: frozenset[Path] | None
+    ) -> dict[Path, str]:
+        collections.append(selected_paths)
+        return original_collect(project_dir=project_dir, selected_paths=selected_paths)
+
+    monkeypatch.setattr(rules_module, "collect_project_files", counting_collect)
+
+    cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+    cold_collections: int = len(collections)
+    warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+
+    assert f"tests/unit/test_orders.sql:{test_case.expected_code}" in cold
+    assert warm == cold
+    assert cold_collections == 0
+    assert collections == [None]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("custom host starts with the first request", 1, "XSQBRARCH001")],
+    ids=lambda case: case.description,
+)
+def test_given_sql_rules_create_cache_first_when_compiling_then_custom_host_is_not_retried(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        f'[rules]\nselect = ["SQBRSQL004", "{test_case.expected_code}"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    test_file: Path = tmp_path / "tests" / "unit" / "test_orders.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders LIMIT 1)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+    rule_file: Path = tmp_path / "rules" / "architecture.py"
+    rule_file.parent.mkdir()
+    rule_file.write_text(
+        """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+@rule(
+    code="XSQBRARCH001",
+    message="Final models must use the final directory",
+    remediation="Move this model beneath models/final/.",
+)
+def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    return [] if "final" in model.path.parts else [ctx.finding(subject=model)]
+""",
+        encoding="utf-8",
+    )
+    sql_cache_written: threading.Event = threading.Event()
+    requests: list[bool] = []
+    original_write: Callable[..., None] = rules_module._write_sql_rule_cache
+    original_payloads: Callable[..., list[dict[str, object]]] = native_module._custom_rule_payloads
+    original_request: Callable[[dict[str, object]], str] = native_module._evaluate_request
+
+    def signalling_write(*, project_dir: Path, bucket: dict[str, dict[str, object]]) -> None:
+        original_write(project_dir=project_dir, bucket=bucket)
+        sql_cache_written.set()
+
+    def delayed_payloads(
+        *,
+        catalogue: tuple[Rule, ...],
+        project: CompiledProject,
+        project_dir: Path,
+        cache_enabled: bool,
+    ) -> list[dict[str, object]]:
+        _ = sql_cache_written.wait(timeout=30)
+        return original_payloads(
+            catalogue=catalogue,
+            project=project,
+            project_dir=project_dir,
+            cache_enabled=cache_enabled,
+        )
+
+    def recording_request(request: dict[str, object]) -> str:
+        requests.append(request["custom_host"] is not None)
+        return original_request(request)
+
+    monkeypatch.setattr(rules_module, "_write_sql_rule_cache", signalling_write)
+    monkeypatch.setattr(native_module, "_custom_rule_payloads", delayed_payloads)
+    monkeypatch.setattr(native_module, "_evaluate_request", recording_request)
+
+    cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+
+    assert sql_cache_written.is_set()
+    assert requests == [True]
+    assert {
+        f"models/orders.sql:{test_case.expected_code}",
+        "tests/unit/test_orders.sql:SQBRSQL004",
+    } <= cold
 
 
 @pytest.mark.parametrize(

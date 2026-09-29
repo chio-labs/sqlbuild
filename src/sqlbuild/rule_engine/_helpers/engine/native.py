@@ -75,6 +75,7 @@ def evaluate_native(
     initial_findings: tuple[Finding, ...] = (),
     defer_suppressions: bool = False,
     verify_determinism: bool = False,
+    rules_cache_present_at_start: bool | None = None,
 ) -> RulesResult:
     """Evaluate one compiled model batch through the native engine."""
 
@@ -117,7 +118,11 @@ def evaluate_native(
     retry_native_misses: int = 0
     request["custom_host"] = None
     try:
-        if not config.cache.enabled or not (project_dir / "target" / "rules-cache").exists():
+        if not config.cache.enabled or not (
+            rules_cache_exists(project_dir)
+            if rules_cache_present_at_start is None
+            else rules_cache_present_at_start
+        ):
             custom_host, custom_host_input = _custom_host_payload(
                 project=project,
                 config=config,
@@ -166,6 +171,12 @@ def evaluate_native(
         built_in_ms=int(payload.get("built_in_ms", 0)),
         custom_ms=int(payload.get("custom_ms", 0)),
     )
+
+
+def rules_cache_exists(project_dir: Path) -> bool:
+    """Return whether this project already has persisted rules-cache state."""
+
+    return (project_dir / "target" / "rules-cache").exists()
 
 
 def _evaluate_request(request: dict[str, object]) -> str:

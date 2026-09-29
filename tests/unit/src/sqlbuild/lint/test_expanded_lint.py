@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint._helpers import expansion
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
+from sqlbuild.lint._helpers.headers import lint_file_role
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintBody, LintConfig, LintRunResult
@@ -268,7 +269,7 @@ def test_given_generic_audit_argument_when_mapping_then_generated_region_is_not_
     context: SqlExpansionContext = build_lint_expansion_context(project_dir=tmp_path)
 
     body: LintBody = prepare_lint_body(
-        project_dir=tmp_path,
+        role=lint_file_role(file_path=audit, project_dir=tmp_path),
         file_path=audit,
         contents=contents,
         body_range=(10, len(contents)),

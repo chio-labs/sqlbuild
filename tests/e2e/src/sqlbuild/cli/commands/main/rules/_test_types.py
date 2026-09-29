@@ -130,3 +130,11 @@ class HelperImportCase:
     helper_path: str
     helper_source: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class SqlRulePathParityCase:
+    description: str
+    files: dict[str, str]
+    expected_findings: tuple[tuple[str, int, int, str], ...]
+    expected_exit: int = 1

@@ -39,6 +39,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     evaluate_native,
     finalize_native_findings,
     native_catalogue,
+    rules_cache_exists,
 )
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
@@ -126,6 +127,7 @@ def evaluate_rules(
             catalogue=catalogue,
             dialect=dialect,
             defer_suppressions=True,
+            rules_cache_present_at_start=rules_cache_exists(resolved_project_dir),
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
@@ -203,6 +205,7 @@ def prepare_sql_rules(
         return None
     return PreparedSqlLint(
         codes=codes,
+        project_dir=project_dir,
         future=executor.submit(
             _prepare_sql_lint,
             project_dir=project_dir,
@@ -210,6 +213,7 @@ def prepare_sql_rules(
                 dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
             ),
             discovered_inputs=inputs.discovered_inputs,
+            static_declaration_scope=inputs.declaration_scope,
             compiled_expansions={
                 model.model_file.file_path: model.sql_expansion
                 for model in inputs.model_inputs
@@ -224,10 +228,13 @@ def _prepare_sql_lint(
     project_dir: Path,
     config: LintConfig,
     discovered_inputs: DiscoveredProjectInputs,
+    static_declaration_scope: DeclarationScopeBuild | None,
     compiled_expansions: dict[Path, CompiledSqlExpansion],
 ) -> PreparedSqlLintResult:
     context: SqlExpansionContext = build_expansion_context(
-        project_dir=project_dir, discovered_inputs=discovered_inputs
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        static_declaration_scope=static_declaration_scope,
     )
     result: LintRunResult = run_lint(
         project_dir=project_dir,
@@ -287,6 +294,21 @@ def _selected_project(
     )
 
 
+def _prepared_project_files(
+    *, prepared_sql: PreparedSqlLint | None, project_dir: Path, codes: tuple[str, ...]
+) -> dict[Path, str] | None:
+    """Reuse the full-project read of a matching early SQL lint for this invocation."""
+
+    if (
+        prepared_sql is None
+        or prepared_sql.project_dir != project_dir
+        or set(prepared_sql.codes) != set(codes)
+        or prepared_sql.future.exception() is not None
+    ):
+        return None
+    return dict(prepared_sql.future.result().result.source_texts)
+
+
 def _run_prepared_lint(
     *,
     project_dir: Path,
@@ -335,6 +357,7 @@ def _run_prepared_lint(
             compiled_expansions=compiled_expansions,
             dynamic_output_paths=proof_paths,
             expansion_context=completed.context,
+            source_files=dict(prepared.source_texts),
         )
         violations = (*violations, *proven.violations)
     return replace(prepared, violations=violations, files_checked=len(selected_paths))
@@ -384,7 +407,11 @@ def _run_sql_rules(
         model_paths: frozenset[Path] = frozenset(
             project_dir / model.relative_path for model in project.models
         )
-        project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
+        project_files = _prepared_project_files(
+            prepared_sql=prepared_sql, project_dir=project_dir, codes=codes
+        )
+        if project_files is None:
+            project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
         file_path: Path
         contents: str
         for file_path, contents in project_files.items():
