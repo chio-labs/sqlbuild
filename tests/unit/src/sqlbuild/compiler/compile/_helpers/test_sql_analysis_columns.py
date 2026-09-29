@@ -39,6 +39,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     NativeTypeInferenceModeTestCase,
     PolyglotAnalysisTestCase,
     QualifiedReferenceAnalysisTestCase,
+    QualifiedReferenceScanTestCase,
     SubstitutePlaceholderDefaultsTestCase,
     UnexpectedAnalysisFailureTestCase,
 )
@@ -308,6 +309,96 @@ def test_given_sql_without_dots_when_finding_qualified_references_then_skips_sca
 
     assert result == frozenset()
     assert scanner.finditer.call_count == test_case.expected_count
+
+
+_QUALIFIED_REFERENCE_SCAN_CASES: tuple[QualifiedReferenceScanTestCase, ...] = (
+    QualifiedReferenceScanTestCase(
+        description="alias qualifier does not qualify the relation",
+        query_sql="SELECT input.id FROM orders AS input",
+        reference_names=("orders",),
+        expected=frozenset(),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="relation qualifier matches case-insensitively",
+        query_sql="SELECT ORDERS . id FROM orders",
+        reference_names=("orders", "Orders"),
+        expected=frozenset({"orders", "Orders"}),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="longer identifier sharing a prefix is not a qualifier",
+        query_sql="SELECT orders_archive.id, x.orders FROM orders_archive, orders AS x",
+        reference_names=("orders", "archive"),
+        expected=frozenset(),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="dollar and digit identifier characters bound the name",
+        query_sql="SELECT $orders.id, orders$1.id, orders.id FROM t",
+        reference_names=("orders",),
+        expected=frozenset({"orders"}),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="string literal text still counts like the regex scan",
+        query_sql="SELECT 'customers.id' AS note FROM orders",
+        reference_names=("orders", "customers"),
+        expected=frozenset({"customers"}),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="comment between qualifier and separator",
+        query_sql="SELECT orders /* note */ .id -- customers.id\nFROM orders",
+        reference_names=("orders", "customers"),
+        expected=frozenset({"orders", "customers"}),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="comment consumed by an earlier qualifier hides its contents",
+        query_sql="SELECT x /* customers. */ .id FROM orders AS x",
+        reference_names=("orders", "customers"),
+        expected=frozenset(),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="quoted identifiers qualify by their unquoted name",
+        query_sql='SELECT "orders".id, `customers`.id, [products].id FROM t',
+        reference_names=("orders", "customers", "products"),
+        expected=frozenset({"orders", "customers", "products"}),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="quoted identifier containing a dot is one name",
+        query_sql='SELECT "orders.v2".id FROM t',
+        reference_names=("orders",),
+        expected=frozenset(),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="non-identifier reference names never qualify",
+        query_sql="SELECT order-lines.id FROM t",
+        reference_names=("order-lines", "lines"),
+        expected=frozenset({"lines"}),
+    ),
+    QualifiedReferenceScanTestCase(
+        description="non-ascii SQL uses the full scan",
+        query_sql="SELECT caf\u00e9.id, orders.id FROM t",
+        reference_names=("orders", "caf\u00e9"),
+        expected=frozenset({"orders"}),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case", _QUALIFIED_REFERENCE_SCAN_CASES, ids=lambda case: case.description
+)
+def test_given_reference_names_when_finding_qualified_references_then_matches_full_scan(
+    test_case: QualifiedReferenceScanTestCase,
+) -> None:
+    names_by_normalized: dict[str, list[str]] = {}
+    for name in test_case.reference_names:
+        names_by_normalized.setdefault(name.casefold(), []).append(name)
+
+    result: frozenset[str] = analysis_columns._qualified_reference_names(
+        query_sql=test_case.query_sql, reference_names=test_case.reference_names
+    )
+
+    assert result == test_case.expected
+    assert result == analysis_columns._scanned_qualified_reference_names(
+        query_sql=test_case.query_sql, names_by_normalized=names_by_normalized
+    )
 
 
 @pytest.mark.parametrize(

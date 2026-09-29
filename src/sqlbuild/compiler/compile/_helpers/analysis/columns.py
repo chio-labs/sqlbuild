@@ -157,6 +157,11 @@ _QUALIFIED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
     r"(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*\.",
     re.DOTALL,
 )
+_QUALIFIED_SCAN_CONSUMING_TOKENS: tuple[str, ...] = ('"', "`", "[", "--", "/*")
+_PLAIN_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"[a-z_$][a-z0-9_$]*")
+_IDENTIFIER_CHARACTERS: frozenset[str] = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$"
+)
 
 
 def _infer_columns_with_polyglot(
@@ -952,7 +957,44 @@ def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]
         names_by_normalized.setdefault(name.casefold(), []).append(name)
     if not names_by_normalized:
         return frozenset()
+    if not query_sql.isascii() or any(
+        token in query_sql for token in _QUALIFIED_SCAN_CONSUMING_TOKENS
+    ):
+        return _scanned_qualified_reference_names(
+            query_sql=query_sql, names_by_normalized=names_by_normalized
+        )
 
+    # Without quoted identifiers or comments, a regex match consumes only an identifier,
+    # whitespace, and the separator, so searching for each name alone finds the same matches.
+    folded_sql: str = query_sql.lower()
+    qualified: set[str] = set()
+    for normalized, names in names_by_normalized.items():
+        if _PLAIN_IDENTIFIER_PATTERN.fullmatch(normalized) is not None and _is_qualifier(
+            folded_sql=folded_sql, name=normalized
+        ):
+            qualified.update(names)
+    return frozenset(qualified)
+
+
+def _is_qualifier(*, folded_sql: str, name: str) -> bool:
+    length: int = len(folded_sql)
+    start: int = folded_sql.find(name)
+    while start != -1:
+        end: int = start + len(name)
+        if (start == 0 or folded_sql[start - 1] not in _IDENTIFIER_CHARACTERS) and (
+            end == length or folded_sql[end] not in _IDENTIFIER_CHARACTERS
+        ):
+            while end < length and folded_sql[end].isspace():
+                end += 1
+            if end < length and folded_sql[end] == SQL_QUALIFIER_SEPARATOR_TOKEN:
+                return True
+        start = folded_sql.find(name, start + 1)
+    return False
+
+
+def _scanned_qualified_reference_names(
+    *, query_sql: str, names_by_normalized: dict[str, list[str]]
+) -> frozenset[str]:
     qualified: set[str] = set()
     for match in _QUALIFIED_IDENTIFIER_PATTERN.finditer(query_sql):
         identifier: str = next(value for value in match.groups() if value is not None)
