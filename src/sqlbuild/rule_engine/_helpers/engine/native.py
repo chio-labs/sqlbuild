@@ -662,7 +662,7 @@ def _custom_fact_fingerprint(*, project: CompiledProject, attributes: frozenset[
         )
     if RULE_CONTEXT_PROJECT_FACT in attributes:
         facts[RULE_CONTEXT_PROJECT_FACT] = _project_fact_models(project=project)
-    encoded: bytes = orjson.dumps(facts, default=str)
+    encoded: bytes = orjson.dumps(facts, option=orjson.OPT_SORT_KEYS, default=str)
     return hashlib.sha256(encoded).hexdigest()
 
 
