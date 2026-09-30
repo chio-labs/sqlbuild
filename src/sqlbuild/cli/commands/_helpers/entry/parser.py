@@ -68,6 +68,7 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_data_parsers(subparsers)
     _add_inspection_parsers(subparsers)
     _add_contract_parser(subparsers)
+    _add_refactor_parsers(subparsers)
     _add_maintenance_parsers(subparsers)
     _add_workspace_parsers(subparsers)
     _add_dbt_parsers(subparsers)
@@ -104,6 +105,47 @@ def _add_contract_parser(
         if action == ContractAction.GENERATE:
             action_parser.add_argument("--write", dest="contract_write", action="store_true")
             action_parser.add_argument("--overwrite", action="store_true")
+
+
+def _add_refactor_parsers(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    rename_parser: argparse.ArgumentParser = subparsers.add_parser(
+        CliCommand.RENAME, help="rename a model or column and update every reference"
+    )
+    rename_parser.add_argument(
+        "refactor_target", metavar="TARGET", help="model:<name> or column:<model>.<column>"
+    )
+    rename_parser.add_argument("refactor_new_name", metavar="NEW_NAME")
+    rename_parser.add_argument(
+        "--cascade",
+        dest="refactor_cascade",
+        action="store_true",
+        default=False,
+        help="rename a column through every downstream model that passes it through",
+    )
+    move_parser: argparse.ArgumentParser = subparsers.add_parser(
+        CliCommand.MV, help="move a model file, optionally renaming it, and update references"
+    )
+    move_parser.add_argument("refactor_target", metavar="TARGET", help="model:<name>")
+    move_parser.add_argument(
+        "refactor_destination", metavar="DESTINATION", help="new .sql path or folder/"
+    )
+    parser: argparse.ArgumentParser
+    for parser in (rename_parser, move_parser):
+        parser.add_argument(
+            "--dry-run",
+            dest="dry_run",
+            action="store_true",
+            default=False,
+            help="print every edit and verify it compiles, without writing files",
+        )
+        parser.add_argument(
+            "--json",
+            action="store_true",
+            default=False,
+            help="print the result as JSON on stdout; progress goes to stderr",
+        )
 
 
 def _add_compile_and_dag_parsers(

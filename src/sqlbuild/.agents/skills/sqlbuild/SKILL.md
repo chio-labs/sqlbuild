@@ -1,6 +1,6 @@
 ---
 name: sqlbuild
-description: ALWAYS load this skill when doing ANY SQLBuild work - models, sources, seeds, macros, enums, constants, tests, audits, scenarios, incremental and microbatch models, configuration, CLI, adapters, or dbt interop. Covers the verify loop (compile, plan, build), comparing data or two queries with sqb diff, inspecting macro/enum/constant visibility with sqb scope, impact analysis with sqb lineage, and where to find exact syntax.
+description: ALWAYS load this skill when doing ANY SQLBuild work - models, sources, seeds, macros, enums, constants, tests, audits, scenarios, incremental and microbatch models, configuration, CLI, adapters, or dbt interop. Covers the verify loop (compile, plan, build), comparing data or two queries with sqb diff, inspecting macro/enum/constant visibility with sqb scope, impact analysis with sqb lineage, renaming or moving models and columns with sqb rename and sqb mv, and where to find exact syntax.
 ---
 
 # SQLBuild
@@ -78,6 +78,7 @@ the trigger applies.
 | Know what a model can see: which macros, enums and constants are visible, used, or unavailable | `sqb scope model:<name>` |
 | Fix "unknown macro/enum/constant", or decide where a declaration should live | `sqb scope model:<name> --explain macro:<name>` |
 | Preview whether moving a file breaks declaration visibility | `sqb scope model:<name> --as-path <new/path.sql>` |
+| Rename a model, move a model file, or rename a column | `sqb rename model:<old> <new>`, `sqb mv model:<name> <path/or/folder/>`, `sqb rename column:<model>.<column> <new>` |
 | Find what a model depends on, or what breaks if it changes | `sqb lineage <model> --direction both` |
 | Trace where a column comes from, or who consumes it before renaming or dropping it | `sqb lineage <model>.<column> --direction downstream` |
 | See which intermediate models a SQL test will really execute | `sqb test --select <model> --inspect` |
@@ -141,6 +142,18 @@ functions, but not in ordinary `MODEL()` config fields. Placement decides visibi
 [references/macros-and-declarations.md](references/macros-and-declarations.md).
 
 **Snapshots** (SCD type 2) use `timestamp` or `check` strategies; full refreshes are policy-gated.
+
+**Renaming and moving.** Never rename or move a model or column by editing files by hand. `sqb
+rename` and `sqb mv` rewrite every `__ref`, fixture CTE, header reference and column use from
+compiler facts (including YAML and `SCHEMA` relationships), add `migrate_from` whenever a
+data-holding relation moves, carry scoped macros, enums, constants and schemas to the folder
+placement requires, verify the edited project compiles in a scratch copy, and write nothing if any
+step fails. Run with `--dry-run` first. A column rename is one step by default (downstream models
+keep their output names via `AS <old>`); `--cascade` renames pass-through outputs downstream too.
+When the command refuses, fix the listed locations (usually a macro call, `SELECT *`, or a
+declaration file to split) and rerun. Then `sqb plan` to see the migration; on a target that never
+built the old name it warns about the missing origin and builds fresh unless the target sets
+`missing_migration_origin`. Read [references/docs/cli/rename.md](references/docs/cli/rename.md).
 
 **Rules** are compile-time project checks (`sqb rules list`, `sqb rules show <code>`). `sqb format`
 rewrites sources deterministically; `sqb format --check` only reports.

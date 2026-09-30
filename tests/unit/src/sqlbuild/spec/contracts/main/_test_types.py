@@ -9,6 +9,7 @@ from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
 )
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 from sqlbuild.sql_values.types import CollectionRendering
 
 
@@ -55,3 +56,12 @@ class InvalidLoaderDestinationTestCase:
     description: str
     destination: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class MissingOriginPolicyResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    target_name: str
+    expected_policy: MissingMigrationOriginPolicy

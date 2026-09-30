@@ -164,6 +164,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 allow_snapshot_full_refresh=args.allow_snapshot_full_refresh,
                 allow_table_type_downgrade=args.allow_table_type_downgrade,
                 allow_retention_decrease=args.allow_retention_decrease,
+                allow_missing_migration_origin=args.allow_missing_migration_origin,
                 allow_snapshot_schema_change=args.allow_snapshot_schema_change,
                 concurrency=args.concurrency,
                 select=select,
@@ -422,6 +423,24 @@ def _dispatch_compile_or_contract(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int | None:
+    if args.command in {CliCommand.RENAME, CliCommand.MV}:
+        from sqlbuild.cli.commands.models import RefactorCommandRequest
+
+        if handlers.run_refactor is None or args.refactor_target is None:
+            raise CliUserError(f"{args.command} command handler is unavailable", code="C950")
+        return handlers.run_refactor(
+            request=RefactorCommandRequest(
+                command=str(args.command),
+                target=args.refactor_target,
+                new_name=args.refactor_new_name,
+                destination=args.refactor_destination,
+                project_dir=project_dir,
+                cascade=args.refactor_cascade,
+                dry_run=args.dry_run,
+                json_output=args.json,
+                no_color=args.no_color,
+            )
+        )
     if args.command == CliCommand.CONTRACT:
         from sqlbuild.cli.commands.models import ContractCommandRequest
 

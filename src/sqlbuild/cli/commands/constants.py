@@ -103,4 +103,12 @@ DEFAULT_DIFF_MAX_VALUE_LENGTH: int = 160
 QUERY_DIFF_INCOMPLETE_PREPARATION_CODES: frozenset[str] = frozenset(
     {"C229", "C230", "C231", "C232", "C233", "C234", "C235", "C240", "C244"}
 )
+MISSING_ORIGIN_BUILD_HELP: str = (
+    "Pass --allow-missing-migration-origin to confirm in non-interactive runs."
+)
+MISSING_ORIGIN_DBT_HELP: str = (
+    "sqb dbt has no confirmation flag: confirm on an interactive terminal, build the affected "
+    "models with sqb build --allow-missing-migration-origin and leave them out of this dbt "
+    "selection, or set the target's missing_migration_origin to 'allow'."
+)
 QUERY_DIFF_INCOMPLETE_EXECUTION_CODES: frozenset[str] = frozenset({"C237", "C238", "C239"})

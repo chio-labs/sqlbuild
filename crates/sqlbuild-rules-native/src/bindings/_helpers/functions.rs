@@ -155,6 +155,12 @@ fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String>
 }
 
 #[pyfunction]
+fn analyze_column_references_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| crate::column_references::main::analyze::analyze_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
 fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| crate::query_analysis::main::analyze::analyze_json(request_json))
         .map_err(value_error)
@@ -429,6 +435,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validations_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_column_references_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_queries_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_project_queries_json, module)?)?;
     module.add_function(wrap_pyfunction!(

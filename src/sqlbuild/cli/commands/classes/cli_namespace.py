@@ -56,6 +56,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "allow_snapshot_full_refresh": False,
     "allow_table_type_downgrade": False,
     "allow_retention_decrease": False,
+    "allow_missing_migration_origin": False,
     "allow_snapshot_schema_change": False,
     "concurrency": None,
     "verbose": False,
@@ -160,6 +161,10 @@ _DEFAULT_VALUES: dict[str, object] = {
     "scope_page_size": 100,
     "scope_after": None,
     "scope_paths": "relative",
+    "refactor_target": None,
+    "refactor_new_name": None,
+    "refactor_destination": None,
+    "refactor_cascade": False,
 }
 
 
@@ -216,6 +221,7 @@ class CliNamespace:
     allow_snapshot_full_refresh: bool
     allow_table_type_downgrade: bool
     allow_retention_decrease: bool
+    allow_missing_migration_origin: bool
     allow_snapshot_schema_change: bool
     concurrency: int | None
     verbose: bool
@@ -238,6 +244,10 @@ class CliNamespace:
     query_limit: int | None
     query_no_limit: bool
     cost_selector: str
+    refactor_target: str | None
+    refactor_new_name: str | None
+    refactor_destination: str | None
+    refactor_cascade: bool
     cost_limit: int | None
     cost_no_limit: bool
     cost_sort: str | None

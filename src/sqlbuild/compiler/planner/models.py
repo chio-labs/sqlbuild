@@ -91,6 +91,7 @@ from sqlbuild.spec.contracts.models import (
 from sqlbuild.spec.contracts.types import (
     FutureCursorAction,
     MicrobatchLimitAction,
+    MissingMigrationOriginPolicy,
     SourceWriteStrategy,
 )
 from sqlbuild.sql_values.models import SqlValue
@@ -931,6 +932,19 @@ class ModelMigrationPlanEntry:
     compatibility_findings: tuple[str, ...] = ()
     message: str | None = None
     origin_tracked: bool = False
+    missing_origin_policy: MissingMigrationOriginPolicy = MissingMigrationOriginPolicy.ALLOW
+
+    @property
+    def origin_missing(self) -> bool:
+        """Return whether the declared origin was not found in this target."""
+
+        return self.decision == MigrationDecision.ORIGIN_MISSING
+
+    @property
+    def origin_hidden(self) -> bool:
+        """Return whether the missing origin has build history in this target."""
+
+        return self.origin_missing and self.origin_tracked
 
     @property
     def storage_transition(self) -> str | None:
@@ -951,6 +965,11 @@ class ModelMigrationPlanEntry:
     def blocks_build(self) -> bool:
         """Return whether this migration must stop a build before any execution."""
 
+        if self.origin_missing:
+            return (
+                self.origin_tracked
+                or self.missing_origin_policy == MissingMigrationOriginPolicy.DENY
+            )
         return self.decision.blocks_build or (
             self.decision.moves_data and self.compatibility == MigrationCompatibility.INCOMPATIBLE
         )
@@ -1010,11 +1029,20 @@ class ColumnMigrationPlanEntry:
     target_name: str | None
     completed_at: datetime | None = None
     message: str | None = None
+    missing_origin_policy: MissingMigrationOriginPolicy = MissingMigrationOriginPolicy.ALLOW
+
+    @property
+    def origin_missing(self) -> bool:
+        """Return whether the declared origin column was not found in this target."""
+
+        return self.decision == ColumnMigrationDecision.SOURCE_MISSING
 
     @property
     def blocks_build(self) -> bool:
         """Return whether this column migration must stop a build before any execution."""
 
+        if self.origin_missing:
+            return self.missing_origin_policy == MissingMigrationOriginPolicy.DENY
         return self.decision.blocks_build
 
 

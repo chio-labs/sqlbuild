@@ -165,6 +165,29 @@ NAMESPACED_ARTIFACT: str = build_scenario_artifact_name(
             expected_skipped_relation_reasons=("relation is not tracked by SQLBuild",),
         ),
         JanitorPlanTestCase(
+            description="origin of a pending migration is kept",
+            relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
+            migrate_from="old_orders",
+            expected_candidate_names=(),
+            expected_skipped_relation_reasons=("pending migration origin for orders",),
+        ),
+        JanitorPlanTestCase(
+            description="qualified origin of a pending migration is kept",
+            relation_infos=(relation_info("OLD_ORDERS", created_at=OLD_TIME),),
+            migrate_from="analytics.old_orders",
+            expected_candidate_names=(),
+            expected_skipped_relation_reasons=("pending migration origin for orders",),
+        ),
+        JanitorPlanTestCase(
+            description="origin is cleaned normally once the destination exists",
+            relation_infos=(
+                relation_info("orders", created_at=OLD_TIME),
+                relation_info("old_orders", created_at=OLD_TIME),
+            ),
+            migrate_from="old_orders",
+            expected_candidate_names=("old_orders",),
+        ),
+        JanitorPlanTestCase(
             description="existing direct state tables are eligible for history pruning",
             relation_infos=(
                 relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),
@@ -204,7 +227,9 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     )
 
     plan: JanitorPlan = build_janitor_plan(
-        project=build_project(source_schema=test_case.source_schema),
+        project=build_project(
+            source_schema=test_case.source_schema, migrate_from=test_case.migrate_from
+        ),
         adapter=adapter,
         connection=object(),
         retention_days=test_case.retention_days,

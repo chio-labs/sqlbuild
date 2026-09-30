@@ -12,6 +12,7 @@ Online: https://sqlbuild.com/docs/cli/janitor/
 - Flags
 - Lifecycle
 - Compatibility views
+- Pending migration origins
 - Relation age
 - Audit record
 - Restoring an archive
@@ -73,6 +74,10 @@ Old name views (1)
 A compatibility view is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. Before dropping, the janitor checks that the relation at the old name is still the view SQLBuild created there, by comparing its stored definition with the view's SQL. Any other relation at that name, such as a view a project model built after an interrupted early drop, is left alone: the janitor records the compatibility view as dropped and lists it as `record  dropped  (name now used by another relation, model:revenue)`, naming the model when the name is a project destination. A compatibility view that no longer exists is recorded as dropped too.
 
 Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
+
+## Pending migration origins
+
+A relation that a project model still has to migrate from is never archived. While a model declares `migrate_from` and its own relation does not exist yet in the target, the janitor skips the origin and lists it as `pending migration origin for <model>`. A bare `migrate_from` name is matched in each schema the project builds into; a qualified name only at that location. Once the model has built, the origin is handled as usual: after a migration, the old name holds a compatibility view, which expires as described above.
 
 ## Relation age
 

@@ -90,6 +90,8 @@ def build_sqlbuild_plan_output(
                 deferral=deferral,
                 policies=PlannerPolicies(),
                 on_progress=hooks.on_progress,
+                project_config=environment.discovered_inputs.project_config,
+                local_config=environment.discovered_inputs.local_config,
             )
         except PlannerInputError:
             return build_display_only_sqlbuild_plan(

@@ -6,6 +6,7 @@ import tomllib
 from dataclasses import fields
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from pathlib import Path
 from typing import cast
 
@@ -82,6 +83,7 @@ from sqlbuild.spec.contracts.types import (
     EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
+    MissingMigrationOriginPolicy,
     RetentionDecreasePolicy,
     TableType,
     TableTypeDowngradePolicy,
@@ -1071,17 +1073,23 @@ def _optional_table_type(
         ) from exc
 
 
-def _optional_table_type_downgrade_policy(
-    *, mapping: dict[str, object], key: str, label: str, file_path: Path
-) -> TableTypeDowngradePolicy | None:
+def _optional_target_policy[PolicyT: StrEnum](
+    *,
+    mapping: dict[str, object],
+    key: str,
+    target_name: str,
+    file_path: Path,
+    policy: type[PolicyT],
+) -> PolicyT | None:
     value: object | None = mapping.get(key)
     if value is None:
         return None
     try:
-        return TableTypeDowngradePolicy(value)
+        return policy(value)
     except (TypeError, ValueError) as exc:
         raise ProjectConfigError(
-            f"{file_path} {label} must be 'deny', 'require_confirmation', or 'allow'"
+            f"{file_path} targets.{target_name}.{key} must be 'deny', "
+            "'require_confirmation', or 'allow'"
         ) from exc
 
 
@@ -1127,110 +1135,43 @@ def _target_retention_by_materialization(
     return loaded
 
 
-def _optional_retention_decrease_policy(
-    *, mapping: dict[str, object], target_name: str, file_path: Path
-) -> RetentionDecreasePolicy | None:
-    value: object | None = mapping.get("time_travel_retention_decrease")
-    if value is None:
-        return None
-    try:
-        return RetentionDecreasePolicy(value)
-    except (TypeError, ValueError) as exc:
-        raise ProjectConfigError(
-            f"{file_path} targets.{target_name}.time_travel_retention_decrease must be "
-            "'deny', 'require_confirmation', or 'allow'"
-        ) from exc
-
-
 def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig]:
-    mapping: dict[str, object] = _coerce_mapping(
-        payload=payload, label="targets", file_path=file_path
+    return {
+        name: _project_target(local)
+        for name, local in _load_local_targets(payload=payload, file_path=file_path).items()
+    }
+
+
+def _project_target(local: LocalTargetConfig) -> TargetConfig:
+    defaults: TargetConfig = TargetConfig()
+    return TargetConfig(
+        connection=local.connection,
+        connection_name=local.connection_name,
+        vars=local.vars,
+        database=local.database,
+        schema=local.schema,
+        loader_schema=local.loader_schema,
+        defer_sources_to=local.defer_sources_to,
+        defer_clone_from=local.defer_clone_from,
+        clone=ClonePolicy(
+            allow_as_clone_origin=local.clone.allow_as_clone_origin is True,
+            allow_as_clone_destination=local.clone.allow_as_clone_destination is True,
+        ),
+        compile_cache=local.compile_cache,
+        time_travel_retention=local.time_travel_retention,
+        time_travel_retention_by_materialization=(
+            local.time_travel_retention_by_materialization or {}
+        ),
+        owns_time_travel_retention_namespace=local.owns_time_travel_retention_namespace is True,
+        default_table_type=local.default_table_type,
+        table_type_downgrade=local.table_type_downgrade or defaults.table_type_downgrade,
+        time_travel_retention_decrease=(
+            local.time_travel_retention_decrease or defaults.time_travel_retention_decrease
+        ),
+        missing_migration_origin=local.missing_migration_origin
+        or defaults.missing_migration_origin,
+        execution_limits=local.execution_limits,
     )
-    targets: dict[str, TargetConfig] = {}
-    target_name: str
-    target_payload: object
-    for target_name, target_payload in mapping.items():
-        target_mapping: dict[str, object] = _coerce_mapping(
-            payload=target_payload,
-            label=f"targets.{target_name}",
-            file_path=file_path,
-        )
-        _validate_target_keys(
-            target_mapping=target_mapping, target_name=target_name, file_path=file_path
-        )
-        clone_mapping: dict[str, object] = _coerce_mapping(
-            payload=target_mapping.get("clone"),
-            label=f"targets.{target_name}.clone",
-            file_path=file_path,
-        )
-        _validate_clone_keys(
-            clone_mapping=clone_mapping, target_name=target_name, file_path=file_path
-        )
-        execution_limits: ExecutionLimitsConfig = _load_execution_limits(
-            payload=target_mapping.get("execution_limits"),
-            label=f"targets.{target_name}.execution_limits",
-            file_path=file_path,
-        )
-        connection, connection_name = _load_target_connection(
-            target_mapping=target_mapping, target_name=target_name, file_path=file_path
-        )
-        targets[target_name] = TargetConfig(
-            connection=connection,
-            connection_name=connection_name,
-            vars=_load_string_mapping(payload=target_mapping.get("vars"), file_path=file_path),
-            database=_optional_str(payload=target_mapping, key="database"),
-            schema=_optional_str(payload=target_mapping, key="schema"),
-            loader_schema=_optional_str(payload=target_mapping, key="loader_schema"),
-            defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
-            defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
-            compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
-            time_travel_retention=_optional_target_retention_default(
-                mapping=target_mapping, target_name=target_name, file_path=file_path
-            ),
-            time_travel_retention_by_materialization=_target_retention_by_materialization(
-                mapping=target_mapping, target_name=target_name, file_path=file_path
-            ),
-            owns_time_travel_retention_namespace=_optional_bool(
-                mapping=target_mapping,
-                key="owns_time_travel_retention_namespace",
-                default=False,
-            ),
-            default_table_type=_optional_table_type(
-                mapping=target_mapping,
-                key="default_table_type",
-                label=f"targets.{target_name}.default_table_type",
-                file_path=file_path,
-            ),
-            table_type_downgrade=(
-                _optional_table_type_downgrade_policy(
-                    mapping=target_mapping,
-                    key="table_type_downgrade",
-                    label=f"targets.{target_name}.table_type_downgrade",
-                    file_path=file_path,
-                )
-                or TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
-            ),
-            time_travel_retention_decrease=(
-                _optional_retention_decrease_policy(
-                    mapping=target_mapping, target_name=target_name, file_path=file_path
-                )
-                or RetentionDecreasePolicy.DENY
-            ),
-            execution_limits=execution_limits,
-            clone=ClonePolicy(
-                allow_as_clone_origin=_optional_bool(
-                    mapping=clone_mapping,
-                    key="allow_as_clone_origin",
-                    default=False,
-                ),
-                allow_as_clone_destination=_optional_bool(
-                    mapping=clone_mapping,
-                    key="allow_as_clone_destination",
-                    default=False,
-                ),
-            ),
-        )
-    return targets
 
 
 def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalTargetConfig]:
@@ -1295,14 +1236,26 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 label=f"targets.{target_name}.default_table_type",
                 file_path=file_path,
             ),
-            table_type_downgrade=_optional_table_type_downgrade_policy(
+            table_type_downgrade=_optional_target_policy(
                 mapping=target_mapping,
                 key="table_type_downgrade",
-                label=f"targets.{target_name}.table_type_downgrade",
+                target_name=target_name,
                 file_path=file_path,
+                policy=TableTypeDowngradePolicy,
             ),
-            time_travel_retention_decrease=_optional_retention_decrease_policy(
-                mapping=target_mapping, target_name=target_name, file_path=file_path
+            time_travel_retention_decrease=_optional_target_policy(
+                mapping=target_mapping,
+                key="time_travel_retention_decrease",
+                target_name=target_name,
+                file_path=file_path,
+                policy=RetentionDecreasePolicy,
+            ),
+            missing_migration_origin=_optional_target_policy(
+                mapping=target_mapping,
+                key="missing_migration_origin",
+                target_name=target_name,
+                file_path=file_path,
+                policy=MissingMigrationOriginPolicy,
             ),
             execution_limits=execution_limits,
             clone=LocalClonePolicy(
@@ -1374,6 +1327,7 @@ def _validate_target_keys(
                 "default_table_type",
                 "table_type_downgrade",
                 "time_travel_retention_decrease",
+                "missing_migration_origin",
                 "clone",
                 "execution_limits",
             }

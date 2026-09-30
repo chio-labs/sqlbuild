@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.types import BoundSentinel
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 PATH_SELECTOR_EXPLICIT_ROOT_ERROR: str = (
     "path selectors require an explicit root: use 'models/' or 'python/'"
@@ -83,3 +84,27 @@ SNAPSHOT_DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
 SNAPSHOT_DEFAULT_VALID_TO_COLUMN: str = "valid_to"
 SOURCE_INPUT_FUNCTION: str = "__source"
 REF_INPUT_FUNCTION: str = "__ref"
+MANUAL_RENAME_HINT: str = (
+    "matched by unchanged definition; sqb rename model:<old> <new> rewrites references and "
+    "declares migrate_from so the move does not depend on discovery"
+)
+HIDDEN_ORIGIN_REMEDY: str = (
+    "the connection may lack permission to see it, or it was dropped outside SQLBuild; restore "
+    "access to it, or remove migrate_from to build the model fresh deliberately "
+    "(missing_migration_origin does not apply)"
+)
+MISSING_ORIGIN_OUTCOMES: dict[MissingMigrationOriginPolicy, str] = {
+    MissingMigrationOriginPolicy.ALLOW: (
+        "nothing is migrated and the build continues as if migrate_from were absent; remove "
+        "migrate_from once no target still needs it"
+    ),
+    MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION: (
+        "building without it needs confirmation (missing_migration_origin = "
+        "require_confirmation); pass --allow-missing-migration-origin, or remove migrate_from if "
+        "it is no longer needed"
+    ),
+    MissingMigrationOriginPolicy.DENY: (
+        "the build stops (missing_migration_origin = deny); if the migration already happened "
+        "elsewhere or is no longer needed, remove migrate_from"
+    ),
+}

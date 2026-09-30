@@ -152,6 +152,7 @@ A target is a named build context - the database and schema you build into, plus
 | `vars` | Target-specific project variables |
 | `defer_sources_to` | Target name to read managed source data from (see [Loaders](python-nodes/loaders.md#source-deferral)) |
 | `clone` | Clone policy (see below) |
+| `missing_migration_origin` | What a build does when a declared `migrate_from` origin does not exist in this target: `allow` (default), `require_confirmation`, or `deny` (see below) |
 
 ```toml
 [connections.warehouse]
@@ -216,6 +217,25 @@ password = "${ENV:SNOWFLAKE_PASSWORD}"
 
 Commands then use `dev` automatically. An explicit command such as `sqb build --target prod`
 still takes precedence for that invocation.
+
+### Missing migration origins
+
+A `migrate_from` declaration, on a model or a column, names a relation or column that exists in the targets where the rename is pending. A target that never built the old name, such as a fresh development schema, has nothing to migrate. `missing_migration_origin` decides what happens there:
+
+| Value | Behavior |
+|-------|----------|
+| `allow` | Default. The plan warns (`M102` for models, `M109` for columns), nothing is migrated, and the model builds as if `migrate_from` were absent. |
+| `require_confirmation` | The build asks for confirmation on a terminal, and stops otherwise; pass `--allow-missing-migration-origin` to confirm in non-interactive runs. |
+| `deny` | The build stops with `M102` or `M109`. Use it for targets where a missing origin means the wrong target or a lost relation. |
+
+```toml
+[targets.prod]
+missing_migration_origin = "deny"
+```
+
+`sqlbuild_local.toml` can override the value for a target.
+
+The policy covers only origins with no build history in the target. A model origin that SQLBuild built in this target but can no longer see, because of permissions or because it was dropped outside SQLBuild, always stops the build with `M102`. Column origins have no such history, so `M109` always follows the policy. `sqb dbt run` and `sqb dbt build` apply the policy too, but have no confirmation flag: they ask on a terminal and stop otherwise. In non-interactive dbt runs, build the affected models with `sqb build --allow-missing-migration-origin` and leave them out of the dbt selection, or set the target's `missing_migration_origin` to `allow`.
 
 ### Clone policies
 

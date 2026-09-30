@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner._helpers.migrations.column_renames import (
     rename_hints,
 )
 from sqlbuild.compiler.planner._helpers.migrations.planning import (
+    missing_origin_policy,
     planning_database,
     redirected_cursor_snapshots,
 )
@@ -32,6 +33,7 @@ from sqlbuild.compiler.planner.classes.known_input_columns import KnownInputColu
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
+from sqlbuild.compiler.planner.constants import MISSING_ORIGIN_OUTCOMES
 from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanEntry,
     ColumnMigrationPlanning,
@@ -47,6 +49,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import InputColumns, MaterializationType, WarningSeverity
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
     {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}
@@ -141,6 +144,8 @@ def plan_column_migrations(
         entries.extend(model_entries)
         warnings.extend(model_warnings)
         hints.extend(_hints(candidate=candidate, entries=model_entries))
+    origin_policy: MissingMigrationOriginPolicy = missing_origin_policy(runtime=runtime)
+    entries = [replace(entry, missing_origin_policy=origin_policy) for entry in entries]
     warnings.extend(warning for entry in entries if (warning := _entry_warning(entry)))
     overlaid: WarehouseSnapshot = _overlay_snapshot(
         snapshot=snapshot,
@@ -399,7 +404,9 @@ def _overlay_snapshot(
 
     if not entries:
         return snapshot
-    blocked: frozenset[str] = frozenset(entry.model_name for entry in entries if entry.blocks_build)
+    blocked: frozenset[str] = frozenset(
+        entry.model_name for entry in entries if entry.blocks_build or entry.origin_missing
+    )
     columns: dict[str, tuple[ColumnInfo, ...]] = dict(snapshot.existing_columns)
     fingerprints: dict[str, Fingerprint] = dict(snapshot.fingerprints.models)
     candidate: _ModelColumns
@@ -521,8 +528,7 @@ def _entry_warning(entry: ColumnMigrationPlanEntry) -> PlanWarning | None:
             "M109",
             f"model '{entry.model_name}': {declaration}: column {entry.origin_column} does not "
             f"exist in {relation} and no recorded rename into {entry.destination_column} was "
-            "found; if the rename already happened elsewhere or is no longer needed, remove "
-            "migrate_from from the column",
+            f"found; {MISSING_ORIGIN_OUTCOMES[entry.missing_origin_policy]}",
         ),
         ColumnMigrationDecision.CONFLICT: (
             "M110",
@@ -546,7 +552,7 @@ def _entry_warning(entry: ColumnMigrationPlanEntry) -> PlanWarning | None:
         return None
     return PlanWarning(
         model_name=entry.model_name,
-        severity=WarningSeverity.ERROR,
+        severity=WarningSeverity.ERROR if entry.blocks_build else WarningSeverity.WARNING,
         message=coded[1],
         code=coded[0],
     )

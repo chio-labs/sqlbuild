@@ -221,3 +221,11 @@ class TolerantCategoryCase:
     files: dict[str, str]
     expected_kind: ResourceKind | DeclarationKind
     expected_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RelocationCase:
+    description: str
+    consumer_paths: tuple[str, ...]
+    destination: str
+    expected_paths: tuple[str, ...]

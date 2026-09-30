@@ -63,6 +63,7 @@ def add_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--allow-snapshot-full-refresh", action="store_true", default=False)
     parser.add_argument("--allow-table-type-downgrade", action="store_true", default=False)
     parser.add_argument("--allow-retention-decrease", action="store_true", default=False)
+    parser.add_argument("--allow-missing-migration-origin", action="store_true", default=False)
     parser.add_argument("--allow-snapshot-schema-change", action="store_true", default=False)
     parser.add_argument("--concurrency", type=int, default=None)
     parser.add_argument("--verbose", "-v", action="store_true", default=False)

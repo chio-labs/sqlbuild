@@ -336,3 +336,49 @@ def report_scope_lookup(*, extra_globals: int = 0) -> ScopeLookup:
         completeness=ScopeCompleteness(),
     )
     return build_scope_lookup(index=index)
+
+
+_RELOCATION_ROOT: OwnershipRoot = OwnershipRoot("models", resource_kind=ResourceKind.MODEL)
+_CENTS_MACRO: DeclarationIdentity = DeclarationIdentity(DeclarationKind.MACRO, "to_cents")
+_ORDER_SHAPE: DeclarationIdentity = DeclarationIdentity(DeclarationKind.SCHEMA, "order_shape")
+
+
+def relocation_index(consumer_paths: tuple[str, ...]) -> ScopeIndex:
+    """Return models sharing a staging schema that uses a staging macro."""
+
+    resources: tuple[ResourceRecord, ...] = tuple(
+        ResourceRecord(
+            identity=ResourceIdentity(ResourceKind.MODEL, f"orders_{position}"),
+            path=path,
+            ownership_root=_RELOCATION_ROOT,
+        )
+        for position, path in enumerate(consumer_paths)
+    )
+    return ScopeIndex(
+        ownership_roots=(_RELOCATION_ROOT,),
+        resources=resources,
+        declarations=(
+            DeclarationRecord(
+                identity=_ORDER_SHAPE,
+                path="models/staging/_sqlbuild/_schemas/order_shape.sql",
+                line=1,
+                column=1,
+                scope=ScopeKind.LOCAL,
+                ownership_root=_RELOCATION_ROOT,
+                owning_path="models/staging",
+            ),
+            DeclarationRecord(
+                identity=_CENTS_MACRO,
+                path="models/staging/_sqlbuild/_macros/cents.py",
+                line=1,
+                column=1,
+                scope=ScopeKind.LOCAL,
+                ownership_root=_RELOCATION_ROOT,
+                owning_path="models/staging",
+            ),
+        ),
+        usages=(
+            *(UsageRecord(consumer=item.identity, declaration=_ORDER_SHAPE) for item in resources),
+            UsageRecord(consumer=_ORDER_SHAPE, declaration=_CENTS_MACRO),
+        ),
+    )

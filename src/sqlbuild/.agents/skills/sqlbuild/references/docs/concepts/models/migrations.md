@@ -23,7 +23,9 @@ Table and view models can declare a migration too. They hold no history, so they
 
 ## Declaring a migration
 
-Add `migrate_from` to the renamed model's header, naming the old model:
+[`sqb rename`](../../cli/rename.md) and `sqb mv` rename or move a model, update every reference to it, and add `migrate_from` whenever the model's relation moves and its materialization keeps warehouse data (table, view, incremental, or snapshot).
+
+To declare a migration by hand, add `migrate_from` to the renamed model's header, naming the old model:
 
 ```sql
 MODEL (
@@ -52,7 +54,7 @@ After the move is recorded, `migrate_from` has no further effect, and SQLBuild t
 | `superseded replace` | The new relation was itself the origin of the latest recorded move, for example after renaming a model back. Replace it with the newer data. |
 | `forced replace` | The new relation has its own build history and `migrate_force true` is set. Replace it. |
 | `conflict` | The new relation has its own build history. The build stops (`M103`) until you set `migrate_force true` or remove `migrate_from`. |
-| `origin missing` | The old relation doesn't exist and no move was recorded. The build stops (`M102`). |
+| `origin missing` | The old relation doesn't exist and no move was recorded, for example on a target that never built the old name. The plan warns (`M102`) and the model builds fresh. A target can require confirmation or stop the build instead with [`missing_migration_origin`](../project-configuration.md#missing-migration-origins). If SQLBuild has build history for the old relation in this target, it should exist, so the build stops (`M102`) whatever the policy: the connection may lack permission to see it, or it was dropped outside SQLBuild. Restore access, or remove `migrate_from` to build fresh deliberately. |
 
 The origin and destination must be compatible under the model's normal `on_schema_change` rules; otherwise the build stops (`M104`).
 

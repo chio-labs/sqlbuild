@@ -59,7 +59,7 @@ def plan_table_types(
         )
     if runtime.adapter.adapter_name != BuiltinAdapter.SNOWFLAKE:
         return ()
-    target: TargetConfig = _effective_target(runtime=runtime)
+    target: TargetConfig = effective_target_config(runtime=runtime)
     entries: list[TableTypePlanEntry] = []
     for model in selected_models:
         if not MaterializationType.is_table_backed(
@@ -140,7 +140,9 @@ def plan_retention(
             entries.extend(
                 _plan_relation_retention(runtime=runtime, warehouse=warehouse, model=model)
             )
-    decrease_policy: str = _effective_target(runtime=runtime).time_travel_retention_decrease.value
+    decrease_policy: str = effective_target_config(
+        runtime=runtime
+    ).time_travel_retention_decrease.value
     return tuple(replace(entry, decrease_policy=decrease_policy) for entry in entries)
 
 
@@ -262,7 +264,7 @@ def _plan_relation_retention(
 def _plan_bigquery_retention(
     *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...]
 ) -> tuple[RetentionPlanEntry, ...]:
-    target: TargetConfig = _effective_target(runtime=runtime)
+    target: TargetConfig = effective_target_config(runtime=runtime)
     if not target.owns_time_travel_retention_namespace:
         raise PlannerInputError(
             "BigQuery managed time_travel_retention requires target "
@@ -362,7 +364,9 @@ def _plan_bigquery_retention(
     return tuple(entries)
 
 
-def _effective_target(*, runtime: PlannerRuntime) -> TargetConfig:
+def effective_target_config(*, runtime: PlannerRuntime) -> TargetConfig:
+    """Return the resolved config of the target being planned, or defaults without one."""
+
     if (
         runtime.project_config is None
         or runtime.local_config is None

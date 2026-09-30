@@ -111,6 +111,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [sqb format](cli/format.md) (`cli/format`) - Apply canonical SQLBuild SQL formatting.
 - [sqb contract](cli/contract.md) (`cli/contract`) - Compare or generate repository contracts from physical warehouse schemas.
 - [scope](cli/scope.md) (`cli/scope`) - Inspect declaration visibility, usage, placement, and move impact offline.
+- [rename and mv](cli/rename.md) (`cli/rename`) - Rename or move a model, or rename a column, and update every reference in one verified step.
 - [sqb rules](cli/rules.md) (`cli/rules`) - List, inspect, or run compiler-integrated Rules and generate project guidance.
 - [sqb plan](cli/plan.md) (`cli/plan`) - Preview what SQLBuild will do before executing.
 - [sqb build](cli/build.md) (`cli/build`) - Compile, plan, and execute the selected build lifecycle.

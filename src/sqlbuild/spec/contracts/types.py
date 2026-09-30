@@ -101,6 +101,14 @@ class TableTypeDowngradePolicy(StrEnum):
     ALLOW = "allow"
 
 
+class MissingMigrationOriginPolicy(StrEnum):
+    """Policy for a declared migrate_from whose origin does not exist in a target."""
+
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    ALLOW = "allow"
+
+
 class RetentionDecreasePolicy(StrEnum):
     """Policy for lowering live time-travel retention."""
 

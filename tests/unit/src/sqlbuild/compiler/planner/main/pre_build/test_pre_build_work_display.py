@@ -92,11 +92,11 @@ _RESET: str = "\033[0m"
             ),
         ),
         MigrationDecisionStyleTestCase(
-            description="origin missing is bold red",
+            description="origin missing allowed by the default policy is bold yellow",
             decision=MigrationDecision.ORIGIN_MISSING,
             compatibility=MigrationCompatibility.NOT_CHECKED,
             findings=(),
-            expected_fragments=(f"{_BOLD_RED}origin missing{_RESET}",),
+            expected_fragments=(f"{_BOLD_YELLOW}origin missing{_RESET}",),
         ),
         MigrationDecisionStyleTestCase(
             description="renamed table is listed as a bold blue migration that rebuilds it",
@@ -138,7 +138,9 @@ def test_given_migration_decision_when_formatting_then_applies_colour_roles(
                 "└── daily_revenue  migrate  prod.revenue -> prod.daily_revenue\n"
                 "    ├── compatibility  compatible\n"
                 "    ├── transfer  physical copy, promote by transactional rename\n"
-                "    └── discovery  automatic"
+                "    ├── discovery  automatic\n"
+                "    └── hint  matched by unchanged definition; sqb rename model:<old> <new> "
+                "rewrites references and declares migrate_from so the move does not depend on discovery"
             ),
         ),
     ),

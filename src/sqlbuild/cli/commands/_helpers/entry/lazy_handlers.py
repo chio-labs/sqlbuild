@@ -89,6 +89,10 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.inspection._scope",
             function_name="run_scope",
         ),
+        "refactor": _lazy_handler(
+            module_name="sqlbuild.cli.commands.main.project._refactor",
+            function_name="run_refactor",
+        ),
         "contract": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.inspection._contract",
             function_name="run_contract",
@@ -220,6 +224,7 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         run_rules=lazy["rules"],
         run_scope=lazy["scope"],
         run_contract=lazy["contract"],
+        run_refactor=lazy["refactor"],
     )
 
 

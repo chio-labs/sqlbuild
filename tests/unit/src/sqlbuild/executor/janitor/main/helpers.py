@@ -540,6 +540,7 @@ def build_project(
     source_database: str | None = None,
     destination_database: str | None = None,
     destination_schema: str = "analytics",
+    migrate_from: str | None = None,
 ) -> CompiledProject:
     source: CompiledSource = CompiledSource(
         key=CompiledObjectKey(
@@ -569,7 +570,7 @@ def build_project(
                 name="orders",
                 relative_path=Path("models/orders.sql"),
                 query_sql="select 1",
-                config=CompileModelConfig(),
+                config=CompileModelConfig(values={"migrate_from": migrate_from}),
                 destination=CompiledRelationLocation(
                     database=destination_database,
                     schema=destination_schema,

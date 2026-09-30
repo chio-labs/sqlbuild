@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sys
+from typing import TextIO
 
+from sqlbuild.cli.commands._helpers.build_planning.confirmation import confirm_typed_action
 from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
     enforce_model_execution_limit,
     executable_model_count,
@@ -17,9 +19,11 @@ from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
 from sqlbuild.cli.commands._helpers.build_planning.table_type import (
     enforce_table_type_downgrade_policy,
 )
+from sqlbuild.cli.commands.constants import MISSING_ORIGIN_BUILD_HELP
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import BuildCommandRequest, BuildInvocation
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
+from sqlbuild.compiler.planner.constants import HIDDEN_ORIGIN_REMEDY
 from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanEntry,
     ModelMigrationPlanEntry,
@@ -27,6 +31,7 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 _OLD_NAME_CODES: frozenset[str] = frozenset({"M114", "P008"})
 _COLUMN_BLOCK_CODES: dict[ColumnMigrationDecision, str] = {
@@ -42,8 +47,13 @@ def enforce_build_plan_policies(
 ) -> None:
     """Apply migration, execution-limit, and storage safety gates in their required order."""
 
-    _enforce_model_migration_policy(plan=plan)
-    _enforce_column_migration_policy(plan=plan)
+    enforce_migration_plan_policies(
+        plan=plan,
+        allow_missing_migration_origin=request.allow_missing_migration_origin,
+        non_interactive_help=MISSING_ORIGIN_BUILD_HELP,
+        input_stream=sys.stdin,
+        output_stream=sys.stdout,
+    )
     _enforce_old_name_policy(plan=plan)
     enforce_model_execution_limit(
         model_count=executable_model_count(plan=plan),
@@ -71,6 +81,27 @@ def enforce_build_plan_policies(
     )
 
 
+def enforce_migration_plan_policies(
+    *,
+    plan: PlanOutput,
+    allow_missing_migration_origin: bool,
+    non_interactive_help: str,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> None:
+    """Refuse blocked model and column migrations, then confirm building past missing origins."""
+
+    _enforce_model_migration_policy(plan=plan)
+    _enforce_column_migration_policy(plan=plan)
+    _confirm_missing_origins(
+        plan=plan,
+        allow_missing_migration_origin=allow_missing_migration_origin,
+        non_interactive_help=non_interactive_help,
+        input_stream=input_stream,
+        output_stream=output_stream,
+    )
+
+
 def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
     """Refuse to build while any planned migration conflicts or is incompatible."""
 
@@ -79,19 +110,27 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
     )
     if not blocked:
         return
+    hidden: tuple[ModelMigrationPlanEntry, ...] = tuple(
+        entry for entry in blocked if entry.origin_hidden
+    )
+    if hidden:
+        raise CliUserError(
+            "model migration origin was built in this target but is not visible for "
+            + _origins(hidden)
+            + f"; {HIDDEN_ORIGIN_REMEDY}",
+            code="M102",
+            help="Run sqb plan to see every model migration decision.",
+        )
     missing: tuple[ModelMigrationPlanEntry, ...] = tuple(
         entry for entry in blocked if entry.decision == MigrationDecision.ORIGIN_MISSING
     )
     if missing:
         raise CliUserError(
             "model migration origin does not exist for "
-            + ", ".join(
-                f"'{entry.model_name}' (migrate_from "
-                f"{entry.origin.qualified_name or entry.origin.name})"
-                for entry in missing
-            )
-            + " and no recorded migration into it was found; if the migration already happened "
-            "elsewhere or is no longer needed, remove migrate_from from the model header",
+            + _origins(missing)
+            + " and no recorded migration into it was found, and this target sets "
+            "missing_migration_origin = deny; if the migration already happened elsewhere or is "
+            "no longer needed, remove migrate_from from the model header",
             code="M102",
             help="Run sqb plan to see every model migration decision.",
         )
@@ -116,6 +155,13 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
     )
 
 
+def _origins(entries: tuple[ModelMigrationPlanEntry, ...]) -> str:
+    return ", ".join(
+        f"'{entry.model_name}' (migrate_from {entry.origin.qualified_name or entry.origin.name})"
+        for entry in entries
+    )
+
+
 def _enforce_column_migration_policy(*, plan: PlanOutput) -> None:
     """Refuse to build while any declared column rename cannot be applied safely."""
 
@@ -133,6 +179,46 @@ def _enforce_column_migration_policy(*, plan: PlanOutput) -> None:
         ),
         code=_COLUMN_BLOCK_CODES.get(blocked[0].decision, "M109"),
         help="Run sqb plan to see why each column rename cannot be applied.",
+    )
+
+
+def _confirm_missing_origins(
+    *,
+    plan: PlanOutput,
+    allow_missing_migration_origin: bool,
+    non_interactive_help: str,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> None:
+    """Confirm before building past declared migrations whose origin is missing."""
+
+    names: tuple[str, ...] = tuple(
+        sorted(
+            {
+                entry.model_name
+                for entry in (*plan.migration_entries, *plan.column_migration_entries)
+                if entry.origin_missing
+                and not entry.blocks_build
+                and entry.missing_origin_policy == MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION
+            }
+        )
+    )
+    if not names or allow_missing_migration_origin:
+        return
+    listed: str = ", ".join(f"'{name}'" for name in names)
+    confirm_typed_action(
+        action=f"building {listed} without its missing migrate_from origin",
+        non_interactive_help=non_interactive_help,
+        warning=f"The migrate_from origin of {listed} does not exist in this target; nothing "
+        "will be migrated.",
+        expected=(
+            f"build {names[0]} without its migration"
+            if len(names) == 1
+            else f"build {len(names)} models without their migrations"
+        ),
+        input_stream=input_stream,
+        output_stream=output_stream,
+        code="M102",
     )
 
 

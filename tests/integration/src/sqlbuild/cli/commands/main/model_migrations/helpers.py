@@ -33,6 +33,23 @@ PROJECT_TOML: str = dedent(
     old_name_views = false
     """
 ).lstrip()
+DENY_MISSING_ORIGIN_PROJECT_TOML: str = dedent(
+    f"""
+    name = "orders_project"
+    adapter = "duckdb"
+    default_target = "main"
+
+    [connection]
+    database = "{DATABASE_FILE}"
+
+    [targets.main]
+    schema = "main"
+    missing_migration_origin = "deny"
+
+    [migrations]
+    old_name_views = false
+    """
+).lstrip()
 TARGETS_PROJECT_TOML: str = dedent(
     f"""
     name = "orders_project"
