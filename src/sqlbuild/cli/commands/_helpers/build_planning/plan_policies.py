@@ -22,6 +22,7 @@ from sqlbuild.cli.commands._helpers.build_planning.table_type import (
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import BuildCommandRequest, BuildInvocation
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
+from sqlbuild.compiler.planner.constants import HIDDEN_ORIGIN_REMEDY
 from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanEntry,
     ModelMigrationPlanEntry,
@@ -105,17 +106,24 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
     )
     if not blocked:
         return
+    hidden: tuple[ModelMigrationPlanEntry, ...] = tuple(
+        entry for entry in blocked if entry.origin_hidden
+    )
+    if hidden:
+        raise CliUserError(
+            "model migration origin was built in this target but is not visible for "
+            + _origins(hidden)
+            + f"; {HIDDEN_ORIGIN_REMEDY}",
+            code="M102",
+            help="Run sqb plan to see every model migration decision.",
+        )
     missing: tuple[ModelMigrationPlanEntry, ...] = tuple(
         entry for entry in blocked if entry.decision == MigrationDecision.ORIGIN_MISSING
     )
     if missing:
         raise CliUserError(
             "model migration origin does not exist for "
-            + ", ".join(
-                f"'{entry.model_name}' (migrate_from "
-                f"{entry.origin.qualified_name or entry.origin.name})"
-                for entry in missing
-            )
+            + _origins(missing)
             + " and no recorded migration into it was found, and this target sets "
             "missing_migration_origin = deny; if the migration already happened elsewhere or is "
             "no longer needed, remove migrate_from from the model header",
@@ -140,6 +148,13 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
         f"model migration source is incompatible with {names}",
         code="M104",
         help="Run sqb plan to see the blocking schema differences.",
+    )
+
+
+def _origins(entries: tuple[ModelMigrationPlanEntry, ...]) -> str:
+    return ", ".join(
+        f"'{entry.model_name}' (migrate_from {entry.origin.qualified_name or entry.origin.name})"
+        for entry in entries
     )
 
 
@@ -178,6 +193,7 @@ def _confirm_missing_origins(
                 entry.model_name
                 for entry in (*plan.migration_entries, *plan.column_migration_entries)
                 if entry.origin_missing
+                and not entry.blocks_build
                 and entry.missing_origin_policy == MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION
             }
         )

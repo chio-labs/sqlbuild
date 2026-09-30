@@ -235,6 +235,8 @@ missing_migration_origin = "deny"
 
 `sqlbuild_local.toml` can override the value for a target.
 
+The policy covers only origins with no build history in the target. A model origin that SQLBuild built in this target but can no longer see, because of permissions or because it was dropped outside SQLBuild, always stops the build with `M102`. Column origins have no such history, so `M109` always follows the policy. `sqb dbt run` and `sqb dbt build` apply the policy too, without a confirmation flag: they ask on a terminal and stop otherwise.
+
 ### Clone policies
 
 Targets can declare whether they allow cloning to or from:

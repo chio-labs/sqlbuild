@@ -44,6 +44,7 @@ from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
 from sqlbuild.compiler.planner.constants import (
+    HIDDEN_ORIGIN_REMEDY,
     MIGRATION_MODEL_NAME_METADATA_KEY,
     MISSING_ORIGIN_OUTCOMES,
     QUALIFIED_RELATION_MAX_PARTS,
@@ -763,6 +764,16 @@ def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
                 f"'{entry.target_label}'; migrate_from can be removed from '{entry.model_name}'"
             ),
             code="M101",
+        )
+    if entry.origin_hidden:
+        return PlanWarning(
+            model_name=entry.model_name,
+            severity=WarningSeverity.ERROR,
+            message=(
+                f"model '{entry.model_name}': migrate_from origin {origin} was built in this "
+                f"target but is not visible; {HIDDEN_ORIGIN_REMEDY}"
+            ),
+            code="M102",
         )
     if entry.origin_missing:
         return PlanWarning(

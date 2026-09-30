@@ -88,6 +88,11 @@ MANUAL_RENAME_HINT: str = (
     "matched by unchanged definition; sqb rename model:<old> <new> rewrites references and "
     "declares migrate_from so the move does not depend on discovery"
 )
+HIDDEN_ORIGIN_REMEDY: str = (
+    "the connection may lack permission to see it, or it was dropped outside SQLBuild; restore "
+    "access to it, or remove migrate_from to build the model fresh deliberately "
+    "(missing_migration_origin does not apply)"
+)
 MISSING_ORIGIN_OUTCOMES: dict[MissingMigrationOriginPolicy, str] = {
     MissingMigrationOriginPolicy.ALLOW: (
         "nothing is migrated and the build continues as if migrate_from were absent; remove "

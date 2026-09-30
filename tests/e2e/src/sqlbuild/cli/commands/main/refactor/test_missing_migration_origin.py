@@ -8,10 +8,12 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
+    HiddenOriginE2ETestCase,
     MissingOriginE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     declare_missing_column_origin,
+    drop_view_outside_sqlbuild,
     order_history_files,
     project_toml,
     relation_columns,
@@ -133,3 +135,45 @@ def test_given_missing_origin_column_when_building_then_policy_decides(
     assert relation_columns(project_dir=project_dir, name="order_history") == (
         test_case.expected_columns
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HiddenOriginE2ETestCase(
+            description="an origin built here but dropped outside SQLBuild stops under allow",
+            target_settings="",
+            expected_output="was built in this target but is not visible",
+        ),
+        HiddenOriginE2ETestCase(
+            description="require_confirmation cannot confirm past a hidden origin",
+            target_settings=_CONFIRM,
+            expected_output="error[M102]",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_built_origin_not_visible_when_building_then_stops_regardless_of_policy(
+    tmp_path: Path, test_case: HiddenOriginE2ETestCase
+) -> None:
+    """Recorded build history means the origin should exist, so its absence is an error."""
+
+    project_dir: Path = write_orders_project(
+        tmp_path=tmp_path,
+        files={"sqlbuild_project.toml": project_toml(target_settings=test_case.target_settings)},
+    )
+    first: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
+    drop_view_outside_sqlbuild(project_dir=project_dir, name="stg_orders")
+    renamed: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "rename", "model:stg_orders", "stg_order_lines"
+    )
+
+    built: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "build", "--allow-missing-migration-origin"
+    )
+
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert renamed.returncode == 0, renamed.stdout + renamed.stderr
+    assert built.returncode == 1, built.stdout + built.stderr
+    assert test_case.expected_output in built.stdout + built.stderr
+    assert relation_type(project_dir=project_dir, name="stg_order_lines") is None

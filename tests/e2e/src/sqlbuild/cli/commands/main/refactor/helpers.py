@@ -259,6 +259,18 @@ def strip_migration_fingerprints(*, project_dir: Path, models: tuple[str, ...]) 
         connection.close()
 
 
+def drop_view_outside_sqlbuild(*, project_dir: Path, name: str) -> None:
+    """Drop a built view directly in the warehouse, leaving SQLBuild's history in place."""
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / DATABASE_FILE))
+    try:
+        _ = connection.execute(f"DROP VIEW {SCHEMA}.{name}")
+    finally:
+        connection.close()
+
+
 def declare_missing_column_origin(*, project_dir: Path) -> None:
     """Add a revenue column that declares migrate_from a column the table never had."""
 

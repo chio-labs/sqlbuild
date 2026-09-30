@@ -941,6 +941,12 @@ class ModelMigrationPlanEntry:
         return self.decision == MigrationDecision.ORIGIN_MISSING
 
     @property
+    def origin_hidden(self) -> bool:
+        """Return whether the missing origin has build history in this target."""
+
+        return self.origin_missing and self.origin_tracked
+
+    @property
     def storage_transition(self) -> str | None:
         """Return the Snowflake table-type transition label, when both types are known."""
 
@@ -960,7 +966,10 @@ class ModelMigrationPlanEntry:
         """Return whether this migration must stop a build before any execution."""
 
         if self.origin_missing:
-            return self.missing_origin_policy == MissingMigrationOriginPolicy.DENY
+            return (
+                self.origin_tracked
+                or self.missing_origin_policy == MissingMigrationOriginPolicy.DENY
+            )
         return self.decision.blocks_build or (
             self.decision.moves_data and self.compatibility == MigrationCompatibility.INCOMPATIBLE
         )

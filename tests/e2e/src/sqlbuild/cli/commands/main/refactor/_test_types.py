@@ -90,3 +90,10 @@ class DeclarationMoveE2ETestCase:
     extra_files: dict[str, str]
     destination: str
     expected_moved: dict[str, str]
+
+
+@dataclass(frozen=True)
+class HiddenOriginE2ETestCase:
+    description: str
+    target_settings: str
+    expected_output: str
