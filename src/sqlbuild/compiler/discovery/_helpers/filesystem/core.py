@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import inspect
+import re
 import sys
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
@@ -36,10 +37,11 @@ from sqlbuild.compiler.discovery._helpers.sql.declarations import (
 from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
 from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    model_header_column_locations,
-    model_output_column_locations,
-    parse_model_sql,
-    prepare_model_file_headers,
+    match_model_header,
+    matched_model_header_column_locations,
+    matched_model_output_column_locations,
+    parse_matched_model_sql,
+    prepare_matched_model_file_headers,
 )
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
@@ -381,17 +383,18 @@ def discover_model_files(
         except (OSError, UnicodeError, ValueError, SyntaxError) as error:
             loaded_model_files.append((file_path, None, error))
 
-    prepare_model_file_headers(
-        [
-            contents
-            for _path, contents, error in loaded_model_files
-            if contents is not None and error is None
-        ]
-    )
+    header_matches: list[re.Match[str] | None] = [
+        match_model_header(contents) if contents is not None and error is None else None
+        for _path, contents, error in loaded_model_files
+    ]
+    prepare_matched_model_file_headers(header_matches)
     discovered_model_files: list[DiscoveredSqlModelFile] = []
     contents: str | None
     read_error: Exception | None
-    for file_path, contents, read_error in loaded_model_files:
+    header_match: re.Match[str] | None
+    for (file_path, contents, read_error), header_match in zip(
+        loaded_model_files, header_matches, strict=True
+    ):
         if read_error is not None:
             if on_fault is None:
                 raise read_error
@@ -405,6 +408,7 @@ def discover_model_files(
                     project_dir=project_dir,
                     file_path=file_path,
                     contents=contents,
+                    header_match=header_match,
                     extract_implicit_alias_columns=extract_implicit_alias_columns,
                     extract_output_column_locations=extract_output_column_locations,
                 )
@@ -422,22 +426,26 @@ def _discover_model_file(
     project_dir: Path,
     file_path: Path,
     contents: str,
+    header_match: re.Match[str] | None,
     extract_implicit_alias_columns: bool,
     extract_output_column_locations: bool,
 ) -> DiscoveredSqlModelFile:
-    header_values, query_sql = parse_model_sql(contents=contents, file_path=file_path)
+    header_values, query_sql = parse_matched_model_sql(
+        header_match=header_match, file_path=file_path
+    )
     relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     return DiscoveredSqlModelFile(
         file_path=file_path,
         relative_path=relative_path,
         contents=contents,
         header_values=header_values,
-        header_column_locations=model_header_column_locations(
-            contents=contents, relative_path=relative_path
+        header_column_locations=matched_model_header_column_locations(
+            contents=contents, header_match=header_match, relative_path=relative_path
         ),
         output_column_locations=(
-            model_output_column_locations(
+            matched_model_output_column_locations(
                 contents=contents,
+                header_match=header_match,
                 relative_path=relative_path,
                 extract_implicit_alias_columns=extract_implicit_alias_columns,
             )

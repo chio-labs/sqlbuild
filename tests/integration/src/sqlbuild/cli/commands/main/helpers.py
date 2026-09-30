@@ -449,12 +449,12 @@ def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[Pa
 
     scanned: list[Path] = []
     original: Callable[..., dict[str, SourceLocation]] = (
-        discovery_core_module.model_output_column_locations
+        discovery_core_module.matched_model_output_column_locations
     )
 
     def recording(**kwargs: Any) -> dict[str, SourceLocation]:
         scanned.append(cast(Path, kwargs["relative_path"]))
         return original(**kwargs)
 
-    monkeypatch.setattr(discovery_core_module, "model_output_column_locations", recording)
+    monkeypatch.setattr(discovery_core_module, "matched_model_output_column_locations", recording)
     return scanned
