@@ -94,6 +94,15 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
             expected_regressed=(False, False, False),
         ),
         MetricVerdictTestCase(
+            description="one high candidate run fails where the median would pass",
+            comparison=comparison(
+                name="compile (no cache)",
+                baseline=((10.0, 19.0, 640), (10.0, 19.0, 860), (10.0, 19.0, 640)),
+                candidate=((10.0, 19.0, 640), (10.0, 19.0, 640), (10.0, 19.0, 1_120)),
+            ),
+            expected_regressed=(False, False, True),
+        ),
+        MetricVerdictTestCase(
             description="a larger worst-run peak RSS fails",
             comparison=comparison(
                 name="compile (no cache)",
