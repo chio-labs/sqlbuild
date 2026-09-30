@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Protocol, cast
 
 import orjson
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile.constants import (
+    SQL_TEST_FACT_CACHE_ALGORITHM,
+    SQL_TEST_FACT_CACHE_NAMESPACE,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeSqlTestResponseError
 from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
@@ -15,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 
 
 class _NativeSqlTestModule(Protocol):
@@ -24,6 +30,49 @@ class _NativeSqlTestModule(Protocol):
 _DIRECT_KIND: str = "direct"
 _MODEL_KIND: str = "model"
 _PAIR_LENGTH: int = 2
+
+
+def extract_expanded_sql_tests_cached(
+    tests: tuple[tuple[str, str, SqlTestMode], ...],
+    *,
+    cache_root: Path | None,
+) -> tuple[CompileSqlTestCtes, ...]:
+    """Reuse exact per-test extraction facts and extract only changed tests natively."""
+
+    with FactCacheStore(
+        root=cache_root,
+        namespace=SQL_TEST_FACT_CACHE_NAMESPACE,
+        algorithm=SQL_TEST_FACT_CACHE_ALGORITHM,
+    ) as fact_cache:
+        if not fact_cache.enabled:
+            return extract_expanded_sql_tests(tests)
+        keys: tuple[str, ...] = tuple(
+            fact_cache.key(sql, file_label, mode.value) for sql, file_label, mode in tests
+        )
+        cached: dict[str, object] = fact_cache.read_many(keys)
+        results: list[CompileSqlTestCtes | None] = [
+            value
+            if isinstance(value := cached.get(key), CompileSqlTestCtes) and value.mode is mode
+            else None
+            for key, (_sql, _file_label, mode) in zip(keys, tests, strict=True)
+        ]
+        missing_indexes: tuple[int, ...] = tuple(
+            index for index, result in enumerate(results) if result is None
+        )
+        if missing_indexes:
+            extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
+                tuple(tests[index] for index in missing_indexes)
+            )
+            ordinals: dict[str, int] = {}
+            slots: list[str] = []
+            for _sql, file_label, _mode in tests:
+                ordinal: int = ordinals.get(file_label, 0)
+                ordinals[file_label] = ordinal + 1
+                slots.append(f"{file_label}#{ordinal}")
+            for index, test_ctes in zip(missing_indexes, extracted, strict=True):
+                results[index] = test_ctes
+                fact_cache.stage(key=keys[index], slot=slots[index], value=test_ctes)
+        return tuple(result for result in results if result is not None)
 
 
 def extract_expanded_sql_tests(

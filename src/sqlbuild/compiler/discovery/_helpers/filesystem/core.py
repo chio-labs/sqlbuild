@@ -15,6 +15,10 @@ from typing import get_type_hints
 
 from pydantic import ValidationError
 
+from sqlbuild.compiler.discovery._helpers.filesystem.cached_files import (
+    decode_cached_source_file,
+    encode_cached_source_file,
+)
 from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
     named_declaration_files,
     named_declaration_roots,
@@ -42,6 +46,7 @@ from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
     CANONICAL_AUTHORED_ROOTS,
+    DISCOVERY_SOURCE_FACT_KIND,
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
     SCHEMA_FILE_NAME,
@@ -90,6 +95,7 @@ from sqlbuild.compiler.discovery.models import (
     NamedDeclarationRoot,
 )
 from sqlbuild.compiler.discovery.types import ScopedDeclarationFile
+from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -734,7 +740,10 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
 
 
 def discover_source_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    fact_cache: FactCacheStore | None = None,
 ) -> tuple[DiscoveredSourceFile, ...]:
     """Discover source declaration YAML files under sources/."""
 
@@ -748,12 +757,32 @@ def discover_source_files(
 
     def parse(file_path: Path) -> DiscoveredSourceFile:
         contents: str = file_path.read_text(encoding="utf-8")
-        return DiscoveredSourceFile(
+        cache_key: str | None = (
+            fact_cache.key(DISCOVERY_SOURCE_FACT_KIND, str(project_dir), str(file_path), contents)
+            if fact_cache is not None and fact_cache.enabled
+            else None
+        )
+        if fact_cache is not None and cache_key is not None:
+            cached: DiscoveredSourceFile | None = decode_cached_source_file(
+                fact=fact_cache.read_many((cache_key,)).get(cache_key),
+                file_path=file_path,
+                contents=contents,
+            )
+            if cached is not None:
+                return cached
+        source_file: DiscoveredSourceFile = DiscoveredSourceFile(
             file_path=file_path,
             relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
             contents=contents,
             source_entries=parse_sources_yml(contents=contents, file_path=file_path),
         )
+        if fact_cache is not None and cache_key is not None:
+            fact_cache.stage(
+                key=cache_key,
+                slot=f"{DISCOVERY_SOURCE_FACT_KIND}:{file_path}",
+                value=encode_cached_source_file(source_file),
+            )
+        return source_file
 
     return _parse_discovered_paths(
         project_dir=project_dir, file_paths=yaml_paths, parse=parse, on_fault=on_fault
@@ -782,6 +811,7 @@ def discover_test_files(
     project_dir: Path,
     selected_paths: frozenset[Path] | None = None,
     on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    fact_cache: FactCacheStore | None = None,
 ) -> tuple[DiscoveredSqlTestFile, ...]:
     """Discover SQL-native unit test files under tests/unit/."""
 
@@ -799,6 +829,7 @@ def discover_test_files(
         project_dir=project_dir,
         file_paths=file_paths,
         on_fault=on_fault,
+        fact_cache=fact_cache,
     )
 
 

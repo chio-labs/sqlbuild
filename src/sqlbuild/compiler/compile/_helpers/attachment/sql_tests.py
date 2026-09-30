@@ -32,7 +32,9 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
     extract_sql_test_ctes,
 )
-from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_expanded_sql_tests
+from sqlbuild.compiler.compile._helpers.sql_tests.native import (
+    extract_expanded_sql_tests_cached,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -102,7 +104,6 @@ def build_test_inputs_with_cache(
     """Build SQL test inputs inside the compile timing boundary."""
 
     with record_compile_timing("test_input_compile_ms"):
-        del compile_cache_dir
         return build_test_inputs(
             discovered_inputs=discovered_inputs,
             effective_vars=effective_vars,
@@ -111,6 +112,7 @@ def build_test_inputs_with_cache(
             declaration_expansion=declaration_expansion,
             external_sql_reference_resolver=external_sql_reference_resolver,
             sql_function_inputs=sql_function_inputs,
+            compile_cache_dir=compile_cache_dir,
         )
 
 
@@ -123,6 +125,7 @@ def build_test_inputs(
     declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
+    compile_cache_dir: Path | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
@@ -276,10 +279,11 @@ def build_test_inputs(
                         test_case=test_case,
                     )
                 )
-    test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
+    test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests_cached(
         tuple(
             (test.sql_body, str(test.test_file.relative_path), test.mode) for test in expanded_tests
-        )
+        ),
+        cache_root=compile_cache_dir,
     )
     for test, test_ctes in zip(expanded_tests, test_ctes_batch, strict=True):
         validate_test_ctes(
