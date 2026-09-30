@@ -9,8 +9,8 @@ from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
     resolve_run_id,
 )
-from sqlbuild.compiler.compile.main.compile_cache_root import compile_cache_root
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fact_cache.main._compile_cache_root import compile_cache_root
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import TargetConfig

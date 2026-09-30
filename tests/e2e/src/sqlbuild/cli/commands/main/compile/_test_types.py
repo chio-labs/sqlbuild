@@ -356,18 +356,9 @@ class CompileCacheInvalidationTestCase:
     description: str
     edit: Callable[[Path], None]
     edited_env: dict[str, str] = field(default_factory=dict)
-    expect_failure: bool = False
-    changes_output: bool = True
-
-
-@dataclass(frozen=True)
-class CompileCacheOutcome:
-    """Comparable result of one fresh-process compile."""
-
-    returncode: int
-    fingerprint: str
-    fact_cache_hits: int
-    fact_cache_misses: int
+    expected_failure: bool = False
+    expected_output_change: bool = True
+    expected_rewarmed_fact_cache_misses: int = 0
 
 
 @dataclass(frozen=True)
@@ -378,3 +369,5 @@ class CompileCacheDisabledTestCase:
     compile_args: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     edit: Callable[[Path], None] = lambda _root: None
+    expected_fact_cache_counts: tuple[int, int] = (0, 0)
+    expected_fact_databases: tuple[Path, ...] = ()

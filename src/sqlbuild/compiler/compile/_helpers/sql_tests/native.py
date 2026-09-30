@@ -33,8 +33,8 @@ _PAIR_LENGTH: int = 2
 
 
 def extract_expanded_sql_tests_cached(
-    tests: tuple[tuple[str, str, SqlTestMode], ...],
     *,
+    tests: tuple[tuple[str, str, SqlTestMode], ...],
     cache_root: Path | None,
 ) -> tuple[CompileSqlTestCtes, ...]:
     """Reuse exact per-test extraction facts and extract only changed tests natively."""

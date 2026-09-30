@@ -124,18 +124,12 @@ def evaluate_rules(
         select=tuple(rule.code for rule in selected),
         ignore=(),
     )
-    # Hash model SQL and read project files before the native rules thread starts: each large
-    # hash update and file read releases the GIL and then stalls behind the GIL-bound thread.
-    sql_rule_identities: dict[str, str] = _sql_model_rule_identities(
-        rules=native_rules, project=selected_project, dialect=dialect
-    )
-    sql_rule_inputs: _SqlRuleInputs = _SqlRuleInputs(
-        identities=sql_rule_identities,
-        project_files=(
-            collect_project_files(project_dir=resolved_project_dir, selected_paths=None)
-            if sql_rule_identities and prepared_sql is None and model_paths is None
-            else None
-        ),
+    sql_rule_inputs: _SqlRuleInputs = _prepare_sql_rule_inputs(
+        rules=native_rules,
+        project=selected_project,
+        dialect=dialect,
+        project_dir=resolved_project_dir,
+        collect_files=prepared_sql is None and model_paths is None,
     )
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-rules") as executor:
         native_result: Future[RulesResult] = executor.submit(
@@ -191,6 +185,29 @@ def evaluate_rules(
         cache_hits=result.cache_hits + sql_result.cache_hits,
         cache_misses=result.cache_misses + sql_result.cache_misses,
         skipped_type_proof_rules=skipped_type_proof_rules,
+    )
+
+
+def _prepare_sql_rule_inputs(
+    *,
+    rules: tuple[Rule, ...],
+    project: CompiledProject,
+    dialect: str,
+    project_dir: Path,
+    collect_files: bool,
+) -> _SqlRuleInputs:
+    """Hash SQL and read files first so GIL-releasing work never waits on the native thread."""
+
+    identities: dict[str, str] = _sql_model_rule_identities(
+        rules=rules, project=project, dialect=dialect
+    )
+    return _SqlRuleInputs(
+        identities=identities,
+        project_files=(
+            collect_project_files(project_dir=project_dir, selected_paths=None)
+            if identities and collect_files
+            else None
+        ),
     )
 
 

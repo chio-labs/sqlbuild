@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import pickle
-import sqlite3
-from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -11,166 +7,222 @@ import pytest
 from sqlbuild.compiler.fact_cache.classes import fact_cache_store
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
-from sqlbuild.spec.contracts.models import SourceLocation
 from tests.unit.src.sqlbuild.compiler.fact_cache.classes._test_types import (
+    FactCacheCodeIdentityTestCase,
     FactCacheCorruptionTestCase,
+    FactCacheNoPersistenceTestCase,
+    FactCacheReadTestCase,
+    FactCacheRetentionTestCase,
 )
-
-_NAMESPACE: str = "unit"
-_ALGORITHM: str = "unit-facts-v1"
-_FACT: tuple[SourceLocation, ...] = (
-    SourceLocation(path=Path("models/orders.sql"), line=3, column=5, end_line=3, end_column=12),
+from tests.unit.src.sqlbuild.compiler.fact_cache.classes.helpers import (
+    FACT_ALGORITHM,
+    FACT_NAMESPACE,
+    FACT_VALUE,
+    fact_database,
+    flip_payload_byte,
+    publish_fact,
+    read_fact,
+    replace_database_with_garbage,
+    stored_fact_slots,
+    truncate_verified_payload,
+    write_untrusted_global,
 )
-
-
-def _database(root: Path) -> Path:
-    return next(root.rglob(f"{_NAMESPACE}.sqlite3"))
-
-
-def _publish(root: Path, *, key_parts: tuple[str, ...], slot: str, value: object) -> str:
-    with FactCacheStore(root=root, namespace=_NAMESPACE, algorithm=_ALGORITHM) as store:
-        key: str = store.key(*key_parts)
-        store.stage(key=key, slot=slot, value=value)
-    return key
-
-
-def _read(root: Path, *, key_parts: tuple[str, ...], slot: str = "orders") -> dict[str, object]:
-    with FactCacheStore(root=root, namespace=_NAMESPACE, algorithm=_ALGORITHM) as store:
-        return store.read_many(((slot, store.key(*key_parts)),))
-
-
-def _overwrite_payload(database: Path, payload: bytes, *, keep_digest: bool) -> None:
-    with closing(sqlite3.connect(database)) as connection, connection:
-        cache_key: str = connection.execute("SELECT cache_key FROM fact").fetchone()[0]
-        digest: str = (
-            hashlib.sha256(cache_key.encode() + b"\0" + payload).hexdigest()
-            if keep_digest
-            else "0" * 64
-        )
-        _ = connection.execute("UPDATE fact SET payload = ?, digest = ?", (payload, digest))
-
-
-def _flip_payload_byte(root: Path) -> None:
-    database: Path = _database(root)
-    with closing(sqlite3.connect(database)) as connection, connection:
-        payload: bytes = connection.execute("SELECT payload FROM fact").fetchone()[0]
-        _ = connection.execute("UPDATE fact SET payload = ?", (payload[:-1] + b"\x00",))
-
-
-def _write_untrusted_global(root: Path) -> None:
-    _overwrite_payload(_database(root), pickle.dumps(Path.home, protocol=5), keep_digest=True)
-
-
-def _truncate_verified_payload(root: Path) -> None:
-    _overwrite_payload(_database(root), b"\x80\x05", keep_digest=True)
-
-
-def _replace_database_with_garbage(root: Path) -> None:
-    _database(root).write_bytes(b"not a sqlite database")
-
-
-CORRUPTION_CASES: list[FactCacheCorruptionTestCase] = [
-    FactCacheCorruptionTestCase(description="payload_bytes_changed", corrupt=_flip_payload_byte),
-    FactCacheCorruptionTestCase(
-        description="verified_payload_references_function", corrupt=_write_untrusted_global
-    ),
-    FactCacheCorruptionTestCase(
-        description="verified_payload_truncated", corrupt=_truncate_verified_payload
-    ),
-    FactCacheCorruptionTestCase(
-        description="database_file_replaced", corrupt=_replace_database_with_garbage
-    ),
-]
-
-
-def test_given_published_fact_when_reading_same_inputs_then_returns_equal_value(
-    tmp_path: Path,
-) -> None:
-    key: str = _publish(tmp_path, key_parts=("orders", "SELECT 1"), slot="orders", value=_FACT)
-
-    with collect_compile_timings() as timings:
-        found: dict[str, object] = _read(tmp_path, key_parts=("orders", "SELECT 1"))
-
-    assert found == {key: _FACT}
-    assert timings.metrics["fact_cache_hits"] == 1
-    assert timings.metrics["fact_cache_misses"] == 0
-
-
-def test_given_published_fact_when_any_input_changes_then_misses(tmp_path: Path) -> None:
-    _ = _publish(tmp_path, key_parts=("orders", "SELECT 1"), slot="orders", value=_FACT)
-
-    assert _read(tmp_path, key_parts=("orders", "SELECT 2")) == {}
-    assert _read(tmp_path, key_parts=("orders", "SELECT 1", "")) == {}
-    assert _read(tmp_path, key_parts=("ordersSELECT 1",)) == {}
-
-
-def test_given_published_fact_when_producing_code_changes_then_misses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _ = _publish(tmp_path, key_parts=("orders",), slot="orders", value=_FACT)
-    monkeypatch.setattr(fact_cache_store, "installed_code_identity", lambda: "next-release")
-
-    assert _read(tmp_path, key_parts=("orders",)) == {}
-
-
-def test_given_published_fact_when_algorithm_changes_then_misses(tmp_path: Path) -> None:
-    _ = _publish(tmp_path, key_parts=("orders",), slot="orders", value=_FACT)
-
-    with FactCacheStore(root=tmp_path, namespace=_NAMESPACE, algorithm="unit-facts-v2") as store:
-        assert store.read_many((("orders", store.key("orders")),)) == {}
 
 
 @pytest.mark.parametrize(
-    "test_case", CORRUPTION_CASES, ids=[case.description for case in CORRUPTION_CASES]
+    "test_case",
+    (
+        FactCacheReadTestCase(
+            description="same_inputs_hit",
+            read_key_parts=("orders", "SELECT 1"),
+            read_algorithm=FACT_ALGORITHM,
+            expected_hit=True,
+            expected_metrics=(1, 0),
+        ),
+        FactCacheReadTestCase(
+            description="changed_input_misses",
+            read_key_parts=("orders", "SELECT 2"),
+            read_algorithm=FACT_ALGORITHM,
+            expected_hit=False,
+            expected_metrics=(0, 1),
+        ),
+        FactCacheReadTestCase(
+            description="extra_empty_input_misses",
+            read_key_parts=("orders", "SELECT 1", ""),
+            read_algorithm=FACT_ALGORITHM,
+            expected_hit=False,
+            expected_metrics=(0, 1),
+        ),
+        FactCacheReadTestCase(
+            description="concatenated_inputs_miss",
+            read_key_parts=("ordersSELECT 1",),
+            read_algorithm=FACT_ALGORITHM,
+            expected_hit=False,
+            expected_metrics=(0, 1),
+        ),
+        FactCacheReadTestCase(
+            description="changed_algorithm_misses",
+            read_key_parts=("orders", "SELECT 1"),
+            read_algorithm="unit-facts-v2",
+            expected_hit=False,
+            expected_metrics=(0, 1),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_published_fact_when_reading_then_hits_only_for_identical_inputs(
+    tmp_path: Path, test_case: FactCacheReadTestCase
+) -> None:
+    key: str = publish_fact(tmp_path, key_parts=("orders", "SELECT 1"), slot="orders")
+
+    with collect_compile_timings() as timings:
+        found: dict[str, object] = read_fact(
+            tmp_path, key_parts=test_case.read_key_parts, algorithm=test_case.read_algorithm
+        )
+
+    assert (found == {key: FACT_VALUE}) is test_case.expected_hit
+    assert (
+        timings.metrics["fact_cache_hits"],
+        timings.metrics["fact_cache_misses"],
+    ) == test_case.expected_metrics
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheCodeIdentityTestCase(
+            description="next_release", next_code_identity="next-release", expected_found_count=0
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_published_fact_when_producing_code_changes_then_misses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: FactCacheCodeIdentityTestCase
+) -> None:
+    _ = publish_fact(tmp_path, key_parts=("orders",), slot="orders")
+    monkeypatch.setattr(
+        fact_cache_store, "installed_code_identity", lambda: test_case.next_code_identity
+    )
+
+    assert len(read_fact(tmp_path, key_parts=("orders",))) == test_case.expected_found_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheCorruptionTestCase(
+            description="payload_bytes_changed",
+            corrupt=flip_payload_byte,
+            expected_found_count=0,
+            expected_republished_hit=True,
+        ),
+        FactCacheCorruptionTestCase(
+            description="verified_payload_references_function",
+            corrupt=write_untrusted_global,
+            expected_found_count=0,
+            expected_republished_hit=True,
+        ),
+        FactCacheCorruptionTestCase(
+            description="verified_payload_truncated",
+            corrupt=truncate_verified_payload,
+            expected_found_count=0,
+            expected_republished_hit=True,
+        ),
+        FactCacheCorruptionTestCase(
+            description="database_file_replaced",
+            corrupt=replace_database_with_garbage,
+            expected_found_count=0,
+            expected_republished_hit=True,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_corrupted_fact_when_reading_then_misses_and_republishes(
     tmp_path: Path, test_case: FactCacheCorruptionTestCase
 ) -> None:
-    _ = _publish(tmp_path, key_parts=("orders",), slot="orders", value=_FACT)
+    _ = publish_fact(tmp_path, key_parts=("orders",), slot="orders")
     test_case.corrupt(tmp_path)
 
-    assert _read(tmp_path, key_parts=("orders",)) == {}
+    assert len(read_fact(tmp_path, key_parts=("orders",))) == test_case.expected_found_count
 
-    _database(tmp_path).unlink()
-    key: str = _publish(tmp_path, key_parts=("orders",), slot="orders", value=_FACT)
-    assert _read(tmp_path, key_parts=("orders",)) == {key: _FACT}
+    fact_database(tmp_path).unlink()
+    key: str = publish_fact(tmp_path, key_parts=("orders",), slot="orders")
+    assert (
+        read_fact(tmp_path, key_parts=("orders",)) == {key: FACT_VALUE}
+    ) is test_case.expected_republished_hit
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheRetentionTestCase(
+            description="same_slot_replaced",
+            publications=(
+                (("orders", "v1"), "orders"),
+                (("orders", "v2"), "orders"),
+                (("customers", "v1"), "customers"),
+            ),
+            stale_key_parts=("orders", "v1"),
+            expected_slots=["customers", "orders"],
+            expected_stale_found_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_new_fact_for_same_slot_when_publishing_then_previous_fact_is_pruned(
-    tmp_path: Path,
+    tmp_path: Path, test_case: FactCacheRetentionTestCase
 ) -> None:
-    _ = _publish(tmp_path, key_parts=("orders", "v1"), slot="orders", value=_FACT)
-    _ = _publish(tmp_path, key_parts=("orders", "v2"), slot="orders", value=_FACT)
-    _ = _publish(tmp_path, key_parts=("customers", "v1"), slot="customers", value=_FACT)
+    for key_parts, slot in test_case.publications:
+        _ = publish_fact(tmp_path, key_parts=key_parts, slot=slot)
 
-    with closing(sqlite3.connect(_database(tmp_path))) as connection:
-        slots: list[tuple[str]] = connection.execute(
-            "SELECT slot FROM fact ORDER BY slot"
-        ).fetchall()
-    assert slots == [("customers",), ("orders",)]
-    assert _read(tmp_path, key_parts=("orders", "v1")) == {}
+    assert stored_fact_slots(tmp_path) == test_case.expected_slots
+    assert (
+        len(read_fact(tmp_path, key_parts=test_case.stale_key_parts))
+        == test_case.expected_stale_found_count
+    )
 
 
-def test_given_disabled_root_when_staging_then_nothing_is_persisted(tmp_path: Path) -> None:
-    with FactCacheStore(root=None, namespace=_NAMESPACE, algorithm=_ALGORITHM) as store:
-        store.stage(key=store.key("orders"), slot="orders", value=_FACT)
-        assert not store.enabled
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheNoPersistenceTestCase(
+            description="disabled_root", expected_enabled=False, expected_database_files=[]
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_disabled_root_when_staging_then_nothing_is_persisted(
+    tmp_path: Path, test_case: FactCacheNoPersistenceTestCase
+) -> None:
+    with FactCacheStore(root=None, namespace=FACT_NAMESPACE, algorithm=FACT_ALGORITHM) as store:
+        store.stage(key=store.key("orders"), slot="orders", value=FACT_VALUE)
+        assert store.enabled is test_case.expected_enabled
         assert store.read_many((("orders", store.key("orders")),)) == {}
 
-    assert not any(tmp_path.iterdir())
+    assert list(tmp_path.iterdir()) == test_case.expected_database_files
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheNoPersistenceTestCase(
+            description="failed_invocation", expected_enabled=True, expected_database_files=[]
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_failed_invocation_when_exiting_then_staged_facts_are_discarded(
-    tmp_path: Path,
+    tmp_path: Path, test_case: FactCacheNoPersistenceTestCase
 ) -> None:
     with (
         pytest.raises(RuntimeError),
-        FactCacheStore(root=tmp_path, namespace=_NAMESPACE, algorithm=_ALGORITHM) as store,
+        FactCacheStore(root=tmp_path, namespace=FACT_NAMESPACE, algorithm=FACT_ALGORITHM) as store,
     ):
-        store.stage(key=store.key("orders"), slot="orders", value=_FACT)
+        assert store.enabled is test_case.expected_enabled
+        store.stage(key=store.key("orders"), slot="orders", value=FACT_VALUE)
         raise RuntimeError("compile failed")
 
-    assert not list(tmp_path.rglob("*.sqlite3"))
+    assert list(tmp_path.rglob("*.sqlite3")) == test_case.expected_database_files
 
 
 if __name__ == "__main__":

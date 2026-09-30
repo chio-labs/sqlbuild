@@ -280,7 +280,7 @@ def build_test_inputs(
                     )
                 )
     test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests_cached(
-        tuple(
+        tests=tuple(
             (test.sql_body, str(test.test_file.relative_path), test.mode) for test in expanded_tests
         ),
         cache_root=compile_cache_dir,

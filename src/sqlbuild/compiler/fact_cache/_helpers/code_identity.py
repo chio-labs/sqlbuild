@@ -7,16 +7,17 @@ import json
 import platform
 from functools import cache
 from importlib.metadata import PackageNotFoundError, distribution
+from os import stat_result
 from pathlib import Path
 from typing import Any
-
-import sqlbuild
 
 _PACKAGE_NAME: str = "sqlbuild"
 _POLYGLOT_PACKAGE_NAME: str = "polyglot-sql-chio"
 _YAML_PACKAGE_NAME: str = "PyYAML"
 _DIRECT_URL_FILE: str = "direct_url.json"
 _SOURCE_SUFFIXES: frozenset[str] = frozenset({".py", ".so", ".pyd"})
+_BYTECODE_CACHE_DIRECTORY: str = "__pycache__"
+_PACKAGE_ROOT_PARENT_DEPTH: int = 3
 
 
 @cache
@@ -34,12 +35,12 @@ def installed_code_identity() -> str:
         digest.update(item.encode())
         digest.update(b"\0")
     if _is_editable_install():
-        package_root: Path = Path(sqlbuild.__file__).resolve().parent
+        package_root: Path = Path(__file__).resolve().parents[_PACKAGE_ROOT_PARENT_DEPTH]
         for path in sorted(package_root.rglob("*")):
-            if path.suffix not in _SOURCE_SUFFIXES or "__pycache__" in path.parts:
+            if path.suffix not in _SOURCE_SUFFIXES or _BYTECODE_CACHE_DIRECTORY in path.parts:
                 continue
             try:
-                stat = path.stat()
+                stat: stat_result = path.stat()
             except OSError:
                 continue
             digest.update(

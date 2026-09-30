@@ -17,8 +17,10 @@ from typing import get_type_hints
 from pydantic import ValidationError
 
 from sqlbuild.compiler.discovery._helpers.filesystem.cached_files import (
-    decode_cached_source_file,
-    encode_cached_source_file,
+    parse_source_file_with_cache,
+)
+from sqlbuild.compiler.discovery._helpers.filesystem.model_files import (
+    discover_matched_model_file,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
     named_declaration_files,
@@ -30,25 +32,18 @@ from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
     parse_constant_declaration_file,
     parse_enum_declaration_file,
-    parse_model_constant_declarations,
-    parse_model_enum_declarations,
     parse_model_schema_declaration_file,
 )
 from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
 from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     match_model_header,
-    matched_model_header_column_locations,
-    matched_model_output_column_locations,
-    parse_matched_model_sql,
     prepare_matched_model_file_headers,
 )
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
-from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
     CANONICAL_AUTHORED_ROOTS,
-    DISCOVERY_SOURCE_FACT_KIND,
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
     SCHEMA_FILE_NAME,
@@ -404,9 +399,9 @@ def discover_model_files(
             raise ModelSqlParseError("Model file read returned neither contents nor an error")
         try:
             discovered_model_files.append(
-                _discover_model_file(
-                    project_dir=project_dir,
+                discover_matched_model_file(
                     file_path=file_path,
+                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                     contents=contents,
                     header_match=header_match,
                     extract_implicit_alias_columns=extract_implicit_alias_columns,
@@ -419,52 +414,6 @@ def discover_model_files(
             on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
             continue
     return tuple(discovered_model_files)
-
-
-def _discover_model_file(
-    *,
-    project_dir: Path,
-    file_path: Path,
-    contents: str,
-    header_match: re.Match[str] | None,
-    extract_implicit_alias_columns: bool,
-    extract_output_column_locations: bool,
-) -> DiscoveredSqlModelFile:
-    header_values, query_sql = parse_matched_model_sql(
-        header_match=header_match, file_path=file_path
-    )
-    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
-    return DiscoveredSqlModelFile(
-        file_path=file_path,
-        relative_path=relative_path,
-        contents=contents,
-        header_values=header_values,
-        header_column_locations=matched_model_header_column_locations(
-            contents=contents, header_match=header_match, relative_path=relative_path
-        ),
-        output_column_locations=(
-            matched_model_output_column_locations(
-                contents=contents,
-                header_match=header_match,
-                relative_path=relative_path,
-                extract_implicit_alias_columns=extract_implicit_alias_columns,
-            )
-            if extract_output_column_locations
-            else {}
-        ),
-        query_sql=query_sql,
-        enum_declarations=parse_model_enum_declarations(
-            raw_value=header_values.get("enums"),
-            model_name=file_path.stem,
-            relative_path=relative_path,
-        ),
-        constant_declarations=parse_model_constant_declarations(
-            raw_value=header_values.get("constants"),
-            model_name=file_path.stem,
-            relative_path=relative_path,
-        ),
-        extract_implicit_alias_columns=extract_implicit_alias_columns,
-    )
 
 
 def discover_enum_files(
@@ -764,34 +713,12 @@ def discover_source_files(
     )
 
     def parse(file_path: Path) -> DiscoveredSourceFile:
-        contents: str = file_path.read_text(encoding="utf-8")
-        cache_key: str | None = (
-            fact_cache.key(DISCOVERY_SOURCE_FACT_KIND, str(project_dir), str(file_path), contents)
-            if fact_cache is not None and fact_cache.enabled
-            else None
-        )
-        slot: str = f"{DISCOVERY_SOURCE_FACT_KIND}:{file_path}"
-        if fact_cache is not None and cache_key is not None:
-            cached: DiscoveredSourceFile | None = decode_cached_source_file(
-                fact=fact_cache.read_many(((slot, cache_key),)).get(cache_key),
-                file_path=file_path,
-                contents=contents,
-            )
-            if cached is not None:
-                return cached
-        source_file: DiscoveredSourceFile = DiscoveredSourceFile(
+        return parse_source_file_with_cache(
+            project_dir=project_dir,
             file_path=file_path,
             relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
-            contents=contents,
-            source_entries=parse_sources_yml(contents=contents, file_path=file_path),
+            fact_cache=fact_cache,
         )
-        if fact_cache is not None and cache_key is not None:
-            fact_cache.stage(
-                key=cache_key,
-                slot=slot,
-                value=encode_cached_source_file(source_file),
-            )
-        return source_file
 
     return _parse_discovered_paths(
         project_dir=project_dir, file_paths=yaml_paths, parse=parse, on_fault=on_fault

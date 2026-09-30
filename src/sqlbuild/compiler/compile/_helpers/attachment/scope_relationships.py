@@ -81,6 +81,18 @@ def build_scope_relationship_grants(
     )
 
 
+def _expected_models_fact_keys(
+    *, discovered_inputs: DiscoveredProjectInputs, fact_cache: FactCacheStore
+) -> dict[tuple[int, int], str]:
+    cache_keys: dict[tuple[int, int], str] = {}
+    for file_index, test_file in enumerate(discovered_inputs.test_files):
+        for block_index, block in enumerate(test_file.blocks):
+            cache_keys[file_index, block_index] = fact_cache.key(
+                block.sql_body, str(test_file.relative_path), block.mode.value
+            )
+    return cache_keys
+
+
 def _test_relationship_grants(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -91,13 +103,7 @@ def _test_relationship_grants(
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
     cache_keys: dict[tuple[int, int], str] = (
-        {
-            (file_index, block_index): fact_cache.key(
-                block.sql_body, str(test_file.relative_path), block.mode.value
-            )
-            for file_index, test_file in enumerate(discovered_inputs.test_files)
-            for block_index, block in enumerate(test_file.blocks)
-        }
+        _expected_models_fact_keys(discovered_inputs=discovered_inputs, fact_cache=fact_cache)
         if fact_cache.enabled
         else {}
     )
