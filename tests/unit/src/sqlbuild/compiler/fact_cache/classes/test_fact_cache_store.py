@@ -18,7 +18,6 @@ from tests.unit.src.sqlbuild.compiler.fact_cache.classes.helpers import (
     FACT_ALGORITHM,
     FACT_NAMESPACE,
     FACT_VALUE,
-    fact_database,
     flip_payload_byte,
     publish_fact,
     read_fact,
@@ -137,7 +136,7 @@ def test_given_published_fact_when_producing_code_changes_then_misses(
     ),
     ids=lambda case: case.description,
 )
-def test_given_corrupted_fact_when_reading_then_misses_and_republishes(
+def test_given_corrupted_fact_when_reading_then_misses_and_next_publication_repairs_it(
     tmp_path: Path, test_case: FactCacheCorruptionTestCase
 ) -> None:
     _ = publish_fact(tmp_path, key_parts=("orders",), slot="orders")
@@ -145,7 +144,6 @@ def test_given_corrupted_fact_when_reading_then_misses_and_republishes(
 
     assert len(read_fact(tmp_path, key_parts=("orders",))) == test_case.expected_found_count
 
-    fact_database(tmp_path).unlink()
     key: str = publish_fact(tmp_path, key_parts=("orders",), slot="orders")
     assert (
         read_fact(tmp_path, key_parts=("orders",)) == {key: FACT_VALUE}

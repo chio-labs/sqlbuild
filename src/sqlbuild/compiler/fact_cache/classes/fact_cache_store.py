@@ -13,13 +13,18 @@ from types import TracebackType
 from typing import Any
 
 from sqlbuild.compiler.fact_cache._helpers.code_identity import installed_code_identity
+from sqlbuild.compiler.fact_cache._helpers.publication import (
+    await_fact_publication,
+    entry_digest,
+    publish_fact_rows,
+)
 from sqlbuild.compiler.fact_cache._helpers.restricted_pickle import (
     dump_fact_payload,
     load_fact_payload,
 )
 from sqlbuild.compiler.fact_cache.constants import (
-    FACT_CACHE_CREATE_TABLE_SQL,
     FACT_CACHE_DATABASE_SUFFIX,
+    FACT_CACHE_DIGEST_BYTES,
     FACT_CACHE_DIRECTORY_PREFIX,
     FACT_CACHE_MAX_ENTRY_BYTES,
     FACT_CACHE_QUERY_CHUNK_SIZE,
@@ -27,7 +32,6 @@ from sqlbuild.compiler.fact_cache.constants import (
     FACT_CACHE_VERSION,
 )
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
-from sqlbuild.compiler.profiling.main.record import record_compile_timing
 
 _READ_ERRORS: tuple[type[BaseException], ...] = (
     OSError,
@@ -61,6 +65,9 @@ class FactCacheStore:
             + (installed_code_identity().encode() if root is not None else b"")
             + b"\0"
         )
+        self._key_hasher: Any = hashlib.blake2b(
+            self._key_prefix, digest_size=FACT_CACHE_DIGEST_BYTES
+        )
         self._pending: dict[str, tuple[str, str, bytes]] = {}
         self._hits: int = 0
         self._misses: int = 0
@@ -93,7 +100,7 @@ class FactCacheStore:
     def key(self, *parts: str | bytes) -> str:
         """Return the exact identity of one fact computed from the given ordered inputs."""
 
-        digest: Any = hashlib.sha256(self._key_prefix)
+        digest: Any = self._key_hasher.copy()
         for part in parts:
             encoded: bytes = (
                 part if isinstance(part, bytes) else part.encode("utf-8", "surrogatepass")
@@ -109,6 +116,7 @@ class FactCacheStore:
         if self._database_path is None or not entries:
             return found
         expected_keys: dict[str, str] = dict(entries)
+        await_fact_publication(database_path=self._database_path)
         if self._database_path.is_file():
             try:
                 with closing(
@@ -152,40 +160,18 @@ class FactCacheStore:
             return
         if len(payload) > FACT_CACHE_MAX_ENTRY_BYTES:
             return
-        self._pending[slot] = (key, _entry_digest(cache_key=key, payload=payload), payload)
+        self._pending[slot] = (key, entry_digest(cache_key=key, payload=payload), payload)
 
     def _write_pending(self) -> None:
         if self._database_path is None or not self._pending:
             return
-        with record_compile_timing("cache_publication_ms"):
-            try:
-                self._database_path.parent.mkdir(parents=True, exist_ok=True)
-                with (
-                    closing(
-                        sqlite3.connect(
-                            self._database_path, timeout=FACT_CACHE_SQLITE_TIMEOUT_SECONDS
-                        )
-                    ) as connection,
-                    connection,
-                ):
-                    _ = connection.execute(FACT_CACHE_CREATE_TABLE_SQL)
-                    _ = connection.executemany(
-                        "INSERT OR REPLACE INTO fact (slot, cache_key, digest, payload) "
-                        "VALUES (?, ?, ?, ?)",
-                        (
-                            (slot, key, digest, payload)
-                            for slot, (key, digest, payload) in self._pending.items()
-                        ),
-                    )
-            except (OSError, sqlite3.DatabaseError):
-                return
-
-
-def _entry_digest(*, cache_key: str, payload: bytes) -> str:
-    digest: Any = hashlib.sha256(cache_key.encode())
-    digest.update(b"\0")
-    digest.update(payload)
-    return str(digest.hexdigest())
+        publish_fact_rows(
+            database_path=self._database_path,
+            rows=tuple(
+                (slot, key, digest, payload)
+                for slot, (key, digest, payload) in self._pending.items()
+            ),
+        )
 
 
 def _verified_value(*, cache_key: object, digest: object, payload: object) -> object | None:
@@ -194,7 +180,7 @@ def _verified_value(*, cache_key: object, digest: object, payload: object) -> ob
         or not isinstance(digest, str)
         or not isinstance(payload, bytes)
         or len(payload) > FACT_CACHE_MAX_ENTRY_BYTES
-        or not hmac.compare_digest(digest, _entry_digest(cache_key=cache_key, payload=payload))
+        or not hmac.compare_digest(digest, entry_digest(cache_key=cache_key, payload=payload))
     ):
         return None
     try:

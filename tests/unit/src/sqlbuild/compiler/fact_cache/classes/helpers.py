@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
 import pickle
 import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from sqlbuild.compiler.fact_cache._helpers.publication import (
+    await_fact_publication,
+    entry_digest,
+)
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.spec.contracts.models import SourceLocation
 
@@ -28,6 +31,7 @@ def publish_fact(
     with FactCacheStore(root=root, namespace=FACT_NAMESPACE, algorithm=FACT_ALGORITHM) as store:
         key: str = store.key(*key_parts)
         store.stage(key=key, slot=slot, value=value)
+    await_fact_publication()
     return key
 
 
@@ -53,7 +57,7 @@ def stored_fact_slots(root: Path) -> list[str]:
 def _overwrite_verified_payload(database: Path, payload: bytes) -> None:
     with closing(sqlite3.connect(database)) as connection, connection:
         cache_key: str = connection.execute("SELECT cache_key FROM fact").fetchone()[0]
-        digest: str = hashlib.sha256(cache_key.encode() + b"\0" + payload).hexdigest()
+        digest: str = entry_digest(cache_key=cache_key, payload=payload)
         _ = connection.execute("UPDATE fact SET payload = ?, digest = ?", (payload, digest))
 
 

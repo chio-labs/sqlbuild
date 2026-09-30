@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 from functools import cache
 from importlib.metadata import PackageNotFoundError, distribution
-from os import stat_result
 from pathlib import Path
 from typing import Any
 
@@ -36,17 +36,32 @@ def installed_code_identity() -> str:
         digest.update(b"\0")
     if _is_editable_install():
         package_root: Path = Path(__file__).resolve().parents[_PACKAGE_ROOT_PARENT_DEPTH]
-        for path in sorted(package_root.rglob("*")):
-            if path.suffix not in _SOURCE_SUFFIXES or _BYTECODE_CACHE_DIRECTORY in path.parts:
-                continue
-            try:
-                stat: stat_result = path.stat()
-            except OSError:
-                continue
-            digest.update(
-                f"{path.relative_to(package_root)}\0{stat.st_size}\0{stat.st_mtime_ns}\0".encode()
-            )
+        for relative_path, size, mtime_ns in _source_file_stats(root=package_root):
+            digest.update(f"{relative_path}\0{size}\0{mtime_ns}\0".encode())
     return str(digest.hexdigest())
+
+
+def _source_file_stats(*, root: Path) -> list[tuple[str, int, int]]:
+    root_prefix_length: int = len(str(root)) + 1
+    stats: list[tuple[str, int, int]] = []
+    pending: list[str] = [str(root)]
+    while pending:
+        directory: str = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        if entry.name != _BYTECODE_CACHE_DIRECTORY:
+                            pending.append(entry.path)
+                    elif os.path.splitext(entry.name)[1] in _SOURCE_SUFFIXES:
+                        stat: os.stat_result = entry.stat()
+                        stats.append(
+                            (entry.path[root_prefix_length:], stat.st_size, stat.st_mtime_ns)
+                        )
+        except OSError:
+            continue
+    stats.sort()
+    return stats
 
 
 def _package_version(package: str) -> str:
