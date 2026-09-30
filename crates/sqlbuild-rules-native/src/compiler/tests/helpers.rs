@@ -1442,6 +1442,38 @@ pub(super) fn quoted_names_keep_bindings() -> bool {
         && rendered.contains("JOIN __sqb_cte_1 AS b")
         && rendered.contains("'final' AS label")
 }
+pub(super) fn repeated_model_sql_renders_like_separate_batches() -> bool {
+    let step = |reserved: &str| {
+        json!({
+            "sqlAnalysisDialect": "duckdb",
+            "chain": [{
+                "modelName": "orders",
+                "resolvedSql": "WITH final AS (SELECT 2 AS order_id) SELECT final.order_id FROM final",
+                "expectedCteSql": format!("SELECT 2 AS order_id {reserved}")
+            }]
+        })
+    };
+    let render = |requests: Vec<Value>| -> Vec<Value> {
+        let response = crate::compiler::_helpers::sql_tests::rendering::render_json(
+            &json!({"requests": requests}).to_string(),
+        )
+        .expect("render batch");
+        serde_json::from_str::<Vec<Value>>(&response).expect("render response")
+    };
+    let plain = step("");
+    let reserved = step("-- __sqb_cte_0");
+    let separate: Vec<Value> = [&plain, &reserved, &plain]
+        .into_iter()
+        .flat_map(|request| render(vec![request.clone()]))
+        .collect();
+    let batched = render(vec![plain.clone(), reserved.clone(), plain]);
+    separate == batched
+        && batched[0] != batched[1]
+        && batched[0]["sql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("__sqb_cte_0 AS"))
+}
+
 pub(super) fn model_cte_names_are_isolated_across_dialects() -> bool {
     [("duckdb", "final"), ("snowflake", "final"), ("postgres", "final"), ("tsql", "final"), ("bigquery", "`final`"), ("databricks", "`final`")].iter().all(|(dialect, name)| {
         let request = json!({

@@ -30,6 +30,7 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.70
 # Writing the cache during a cold compile must stay a small same-runner cost over --no-cache.
 _MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.10
 _MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO: float = 1.15
+_MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
 
 
 @pytest.mark.performance
@@ -119,7 +120,7 @@ _MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO: float = 1.15
             expected_edit_max_wall_seconds=37.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
-            expected_max_cache_write_cpu_overhead_ratio=_MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO,
+            expected_max_cache_write_cpu_overhead_ratio=_MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO,
             expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,

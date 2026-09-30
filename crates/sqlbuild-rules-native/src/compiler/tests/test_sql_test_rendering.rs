@@ -7,7 +7,7 @@ use crate::compiler::tests::helpers::{
 };
 use crate::compiler::tests::helpers::{
     bounded_names_are_unique, model_cte_names_are_isolated_across_dialects,
-    quoted_names_keep_bindings,
+    quoted_names_keep_bindings, repeated_model_sql_renders_like_separate_batches,
 };
 use crate::compiler::tests::test_types::SqlTestRenderingTestCase;
 
@@ -17,6 +17,11 @@ fn given_sql_rendering_cases_when_rendering_native_batches_then_expected_behavio
         SqlTestRenderingTestCase {
             description: "model CTEs are isolated across every first-class dialect",
             run: model_cte_names_are_isolated_across_dialects,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "repeated model SQL in one batch renders like separate batches",
+            run: repeated_model_sql_renders_like_separate_batches,
             expected_success: true,
         },
         SqlTestRenderingTestCase {
