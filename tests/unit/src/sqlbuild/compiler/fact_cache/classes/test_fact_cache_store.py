@@ -280,8 +280,8 @@ def test_given_old_sqlite_parameter_limit_when_publishing_many_facts_then_all_ar
 ) -> None:
     connect: Callable[..., sqlite3.Connection] = sqlite3.connect
 
-    def limited_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
-        connection: sqlite3.Connection = connect(*args, **kwargs)
+    def limited_connect(database: Path, timeout: float = 5.0) -> sqlite3.Connection:
+        connection: sqlite3.Connection = connect(database, timeout=timeout)
         _ = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
         return connection
 
