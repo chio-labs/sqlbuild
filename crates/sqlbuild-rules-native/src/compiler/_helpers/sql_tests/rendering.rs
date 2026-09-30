@@ -1,6 +1,8 @@
 //! Deterministic comparison SQL rendering for planned SQL-native tests.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasher, RandomState};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use polyglot_sql::{Dialect, DialectType, Expression};
 
@@ -14,6 +16,7 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;
 const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+const STATEMENT_CACHE_SQL_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -97,15 +100,55 @@ struct RenderResponse {
     sql: String,
 }
 
+/// Bounded parses of repeated SQL reused across one single-dialect render batch.
+#[derive(Default)]
+pub(crate) struct StatementCache {
+    entries: Mutex<StatementEntries>,
+}
+
+#[derive(Default)]
+struct StatementEntries {
+    seen: HashSet<u64>,
+    hasher: RandomState,
+    parsed: HashMap<String, Arc<OnceLock<Option<Expression>>>>,
+    parsed_sql_bytes: usize,
+}
+
+impl StatementCache {
+    /// Admit SQL on its second use, within a byte budget, so unrepeated SQL is never retained.
+    fn entry(&self, sql: &str) -> Option<Arc<OnceLock<Option<Expression>>>> {
+        let mut entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(entry) = entries.parsed.get(sql) {
+            return Some(Arc::clone(entry));
+        }
+        let fingerprint = entries.hasher.hash_one(sql);
+        if entries.seen.insert(fingerprint)
+            || entries.parsed_sql_bytes + sql.len() > STATEMENT_CACHE_SQL_BYTES
+        {
+            return None;
+        }
+        entries.parsed_sql_bytes += sql.len();
+        Some(Arc::clone(
+            entries.parsed.entry(sql.to_string()).or_default(),
+        ))
+    }
+}
+
 struct RenderCteState<'a> {
     dialect: &'a Dialect,
+    statements: Option<&'a StatementCache>,
     lifted: Vec<(String, String)>,
     name_counts: CteSuffixCounter,
     namespace: CteNamespace,
 }
 
 impl<'a> RenderCteState<'a> {
-    fn new(dialect: &'a Dialect, chain: &[ChainStep], assertions: &[AssertionStep]) -> Self {
+    fn new(
+        dialect: &'a Dialect,
+        statements: Option<&'a StatementCache>,
+        chain: &[ChainStep],
+        assertions: &[AssertionStep],
+    ) -> Self {
         let mut namespace = CteNamespace::default();
         for step in chain {
             namespace.reserve(&step.resolved_sql);
@@ -126,6 +169,7 @@ impl<'a> RenderCteState<'a> {
         }
         Self {
             dialect,
+            statements,
             lifted: Vec::new(),
             name_counts: CteSuffixCounter::default(),
             namespace,
@@ -136,9 +180,12 @@ impl<'a> RenderCteState<'a> {
         if !enabled || leading_with_prefix_end(sql).is_none() {
             return sql.to_string();
         }
-        let Some((step_ctes, body_sql)) =
-            split_top_level_with(sql, self.dialect, namespace.then_some(&mut self.namespace))
-        else {
+        let Some((step_ctes, body_sql)) = split_top_level_with(
+            sql,
+            self.dialect,
+            self.statements,
+            namespace.then_some(&mut self.namespace),
+        ) else {
             return sql.to_string();
         };
         if step_ctes.iter().any(|(name, body)| {
@@ -202,26 +249,20 @@ impl<'a> RenderCteState<'a> {
     fn definition(&mut self, name: &str, sql: &str, enabled: bool) -> String {
         let scoped = if enabled && leading_with_prefix_end(sql).is_some() {
             let (protected, identifiers) = protect_backtick_identifiers(sql);
-            match self.dialect.parse(&protected) {
-                Ok(mut expressions) => (|| {
-                    if expressions.len() != 1 {
-                        return None;
-                    }
-                    let expression = match self
-                        .namespace
-                        .rewrite(expressions.pop()?, self.dialect.dialect_type())
-                    {
-                        Ok(expression) => expression,
-                        Err(_) => return None,
-                    };
-                    let sql = match self.dialect.generate(&expression) {
-                        Ok(sql) => sql,
-                        Err(_) => return None,
-                    };
-                    Some(restore_backtick_identifiers(&sql, &identifiers))
-                })(),
-                Err(_) => None,
-            }
+            parse_statement(&protected, self.dialect, self.statements).and_then(|expression| {
+                let expression = match self
+                    .namespace
+                    .rewrite(expression, self.dialect.dialect_type())
+                {
+                    Ok(expression) => expression,
+                    Err(_) => return None,
+                };
+                let sql = match self.dialect.generate(&expression) {
+                    Ok(sql) => sql,
+                    Err(_) => return None,
+                };
+                Some(restore_backtick_identifiers(&sql, &identifiers))
+            })
         } else {
             None
         };
@@ -233,8 +274,12 @@ impl<'a> RenderCteState<'a> {
         for (name, sql) in std::mem::take(&mut self.lifted) {
             if enabled
                 && leading_with_prefix_end(&sql).is_some()
-                && let Some((ctes, body)) =
-                    split_top_level_with(&sql, self.dialect, Some(&mut self.namespace))
+                && let Some((ctes, body)) = split_top_level_with(
+                    &sql,
+                    self.dialect,
+                    self.statements,
+                    Some(&mut self.namespace),
+                )
             {
                 definitions.extend(
                     ctes.iter()
@@ -289,7 +334,7 @@ pub(crate) fn render_json(request_json: &str) -> Result<String, String> {
         .stack_size(WORKER_STACK_BYTES)
         .build()
         .map_err(|error| error.to_string())?;
-    let dialects: HashMap<Option<String>, Dialect> = request
+    let dialects: HashMap<Option<String>, (Dialect, StatementCache)> = request
         .requests
         .iter()
         .map(|item| item.sql_analysis_dialect.clone())
@@ -297,15 +342,18 @@ pub(crate) fn render_json(request_json: &str) -> Result<String, String> {
         .into_iter()
         .map(|name| {
             let dialect = render_dialect(name.as_deref());
-            (name, dialect)
+            (name, (dialect, StatementCache::default()))
         })
         .collect();
     let responses: Vec<RenderResponse> = pool.install(|| {
         request
             .requests
             .into_par_iter()
-            .map(|request| RenderResponse {
-                sql: render_comparison_sql(&request, &dialects[&request.sql_analysis_dialect]),
+            .map(|request| {
+                let (dialect, statements) = &dialects[&request.sql_analysis_dialect];
+                RenderResponse {
+                    sql: render_comparison_sql(&request, dialect, Some(statements)),
+                }
             })
             .collect()
     });
@@ -333,7 +381,7 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest, dialect: &Dia
     let Some(expected_input) = step.expected_cte_sql.as_deref() else {
         return String::new();
     };
-    let mut cte_state = RenderCteState::new(dialect, std::slice::from_ref(step), &[]);
+    let mut cte_state = RenderCteState::new(dialect, None, std::slice::from_ref(step), &[]);
     let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
     let expected_sql =
         cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
@@ -370,11 +418,16 @@ fn compared_projection(step: &ChainStep) -> String {
         .map_or_else(|| "*".to_string(), |columns| columns.join(", "))
 }
 
-pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) -> String {
+pub(crate) fn render_comparison_sql(
+    request: &RenderRequest,
+    dialect: &Dialect,
+    statements: Option<&StatementCache>,
+) -> String {
     if request.chain.is_empty() && request.assertions.is_empty() {
         return String::new();
     }
-    let mut cte_state = RenderCteState::new(dialect, &request.chain, &request.assertions);
+    let mut cte_state =
+        RenderCteState::new(dialect, statements, &request.chain, &request.assertions);
     let mut comparison_ctes: Vec<String> = Vec::new();
     let mut select_parts: Vec<String> = Vec::new();
     let rendered_steps = rendered_chain_steps(&request.chain, &request.assertions);
@@ -481,20 +534,30 @@ fn existing_cte<'a>(lifted: &'a [(String, String)], name: &str) -> Option<&'a (S
         .find(|(existing, _)| existing.eq_ignore_ascii_case(name))
 }
 
+/// Parse one statement, reusing a batch's earlier parse of the same SQL when a cache is given.
+fn parse_statement(
+    sql: &str,
+    dialect: &Dialect,
+    statements: Option<&StatementCache>,
+) -> Option<Expression> {
+    let parse = || match dialect.parse(sql) {
+        Ok(mut parsed) if parsed.len() == 1 => parsed.pop(),
+        _ => None,
+    };
+    match statements.and_then(|statements| statements.entry(sql)) {
+        Some(cached) => cached.get_or_init(parse).clone(),
+        None => parse(),
+    }
+}
+
 fn split_top_level_with(
     sql: &str,
     dialect: &Dialect,
+    statements: Option<&StatementCache>,
     namespace: Option<&mut CteNamespace>,
 ) -> Option<(Vec<(String, String)>, String)> {
     let (protected, identifiers) = protect_backtick_identifiers(sql);
-    let mut statements = match dialect.parse(&protected) {
-        Ok(statements) => statements,
-        Err(_) => return None,
-    };
-    if statements.len() != 1 {
-        return None;
-    }
-    let mut expression = statements.pop()?;
+    let mut expression = parse_statement(&protected, dialect, statements)?;
     if let Some(namespace) = namespace {
         expression = match namespace.rewrite(expression, dialect.dialect_type()) {
             Ok(expression) => expression,
