@@ -17,6 +17,7 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 fensu-policy.workspace = true
 globset.workspace = true
+mimalloc.workspace = true
 polyglot-sql.workspace = true
 pyo3.workspace = true
 rayon.workspace = true
