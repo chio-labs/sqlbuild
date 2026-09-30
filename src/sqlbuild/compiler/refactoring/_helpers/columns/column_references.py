@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.refactoring._helpers.text_edits import manual_at, text_edit
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import manual_at, text_edit
 from sqlbuild.compiler.refactoring.constants import (
     CTE_SCOPE_PREFIX,
     QUOTE_CHARACTERS,

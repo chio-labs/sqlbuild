@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path, PurePosixPath
 
-from sqlbuild.compiler.refactoring._helpers.text_edits import apply_text_edits
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import apply_text_edits
 from sqlbuild.compiler.refactoring.constants import (
     COPIED_PROJECT_SUFFIXES,
     HIDDEN_PREFIX,

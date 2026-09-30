@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.refactoring._helpers.workspace import commit_changes
+from sqlbuild.compiler.refactoring._helpers.project.workspace import commit_changes
 from sqlbuild.compiler.refactoring.models import RefactorPlan
 
 

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.refactoring.types import HeaderTokenKind, RefactorOperation, SqlFileRole
+from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
+from sqlbuild.compiler.refactoring.types import (
+    HeaderTokenKind,
+    RefactorOperation,
+    SqlFileRole,
+)
 
 MODEL_KIND_PREFIX: str = "model:"
 COLUMN_KIND_PREFIX: str = "column:"
@@ -17,6 +22,9 @@ REF_CALL_PATTERN: re.Pattern[str] = re.compile(
 )
 RESOURCE_CALL_PATTERN: re.Pattern[str] = re.compile(
     r"^__(?P<kind>ref|source|seed)\s*\(\s*(?P<quote>['\"])(?P<name>[^'\"]+)(?P=quote)\s*\)$"
+)
+EMBEDDED_REF_PATTERN: re.Pattern[str] = re.compile(
+    r"""__ref\s*\(\s*\\?['"](?P<name>[^'"\\]+)\\?['"]\s*\)"""
 )
 REF_FIXTURE_PREFIX: str = "__ref__"
 EXPECTED_FIXTURE_PREFIX: str = "__expected__"
@@ -96,9 +104,9 @@ SEED_KIND: str = "seed"
 UNKNOWN_COLUMN_TYPE: str = "UNKNOWN"
 MODEL_MANUAL_HELP: str = (
     "Pass the model into the macro as an argument, or edit the listed locations, then run the "
-    "command again; --allow-manual applies the safe edits and leaves them to you."
+    "command again."
 )
-COLUMN_MANUAL_HELP: str = (
-    "Edit the listed locations, or rerun with --allow-manual to apply the safe edits and finish "
-    "them by hand."
+COLUMN_MANUAL_HELP: str = "Edit the listed locations, then run the command again."
+SCHEMA_STATEMENT_PATTERN: re.Pattern[str] = re.compile(
+    r"\bSCHEMA\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;"
 )

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.refactoring._helpers.workspace import commit_changes
+from sqlbuild.compiler.refactoring._helpers.project.workspace import commit_changes
 from sqlbuild.compiler.refactoring.exceptions import RefactorWriteError
 from sqlbuild.compiler.refactoring.models import FileChange
 from tests.unit.src.sqlbuild.compiler.refactoring._helpers._test_types import (

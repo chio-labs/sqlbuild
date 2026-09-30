@@ -76,7 +76,7 @@ def _run(
         else plan_model_refactor(project=before.project, request=refactor_request)
     )
     status.complete(message=f"Planned edits to {len(plan.changes)} files.")
-    if plan.blocking or (plan.manual and not request.allow_manual):
+    if plan.blocking or plan.manual:
         status.error("Refused: some references cannot be rewritten safely.")
         return _finish(
             request=request,
@@ -92,15 +92,11 @@ def _run(
             project_dir=project_dir, staging_dir=staging_dir, plan=plan
         )
         after: RefactorCompile = compile_for_refactor(project_dir=staging_dir, no_cache=True)
-        if (
-            after.project is not None
-            and not after.errors
-            and refactor_request.operation != (RefactorOperation.RENAME_COLUMN)
-        ):
+        if refactor_request.operation != RefactorOperation.RENAME_COLUMN:
             migrated: RefactorPlan = with_model_migration(
                 plan=plan,
                 before=before.project.graph.project,
-                after=after.project.graph.project,
+                after=after.project.graph.project if after.project is not None else None,
                 originals=originals,
             )
             if migrated.blocking:
@@ -118,16 +114,19 @@ def _run(
                     project_dir=project_dir, staging_dir=staging_dir, plan=plan, copy_inputs=False
                 )
                 after = compile_for_refactor(project_dir=staging_dir, no_cache=True)
-        if after.errors:
-            status.error("Verification failed: the edited project does not compile.")
-            return _finish(
-                request=request,
-                plan=plan,
-                status=RefactorStatus.COMPILE_FAILED,
-                diagnostics=_relative(errors=after.errors, staging_dir=staging_dir),
-                use_color=use_color,
-            )
-        status.complete(message="Verified: the edited project compiles.")
+        diagnostics: tuple[CompilerDiagnostic, ...] = _relative(
+            errors=after.errors, staging_dir=staging_dir
+        )
+    if diagnostics:
+        status.error("Verification failed: the edited project does not compile.")
+        return _finish(
+            request=request,
+            plan=plan,
+            status=RefactorStatus.COMPILE_FAILED,
+            diagnostics=diagnostics,
+            use_color=use_color,
+        )
+    status.complete(message="Verified: the edited project compiles.")
     if request.dry_run:
         return _finish(
             request=request,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.refactoring._helpers.text_edits import apply_text_edits
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import apply_text_edits
 from sqlbuild.compiler.refactoring.models import BodyEdits
 from tests.unit.src.sqlbuild.compiler.refactoring._helpers._test_types import ColumnEditTestCase
 from tests.unit.src.sqlbuild.compiler.refactoring._helpers.helpers import plan_consumer

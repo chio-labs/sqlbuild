@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 from collections.abc import Mapping
@@ -17,12 +18,20 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 
 DATABASE_FILE: str = "orders.duckdb"
 SCHEMA: str = "analytics"
-_PROJECT_TOML: str = (
-    'name = "orders_project"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
-    f'[connection]\ndatabase = "{DATABASE_FILE}"\n\n'
-    f'[targets.dev]\nschema = "{SCHEMA}"\n\n'
-    "[janitor]\nenabled = true\n"
-)
+
+
+def project_toml(*, target_settings: str = "") -> str:
+    """Return the project config, with extra settings for the dev target."""
+
+    return (
+        'name = "orders_project"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        f'[connection]\ndatabase = "{DATABASE_FILE}"\n\n'
+        f'[targets.dev]\nschema = "{SCHEMA}"\n{target_settings}\n'
+        "[janitor]\nenabled = true\n"
+    )
+
+
+_PROJECT_TOML: str = project_toml()
 _SOURCES_YML: str = (
     "sources:\n"
     "  - name: raw_orders\n"
@@ -88,6 +97,50 @@ ORDER_EXPORT: dict[str, str] = {
         'MODEL (\n  materialized view,\n);\n\nSELECT *\nFROM __ref("fact_orders")\n'
     ),
 }
+CUSTOMER_DECLARATIONS: dict[str, str] = {
+    "seeds/customers.csv": "customer_id,customer_name\n10,Ada\n11,Bo\n",
+    "seeds/customers.yml": (
+        "seeds:\n"
+        "  - name: customers\n"
+        "    columns:\n"
+        "      - name: customer_id\n"
+        "        type: INTEGER\n"
+        "        audits:\n"
+        "          - relationships:\n"
+        '              to: __ref("stg_orders")\n'
+        "              field: customer_id\n"
+        "      - name: customer_name\n"
+        "        type: VARCHAR\n"
+    ),
+    "sources/customers.yml": (
+        "sources:\n"
+        "  - name: raw_customers\n"
+        '    expression: "SELECT 10 AS customer_id UNION ALL SELECT 11"\n'
+        "    columns:\n"
+        "      - name: customer_id\n"
+        "        audits:\n"
+        "          - relationships: {to: '__ref(\"stg_orders\")', field: customer_id}\n"
+    ),
+}
+ORDER_SHAPE: dict[str, str] = {
+    "models/marts/_sqlbuild/_schemas/order_shape.sql": (
+        "SCHEMA (\n  name order_shape,\n  columns (\n    customer_id (audits [relationships "
+        '(to __ref("stg_orders"), field customer_id)]),\n  ),\n);\n'
+    ),
+    "models/marts/fact_orders.sql": FACT_ORDERS.replace(
+        "materialized table,", "materialized table,\n  model_schema order_shape,"
+    ),
+}
+ORDERS_MACRO: dict[str, str] = {
+    "sqlbuild_project.toml": _PROJECT_TOML + "\n[references]\nenforce_explicit = false\n",
+    "models/staging/_sqlbuild/_macros/orders.py": (
+        "def staged_orders() -> str:\n    return '__ref(\"stg_orders\")'\n"
+    ),
+    "models/staging/stg_order_count.sql": (
+        "MODEL (\n  materialized view,\n);\n\n"
+        "SELECT COUNT(*) AS order_count\nFROM @staged_orders()\n"
+    ),
+}
 _INCREMENTAL_HEADER: str = (
     "  materialized incremental,\n"
     "  incremental_strategy delete_insert,\n"
@@ -137,6 +190,63 @@ def write_orders_project(
     return project_dir
 
 
+def order_history_copy() -> dict[str, str]:
+    """Return a second model with exactly the order_history definition."""
+
+    return {
+        "models/marts/order_history_copy.sql": order_history_files(
+            materialized="incremental", udf=False
+        )["models/marts/order_history.sql"]
+    }
+
+
+def strip_migration_fingerprints(*, project_dir: Path, models: tuple[str, ...]) -> None:
+    """Make built models look like ones built before rename matching recorded fingerprints."""
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / DATABASE_FILE))
+    try:
+        rows: list[tuple[Any, ...]] = connection.execute(
+            f"SELECT node_name, metadata_json_b64 FROM {SCHEMA}._sqlbuild_fingerprints "
+            "WHERE list_contains(?, node_name)",
+            [list(models)],
+        ).fetchall()
+        model: str
+        encoded: str
+        for model, encoded in rows:
+            metadata: dict[str, Any] = json.loads(base64.b64decode(encoded))
+            _ = metadata.pop("migration_fingerprint", None)
+            _ = connection.execute(
+                f"UPDATE {SCHEMA}._sqlbuild_fingerprints SET metadata_json_b64 = ? "
+                "WHERE node_name = ? AND metadata_json_b64 = ?",
+                [base64.b64encode(json.dumps(metadata).encode()).decode(), model, encoded],
+            )
+    finally:
+        connection.close()
+
+
+def declare_missing_column_origin(*, project_dir: Path) -> None:
+    """Add a revenue column that declares migrate_from a column the table never had."""
+
+    path: Path = project_dir / "models/marts/order_history.sql"
+    contents: str = path.read_text(encoding="utf-8")
+    _ = path.write_text(
+        contents.replace(
+            "MODEL (\n", "MODEL (\n  columns (revenue (migrate_from gross_amount)),\n", 1
+        ).replace("  order_date\n", "  order_date,\n  amount AS revenue\n", 1),
+        encoding="utf-8",
+    )
+
+
+def remove_files(*, project_dir: Path, paths: tuple[str, ...]) -> None:
+    """Delete project files by hand, as an author removing a model would."""
+
+    path: str
+    for path in paths:
+        (project_dir / path).unlink()
+
+
 def load_raw_orders(*, project_dir: Path, order_ids: tuple[int, ...]) -> None:
     """Replace the raw orders with one order per id, dated January of that day."""
 
@@ -172,6 +282,7 @@ def project_text(project_dir: Path) -> dict[str, str]:
     paths: tuple[Path, ...] = (
         project_dir / "sqlbuild_project.toml",
         *project_dir.glob("sources/*.yml"),
+        *project_dir.glob("seeds/*.yml"),
         *project_dir.glob("models/**/*.sql"),
         *project_dir.glob("models/**/*.py"),
         *project_dir.glob("functions/**/*.sql"),

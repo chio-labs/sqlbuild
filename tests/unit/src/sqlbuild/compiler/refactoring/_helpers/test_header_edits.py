@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.refactoring._helpers.header_edits import (
+from sqlbuild.compiler.refactoring._helpers.text.header_edits import (
     insert_header_entry_edit,
     model_name_header_edits,
 )
-from sqlbuild.compiler.refactoring._helpers.text_edits import apply_text_edits
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import apply_text_edits
 from sqlbuild.compiler.refactoring.models import TextEdit
 from tests.unit.src.sqlbuild.compiler.refactoring._helpers._test_types import HeaderEditTestCase
 from tests.unit.src.sqlbuild.compiler.refactoring._helpers.helpers import migrated_column_edits

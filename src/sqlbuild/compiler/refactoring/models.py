@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from yaml.nodes import ScalarNode
+
 from sqlbuild.compiler.compile.models import CompiledModel, ExpansionSpan
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -186,6 +188,23 @@ class HeaderToken:
 
 
 @dataclass(frozen=True)
+class RelationshipTokens:
+    """The target and field value tokens of one relationships audit in a MODEL header."""
+
+    target: HeaderToken | None
+    field: HeaderToken | None
+    called: bool
+
+
+@dataclass(frozen=True)
+class YamlRelationship:
+    """The `to` and `field` scalars of one relationships audit in a YAML declaration."""
+
+    target: ScalarNode | None
+    field: ScalarNode | None
+
+
+@dataclass(frozen=True)
 class HeaderEntry:
     """One top-level `key value` entry of a MODEL header."""
 
@@ -281,6 +300,8 @@ class ColumnRenameContext:
     columns: ResourceColumns
     contents: dict[str, str]
     bodies: tuple[AuthoredBody, ...]
+    yaml_files: tuple[ProjectSqlFile, ...]
+    schema_files: tuple[ProjectSqlFile, ...]
     old: str
     new: str
     cascade: bool

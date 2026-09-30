@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.refactoring._helpers.column_planning import (
+from sqlbuild.compiler.refactoring._helpers.columns.column_planning import (
     column_rename_context,
     column_rename_parts,
 )
-from sqlbuild.compiler.refactoring._helpers.text_edits import build_plan
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import build_plan
 from sqlbuild.compiler.refactoring.constants import COLUMN_MANUAL_HELP
 from sqlbuild.compiler.refactoring.models import (
     ColumnRenameContext,

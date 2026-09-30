@@ -1,4 +1,4 @@
-"""Resolve a model rename or move and find everything that blocks it."""
+"""Resolve a model rename or move, find what blocks it, and decide its migrations."""
 
 from __future__ import annotations
 
@@ -6,19 +6,24 @@ from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.refactoring._helpers.header_edits import header_tokens, is_value
-from sqlbuild.compiler.refactoring._helpers.model_references import (
+from sqlbuild.compiler.refactoring._helpers.project.project_files import (
+    project_sql_files,
+    python_string_locations,
+    yaml_files,
+)
+from sqlbuild.compiler.refactoring._helpers.renames.model_references import (
     macro_reference_locations,
     model_reference_edits,
 )
-from sqlbuild.compiler.refactoring._helpers.project_files import (
-    project_sql_files,
-    python_string_locations,
-)
-from sqlbuild.compiler.refactoring._helpers.text_edits import manual_at
+from sqlbuild.compiler.refactoring._helpers.text.header_edits import header_tokens, is_value
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import manual_at
+from sqlbuild.compiler.refactoring._helpers.text.yaml_edits import yaml_model_edits
 from sqlbuild.compiler.refactoring.constants import (
     GENERIC_DIALECT,
+    HISTORY_MATERIALIZATIONS,
     IDENTIFIER_PATTERN,
+    MATERIALIZED_KEY,
+    MIGRATABLE_MATERIALIZATIONS,
     MIGRATE_FROM_KEY,
     MODEL_KIND_PREFIX,
     PATH_SEPARATOR,
@@ -28,6 +33,7 @@ from sqlbuild.compiler.refactoring.exceptions import RefactorInputError
 from sqlbuild.compiler.refactoring.models import (
     HeaderToken,
     ManualLocation,
+    ModelMigrationDecision,
     ModelTarget,
     ProjectSqlFile,
     RefactorParts,
@@ -38,6 +44,7 @@ from sqlbuild.compiler.refactoring.types import RefactorOperation
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
 from sqlbuild.compiler.scopes.models import DeclarationReport, MovePreview, ScopeDiagnostic
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def find_model(*, project: CompiledProject, name: str) -> CompiledModel:
@@ -103,7 +110,10 @@ def model_parts(*, project: RefactorProject, target: ModelTarget) -> RefactorPar
     old: str = target.model.name
     new: str = target.request.new_name
     return RefactorParts(
-        edits=model_reference_edits(files=files, old=old, new=new, dialect=dialect)
+        edits=(
+            *model_reference_edits(files=files, old=old, new=new, dialect=dialect),
+            *yaml_model_edits(files=yaml_files(discovered=project.discovered), old=old, new=new),
+        )
         if new != old
         else (),
         manual=(
@@ -236,4 +246,90 @@ def _pending_migration(
                 "target and remove migrate_from before renaming it again"
             ),
         ),
+    )
+
+
+def decide_model_migration(
+    *, before: CompiledProject, after: CompiledProject | None, old: str, new: str
+) -> ModelMigrationDecision:
+    """Declare migrate_from whenever the relation moves, unless migrations cannot follow it."""
+
+    old_model: CompiledModel | None = _model(project=before, name=old)
+    new_model: CompiledModel | None = None if after is None else _model(project=after, name=new)
+    if old_model is None:
+        return ModelMigrationDecision(needed=False, reason="model not compiled")
+    materialized: str | None = get_config_str(
+        values=(new_model or old_model).config.values, key=MATERIALIZED_KEY
+    )
+    if materialized not in MIGRATABLE_MATERIALIZATIONS:
+        return ModelMigrationDecision(
+            needed=False, reason=f"'{materialized}' models keep no warehouse data"
+        )
+    if after is None or new_model is None:
+        return ModelMigrationDecision(
+            needed=True,
+            reason="keeps the relation's history; the destination could not be checked because "
+            "the edited project does not compile",
+        )
+    if _location_key(old_model) == _location_key(new_model):
+        return ModelMigrationDecision(needed=False, reason="relation name is unchanged")
+    return _blocked_move(after=after, old_model=old_model, new_model=new_model) or (
+        ModelMigrationDecision(
+            needed=True, reason="keeps the relation's history and its old name working"
+        )
+    )
+
+
+def _blocked_move(
+    *, after: CompiledProject, old_model: CompiledModel, new_model: CompiledModel
+) -> ModelMigrationDecision | None:
+    old_database: str = (old_model.destination.database or "").lower()
+    new_database: str = (new_model.destination.database or "").lower()
+    if old_database and new_database and old_database != new_database:
+        return ModelMigrationDecision(
+            needed=False,
+            blocked=True,
+            reason=(
+                f"moves from database {old_model.destination.database} to "
+                f"{new_model.destination.database}; migrations cannot cross databases"
+            ),
+        )
+    old_schema: str = (old_model.destination.schema or "").lower()
+    project_schemas: frozenset[str] = frozenset(
+        (model.destination.schema or "").lower() for model in after.models
+    )
+    if old_schema in project_schemas:
+        return None
+    return ModelMigrationDecision(
+        needed=False,
+        blocked=True,
+        reason=(
+            f"no model is left in schema {old_model.destination.schema}, so migrate_from "
+            f"{old_model.name} cannot find the old relation; add a schema-qualified "
+            "migrate_from for each target"
+        ),
+    )
+
+
+def needs_column_migration(*, model: CompiledModel) -> bool:
+    """Return whether renaming a column of this model must declare migrate_from."""
+
+    materialized: str | None = get_config_str(values=model.config.values, key=MATERIALIZED_KEY)
+    if materialized in HISTORY_MATERIALIZATIONS:
+        return True
+    return (
+        materialized in MIGRATABLE_MATERIALIZATIONS
+        and model.config.values.get(MIGRATE_FROM_KEY) is not None
+    )
+
+
+def _model(*, project: CompiledProject, name: str) -> CompiledModel | None:
+    return next((model for model in project.models if model.name == name), None)
+
+
+def _location_key(model: CompiledModel) -> tuple[str, str, str]:
+    return (
+        (model.destination.database or "").lower(),
+        (model.destination.schema or "").lower(),
+        model.destination.name.lower(),
     )

@@ -12,11 +12,15 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     ColumnMigrationE2ETestCase,
     ColumnRenameE2ETestCase,
+    CombinedRenameE2ETestCase,
     RefusedRefactorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     CENTS_MACRO,
+    CUSTOMER_DECLARATIONS,
     ORDER_EXPORT,
+    ORDER_SHAPE,
+    ORDERS_MACRO,
     fragments_present,
     load_raw_orders,
     order_history_files,
@@ -58,6 +62,30 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
             },
         ),
         ColumnRenameE2ETestCase(
+            description="seed and source relationships follow the column",
+            command=("rename", "column:stg_orders.customer_id", "buyer_id"),
+            extra_files=CUSTOMER_DECLARATIONS,
+            expected_fragments={
+                "seeds/customers.yml": ("field: buyer_id",),
+                "sources/customers.yml": ("field: buyer_id}",),
+                "models/marts/fact_orders.sql": ("  o.buyer_id AS customer_id,",),
+            },
+            expected_columns={
+                "stg_orders": ("order_id", "buyer_id", "amount", "order_date"),
+            },
+        ),
+        ColumnRenameE2ETestCase(
+            description="reusable schema relationships follow the column",
+            command=("rename", "column:stg_orders.customer_id", "buyer_id"),
+            extra_files=ORDER_SHAPE,
+            expected_fragments={
+                "models/marts/_sqlbuild/_schemas/order_shape.sql": ("field buyer_id)",),
+            },
+            expected_columns={
+                "fact_orders": ("order_id", "customer_id", "amount", "order_date"),
+            },
+        ),
+        ColumnRenameE2ETestCase(
             description="cascade follows SELECT star consumers",
             command=("rename", "column:fact_orders.amount", "revenue", "--cascade"),
             extra_files=ORDER_EXPORT,
@@ -66,16 +94,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
                 "fact_orders": ("order_id", "customer_id", "revenue", "order_date"),
                 "order_export": ("order_id", "customer_id", "revenue", "order_date"),
             },
-        ),
-        ColumnRenameE2ETestCase(
-            description="allow manual applies safe edits and lists the rest",
-            command=("rename", "column:fact_orders.amount", "revenue", "--allow-manual"),
-            extra_files=ORDER_EXPORT,
-            expected_fragments={"models/marts/fact_orders.sql": ("  o.amount AS revenue,",)},
-            expected_columns={
-                "order_export": ("order_id", "customer_id", "revenue", "order_date"),
-            },
-            expected_manual=("models/marts/order_export.sql",),
         ),
     ],
     ids=lambda case: case.description,
@@ -115,6 +133,7 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             extra_files=CENTS_MACRO,
             expected_status="refused",
             expected_reason="macro:to_cents used by model:stg_order_cents is not visible",
+            expected_paths=("models/staging/_sqlbuild/_macros/cents.py",),
         ),
         RefusedRefactorE2ETestCase(
             description="rename onto an existing model",
@@ -122,6 +141,7 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             extra_files={},
             expected_status="refused",
             expected_reason="model:fact_orders already exists",
+            expected_paths=("models/marts/fact_orders.sql",),
         ),
         RefusedRefactorE2ETestCase(
             description="column used inside macro-generated SQL",
@@ -129,6 +149,7 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             extra_files=CENTS_MACRO,
             expected_status="refused",
             expected_reason="referenced in SQL a macro generates",
+            expected_paths=("models/staging/stg_order_cents.sql",),
         ),
         RefusedRefactorE2ETestCase(
             description="SELECT star consumer without cascade",
@@ -136,13 +157,15 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             extra_files=ORDER_EXPORT,
             expected_status="refused",
             expected_reason="rerun with --cascade",
+            expected_paths=("models/marts/order_export.sql",),
         ),
         RefusedRefactorE2ETestCase(
-            description="allow manual that leaves the project broken",
-            command=("rename", "column:stg_orders.amount", "revenue", "--allow-manual"),
-            extra_files=CENTS_MACRO,
-            expected_status="compile_failed",
-            expected_reason="Unknown column 'amount'",
+            description="model reference produced by a macro",
+            command=("rename", "model:stg_orders", "stg_order_lines"),
+            extra_files=ORDERS_MACRO,
+            expected_status="refused",
+            expected_reason="reference to stg_orders produced by a macro",
+            expected_paths=("models/staging/stg_order_count.sql",),
         ),
     ],
     ids=lambda case: case.description,
@@ -163,6 +186,10 @@ def test_given_unsafe_refactor_when_running_then_no_file_changes(
     assert code == 1
     assert payload["status"] == test_case.expected_status
     assert test_case.expected_reason in json.dumps(payload)
+    assert (
+        tuple(sorted({item["path"] for item in (*payload["manual"], *payload["blocking"])}))
+        == test_case.expected_paths
+    )
     assert text.returncode == 1
     assert "no files changed" in text.stdout
     assert project_text(project_dir) == before
@@ -206,4 +233,48 @@ def test_given_built_incremental_when_renaming_column_then_build_keeps_history(
     )
     assert order_ids(project_dir=project_dir, name="order_history") == (
         test_case.expected_order_ids
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CombinedRenameE2ETestCase(
+            description="table renamed, then its column, before one build",
+            expected_declarations=("migrate_from order_history", "revenue (migrate_from amount)"),
+            expected_new_columns=("order_id", "revenue", "order_date"),
+            expected_old_columns=("order_id", "amount", "order_date"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_renamed_table_when_renaming_its_column_then_build_keeps_both(
+    tmp_path: Path, test_case: CombinedRenameE2ETestCase
+) -> None:
+    """A renamed table declares migrate_from, so its column rename is declared too."""
+
+    project_dir: Path = write_orders_project(
+        tmp_path=tmp_path, files=order_history_files(materialized="table", udf=False)
+    )
+    first: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
+
+    model: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "rename", "model:order_history", "order_ledger"
+    )
+    column: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "rename", "column:order_ledger.amount", "revenue"
+    )
+    header: str = (project_dir / "models/marts/order_ledger.sql").read_text(encoding="utf-8")
+    second: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
+
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert model.returncode == 0, model.stdout + model.stderr
+    assert column.returncode == 0, column.stdout + column.stderr
+    assert all(declaration in header for declaration in test_case.expected_declarations), header
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert relation_columns(project_dir=project_dir, name="order_ledger") == (
+        test_case.expected_new_columns
+    )
+    assert relation_columns(project_dir=project_dir, name="order_history") == (
+        test_case.expected_old_columns
     )

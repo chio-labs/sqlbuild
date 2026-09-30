@@ -134,13 +134,6 @@ def _add_refactor_parsers(
     parser: argparse.ArgumentParser
     for parser in (rename_parser, move_parser):
         parser.add_argument(
-            "--allow-manual",
-            dest="refactor_allow_manual",
-            action="store_true",
-            default=False,
-            help="apply the safe edits and leave the listed locations to edit by hand",
-        )
-        parser.add_argument(
             "--dry-run",
             dest="dry_run",
             action="store_true",

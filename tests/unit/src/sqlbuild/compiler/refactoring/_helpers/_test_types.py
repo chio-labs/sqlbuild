@@ -53,3 +53,10 @@ class CommitChangesTestCase:
     moved_to: str
     expected_error: type[Exception]
     expected_files: dict[str, str]
+
+
+@dataclass(frozen=True)
+class DeclarationEditTestCase:
+    description: str
+    contents: str
+    expected_contents: str

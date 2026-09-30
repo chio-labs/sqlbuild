@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.refactoring._helpers.text_edits import apply_text_edits, identifier_sites
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import (
+    apply_text_edits,
+    identifier_sites,
+)
 from sqlbuild.compiler.refactoring.exceptions import RefactorEditError
 from tests.unit.src.sqlbuild.compiler.refactoring._helpers._test_types import (
     ApplyEditsErrorTestCase,

@@ -44,11 +44,8 @@ def render_refactor_text(
     if blocked:
         lines.append(style.error_strong(f"Cannot {_verb(plan)} {_target(plan)} automatically"))
         lines.extend(_location_lines(style=style, locations=(*plan.blocking, *plan.manual)))
-        if plan.help and plan.manual and not plan.blocking:
+        if plan.help and plan.manual:
             lines.append(plan.help)
-    elif plan.manual:
-        lines.append(style.warning_strong("Edit by hand"))
-        lines.extend(_location_lines(style=style, locations=plan.manual))
     if diagnostics:
         lines.append(style.error_strong("Compile errors in the edited project"))
         lines.extend(_diagnostic_lines(style=style, diagnostics=diagnostics))

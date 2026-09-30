@@ -5,7 +5,8 @@ from __future__ import annotations
 import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.main._model_header_spans import get_model_header_spans
 from sqlbuild.compiler.discovery.models import ModelHeaderSpans
-from sqlbuild.compiler.refactoring._helpers.text_edits import text_edit, whole_word_offsets
+from sqlbuild.compiler.refactoring._helpers.text.sql_sites import embedded_ref_spans
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import text_edit, whole_word_offsets
 from sqlbuild.compiler.refactoring.constants import (
     COLUMN_VALUED_CONFIG_KEYS,
     COLUMNS_KEY,
@@ -20,11 +21,17 @@ from sqlbuild.compiler.refactoring.constants import (
     IDENTIFIER_PATTERN,
     NATIVE_HEADER_TOKEN_KINDS,
     PARENTHESIZED_EMPTY_TOKENS,
+    REF_FUNCTION,
     RELATIONSHIPS_AUDIT,
     RELATIONSHIPS_FIELD_KEY,
     RELATIONSHIPS_TO_KEY,
 )
-from sqlbuild.compiler.refactoring.models import HeaderEntry, HeaderToken, TextEdit
+from sqlbuild.compiler.refactoring.models import (
+    HeaderEntry,
+    HeaderToken,
+    RelationshipTokens,
+    TextEdit,
+)
 from sqlbuild.compiler.refactoring.types import EditKind, HeaderTokenKind
 from sqlbuild.lint.main.quoted_value_end import quoted_value_end
 
@@ -37,8 +44,14 @@ def header_tokens(*, contents: str) -> tuple[HeaderToken, ...] | None:
     spans: ModelHeaderSpans = get_model_header_spans(contents=contents)
     if spans.body is None:
         return None
-    body_start: int = spans.body[0]
-    body: str = contents[spans.body[0] : spans.body[1]]
+    return span_tokens(contents=contents, span=spans.body)
+
+
+def span_tokens(*, contents: str, span: tuple[int, int]) -> tuple[HeaderToken, ...]:
+    """Tokenize one declaration header body in file offsets."""
+
+    body_start: int = span[0]
+    body: str = contents[span[0] : span[1]]
     tokens: list[HeaderToken] = []
     depth: int = 0
     raw_kind: int
@@ -106,12 +119,10 @@ def cursor_input_tokens(
     return ()
 
 
-def relationship_tokens(
-    *, tokens: tuple[HeaderToken, ...]
-) -> tuple[tuple[HeaderToken | None, HeaderToken | None], ...]:
-    """Return the (to, field) value tokens of every relationships audit."""
+def relationship_tokens(*, tokens: tuple[HeaderToken, ...]) -> tuple[RelationshipTokens, ...]:
+    """Return the target and field value tokens of every relationships audit."""
 
-    found: list[tuple[HeaderToken | None, HeaderToken | None]] = []
+    found: list[RelationshipTokens] = []
     index: int
     token: HeaderToken
     for index, token in enumerate(tokens):
@@ -123,7 +134,7 @@ def relationship_tokens(
         ):
             continue
         depth: int = tokens[index + 1].depth + 1
-        values: dict[str, HeaderToken] = {}
+        values: dict[str, int] = {}
         cursor: int = index + 2
         while cursor < len(tokens) and tokens[cursor].depth >= depth:
             candidate: HeaderToken = tokens[cursor]
@@ -133,9 +144,15 @@ def relationship_tokens(
                 and candidate.value in {RELATIONSHIPS_TO_KEY, RELATIONSHIPS_FIELD_KEY}
                 and cursor + 1 < len(tokens)
             ):
-                values[candidate.value] = tokens[cursor + 1]
+                values[candidate.value] = cursor + 1
             cursor += 1
-        found.append((values.get(RELATIONSHIPS_TO_KEY), values.get(RELATIONSHIPS_FIELD_KEY)))
+        found.append(
+            _relationship(
+                tokens=tokens,
+                to_index=values.get(RELATIONSHIPS_TO_KEY),
+                field_index=values.get(RELATIONSHIPS_FIELD_KEY),
+            )
+        )
     return tuple(found)
 
 
@@ -265,23 +282,49 @@ def unhandled_word_offsets(
 
 
 def model_name_header_edits(*, contents: str, old: str, new: str) -> tuple[TextEdit, ...]:
-    """Rename a model in cursor_inputs keys and relationships `to` values."""
+    """Rename a model in cursor_inputs keys, bare relationships targets, and quoted SQL."""
 
     tokens: tuple[HeaderToken, ...] | None = header_tokens(contents=contents)
     if tokens is None:
         return ()
+    return model_name_token_edits(contents=contents, tokens=tokens, old=old, new=new)
+
+
+def model_name_token_edits(
+    *, contents: str, tokens: tuple[HeaderToken, ...], old: str, new: str
+) -> tuple[TextEdit, ...]:
+    """Rename a model in the given header tokens."""
+
     names: list[HeaderToken] = [
         name for name, _ in cursor_input_tokens(tokens=tokens) if is_value(token=name, value=old)
     ]
     names.extend(
-        to_token
-        for to_token, _ in relationship_tokens(tokens=tokens)
-        if to_token is not None and is_value(token=to_token, value=old)
+        relationship.target
+        for relationship in relationship_tokens(tokens=tokens)
+        if relationship.target is not None
+        and not relationship.called
+        and is_value(token=relationship.target, value=old)
     )
-    return tuple(
+    edits: list[TextEdit] = [
         rename_value_token(contents=contents, token=name, new_value=new, kind=EditKind.HEADER)
         for name in names
-    )
+    ]
+    token: HeaderToken
+    for token in tokens:
+        if token.kind == HeaderTokenKind.STRING:
+            edits.extend(
+                text_edit(
+                    text=contents,
+                    start=token.start + start,
+                    end=token.start + end,
+                    replacement=new,
+                    kind=EditKind.REFERENCE,
+                )
+                for start, end in embedded_ref_spans(
+                    text=contents[token.start : token.end], name=old
+                )
+            )
+    return tuple(edits)
 
 
 def consumer_column_header_edits(
@@ -292,22 +335,29 @@ def consumer_column_header_edits(
     tokens: tuple[HeaderToken, ...] | None = header_tokens(contents=contents)
     if tokens is None:
         return ()
+    return column_token_edits(contents=contents, tokens=tokens, upstream=upstream, old=old, new=new)
+
+
+def column_token_edits(
+    *, contents: str, tokens: tuple[HeaderToken, ...], upstream: str, old: str, new: str
+) -> tuple[TextEdit, ...]:
+    """Rename an upstream column in the given header tokens."""
+
     values: list[HeaderToken] = []
     name: HeaderToken
     inputs: tuple[HeaderToken, ...]
     for name, inputs in cursor_input_tokens(tokens=tokens):
         if is_value(token=name, value=upstream):
             values.extend(value for value in inputs if is_value(token=value, value=old))
-    to_token: HeaderToken | None
-    field_token: HeaderToken | None
-    for to_token, field_token in relationship_tokens(tokens=tokens):
+    relationship: RelationshipTokens
+    for relationship in relationship_tokens(tokens=tokens):
         if (
-            to_token is not None
-            and field_token is not None
-            and is_value(token=to_token, value=upstream)
-            and is_value(token=field_token, value=old)
+            relationship.target is not None
+            and relationship.field is not None
+            and is_value(token=relationship.target, value=upstream)
+            and is_value(token=relationship.field, value=old)
         ):
-            values.append(field_token)
+            values.append(relationship.field)
     return tuple(
         rename_value_token(contents=contents, token=value, new_value=new, kind=EditKind.HEADER)
         for value in values
@@ -344,6 +394,23 @@ def _column_migration_edit(
         kind=EditKind.MIGRATION,
         before="",
         after=declaration,
+    )
+
+
+def _relationship(
+    *, tokens: tuple[HeaderToken, ...], to_index: int | None, field_index: int | None
+) -> RelationshipTokens:
+    field: HeaderToken | None = tokens[field_index] if field_index is not None else None
+    if to_index is None:
+        return RelationshipTokens(target=None, field=field, called=False)
+    called: bool = (
+        tokens[to_index].value == REF_FUNCTION
+        and to_index + 2 < len(tokens)
+        and tokens[to_index + 1].value == HEADER_OPEN_PAREN
+        and tokens[to_index + 2].kind == HeaderTokenKind.STRING
+    )
+    return RelationshipTokens(
+        target=tokens[to_index + 2] if called else tokens[to_index], field=field, called=called
     )
 
 

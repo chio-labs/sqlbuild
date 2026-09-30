@@ -1,12 +1,12 @@
-"""Add model migrate_from to a staged rename exactly where discovery would miss it."""
+"""Add model migrate_from to a staged rename whenever its relation moves."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.refactoring._helpers.header_edits import insert_header_entry_edit
-from sqlbuild.compiler.refactoring._helpers.model_migration import decide_model_migration
+from sqlbuild.compiler.refactoring._helpers.renames.model_planning import decide_model_migration
+from sqlbuild.compiler.refactoring._helpers.text.header_edits import insert_header_entry_edit
 from sqlbuild.compiler.refactoring.constants import MIGRATE_FROM_KEY
 from sqlbuild.compiler.refactoring.models import (
     FileChange,
@@ -22,10 +22,10 @@ def with_model_migration(
     *,
     plan: RefactorPlan,
     before: CompiledProject,
-    after: CompiledProject,
+    after: CompiledProject | None,
     originals: dict[str, str],
 ) -> RefactorPlan:
-    """Return the plan with `migrate_from <old>` on the model when history would be lost."""
+    """Return the plan with `migrate_from <old>` on the model whenever its relation moves."""
 
     old: str = plan.request.model_name
     new: str = plan.request.new_name
@@ -57,8 +57,8 @@ def with_model_migration(
     if edit is None:
         return replace(
             plan,
-            manual=(
-                *plan.manual,
+            blocking=(
+                *plan.blocking,
                 ManualLocation(
                     path=change.path,
                     line=1,

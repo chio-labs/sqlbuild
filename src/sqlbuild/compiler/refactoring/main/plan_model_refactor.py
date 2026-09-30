@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.refactoring._helpers.model_planning import model_parts, model_target
-from sqlbuild.compiler.refactoring._helpers.text_edits import build_plan
+from sqlbuild.compiler.refactoring._helpers.renames.model_planning import model_parts, model_target
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import build_plan
 from sqlbuild.compiler.refactoring.constants import MODEL_MANUAL_HELP
 from sqlbuild.compiler.refactoring.models import (
     ModelTarget,

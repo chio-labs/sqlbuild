@@ -22,9 +22,11 @@ class ModelMigrationE2ETestCase:
     materialized: str
     udf: bool
     expected_declaration: str
-    expected_migrate_from_count: int
     expected_old_name_type: str
     expected_order_ids: tuple[int, ...]
+    extra_files: dict[str, str] = field(default_factory=dict)
+    removed_files: tuple[str, ...] = ()
+    stripped_fingerprints: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,7 @@ class RefusedRefactorE2ETestCase:
     extra_files: dict[str, str]
     expected_status: str
     expected_reason: str
+    expected_paths: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -59,3 +62,22 @@ class DryRunE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_paths: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CombinedRenameE2ETestCase:
+    description: str
+    expected_declarations: tuple[str, ...]
+    expected_new_columns: tuple[str, ...]
+    expected_old_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MissingOriginE2ETestCase:
+    description: str
+    target_settings: str
+    build_args: tuple[str, ...]
+    expected_exit: int
+    expected_output: str
+    expected_relation_type: str | None
+    expected_columns: tuple[str, ...] = ()

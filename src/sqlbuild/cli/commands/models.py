@@ -1065,7 +1065,6 @@ class RefactorCommandRequest:
     destination: str | None = None
     project_dir: Path | None = None
     cascade: bool = False
-    allow_manual: bool = False
     dry_run: bool = False
     json_output: bool = False
     no_color: bool = False

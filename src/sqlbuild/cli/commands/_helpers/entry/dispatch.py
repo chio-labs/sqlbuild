@@ -436,7 +436,6 @@ def _dispatch_compile_or_contract(
                 destination=args.refactor_destination,
                 project_dir=project_dir,
                 cascade=args.refactor_cascade,
-                allow_manual=args.refactor_allow_manual,
                 dry_run=args.dry_run,
                 json_output=args.json,
                 no_color=args.no_color,

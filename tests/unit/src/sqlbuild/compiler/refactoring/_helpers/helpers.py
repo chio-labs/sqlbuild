@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.refactoring._helpers.column_references import (
+from sqlbuild.compiler.refactoring._helpers.columns.column_references import (
     analyze_column,
     consumer_edits,
 )
-from sqlbuild.compiler.refactoring._helpers.header_edits import (
+from sqlbuild.compiler.refactoring._helpers.text.header_edits import (
     add_column_entry_edit,
     column_config_edits,
     column_entry_edits,
     header_tokens,
 )
-from sqlbuild.compiler.refactoring._helpers.sql_sites import analysis_sql
-from sqlbuild.compiler.refactoring._helpers.text_edits import text_edit
+from sqlbuild.compiler.refactoring._helpers.text.sql_sites import analysis_sql
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import text_edit
 from sqlbuild.compiler.refactoring.models import (
     AnalysisSql,
     BodyContext,
@@ -23,9 +23,10 @@ from sqlbuild.compiler.refactoring.models import (
     ColumnFacts,
     ColumnQuery,
     HeaderToken,
+    ProjectSqlFile,
     TextEdit,
 )
-from sqlbuild.compiler.refactoring.types import EditKind
+from sqlbuild.compiler.refactoring.types import EditKind, SqlFileRole
 
 DIALECT: str = "duckdb"
 COLUMNS: dict[tuple[str, str], tuple[str, ...]] = {
@@ -106,3 +107,11 @@ def read_tree(*, root: Path) -> dict[str, str]:
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
         for path in sorted(root.rglob("*.sql"))
     }
+
+
+def yaml_file(contents: str) -> ProjectSqlFile:
+    """Wrap YAML text as one project declaration file."""
+
+    return ProjectSqlFile(
+        relative_path="seeds/customers.yml", contents=contents, role=SqlFileRole.YAML
+    )

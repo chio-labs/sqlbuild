@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models import (
     MappedOffset,
 )
 from sqlbuild.compiler.refactoring.constants import (
+    EMBEDDED_REF_PATTERN,
     GENERIC_PLACEHOLDER_KIND,
     PLACEHOLDER_BASE,
     PLACEHOLDER_PAD,
@@ -44,6 +45,16 @@ def resource_sites(*, text: str, dialect: str) -> tuple[ResourceSite, ...]:
             )
         )
     return tuple(sites)
+
+
+def embedded_ref_spans(*, text: str, name: str) -> tuple[tuple[int, int], ...]:
+    """Return the name spans of `__ref` calls to a model inside a quoted string's raw text."""
+
+    return tuple(
+        (match.start("name"), match.end("name"))
+        for match in EMBEDDED_REF_PATTERN.finditer(text)
+        if match.group("name") == name
+    )
 
 
 def analysis_sql(*, text: str, dialect: str) -> AnalysisSql:

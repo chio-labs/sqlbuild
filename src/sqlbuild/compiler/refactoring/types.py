@@ -43,6 +43,8 @@ class SqlFileRole(StrEnum):
     AUDIT = "audit"
     HOOK = "hook"
     FUNCTION = "function"
+    SCHEMA = "schema"
+    YAML = "yaml"
 
 
 class HeaderTokenKind(StrEnum):

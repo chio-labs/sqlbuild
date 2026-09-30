@@ -14,14 +14,19 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     ModelRefactorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
+    CUSTOMER_DECLARATIONS,
+    ORDER_SHAPE,
     fragments_present,
     load_raw_orders,
+    order_history_copy,
     order_history_files,
     order_ids,
     project_text,
     relation_type,
+    remove_files,
     sqb,
     sqb_json,
+    strip_migration_fingerprints,
     write_orders_project,
 )
 
@@ -39,6 +44,32 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
                 "tests/unit/test_fact_orders.sql": ("__ref__stg_order_lines AS (",),
             },
             expected_relation="stg_order_lines",
+        ),
+        ModelRefactorE2ETestCase(
+            description="rename rewrites seed and source relationships audits",
+            command=("rename", "model:stg_orders", "stg_order_lines"),
+            expected_removed="models/staging/stg_orders.sql",
+            expected_file="models/staging/stg_order_lines.sql",
+            expected_fragments={
+                "seeds/customers.yml": ('to: __ref("stg_order_lines")',),
+                "sources/customers.yml": ("to: '__ref(\"stg_order_lines\")'",),
+                "models/staging/stg_order_lines.sql": ("migrate_from stg_orders",),
+            },
+            expected_relation="stg_order_lines",
+            extra_files=CUSTOMER_DECLARATIONS,
+        ),
+        ModelRefactorE2ETestCase(
+            description="rename rewrites reusable schema relationships audits",
+            command=("rename", "model:stg_orders", "stg_order_lines"),
+            expected_removed="models/staging/stg_orders.sql",
+            expected_file="models/staging/stg_order_lines.sql",
+            expected_fragments={
+                "models/marts/_sqlbuild/_schemas/order_shape.sql": (
+                    '(to __ref("stg_order_lines"), field customer_id)',
+                ),
+            },
+            expected_relation="stg_order_lines",
+            extra_files=ORDER_SHAPE,
         ),
         ModelRefactorE2ETestCase(
             description="rename rewrites cursor_inputs keys of incremental consumers",
@@ -142,40 +173,47 @@ def test_given_dry_run_json_when_refactoring_then_nothing_is_written(
     "test_case",
     [
         ModelMigrationE2ETestCase(
-            description="unfingerprintable table gains migrate_from",
+            description="table",
             materialized="table",
-            udf=True,
+            udf=False,
             expected_declaration="migrate_from order_history",
-            expected_migrate_from_count=1,
             expected_old_name_type="VIEW",
             expected_order_ids=(3, 4),
         ),
         ModelMigrationE2ETestCase(
-            description="unfingerprintable view gains migrate_from",
+            description="view calling a UDF",
             materialized="view",
             udf=True,
             expected_declaration="migrate_from order_history",
-            expected_migrate_from_count=1,
             expected_old_name_type="VIEW",
             expected_order_ids=(3, 4),
         ),
         ModelMigrationE2ETestCase(
-            description="unfingerprintable incremental keeps its history",
+            description="incremental with an unchanged definition",
             materialized="incremental",
-            udf=True,
+            udf=False,
             expected_declaration="migrate_from order_history",
-            expected_migrate_from_count=1,
             expected_old_name_type="VIEW",
             expected_order_ids=(1, 2, 3, 4),
         ),
         ModelMigrationE2ETestCase(
-            description="unchanged definition is left to automatic discovery",
+            description="incremental that discovery would find ambiguous",
             materialized="incremental",
             udf=False,
-            expected_declaration="",
-            expected_migrate_from_count=0,
+            expected_declaration="migrate_from order_history",
             expected_old_name_type="VIEW",
             expected_order_ids=(1, 2, 3, 4),
+            extra_files=order_history_copy(),
+            removed_files=("models/marts/order_history_copy.sql",),
+        ),
+        ModelMigrationE2ETestCase(
+            description="incremental built before rename matching",
+            materialized="incremental",
+            udf=False,
+            expected_declaration="migrate_from order_history",
+            expected_old_name_type="VIEW",
+            expected_order_ids=(1, 2, 3, 4),
+            stripped_fingerprints=("order_history",),
         ),
     ],
     ids=lambda case: case.description,
@@ -183,25 +221,29 @@ def test_given_dry_run_json_when_refactoring_then_nothing_is_written(
 def test_given_built_model_when_renamed_then_build_migrates_its_relation(
     tmp_path: Path, test_case: ModelMigrationE2ETestCase
 ) -> None:
-    """The rename declares migrate_from exactly when discovery would miss the old relation."""
+    """Every rename declares migrate_from, so history survives whatever discovery would do."""
 
     project_dir: Path = write_orders_project(
         tmp_path=tmp_path,
-        files=order_history_files(materialized=test_case.materialized, udf=test_case.udf),
+        files={
+            **order_history_files(materialized=test_case.materialized, udf=test_case.udf),
+            **test_case.extra_files,
+        },
     )
     first: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
+    strip_migration_fingerprints(project_dir=project_dir, models=test_case.stripped_fingerprints)
 
     result: subprocess.CompletedProcess[str] = sqb(
         project_dir, "rename", "model:order_history", "order_ledger"
     )
+    remove_files(project_dir=project_dir, paths=test_case.removed_files)
     header: str = (project_dir / "models/marts/order_ledger.sql").read_text(encoding="utf-8")
     load_raw_orders(project_dir=project_dir, order_ids=(3, 4))
     second: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
 
     assert first.returncode == 0, first.stdout + first.stderr
     assert result.returncode == 0, result.stdout + result.stderr
-    assert test_case.expected_declaration in header
-    assert header.count("migrate_from") == test_case.expected_migrate_from_count, header
+    assert header.count(test_case.expected_declaration) == 1, header
     assert second.returncode == 0, second.stdout + second.stderr
     assert relation_type(project_dir=project_dir, name="order_history") == (
         test_case.expected_old_name_type

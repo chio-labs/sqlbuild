@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.refactoring._helpers.header_edits import model_name_header_edits
-from sqlbuild.compiler.refactoring._helpers.sql_sites import (
+from sqlbuild.compiler.refactoring._helpers.text.header_edits import model_name_header_edits
+from sqlbuild.compiler.refactoring._helpers.text.schema_edits import schema_model_name_edits
+from sqlbuild.compiler.refactoring._helpers.text.sql_sites import (
     authored_offset,
     model_body,
     resource_sites,
 )
-from sqlbuild.compiler.refactoring._helpers.text_edits import (
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import (
     identifier_sites,
     manual_at,
     path_edits,
@@ -58,6 +59,13 @@ def model_reference_edits(
                 path_edits(
                     path=item.relative_path,
                     edits=model_name_header_edits(contents=item.contents, old=old, new=new),
+                )
+            )
+        if item.role == SqlFileRole.SCHEMA:
+            edits.extend(
+                path_edits(
+                    path=item.relative_path,
+                    edits=schema_model_name_edits(contents=item.contents, old=old, new=new),
                 )
             )
     return tuple(edits)

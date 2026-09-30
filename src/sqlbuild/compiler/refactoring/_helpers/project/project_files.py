@@ -10,7 +10,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlTestBlock,
 )
-from sqlbuild.compiler.refactoring._helpers.text_edits import whole_word_offsets
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import whole_word_offsets
 from sqlbuild.compiler.refactoring.constants import SQL_LIKE_PATTERN
 from sqlbuild.compiler.refactoring.models import AuthoredBody, ManualLocation, ProjectSqlFile
 from sqlbuild.compiler.refactoring.types import SqlFileRole
@@ -34,6 +34,19 @@ def project_sql_files(*, discovered: DiscoveredProjectInputs) -> tuple[ProjectSq
             relative, ProjectSqlFile(relative_path=relative, contents=contents, role=role)
         )
     return tuple(files[path] for path in sorted(files))
+
+
+def yaml_files(*, discovered: DiscoveredProjectInputs) -> tuple[ProjectSqlFile, ...]:
+    """Return every source and seed YAML declaration file."""
+
+    files: dict[str, str] = {
+        item.relative_path.as_posix(): item.contents
+        for item in (*discovered.source_files, *discovered.schema_files)
+    }
+    return tuple(
+        ProjectSqlFile(relative_path=path, contents=files[path], role=SqlFileRole.YAML)
+        for path in sorted(files)
+    )
 
 
 def authored_bodies(*, discovered: DiscoveredProjectInputs) -> tuple[AuthoredBody, ...]:
@@ -117,6 +130,10 @@ def _authored_files(*, discovered: DiscoveredProjectInputs) -> tuple[_AuthoredFi
     files.extend(
         (SqlFileRole.FUNCTION, item.relative_path, item.contents, (item.body_sql,))
         for item in discovered.sql_function_files
+    )
+    files.extend(
+        (SqlFileRole.SCHEMA, item.relative_path, item.contents, ())
+        for item in discovered.model_schema_files
     )
     return tuple(files)
 

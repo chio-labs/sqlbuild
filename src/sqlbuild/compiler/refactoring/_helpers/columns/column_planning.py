@@ -6,13 +6,24 @@ from collections import deque
 
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.refactoring._helpers.column_references import (
+from sqlbuild.compiler.refactoring._helpers.columns.column_references import (
     analyze_column,
     consumer_edits,
     output_edits,
     resource_columns,
 )
-from sqlbuild.compiler.refactoring._helpers.header_edits import (
+from sqlbuild.compiler.refactoring._helpers.project.project_files import (
+    authored_bodies,
+    project_sql_files,
+    python_string_locations,
+    yaml_files,
+)
+from sqlbuild.compiler.refactoring._helpers.renames.model_planning import (
+    find_model,
+    needs_column_migration,
+    validate_identifier,
+)
+from sqlbuild.compiler.refactoring._helpers.text.header_edits import (
     add_column_entry_edit,
     column_config_edits,
     column_entry_edits,
@@ -20,20 +31,19 @@ from sqlbuild.compiler.refactoring._helpers.header_edits import (
     header_tokens,
     unhandled_word_offsets,
 )
-from sqlbuild.compiler.refactoring._helpers.model_migration import needs_column_migration
-from sqlbuild.compiler.refactoring._helpers.model_planning import find_model, validate_identifier
-from sqlbuild.compiler.refactoring._helpers.project_files import (
-    authored_bodies,
-    project_sql_files,
-    python_string_locations,
-)
-from sqlbuild.compiler.refactoring._helpers.sql_sites import (
+from sqlbuild.compiler.refactoring._helpers.text.schema_edits import schema_column_edits
+from sqlbuild.compiler.refactoring._helpers.text.sql_sites import (
     analysis_sql,
     authored_offset,
     authored_span,
     model_body,
 )
-from sqlbuild.compiler.refactoring._helpers.text_edits import manual_at, merge_parts, path_edits
+from sqlbuild.compiler.refactoring._helpers.text.text_edits import (
+    manual_at,
+    merge_parts,
+    path_edits,
+)
+from sqlbuild.compiler.refactoring._helpers.text.yaml_edits import yaml_column_edits
 from sqlbuild.compiler.refactoring.constants import (
     EXPECTED_FIXTURE_PREFIX,
     FIXTURE_ROLES,
@@ -62,6 +72,7 @@ from sqlbuild.compiler.refactoring.models import (
     RefactorRequest,
     TextEdit,
 )
+from sqlbuild.compiler.refactoring.types import SqlFileRole
 from sqlbuild.spec.contracts.models import SchemaColumn
 
 type _ModelContext = tuple[BodyContext | None, str, tuple[ManualLocation, ...]]
@@ -84,6 +95,8 @@ def column_rename_context(
         columns=resource_columns(project=project.graph.project),
         contents={item.relative_path: item.contents for item in files},
         bodies=authored_bodies(discovered=project.discovered),
+        yaml_files=yaml_files(discovered=project.discovered),
+        schema_files=tuple(item for item in files if item.role == SqlFileRole.SCHEMA),
         old=old,
         new=new,
         cascade=request.cascade,
@@ -119,11 +132,42 @@ def column_rename_parts(*, context: ColumnRenameContext) -> RefactorParts:
                 _declarations(context=context, model=model),
                 consumers,
                 _authored_body_parts(context=context, model=model),
+                RefactorParts(
+                    edits=(
+                        *yaml_column_edits(
+                            files=context.yaml_files,
+                            model=model.name,
+                            old=context.old,
+                            new=context.new,
+                        ),
+                        *_schema_edits(context=context, model=model),
+                    )
+                ),
             )
         )
         queue.extend(cascaded)
     merged: RefactorParts = merge_parts(parts=tuple(parts))
     return merge_parts(parts=(merged, _python_locations(context=context, merged=merged)))
+
+
+def _schema_edits(
+    *, context: ColumnRenameContext, model: CompiledModel
+) -> tuple[tuple[str, TextEdit], ...]:
+    edits: list[tuple[str, TextEdit]] = []
+    item: ProjectSqlFile
+    for item in context.schema_files:
+        edits.extend(
+            path_edits(
+                path=item.relative_path,
+                edits=schema_column_edits(
+                    contents=item.contents,
+                    upstream=model.name,
+                    old=context.old,
+                    new=context.new,
+                ),
+            )
+        )
+    return tuple(edits)
 
 
 def _output_names(*, context: ColumnRenameContext) -> frozenset[str]:
