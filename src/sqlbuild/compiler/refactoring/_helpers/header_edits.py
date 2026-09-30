@@ -12,7 +12,6 @@ from sqlbuild.compiler.refactoring.constants import (
     CURSOR_INPUTS_KEY,
     HEADER_CLOSERS,
     HEADER_DESCRIPTION_KEY,
-    HEADER_ESCAPE,
     HEADER_INDENT,
     HEADER_KEY_AND_VALUE_TOKENS,
     HEADER_OPEN_PAREN,
@@ -27,6 +26,7 @@ from sqlbuild.compiler.refactoring.constants import (
 )
 from sqlbuild.compiler.refactoring.models import HeaderEntry, HeaderToken, TextEdit
 from sqlbuild.compiler.refactoring.types import EditKind, HeaderTokenKind
+from sqlbuild.lint.main.quoted_value_end import quoted_value_end
 
 _VALUE_KINDS: frozenset[HeaderTokenKind] = frozenset({HeaderTokenKind.WORD, HeaderTokenKind.STRING})
 
@@ -373,16 +373,7 @@ def _is_separator(token: HeaderToken) -> bool:
 def _token_end(*, contents: str, kind: HeaderTokenKind, value: str, start: int) -> int:
     if kind != HeaderTokenKind.STRING:
         return start + len(value)
-    quote: str = contents[start]
-    index: int = start + 1
-    while index < len(contents):
-        if contents[index] == HEADER_ESCAPE:
-            index += 2
-            continue
-        if contents[index] == quote:
-            return index + 1
-        index += 1
-    return len(contents)
+    return quoted_value_end(text=contents, start=start)
 
 
 def _line_indent(*, contents: str, offset: int) -> str:

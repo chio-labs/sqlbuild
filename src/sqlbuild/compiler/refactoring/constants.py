@@ -75,7 +75,6 @@ HEADER_OPENERS: frozenset[str] = frozenset({"(", "[", "{"})
 HEADER_CLOSERS: frozenset[str] = frozenset({")", "]", "}"})
 HEADER_SEPARATOR: str = ","
 HEADER_OPEN_PAREN: str = "("
-HEADER_ESCAPE: str = "\\"
 HEADER_DESCRIPTION_KEY: str = "description"
 HEADER_INDENT: str = "  "
 PARENTHESIZED_EMPTY_TOKENS: int = 2

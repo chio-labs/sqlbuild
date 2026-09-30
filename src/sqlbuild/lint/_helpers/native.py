@@ -405,7 +405,7 @@ def _top_level_description_value_span(*, header_text: str) -> tuple[int, int] | 
     while index < len(header_text):
         character: str = header_text[index]
         if character in _QUOTE_CHARACTERS:
-            index = _quoted_value_end(text=header_text, start=index)
+            index = quoted_value_end(text=header_text, start=index)
             continue
         if character in closing_delimiters:
             delimiters.append(closing_delimiters[character])
@@ -429,7 +429,7 @@ def _top_level_description_value_span(*, header_text: str) -> tuple[int, int] | 
                 while quote_start < len(header_text) and header_text[quote_start].isspace():
                     quote_start += 1
                 if quote_start < len(header_text) and header_text[quote_start] in _QUOTE_CHARACTERS:
-                    quote_end: int = _quoted_value_end(text=header_text, start=quote_start)
+                    quote_end: int = quoted_value_end(text=header_text, start=quote_start)
                     return quote_start + 1, quote_end - 1
             index = word_end
             continue
@@ -437,7 +437,9 @@ def _top_level_description_value_span(*, header_text: str) -> tuple[int, int] | 
     return None
 
 
-def _quoted_value_end(*, text: str, start: int) -> int:
+def quoted_value_end(*, text: str, start: int) -> int:
+    """Return the offset just past the quoted value that opens at start."""
+
     quote: str = text[start]
     index: int = start + 1
     while index < len(text):
