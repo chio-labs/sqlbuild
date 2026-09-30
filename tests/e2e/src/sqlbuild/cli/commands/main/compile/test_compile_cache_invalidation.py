@@ -104,6 +104,15 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             ),
         ),
         CompileCacheInvalidationTestCase(
+            description="second_test_block_in_multi_block_file_edit",
+            edit=lambda root: replace_project_text(
+                root,
+                "tests/unit/test_channel_blocks.sql",
+                "SELECT 2 AS order_id, 'web' AS order_channel",
+                "SELECT 2 AS order_id, 'partner' AS order_channel",
+            ),
+        ),
+        CompileCacheInvalidationTestCase(
             description="unit_test_structure_error",
             edit=lambda root: replace_project_text(
                 root, "tests/unit/test_channel_orders.sql", "SELECT 1\n", ""

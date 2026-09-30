@@ -81,18 +81,6 @@ def build_scope_relationship_grants(
     )
 
 
-def _expected_models_fact_keys(
-    *, discovered_inputs: DiscoveredProjectInputs, fact_cache: FactCacheStore
-) -> dict[tuple[int, int], str]:
-    cache_keys: dict[tuple[int, int], str] = {}
-    for file_index, test_file in enumerate(discovered_inputs.test_files):
-        for block_index, block in enumerate(test_file.blocks):
-            cache_keys[file_index, block_index] = fact_cache.key(
-                block.sql_body, str(test_file.relative_path), block.mode.value
-            )
-    return cache_keys
-
-
 def _test_relationship_grants(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -102,44 +90,39 @@ def _test_relationship_grants(
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
-    cache_keys: dict[tuple[int, int], str] = (
-        _expected_models_fact_keys(discovered_inputs=discovered_inputs, fact_cache=fact_cache)
+    cache_keys: dict[int, str] = (
+        {
+            file_index: _expected_models_fact_key(test_file=test_file, fact_cache=fact_cache)
+            for file_index, test_file in enumerate(discovered_inputs.test_files)
+        }
         if fact_cache.enabled
         else {}
     )
     cached_names: dict[str, object] = fact_cache.read_many(
         tuple(
-            (
-                _expected_models_fact_slot(
-                    test_file=discovered_inputs.test_files[file_index], block_index=block_index
-                ),
-                cache_key,
-            )
-            for (file_index, block_index), cache_key in cache_keys.items()
+            (_expected_models_fact_slot(discovered_inputs.test_files[file_index]), cache_key)
+            for file_index, cache_key in cache_keys.items()
         )
     )
     for file_index, test_file in enumerate(discovered_inputs.test_files):
+        cache_key: str | None = cache_keys.get(file_index)
+        cached_file_names: tuple[tuple[str, ...], ...] | None = _cached_expected_names(
+            value=None if cache_key is None else cached_names.get(cache_key),
+            block_count=len(test_file.blocks),
+        )
+        extracted_names: list[tuple[str, ...]] = []
         for block_index, block in enumerate(test_file.blocks):
             try:
-                cache_key: str | None = cache_keys.get((file_index, block_index))
-                cached: object = None if cache_key is None else cached_names.get(cache_key)
-                expected_names: tuple[str, ...]
-                if isinstance(cached, tuple) and all(isinstance(name, str) for name in cached):
-                    expected_names = cast(tuple[str, ...], cached)
-                else:
-                    expected_names = extract_sql_test_expected_model_names(
+                expected_names: tuple[str, ...] = (
+                    cached_file_names[block_index]
+                    if cached_file_names is not None
+                    else extract_sql_test_expected_model_names(
                         sql=block.sql_body,
                         file_label=str(test_file.relative_path),
                         mode=block.mode,
                     )
-                    if cache_key is not None:
-                        fact_cache.stage(
-                            key=cache_key,
-                            slot=_expected_models_fact_slot(
-                                test_file=test_file, block_index=block_index
-                            ),
-                            value=expected_names,
-                        )
+                )
+                extracted_names.append(expected_names)
                 grants.extend(
                     _expected_model_grants(
                         lookup=lookup,
@@ -164,11 +147,41 @@ def _test_relationship_grants(
                     )
             except Exception as error:
                 faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
+        if (
+            cache_key is not None
+            and cached_file_names is None
+            and len(extracted_names) == len(test_file.blocks)
+        ):
+            fact_cache.stage(
+                key=cache_key,
+                slot=_expected_models_fact_slot(test_file),
+                value=tuple(extracted_names),
+            )
     return tuple(grants), tuple(faults)
 
 
-def _expected_models_fact_slot(*, test_file: DiscoveredSqlTestFile, block_index: int) -> str:
-    return f"expected:{test_file.relative_path}#{block_index}"
+def _expected_models_fact_key(
+    *, test_file: DiscoveredSqlTestFile, fact_cache: FactCacheStore
+) -> str:
+    parts: list[str] = [str(test_file.relative_path)]
+    for block in test_file.blocks:
+        parts.extend((block.sql_body, block.mode.value))
+    return fact_cache.key(*parts)
+
+
+def _cached_expected_names(
+    *, value: object, block_count: int
+) -> tuple[tuple[str, ...], ...] | None:
+    if not isinstance(value, tuple) or len(value) != block_count:
+        return None
+    for names in value:
+        if not isinstance(names, tuple) or not all(isinstance(name, str) for name in names):
+            return None
+    return cast(tuple[tuple[str, ...], ...], value)
+
+
+def _expected_models_fact_slot(test_file: DiscoveredSqlTestFile) -> str:
+    return f"expected:{test_file.relative_path}"
 
 
 def _scenario_relationship_grants(

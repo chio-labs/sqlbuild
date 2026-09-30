@@ -2373,6 +2373,26 @@ _COMPILE_CACHE_EXTRA_PROJECT_FILES: dict[str, str] = {
         ")\n"
         "SELECT 1\n"
     ),
+    "tests/unit/test_channel_blocks.sql": (
+        'TEST (name "channel_orders_first");\n\n'
+        "WITH\n"
+        "__ref__stg_orders AS (\n"
+        "  SELECT 1 AS order_id, 2 AS quantity\n"
+        "),\n"
+        "__expected__channel_orders AS (\n"
+        "  SELECT 1 AS order_id, 'web' AS order_channel\n"
+        ")\n"
+        "SELECT 1\n\n"
+        'TEST (name "channel_orders_second");\n\n'
+        "WITH\n"
+        "__ref__stg_orders AS (\n"
+        "  SELECT 2 AS order_id, 5 AS quantity\n"
+        "),\n"
+        "__expected__channel_orders AS (\n"
+        "  SELECT 2 AS order_id, 'web' AS order_channel\n"
+        ")\n"
+        "SELECT 1\n"
+    ),
 }
 
 
