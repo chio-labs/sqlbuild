@@ -809,3 +809,10 @@ class DiscoveryWorkTestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_eager_output_column_scans: int
+
+
+@dataclass(frozen=True)
+class NativeAllocatorEntryTestCase:
+    description: str
+    inherited_environment: tuple[tuple[str, str], ...]
+    expected_purge_delay: str
