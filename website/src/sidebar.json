@@ -188,6 +188,7 @@
 			"docs/cli/format",
 			"docs/cli/contract",
 			"docs/cli/scope",
+			"docs/cli/rename",
 			"docs/cli/rules",
 			"docs/cli/plan",
 			"docs/cli/build",

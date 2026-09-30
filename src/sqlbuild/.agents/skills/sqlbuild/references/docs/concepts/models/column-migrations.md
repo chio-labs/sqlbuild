@@ -21,6 +21,8 @@ Column migrations apply to incremental models, including microbatch models, and 
 
 ## Declaring a rename
 
+[`sqb rename column:<model>.<column>`](../../cli/rename.md) renames the column in the model and every query that reads it, and adds the `migrate_from` declaration below for you.
+
 Add `migrate_from` to the renamed column in the model header, naming the old column:
 
 ```sql

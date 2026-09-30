@@ -23,7 +23,9 @@ Table and view models can declare a migration too. They hold no history, so they
 
 ## Declaring a migration
 
-Add `migrate_from` to the renamed model's header, naming the old model:
+[`sqb rename`](../../cli/rename.md) renames a model and every reference to it, and adds `migrate_from` only when [automatic discovery](#automatic-discovery) would not find the old relation.
+
+To declare a migration by hand, add `migrate_from` to the renamed model's header, naming the old model:
 
 ```sql
 MODEL (
