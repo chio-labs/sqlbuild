@@ -73,11 +73,7 @@ def all_verdicts(*, commands: tuple[CommandComparison, ...]) -> tuple[MetricVerd
 
 
 def summary_sample(*, samples: tuple[CommandSample, ...]) -> CommandSample:
-    """Return median wall and CPU time and the worst peak RSS of samples.
-
-    Peak RSS depends on whether concurrent phases overlap, so it lands on one of a few levels
-    run to run; the worst run is stable where a median flips between levels.
-    """
+    """Return median wall and CPU time and the worst-run peak RSS of samples."""
 
     return CommandSample(
         wall_seconds=statistics.median(sample.wall_seconds for sample in samples),
