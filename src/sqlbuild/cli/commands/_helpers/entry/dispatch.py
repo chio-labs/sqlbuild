@@ -422,6 +422,25 @@ def _dispatch_compile_or_contract(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int | None:
+    if args.command in {CliCommand.RENAME, CliCommand.MV}:
+        from sqlbuild.cli.commands.models import RefactorCommandRequest
+
+        if handlers.run_refactor is None or args.refactor_target is None:
+            raise CliUserError(f"{args.command} command handler is unavailable", code="C950")
+        return handlers.run_refactor(
+            request=RefactorCommandRequest(
+                command=str(args.command),
+                target=args.refactor_target,
+                new_name=args.refactor_new_name,
+                destination=args.refactor_destination,
+                project_dir=project_dir,
+                cascade=args.refactor_cascade,
+                allow_manual=args.refactor_allow_manual,
+                dry_run=args.dry_run,
+                json_output=args.json,
+                no_color=args.no_color,
+            )
+        )
     if args.command == CliCommand.CONTRACT:
         from sqlbuild.cli.commands.models import ContractCommandRequest
 

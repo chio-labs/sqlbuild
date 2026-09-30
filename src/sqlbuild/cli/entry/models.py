@@ -78,3 +78,4 @@ class CliEntrypointHandlers:
     run_rules: Callable[..., int]
     run_scope: ScopeCommandHandler
     run_contract: Callable[..., int] | None = None
+    run_refactor: Callable[..., int] | None = None

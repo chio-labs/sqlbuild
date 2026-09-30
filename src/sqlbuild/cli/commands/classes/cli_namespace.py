@@ -160,6 +160,11 @@ _DEFAULT_VALUES: dict[str, object] = {
     "scope_page_size": 100,
     "scope_after": None,
     "scope_paths": "relative",
+    "refactor_target": None,
+    "refactor_new_name": None,
+    "refactor_destination": None,
+    "refactor_cascade": False,
+    "refactor_allow_manual": False,
 }
 
 
@@ -238,6 +243,11 @@ class CliNamespace:
     query_limit: int | None
     query_no_limit: bool
     cost_selector: str
+    refactor_target: str | None
+    refactor_new_name: str | None
+    refactor_destination: str | None
+    refactor_cascade: bool
+    refactor_allow_manual: bool
     cost_limit: int | None
     cost_no_limit: bool
     cost_sort: str | None

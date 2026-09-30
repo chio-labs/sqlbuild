@@ -139,6 +139,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/playground \
 	tests/e2e/src/sqlbuild/cli/commands/main/postgres \
 	tests/e2e/src/sqlbuild/cli/commands/main/query \
+	tests/e2e/src/sqlbuild/cli/commands/main/refactor \
 	tests/e2e/src/sqlbuild/cli/commands/main/scope \
 	tests/e2e/src/sqlbuild/cli/commands/main/seed \
 	tests/e2e/src/sqlbuild/cli/commands/main/skills \

@@ -53,6 +53,8 @@ class CliCommand(StrEnum):
     RULES = "rules"
     SCOPE = "scope"
     CONTRACT = "contract"
+    RENAME = "rename"
+    MV = "mv"
 
 
 class ScopeCommandHandler(Protocol):

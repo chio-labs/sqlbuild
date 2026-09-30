@@ -52,6 +52,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlScenario,
+    CompilerDiagnostic,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
@@ -69,6 +70,7 @@ from sqlbuild.compiler.pipeline.models import (
 )
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+from sqlbuild.compiler.refactoring.models import RefactorProject
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
@@ -1050,6 +1052,30 @@ class TestCommandRequest:
     concurrency: int | None = None
     case_name: str | None = None
     inspect: bool = False
+
+
+@dataclass(frozen=True)
+class RefactorCommandRequest:
+    """CLI inputs for one `sqb rename` or `sqb mv` invocation."""
+
+    command: str
+    target: str
+    new_name: str | None = None
+    destination: str | None = None
+    project_dir: Path | None = None
+    cascade: bool = False
+    allow_manual: bool = False
+    dry_run: bool = False
+    json_output: bool = False
+    no_color: bool = False
+
+
+@dataclass(frozen=True)
+class RefactorCompile:
+    """One offline compile for a refactoring: its facts, or the errors that stopped it."""
+
+    project: RefactorProject | None
+    errors: tuple[CompilerDiagnostic, ...]
 
 
 @dataclass(frozen=True)
