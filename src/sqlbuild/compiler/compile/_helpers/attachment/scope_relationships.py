@@ -27,7 +27,7 @@ from sqlbuild.compiler.compile.models import (
     ScopeRelationshipFault,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
     resolve_scope_path_visibility,
@@ -101,7 +101,17 @@ def _test_relationship_grants(
         if fact_cache.enabled
         else {}
     )
-    cached_names: dict[str, object] = fact_cache.read_many(tuple(cache_keys.values()))
+    cached_names: dict[str, object] = fact_cache.read_many(
+        tuple(
+            (
+                _expected_models_fact_slot(
+                    test_file=discovered_inputs.test_files[file_index], block_index=block_index
+                ),
+                cache_key,
+            )
+            for (file_index, block_index), cache_key in cache_keys.items()
+        )
+    )
     for file_index, test_file in enumerate(discovered_inputs.test_files):
         for block_index, block in enumerate(test_file.blocks):
             try:
@@ -119,7 +129,9 @@ def _test_relationship_grants(
                     if cache_key is not None:
                         fact_cache.stage(
                             key=cache_key,
-                            slot=f"expected:{test_file.relative_path}#{block_index}",
+                            slot=_expected_models_fact_slot(
+                                test_file=test_file, block_index=block_index
+                            ),
                             value=expected_names,
                         )
                 grants.extend(
@@ -147,6 +159,10 @@ def _test_relationship_grants(
             except Exception as error:
                 faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
     return tuple(grants), tuple(faults)
+
+
+def _expected_models_fact_slot(*, test_file: DiscoveredSqlTestFile, block_index: int) -> str:
+    return f"expected:{test_file.relative_path}#{block_index}"
 
 
 def _scenario_relationship_grants(

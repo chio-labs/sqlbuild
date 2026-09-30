@@ -18,7 +18,6 @@ from sqlbuild.compiler.fact_cache._helpers.restricted_pickle import (
     load_fact_payload,
 )
 from sqlbuild.compiler.fact_cache.constants import (
-    FACT_CACHE_CREATE_SLOT_INDEX_SQL,
     FACT_CACHE_CREATE_TABLE_SQL,
     FACT_CACHE_DATABASE_SUFFIX,
     FACT_CACHE_DIRECTORY_PREFIX,
@@ -103,12 +102,13 @@ class FactCacheStore:
             digest.update(encoded)
         return str(digest.hexdigest())
 
-    def read_many(self, keys: Sequence[str]) -> dict[str, object]:
-        """Return verified cached values for the requested keys; every fault is a miss."""
+    def read_many(self, entries: Sequence[tuple[str, str]]) -> dict[str, object]:
+        """Return verified cached values for requested (slot, key) pairs; faults are misses."""
 
         found: dict[str, object] = {}
-        if self._database_path is None or not keys:
+        if self._database_path is None or not entries:
             return found
+        expected_keys: dict[str, str] = dict(entries)
         if self._database_path.is_file():
             try:
                 with closing(
@@ -118,27 +118,27 @@ class FactCacheStore:
                         timeout=FACT_CACHE_SQLITE_TIMEOUT_SECONDS,
                     )
                 ) as connection:
-                    unique_keys: tuple[str, ...] = tuple(dict.fromkeys(keys))
-                    for start in range(0, len(unique_keys), FACT_CACHE_QUERY_CHUNK_SIZE):
-                        chunk: tuple[str, ...] = unique_keys[
-                            start : start + FACT_CACHE_QUERY_CHUNK_SIZE
-                        ]
+                    slots: tuple[str, ...] = tuple(expected_keys)
+                    for start in range(0, len(slots), FACT_CACHE_QUERY_CHUNK_SIZE):
+                        chunk: tuple[str, ...] = slots[start : start + FACT_CACHE_QUERY_CHUNK_SIZE]
                         placeholders: str = ",".join("?" for _ in chunk)
-                        rows: list[tuple[object, object, object]] = connection.execute(
-                            f"SELECT cache_key, digest, payload FROM fact "
-                            f"WHERE cache_key IN ({placeholders})",
+                        rows: list[tuple[object, object, object, object]] = connection.execute(
+                            f"SELECT slot, cache_key, digest, payload FROM fact "
+                            f"WHERE slot IN ({placeholders})",
                             chunk,
                         ).fetchall()
-                        for cache_key, digest, payload in rows:
+                        for slot, cache_key, digest, payload in rows:
+                            if not isinstance(slot, str) or expected_keys.get(slot) != cache_key:
+                                continue
                             value: object | None = _verified_value(
                                 cache_key=cache_key, digest=digest, payload=payload
                             )
-                            if value is not None and isinstance(cache_key, str):
-                                found[cache_key] = value
+                            if value is not None:
+                                found[expected_keys[slot]] = value
             except _READ_ERRORS:
                 found = {}
-        self._hits += sum(1 for key in keys if key in found)
-        self._misses += sum(1 for key in keys if key not in found)
+        self._hits += sum(1 for key in expected_keys.values() if key in found)
+        self._misses += sum(1 for key in expected_keys.values() if key not in found)
         return found
 
     def stage(self, *, key: str, slot: str, value: object) -> None:
@@ -152,7 +152,7 @@ class FactCacheStore:
             return
         if len(payload) > FACT_CACHE_MAX_ENTRY_BYTES:
             return
-        self._pending[key] = (slot, _entry_digest(cache_key=key, payload=payload), payload)
+        self._pending[slot] = (key, _entry_digest(cache_key=key, payload=payload), payload)
 
     def _write_pending(self) -> None:
         if self._database_path is None or not self._pending:
@@ -169,17 +169,12 @@ class FactCacheStore:
                     connection,
                 ):
                     _ = connection.execute(FACT_CACHE_CREATE_TABLE_SQL)
-                    _ = connection.execute(FACT_CACHE_CREATE_SLOT_INDEX_SQL)
                     _ = connection.executemany(
-                        "DELETE FROM fact WHERE slot = ? AND cache_key <> ?",
-                        ((slot, key) for key, (slot, _digest, _payload) in self._pending.items()),
-                    )
-                    _ = connection.executemany(
-                        "INSERT OR REPLACE INTO fact (cache_key, slot, digest, payload) "
+                        "INSERT OR REPLACE INTO fact (slot, cache_key, digest, payload) "
                         "VALUES (?, ?, ?, ?)",
                         (
-                            (key, slot, digest, payload)
-                            for key, (slot, digest, payload) in self._pending.items()
+                            (slot, key, digest, payload)
+                            for slot, (key, digest, payload) in self._pending.items()
                         ),
                     )
             except (OSError, sqlite3.DatabaseError):

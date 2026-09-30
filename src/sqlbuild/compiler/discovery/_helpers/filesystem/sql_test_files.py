@@ -56,7 +56,11 @@ def discover_sql_test_files(
         else {}
     )
     cached_facts: dict[str, object] = (
-        fact_cache.read_many(tuple(cache_keys.values())) if fact_cache is not None else {}
+        fact_cache.read_many(
+            tuple((_fact_slot(file_path), cache_key) for file_path, cache_key in cache_keys.items())
+        )
+        if fact_cache is not None
+        else {}
     )
     discovered: list[DiscoveredSqlTestFile] = []
     for batch_start in range(0, len(loaded), _TEST_FILE_BATCH_SIZE):
@@ -103,10 +107,14 @@ def discover_sql_test_files(
             if fact_cache is not None and cache_key is not None:
                 fact_cache.stage(
                     key=cache_key,
-                    slot=f"{DISCOVERY_SQL_TEST_FACT_KIND}:{file_path}",
+                    slot=_fact_slot(file_path),
                     value=encode_cached_sql_test_file(test_file),
                 )
     return tuple(discovered)
+
+
+def _fact_slot(file_path: Path) -> str:
+    return f"{DISCOVERY_SQL_TEST_FACT_KIND}:{file_path}"
 
 
 def _prepare_batch(batch: list[tuple[Path, str | None, Exception | None]]) -> None:

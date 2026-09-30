@@ -34,9 +34,9 @@ def _publish(root: Path, *, key_parts: tuple[str, ...], slot: str, value: object
     return key
 
 
-def _read(root: Path, *, key_parts: tuple[str, ...]) -> dict[str, object]:
+def _read(root: Path, *, key_parts: tuple[str, ...], slot: str = "orders") -> dict[str, object]:
     with FactCacheStore(root=root, namespace=_NAMESPACE, algorithm=_ALGORITHM) as store:
-        return store.read_many((store.key(*key_parts),))
+        return store.read_many(((slot, store.key(*key_parts)),))
 
 
 def _overwrite_payload(database: Path, payload: bytes, *, keep_digest: bool) -> None:
@@ -117,7 +117,7 @@ def test_given_published_fact_when_algorithm_changes_then_misses(tmp_path: Path)
     _ = _publish(tmp_path, key_parts=("orders",), slot="orders", value=_FACT)
 
     with FactCacheStore(root=tmp_path, namespace=_NAMESPACE, algorithm="unit-facts-v2") as store:
-        assert store.read_many((store.key("orders"),)) == {}
+        assert store.read_many((("orders", store.key("orders")),)) == {}
 
 
 @pytest.mark.parametrize(
@@ -155,7 +155,7 @@ def test_given_disabled_root_when_staging_then_nothing_is_persisted(tmp_path: Pa
     with FactCacheStore(root=None, namespace=_NAMESPACE, algorithm=_ALGORITHM) as store:
         store.stage(key=store.key("orders"), slot="orders", value=_FACT)
         assert not store.enabled
-        assert store.read_many((store.key("orders"),)) == {}
+        assert store.read_many((("orders", store.key("orders")),)) == {}
 
     assert not any(tmp_path.iterdir())
 

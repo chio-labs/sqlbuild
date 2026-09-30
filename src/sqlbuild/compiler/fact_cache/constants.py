@@ -11,13 +11,12 @@ FACT_CACHE_QUERY_CHUNK_SIZE: int = 500
 FACT_CACHE_PICKLE_PROTOCOL: int = 5
 FACT_CACHE_CREATE_TABLE_SQL: str = """
 CREATE TABLE IF NOT EXISTS fact (
-    cache_key TEXT PRIMARY KEY,
-    slot TEXT NOT NULL,
+    slot TEXT PRIMARY KEY,
+    cache_key TEXT NOT NULL,
     digest TEXT NOT NULL,
     payload BLOB NOT NULL
 )
 """
-FACT_CACHE_CREATE_SLOT_INDEX_SQL: str = "CREATE INDEX IF NOT EXISTS fact_slot ON fact (slot)"
 FACT_CACHE_ALLOWED_PACKAGE: str = "sqlbuild"
 FACT_CACHE_ALLOWED_GLOBALS: frozenset[tuple[str, str]] = frozenset(
     {

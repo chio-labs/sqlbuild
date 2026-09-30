@@ -49,7 +49,13 @@ def extract_expanded_sql_tests_cached(
         keys: tuple[str, ...] = tuple(
             fact_cache.key(sql, file_label, mode.value) for sql, file_label, mode in tests
         )
-        cached: dict[str, object] = fact_cache.read_many(keys)
+        ordinals: dict[str, int] = {}
+        slots: list[str] = []
+        for _sql, file_label, _mode in tests:
+            ordinal: int = ordinals.get(file_label, 0)
+            ordinals[file_label] = ordinal + 1
+            slots.append(f"{file_label}#{ordinal}")
+        cached: dict[str, object] = fact_cache.read_many(tuple(zip(slots, keys, strict=True)))
         results: list[CompileSqlTestCtes | None] = [
             value
             if isinstance(value := cached.get(key), CompileSqlTestCtes) and value.mode is mode
@@ -63,12 +69,6 @@ def extract_expanded_sql_tests_cached(
             extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
                 tuple(tests[index] for index in missing_indexes)
             )
-            ordinals: dict[str, int] = {}
-            slots: list[str] = []
-            for _sql, file_label, _mode in tests:
-                ordinal: int = ordinals.get(file_label, 0)
-                ordinals[file_label] = ordinal + 1
-                slots.append(f"{file_label}#{ordinal}")
             for index, test_ctes in zip(missing_indexes, extracted, strict=True):
                 results[index] = test_ctes
                 fact_cache.stage(key=keys[index], slot=slots[index], value=test_ctes)

@@ -770,9 +770,10 @@ def discover_source_files(
             if fact_cache is not None and fact_cache.enabled
             else None
         )
+        slot: str = f"{DISCOVERY_SOURCE_FACT_KIND}:{file_path}"
         if fact_cache is not None and cache_key is not None:
             cached: DiscoveredSourceFile | None = decode_cached_source_file(
-                fact=fact_cache.read_many((cache_key,)).get(cache_key),
+                fact=fact_cache.read_many(((slot, cache_key),)).get(cache_key),
                 file_path=file_path,
                 contents=contents,
             )
@@ -787,7 +788,7 @@ def discover_source_files(
         if fact_cache is not None and cache_key is not None:
             fact_cache.stage(
                 key=cache_key,
-                slot=f"{DISCOVERY_SOURCE_FACT_KIND}:{file_path}",
+                slot=slot,
                 value=encode_cached_source_file(source_file),
             )
         return source_file
