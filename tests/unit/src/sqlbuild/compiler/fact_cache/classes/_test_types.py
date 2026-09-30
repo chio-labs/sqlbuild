@@ -62,3 +62,12 @@ class FactCacheWriterErrorTestCase:
     description: str
     error: Exception
     expected_earlier_found_count: int
+
+
+@dataclass(frozen=True)
+class FactCacheParameterLimitTestCase:
+    """One SQLite bound-parameter limit and a publication larger than one statement allows."""
+
+    description: str
+    max_bound_parameters: int
+    fact_count: int

@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.compiler.fact_cache.classes._test_types import (
     FactCacheCodeIdentityTestCase,
     FactCacheCorruptionTestCase,
     FactCacheNoPersistenceTestCase,
+    FactCacheParameterLimitTestCase,
     FactCacheReadTestCase,
     FactCacheRetentionTestCase,
     FactCacheWriterErrorTestCase,
@@ -275,18 +276,29 @@ def test_given_writer_error_when_publishing_then_only_corruption_discards_rows_a
     )
 
 
-def test_given_old_sqlite_parameter_limit_when_publishing_many_facts_then_all_are_stored(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheParameterLimitTestCase(
+            description="sqlite_before_3_32", max_bound_parameters=999, fact_count=600
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sqlite_parameter_limit_when_publishing_many_facts_then_all_are_stored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: FactCacheParameterLimitTestCase
 ) -> None:
     connect: Callable[..., sqlite3.Connection] = sqlite3.connect
 
     def limited_connect(database: Path, timeout: float = 5.0) -> sqlite3.Connection:
         connection: sqlite3.Connection = connect(database, timeout=timeout)
-        _ = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
+        _ = connection.setlimit(
+            sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, test_case.max_bound_parameters
+        )
         return connection
 
     monkeypatch.setattr(sqlite3, "connect", limited_connect)
-    slots: tuple[str, ...] = tuple(f"order_{index:04d}" for index in range(600))
+    slots: tuple[str, ...] = tuple(f"order_{index:04d}" for index in range(test_case.fact_count))
 
     publish_facts(tmp_path, slots=slots)
 
