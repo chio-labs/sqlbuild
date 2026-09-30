@@ -21,10 +21,10 @@ from scripts.release_performance.models import (
 
 
 def metric_verdicts(*, comparison: CommandComparison) -> tuple[MetricVerdict, ...]:
-    """Compare median wall time, CPU time and peak RSS of one command."""
+    """Compare median wall and CPU time and worst-run peak RSS of one command."""
 
-    baseline: CommandSample = median_sample(samples=comparison.baseline)
-    candidate: CommandSample = median_sample(samples=comparison.candidate)
+    baseline: CommandSample = summary_sample(samples=comparison.baseline)
+    candidate: CommandSample = summary_sample(samples=comparison.candidate)
     return (
         _verdict(
             command=comparison.name,
@@ -72,13 +72,13 @@ def all_verdicts(*, commands: tuple[CommandComparison, ...]) -> tuple[MetricVerd
     return tuple(verdicts)
 
 
-def median_sample(*, samples: tuple[CommandSample, ...]) -> CommandSample:
-    """Return the per-metric median of samples."""
+def summary_sample(*, samples: tuple[CommandSample, ...]) -> CommandSample:
+    """Return median wall and CPU time and the worst-run peak RSS of samples."""
 
     return CommandSample(
         wall_seconds=statistics.median(sample.wall_seconds for sample in samples),
         cpu_seconds=statistics.median(sample.cpu_seconds for sample in samples),
-        peak_rss_bytes=int(statistics.median(sample.peak_rss_bytes for sample in samples)),
+        peak_rss_bytes=max(sample.peak_rss_bytes for sample in samples),
     )
 
 
