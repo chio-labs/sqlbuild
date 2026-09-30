@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.127.0](https://github.com/chio-labs/sqlbuild/compare/v0.126.6...v0.127.0) (2026-09-30)
+
+
+### Features
+
+* **cli:** add sqb rename and sqb mv refactoring commands ([#891](https://github.com/chio-labs/sqlbuild/issues/891)) ([38029bf](https://github.com/chio-labs/sqlbuild/commit/38029bf6e9cb07453dff0530f338582081325b9d))
+
 ## [0.126.6](https://github.com/chio-labs/sqlbuild/compare/v0.126.5...v0.126.6) (2026-09-30)
 
 
