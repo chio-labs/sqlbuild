@@ -22,6 +22,7 @@ jobs:
       performance: ${{ steps.scope.outputs.performance }}
       format_performance: ${{ steps.scope.outputs.format_performance }}
       rules_performance: ${{ steps.scope.outputs.rules_performance }}
+      wheels: ${{ steps.scope.outputs.wheels }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,11 +42,12 @@ jobs:
               echo "format_performance=$4"
               echo "rules_performance=$5"
               echo "checks=$6"
+              echo "wheels=$7"
             } >> "${GITHUB_OUTPUT}"
           }
 
           if [[ "${EVENT_NAME}" != "pull_request" ]]; then
-            write_scope true true true true true true
+            write_scope true true true true true true true
             exit 0
           fi
 
@@ -54,6 +56,7 @@ jobs:
           performance=false
           format_performance=false
           rules_performance=false
+          wheels=false
           broad=false
           changed=false
           # A change that only touches the website, root-level Markdown, the README demo GIFs or the
@@ -68,6 +71,11 @@ jobs:
               */*) docs_only=false ;;
               *.md) ;;
               *) docs_only=false ;;
+            esac
+            case "${path}" in
+              crates/*|Cargo.toml|Cargo.lock|pyproject.toml|.github/workflows/verify.yml)
+                wheels=true
+                ;;
             esac
             case "${path}" in
               crates/*|Cargo.toml|Cargo.lock|pyproject.toml|uv.lock)
@@ -123,7 +131,7 @@ jobs:
           done < <(git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}")
 
           if [[ "${changed}" != "true" ]]; then
-            write_scope true true true true true true
+            write_scope true true true true true true true
             exit 0
           fi
 
@@ -143,7 +151,8 @@ jobs:
             "${performance}" \
             "${format_performance}" \
             "${rules_performance}" \
-            "${checks}"
+            "${checks}" \
+            "${wheels}"
 
   lockfile:
     name: Lockfile consistency
@@ -601,6 +610,59 @@ jobs:
           -m "real_warehouse and postgres"
           -vv --color=yes -n auto --dist loadfile
 
+  wheels:
+    # Keep the platform matrix and maturin settings in sync with publish.yml.
+    name: Build wheel (${{ matrix.platform.name }})
+    needs: [changes]
+    if: needs.changes.outputs.wheels == 'true'
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64
+          - name: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64
+          - name: macos-arm64
+            runner: macos-15
+            target: aarch64
+          - name: windows-x86_64
+            runner: windows-2025
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --features extension-module
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+      - name: Smoke import the native extension from the built wheel
+        shell: bash
+        run: |
+          python -m venv "${RUNNER_TEMP}/wheel-smoke"
+          if [[ -x "${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe" ]]; then
+            smoke_python="${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe"
+          else
+            smoke_python="${RUNNER_TEMP}/wheel-smoke/bin/python"
+          fi
+          "${smoke_python}" -m pip install --no-deps dist/*.whl
+          cd "${RUNNER_TEMP}"
+          "${smoke_python}" -c "import sqlbuild._native"
+
   verify:
     name: Verify
     if: always()
@@ -618,6 +680,7 @@ jobs:
         cache_compile_performance,
         rules_performance,
         postgres,
+        wheels,
       ]
     runs-on: ubuntu-24.04
     steps:
@@ -636,6 +699,7 @@ jobs:
           CACHE_COMPILE_PERFORMANCE_RESULT: ${{ needs.cache_compile_performance.result }}
           RULES_PERFORMANCE_RESULT: ${{ needs.rules_performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
+          WHEELS_RESULT: ${{ needs.wheels.result }}
         run: |
           if [[ "${CHANGES_RESULT}" != "success" || "${LOCKFILE_RESULT}" != "success" ]]; then
             echo "Required classification or lockfile checks did not pass" >&2
@@ -655,7 +719,8 @@ jobs:
             "${COMPILE_PERFORMANCE_RATIO_RESULT}" \
             "${CACHE_COMPILE_PERFORMANCE_RESULT}" \
             "${RULES_PERFORMANCE_RESULT}" \
-            "${POSTGRES_RESULT}"; do
+            "${POSTGRES_RESULT}" \
+            "${WHEELS_RESULT}"; do
             if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
               echo "A selected verification suite did not pass: ${result}" >&2
               exit 1

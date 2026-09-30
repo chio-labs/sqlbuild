@@ -34,6 +34,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   wheels:
+    # Keep the platform matrix and maturin settings in sync with verify.yml.
     name: Build wheel (${{ matrix.platform.name }})
     needs: release-tag
     runs-on: ${{ matrix.platform.runner }}
