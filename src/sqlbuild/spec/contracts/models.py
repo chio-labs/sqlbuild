@@ -14,6 +14,7 @@ from sqlbuild.spec.contracts.types import (
     EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
+    MissingMigrationOriginPolicy,
     RetentionDecreasePolicy,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
@@ -123,6 +124,7 @@ class TargetConfig:
     default_table_type: TableType | None = None
     table_type_downgrade: TableTypeDowngradePolicy = TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
     time_travel_retention_decrease: RetentionDecreasePolicy = RetentionDecreasePolicy.DENY
+    missing_migration_origin: MissingMigrationOriginPolicy = MissingMigrationOriginPolicy.ALLOW
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 
@@ -146,6 +148,7 @@ class LocalTargetConfig:
     default_table_type: TableType | None = None
     table_type_downgrade: TableTypeDowngradePolicy | None = None
     time_travel_retention_decrease: RetentionDecreasePolicy | None = None
+    missing_migration_origin: MissingMigrationOriginPolicy | None = None
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 

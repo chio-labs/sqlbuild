@@ -3,7 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from sqlbuild.spec.contracts.models import AuthoredTimeTravelRetention
-from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, RetentionDecreasePolicy
 from sqlbuild.sql_values.types import CollectionRendering
 
 
@@ -896,3 +896,10 @@ class ParseSeedAuditsYamlTestCase:
     contents: str
     expected_table_audits: tuple[str, ...]
     expected_column_audits: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class MissingMigrationOriginConfigTestCase:
+    description: str
+    target_lines: tuple[str, ...]
+    expected_policy: MissingMigrationOriginPolicy

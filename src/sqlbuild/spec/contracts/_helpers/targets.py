@@ -112,6 +112,11 @@ def resolve_target_config(
             if local_target.time_travel_retention_decrease is not None
             else project_target.time_travel_retention_decrease
         ),
+        missing_migration_origin=(
+            local_target.missing_migration_origin
+            if local_target.missing_migration_origin is not None
+            else project_target.missing_migration_origin
+        ),
         execution_limits=_merge_execution_limits(
             project_limits=project_target.execution_limits,
             local_limits=local_target.execution_limits,

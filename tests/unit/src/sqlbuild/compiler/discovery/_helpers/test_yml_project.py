@@ -18,7 +18,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, RetentionDecreasePolicy
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
@@ -42,6 +42,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadTargetRetentionPoliciesTestCase,
     MicrobatchLimitConfigErrorTestCase,
     MicrobatchLimitConfigTestCase,
+    MissingMigrationOriginConfigTestCase,
     StartCursorConfigTestCase,
     TargetExecutionLimitsConfigTestCase,
 )
@@ -562,6 +563,43 @@ def test_given_target_retention_policies_when_loading_project_then_they_are_type
 @pytest.mark.parametrize(
     "test_case",
     [
+        MissingMigrationOriginConfigTestCase(
+            description="missing migration origins are allowed by default",
+            target_lines=(),
+            expected_policy=MissingMigrationOriginPolicy.ALLOW,
+        ),
+        MissingMigrationOriginConfigTestCase(
+            description="deny is typed",
+            target_lines=('missing_migration_origin = "deny"',),
+            expected_policy=MissingMigrationOriginPolicy.DENY,
+        ),
+        MissingMigrationOriginConfigTestCase(
+            description="require_confirmation is typed",
+            target_lines=('missing_migration_origin = "require_confirmation"',),
+            expected_policy=MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_migration_origin_policy_when_loading_project_then_it_is_typed(
+    test_case: MissingMigrationOriginConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            ('name = "demo"', 'adapter = "duckdb"', "[targets.prod]", *test_case.target_lines)
+        ),
+        encoding="utf-8",
+    )
+
+    target: TargetConfig = load_project_config(project_dir=tmp_path).targets["prod"]
+
+    assert target.missing_migration_origin is test_case.expected_policy
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         LoadTargetRetentionPoliciesErrorTestCase(
             description="retention table rejects non-table materializations",
             target_lines=('time_travel_retention = { view = "7d" }',),
@@ -576,6 +614,11 @@ def test_given_target_retention_policies_when_loading_project_then_they_are_type
             description="decrease policy must be a known value",
             target_lines=('time_travel_retention_decrease = "sometimes"',),
             expected_error_fragment="'deny', 'require_confirmation', or 'allow'",
+        ),
+        LoadTargetRetentionPoliciesErrorTestCase(
+            description="missing migration origin policy must be a known value",
+            target_lines=('missing_migration_origin = "sometimes"',),
+            expected_error_fragment="targets.prod.missing_migration_origin must be",
         ),
     ],
     ids=lambda case: case.description,

@@ -11,8 +11,10 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     TargetConfig,
 )
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     ExecutionLimitsResolutionTestCase,
+    MissingOriginPolicyResolutionTestCase,
     TargetRetentionResolutionTestCase,
 )
 
@@ -134,3 +136,55 @@ def test_given_local_execution_limit_fields_when_resolving_then_each_field_overr
     )
 
     assert target_config.execution_limits == test_case.expected_limits
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingOriginPolicyResolutionTestCase(
+            description="local target policy overrides the project target",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(missing_migration_origin=MissingMigrationOriginPolicy.DENY)
+                },
+            ),
+            local_config=LocalConfig(
+                targets={
+                    "dev": LocalTargetConfig(
+                        missing_migration_origin=MissingMigrationOriginPolicy.ALLOW
+                    )
+                }
+            ),
+            target_name="dev",
+            expected_policy=MissingMigrationOriginPolicy.ALLOW,
+        ),
+        MissingOriginPolicyResolutionTestCase(
+            description="project target policy applies without a local override",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(
+                        missing_migration_origin=MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION
+                    )
+                },
+            ),
+            local_config=LocalConfig(targets={"dev": LocalTargetConfig()}),
+            target_name="dev",
+            expected_policy=MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_origin_policy_when_resolving_then_local_overrides_project(
+    test_case: MissingOriginPolicyResolutionTestCase,
+) -> None:
+    target_config: TargetConfig = resolve_target_config(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+        target_name=test_case.target_name,
+    )
+
+    assert target_config.missing_migration_origin is test_case.expected_policy

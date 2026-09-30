@@ -56,6 +56,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "allow_snapshot_full_refresh": False,
     "allow_table_type_downgrade": False,
     "allow_retention_decrease": False,
+    "allow_missing_migration_origin": False,
     "allow_snapshot_schema_change": False,
     "concurrency": None,
     "verbose": False,
@@ -221,6 +222,7 @@ class CliNamespace:
     allow_snapshot_full_refresh: bool
     allow_table_type_downgrade: bool
     allow_retention_decrease: bool
+    allow_missing_migration_origin: bool
     allow_snapshot_schema_change: bool
     concurrency: int | None
     verbose: bool

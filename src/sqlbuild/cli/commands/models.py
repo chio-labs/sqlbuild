@@ -163,6 +163,7 @@ class BuildCommandRequest:
     allow_snapshot_full_refresh: bool = False
     allow_table_type_downgrade: bool = False
     allow_retention_decrease: bool = False
+    allow_missing_migration_origin: bool = False
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
     select: tuple[str, ...] = ()

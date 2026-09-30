@@ -92,11 +92,11 @@ _RESET: str = "\033[0m"
             ),
         ),
         MigrationDecisionStyleTestCase(
-            description="origin missing is bold red",
+            description="origin missing allowed by the default policy is bold yellow",
             decision=MigrationDecision.ORIGIN_MISSING,
             compatibility=MigrationCompatibility.NOT_CHECKED,
             findings=(),
-            expected_fragments=(f"{_BOLD_RED}origin missing{_RESET}",),
+            expected_fragments=(f"{_BOLD_YELLOW}origin missing{_RESET}",),
         ),
         MigrationDecisionStyleTestCase(
             description="renamed table is listed as a bold blue migration that rebuilds it",

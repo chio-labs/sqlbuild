@@ -16,6 +16,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_typ
     MigrationOutcomeTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
+    DENY_MISSING_ORIGIN_PROJECT_TOML,
     DESTINATION_MODEL,
     ORIGIN_MODEL,
     PROJECT_TOML,
@@ -330,12 +331,13 @@ def test_given_destination_with_build_history_when_building_then_conflict_until_
     "test_case",
     [
         MigrationOutcomeTestCase(
-            description="missing origin without a recorded migration fails the build",
+            description="missing origin fails the build when the target denies it",
             expected_decisions=("origin_missing",),
             expected_output_fragment=(
                 "'stg_customer_orders' (migrate_from main.retired_orders) and no recorded "
-                "migration into it was found; if the migration already happened elsewhere or "
-                "is no longer needed, remove migrate_from from the model header"
+                "migration into it was found, and this target sets missing_migration_origin = "
+                "deny; if the migration already happened elsewhere or is no longer needed, "
+                "remove migrate_from from the model header"
             ),
         )
     ],
@@ -347,6 +349,7 @@ def test_given_missing_origin_without_event_when_building_then_fails_before_buil
     write_project(
         project_dir=tmp_path,
         models={DESTINATION_MODEL: incremental_orders_sql(migrate_from="retired_orders")},
+        project_toml=DENY_MISSING_ORIGIN_PROJECT_TOML,
     )
     load_raw_orders(project_dir=tmp_path, first_day=1, last_day=3)
 
@@ -358,8 +361,9 @@ def test_given_missing_origin_without_event_when_building_then_fails_before_buil
     assert tuple(warning["severity"] for warning in plan["warnings"]) == ("error",)
     assert plan["warnings"][0]["message"] == (
         "model 'stg_customer_orders': migrate_from origin main.retired_orders does not exist "
-        "and no recorded migration into it was found; if the migration already happened "
-        "elsewhere or is no longer needed, remove migrate_from from the model header"
+        "in this target and no recorded migration into it was found; the build stops "
+        "(missing_migration_origin = deny); if the migration already happened elsewhere or is "
+        "no longer needed, remove migrate_from"
     )
     assert "origin missing  main.retired_orders -> main.stg_customer_orders" in text.output
     assert result.exit_code == 1

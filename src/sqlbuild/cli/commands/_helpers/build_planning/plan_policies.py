@@ -11,6 +11,9 @@ from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
+from sqlbuild.cli.commands._helpers.build_planning.missing_migration_origin import (
+    enforce_missing_migration_origin_policy,
+)
 from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
     enforce_retention_decrease_policy,
 )
@@ -44,6 +47,12 @@ def enforce_build_plan_policies(
 
     _enforce_model_migration_policy(plan=plan)
     _enforce_column_migration_policy(plan=plan)
+    enforce_missing_migration_origin_policy(
+        plan=plan,
+        allow_missing_migration_origin=request.allow_missing_migration_origin,
+        input_stream=sys.stdin,
+        output_stream=sys.stdout,
+    )
     _enforce_old_name_policy(plan=plan)
     enforce_model_execution_limit(
         model_count=executable_model_count(plan=plan),
@@ -90,8 +99,9 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
                 f"{entry.origin.qualified_name or entry.origin.name})"
                 for entry in missing
             )
-            + " and no recorded migration into it was found; if the migration already happened "
-            "elsewhere or is no longer needed, remove migrate_from from the model header",
+            + " and no recorded migration into it was found, and this target sets "
+            "missing_migration_origin = deny; if the migration already happened elsewhere or is "
+            "no longer needed, remove migrate_from from the model header",
             code="M102",
             help="Run sqb plan to see every model migration decision.",
         )

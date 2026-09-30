@@ -82,6 +82,7 @@ from sqlbuild.spec.contracts.types import (
     EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
+    MissingMigrationOriginPolicy,
     RetentionDecreasePolicy,
     TableType,
     TableTypeDowngradePolicy,
@@ -1127,6 +1128,21 @@ def _target_retention_by_materialization(
     return loaded
 
 
+def _optional_missing_migration_origin_policy(
+    *, mapping: dict[str, object], target_name: str, file_path: Path
+) -> MissingMigrationOriginPolicy | None:
+    value: object | None = mapping.get("missing_migration_origin")
+    if value is None:
+        return None
+    try:
+        return MissingMigrationOriginPolicy(value)
+    except (TypeError, ValueError) as exc:
+        raise ProjectConfigError(
+            f"{file_path} targets.{target_name}.missing_migration_origin must be 'deny', "
+            "'require_confirmation', or 'allow'"
+        ) from exc
+
+
 def _optional_retention_decrease_policy(
     *, mapping: dict[str, object], target_name: str, file_path: Path
 ) -> RetentionDecreasePolicy | None:
@@ -1216,6 +1232,12 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                 )
                 or RetentionDecreasePolicy.DENY
             ),
+            missing_migration_origin=(
+                _optional_missing_migration_origin_policy(
+                    mapping=target_mapping, target_name=target_name, file_path=file_path
+                )
+                or MissingMigrationOriginPolicy.ALLOW
+            ),
             execution_limits=execution_limits,
             clone=ClonePolicy(
                 allow_as_clone_origin=_optional_bool(
@@ -1304,6 +1326,9 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             time_travel_retention_decrease=_optional_retention_decrease_policy(
                 mapping=target_mapping, target_name=target_name, file_path=file_path
             ),
+            missing_migration_origin=_optional_missing_migration_origin_policy(
+                mapping=target_mapping, target_name=target_name, file_path=file_path
+            ),
             execution_limits=execution_limits,
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
@@ -1374,6 +1399,7 @@ def _validate_target_keys(
                 "default_table_type",
                 "table_type_downgrade",
                 "time_travel_retention_decrease",
+                "missing_migration_origin",
                 "clone",
                 "execution_limits",
             }

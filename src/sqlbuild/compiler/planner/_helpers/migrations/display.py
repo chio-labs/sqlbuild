@@ -173,8 +173,10 @@ def _format_column_migrations(
 def _column_migration_text(*, entry: ColumnMigrationPlanEntry, style: CliStyle) -> str:
     rename: str = f"{entry.origin_column} -> {entry.destination_column}"
     decision: str
-    if entry.decision.blocks_build:
+    if entry.blocks_build:
         decision = style.error_strong(entry.decision.label)
+    elif entry.origin_missing:
+        decision = style.warning_strong(entry.decision.label)
     elif entry.decision == ColumnMigrationDecision.DONE:
         decision = style.muted(entry.decision.label)
     else:
@@ -199,7 +201,7 @@ def _migration_lines(
     destination: str = entry.destination.qualified_name or entry.destination.name
     relation_move: str = f"{style.muted(f'{origin} ->')} {destination}"
     name: str = style.object_name(entry.model_name)
-    decision: str = _decision_text(decision=entry.decision, style=style)
+    decision: str = _decision_text(entry=entry, style=style)
     if entry.decision == MigrationDecision.RENAMED:
         decision = (
             style.muted(MigrationDecision.DONE.label)
@@ -253,8 +255,8 @@ def _migration_lines(
         )
     if old_name is not None:
         rows.extend(old_name_rows(entry=old_name, style=style))
-    blocking: bool = (
-        entry.decision.blocks_build or entry.compatibility == MigrationCompatibility.INCOMPATIBLE
+    blocking: bool = entry.blocks_build or (
+        entry.compatibility == MigrationCompatibility.INCOMPATIBLE
     )
     finding_style: Callable[[str], str] = style.error if blocking else style.warning
     rows.extend(f"    {finding_style(f'! {finding}')}" for finding in entry.compatibility_findings)
@@ -273,9 +275,12 @@ def _property_row(*, label: str, value: str, style: CliStyle) -> str:
     return f"    {style.muted(label)}  {value}"
 
 
-def _decision_text(*, decision: MigrationDecision, style: CliStyle) -> str:
-    if decision.blocks_build:
+def _decision_text(*, entry: ModelMigrationPlanEntry, style: CliStyle) -> str:
+    decision: MigrationDecision = entry.decision
+    if entry.blocks_build and decision.blocks_build:
         return style.error_strong(decision.label)
+    if entry.origin_missing:
+        return style.warning_strong(decision.label)
     if decision in (MigrationDecision.SUPERSEDED_REPLACE, MigrationDecision.FORCED_REPLACE):
         return style.warning_strong(decision.label)
     if decision == MigrationDecision.DONE:

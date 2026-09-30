@@ -44,6 +44,7 @@ from sqlbuild.compiler.planner.classes.migration_state_inspection import (
 )
 from sqlbuild.compiler.planner.constants import (
     MIGRATION_MODEL_NAME_METADATA_KEY,
+    MISSING_ORIGIN_OUTCOMES,
     QUALIFIED_RELATION_MAX_PARTS,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -65,8 +66,9 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import SnapshotsConfig
-from sqlbuild.spec.contracts.types import TableType
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, TableType
 
 _IDENTITY_MATERIALIZATIONS: frozenset[str] = frozenset(
     {MaterializationType.TABLE, MaterializationType.VIEW}
@@ -177,6 +179,7 @@ def plan_model_migrations(
         if runtime.project_config is not None
         else SnapshotsConfig()
     )
+    origin_policy: MissingMigrationOriginPolicy = missing_origin_policy(runtime=runtime)
     entries: list[ModelMigrationPlanEntry] = []
     handovers: dict[str, Fingerprint | None] = {}
     request: ModelMigrationRequest
@@ -195,7 +198,7 @@ def plan_model_migrations(
             state=state,
             snapshots_config=snapshots_config,
         )
-        entries.append(entry)
+        entries.append(replace(entry, missing_origin_policy=origin_policy))
         if applies:
             handovers[request.model.name] = _equivalent_definition(
                 model=request.model,
@@ -288,6 +291,22 @@ def planning_database(*, runtime: PlannerRuntime) -> str | None:
         ),
         runtime.project.effective_target_database,
     )
+
+
+def missing_origin_policy(*, runtime: PlannerRuntime) -> MissingMigrationOriginPolicy:
+    """Return how the effective target treats a declared migration origin it cannot find."""
+
+    if (
+        runtime.project_config is None
+        or runtime.local_config is None
+        or runtime.project.effective_target_name is None
+    ):
+        return MissingMigrationOriginPolicy.ALLOW
+    return resolve_target_config(
+        project_config=runtime.project_config,
+        local_config=runtime.local_config,
+        target_name=runtime.project.effective_target_name,
+    ).missing_migration_origin
 
 
 def project_schemas(*, runtime: PlannerRuntime) -> set[str]:
@@ -755,14 +774,18 @@ def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
             ),
             code="M101",
         )
-    if entry.decision == MigrationDecision.ORIGIN_MISSING:
+    if entry.origin_missing:
         return PlanWarning(
             model_name=entry.model_name,
-            severity=WarningSeverity.ERROR,
+            severity=(
+                WarningSeverity.ERROR
+                if entry.missing_origin_policy == MissingMigrationOriginPolicy.DENY
+                else WarningSeverity.WARNING
+            ),
             message=(
-                f"model '{entry.model_name}': migrate_from origin {origin} does not exist and "
-                "no recorded migration into it was found; if the migration already happened "
-                "elsewhere or is no longer needed, remove migrate_from from the model header"
+                f"model '{entry.model_name}': migrate_from origin {origin} does not exist in "
+                "this target and no recorded migration into it was found; "
+                + MISSING_ORIGIN_OUTCOMES[entry.missing_origin_policy]
             ),
             code="M102",
         )

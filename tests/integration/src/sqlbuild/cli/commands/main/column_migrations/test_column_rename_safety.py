@@ -99,15 +99,6 @@ def test_given_interrupted_rename_when_retrying_then_column_is_renamed_once_and_
             expected_error="error[M110]",
         ),
         BlockedColumnRenameTestCase(
-            description="source column never existed",
-            renamed_sql=orders_sql(
-                columns="amount AS revenue",
-                extra_config=migrate_columns("revenue (migrate_from gross_amount)"),
-            ),
-            expected_decision="source_missing",
-            expected_error="error[M109]",
-        ),
-        BlockedColumnRenameTestCase(
             description="source column is still produced",
             renamed_sql=orders_sql(
                 columns="amount, amount AS revenue",
