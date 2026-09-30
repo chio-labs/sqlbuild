@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import sys
 
+from sqlbuild.cli.commands._helpers.build_planning.confirmation import confirm_typed_action
 from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
     enforce_model_execution_limit,
     executable_model_count,
 )
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
-)
-from sqlbuild.cli.commands._helpers.build_planning.missing_migration_origin import (
-    enforce_missing_migration_origin_policy,
 )
 from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
     enforce_retention_decrease_policy,
@@ -30,6 +28,7 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 _OLD_NAME_CODES: frozenset[str] = frozenset({"M114", "P008"})
 _COLUMN_BLOCK_CODES: dict[ColumnMigrationDecision, str] = {
@@ -47,11 +46,8 @@ def enforce_build_plan_policies(
 
     _enforce_model_migration_policy(plan=plan)
     _enforce_column_migration_policy(plan=plan)
-    enforce_missing_migration_origin_policy(
-        plan=plan,
-        allow_missing_migration_origin=request.allow_missing_migration_origin,
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
+    _confirm_missing_origins(
+        plan=plan, allow_missing_migration_origin=request.allow_missing_migration_origin
     )
     _enforce_old_name_policy(plan=plan)
     enforce_model_execution_limit(
@@ -143,6 +139,38 @@ def _enforce_column_migration_policy(*, plan: PlanOutput) -> None:
         ),
         code=_COLUMN_BLOCK_CODES.get(blocked[0].decision, "M109"),
         help="Run sqb plan to see why each column rename cannot be applied.",
+    )
+
+
+def _confirm_missing_origins(*, plan: PlanOutput, allow_missing_migration_origin: bool) -> None:
+    """Confirm before building past declared migrations whose origin is missing."""
+
+    names: tuple[str, ...] = tuple(
+        sorted(
+            {
+                entry.model_name
+                for entry in (*plan.migration_entries, *plan.column_migration_entries)
+                if entry.origin_missing
+                and entry.missing_origin_policy == MissingMigrationOriginPolicy.REQUIRE_CONFIRMATION
+            }
+        )
+    )
+    if not names or allow_missing_migration_origin:
+        return
+    listed: str = ", ".join(f"'{name}'" for name in names)
+    confirm_typed_action(
+        action=f"building {listed} without its missing migrate_from origin",
+        flag="--allow-missing-migration-origin",
+        warning=f"The migrate_from origin of {listed} does not exist in this target; nothing "
+        "will be migrated.",
+        expected=(
+            f"build {names[0]} without its migration"
+            if len(names) == 1
+            else f"build {len(names)} models without their migrations"
+        ),
+        input_stream=sys.stdin,
+        output_stream=sys.stdout,
+        code="M102",
     )
 
 

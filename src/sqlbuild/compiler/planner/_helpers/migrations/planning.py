@@ -33,6 +33,7 @@ from sqlbuild.compiler.planner._helpers.migrations.discovery import (
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
 )
+from sqlbuild.compiler.planner._helpers.planning.retention import effective_target_config
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     gather_redirected_cursor_snapshots,
 )
@@ -66,7 +67,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, TableType
 
@@ -296,17 +296,7 @@ def planning_database(*, runtime: PlannerRuntime) -> str | None:
 def missing_origin_policy(*, runtime: PlannerRuntime) -> MissingMigrationOriginPolicy:
     """Return how the effective target treats a declared migration origin it cannot find."""
 
-    if (
-        runtime.project_config is None
-        or runtime.local_config is None
-        or runtime.project.effective_target_name is None
-    ):
-        return MissingMigrationOriginPolicy.ALLOW
-    return resolve_target_config(
-        project_config=runtime.project_config,
-        local_config=runtime.local_config,
-        target_name=runtime.project.effective_target_name,
-    ).missing_migration_origin
+    return effective_target_config(runtime=runtime).missing_migration_origin
 
 
 def project_schemas(*, runtime: PlannerRuntime) -> set[str]:
