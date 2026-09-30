@@ -291,11 +291,8 @@ fn star_span(item: &Expression) -> (Option<usize>, Option<usize>) {
 }
 
 fn scope_select(expression: &Expression) -> Option<&polyglot_sql::expressions::Select> {
-    match expression {
+    match select_body(expression)? {
         Expression::Select(select) => Some(select),
-        Expression::Cte(cte) => scope_select(&cte.this),
-        Expression::Subquery(subquery) => scope_select(&subquery.this),
-        Expression::Paren(paren) => scope_select(&paren.this),
         _ => None,
     }
 }
