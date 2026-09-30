@@ -8,12 +8,14 @@ from datetime import UTC, datetime
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledSeed,
     CompiledSource,
 )
+from sqlbuild.executor.janitor.constants import QUALIFIED_ORIGIN_PARTS
 from sqlbuild.executor.janitor.models import JanitorRelationKey
 
 
@@ -40,6 +42,59 @@ def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
             )
         )
     return keys
+
+
+def pending_migration_origins(
+    *,
+    project: CompiledProject,
+    relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]],
+) -> dict[JanitorRelationKey, str]:
+    """Return listed origins of migrations whose destination relation does not exist yet."""
+
+    listed: dict[tuple[str | None, str | None, str], JanitorRelationKey] = {}
+    relations: tuple[RelationInfo, ...]
+    for relations in relations_by_schema.values():
+        listed.update({_folded(relation_key(item)): relation_key(item) for item in relations})
+    schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
+    pending: dict[JanitorRelationKey, str] = {}
+    model: CompiledModel
+    for model in project.models:
+        raw: object | None = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
+        destination: JanitorRelationKey = JanitorRelationKey(
+            database=model.destination.database,
+            schema=model.destination.schema,
+            name=model.destination.name,
+        )
+        if not isinstance(raw, str) or _folded(destination) in listed:
+            continue
+        origin: JanitorRelationKey
+        for origin in _origin_keys(raw=raw, destination=destination, schemas=schemas):
+            found: JanitorRelationKey | None = listed.get(_folded(origin))
+            if found is not None:
+                pending.setdefault(found, f"pending migration origin for {model.name}")
+    return pending
+
+
+def _origin_keys(
+    *, raw: str, destination: JanitorRelationKey, schemas: set[tuple[str | None, str | None]]
+) -> tuple[JanitorRelationKey, ...]:
+    parts: list[str] = [part.strip().strip('"`') for part in raw.split(".")]
+    if len(parts) == 1:
+        return tuple(
+            JanitorRelationKey(database=database, schema=schema, name=parts[0])
+            for database, schema in sorted(schemas, key=_schema_sort_key)
+        )
+    return (
+        JanitorRelationKey(
+            database=parts[0] if len(parts) == QUALIFIED_ORIGIN_PARTS else destination.database,
+            schema=parts[-2],
+            name=parts[-1],
+        ),
+    )
+
+
+def _folded(key: JanitorRelationKey) -> tuple[str | None, str | None, str]:
+    return RelationLookup.key(database=key.database, schema=key.schema, name=key.name)
 
 
 def collect_target_schemas(project: CompiledProject) -> set[tuple[str | None, str | None]]:

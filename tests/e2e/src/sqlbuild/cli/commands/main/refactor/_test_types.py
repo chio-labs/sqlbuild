@@ -97,3 +97,10 @@ class HiddenOriginE2ETestCase:
     description: str
     target_settings: str
     expected_output: str
+
+
+@dataclass(frozen=True)
+class PendingOriginJanitorE2ETestCase:
+    description: str
+    janitor_args: tuple[str, ...]
+    expected_order_ids: tuple[int, ...]

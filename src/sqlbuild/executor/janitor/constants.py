@@ -43,3 +43,4 @@ CASE_COLLISION_REASON: str = (
 MALFORMED_ARCHIVE_REASON: str = (
     "name resembles a janitor archive but does not match the strict archive grammar"
 )
+QUALIFIED_ORIGIN_PARTS: int = 3

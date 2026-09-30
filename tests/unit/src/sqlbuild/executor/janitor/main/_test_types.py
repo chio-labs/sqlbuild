@@ -22,6 +22,7 @@ class JanitorPlanTestCase:
     tracked_relations: tuple[tuple[str | None, str | None, str], ...] = field(default_factory=tuple)
     exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
     protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
+    migrate_from: str | None = None
     expected_candidate_names: tuple[str, ...] = field(default_factory=tuple)
     expected_direct_state_table_names: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_relation_reasons: tuple[str, ...] = field(default_factory=tuple)

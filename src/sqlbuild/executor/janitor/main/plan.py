@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -14,7 +15,11 @@ from sqlbuild.executor.janitor._helpers.classification import (
     collect_query_diff_artifact_candidates,
     gather_janitor_warehouse_facts,
 )
-from sqlbuild.executor.janitor._helpers.plan import collect_scan_schemas, collect_target_schemas
+from sqlbuild.executor.janitor._helpers.plan import (
+    collect_scan_schemas,
+    collect_target_schemas,
+    pending_migration_origins,
+)
 from sqlbuild.executor.janitor._helpers.schema_planning import classify_target_schemas
 from sqlbuild.executor.janitor.classes.relation_age_reader import JanitorRelationAgeReader
 from sqlbuild.executor.janitor.models import (
@@ -23,6 +28,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorDirectStatePruneCandidate,
     JanitorOldNameViewPlanning,
     JanitorPlan,
+    JanitorRelationKey,
     JanitorRelationScope,
     JanitorSchemaClassification,
     JanitorWarehouseFacts,
@@ -107,12 +113,11 @@ def build_janitor_plan(
         )
         inspection.completed(metadata={"item_count": len(target_schemas)})
     old_names: JanitorOldNameViewPlanning
-    old_names, scope = plan_old_name_view_cleanup(
+    old_names, scope = _plan_protected_names(
         adapter=adapter,
         connection=connection,
         managed_target_schemas=managed_target_schemas,
-        relations_by_schema=facts.relations_by_schema,
-        target_name=project.effective_target_name,
+        facts=facts,
         early_drops=early_old_name_view_drops,
         project=project,
         scope=scope,
@@ -172,4 +177,57 @@ def build_janitor_plan(
         scanned_schema_count=len(target_schemas | set(query_artifact_schemas)),
         age_metadata_supported=age_supported,
         planned_at=now,
+    )
+
+
+def _plan_protected_names(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    managed_target_schemas: set[tuple[str | None, str | None]],
+    facts: JanitorWarehouseFacts,
+    early_drops: tuple[str, ...],
+    project: CompiledProject,
+    scope: JanitorRelationScope,
+    now: datetime,
+) -> tuple[JanitorOldNameViewPlanning, JanitorRelationScope]:
+    """Plan old-name views, then keep general cleanup away from pending migration origins."""
+
+    old_names: JanitorOldNameViewPlanning
+    old_names, scope = plan_old_name_view_cleanup(
+        adapter=adapter,
+        connection=connection,
+        managed_target_schemas=managed_target_schemas,
+        relations_by_schema=facts.relations_by_schema,
+        target_name=project.effective_target_name,
+        early_drops=early_drops,
+        project=project,
+        scope=scope,
+        now=now,
+    )
+    return old_names, _protect_pending_origins(
+        project=project, facts=facts, scope=scope, old_names=old_names
+    )
+
+
+def _protect_pending_origins(
+    *,
+    project: CompiledProject,
+    facts: JanitorWarehouseFacts,
+    scope: JanitorRelationScope,
+    old_names: JanitorOldNameViewPlanning,
+) -> JanitorRelationScope:
+    pending: dict[JanitorRelationKey, str] = {
+        key: reason
+        for key, reason in pending_migration_origins(
+            project=project, relations_by_schema=facts.relations_by_schema
+        ).items()
+        if key not in old_names.keys
+    }
+    if not pending:
+        return scope
+    return replace(
+        scope,
+        protected_relation_keys=scope.protected_relation_keys | frozenset(pending),
+        protected_relation_reasons={**(scope.protected_relation_reasons or {}), **pending},
     )

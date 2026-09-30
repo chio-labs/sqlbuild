@@ -59,6 +59,10 @@ A compatibility view is never archived as a stale relation. Once it expires, or 
 
 Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
 
+## Pending migration origins
+
+A relation that a project model still has to migrate from is never archived. While a model declares `migrate_from` and its own relation does not exist yet in the target, the janitor skips the origin and lists it as `pending migration origin for <model>`. A bare `migrate_from` name is matched in each schema the project builds into; a qualified name only at that location. Once the model has built, the origin is handled as usual: after a migration, the old name holds a compatibility view, which expires as described above.
+
 ## Relation age
 
 `retention_days` is measured from the last time a relation was written, as reported by the warehouse. For a relation the project no longer builds, that is roughly when it stopped being built.
