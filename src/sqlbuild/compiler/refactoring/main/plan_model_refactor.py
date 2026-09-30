@@ -22,8 +22,13 @@ def plan_model_refactor(*, project: RefactorProject, request: RefactorRequest) -
     return build_plan(
         request=target.request,
         parts=parts,
-        moves={target.source_path: target.destination}
-        if target.destination != target.source_path
-        else {},
+        moves={
+            **dict(parts.moves),
+            **(
+                {target.source_path: target.destination}
+                if target.destination != target.source_path
+                else {}
+            ),
+        },
         help=MODEL_MANUAL_HELP,
     )

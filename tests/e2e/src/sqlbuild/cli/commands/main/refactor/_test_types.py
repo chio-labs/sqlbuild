@@ -81,3 +81,12 @@ class MissingOriginE2ETestCase:
     expected_output: str
     expected_relation_type: str | None
     expected_columns: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DeclarationMoveE2ETestCase:
+    description: str
+    model: str
+    extra_files: dict[str, str]
+    destination: str
+    expected_moved: dict[str, str]

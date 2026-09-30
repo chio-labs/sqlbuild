@@ -43,7 +43,18 @@ from sqlbuild.compiler.refactoring.models import (
 from sqlbuild.compiler.refactoring.types import RefactorOperation
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
-from sqlbuild.compiler.scopes.models import DeclarationReport, MovePreview, ScopeDiagnostic
+from sqlbuild.compiler.scopes.main.relocate_declarations_for_move import (
+    relocate_declarations_for_move,
+)
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    MovePreview,
+    ResourceIdentity,
+    ScopeDiagnostic,
+    ScopeIndex,
+)
+from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
@@ -109,6 +120,9 @@ def model_parts(*, project: RefactorProject, target: ModelTarget) -> RefactorPar
     dialect: str = project.graph.project.sql_analysis_dialect or GENERIC_DIALECT
     old: str = target.model.name
     new: str = target.request.new_name
+    moves: tuple[tuple[str, str], ...]
+    move_blockers: tuple[ManualLocation, ...]
+    moves, move_blockers = _declaration_moves(project=project, target=target)
     return RefactorParts(
         edits=(
             *model_reference_edits(files=files, old=old, new=new, dialect=dialect),
@@ -127,9 +141,10 @@ def model_parts(*, project: RefactorProject, target: ModelTarget) -> RefactorPar
         ),
         blocking=(
             *_collisions(project=project, target=target),
-            *_scope_losses(project=project, target=target),
+            *move_blockers,
             *_pending_migration(files=files, target=target),
         ),
+        moves=moves,
     )
 
 
@@ -175,18 +190,32 @@ def _collisions(*, project: RefactorProject, target: ModelTarget) -> tuple[Manua
     return tuple(found)
 
 
-def _scope_losses(*, project: RefactorProject, target: ModelTarget) -> tuple[ManualLocation, ...]:
+def _declaration_moves(
+    *, project: RefactorProject, target: ModelTarget
+) -> tuple[tuple[tuple[str, str], ...], tuple[ManualLocation, ...]]:
+    """Move the declarations the model uses to where placement requires them afterwards."""
+
     if PurePosixPath(target.destination).parent == PurePosixPath(target.source_path).parent:
-        return ()
+        return (), ()
+    index: ScopeIndex = project.graph.project.scope_index
     move: MovePreview | None
     diagnostics: tuple[ScopeDiagnostic, ...]
     move, diagnostics = preview_scope_move(
-        lookup=build_scope_lookup(index=project.graph.project.scope_index),
+        lookup=build_scope_lookup(index=index),
         resource=f"{MODEL_KIND_PREFIX}{target.model.name}",
         destination=target.destination,
     )
-    if move is None:
-        return tuple(
+    relocated: tuple[DeclarationRecord, ...] | None = (
+        None
+        if move is None
+        else relocate_declarations_for_move(
+            index=index,
+            resource=ResourceIdentity(kind=ResourceKind.MODEL, name=target.model.name),
+            destination=target.destination,
+        )
+    )
+    if move is None or relocated is None:
+        return (), tuple(
             ManualLocation(path=target.destination, line=None, column=None, reason=item.message)
             for item in diagnostics
         ) or (
@@ -194,30 +223,73 @@ def _scope_losses(*, project: RefactorProject, target: ModelTarget) -> tuple[Man
                 path=target.destination,
                 line=None,
                 column=None,
-                reason="declaration scopes at the destination could not be checked",
+                reason="declaration placement at the destination could not be worked out",
             ),
         )
-    lost: dict[str, DeclarationReport] = {report.identity: report for report in move.lost}
-    return tuple(
-        _scope_loss(identity=identity, report=lost.get(identity), target=target)
-        for identity in move.invalidated_usages
-    )
+    return _file_moves(project=project, index=index, relocated=relocated)
 
 
-def _scope_loss(
-    *, identity: str, report: DeclarationReport | None, target: ModelTarget
-) -> ManualLocation:
-    reason: str = (
-        f"{identity} used by model:{target.model.name} is not visible from {target.destination}"
-    )
-    if report is None:
-        return ManualLocation(path=target.source_path, line=None, column=None, reason=reason)
-    return ManualLocation(
-        path=report.definition.path,
-        line=report.definition.line,
-        column=report.definition.column,
-        reason=reason,
-    )
+def _file_moves(
+    *, project: RefactorProject, index: ScopeIndex, relocated: tuple[DeclarationRecord, ...]
+) -> tuple[tuple[tuple[str, str], ...], tuple[ManualLocation, ...]]:
+    destinations: dict[str, str] = {}
+    blocking: list[ManualLocation] = []
+    record: DeclarationRecord
+    for record in sorted(relocated, key=lambda item: item.identity):
+        original: DeclarationRecord = next(
+            item for item in index.declarations if item.identity == record.identity
+        )
+        label: str = _label(record.identity)
+        if not (project.project_dir / PurePosixPath(original.path)).is_file():
+            blocking.append(
+                _declaration_blocker(
+                    record=original,
+                    reason=f"{label} must move to {record.path}, but it is not an authored "
+                    "project file",
+                )
+            )
+            continue
+        planned: str | None = destinations.setdefault(original.path, record.path)
+        if planned != record.path:
+            blocking.append(
+                _declaration_blocker(
+                    record=original,
+                    reason=f"{original.path} holds declarations that must move to different "
+                    f"folders ({planned}, {record.path}); split the file first",
+                )
+            )
+    moving: frozenset[DeclarationIdentity] = frozenset(item.identity for item in relocated)
+    staying: DeclarationRecord
+    for staying in index.declarations:
+        if staying.path in destinations and staying.identity not in moving:
+            blocking.append(
+                _declaration_blocker(
+                    record=staying,
+                    reason=f"{destinations[staying.path]} would take "
+                    f"{_label(staying.identity)} along, which must "
+                    f"stay in {staying.path}; split the file first",
+                )
+            )
+    new_path: str
+    for new_path in sorted(set(destinations.values())):
+        if (project.project_dir / PurePosixPath(new_path)).exists():
+            blocking.append(
+                ManualLocation(
+                    path=new_path,
+                    line=None,
+                    column=None,
+                    reason="a declaration must move here, but the file already exists",
+                )
+            )
+    return tuple(sorted(destinations.items())), tuple(blocking)
+
+
+def _label(identity: DeclarationIdentity) -> str:
+    return f"{identity.kind.value}:{identity.name}"
+
+
+def _declaration_blocker(*, record: DeclarationRecord, reason: str) -> ManualLocation:
+    return ManualLocation(path=record.path, line=record.line, column=record.column, reason=reason)
 
 
 def _pending_migration(

@@ -92,6 +92,22 @@ CENTS_MACRO: dict[str, str] = {
         'SELECT\n  order_id,\n  @to_cents("amount") AS amount_cents\nFROM __ref("stg_orders")\n'
     ),
 }
+ORDER_REFUNDS: dict[str, str] = {
+    "models/staging/stg_order_refunds.sql": (
+        "MODEL (\n  materialized view,\n);\n\n"
+        'SELECT\n  order_id,\n  @to_cents("amount") AS refund_cents\nFROM __ref("stg_orders")\n'
+    ),
+}
+SPLIT_CENTS_MACROS: dict[str, str] = {
+    **CENTS_MACRO,
+    "models/staging/_sqlbuild/_macros/cents.py": (
+        CENTS_MACRO["models/staging/_sqlbuild/_macros/cents.py"]
+        + '\n\ndef to_dollars(expression: str) -> str:\n    return f"({expression}) / 100"\n'
+    ),
+    "models/staging/stg_order_refunds.sql": ORDER_REFUNDS[
+        "models/staging/stg_order_refunds.sql"
+    ].replace("to_cents", "to_dollars"),
+}
 ORDER_EXPORT: dict[str, str] = {
     "models/marts/order_export.sql": (
         'MODEL (\n  materialized view,\n);\n\nSELECT *\nFROM __ref("fact_orders")\n'
@@ -237,6 +253,15 @@ def declare_missing_column_origin(*, project_dir: Path) -> None:
         ).replace("  order_date\n", "  order_date,\n  amount AS revenue\n", 1),
         encoding="utf-8",
     )
+
+
+def existing_files(*, project_dir: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
+    """Return the given project-relative paths that exist, sorted."""
+
+    present: frozenset[str] = frozenset(
+        path.relative_to(project_dir).as_posix() for path in project_dir.rglob("*.*")
+    )
+    return tuple(sorted(frozenset(paths) & present))
 
 
 def remove_files(*, project_dir: Path, paths: tuple[str, ...]) -> None:

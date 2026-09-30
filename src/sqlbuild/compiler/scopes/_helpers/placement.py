@@ -172,6 +172,102 @@ def resolve_required_placement(
     )
 
 
+def declaration_directory(*, kind: DeclarationKind, scope: ScopeKind, path: str | None) -> str:
+    """Return the project-relative folder where a declaration with this placement lives."""
+
+    role_parts: tuple[str, ...] = DECLARATION_ROLE_PARTS[kind]
+    if scope is ScopeKind.GLOBAL or path is None:
+        return "/".join(role_parts)
+    prefix: str = "_" if scope is ScopeKind.LOCAL else ""
+    role: str = "/".join((f"{prefix}{role_parts[0]}", *role_parts[1:]))
+    if path in _AUTHORED_ROOT_PATHS:
+        return f"{path}/{role}"
+    return f"{path}/{DECLARATION_GROUP_DIRECTORY}/{role}"
+
+
+def relocate_for_resource_move(
+    *, index: ScopeIndex, resource: ResourceIdentity, destination: str
+) -> tuple[DeclarationRecord, ...] | None:
+    """Return declarations whose placement changes when a resource moves, or None if unsettled."""
+
+    if not index.completeness.runtime_usage:
+        return None
+    misplaced: frozenset[DeclarationIdentity] = frozenset(
+        item.declaration
+        for item in build_placement_validated_index(index=index).diagnostics
+        if item.code in _PLACEMENT_CODES and item.declaration is not None
+    )
+    current: ScopeIndex = replace(
+        index,
+        resources=tuple(
+            replace(item, path=destination) if item.identity == resource else item
+            for item in index.resources
+        ),
+    )
+    usages_by_declaration: _UsagesByDeclaration = _usages_by_declaration(index=current)
+    for _ in range(len(index.declarations) + 1):
+        anchor_sets: _AnchorSets = _anchor_sets(
+            index=current, usages_by_declaration=usages_by_declaration
+        )
+        relocated: dict[DeclarationIdentity, DeclarationRecord] = {}
+        record: DeclarationRecord
+        for record in current.declarations:
+            if record.scope is ScopeKind.PRIVATE or record.identity in misplaced:
+                continue
+            moved: DeclarationRecord | None = _relocated_record(
+                record=record,
+                usages_by_declaration=usages_by_declaration,
+                anchor_sets=anchor_sets,
+            )
+            if moved is not None:
+                relocated[record.identity] = moved
+        if not relocated:
+            original: dict[DeclarationIdentity, DeclarationRecord] = {
+                item.identity: item for item in index.declarations
+            }
+            return tuple(
+                item for item in current.declarations if item.path != original[item.identity].path
+            )
+        current = replace(
+            current,
+            declarations=tuple(relocated.get(item.identity, item) for item in current.declarations),
+        )
+    return None
+
+
+def _relocated_record(
+    *,
+    record: DeclarationRecord,
+    usages_by_declaration: _UsagesByDeclaration,
+    anchor_sets: _AnchorSets,
+) -> DeclarationRecord | None:
+    required: tuple[ScopeKind, str | None, tuple[str, ...]] | None = _required_placement_for_record(
+        record=record, usages_by_declaration=usages_by_declaration, anchor_sets=anchor_sets
+    )
+    if required is None:
+        return None
+    scope: ScopeKind = required[0]
+    path: str | None = required[1]
+    if record.scope is scope and record.owning_path == path:
+        return None
+    directory: str = declaration_directory(kind=record.identity.kind, scope=scope, path=path)
+    roots: set[OwnershipRoot] = {
+        root for root, _path in anchor_sets.get(record.identity, frozenset())
+    }
+    ownership_root: OwnershipRoot = (
+        OwnershipRoot(directory, OwnershipRootKind.GLOBAL)
+        if scope is ScopeKind.GLOBAL or len(roots) != 1
+        else next(iter(roots))
+    )
+    return replace(
+        record,
+        path=f"{directory}/{PurePosixPath(record.path).name}",
+        scope=scope,
+        ownership_root=ownership_root,
+        owning_path=None if scope is ScopeKind.GLOBAL else path,
+    )
+
+
 def _usages_by_declaration(*, index: ScopeIndex) -> _UsagesByDeclaration:
     usage_lists: dict[DeclarationIdentity, list[UsageRecord]] = {}
     for usage in index.usages:
@@ -319,17 +415,12 @@ def _message(
     consumers: str,
 ) -> str:
     current_path: str = declaration.owning_path or declaration.ownership_root.path
-    role_parts: tuple[str, ...] = DECLARATION_ROLE_PARTS[declaration.identity.kind]
-    if required_scope is ScopeKind.GLOBAL:
-        target: str = f"top-level {'/'.join(role_parts)}/"
-    else:
-        prefix: str = "_" if required_scope is ScopeKind.LOCAL else ""
-        role: str = "/".join((f"{prefix}{role_parts[0]}", *role_parts[1:])) + "/"
-        target = (
-            f"{required_path}/{role}"
-            if required_path in _AUTHORED_ROOT_PATHS
-            else f"{required_path}/{DECLARATION_GROUP_DIRECTORY}/{role}"
-        )
+    directory: str = declaration_directory(
+        kind=declaration.identity.kind, scope=required_scope, path=required_path
+    )
+    target: str = (
+        f"top-level {directory}/" if required_scope is ScopeKind.GLOBAL else f"{directory}/"
+    )
     consumer_label: str = (
         "References" if declaration.identity.kind is DeclarationKind.SINGULAR_AUDIT else "Consumers"
     )

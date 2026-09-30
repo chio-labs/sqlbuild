@@ -21,6 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     ORDER_EXPORT,
     ORDER_SHAPE,
     ORDERS_MACRO,
+    SPLIT_CENTS_MACROS,
     fragments_present,
     load_raw_orders,
     order_history_files,
@@ -128,11 +129,11 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
     "test_case",
     [
         RefusedRefactorE2ETestCase(
-            description="move out of a macro scope",
+            description="move needing to split a declaration file",
             command=("mv", "model:stg_order_cents", "models/marts/"),
-            extra_files=CENTS_MACRO,
+            extra_files=SPLIT_CENTS_MACROS,
             expected_status="refused",
-            expected_reason="macro:to_cents used by model:stg_order_cents is not visible",
+            expected_reason="would take macro:to_dollars along, which must stay in",
             expected_paths=("models/staging/_sqlbuild/_macros/cents.py",),
         ),
         RefusedRefactorE2ETestCase(

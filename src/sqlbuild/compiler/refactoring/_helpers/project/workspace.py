@@ -85,6 +85,7 @@ def write_staged_changes(
         target.parent.mkdir(parents=True, exist_ok=True)
         _ = target.write_text(contents[change.path], encoding=TEXT_ENCODING)
         written.append(target)
+    prune_emptied_directories(root=staging_dir, changes=changes)
     return tuple(written)
 
 
@@ -120,7 +121,6 @@ def commit_changes(
         for change in changes:
             if change.moved:
                 (project_dir / PurePosixPath(change.original_path)).unlink()
-        return tuple(written)
     except BaseException:
         _rollback(
             project_dir=project_dir,
@@ -129,6 +129,21 @@ def commit_changes(
             created_directories=created_directories,
         )
         raise
+    prune_emptied_directories(root=project_dir, changes=changes)
+    return tuple(written)
+
+
+def prune_emptied_directories(*, root: Path, changes: tuple[FileChange, ...]) -> None:
+    """Remove folders a move left empty, walking up to the project root."""
+
+    change: FileChange
+    for change in changes:
+        if not change.moved:
+            continue
+        directory: Path = (root / PurePosixPath(change.original_path)).parent
+        while directory != root and directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+            directory = directory.parent
 
 
 def _rollback(

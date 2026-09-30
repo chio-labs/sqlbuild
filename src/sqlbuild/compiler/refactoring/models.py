@@ -123,6 +123,7 @@ class RefactorParts:
     blocking: tuple[ManualLocation, ...] = field(default_factory=tuple)
     migrations: tuple[MigrationDeclaration, ...] = field(default_factory=tuple)
     cascaded: tuple[str, ...] = field(default_factory=tuple)
+    moves: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
