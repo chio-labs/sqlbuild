@@ -101,10 +101,14 @@ fn evaluate_native_models(
     let mut model_results: Vec<Option<Vec<Fault>>> = vec![None; model_limit];
     let mut pending_models: Vec<PendingModelRule<'_>> = Vec::new();
     let mut identities = if cache.is_some() {
-        model_cache_identities(&models[..model_limit], ruleset_fingerprint, project_fingerprint)?
-            .into_iter()
-            .map(Some)
-            .collect()
+        model_cache_identities(
+            &models[..model_limit],
+            ruleset_fingerprint,
+            project_fingerprint,
+        )?
+        .into_iter()
+        .map(Some)
+        .collect()
     } else {
         vec![None; model_limit]
     };
