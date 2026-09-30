@@ -22,7 +22,8 @@ FACT_CACHE_INSERT_SQL: str = (
     "INSERT OR REPLACE INTO fact (slot, cache_key, digest, payload) VALUES "
 )
 FACT_CACHE_INSERT_ROW_SQL: str = "(?, ?, ?, ?)"
-FACT_CACHE_INSERT_CHUNK_ROWS: int = 2000
+# Four parameters per row; SQLite before 3.32 binds at most 999 per statement.
+FACT_CACHE_INSERT_CHUNK_ROWS: int = 249
 FACT_CACHE_WRITE_PRAGMAS: tuple[str, ...] = (
     "PRAGMA synchronous = OFF",
     "PRAGMA journal_mode = MEMORY",

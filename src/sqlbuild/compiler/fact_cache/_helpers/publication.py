@@ -59,11 +59,10 @@ def _write_rows(
         previous.join()
     try:
         _insert_records(database_path=database_path, records=rows)
-    except sqlite3.OperationalError:
-        return
-    except sqlite3.DatabaseError:
-        _replace_unreadable_database(database_path=database_path, records=rows)
-    except OSError:
+    except sqlite3.DatabaseError as error:
+        if type(error) is sqlite3.DatabaseError:
+            _replace_unreadable_database(database_path=database_path, records=rows)
+    except (sqlite3.Error, OSError):
         return
 
 
@@ -73,7 +72,7 @@ def _replace_unreadable_database(
     try:
         database_path.unlink(missing_ok=True)
         _insert_records(database_path=database_path, records=records)
-    except (OSError, sqlite3.DatabaseError):
+    except (OSError, sqlite3.Error):
         return
 
 

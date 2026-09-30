@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import sqlite3
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.fact_cache._helpers import publication
 from sqlbuild.compiler.fact_cache.classes import fact_cache_store
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
@@ -13,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.fact_cache.classes._test_types import (
     FactCacheNoPersistenceTestCase,
     FactCacheReadTestCase,
     FactCacheRetentionTestCase,
+    FactCacheWriterErrorTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.fact_cache.classes.helpers import (
     FACT_ALGORITHM,
@@ -20,6 +25,7 @@ from tests.unit.src.sqlbuild.compiler.fact_cache.classes.helpers import (
     FACT_VALUE,
     flip_payload_byte,
     publish_fact,
+    publish_facts,
     read_fact,
     replace_database_with_garbage,
     stored_fact_slots,
@@ -221,6 +227,70 @@ def test_given_failed_invocation_when_exiting_then_staged_facts_are_discarded(
         raise RuntimeError("compile failed")
 
     assert list(tmp_path.rglob("*.sqlite3")) == test_case.expected_database_files
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FactCacheWriterErrorTestCase(
+            description="busy_database_keeps_rows",
+            error=sqlite3.OperationalError("database is locked"),
+            expected_earlier_found_count=1,
+        ),
+        FactCacheWriterErrorTestCase(
+            description="integrity_error_keeps_rows",
+            error=sqlite3.IntegrityError("constraint failed"),
+            expected_earlier_found_count=1,
+        ),
+        FactCacheWriterErrorTestCase(
+            description="interface_error_keeps_rows",
+            error=sqlite3.InterfaceError("bad parameter"),
+            expected_earlier_found_count=1,
+        ),
+        FactCacheWriterErrorTestCase(
+            description="unreadable_database_is_replaced",
+            error=sqlite3.DatabaseError("file is not a database"),
+            expected_earlier_found_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_writer_error_when_publishing_then_only_corruption_discards_rows_and_nothing_escapes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: FactCacheWriterErrorTestCase
+) -> None:
+    _ = publish_fact(tmp_path, key_parts=("orders",), slot="orders")
+    escaped: list[threading.ExceptHookArgs] = []
+    monkeypatch.setattr(threading, "excepthook", escaped.append)
+
+    def failing_insert(**_: object) -> None:
+        raise test_case.error
+
+    monkeypatch.setattr(publication, "_insert_records", failing_insert)
+    _ = publish_fact(tmp_path, key_parts=("customers",), slot="customers")
+    monkeypatch.undo()
+
+    assert escaped == []
+    assert len(read_fact(tmp_path, key_parts=("orders",))) == (
+        test_case.expected_earlier_found_count
+    )
+
+
+def test_given_old_sqlite_parameter_limit_when_publishing_many_facts_then_all_are_stored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect: Callable[..., sqlite3.Connection] = sqlite3.connect
+
+    def limited_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+        connection: sqlite3.Connection = connect(*args, **kwargs)
+        _ = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", limited_connect)
+    slots: tuple[str, ...] = tuple(f"order_{index:04d}" for index in range(600))
+
+    publish_facts(tmp_path, slots=slots)
+
+    assert stored_fact_slots(tmp_path) == list(slots)
 
 
 if __name__ == "__main__":

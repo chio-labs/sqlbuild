@@ -53,3 +53,12 @@ class FactCacheNoPersistenceTestCase:
     description: str
     expected_enabled: bool
     expected_database_files: list[Path]
+
+
+@dataclass(frozen=True)
+class FactCacheWriterErrorTestCase:
+    """One SQLite error raised while publishing after an earlier fact was stored."""
+
+    description: str
+    error: Exception
+    expected_earlier_found_count: int

@@ -78,3 +78,10 @@ def truncate_verified_payload(root: Path) -> None:
 
 def replace_database_with_garbage(root: Path) -> None:
     fact_database(root).write_bytes(b"not a sqlite database")
+
+
+def publish_facts(root: Path, *, slots: tuple[str, ...]) -> None:
+    with FactCacheStore(root=root, namespace=FACT_NAMESPACE, algorithm=FACT_ALGORITHM) as store:
+        for slot in slots:
+            store.stage(key=store.key(slot), slot=slot, value=FACT_VALUE)
+    await_fact_publication()
