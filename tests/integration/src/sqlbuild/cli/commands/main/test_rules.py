@@ -732,10 +732,17 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
     )
 
     def counting_build(
-        *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: dict[str, LoadedMacro]
+        *,
+        discovered_inputs: DiscoveredProjectInputs,
+        loaded_macros: dict[str, LoadedMacro],
+        compile_cache_dir: Path | None = None,
     ) -> DeclarationScopeBuild:
         scope_builds.append(tmp_path)
-        return original_build(discovered_inputs=discovered_inputs, loaded_macros=loaded_macros)
+        return original_build(
+            discovered_inputs=discovered_inputs,
+            loaded_macros=loaded_macros,
+            compile_cache_dir=compile_cache_dir,
+        )
 
     monkeypatch.setattr(compile_inputs_module, "build_declaration_scope", counting_build)
     monkeypatch.setattr(expansion_context_module, "build_declaration_scope", counting_build)
@@ -785,10 +792,17 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
     )
 
     def counting_build(
-        *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: dict[str, LoadedMacro]
+        *,
+        discovered_inputs: DiscoveredProjectInputs,
+        loaded_macros: dict[str, LoadedMacro],
+        compile_cache_dir: Path | None = None,
     ) -> DeclarationScopeBuild:
         scope_builds.append(tmp_path)
-        return original_build(discovered_inputs=discovered_inputs, loaded_macros=loaded_macros)
+        return original_build(
+            discovered_inputs=discovered_inputs,
+            loaded_macros=loaded_macros,
+            compile_cache_dir=compile_cache_dir,
+        )
 
     def recording_load(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
         loaded: dict[str, LoadedMacro] = original_load(macro_files)
