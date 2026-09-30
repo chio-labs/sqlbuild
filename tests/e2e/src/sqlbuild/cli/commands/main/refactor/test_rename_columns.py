@@ -24,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     SPLIT_CENTS_MACROS,
     fragments_present,
     load_raw_orders,
+    order_amount_union,
     order_history_files,
     order_ids,
     project_text,
@@ -84,6 +85,35 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
             },
             expected_columns={
                 "fact_orders": ("order_id", "customer_id", "amount", "order_date"),
+            },
+        ),
+        ColumnRenameE2ETestCase(
+            description="cascade stops at a later set-operation branch",
+            command=("rename", "column:fact_orders.amount", "revenue", "--cascade"),
+            extra_files=order_amount_union(first="stg_orders", second="fact_orders"),
+            expected_fragments={
+                "models/marts/order_amounts.sql": ('SELECT revenue FROM __ref("fact_orders")',),
+                "models/marts/order_amount_reads.sql": ("SELECT amount FROM",),
+            },
+            expected_columns={
+                "order_amounts": ("amount",),
+                "order_amount_reads": ("amount",),
+            },
+        ),
+        ColumnRenameE2ETestCase(
+            description="cascade follows the first set-operation branch",
+            command=("rename", "column:fact_orders.amount", "revenue", "--cascade"),
+            extra_files=order_amount_union(first="fact_orders", second="stg_orders"),
+            expected_fragments={
+                "models/marts/order_amounts.sql": (
+                    'SELECT revenue FROM __ref("fact_orders")',
+                    'SELECT amount FROM __ref("stg_orders")',
+                ),
+                "models/marts/order_amount_reads.sql": ("SELECT revenue FROM",),
+            },
+            expected_columns={
+                "order_amounts": ("revenue",),
+                "order_amount_reads": ("revenue",),
             },
         ),
         ColumnRenameE2ETestCase(

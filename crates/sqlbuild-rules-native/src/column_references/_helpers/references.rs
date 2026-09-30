@@ -93,6 +93,7 @@ struct Analysis<'a> {
     output_ctes: HashSet<String>,
     response: ReferenceResponse,
     seen: HashSet<(usize, usize)>,
+    later_branch: bool,
 }
 
 fn default_dialect() -> String {
@@ -131,9 +132,10 @@ pub(crate) fn analyze_json(request_json: &str) -> Result<String, String> {
             ..ReferenceResponse::default()
         },
         seen: HashSet::new(),
+        later_branch: false,
     };
     for scope in &scopes {
-        analysis.visit(scope, ROOT_SCOPE.to_string(), &[]);
+        analysis.visit(scope, ROOT_SCOPE.to_string(), &[], false);
     }
     serde_json::to_string(&analysis.response).map_err(|error| error.to_string())
 }
@@ -183,14 +185,14 @@ fn star_derived_ctes(
     }
 }
 
+/// Only the first branch of a set operation names its output columns.
 fn selects_star_over_targets(
     body: &Expression,
     target_tables: &HashSet<String>,
     target_ctes: &HashSet<String>,
 ) -> bool {
-    branch_selects(body)
-        .iter()
-        .any(|select| select_stars_over_targets(select, target_tables, target_ctes))
+    first_branch_select(body)
+        .is_some_and(|select| select_stars_over_targets(select, target_tables, target_ctes))
 }
 
 fn select_stars_over_targets(
@@ -224,23 +226,15 @@ fn is_target_name(
     target_tables.contains(name) || target_ctes.contains(name)
 }
 
-fn branch_selects(body: &Expression) -> Vec<&polyglot_sql::expressions::Select> {
+fn first_branch_select(body: &Expression) -> Option<&polyglot_sql::expressions::Select> {
     match body {
-        Expression::Select(select) => vec![select],
-        Expression::Union(union) => {
-            [branch_selects(&union.left), branch_selects(&union.right)].concat()
-        }
-        Expression::Intersect(intersect) => [
-            branch_selects(&intersect.left),
-            branch_selects(&intersect.right),
-        ]
-        .concat(),
-        Expression::Except(except) => {
-            [branch_selects(&except.left), branch_selects(&except.right)].concat()
-        }
-        Expression::Subquery(subquery) => branch_selects(&subquery.this),
-        Expression::Paren(paren) => branch_selects(&paren.this),
-        _ => Vec::new(),
+        Expression::Select(select) => Some(select),
+        Expression::Union(union) => first_branch_select(&union.left),
+        Expression::Intersect(intersect) => first_branch_select(&intersect.left),
+        Expression::Except(except) => first_branch_select(&except.left),
+        Expression::Subquery(subquery) => first_branch_select(&subquery.this),
+        Expression::Paren(paren) => first_branch_select(&paren.this),
+        _ => None,
     }
 }
 
@@ -308,11 +302,13 @@ fn select_body(expression: &Expression) -> Option<&Expression> {
 }
 
 impl Analysis<'_> {
-    fn visit(&mut self, scope: &Scope, role: String, outer: &[&Scope]) {
+    /// Visit one scope; `later_branch` marks a set-operation branch that names no outputs.
+    fn visit(&mut self, scope: &Scope, role: String, outer: &[&Scope], later_branch: bool) {
         if let Some(select) = scope_select(&scope.expression) {
             let local: Scope = local_scope(scope, select);
             let mut chain: Vec<&Scope> = vec![&local];
             chain.extend(outer.iter().copied());
+            self.later_branch = later_branch;
             self.visit_select(select, &scope.expression, &chain, &role);
         }
         for child in &scope.cte_scopes {
@@ -320,18 +316,18 @@ impl Analysis<'_> {
                 Expression::Cte(cte) => cte.alias.name.clone(),
                 _ => String::new(),
             };
-            self.visit(child, format!("{CTE_SCOPE_PREFIX}{name}"), &[]);
+            self.visit(child, format!("{CTE_SCOPE_PREFIX}{name}"), &[], false);
         }
         for child in &scope.derived_table_scopes {
-            self.visit(child, DERIVED_SCOPE.to_string(), &[]);
+            self.visit(child, DERIVED_SCOPE.to_string(), &[], false);
         }
         let mut nested: Vec<&Scope> = vec![scope];
         nested.extend(outer.iter().copied());
         for child in scope.subquery_scopes.iter().chain(scope.udtf_scopes.iter()) {
-            self.visit(child, SUBQUERY_SCOPE.to_string(), &nested);
+            self.visit(child, SUBQUERY_SCOPE.to_string(), &nested, false);
         }
-        for child in &scope.union_scopes {
-            self.visit(child, role.clone(), outer);
+        for (position, child) in scope.union_scopes.iter().enumerate() {
+            self.visit(child, role.clone(), outer, later_branch || position > 0);
         }
     }
 
@@ -343,7 +339,9 @@ impl Analysis<'_> {
         role: &str,
     ) {
         self.record_outputs(select, role);
-        self.record_stars(select, chain[0], role);
+        if !self.later_branch {
+            self.record_stars(select, chain[0], role);
+        }
         self.record_joins(select, chain[0], role);
         let Some(body) = select_body(expression) else {
             return;
@@ -379,7 +377,11 @@ impl Analysis<'_> {
                 name_start: name_span.start,
                 name_end: name_span.end,
                 scope: role.to_string(),
-                projection: projection_site(select, span.start),
+                projection: if self.later_branch {
+                    None
+                } else {
+                    projection_site(select, span.start)
+                },
             }),
             Resolution::Other => {}
             Resolution::Unknown => {

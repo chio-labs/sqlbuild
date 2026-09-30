@@ -108,6 +108,23 @@ SPLIT_CENTS_MACROS: dict[str, str] = {
         "models/staging/stg_order_refunds.sql"
     ].replace("to_cents", "to_dollars"),
 }
+
+
+def order_amount_union(*, first: str, second: str) -> dict[str, str]:
+    """Return a view unioning amount from two models, and a view reading its output."""
+
+    return {
+        "models/marts/order_amounts.sql": (
+            "MODEL (\n  materialized view,\n);\n\n"
+            f'SELECT amount FROM __ref("{first}")\nUNION ALL\n'
+            f'SELECT amount FROM __ref("{second}")\n'
+        ),
+        "models/marts/order_amount_reads.sql": (
+            'MODEL (\n  materialized view,\n);\n\nSELECT amount FROM __ref("order_amounts")\n'
+        ),
+    }
+
+
 ORDER_EXPORT: dict[str, str] = {
     "models/marts/order_export.sql": (
         'MODEL (\n  materialized view,\n);\n\nSELECT *\nFROM __ref("fact_orders")\n'
