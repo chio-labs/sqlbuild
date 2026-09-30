@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 import threading
+import zlib
 from contextlib import closing
 from pathlib import Path
-from typing import Any
 
 from sqlbuild.compiler.fact_cache.classes.fact_publication_registry import (
     FactPublicationRegistry,
 )
 from sqlbuild.compiler.fact_cache.constants import (
     FACT_CACHE_CREATE_TABLE_SQL,
-    FACT_CACHE_DIGEST_BYTES,
     FACT_CACHE_INSERT_CHUNK_ROWS,
     FACT_CACHE_INSERT_ROW_SQL,
     FACT_CACHE_INSERT_SQL,
@@ -46,12 +44,9 @@ def await_fact_publication(*, database_path: Path | None = None) -> None:
 
 
 def entry_digest(*, cache_key: str, payload: bytes) -> str:
-    """Return the integrity digest binding one payload to its exact cache key."""
+    """Return the CRC-32 checksum binding one payload to its exact cache key."""
 
-    digest: Any = hashlib.blake2b(cache_key.encode(), digest_size=FACT_CACHE_DIGEST_BYTES)
-    digest.update(b"\0")
-    digest.update(payload)
-    return str(digest.hexdigest())
+    return f"{zlib.crc32(payload, zlib.crc32(cache_key.encode() + b'\0')):08x}"
 
 
 def _write_rows(
