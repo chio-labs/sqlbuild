@@ -85,8 +85,8 @@ SNAPSHOT_DEFAULT_VALID_TO_COLUMN: str = "valid_to"
 SOURCE_INPUT_FUNCTION: str = "__source"
 REF_INPUT_FUNCTION: str = "__ref"
 MANUAL_RENAME_HINT: str = (
-    "matched by unchanged definition; sqb rename model:<old> <new> also rewrites references "
-    "and adds migrate_from when discovery cannot match"
+    "matched by unchanged definition; sqb rename model:<old> <new> rewrites references and "
+    "declares migrate_from so the move does not depend on discovery"
 )
 MISSING_ORIGIN_OUTCOMES: dict[MissingMigrationOriginPolicy, str] = {
     MissingMigrationOriginPolicy.ALLOW: (

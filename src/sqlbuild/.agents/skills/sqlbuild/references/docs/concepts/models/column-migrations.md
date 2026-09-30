@@ -92,7 +92,7 @@ Automatically detected renames are marked `(automatic)`. The decision is based o
 | `already renamed, record` | The new column exists and the old one doesn't, but no rename is recorded, which is what an interrupted rename leaves behind. Record it without renaming again. |
 | `done` | The rename is recorded and the new column exists. Nothing to do. |
 | `conflict` | Both columns exist. The build stops (`M110`); drop one of them, or remove `migrate_from` and let `on_schema_change` handle the columns. |
-| `source missing` | Neither column exists and no rename is recorded. The build stops (`M109`); remove `migrate_from` if the rename happened elsewhere or is no longer needed. |
+| `source missing` | Neither column exists and no rename is recorded. The plan warns (`M109`) and the columns follow `on_schema_change` as if `migrate_from` were absent. A target can require confirmation or stop the build instead with [`missing_migration_origin`](../project-configuration.md#missing-migration-origins). |
 | `source still produced` | The query still selects the old column. The build stops (`M111`). |
 | `unsupported` | The warehouse can't rename this table's columns in place (see [Adapter support](#adapter-support)). The build stops (`M112`). |
 

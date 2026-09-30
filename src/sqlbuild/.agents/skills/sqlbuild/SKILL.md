@@ -145,13 +145,15 @@ functions, but not in ordinary `MODEL()` config fields. Placement decides visibi
 
 **Renaming and moving.** Never rename or move a model or column by editing files by hand. `sqb
 rename` and `sqb mv` rewrite every `__ref`, fixture CTE, header reference and column use from
-compiler facts, add `migrate_from` exactly where the warehouse history would otherwise be lost,
-verify the edited project compiles in a scratch copy, and write nothing if any step fails. Run
-with `--dry-run` first. A column rename is one step by default (downstream models keep their output
-names via `AS <old>`); `--cascade` renames pass-through outputs downstream too. When the command
-refuses, fix the listed locations (usually a macro call or `SELECT *`) and rerun; use
-`--allow-manual` only when the user agrees to finish those locations by hand. Then `sqb plan` to
-see the migration. Read [references/docs/cli/rename.md](references/docs/cli/rename.md).
+compiler facts (including YAML and `SCHEMA` relationships), add `migrate_from` whenever a
+data-holding relation moves, carry scoped macros, enums, constants and schemas to the folder
+placement requires, verify the edited project compiles in a scratch copy, and write nothing if any
+step fails. Run with `--dry-run` first. A column rename is one step by default (downstream models
+keep their output names via `AS <old>`); `--cascade` renames pass-through outputs downstream too.
+When the command refuses, fix the listed locations (usually a macro call, `SELECT *`, or a
+declaration file to split) and rerun. Then `sqb plan` to see the migration; on a target that never
+built the old name it warns about the missing origin and builds fresh unless the target sets
+`missing_migration_origin`. Read [references/docs/cli/rename.md](references/docs/cli/rename.md).
 
 **Rules** are compile-time project checks (`sqb rules list`, `sqb rules show <code>`). `sqb format`
 rewrites sources deterministically; `sqb format --check` only reports.
