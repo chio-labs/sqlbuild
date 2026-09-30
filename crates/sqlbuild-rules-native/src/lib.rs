@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod bindings;
+mod column_references;
 mod compiler;
 mod configuration;
 mod constants;
