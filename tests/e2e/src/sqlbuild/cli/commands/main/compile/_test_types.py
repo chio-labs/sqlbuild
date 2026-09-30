@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -345,3 +347,27 @@ class ExistingStatePlanGuardTestCase:
     expected_migrations: tuple[tuple[str, str, str], ...]
     expected_max_wall_seconds: float
     expected_max_rss_bytes: int
+
+
+@dataclass(frozen=True)
+class CompileCacheInvalidationTestCase:
+    """One authored input edit applied after a warm compile-cache run."""
+
+    description: str
+    edit: Callable[[Path], None]
+    edited_env: dict[str, str] = field(default_factory=dict)
+    expected_failure: bool = False
+    expected_output_change: bool = True
+    expected_rewarmed_fact_cache_misses: int = 0
+
+
+@dataclass(frozen=True)
+class CompileCacheDisabledTestCase:
+    """One supported control that disables compile-cache reads and writes."""
+
+    description: str
+    compile_args: tuple[str, ...] = ()
+    env: dict[str, str] = field(default_factory=dict)
+    edit: Callable[[Path], None] = lambda _root: None
+    expected_fact_cache_counts: tuple[int, int] = (0, 0)
+    expected_fact_databases: tuple[Path, ...] = ()

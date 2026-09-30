@@ -22,4 +22,6 @@ COMPILE_METRICS: tuple[CompileMetric, ...] = (
     "analysis_entry_cache_hits",
     "analysis_cache_misses",
     "analysis_cache_bypasses",
+    "fact_cache_hits",
+    "fact_cache_misses",
 )

@@ -132,6 +132,9 @@ RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
 )
 COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
 COMPILE_CACHE_DISABLE_VALUE: str = "1"
+SQL_TEST_FACT_CACHE_NAMESPACE: str = "sql-tests"
+SQL_TEST_FACT_CACHE_ALGORITHM: str = "expanded-sql-test-ctes-v2"
+SQL_TEST_EXPECTED_MODELS_FACT_ALGORITHM: str = "sql-test-expected-models-v2"
 COMPACT_ANALYSIS_RESPONSE_LENGTH: int = 2
 COMPACT_RELATION_STUB_PREFIX: str = "__sqlbuild_project_input_"
 COMPACT_REFERENCE_MARKER_PATTERN: re.Pattern[str] = re.compile(

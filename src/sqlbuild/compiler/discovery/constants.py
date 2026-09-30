@@ -76,3 +76,8 @@ STATEMENT_HEADER_BODY_PATTERN: str = (
     r"|[\"'](?:[^\\)]|\\.)*+"
     r"|\)(?!\s*;))*+)"
 )
+
+DISCOVERY_FACT_CACHE_NAMESPACE: str = "discovery"
+DISCOVERY_FACT_CACHE_ALGORITHM: str = "discovered-files-v1"
+DISCOVERY_SOURCE_FACT_KIND: str = "source"
+DISCOVERY_SQL_TEST_FACT_KIND: str = "sql_test"

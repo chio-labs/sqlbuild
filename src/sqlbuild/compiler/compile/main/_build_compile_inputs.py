@@ -124,7 +124,9 @@ def build_compile_inputs(
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     declaration_scope: DeclarationScopeBuild = build_declaration_scope(
-        discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
+        discovered_inputs=discovered_inputs,
+        loaded_macros=loaded_macros,
+        compile_cache_dir=compile_cache_dir,
     )
     model_context: ModelInputBuildContext = ModelInputBuildContext(
         effective_vars=effective_vars,

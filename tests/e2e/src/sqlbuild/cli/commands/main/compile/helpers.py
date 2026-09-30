@@ -2334,3 +2334,156 @@ def write_relation_stub_project(
             ),
         },
     )
+
+
+COMPILE_CACHE_REGION_ENV_VAR: str = "SQB_CACHE_INVALIDATION_REGION"
+_COMPILE_CACHE_DIAGNOSTIC_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?:error|warning)\[.*$", re.MULTILINE
+)
+_COMPILE_CACHE_EXTRA_PROJECT_FILES: dict[str, str] = {
+    "models/marts/_sqlbuild/_enums/order_channel.sql": (
+        'ENUM (\n  name order_channel,\n  members (WEB "web", PARTNER "partner"),\n);\n'
+    ),
+    "models/marts/_sqlbuild/_constants/min_quantity.sql": (
+        "CONSTANT (name min_quantity, value 1);\n"
+    ),
+    "models/marts/channel_orders.sql": (
+        "MODEL (\n"
+        "  materialized table,\n"
+        "  columns (\n"
+        "    order_id (nullable false, audits [not_null]),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT\n"
+        "  o.order_id,\n"
+        '  @enum("order_channel").WEB AS order_channel,\n'
+        '  o.quantity >= @const("min_quantity") AS meets_minimum,\n'
+        "  CAST(@@quantity_multiplier AS INTEGER) * o.quantity AS scaled_quantity,\n"
+        "  '@@ENV:" + COMPILE_CACHE_REGION_ENV_VAR + "' AS region\n"
+        'FROM __ref("stg_orders") o\n'
+    ),
+    "tests/unit/test_channel_orders.sql": (
+        "TEST ();\n\n"
+        "WITH\n"
+        "__ref__stg_orders AS (\n"
+        "  SELECT 1 AS order_id, 2 AS quantity\n"
+        "),\n"
+        "__expected__channel_orders AS (\n"
+        "  SELECT 1 AS order_id, 'web' AS order_channel, TRUE AS meets_minimum\n"
+        ")\n"
+        "SELECT 1\n"
+    ),
+    "tests/unit/test_channel_blocks.sql": (
+        'TEST (name "channel_orders_first");\n\n'
+        "WITH\n"
+        "__ref__stg_orders AS (\n"
+        "  SELECT 1 AS order_id, 2 AS quantity\n"
+        "),\n"
+        "__expected__channel_orders AS (\n"
+        "  SELECT 1 AS order_id, 'web' AS order_channel\n"
+        ")\n"
+        "SELECT 1\n\n"
+        'TEST (name "channel_orders_second");\n\n'
+        "WITH\n"
+        "__ref__stg_orders AS (\n"
+        "  SELECT 2 AS order_id, 5 AS quantity\n"
+        "),\n"
+        "__expected__channel_orders AS (\n"
+        "  SELECT 2 AS order_id, 'web' AS order_channel\n"
+        ")\n"
+        "SELECT 1\n"
+    ),
+}
+
+
+class CompileCacheOutcome(NamedTuple):
+    """Comparable result of one fresh-process compile."""
+
+    returncode: int
+    diagnostics: tuple[str, ...]
+    fingerprint: str
+    fact_cache_hits: int
+    fact_cache_misses: int
+
+
+def run_installed_sqb(
+    *, project_dir: Path, args: tuple[str, ...], env: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    """Run the installed sqb entrypoint in a fresh process with extra environment values."""
+
+    return subprocess.run(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--project-dir",
+            str(project_dir),
+            "--no-color",
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, **env},
+        check=False,
+    )
+
+
+def compile_cache_outcome(
+    *, project_dir: Path, env: dict[str, str], compile_args: tuple[str, ...] = ()
+) -> CompileCacheOutcome:
+    """Compile in a fresh process and return its semantic fingerprint and fact-cache counts."""
+
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir, args=("compile", "--json", *compile_args), env=env
+    )
+    values: dict[str, object] = cast(dict[str, object], json.loads(result.stdout or "{}"))
+    timings: dict[str, int] = cast(dict[str, int], values.get("compile_timings", {}))
+    return CompileCacheOutcome(
+        returncode=result.returncode,
+        diagnostics=tuple(_COMPILE_CACHE_DIAGNOSTIC_PATTERN.findall(result.stderr)),
+        fingerprint=semantic_compile_fingerprint(
+            payload=values, compiled_dir=project_dir / "target" / "compiled"
+        ),
+        fact_cache_hits=timings.get("fact_cache_hits", 0),
+        fact_cache_misses=timings.get("fact_cache_misses", 0),
+    )
+
+
+def replace_project_text(project_dir: Path, relative_path: str, old: str, new: str) -> None:
+    """Replace the first occurrence of authored text, failing when it is absent."""
+
+    path: Path = project_dir / relative_path
+    contents: str = path.read_text(encoding="utf-8")
+    assert old in contents, f"{old!r} not found in {relative_path}"
+    path.write_text(contents.replace(old, new, 1), encoding="utf-8")
+
+
+def write_project_file(project_dir: Path, relative_path: str, contents: str) -> None:
+    """Write one authored project file, creating parent folders."""
+
+    path: Path = project_dir / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+
+
+def move_project_file(project_dir: Path, source: str, destination: str) -> None:
+    """Move one authored project file into a possibly new folder."""
+
+    (project_dir / destination).parent.mkdir(parents=True, exist_ok=True)
+    (project_dir / source).rename(project_dir / destination)
+
+
+def prepare_compile_cache_invalidation_project(*, project_dir: Path) -> None:
+    """Create a playground project covering every cached compile input kind."""
+
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir.parent, args=("playground", str(project_dir)), env={}
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    shutil.rmtree(project_dir / "target", ignore_errors=True)
+    for relative_path, contents in _COMPILE_CACHE_EXTRA_PROJECT_FILES.items():
+        write_project_file(project_dir, relative_path, contents)
+    replace_project_text(
+        project_dir,
+        "sqlbuild_project.toml",
+        "[settings]",
+        '[vars]\nquantity_multiplier = "2"\n\n[settings]',
+    )

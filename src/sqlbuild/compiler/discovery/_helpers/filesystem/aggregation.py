@@ -65,6 +65,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     TolerantScopeDiscovery,
 )
+from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -76,6 +77,7 @@ def build_discovered_project_inputs(
     local_config: LocalConfig,
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool = True,
+    fact_cache: FactCacheStore | None = None,
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
@@ -83,7 +85,7 @@ def build_discovered_project_inputs(
         operation_kind="project", operation_name="discovery_declaration_parse"
     ) as declaration_lifecycle:
         source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(
-            project_dir=project_dir
+            project_dir=project_dir, fact_cache=fact_cache
         )
         model_files: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
             project_dir=project_dir,
@@ -110,7 +112,9 @@ def build_discovered_project_inputs(
             project_dir=project_dir
         )
         seed_files: tuple[DiscoveredSeedFile, ...] = discover_seed_files(project_dir=project_dir)
-        test_files: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(project_dir=project_dir)
+        test_files: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(
+            project_dir=project_dir, fact_cache=fact_cache
+        )
         scenario_files: tuple[DiscoveredSqlScenarioFile, ...] = discover_scenario_files(
             project_dir=project_dir
         )

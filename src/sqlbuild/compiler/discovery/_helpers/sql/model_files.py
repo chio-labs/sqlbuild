@@ -110,10 +110,23 @@ class _ModelHeaderTokenCache:
 _MODEL_HEADER_TOKEN_CACHE: _ModelHeaderTokenCache = _ModelHeaderTokenCache()
 
 
+def match_model_header(contents: str) -> re.Match[str] | None:
+    """Match the MODEL(...) header once so callers can reuse it for every header projection."""
+
+    return _MODEL_HEADER_PATTERN.match(contents)
+
+
 def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
     """Parse a raw SQL model file into header values and SQL body."""
 
-    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    return parse_matched_model_sql(header_match=match_model_header(contents), file_path=file_path)
+
+
+def parse_matched_model_sql(
+    *, header_match: re.Match[str] | None, file_path: Path
+) -> tuple[dict[str, object], str]:
+    """Parse header values and SQL body from one precomputed MODEL header match."""
+
     if header_match is None:
         raise ModelSqlParseError(
             f"SQL model '{file_path}' must start with a MODEL(...) header as the first "
@@ -136,7 +149,16 @@ def model_header_column_locations(
 ) -> dict[str, SourceLocation]:
     """Return authored locations for MODEL(columns) declarations."""
 
-    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    return matched_model_header_column_locations(
+        contents=contents, header_match=match_model_header(contents), relative_path=relative_path
+    )
+
+
+def matched_model_header_column_locations(
+    *, contents: str, header_match: re.Match[str] | None, relative_path: Path
+) -> dict[str, SourceLocation]:
+    """Return authored MODEL(columns) locations from one precomputed header match."""
+
     if header_match is None:
         return {}
     return header_column_locations(
@@ -261,7 +283,23 @@ def model_output_column_locations(
 ) -> dict[str, SourceLocation]:
     """Return authored locations for simple SELECT output expressions."""
 
-    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    return matched_model_output_column_locations(
+        contents=contents,
+        header_match=match_model_header(contents),
+        relative_path=relative_path,
+        extract_implicit_alias_columns=extract_implicit_alias_columns,
+    )
+
+
+def matched_model_output_column_locations(
+    *,
+    contents: str,
+    header_match: re.Match[str] | None,
+    relative_path: Path,
+    extract_implicit_alias_columns: bool,
+) -> dict[str, SourceLocation]:
+    """Return simple SELECT output locations from one precomputed header match."""
+
     if header_match is None:
         return {}
     sql_start: int = header_match.start("sql")
@@ -604,11 +642,17 @@ def _header_column_relative_locations(
 def prepare_model_file_headers(contents: list[str]) -> None:
     """Batch tokenization for syntactically recognizable MODEL file headers."""
 
+    prepare_matched_model_file_headers([match_model_header(value) for value in contents])
+
+
+def prepare_matched_model_file_headers(header_matches: list[re.Match[str] | None]) -> None:
+    """Batch tokenization for precomputed MODEL header matches."""
+
     prepare_model_header_tokens(
         [
             header_match.group("header")
-            for contents_value in contents
-            if (header_match := _MODEL_HEADER_PATTERN.match(contents_value)) is not None
+            for header_match in header_matches
+            if header_match is not None
         ]
     )
 

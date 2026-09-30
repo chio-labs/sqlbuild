@@ -42,7 +42,7 @@ from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryCacheRequest
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
@@ -115,6 +115,9 @@ def _analyze_compile_project(
         extract_output_column_locations=False,
         sql_analysis_enabled_override=(
             False if profile_flags.skip_discovery_sql_analysis else None
+        ),
+        cache_request=DiscoveryCacheRequest(
+            selected_target=selected_target, no_cache=analysis_selection.no_cache
         ),
     )
     discover_ms: int = elapsed_ms(discover_start)

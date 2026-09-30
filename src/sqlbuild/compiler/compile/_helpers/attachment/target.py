@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
@@ -10,11 +9,8 @@ from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
     resolve_run_id,
 )
-from sqlbuild.compiler.compile.constants import (
-    COMPILE_CACHE_DISABLE_ENV_VAR,
-    COMPILE_CACHE_DISABLE_VALUE,
-)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fact_cache.main._compile_cache_root import compile_cache_root
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import TargetConfig
@@ -42,16 +38,10 @@ def build_compile_target_context(
         if target_name is not None
         else None
     )
-    cache_disabled: bool = (
-        no_cache
-        or (target_config is not None and target_config.compile_cache is False)
-        or os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE
-    )
-    project_dir: Path | None = discovered_inputs.project_dir
-    cache_dir: Path | None = (
-        None
-        if cache_disabled or project_dir is None
-        else project_dir / "target" / "cache" / "compiler"
+    cache_dir: Path | None = compile_cache_root(
+        project_dir=discovered_inputs.project_dir,
+        target_config=target_config,
+        no_cache=no_cache,
     )
     return target_name, target_config, cache_dir
 

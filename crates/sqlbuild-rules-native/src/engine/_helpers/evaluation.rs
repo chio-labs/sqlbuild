@@ -22,7 +22,9 @@ use fensu_policy::lifecycle::models::{
     RuntimeIdentity, ScopedIgnore,
 };
 use fensu_policy::{apply_suppressions, evaluate_batch, run_custom_host};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -98,20 +100,20 @@ fn evaluate_native_models(
     let mut result = NativeModelEvaluation::default();
     let mut model_results: Vec<Option<Vec<Fault>>> = vec![None; model_limit];
     let mut pending_models: Vec<PendingModelRule<'_>> = Vec::new();
+    let mut identities = if cache.is_some() {
+        model_cache_identities(
+            &models[..model_limit],
+            ruleset_fingerprint,
+            project_fingerprint,
+        )?
+        .into_iter()
+        .map(Some)
+        .collect()
+    } else {
+        vec![None; model_limit]
+    };
     for (index, model) in models.iter().take(model_limit).enumerate() {
-        let identity = cache
-            .map(|_| {
-                model_cache_identity(
-                    model,
-                    ruleset_fingerprint,
-                    if index == 0 {
-                        project_fingerprint
-                    } else {
-                        None
-                    },
-                )
-            })
-            .transpose()?;
+        let identity = identities[index].take();
         if let Some(identity) = &identity
             && let Some(entry) = bucket
                 .entries
@@ -546,20 +548,28 @@ fn custom_local_identity(model_identity: &str, rule: &str, project: Option<&str>
 fn custom_model_fact_identities(
     models: &[crate::models::Model],
 ) -> Result<BTreeMap<String, String>, String> {
-    models
-        .iter()
-        .map(|model| {
-            let mut digest = Sha256::new();
-            digest.update(b"custom-rule-model-facts-v1");
-            digest.update(ANALYSIS_BATCH_SCHEMA_VERSION.to_le_bytes());
-            digest.update(env!("CARGO_PKG_VERSION").as_bytes());
-            digest.update(serde_json::to_vec(model).map_err(|error| error.to_string())?);
-            Ok((
-                model.relative_path.clone(),
-                format!("{:x}", digest.finalize()),
-            ))
-        })
-        .collect()
+    let identity = |model: &crate::models::Model| -> Result<(String, String), String> {
+        let mut digest = Sha256::new();
+        digest.update(b"custom-rule-model-facts-v1");
+        digest.update(ANALYSIS_BATCH_SCHEMA_VERSION.to_le_bytes());
+        digest.update(env!("CARGO_PKG_VERSION").as_bytes());
+        digest.update(serde_json::to_vec(model).map_err(|error| error.to_string())?);
+        Ok((
+            model.relative_path.clone(),
+            format!("{:x}", digest.finalize()),
+        ))
+    };
+    let results: Vec<Result<(String, String), String>> = if models.len() <= 1 {
+        models.iter().map(identity).collect()
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(NATIVE_RULE_WORKERS.min(models.len()))
+            .stack_size(NATIVE_RULE_STACK_BYTES)
+            .build()
+            .map_err(|error| error.to_string())?;
+        pool.install(|| models.par_iter().map(identity).collect())
+    };
+    results.into_iter().collect()
 }
 
 fn custom_rule_identity(rule: &RuleMetadata, request: &EvaluateRequest) -> Result<String, String> {
@@ -579,6 +589,27 @@ fn custom_rule_identity(rule: &RuleMetadata, request: &EvaluateRequest) -> Resul
         digest.update(custom.fact_fingerprint.as_bytes());
     }
     Ok(format!("{:x}", digest.finalize()))
+}
+
+fn model_cache_identities(
+    models: &[&crate::models::Model],
+    ruleset: &str,
+    project: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let identity = |(index, model): (usize, &&crate::models::Model)| {
+        model_cache_identity(model, ruleset, if index == 0 { project } else { None })
+    };
+    let results: Vec<Result<String, String>> = if models.len() <= 1 {
+        models.iter().enumerate().map(identity).collect()
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(NATIVE_RULE_WORKERS.min(models.len()))
+            .stack_size(NATIVE_RULE_STACK_BYTES)
+            .build()
+            .map_err(|error| error.to_string())?;
+        pool.install(|| models.par_iter().enumerate().map(identity).collect())
+    };
+    results.into_iter().collect()
 }
 
 fn model_cache_identity(

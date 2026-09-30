@@ -62,6 +62,12 @@ _SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
 
 
 @dataclass(frozen=True)
+class _SqlRuleInputs:
+    identities: dict[str, str]
+    project_files: dict[Path, str] | None
+
+
+@dataclass(frozen=True)
 class _SqlRulesEvaluation:
     findings: tuple[Finding, ...]
     cache_hits: int
@@ -118,6 +124,13 @@ def evaluate_rules(
         select=tuple(rule.code for rule in selected),
         ignore=(),
     )
+    sql_rule_inputs: _SqlRuleInputs = _prepare_sql_rule_inputs(
+        rules=native_rules,
+        project=selected_project,
+        dialect=dialect,
+        project_dir=resolved_project_dir,
+        collect_files=prepared_sql is None and model_paths is None,
+    )
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-rules") as executor:
         native_result: Future[RulesResult] = executor.submit(
             evaluate_native,
@@ -140,6 +153,7 @@ def evaluate_rules(
             cache_enabled=effective_config.cache.enabled,
             prepared_sql=prepared_sql,
             expansion_reuse=expansion_reuse,
+            prepared_inputs=sql_rule_inputs,
         )
         sql_ms: int = round((time.monotonic() - sql_started) * 1000)
         result: RulesResult = native_result.result()
@@ -171,6 +185,29 @@ def evaluate_rules(
         cache_hits=result.cache_hits + sql_result.cache_hits,
         cache_misses=result.cache_misses + sql_result.cache_misses,
         skipped_type_proof_rules=skipped_type_proof_rules,
+    )
+
+
+def _prepare_sql_rule_inputs(
+    *,
+    rules: tuple[Rule, ...],
+    project: CompiledProject,
+    dialect: str,
+    project_dir: Path,
+    collect_files: bool,
+) -> _SqlRuleInputs:
+    """Hash SQL and read files first so GIL-releasing work never waits on the native thread."""
+
+    identities: dict[str, str] = _sql_model_rule_identities(
+        rules=rules, project=project, dialect=dialect
+    )
+    return _SqlRuleInputs(
+        identities=identities,
+        project_files=(
+            collect_project_files(project_dir=project_dir, selected_paths=None)
+            if identities and collect_files
+            else None
+        ),
     )
 
 
@@ -374,22 +411,20 @@ def _run_sql_rules(
     cache_enabled: bool,
     prepared_sql: PreparedSqlLint | None = None,
     expansion_reuse: SqlExpansionReuse | None = None,
+    prepared_inputs: _SqlRuleInputs | None = None,
 ) -> _SqlRulesEvaluation:
-    codes: tuple[str, ...] = tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
+    codes: tuple[str, ...] = _sql_rule_codes(rules)
     if not codes:
         return _SqlRulesEvaluation(findings=(), cache_hits=0, cache_misses=0)
-    models_by_path: dict[str, CompiledModel] = {
-        model.relative_path.as_posix(): model
-        for model in project.models
-        if project.settings.sql_analysis and model.config.values.get("sql_analysis") is not False
-    }
+    models_by_path: dict[str, CompiledModel] = _sql_rule_models(project)
     bucket: dict[str, dict[str, object]] = (
         _read_sql_rule_cache(project_dir) if cache_enabled else {}
     )
-    identities: dict[str, str] = {
-        path: _sql_rule_identity(model=model, codes=codes, dialect=dialect)
-        for path, model in models_by_path.items()
-    }
+    identities: dict[str, str] = (
+        prepared_inputs.identities
+        if prepared_inputs is not None
+        else _sql_model_rule_identities(rules=rules, project=project, dialect=dialect)
+    )
     findings: list[Finding] = []
     misses: set[str] = set()
     for path, identity in identities.items():
@@ -411,7 +446,11 @@ def _run_sql_rules(
             prepared_sql=prepared_sql, project_dir=project_dir, codes=codes
         )
         if project_files is None:
-            project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
+            project_files = (
+                prepared_inputs.project_files
+                if prepared_inputs is not None and prepared_inputs.project_files is not None
+                else collect_project_files(project_dir=project_dir, selected_paths=None)
+            )
         file_path: Path
         contents: str
         for file_path, contents in project_files.items():
@@ -531,6 +570,30 @@ def _lint_finding(*, violation: LintViolation, project_dir: Path) -> Finding:
         message=violation.message,
         remediation=violation.remediation or "Update the authored SQL to satisfy this rule.",
     )
+
+
+def _sql_rule_codes(rules: tuple[Rule, ...]) -> tuple[str, ...]:
+    return tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
+
+
+def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModel]:
+    return {
+        model.relative_path.as_posix(): model
+        for model in project.models
+        if project.settings.sql_analysis and model.config.values.get("sql_analysis") is not False
+    }
+
+
+def _sql_model_rule_identities(
+    *, rules: tuple[Rule, ...], project: CompiledProject, dialect: str
+) -> dict[str, str]:
+    codes: tuple[str, ...] = _sql_rule_codes(rules)
+    if not codes:
+        return {}
+    return {
+        path: _sql_rule_identity(model=model, codes=codes, dialect=dialect)
+        for path, model in _sql_rule_models(project).items()
+    }
 
 
 def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:

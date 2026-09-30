@@ -19,7 +19,9 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
 from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
-from sqlbuild.compiler.discovery._helpers.filesystem import core as discovery_core_module
+from sqlbuild.compiler.discovery._helpers.filesystem import (
+    model_files as discovery_model_files_module,
+)
 from sqlbuild.spec.contracts.models import SourceLocation
 
 
@@ -449,12 +451,14 @@ def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[Pa
 
     scanned: list[Path] = []
     original: Callable[..., dict[str, SourceLocation]] = (
-        discovery_core_module.model_output_column_locations
+        discovery_model_files_module.matched_model_output_column_locations
     )
 
     def recording(**kwargs: Any) -> dict[str, SourceLocation]:
         scanned.append(cast(Path, kwargs["relative_path"]))
         return original(**kwargs)
 
-    monkeypatch.setattr(discovery_core_module, "model_output_column_locations", recording)
+    monkeypatch.setattr(
+        discovery_model_files_module, "matched_model_output_column_locations", recording
+    )
     return scanned
