@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 def confirm_typed_action(
     *,
     action: str,
-    flag: str,
+    non_interactive_help: str,
     warning: str,
     expected: str,
     input_stream: TextIO,
@@ -23,7 +23,7 @@ def confirm_typed_action(
         raise CliUserError(
             f"{action} requires confirmation",
             code=code,
-            help=f"Pass {flag} to confirm in non-interactive runs.",
+            help=non_interactive_help,
         )
     _ = output_stream.write(f"{warning}\n\n")
     _ = output_stream.write(f"Type `{expected}` to continue: ")

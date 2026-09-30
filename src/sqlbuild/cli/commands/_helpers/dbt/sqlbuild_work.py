@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     format_build_footer,
 )
+from sqlbuild.cli.commands.constants import MISSING_ORIGIN_DBT_HELP
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.main._execution_header import format_execution_header
@@ -56,6 +57,7 @@ def execute_sqlbuild_build_work(
     enforce_migration_plan_policies(
         plan=plan_output,
         allow_missing_migration_origin=False,
+        non_interactive_help=MISSING_ORIGIN_DBT_HELP,
         input_stream=sys.stdin,
         output_stream=output_stream,
     )

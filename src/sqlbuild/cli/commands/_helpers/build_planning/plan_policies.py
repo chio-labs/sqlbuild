@@ -19,6 +19,7 @@ from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
 from sqlbuild.cli.commands._helpers.build_planning.table_type import (
     enforce_table_type_downgrade_policy,
 )
+from sqlbuild.cli.commands.constants import MISSING_ORIGIN_BUILD_HELP
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import BuildCommandRequest, BuildInvocation
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
@@ -49,6 +50,7 @@ def enforce_build_plan_policies(
     enforce_migration_plan_policies(
         plan=plan,
         allow_missing_migration_origin=request.allow_missing_migration_origin,
+        non_interactive_help=MISSING_ORIGIN_BUILD_HELP,
         input_stream=sys.stdin,
         output_stream=sys.stdout,
     )
@@ -83,6 +85,7 @@ def enforce_migration_plan_policies(
     *,
     plan: PlanOutput,
     allow_missing_migration_origin: bool,
+    non_interactive_help: str,
     input_stream: TextIO,
     output_stream: TextIO,
 ) -> None:
@@ -93,6 +96,7 @@ def enforce_migration_plan_policies(
     _confirm_missing_origins(
         plan=plan,
         allow_missing_migration_origin=allow_missing_migration_origin,
+        non_interactive_help=non_interactive_help,
         input_stream=input_stream,
         output_stream=output_stream,
     )
@@ -182,6 +186,7 @@ def _confirm_missing_origins(
     *,
     plan: PlanOutput,
     allow_missing_migration_origin: bool,
+    non_interactive_help: str,
     input_stream: TextIO,
     output_stream: TextIO,
 ) -> None:
@@ -203,7 +208,7 @@ def _confirm_missing_origins(
     listed: str = ", ".join(f"'{name}'" for name in names)
     confirm_typed_action(
         action=f"building {listed} without its missing migrate_from origin",
-        flag="--allow-missing-migration-origin",
+        non_interactive_help=non_interactive_help,
         warning=f"The migrate_from origin of {listed} does not exist in this target; nothing "
         "will be migrated.",
         expected=(

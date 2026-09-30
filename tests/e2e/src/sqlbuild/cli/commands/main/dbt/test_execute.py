@@ -551,12 +551,12 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
         DbtMissingOriginE2ETestCase(
             description="dbt build refuses a missing origin that needs confirmation",
             command=("dbt", "build", "--select", "tag:sqb_only"),
-            expected_output="--allow-missing-migration-origin",
+            expected_output="build the affected models with sqb build --allow-missing-migration-origin",
         ),
         DbtMissingOriginE2ETestCase(
             description="dbt run refuses a missing origin that needs confirmation",
             command=("dbt", "run", "--select", "local_only"),
-            expected_output="--allow-missing-migration-origin",
+            expected_output="build the affected models with sqb build --allow-missing-migration-origin",
         ),
     ],
     ids=lambda case: case.description,
@@ -575,4 +575,5 @@ def test_given_missing_origin_requiring_confirmation_when_running_dbt_then_refus
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert test_case.expected_output in result.stdout + result.stderr
+    assert "Pass --allow-missing-migration-origin" not in result.stdout + result.stderr
     assert not table_exists(db_path=project_dir / "dbt_interop.duckdb", table_name="local_only")
