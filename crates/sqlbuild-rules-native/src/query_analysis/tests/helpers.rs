@@ -335,6 +335,51 @@ pub(crate) fn interleaved_query_templates_preserve_template_order() -> bool {
     names == vec!["second_value", "first_value", "second_value"]
 }
 
+pub(crate) fn larger_later_queries_keep_request_order() -> bool {
+    let response: Value = serde_json::from_str(
+        &analyze_project_compact_json(
+            &json!({
+                "queries": [
+                    {"sql": "SELECT 1 AS first_value", "dialect": "duckdb"},
+                    {"sql": "SELECT 2 AS second_value, 3 AS third_value", "dialect": "duckdb"},
+                    {"sql": "SELECT 4 AS fourth_value, 5 AS fifth_value, 6 AS sixth_value", "dialect": "duckdb"}
+                ],
+                "templates": [
+                    {"queryIndex": 0},
+                    {"queryIndex": 1},
+                    {"queryIndex": 2}
+                ],
+                "projections": [
+                    {"templateIndex": 0},
+                    {"templateIndex": 1},
+                    {"templateIndex": 2}
+                ],
+                "workers": 2
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    response["strings"]
+        == json!([
+            "first_value",
+            "INT",
+            "second_value",
+            "third_value",
+            "fourth_value",
+            "fifth_value",
+            "sixth_value"
+        ])
+        && response["templates"]
+            == json!([
+                [[0], false, false],
+                [[1, 2], false, false],
+                [[3, 4, 5], false, false]
+            ])
+}
+
 pub(crate) fn canonical_queries_reuse_semantics_and_project_resources() -> bool {
     let response: Value = serde_json::from_str(
         &analyze_project_compact_json(

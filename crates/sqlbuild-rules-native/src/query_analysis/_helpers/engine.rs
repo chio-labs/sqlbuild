@@ -9,6 +9,8 @@ use polyglot_sql::{
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use crate::constants::{SQL_WILDCARD, UNKNOWN_SQL_TYPE, VARCHAR_SQL_TYPE};
 
@@ -430,13 +432,7 @@ pub(crate) fn analyze_project_compact_with_catalog(
         if batch.is_empty() {
             break;
         }
-        let analysis_groups: Vec<CompiledQueryWorkResult> = pool.install(|| {
-            batch
-                .into_par_iter()
-                .map(|work| analyze_compact_query_work(work, catalog))
-                .collect()
-        });
-        for group in analysis_groups {
+        for group in analyze_largest_first(&pool, batch, catalog) {
             validations.push(group.validation.transpose()?);
             for (projection_index, analysis) in group.projections {
                 accumulator.compact_analysis(projection_index, analysis)?;
@@ -452,6 +448,39 @@ pub(crate) fn analyze_project_compact_with_catalog(
         response.validations = Some(validations);
     }
     serde_json::to_string(&response).map_err(|error| error.to_string())
+}
+
+/// Analyse a batch largest SQL first so no late wide query becomes its critical path.
+fn analyze_largest_first(
+    pool: &rayon::ThreadPool,
+    batch: Vec<CompactQueryWork>,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> Vec<CompiledQueryWorkResult> {
+    let mut order: Vec<usize> = (0..batch.len()).collect();
+    order.sort_by_key(|index| std::cmp::Reverse(batch[*index].query.sql.len()));
+    let slots: Vec<Mutex<Option<CompactQueryWork>>> = batch
+        .into_iter()
+        .map(|work| Mutex::new(Some(work)))
+        .collect();
+    let next = AtomicUsize::new(0);
+    let finished: Vec<Vec<(usize, CompiledQueryWorkResult)>> = pool.broadcast(|_| {
+        let mut finished: Vec<(usize, CompiledQueryWorkResult)> = Vec::new();
+        while let Some(index) = order.get(next.fetch_add(1, Ordering::Relaxed)).copied() {
+            let work = slots[index]
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            if let Some(work) = work {
+                finished.push((index, analyze_compact_query_work(work, catalog)));
+            }
+        }
+        finished
+    });
+    let mut results: Vec<Option<CompiledQueryWorkResult>> = slots.iter().map(|_| None).collect();
+    for (index, result) in finished.into_iter().flatten() {
+        results[index] = Some(result);
+    }
+    results.into_iter().flatten().collect()
 }
 
 fn analyze_compact_query_work(

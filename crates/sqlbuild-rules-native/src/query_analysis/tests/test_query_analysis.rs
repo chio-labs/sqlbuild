@@ -7,7 +7,7 @@ use crate::query_analysis::tests::helpers::{
     bound_lineage_survives_type_recovery, canonical_queries_reuse_semantics_and_project_resources,
     combined_queries_preserve_standalone_binding,
     compact_project_query_interns_repeated_lineage_strings,
-    interleaved_query_templates_preserve_template_order,
+    interleaved_query_templates_preserve_template_order, larger_later_queries_keep_request_order,
     native_compatibility_types_preserve_result_semantics,
     repeated_project_facts_intern_complete_facts,
     unannotated_types_require_complete_nested_evidence,
@@ -79,6 +79,11 @@ fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_hold
         CompactQueryAnalysisTestCase {
             description: "interleaved query templates preserve request order",
             run: interleaved_query_templates_preserve_template_order,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "larger later queries keep request order",
+            run: larger_later_queries_keep_request_order,
             expected_success: true,
         },
     ];
