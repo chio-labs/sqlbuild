@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.126.6](https://github.com/chio-labs/sqlbuild/compare/v0.126.5...v0.126.6) (2026-09-30)
+
+
+### Bug Fixes
+
+* **cli:** return native allocator memory within 10 ms by default ([#890](https://github.com/chio-labs/sqlbuild/issues/890)) ([e60652b](https://github.com/chio-labs/sqlbuild/commit/e60652b3b90fab6ff7aba0d172b71a1977d90440))
+
+
+### Performance Improvements
+
+* **compile:** close the fresh compile gap with ordered native scheduling and mimalloc ([#889](https://github.com/chio-labs/sqlbuild/issues/889)) ([eb9af35](https://github.com/chio-labs/sqlbuild/commit/eb9af359669bd0b7cd9415dea43c86805b5bae65))
+* **compile:** reuse per-file facts on warm compiles ([#886](https://github.com/chio-labs/sqlbuild/issues/886)) ([47831f8](https://github.com/chio-labs/sqlbuild/commit/47831f87465d52737ea49a1c22143e3d3ff056f5))
+
 ## [0.126.5](https://github.com/chio-labs/sqlbuild/compare/v0.126.4...v0.126.5) (2026-09-29)
 
 
