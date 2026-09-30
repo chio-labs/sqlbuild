@@ -129,6 +129,26 @@ def write_sqlbuild_defer_target_models(*, project_dir: Path) -> None:
     )
 
 
+def declare_missing_origin_requiring_confirmation(*, project_dir: Path) -> None:
+    """Give local_only a migrate_from origin that was never built, under require_confirmation."""
+
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            'adapter = "duckdb"\n', 'adapter = "duckdb"\ndefault_target = "main"\n'
+        )
+        + '\n[targets.main]\nschema = "main"\nmissing_migration_origin = "require_confirmation"\n',
+        encoding="utf-8",
+    )
+    model_path: Path = project_dir / "models" / "local_only.sql"
+    model_path.write_text(
+        model_path.read_text(encoding="utf-8").replace(
+            "MODEL (\n", "MODEL (\n  materialized table,\n  migrate_from retired_local_orders,\n", 1
+        ),
+        encoding="utf-8",
+    )
+
+
 def load_json_stdout(stdout: str) -> dict[str, object]:
     """Load JSON command output."""
 

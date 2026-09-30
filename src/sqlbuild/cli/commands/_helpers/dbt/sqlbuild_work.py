@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_planning.plan_policies import (
+    enforce_migration_plan_policies,
+)
 from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
     enforce_retention_decrease_policy,
 )
@@ -50,6 +53,12 @@ def execute_sqlbuild_build_work(
     adapter_name: str = context.adapter_name
     output_stream: TextIO = context.output_stream
     use_color: bool = context.use_color
+    enforce_migration_plan_policies(
+        plan=plan_output,
+        allow_missing_migration_origin=False,
+        input_stream=sys.stdin,
+        output_stream=output_stream,
+    )
     enforce_retention_decrease_policy(
         plan=plan_output,
         allow_retention_decrease=False,

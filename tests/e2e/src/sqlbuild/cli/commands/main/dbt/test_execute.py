@@ -11,9 +11,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtExecutionCliTestCase,
     DbtExecutionFailureCliTestCase,
     DbtExecutionQueryAssertion,
+    DbtMissingOriginE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     break_dbt_interop_fact_orders_model,
+    declare_missing_origin_requiring_confirmation,
     load_json_stdout,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
@@ -541,3 +543,36 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
     relation_name: str
     for relation_name in test_case.expected_absent_relations:
         assert not table_exists(db_path=db_path, table_name=relation_name), relation_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtMissingOriginE2ETestCase(
+            description="dbt build refuses a missing origin that needs confirmation",
+            command=("dbt", "build", "--select", "tag:sqb_only"),
+            expected_output="--allow-missing-migration-origin",
+        ),
+        DbtMissingOriginE2ETestCase(
+            description="dbt run refuses a missing origin that needs confirmation",
+            command=("dbt", "run", "--select", "local_only"),
+            expected_output="--allow-missing-migration-origin",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_origin_requiring_confirmation_when_running_dbt_then_refuses(
+    test_case: DbtMissingOriginE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    declare_missing_origin_requiring_confirmation(project_dir=project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir, input_text=""
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert test_case.expected_output in result.stdout + result.stderr
+    assert not table_exists(db_path=project_dir / "dbt_interop.duckdb", table_name="local_only")

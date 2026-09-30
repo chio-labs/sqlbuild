@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import TextIO
 
 from sqlbuild.cli.commands._helpers.build_planning.confirmation import confirm_typed_action
 from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
@@ -44,10 +45,11 @@ def enforce_build_plan_policies(
 ) -> None:
     """Apply migration, execution-limit, and storage safety gates in their required order."""
 
-    _enforce_model_migration_policy(plan=plan)
-    _enforce_column_migration_policy(plan=plan)
-    _confirm_missing_origins(
-        plan=plan, allow_missing_migration_origin=request.allow_missing_migration_origin
+    enforce_migration_plan_policies(
+        plan=plan,
+        allow_missing_migration_origin=request.allow_missing_migration_origin,
+        input_stream=sys.stdin,
+        output_stream=sys.stdout,
     )
     _enforce_old_name_policy(plan=plan)
     enforce_model_execution_limit(
@@ -73,6 +75,25 @@ def enforce_build_plan_policies(
         allow_retention_decrease=request.allow_retention_decrease,
         input_stream=sys.stdin,
         output_stream=sys.stdout,
+    )
+
+
+def enforce_migration_plan_policies(
+    *,
+    plan: PlanOutput,
+    allow_missing_migration_origin: bool,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> None:
+    """Refuse blocked model and column migrations, then confirm building past missing origins."""
+
+    _enforce_model_migration_policy(plan=plan)
+    _enforce_column_migration_policy(plan=plan)
+    _confirm_missing_origins(
+        plan=plan,
+        allow_missing_migration_origin=allow_missing_migration_origin,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
 
 
@@ -142,7 +163,13 @@ def _enforce_column_migration_policy(*, plan: PlanOutput) -> None:
     )
 
 
-def _confirm_missing_origins(*, plan: PlanOutput, allow_missing_migration_origin: bool) -> None:
+def _confirm_missing_origins(
+    *,
+    plan: PlanOutput,
+    allow_missing_migration_origin: bool,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> None:
     """Confirm before building past declared migrations whose origin is missing."""
 
     names: tuple[str, ...] = tuple(
@@ -168,8 +195,8 @@ def _confirm_missing_origins(*, plan: PlanOutput, allow_missing_migration_origin
             if len(names) == 1
             else f"build {len(names)} models without their migrations"
         ),
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
+        input_stream=input_stream,
+        output_stream=output_stream,
         code="M102",
     )
 

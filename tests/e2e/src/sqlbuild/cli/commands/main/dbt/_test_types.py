@@ -107,3 +107,10 @@ class DbtAutoInitE2ETestCase:
 class DbtCliFlagAmbiguityE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtMissingOriginE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_output: str
