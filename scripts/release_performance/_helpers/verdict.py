@@ -21,10 +21,10 @@ from scripts.release_performance.models import (
 
 
 def metric_verdicts(*, comparison: CommandComparison) -> tuple[MetricVerdict, ...]:
-    """Compare median wall time, CPU time and peak RSS of one command."""
+    """Compare median wall and CPU time and worst-run peak RSS of one command."""
 
-    baseline: CommandSample = median_sample(samples=comparison.baseline)
-    candidate: CommandSample = median_sample(samples=comparison.candidate)
+    baseline: CommandSample = summary_sample(samples=comparison.baseline)
+    candidate: CommandSample = summary_sample(samples=comparison.candidate)
     return (
         _verdict(
             command=comparison.name,
@@ -72,13 +72,17 @@ def all_verdicts(*, commands: tuple[CommandComparison, ...]) -> tuple[MetricVerd
     return tuple(verdicts)
 
 
-def median_sample(*, samples: tuple[CommandSample, ...]) -> CommandSample:
-    """Return the per-metric median of samples."""
+def summary_sample(*, samples: tuple[CommandSample, ...]) -> CommandSample:
+    """Return median wall and CPU time and the worst peak RSS of samples.
+
+    Peak RSS depends on whether concurrent phases overlap, so it lands on one of a few levels
+    run to run; the worst run is stable where a median flips between levels.
+    """
 
     return CommandSample(
         wall_seconds=statistics.median(sample.wall_seconds for sample in samples),
         cpu_seconds=statistics.median(sample.cpu_seconds for sample in samples),
-        peak_rss_bytes=int(statistics.median(sample.peak_rss_bytes for sample in samples)),
+        peak_rss_bytes=max(sample.peak_rss_bytes for sample in samples),
     )
 
 

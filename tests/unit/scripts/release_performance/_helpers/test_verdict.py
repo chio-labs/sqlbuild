@@ -64,13 +64,43 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
             expected_regressed=(False, True, False),
         ),
         MetricVerdictTestCase(
-            description="one slow outlier does not move the median",
+            description="one slow outlier does not move the median time",
             comparison=comparison(
                 name="build (empty warehouse)",
                 baseline=((60.0, 60.0, 700),) * 3,
-                candidate=((60.0, 60.0, 700), (95.0, 95.0, 1_400), (61.0, 61.0, 710)),
+                candidate=((60.0, 60.0, 700), (95.0, 95.0, 705), (61.0, 61.0, 710)),
             ),
             expected_regressed=(False, False, False),
+        ),
+        MetricVerdictTestCase(
+            description="peak RSS landing on the high level more often passes on the worst run",
+            comparison=comparison(
+                name="compile (no cache)",
+                baseline=(
+                    (10.0, 19.0, 640),
+                    (10.0, 19.0, 860),
+                    (10.0, 19.0, 640),
+                    (10.0, 19.0, 640),
+                    (10.0, 19.0, 890),
+                ),
+                candidate=(
+                    (10.0, 19.0, 850),
+                    (10.0, 19.0, 860),
+                    (10.0, 19.0, 630),
+                    (10.0, 19.0, 855),
+                    (10.0, 19.0, 868),
+                ),
+            ),
+            expected_regressed=(False, False, False),
+        ),
+        MetricVerdictTestCase(
+            description="a larger worst-run peak RSS fails",
+            comparison=comparison(
+                name="compile (no cache)",
+                baseline=((10.0, 19.0, 640), (10.0, 19.0, 860), (10.0, 19.0, 640)),
+                candidate=((10.0, 19.0, 900), (10.0, 19.0, 1_120), (10.0, 19.0, 910)),
+            ),
+            expected_regressed=(False, False, True),
         ),
     ),
     ids=lambda case: case.description,

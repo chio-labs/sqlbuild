@@ -92,8 +92,10 @@ pull request also compares the candidate with the previous published release on 
 `scripts/compare_release_performance.py` installs the candidate wheel and the baseline from PyPI
 into separate Python 3.12 environments, generates the inspection and build benchmarks above once,
 and gives each version its own copy with compile, lineage and scope caches warmed by that version.
-It then runs each command alternately for baseline and candidate, three times each, and compares
-the medians of wall time, CPU time (user+sys) and peak RSS:
+It then runs each command alternately for baseline and candidate, five times each, and compares
+the medians of wall time and CPU time (user+sys) and the worst-run peak RSS. Peak RSS depends on
+whether concurrent phases overlap, so it lands on one of a few levels from run to run; a median
+flips between those levels, while the worst run is stable:
 
 - warm and uncached `sqb compile --json`, `sqb plan --json`, `sqb dag --json` and
   `sqb scope --json` on the 3,000-model inspection benchmark;
@@ -101,7 +103,7 @@ the medians of wall time, CPU time (user+sys) and peak RSS:
   `shared_orders_rollup.amount`;
 - `sqb build` of the 1,000-model build benchmark from an empty warehouse, restored before each run.
 
-A command fails when its candidate median exceeds the baseline by more than 25% and by more than
+A command fails when a candidate value exceeds the baseline by more than 25% and by more than
 0.5 s (wall and CPU) or 32 MiB (peak RSS); the limits live in
 `scripts/release_performance/constants.py`. The baseline defaults to the highest version below
 the candidate that is installable from PyPI, or release-tagged but not yet on PyPI; yanked releases

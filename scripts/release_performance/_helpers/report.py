@@ -19,7 +19,7 @@ _MIB: int = 1024 * 1024
 
 
 def comparison_markdown(*, comparison: ReleaseComparison) -> str:
-    """Summarize per-command medians, ratios and the overall verdict as Markdown."""
+    """Summarize per-command medians, worst-run peak RSS, ratios and the verdict as Markdown."""
 
     lines: list[str] = [
         f"### Release performance: {comparison.candidate_version} (candidate) vs "
@@ -28,7 +28,8 @@ def comparison_markdown(*, comparison: ReleaseComparison) -> str:
         f"Same runner: {comparison.runner.cpu_model}, {comparison.runner.cpu_count} CPUs; "
         f"load average {_load(comparison.runner.load_average_before)} before and "
         f"{_load(comparison.runner.load_average_after)} after. "
-        f"{comparison.runs} interleaved runs per version; medians shown.",
+        f"{comparison.runs} interleaved runs per version; wall and CPU are medians, "
+        "peak RSS is the worst run.",
         "",
         f"Limits: wall {_percent(MAX_WALL_RATIO)} (ignored under "
         f"{MIN_WALL_REGRESSION_SECONDS:g} s), CPU {_percent(MAX_CPU_RATIO)} (ignored under "
