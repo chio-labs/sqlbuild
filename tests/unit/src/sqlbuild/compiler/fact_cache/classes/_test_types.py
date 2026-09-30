@@ -71,3 +71,4 @@ class FactCacheParameterLimitTestCase:
     description: str
     max_bound_parameters: int
     fact_count: int
+    expected_stored_count: int

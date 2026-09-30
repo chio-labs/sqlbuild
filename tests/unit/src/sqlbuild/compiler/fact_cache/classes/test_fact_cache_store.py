@@ -280,7 +280,10 @@ def test_given_writer_error_when_publishing_then_only_corruption_discards_rows_a
     "test_case",
     (
         FactCacheParameterLimitTestCase(
-            description="sqlite_before_3_32", max_bound_parameters=999, fact_count=600
+            description="sqlite_before_3_32",
+            max_bound_parameters=999,
+            fact_count=600,
+            expected_stored_count=600,
         ),
     ),
     ids=lambda case: case.description,
@@ -302,7 +305,9 @@ def test_given_sqlite_parameter_limit_when_publishing_many_facts_then_all_are_st
 
     publish_facts(tmp_path, slots=slots)
 
-    assert stored_fact_slots(tmp_path) == list(slots)
+    stored: list[str] = stored_fact_slots(tmp_path)
+    assert len(stored) == test_case.expected_stored_count
+    assert stored == list(slots)
 
 
 if __name__ == "__main__":
