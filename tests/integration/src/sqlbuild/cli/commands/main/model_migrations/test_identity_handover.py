@@ -153,6 +153,8 @@ def test_given_renamed_chain_with_full_replay_when_building_then_migrated_histor
                 "├── customer_orders_enriched  migrate  main.orders_enriched -> "
                 "main.customer_orders_enriched\n    ├── transfer  recreate (view)\n"
                 "    ├── discovery  automatic\n"
+                "    ├── hint  matched by unchanged definition; sqb rename model:<old> <new> "
+                "also rewrites references and adds migrate_from when discovery cannot match\n"
                 "    └── old name  main.orders_enriched\n"
                 "        └── left for janitor  old_name_view false"
             ),

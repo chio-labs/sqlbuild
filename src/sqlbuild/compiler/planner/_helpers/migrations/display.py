@@ -11,6 +11,7 @@ from sqlbuild.compiler.migrations.types import (
     MigrationDiscovery,
     OldNameViewAction,
 )
+from sqlbuild.compiler.planner.constants import MANUAL_RENAME_HINT
 from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanEntry,
     ModelMigrationPlanEntry,
@@ -240,6 +241,8 @@ def _migration_lines(
         )
     if entry.discovery != MigrationDiscovery.MANUAL:
         rows.append(_property_row(label="discovery", value=entry.discovery.value, style=style))
+    if entry.discovery == MigrationDiscovery.AUTOMATIC and entry.completed_at is None:
+        rows.append(_property_row(label="hint", value=MANUAL_RENAME_HINT, style=style))
     if entry.completed_at is not None:
         rows.append(
             _property_row(

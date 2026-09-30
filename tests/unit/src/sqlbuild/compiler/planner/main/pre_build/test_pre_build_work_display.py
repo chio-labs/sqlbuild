@@ -138,7 +138,9 @@ def test_given_migration_decision_when_formatting_then_applies_colour_roles(
                 "└── daily_revenue  migrate  prod.revenue -> prod.daily_revenue\n"
                 "    ├── compatibility  compatible\n"
                 "    ├── transfer  physical copy, promote by transactional rename\n"
-                "    └── discovery  automatic"
+                "    ├── discovery  automatic\n"
+                "    └── hint  matched by unchanged definition; sqb rename model:<old> <new> "
+                "also rewrites references and adds migrate_from when discovery cannot match"
             ),
         ),
     ),
