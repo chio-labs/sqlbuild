@@ -118,6 +118,7 @@ from sqlbuild.adapters.snowflake._helpers.show_metadata import (
     is_missing_object_error,
     listed_relation_from_show_table,
     listed_relation_from_show_view,
+    show_like_pattern,
 )
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.snowflake.constants import (
@@ -128,6 +129,7 @@ from sqlbuild.adapters.snowflake.constants import (
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
     SECONDARY_ROLES_ALL,
     SECONDARY_ROLES_NONE,
+    SHOW_LIKE_ESCAPE_CHARACTER,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
     TRUE_METADATA_VALUE,
@@ -1745,6 +1747,40 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
+        """Look one relation up with SHOW, which needs no running warehouse."""
+
+        if schema is None or SHOW_LIKE_ESCAPE_CHARACTER in name:
+            return self._information_schema_relation_exists(
+                connection=connection, database=database, schema=schema, name=name
+            )
+        show_database: str = self._show_database(
+            connection=connection, database=database, schema=schema
+        )
+        scope: str = self._show_schema_scope(
+            connection=connection, database=database, schema=schema
+        )
+        stored_name: str = self._information_schema_identifier(name)
+        pattern: str = show_like_pattern(stored_name)
+        kind: str
+        for kind in ("TABLES", "VIEWS"):
+            rows: list[dict[str, object]] = self._fetch_schema_show_rows(
+                connection=connection,
+                query=f"SHOW TERSE {kind} LIKE '{pattern}' IN SCHEMA {scope}",
+                show_database=show_database,
+                schema=schema,
+            )
+            if any(str(row.get("name")) == stored_name for row in rows):
+                return True
+        return False
+
+    def _information_schema_relation_exists(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
         clauses: list[str] = ["table_name = %s"]
         params: list[str] = [self._information_schema_identifier(name)]
         if schema is not None:
@@ -2177,6 +2213,47 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def get_columns(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> tuple[ColumnInfo, ...]:
+        """Read one relation's columns with SHOW COLUMNS, which needs no running warehouse."""
+
+        if schema is None:
+            return self._information_schema_columns(
+                connection=connection, database=database, schema=schema, name=name
+            )
+        show_database: str = self._show_database(
+            connection=connection, database=database, schema=schema
+        )
+        relation: str = ".".join(
+            self.render_identifier(part) for part in (show_database, schema, name)
+        )
+        kind: str
+        for kind in ("TABLE", "VIEW"):
+            try:
+                rows: list[dict[str, object]] = self._fetch_show_rows(
+                    connection=connection, query=f"SHOW COLUMNS IN {kind} {relation}"
+                )
+            except Exception as error:
+                if not is_missing_object_error(error):
+                    raise
+                continue
+            return tuple(
+                ColumnInfo(
+                    name=str(row["column_name"]).lower(),
+                    type=show_columns_type(row["data_type"]),
+                )
+                for row in rows
+                if str(row.get("kind") or _SHOW_COLUMN_KIND).upper() in _SHOW_COLUMN_KINDS
+            )
+        _ = self._schema_exists(connection=connection, show_database=show_database, schema=schema)
+        return ()
+
+    def _information_schema_columns(
         self,
         *,
         connection: _SnowflakeConnection,

@@ -169,3 +169,38 @@ class NestedConcurrencyTestCase:
     statement_latency_seconds: float
     expected_max_concurrent: int
     expected_column_reads: int
+
+
+@dataclass(frozen=True)
+class SingleRelationLookupTestCase:
+    """One build-path existence and column lookup answered by SHOW."""
+
+    description: str
+    database: str | None
+    schema: str
+    name: str
+    expected_exists: bool
+    expected_column_names: tuple[str, ...]
+    expected_query_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SingleRelationErrorTestCase:
+    """A build-path lookup whose database does not exist."""
+
+    description: str
+    database: str
+    schema: str
+    name: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ShowColumnsEquivalenceTestCase:
+    """One relation whose SHOW COLUMNS read must equal its INFORMATION_SCHEMA read."""
+
+    description: str
+    database: str
+    schema: str
+    name: str
+    expected_column_count: int

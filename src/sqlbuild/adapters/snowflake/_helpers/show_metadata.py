@@ -63,6 +63,12 @@ def is_missing_object_error(error: Exception) -> bool:
     )
 
 
+def show_like_pattern(stored_name: str) -> str:
+    """Quote a stored name as a SHOW LIKE literal; ``_`` matches neighbours, so compare exactly."""
+
+    return stored_name.replace("'", "''")
+
+
 def _listed_relation(
     *,
     row: Mapping[str, object],

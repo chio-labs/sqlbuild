@@ -22,3 +22,4 @@ TEXT_TYPE_NAMES: frozenset[str] = frozenset({"TEXT", "VARCHAR", "CHAR", "CHARACT
 TEXT_TYPE_NAME: str = "TEXT"
 UNBOUNDED_TEXT_TYPE_NAMES: frozenset[str] = frozenset({"STRING", "TEXT", "VARCHAR"})
 TRUE_METADATA_VALUE: str = "YES"
+SHOW_LIKE_ESCAPE_CHARACTER: str = "\\"
