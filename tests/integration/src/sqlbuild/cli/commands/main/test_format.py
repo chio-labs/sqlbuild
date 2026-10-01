@@ -24,6 +24,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FromValuesFormatIntegrationTestCase,
     LayoutOnlyFormatIntegrationTestCase,
     LeadingCteCommentFormatIntegrationTestCase,
+    LineWidthWrapIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
     TypedNullFormatIntegrationTestCase,
 )
@@ -1174,3 +1175,85 @@ def test_given_select_all_and_implicit_aliases_when_formatting_then_only_layout_
 
     assert (format_exit, check_exit) == (0, 0), output.out + output.err
     assert model.read_text(encoding="utf-8").endswith(test_case.expected_body)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LineWidthWrapIntegrationTestCase(
+            description="long audit list and long reference arguments wrap at the project width",
+            line_width=60,
+            authored_sql=(
+                "MODEL (\n"
+                '  description "Order totals",\n'
+                "  materialized table,\n"
+                "  columns (\n"
+                "    order_id (audits [not_null, unique, accepted_values (values [1, 2, 3])]),\n"
+                "  ),\n"
+                ");\n\n"
+                "select o.order_id, coalesce(o.amount, o.fallback_amount, 0) + o.tax as total "
+                'from __ref("orders_with_a_long_name") o where o.amount > 0 and o.order_id > 0 '
+                "and o.tax >= 0 and o.fallback_amount is null\n"
+            ),
+            expected_sql=(
+                "MODEL (\n"
+                '  description "Order totals",\n'
+                "  materialized table,\n"
+                "  columns (\n"
+                "    order_id (audits [\n"
+                "      not_null,\n"
+                "      unique,\n"
+                "      accepted_values (values [1, 2, 3]),\n"
+                "    ]),\n"
+                "  ),\n"
+                ");\n\n"
+                "SELECT\n"
+                "  o.order_id,\n"
+                "  COALESCE(o.amount, o.fallback_amount, 0) + o.tax AS total\n"
+                'FROM __ref("orders_with_a_long_name") o\n'
+                "WHERE\n"
+                "  o.amount > 0\n"
+                "  AND o.order_id > 0\n"
+                "  AND o.tax >= 0\n"
+                "  AND o.fallback_amount IS NULL\n"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_line_width_when_formatting_then_long_lines_wrap_and_project_builds(
+    test_case: LineWidthWrapIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "prod"\n\n'
+        f"[format]\nline_width = {test_case.line_width}\n\n"
+        '[connections.local]\ndatabase = "warehouse.duckdb"\n\n'
+        '[targets.prod]\nconnection = "local"\nschema = "prod"\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders_with_a_long_name.sql").write_text(
+        'MODEL (description "Orders", materialized table);\n\n'
+        "SELECT\n  1 AS order_id,\n  5 AS amount,\n  NULL AS fallback_amount,\n  1 AS tax\n",
+        encoding="utf-8",
+    )
+    model: Path = models / "order_totals.sql"
+    model.write_text(test_case.authored_sql, encoding="utf-8")
+
+    unformatted_check: int = main(
+        ["--project-dir", str(tmp_path), "--no-color", "format", "--check"]
+    )
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    formatted_check: int = main(["--project-dir", str(tmp_path), "--no-color", "format", "--check"])
+    build_exit, build_output = run_build(project_dir=tmp_path, flags=(), capsys=capsys)
+
+    assert (unformatted_check, format_exit, formatted_check, build_exit) == (1, 0, 0, 0), (
+        build_output
+    )
+    assert model.read_text(encoding="utf-8") == test_case.expected_sql
+    assert query_duckdb_rows(
+        db_path=tmp_path / "warehouse.duckdb", sql="SELECT order_id, total FROM prod.order_totals"
+    ) == ((1, 6),)

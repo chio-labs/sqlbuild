@@ -46,6 +46,9 @@ fn diagnostic_values(response: &str) -> Result<Vec<Value>, String> {
         .ok_or_else(|| "diagnostics should be an array".to_string())
 }
 
+/// A narrow width so that wrapping is exercised on most corpus queries.
+const CORPUS_LINE_WIDTH: usize = 40;
+
 /// Format every corpus query of one dialect and return the formatted and refused counts.
 pub(crate) fn check_dialect_corpus(
     corpus: &[Value],
@@ -54,7 +57,7 @@ pub(crate) fn check_dialect_corpus(
     let mut outcomes: Vec<bool> = Vec::new();
     for entry in corpus.iter().filter(|entry| entry["dialect"] == dialect) {
         let sql = entry["sql"].as_str().unwrap_or_default();
-        let response = format_once(sql, dialect)?;
+        let response = format_once(sql, dialect, None)?;
         let formatted = response["formatted"] == true;
         let actual = response
             .get("sql")
@@ -65,20 +68,29 @@ pub(crate) fn check_dialect_corpus(
         assert_eq!(actual, expected, "{dialect}: {sql}");
         let layouts = [&entry["formatted"], &entry["previously_formatted"]];
         for stable in layouts.iter().filter_map(|layout| layout.as_str()) {
-            let again = format_once(stable, dialect)?;
+            let again = format_once(stable, dialect, None)?;
             assert_eq!(again["sql"], stable, "{dialect} layout drifted: {stable}");
             assert_eq!(
                 again["changed"], false,
                 "{dialect} layout drifted: {stable}"
             );
         }
+        let wrapped = format_once(sql, dialect, Some(CORPUS_LINE_WIDTH))?;
+        assert_eq!(wrapped["formatted"], formatted, "{dialect} wrapped: {sql}");
+        let wrapped_sql = wrapped["sql"].as_str().unwrap_or_default();
+        let rewrapped = format_once(wrapped_sql, dialect, Some(CORPUS_LINE_WIDTH))?;
+        assert_eq!(
+            rewrapped["sql"], wrapped_sql,
+            "{dialect} wrapping drifted: {sql}"
+        );
         outcomes.push(formatted);
     }
     let formatted = outcomes.iter().filter(|outcome| **outcome).count();
     Ok((formatted, outcomes.len() - formatted))
 }
 
-fn format_once(sql: &str, dialect: &str) -> Result<Value, String> {
-    let response = format_json(&json!({"version": 1, "sql": sql, "dialect": dialect}).to_string())?;
+fn format_once(sql: &str, dialect: &str, line_width: Option<usize>) -> Result<Value, String> {
+    let request = json!({"version": 1, "sql": sql, "dialect": dialect, "line_width": line_width});
+    let response = format_json(&request.to_string())?;
     serde_json::from_str(&response).map_err(|error| error.to_string())
 }

@@ -194,3 +194,13 @@ class DollarQuotePreparationTestCase:
     dialect: str
     literal: str
     expected_sites: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class HeaderAuditWrapTestCase:
+    """A MODEL header and its expected audit-list layout at one line width."""
+
+    description: str
+    line_width: int
+    header: str
+    expected_header: str

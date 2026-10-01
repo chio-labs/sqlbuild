@@ -239,6 +239,16 @@ class LayoutOnlyFormatIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class LineWidthWrapIntegrationTestCase:
+    """One project line width and the wrapped model file formatting must produce."""
+
+    description: str
+    line_width: int
+    authored_sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class DollarQuoteFormatIntegrationTestCase:
     """One dollar-quoted literal whose quote state must not hide a later intrinsic call."""
 

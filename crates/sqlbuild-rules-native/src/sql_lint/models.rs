@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::tokens::Span;
 use serde::{Deserialize, Serialize};
@@ -125,6 +125,10 @@ pub(crate) struct FormatRequest {
     pub dialect: String,
     #[serde(default)]
     pub max_function_call_depth: Option<usize>,
+    #[serde(default)]
+    pub line_width: Option<usize>,
+    #[serde(default)]
+    pub token_widths: HashMap<String, usize>,
 }
 
 #[derive(Debug, Serialize)]

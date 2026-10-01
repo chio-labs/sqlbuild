@@ -31,7 +31,7 @@ class _PreparedBody:
     start: int
     end: int
     trailing: str
-    cache_key: tuple[str, str]
+    cache_key: tuple[str, str, str]
     interpolation_sites: tuple[InterpolationSite, ...]
 
 
@@ -54,7 +54,7 @@ def format_native_sql_bodies(
 
     prepared_by_path: dict[Path, tuple[_PreparedBody, ...]] = {}
     faults: list[LintViolation] = []
-    requests_by_key: dict[tuple[str, str], dict[str, object]] = {}
+    requests_by_key: dict[tuple[str, str, str], dict[str, object]] = {}
     for file_path, contents in sorted(files.items()):
         headers: tuple[HeaderSpan, ...] = scan_headers(contents=contents)
         body_ranges: tuple[tuple[int, int], ...] = lint_body_ranges(
@@ -71,7 +71,12 @@ def format_native_sql_bodies(
             neutralized, sites = neutralize_interpolation(
                 body=core, dialect=config.dialect, for_formatting=True
             )
-            cache_key: tuple[str, str] = (neutralized, config.dialect)
+            token_widths: dict[str, int] = _sentinel_widths(sites=sites)
+            cache_key: tuple[str, str, str] = (
+                neutralized,
+                config.dialect,
+                repr(sorted(token_widths.items())),
+            )
             requests_by_key.setdefault(
                 cache_key,
                 {
@@ -79,6 +84,8 @@ def format_native_sql_bodies(
                     "sql": neutralized,
                     "dialect": config.dialect,
                     "max_function_call_depth": POLYGLOT_MAX_FUNCTION_CALL_DEPTH,
+                    "line_width": config.line_width,
+                    "token_widths": token_widths,
                 },
             )
             prepared_bodies.append(
@@ -91,7 +98,7 @@ def format_native_sql_bodies(
                 )
             )
         prepared_by_path[file_path] = tuple(prepared_bodies)
-    response_cache: dict[tuple[str, str], dict[str, Any]] = _format_responses(
+    response_cache: dict[tuple[str, str, str], dict[str, Any]] = _format_responses(
         requests_by_key=requests_by_key
     )
     formatted_files: dict[Path, str] = {}
@@ -145,6 +152,21 @@ def format_native_sql_bodies(
     return formatted_files, faults
 
 
+def _sentinel_widths(*, sites: tuple[InterpolationSite, ...]) -> dict[str, int]:
+    """Map each sentinel to the printed width of the SQLBuild syntax it stands in for."""
+
+    return {
+        site.sentinel.upper(): _printed_width(text=site.original_text)
+        for site in sites
+        if len(site.original_text) != len(site.sentinel) or LINE_FEED in site.original_text
+    }
+
+
+def _printed_width(*, text: str) -> int:
+    lines: list[str] = text.splitlines() or [""]
+    return max(map(len, lines))
+
+
 def _format_fault(*, file_path: Path, contents: str, start: int, reason: str) -> LintViolation:
     return LintViolation(
         file_path=file_path,
@@ -162,11 +184,11 @@ def _format_fault(*, file_path: Path, contents: str, start: int, reason: str) ->
 
 
 def _format_responses(
-    *, requests_by_key: dict[tuple[str, str], dict[str, object]]
-) -> dict[tuple[str, str], dict[str, Any]]:
+    *, requests_by_key: dict[tuple[str, str, str], dict[str, object]]
+) -> dict[tuple[str, str, str], dict[str, Any]]:
     if not requests_by_key:
         return {}
-    ordered_requests: tuple[tuple[tuple[str, str], dict[str, object]], ...] = tuple(
+    ordered_requests: tuple[tuple[tuple[str, str, str], dict[str, object]], ...] = tuple(
         sorted(requests_by_key.items())
     )
     try:
@@ -183,7 +205,7 @@ def _format_responses(
         raise NativeLintError(str(error)) from error
     if not isinstance(decoded, list) or len(decoded) != len(ordered_requests):
         raise NativeLintError("native formatter returned an invalid batch response")
-    responses: dict[tuple[str, str], dict[str, Any]] = {}
+    responses: dict[tuple[str, str, str], dict[str, Any]] = {}
     for (cache_key, _), raw_response in zip(ordered_requests, decoded, strict=True):
         if not isinstance(raw_response, dict):
             raise NativeLintError("native formatter returned a non-object response")

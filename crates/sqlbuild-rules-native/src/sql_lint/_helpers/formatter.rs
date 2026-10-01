@@ -6,6 +6,7 @@ use polyglot_sql::{ComplexityGuardOptions, Dialect, DialectType, ParseOptions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::sql_lint::_helpers::formatter_syntax::{cte_macro_indices, protect_syntax};
+use crate::sql_lint::_helpers::line_wrap::{WrapOptions, wrap_lines};
 use crate::sql_lint::_helpers::token_layout::{
     AuthoredSql, comments_in, neutralize_comments, print_authored_tokens, verify_token_invariant,
 };
@@ -64,8 +65,16 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
             ..Default::default()
         }),
     };
-    let (formatted, oracle) = format_layout(&original, &dialect, &parse_options)?;
-    if relayout(&formatted, &oracle, &dialect)? != formatted {
+    let wrap = request.line_width.map(|line_width| WrapOptions {
+        line_width,
+        token_widths: &request.token_widths,
+    });
+    let layout = Layout {
+        dialect: &dialect,
+        wrap: wrap.as_ref(),
+    };
+    let (formatted, oracle) = format_layout(&original, &layout, &parse_options)?;
+    if relayout(&formatted, &oracle, &layout)? != formatted {
         return Err(NOT_IDEMPOTENT_FAILURE.to_string());
     }
     let changed = formatted != original;
@@ -81,9 +90,10 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
 /// Print the tokens of `sql` with parse-tree whitespace; return the output and its oracle.
 fn format_layout(
     sql: &str,
-    dialect: &Dialect,
+    layout: &Layout<'_>,
     parse_options: &ParseOptions,
 ) -> Result<(String, String), String> {
+    let dialect = layout.dialect;
     let tokens = dialect
         .tokenize(sql)
         .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
@@ -103,14 +113,15 @@ fn format_layout(
         tokens: &tokens,
         comments: &comments,
     };
-    let printed = print_authored_tokens(&authored, &oracle, dialect)?;
+    let printed = layout.print(&authored, &oracle)?;
     verify_token_invariant(sql, &printed, dialect)?;
     Ok((printed, oracle))
 }
 
 /// Re-print formatted SQL against its oracle; unchanged tokens imply an unchanged layout.
-fn relayout(formatted: &str, oracle: &str, dialect: &Dialect) -> Result<String, String> {
-    let tokens = dialect
+fn relayout(formatted: &str, oracle: &str, layout: &Layout<'_>) -> Result<String, String> {
+    let tokens = layout
+        .dialect
         .tokenize(formatted)
         .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
     if tokens.is_empty() {
@@ -122,7 +133,23 @@ fn relayout(formatted: &str, oracle: &str, dialect: &Dialect) -> Result<String, 
         tokens: &tokens,
         comments: &comments,
     };
-    print_authored_tokens(&authored, oracle, dialect)
+    layout.print(&authored, oracle)
+}
+
+/// The dialect and optional line wrapping every printed layout uses.
+struct Layout<'a> {
+    dialect: &'a Dialect,
+    wrap: Option<&'a WrapOptions<'a>>,
+}
+
+impl Layout<'_> {
+    fn print(&self, authored: &AuthoredSql<'_>, oracle: &str) -> Result<String, String> {
+        let printed = print_authored_tokens(authored, oracle, self.dialect)?;
+        match self.wrap {
+            Some(wrap) => wrap_lines(&printed, self.dialect, wrap),
+            None => Ok(printed),
+        }
+    }
 }
 
 /// Return the parse-tree layout of `neutral_sql`; only its whitespace is ever printed.

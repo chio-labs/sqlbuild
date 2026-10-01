@@ -79,6 +79,14 @@ pub(crate) struct DialectLintRuleTestCase {
     pub expected_reason: &'static str,
 }
 
+pub(crate) struct LineWrapTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub line_width: usize,
+    pub token_widths: &'static [(&'static str, usize)],
+    pub expected_sql: &'static str,
+}
+
 pub(crate) struct FormatCorpusTestCase {
     pub description: &'static str,
     pub dialect: &'static str,

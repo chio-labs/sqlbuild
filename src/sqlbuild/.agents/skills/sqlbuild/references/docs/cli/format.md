@@ -32,16 +32,32 @@ configured [Rules](../concepts/rules.md), which never mutate source.
 
 ## Line width and descriptions
 
-Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
-are normalized as spaces, while blank lines preserve paragraph boundaries. Configure the maximum
-physical line width in `sqlbuild_project.toml` (the default is `100`):
+Configure the maximum physical line width in `sqlbuild_project.toml` (the default is `100`):
 
 ```toml
 [format]
 line_width = 100
 ```
 
+Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
+are normalized as spaces, while blank lines preserve paragraph boundaries.
+
+SQL lines longer than the width are broken at the outermost structure first: before top-level
+`AND` and `OR` (never inside `BETWEEN ... AND`), then before arithmetic operators, then by putting
+the arguments of a function call, `IN` list, or array one per line. Inside `OVER (...)`,
+`PARTITION BY` and `ORDER BY` go on separate lines. Header `audits [...]` lists put each audit, and
+then each audit argument, on its own line. String literals, comments, and lines that carry a
+comment are never broken, so a line can stay longer than the width when nothing on it can be split.
+Lines within the width keep their layout. `sqb format --check` fails while a long line can still
+be shortened.
+
 ## What formatting preserves
+
+Formatting changes layout only: it prints the authored SQL tokens in their original order and
+changes only the whitespace between them and the letter case of unquoted keywords and built-in
+function names. It does not add `AS` to aliases or remove statement terminators or trailing commas.
+Every result is checked against the authored token stream and comment positions, and a body whose
+tokens would change is reported as `format-unsafe` instead of being written.
 
 Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
 lambda parameters, and supported SQL function spellings while applying canonical layout. SQLBuild
