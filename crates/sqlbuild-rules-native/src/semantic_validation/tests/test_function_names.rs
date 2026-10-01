@@ -72,6 +72,12 @@ fn given_unsupported_builtin_spelling_when_scanning_then_reports_dialect_spellin
             ],
         },
         UnsupportedFunctionTestCase {
+            description: "a call followed by AS NOT without MATERIALIZED is still checked",
+            dialect: DialectType::DuckDB,
+            sql: "SELECT STARTSWITH(product_name, 'a') AS not_featured FROM products",
+            expected_calls: &[("STARTSWITH", "STARTS_WITH")],
+        },
+        UnsupportedFunctionTestCase {
             description: "DuckDB STARTSWITH suggests the catalogue spelling",
             dialect: DialectType::DuckDB,
             sql: "SELECT STARTSWITH(product_name, 'a') FROM products",
@@ -146,6 +152,14 @@ fn given_supported_or_non_builtin_call_when_scanning_then_reports_nothing() {
             dialect: DialectType::Snowflake,
             sql: "WITH listed AS (SELECT 1 AS dow), day_of_week (dow) AS (SELECT 1), \
                   lcase(x) AS (SELECT 2) SELECT dow FROM day_of_week",
+            expected_calls: &[],
+        },
+        UnsupportedFunctionTestCase {
+            description: "materialized CTE column lists are not calls",
+            dialect: DialectType::DuckDB,
+            sql: "WITH day_of_week (d) AS MATERIALIZED (SELECT 1), \
+                  day_of_month (d) AS /* hint */ NOT -- keep\n MATERIALIZED (SELECT 2) \
+                  SELECT * FROM day_of_week",
             expected_calls: &[],
         },
         UnsupportedFunctionTestCase {
