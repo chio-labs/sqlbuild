@@ -56,6 +56,19 @@ Snowflake's function catalogue is partial and deliberately does not reject unkno
 Function signatures and overload coverage remain partial; compilation is not a replacement for
 executing SQL unit tests.
 
+Built-in function spellings are checked for Snowflake and DuckDB. The SQL parser treats alias
+spellings such as `STARTS_WITH` and `STARTSWITH` as one built-in, so a spelling the warehouse
+rejects would otherwise compile. SQLBuild compares each call's authored name, case-insensitively,
+with the dialect's accepted spellings and reports a blocking B101 error naming the dialect's
+spelling, for example `Unknown function 'STARTS_WITH' for dialect Snowflake; did you mean
+STARTSWITH?`. Snowflake's accepted spellings come from its function reference and include
+documented synonyms such as `SUBSTR` and `SUBSTRING`, `DATEDIFF` and `TIMESTAMPDIFF`, and
+`TRY_TO_DECIMAL` and `TRY_TO_NUMBER`. DuckDB's come from its function catalogue. A name is
+rejected only when the parser maps it to the same built-in as an accepted spelling, so project
+UDFs called through `__udf`, schema-qualified and method calls, quoted names, and unknown
+functions are not affected. There is no per-model suppression: use the suggested spelling, or
+schema-qualify a call to an external UDF that shares an alias name. Other dialects are not checked.
+
 Derived-table column aliases, UNPIVOT, and Snowflake GROUPING SETS are checked. DuckDB and Snowflake
 reject excess relation aliases; fewer aliases than output columns remain valid. Missing UNPIVOT
 input columns are errors.
@@ -158,7 +171,7 @@ the notice never reduces them to a count alone.
 | B002 | E201 | Unknown column |
 | B003 | E221 | Ambiguous column |
 | B004–B005 | E222–E223 | Reference/scope errors |
-| B101 | E202 | Unknown function |
+| B101 | E202 or SQLBuild | Unknown function, or a built-in spelling the dialect does not accept |
 | B102 | E203 or project declaration | Invalid function arity |
 | B210–B219 | E210–E219 | Proven native type/shape errors on enabled dialects |
 | B211–B218 | W210–W216 | Implicit conversions; blocking, fixed by an explicit `CAST` or comparison |
