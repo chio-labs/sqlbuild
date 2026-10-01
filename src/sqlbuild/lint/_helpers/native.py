@@ -49,6 +49,24 @@ _UNICODE_SURROGATE_END: int = 0xDFFF
 _HEXADECIMAL_CHARACTERS: frozenset[str] = frozenset("0123456789abcdefABCDEF")
 
 
+_AUDITS_KEY: re.Pattern[str] = re.compile(r"\baudits\s*\[")
+_OPENERS: dict[str, str] = {"(": ")", "[": "]"}
+_AUDIT_LIST_OPENER: str = "["
+_HEADER_ITEM_SEPARATOR: str = ","
+_AUDITS_KEYWORD: str = "audits"
+_AUDIT_WRAP_MAX_PASSES: int = 64
+
+
+@dataclass(frozen=True)
+class _Group:
+    """One bracket group inside a header audit list."""
+
+    open_index: int
+    close_index: int
+    depth: int
+    commas: tuple[int, ...]
+
+
 @dataclass(frozen=True)
 class _RelocationOutcome:
     """Result of relocating a leading comment into the model description."""
@@ -188,7 +206,21 @@ def format_native_headers(
         headers=relocated_headers,
         config=config,
     )
-    return wrapped, relocation.faults
+    audits_wrapped: str = _wrap_header_audits(
+        contents=wrapped,
+        headers=scan_headers(contents=wrapped),
+        line_width=config.line_width,
+    )
+    return audits_wrapped, relocation.faults
+
+
+def _header_values_or_unique(*, kind: str, header_text: str) -> object:
+    """Parse header values; an unparseable header compares unequal to every other result."""
+
+    try:
+        return _parse_header_values(kind=kind, header_text=header_text)
+    except ModelSqlParseError:
+        return object()
 
 
 def _lint_header_values(
@@ -703,3 +735,107 @@ def _inner_header_text(*, header_text: str) -> str:
     if open_index < 0 or close_index <= open_index:
         return ""
     return header_text[open_index + 1 : close_index]
+
+
+def _wrap_header_audits(*, contents: str, headers: tuple[HeaderSpan, ...], line_width: int) -> str:
+    """Split audit lists in header lines over `line_width`; keep only value-preserving rewrites."""
+
+    updated: str = contents
+    for header in reversed(headers):
+        header_text: str = updated[header.start : header.end]
+        wrapped: str = _wrap_header(header_text=header_text, line_width=line_width)
+        if wrapped == header_text:
+            continue
+        if _header_values_or_unique(kind=header.kind, header_text=wrapped) != (
+            _header_values_or_unique(kind=header.kind, header_text=header_text)
+        ):
+            continue
+        updated = updated[: header.start] + wrapped + updated[header.end :]
+    return updated
+
+
+def _wrap_header(*, header_text: str, line_width: int) -> str:
+    text: str = header_text
+    for _ in range(_AUDIT_WRAP_MAX_PASSES):
+        exploded: str | None = _explode_first_long_line(text=text, line_width=line_width)
+        if exploded is None:
+            return text
+        text = exploded
+    return text
+
+
+def _explode_first_long_line(*, text: str, line_width: int) -> str | None:
+    groups: tuple[_Group, ...] = _audit_groups(text=text)
+    line_start: int = 0
+    for line in text.split("\n"):
+        line_end: int = line_start + len(line)
+        if len(line) > line_width and _LINE_COMMENT_PREFIX not in line:
+            candidates: list[_Group] = [
+                group
+                for group in groups
+                if line_start <= group.open_index
+                and group.close_index < line_end
+                and group.close_index - line_start >= line_width
+                and text[group.open_index + 1 : group.close_index].strip()
+            ]
+            if candidates:
+                chosen: _Group = min(candidates, key=lambda group: group.depth)
+                indent: str = line[: len(line) - len(line.lstrip())]
+                return _explode(text=text, group=chosen, indent=indent)
+        line_start = line_end + 1
+    return None
+
+
+def _explode(*, text: str, group: _Group, indent: str) -> str:
+    bounds: list[int] = [group.open_index, *group.commas, group.close_index]
+    items: list[str] = [
+        text[start + 1 : end].strip() for start, end in zip(bounds[:-1], bounds[1:], strict=True)
+    ]
+    items = [item for item in items if item]
+    inner: str = indent + _HEADER_INDENT
+    body: str = "".join(f"\n{inner}{item}," for item in items)
+    return f"{text[: group.open_index + 1]}{body}\n{indent}{text[group.close_index :]}"
+
+
+def _audit_groups(*, text: str) -> tuple[_Group, ...]:
+    """Bracket groups at or inside each `audits [...]` value, outside quoted text."""
+
+    groups: list[_Group] = []
+    open_stack: list[tuple[int, str, list[int]]] = []
+    audit_depths: list[int] = []
+    index: int = 0
+    while index < len(text):
+        character: str = text[index]
+        if character in _QUOTE_CHARACTERS:
+            index = quoted_value_end(text=text, start=index)
+            continue
+        if character in _OPENERS:
+            if character == _AUDIT_LIST_OPENER and _AUDITS_KEY.match(
+                text, _audits_key_start(text=text, bracket=index)
+            ):
+                audit_depths.append(len(open_stack))
+            open_stack.append((index, _OPENERS[character], []))
+        elif open_stack and character == open_stack[-1][1]:
+            start, _, commas = open_stack.pop()
+            if audit_depths and len(open_stack) >= audit_depths[-1]:
+                groups.append(
+                    _Group(
+                        open_index=start,
+                        close_index=index,
+                        depth=len(open_stack),
+                        commas=tuple(commas),
+                    )
+                )
+            if audit_depths and len(open_stack) == audit_depths[-1]:
+                audit_depths.pop()
+        elif open_stack and character == _HEADER_ITEM_SEPARATOR:
+            open_stack[-1][2].append(index)
+        index += 1
+    return tuple(groups)
+
+
+def _audits_key_start(*, text: str, bracket: int) -> int:
+    start: int = bracket
+    while start > 0 and text[start - 1].isspace():
+        start -= 1
+    return max(0, start - len(_AUDITS_KEYWORD))

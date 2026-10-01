@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.changes.metadata import (
     changed_local_function_names,
@@ -35,6 +34,7 @@ from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
 )
+from sqlbuild.compiler.planner._helpers.identity.hashing import model_definition_hash
 from sqlbuild.compiler.planner._helpers.identity.model_metadata import declared_columns_hash
 from sqlbuild.compiler.planner.constants import EMPTY_FINGERPRINT_METADATA_JSON
 from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
@@ -90,10 +90,12 @@ def detect_changes(
         function_changes[function.name] = FunctionChangeResult(
             fingerprint_sql=fingerprint_sql,
             reason=detect_function_change(
+                function=function,
                 fingerprint_sql=fingerprint_sql,
                 fingerprint=snapshot.fingerprints.functions.get(function.name),
                 query_change_tracking=project.settings.query_change_tracking,
                 full_refresh=full_refresh,
+                dialect=snapshot.column_dialect,
             ),
         )
 
@@ -118,7 +120,7 @@ def detect_model_changes_in_scope(
         else query_change_tracking
     )
     function_local_hashes: dict[str, str] = build_function_local_hashes(
-        functions=project.functions,
+        functions=project.functions, dialect=project.sql_analysis_dialect
     )
     hook_version_hashes: dict[str, str] = {
         name: identity.version_hash
@@ -182,13 +184,20 @@ def detect_model_changes(
 
     relation_exists: bool = model_name in snapshot.existing_relations
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model_name)
+    compiled_query_hash: str | None = (
+        model_definition_hash(
+            model_name=model_name, query_sql=model.query_sql, dialect=snapshot.column_dialect
+        )
+        if query_change_tracking and fingerprint is not None
+        else None
+    )
 
     if not relation_exists and model_name in snapshot.renamed_models:
         renamed_query_changed: bool = (
-            query_change_tracking
+            compiled_query_hash is not None
             and fingerprint is not None
             and detect_query_change(
-                compiled_query_hash=compute_query_hash(model.query_sql), fingerprint=fingerprint
+                compiled_query_hash=compiled_query_hash, fingerprint=fingerprint
             )
         )
         return ChangeDetectionResult(
@@ -244,10 +253,10 @@ def detect_model_changes(
             renames=snapshot.reference_renames,
             dialect=snapshot.column_dialect,
         )
-        if query_change_tracking
+        if compiled_query_hash is not None
         and fingerprint is not None
         and snapshot.reference_renames
-        and compute_query_hash(model.query_sql) != fingerprint.definition_hash
+        and compiled_query_hash != fingerprint.definition_hash
         else None
     )
     config_changed: bool = recorded_metadata_json is not None and identity_payload(
@@ -256,9 +265,8 @@ def detect_model_changes(
         else metadata_json
     ) != identity_payload(recorded_metadata_json)
     replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
-    if query_change_tracking and fingerprint is not None:
+    if compiled_query_hash is not None and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
-        compiled_query_hash: str = compute_query_hash(model.query_sql)
         query_changed = origin_names is None and detect_query_change(
             compiled_query_hash=compiled_query_hash,
             fingerprint=fingerprint,

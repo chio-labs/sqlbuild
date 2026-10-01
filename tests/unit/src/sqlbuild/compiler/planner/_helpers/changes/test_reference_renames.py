@@ -90,7 +90,9 @@ def test_given_renamed_references_when_matching_recorded_query_then_returns_mapp
         target_schema="main",
         target_name="order_summary",
         run_id="run",
-        definition_hash=compute_query_hash(test_case.recorded_query_sql),
+        definition_hash=compute_query_hash(
+            query_sql=test_case.recorded_query_sql, dialect="duckdb"
+        ),
         schema_fingerprint="",
         definition=test_case.recorded_query_sql,
         ts=_BUILT_AT,

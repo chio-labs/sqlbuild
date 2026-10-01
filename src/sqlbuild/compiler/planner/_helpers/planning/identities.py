@@ -33,6 +33,7 @@ def build_planner_identity_context(
         seeds=project.seeds,
         scope=scopes.inspection_scope,
         hook_functions=project.hook_functions,
+        dialect=project.sql_analysis_dialect,
     )
     return PlannerIdentityContext(
         version_identities=version_identities,
@@ -42,6 +43,7 @@ def build_planner_identity_context(
                 seeds=project.seeds,
                 scope=scopes.stale_warning_scope,
                 hook_functions=project.hook_functions,
+                dialect=project.sql_analysis_dialect,
             )
             if include_stale_warning_identities
             else version_identities

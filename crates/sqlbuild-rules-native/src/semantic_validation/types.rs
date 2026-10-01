@@ -13,3 +13,4 @@ pub(crate) type DiagnosticRow = (
     String,
 );
 pub(crate) type Expansion = (usize, usize, usize, usize);
+pub(crate) type ProbeKey = (polyglot_sql::DialectType, String, usize);

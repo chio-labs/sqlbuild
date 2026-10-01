@@ -13,6 +13,7 @@ from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     DialectNeutralizeInterpolationTestCase,
+    DollarQuotePreparationTestCase,
     NeutralizeInterpolationTestCase,
     RestoreFailureTestCase,
     RestoreInterpolationTestCase,
@@ -395,3 +396,63 @@ def test_given_mangled_sentinels_when_restoring_then_error_is_raised(
     with pytest.raises(InterpolationRestorationError) as error:
         _ = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
     assert test_case.expected_message_fragment in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DollarQuotePreparationTestCase(
+            "untagged apostrophe",
+            "duckdb",
+            "$$Customer's order$$",
+            ("@label($$Customer's order$$)", '__ref("orders")'),
+        ),
+        DollarQuotePreparationTestCase(
+            "tagged apostrophe",
+            "postgres",
+            "$note$it's$note$",
+            ("@label($note$it's$note$)", '__ref("orders")'),
+        ),
+        DollarQuotePreparationTestCase(
+            "hidden intrinsic",
+            "snowflake",
+            "$$__ref('items')$$",
+            ("@label($$__ref('items')$$)", '__ref("orders")'),
+        ),
+        DollarQuotePreparationTestCase(
+            "hidden macro paren",
+            "duckdb",
+            "$$@m( ')$$",
+            ("@label($$@m( ')$$)", '__ref("orders")'),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dollar_quoted_text_when_neutralizing_then_python_and_native_sites_agree(
+    test_case: DollarQuotePreparationTestCase,
+) -> None:
+    sql: str = (
+        f"SELECT {test_case.literal} AS note, @label({test_case.literal}) AS label "
+        'FROM __ref("orders") o'
+    )
+    lint_sql, lint_sites = neutralize_interpolation(body=sql, dialect=test_case.dialect)
+    format_sql, format_sites = neutralize_interpolation(
+        body=sql, dialect=test_case.dialect, for_formatting=True
+    )
+    native: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
+        _native.prepare_lint_sql(
+            {
+                "expanded": sql,
+                "before_expansion": sql,
+                "prior_sites": [],
+                "dialect": test_case.dialect,
+            }
+        )
+    )
+
+    assert tuple(site.original_text for site in lint_sites) == test_case.expected_sites
+    assert tuple(site.original_text for site in format_sites) == test_case.expected_sites
+    assert native is not None
+    assert native[0] == lint_sql
+    assert tuple(InterpolationSite(*site) for site in native[1]) == lint_sites
+    assert restore_interpolation(fixed=format_sql, sites=format_sites) == sql

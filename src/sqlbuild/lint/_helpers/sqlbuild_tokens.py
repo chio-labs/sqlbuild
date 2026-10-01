@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import (
     BACKTICK_CHARACTER,
     CLOSING_PAREN_CHARACTER,
+    DOLLAR_QUOTE_CHARACTER,
     EXPECTED_SENTINEL_OCCURRENCES,
     IDENTIFIER_EXTRA_CHARACTER,
     INTERPOLATION_NAME_EXTRA_CHARACTERS,
@@ -49,13 +50,20 @@ _CONTEXT_SENTINEL_TEMPLATE: str = "__sqlbuild_context_parameter_{index}__"
 _LINE_COMMENT_START: str = "--"
 _BLOCK_COMMENT_START: str = "/*"
 _BLOCK_COMMENT_END: str = "*/"
+_DOLLAR_QUOTE_SCAN_PATTERN: str = (
+    r"(?<![A-Za-z0-9_$\x80-\U0010ffff])"
+    r"\$(?P<dollar_tag>(?:[A-Za-z_][A-Za-z0-9_]*)?)\$"
+    r"(?:[\s\S]*?\$(?P=dollar_tag)\$|[\s\S]*\Z)"
+)
 _NON_CODE_SCAN_PATTERN: str = (
     r"--[^\n]*(?:\n|\Z)"
     r"|/\*[\s\S]*?(?:\*/|\Z)"
     r"|'(?:\\.|''|[^'\\])*(?:'|\Z)"
     r'|"(?:\\.|""|[^"\\])*(?:"|\Z)'
+    rf"|{_DOLLAR_QUOTE_SCAN_PATTERN}"
 )
 _BACKTICK_SCAN_PATTERN: str = r"|`(?:``|[^`])*(?:`|\Z)"
+_DOLLAR_QUOTE_PATTERN: re.Pattern[str] = re.compile(_DOLLAR_QUOTE_SCAN_PATTERN)
 
 
 @cache
@@ -327,6 +335,11 @@ def _matching_paren_end(*, body: str, opening_index: int, backtick_identifiers: 
             comment_end: int = body.find(_BLOCK_COMMENT_END, index + len(_BLOCK_COMMENT_START))
             index = length if comment_end < 0 else comment_end + len(_BLOCK_COMMENT_END)
             continue
+        if quote_character is None and body.startswith(DOLLAR_QUOTE_CHARACTER, index):
+            dollar_quote: re.Match[str] | None = _DOLLAR_QUOTE_PATTERN.match(body, index)
+            if dollar_quote is not None:
+                index = dollar_quote.end()
+                continue
         character: str = body[index]
         if quote_character is not None:
             if (

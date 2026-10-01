@@ -15,6 +15,7 @@ sqb format [flags]
 |------|-------------|
 | `--check` | Fail when formatting changes are needed without writing |
 | `--diff` | Print the proposed diff without writing |
+| `--fix` | Also apply compiler-verified, meaning-preserving Rule fixes before layout formatting |
 | `--json` | Print structured results |
 | `--select`, `-s` | Format selected models |
 | `--select-file` | Read selectors from a file |
@@ -31,22 +32,100 @@ configured [Rules](/docs/concepts/rules), which never mutate source.
 
 ## Line width and descriptions
 
-Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
-are normalized as spaces, while blank lines preserve paragraph boundaries. Configure the maximum
-physical line width in `sqlbuild_project.toml` (the default is `100`):
+Configure the maximum physical line width in `sqlbuild_project.toml` (the default is `100`):
 
 ```toml
 [format]
 line_width = 100
 ```
 
+Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
+are normalized as spaces, while blank lines preserve paragraph boundaries.
+
+Clause layout follows a few fixed rules:
+
+- A `SELECT` list with exactly one item stays on the `SELECT` line when the item fits (`SELECT *`,
+  `SELECT DISTINCT order_id`). Two or more items go one per line.
+- `WHERE`, `QUALIFY` and `HAVING` with one top-level condition stay on the clause line when it
+  fits (`WHERE amount > 0`). Several `AND`/`OR` conditions go one per line.
+- Each CTE closes with `),` followed by one blank line, and one blank line separates the last CTE
+  from the statement that uses it. Comments above a CTE stay directly above its name.
+- A `VALUES` list that does not fit on its line puts each row on its own line under `VALUES`, and a
+  row is never split, even when it is longer than the width.
+- When an operand of `+`, `-`, `*`, `/`, `%`, `||`, `AND` or `OR` spans several lines, the
+  operator starts the next line.
+- A broken `DECODE` puts its first argument on its own line, then one search/result pair per line,
+  then any default.
+
+SQL lines longer than the width, counting any trailing alias and comma, are broken at the outermost
+structure first: before top-level `AND` and `OR` (never inside `BETWEEN ... AND`), then before
+arithmetic operators, then by putting the arguments of the widest outermost function call, `IN`
+list, or array one per line, or the branches of a `CASE` on their own lines. Inside `OVER (...)`,
+`PARTITION BY` and `ORDER BY` go on separate lines. Type parameters such as `NUMBER(38, 2)` or
+`VARCHAR(MAX)` are never split; the enclosing call breaks instead. Header `audits [...]` lists put
+each audit, and then each audit argument, on its own line. String literals, comments, and lines that
+carry a comment are never broken, so a line can stay longer than the width when nothing on it can be
+split. `sqb format --check` fails while a long line can still be shortened.
+
 ## What formatting preserves
+
+Formatting changes layout only: it prints the authored SQL tokens in their original order and
+changes only the whitespace between them and the letter case of keywords and built-in function
+names. A word is upper-cased only when the parse confirms it is a keyword at that position, such as
+`ORDER BY`, `CASE WHEN`, `NULLS LAST`, `IS NULL` or `JOIN`, or when it names a built-in function at
+a call site, such as `coalesce(`. Identifiers keep their authored case even when they are spelled
+like keywords, such as `t.view`, `AS index` or a table named `view`, and so do aliases, qualified
+names, JSON path keys and user-defined function names.
+
+Query fingerprints ignore the case of reserved keywords and built-in function names only, so
+formatting lowercase SQL may change a model's fingerprint once, when a non-reserved keyword such as
+`by` or `nulls` is upper-cased. Formatting already formatted SQL never changes its fingerprint.
+
+Comments in every dialect form are kept, including `//` in Snowflake and `#` in BigQuery, and
+adjacent string literals split across lines stay on separate lines. It does not add `AS` to aliases
+or remove statement terminators or trailing commas. Every result is checked against the authored
+token stream and comment positions, and a body whose tokens would change is reported as
+`format-unsafe` instead of being written.
 
 Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
 lambda parameters, and supported SQL function spellings while applying canonical layout. SQLBuild
 calls keep their authored spelling, including zero-argument cursor and empty-fixture intrinsics.
 CTE-producing macros remain authored calls rather than expanded project SQL, with each call on its
 own CTE-list line and leading comments attached to the node they describe.
+
+## Rule fixes
+
+`sqb format` on its own never changes what SQL means. `sqb format --fix` also applies Rule edits
+that are known to preserve meaning, then formats the layout. `--fix --check` reports the proposed
+changes without writing files, and `--fix --diff` prints their diff.
+
+Edits are planned in memory and repeated until no more apply; overlapping edits wait for the next
+pass. Every pass recompiles the project and compares output columns (including types and
+nullability), dependencies, and column lineage of each edited model and everything downstream of it
+against the original compilation. When a pass cannot be proved, the edits of each file are checked
+on their own: files whose edits cannot be proved keep their original contents and report
+`format-fix-verification-failed`, while the other files are still fixed. A cycle or the 128-pass
+limit fails without writing any edit.
+
+| Rule | Decision | Reason |
+| --- | --- | --- |
+| SQBRSQL001 NULL comparison | Refused | Replacing `= NULL` with `IS NULL` changes three-valued logic. |
+| SQBRSQL002 implicit cartesian join | Applied | A comma-separated product becomes an explicit `CROSS JOIN`; mixed join precedence is excluded. |
+| SQBRSQL003 conditionless join | Applied in Snowflake | Snowflake defines an unqualified `JOIN` without `ON` or `USING` as a cartesian product. Other dialects are refused because the original syntax may be invalid. |
+| SQBRSQL005 unused CTE | Applied | Unreferenced `SELECT` CTEs contribute no rows. Mutation statements and commented CTEs are excluded. |
+| SQBRSQL006 redundant DISTINCT | Applied | The projected and grouping expressions are proved to coincide. |
+| SQBRSQL008 bare UNION | Applied | `UNION DISTINCT` states the existing duplicate elimination, in dialects that support it. |
+| SQBRSQL013 parenthesized DISTINCT | Refused | Removing parentheses can change operator precedence. |
+| SQBRSQL017 constant row count | Applied | `COUNT(1)` and `COUNT(*)` both count every row. |
+| SQBRSQL023 unused table alias | Refused | Not yet reviewed as meaning-preserving. |
+| SQBRSQL025 implicit inner join | Applied | A bare `JOIN ... ON` is an inner join. |
+| SQBRSQL030 boolean CASE simplification | Refused | The `COALESCE` rewrite is not proved portable to every supported dialect. |
+
+Edits that touch macro or intrinsic expansions are refused, and so are edits outside model SQL
+bodies, because recompiling cannot prove their output contract. Findings without a proposed edit
+are reported as unavailable. Human output lists each applied, refused, and unavailable fix with its
+reason; JSON output includes a `rule_fixes` array with `file`, `line`, `code`, `status`, and
+`reason`. Refused and unavailable fixes still need a manual change.
 
 ## Unsafe bodies
 

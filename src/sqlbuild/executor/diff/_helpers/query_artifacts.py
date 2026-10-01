@@ -91,7 +91,9 @@ def materialize_query_diff_artifact(
             connection=connection,
             relation=artifact.relation,
         )
-        definition_hash: str = compute_query_hash(sql)
+        definition_hash: str = compute_query_hash(
+            query_sql=sql, dialect=adapter.sql_analysis_dialect()
+        )
         metadata_json: str = json.dumps(
             {
                 "artifact_version": _ARTIFACT_VERSION,

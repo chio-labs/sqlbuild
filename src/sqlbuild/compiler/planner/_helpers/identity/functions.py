@@ -7,8 +7,8 @@ from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner._helpers.identity.hashing import function_definition_hash
 from sqlbuild.compiler.planner.types import PlanReason
 
 
@@ -29,10 +29,12 @@ def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
 
 def detect_function_change(
     *,
+    function: CompiledFunction,
     fingerprint_sql: str,
     fingerprint: Fingerprint | None,
     query_change_tracking: bool,
     full_refresh: bool,
+    dialect: str | None,
 ) -> PlanReason:
     """Resolve why a function is redeployed; callers decide their own replay."""
 
@@ -40,7 +42,15 @@ def detect_function_change(
         return PlanReason.FULL_REFRESH
     if fingerprint is None:
         return PlanReason.FIRST_RUN
-    if query_change_tracking and compute_query_hash(fingerprint_sql) != fingerprint.definition_hash:
+    if query_change_tracking and (
+        function_definition_hash(
+            function_name=function.name,
+            fingerprint_sql=fingerprint_sql,
+            language=str(function.language),
+            dialect=dialect,
+        )
+        != fingerprint.definition_hash
+    ):
         return PlanReason.QUERY_CHANGED
     return PlanReason.NO_CHANGE
 

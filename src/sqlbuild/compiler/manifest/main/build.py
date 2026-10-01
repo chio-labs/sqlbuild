@@ -72,6 +72,7 @@ def build_manifest(
             plan_entry=plan_entry,
             project_name=project_name,
             python_hook_metadata=python_hook_metadata,
+            sql_analysis_dialect=project.sql_analysis_dialect,
         )
 
     source: CompiledSource

@@ -1812,13 +1812,13 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "comment-free canonical SQL",
             sql: "select a,b from items where a=1",
-            expected_sql: "SELECT\n  a,\n  b\nFROM items\nWHERE\n  a = 1",
+            expected_sql: "SELECT\n  a,\n  b\nFROM items\nWHERE a = 1",
             expected_changed: true,
         },
         test_types::FormatTestCase {
             description: "lowercase function canonicalization preserves structure",
             sql: "select count(1) from items",
-            expected_sql: "SELECT\n  COUNT(1)\nFROM items",
+            expected_sql: "SELECT COUNT(1)\nFROM items",
             expected_changed: true,
         },
         test_types::FormatTestCase {
@@ -1830,7 +1830,7 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "line and leading comments",
             sql: "-- lead\nselect a,b from items -- tail\nwhere a=1",
-            expected_sql: "-- lead\nSELECT\n  a,\n  b\nFROM items -- tail\nWHERE\n  a = 1",
+            expected_sql: "-- lead\nSELECT\n  a,\n  b\nFROM items -- tail\nWHERE a = 1",
             expected_changed: true,
         },
         test_types::FormatTestCase {
@@ -1842,19 +1842,19 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "comment marker string",
             sql: "select '-- not a comment' as value",
-            expected_sql: "SELECT\n  '-- not a comment' AS value",
+            expected_sql: "SELECT '-- not a comment' AS value",
             expected_changed: true,
         },
         test_types::FormatTestCase {
             description: "doubled apostrophe string remains compiler compatible",
             sql: "select 'Customer''s order' as value",
-            expected_sql: "SELECT\n  'Customer''s order' AS value",
+            expected_sql: "SELECT 'Customer''s order' AS value",
             expected_changed: true,
         },
         test_types::FormatTestCase {
             description: "explicit null ordering remains explicit",
             sql: "select id from items order by category nulls last, created_at desc nulls first",
-            expected_sql: "SELECT\n  id\nFROM items\nORDER BY\n  category NULLS LAST,\n  created_at DESC NULLS FIRST",
+            expected_sql: "SELECT id\nFROM items\nORDER BY\n  category NULLS LAST,\n  created_at DESC NULLS FIRST",
             expected_changed: true,
         },
         test_types::FormatTestCase {
@@ -1878,19 +1878,19 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "cast-free token expansion remains supported",
             sql: "select id label from items",
-            expected_sql: "SELECT\n  id AS label\nFROM items",
+            expected_sql: "SELECT id label\nFROM items",
             expected_changed: true,
         },
         test_types::FormatTestCase {
             description: "cast-free multiple statements remain supported",
             sql: "select 1; select 2",
-            expected_sql: "SELECT\n  1;\nSELECT\n  2",
+            expected_sql: "SELECT 1;\nSELECT 2",
             expected_changed: true,
         },
         test_types::FormatTestCase {
-            description: "trailing comment",
+            description: "trailing comment after a kept statement terminator",
             sql: "select a from items; -- retained",
-            expected_sql: "SELECT\n  a\nFROM items -- retained\n",
+            expected_sql: "SELECT a\nFROM items; -- retained\n",
             expected_changed: true,
         },
         test_types::FormatTestCase {
@@ -1927,13 +1927,13 @@ fn given_ordered_sql_batch_when_formatting_then_outputs_are_parallel_and_ordered
         test_types::FormatTestCase {
             description: "first order query",
             sql: "select order_id from orders where order_id=1",
-            expected_sql: "SELECT\n  order_id\nFROM orders\nWHERE\n  order_id = 1",
+            expected_sql: "SELECT order_id\nFROM orders\nWHERE order_id = 1",
             expected_changed: true,
         },
         test_types::FormatTestCase {
             description: "second product query",
             sql: "select product_id from products where product_id=2",
-            expected_sql: "SELECT\n  product_id\nFROM products\nWHERE\n  product_id = 2",
+            expected_sql: "SELECT product_id\nFROM products\nWHERE product_id = 2",
             expected_changed: true,
         },
     ];

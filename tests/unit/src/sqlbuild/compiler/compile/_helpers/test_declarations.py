@@ -530,9 +530,9 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
     )
     changed_model: CompiledModel = compile_first_model(project_dir=tmp_path)
 
-    query_hash_changed: bool = compute_query_hash(initial_model.query_sql) != compute_query_hash(
-        changed_model.query_sql
-    )
+    query_hash_changed: bool = compute_query_hash(
+        query_sql=initial_model.query_sql, dialect=None
+    ) != compute_query_hash(query_sql=changed_model.query_sql, dialect=None)
     metadata_changed: bool = build_model_version_identity_metadata_json(
         model=initial_model
     ) != build_model_version_identity_metadata_json(model=changed_model)

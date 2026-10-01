@@ -1,5 +1,7 @@
 use crate::compiler::_helpers::sql_references::extraction::extract;
-use crate::engine::tests::test_types::{LintDialectSiteTestCase, SqlScannerTestCase};
+use crate::engine::tests::test_types::{
+    DollarQuoteSiteTestCase, LintDialectSiteTestCase, SqlScannerTestCase,
+};
 use crate::rules::_helpers::evaluation::{normalize_rules_sql, rules_quote_policy};
 use crate::rules::_helpers::numeric_decisions::compact_sql;
 use crate::sql_lint::_helpers::preparation::prepare;
@@ -177,7 +179,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_comma: "SELECT $$ ) $$ a  FROM t",
             expected_compact: "a=$$)$$andb",
             expected_snowflake_compact: "a=$$)$$andb",
-            expected_lint_site: Some("@m($$ )"),
+            expected_lint_site: Some("@m($$ ) $$ x)"),
             expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
@@ -340,6 +342,18 @@ fn given_lint_dialect_when_preparing_macro_sites_then_backticks_follow_rules_quo
             expected_lint_site: "@m(`a)",
         },
         LintDialectSiteTestCase {
+            description: "duckdb dollar quote hides an apostrophe and close paren",
+            dialect: "duckdb",
+            fragment: "$$Customer's order)$$",
+            expected_lint_site: "@m($$Customer's order)$$ x)",
+        },
+        LintDialectSiteTestCase {
+            description: "snowflake tagged dollar quote hides a nested dollar quote",
+            dialect: "snowflake",
+            fragment: "$note$ $$ ) $note$",
+            expected_lint_site: "@m($note$ $$ ) $note$ x)",
+        },
+        LintDialectSiteTestCase {
             description: "sqlserver backtick remains code",
             dialect: "tsql",
             fragment: "`a)b`",
@@ -356,6 +370,36 @@ fn given_lint_dialect_when_preparing_macro_sites_then_backticks_follow_rules_quo
             "SQL lint macro site: {}",
             test_case.description
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_dollar_quoted_apostrophe_when_preparing_lint_sites_then_later_references_are_sites()
+-> Result<(), String> {
+    let test_cases = [
+        DollarQuoteSiteTestCase {
+            description: "duckdb untagged and tagged quotes",
+            dialect: "duckdb",
+            expected_sites: &["__ref(\"orders\")"],
+        },
+        DollarQuoteSiteTestCase {
+            description: "postgres untagged and tagged quotes",
+            dialect: "postgres",
+            expected_sites: &["__ref(\"orders\")"],
+        },
+        DollarQuoteSiteTestCase {
+            description: "snowflake untagged and tagged quotes",
+            dialect: "snowflake",
+            expected_sites: &["__ref(\"orders\")"],
+        },
+    ];
+    let sql = "SELECT $$Customer's order$$ AS note, $tag$it's$tag$ AS tag FROM __ref(\"orders\") o";
+    for test_case in test_cases {
+        let sites: Vec<String> = prepare(sql, sql, &[], test_case.dialect)?
+            .map(|prepared| prepared.1.into_iter().map(|site| site.5).collect())
+            .unwrap_or_default();
+        assert_eq!(sites, test_case.expected_sites, "{}", test_case.description);
     }
     Ok(())
 }

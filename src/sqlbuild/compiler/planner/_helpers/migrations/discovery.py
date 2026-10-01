@@ -357,7 +357,7 @@ def _metadata_jsons(
     *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...]
 ) -> dict[str, str]:
     function_hashes: dict[str, str] = build_function_local_hashes(
-        functions=runtime.project.functions
+        functions=runtime.project.functions, dialect=runtime.project.sql_analysis_dialect
     )
     hook_hashes: dict[str, str] = {
         name: identity.version_hash

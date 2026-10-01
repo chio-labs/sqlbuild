@@ -14,3 +14,4 @@ mod semantic_usage;
 mod semantic_validation;
 mod sql_lint;
 mod sql_scan;
+mod sql_tokens;

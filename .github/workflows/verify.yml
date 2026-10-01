@@ -81,6 +81,7 @@ jobs:
               crates/*|Cargo.toml|Cargo.lock|pyproject.toml|uv.lock)
                 broad=true
                 performance=true
+                format_performance=true
                 rules_performance=true
                 ;;
               src/sqlbuild/compiler/*|src/sqlbuild/adapter/type_system/*)

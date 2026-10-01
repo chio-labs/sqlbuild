@@ -68,7 +68,7 @@ def build_table_function_graph_identities(*, base_query: str) -> DirectModelVers
         selected_keys=frozenset(upstream),
         execution_order=(base_key, function_key, consumer_key),
     )
-    return build_direct_model_version_identities(functions=(function,), scope=scope)
+    return build_direct_model_version_identities(functions=(function,), scope=scope, dialect=None)
 
 
 def _build_model(

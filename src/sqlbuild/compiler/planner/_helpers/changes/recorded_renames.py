@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledModel
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner._helpers.identity.hashing import model_definition_hash
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
@@ -68,5 +68,8 @@ def _referencing_query_changed(*, model: CompiledModel, snapshot: WarehouseSnaps
     return (
         recorded is not None
         and any(reference.ref_kind == SqlReferenceKind.REF for reference in model.references)
-        and compute_query_hash(model.query_sql) != recorded.definition_hash
+        and model_definition_hash(
+            model_name=model.name, query_sql=model.query_sql, dialect=snapshot.column_dialect
+        )
+        != recorded.definition_hash
     )

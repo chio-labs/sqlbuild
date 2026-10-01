@@ -8,6 +8,15 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class SemanticFixTestCase:
+    description: str
+    sql: str
+    expected_code: str
+    dialect: str = "duckdb"
+    expected_status: str = "applied"
+
+
+@dataclass(frozen=True)
 class VariedCompileFixtureTestCase:
     description: str
     model_count: int
@@ -227,6 +236,34 @@ class AuthoredSpellingFormatIntegrationTestCase:
     adapter: str
     authored_expression: str
     expected_expression: str
+
+
+@dataclass(frozen=True)
+class LayoutOnlyFormatIntegrationTestCase:
+    """One adapter whose authored keywords, aliases and terminators formatting must keep."""
+
+    description: str
+    adapter: str
+    expected_body: str
+
+
+@dataclass(frozen=True)
+class LineWidthWrapIntegrationTestCase:
+    """One project line width and the wrapped model file formatting must produce."""
+
+    description: str
+    line_width: int
+    authored_sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class DollarQuoteFormatIntegrationTestCase:
+    """One dollar-quoted literal whose quote state must not hide a later intrinsic call."""
+
+    description: str
+    literal: str
+    expected_note: str
 
 
 @dataclass(frozen=True)

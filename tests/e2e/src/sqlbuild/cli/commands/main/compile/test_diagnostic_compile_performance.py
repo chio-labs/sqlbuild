@@ -10,11 +10,13 @@ import pytest
 
 from scripts.cold_compile_performance._helpers.diagnostic_measurement import (
     measure_diagnostic_compile,
+    measure_function_name_scan,
     measure_position_mapping,
 )
 from scripts.cold_compile_performance._helpers.diagnostic_project import (
     write_cascade_project,
     write_diagnostic_project,
+    write_function_name_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import DiagnosticPerformanceCase
 
@@ -102,6 +104,63 @@ def test_given_deep_poisoned_dag_when_recovering_then_bounds_scaling(
     _LOGGER.info("cascade depth=%d wall=%s", test_case.depth, timings)
     assert max(timings) < test_case.expected_max_wall_seconds
     assert timings[1] <= timings[0] * 3.0 + 1.0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiagnosticPerformanceCase(
+            "unsupported_function_spellings",
+            width=300,
+            depth=3,
+            expected_max_wall_seconds=20.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_many_unsupported_function_spellings_when_compiling_then_bounds_scaling(
+    test_case: DiagnosticPerformanceCase, tmp_path: Path
+) -> None:
+    timings: list[float] = []
+    for multiplier in (1, 2):
+        project: Path = tmp_path / f"calls_{multiplier}"
+        calls: int = test_case.width * multiplier
+        write_function_name_project(project_dir=project, model_count=test_case.depth, calls=calls)
+        elapsed, payload = measure_diagnostic_compile(
+            project_dir=project, timeout=test_case.expected_timeout_seconds
+        )
+        codes: Counter[str] = Counter(item["code"] for item in payload["diagnostics"])
+        assert codes["B101"] == calls * test_case.depth
+        timings.append(elapsed)
+    _LOGGER.info("unsupported function spellings wall=%s", timings)
+    assert max(timings) < test_case.expected_max_wall_seconds
+    assert timings[1] <= timings[0] * 3.0 + 1.0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiagnosticPerformanceCase(
+            "function_name_scan_scales_linearly",
+            diagnostic_count=4000,
+            expected_max_wall_seconds=1.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wide_sql_with_unsupported_spellings_when_scanning_then_scales_linearly(
+    test_case: DiagnosticPerformanceCase,
+) -> None:
+    measure_function_name_scan(calls=1)
+    single: float = median(
+        measure_function_name_scan(calls=test_case.diagnostic_count) for _ in range(3)
+    )
+    doubled: float = median(
+        measure_function_name_scan(calls=test_case.diagnostic_count * 2) for _ in range(3)
+    )
+    _LOGGER.info("function name scan N=%.3fs 2N=%.3fs", single, doubled)
+    assert doubled < test_case.expected_max_wall_seconds
+    assert doubled <= single * 2.8 + 0.05
 
 
 if __name__ == "__main__":

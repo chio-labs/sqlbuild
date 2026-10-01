@@ -10,12 +10,16 @@ from pathlib import Path
 
 import pytest
 
+from scripts.format_performance._helpers.model_project import write_model_format_project
 from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
     FormatPerformanceGuardTestCase,
     FormatScalingGuardTestCase,
+    ModelFormatPerformanceTestCase,
+    ModelFormatScalingTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.format.helpers import (
     count_typed_null_candidates,
+    run_format_check,
     write_format_performance_project,
 )
 
@@ -158,3 +162,84 @@ def test_given_doubling_fixture_counts_when_formatting_then_elapsed_time_scales_
     for samples in (elapsed_samples, format_samples):
         for smaller, larger in zip(samples[:-1], samples[1:], strict=True):
             assert larger / smaller <= test_case.expected_max_doubling_ratio
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelFormatPerformanceTestCase(
+            description="1,300 unformatted models of mixed shape format within budget",
+            model_count=1_300,
+            large_model_lines=0,
+            expected_file_count=1_300,
+            expected_max_format_seconds=1.5,
+            expected_max_elapsed_seconds=3.5,
+            hard_ceiling_seconds=30.0,
+        ),
+        ModelFormatPerformanceTestCase(
+            description="one 6,000-line model with 3,000 CTEs formats within budget",
+            model_count=0,
+            large_model_lines=6_000,
+            expected_file_count=1,
+            expected_max_format_seconds=0.75,
+            expected_max_elapsed_seconds=2.5,
+            hard_ceiling_seconds=30.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unformatted_models_when_checking_format_then_time_stays_bounded(
+    tmp_path: Path,
+    test_case: ModelFormatPerformanceTestCase,
+) -> None:
+    project_dir: Path = tmp_path / "model_format_performance"
+    write_model_format_project(
+        project_dir=project_dir,
+        model_count=test_case.model_count,
+        large_model_lines=test_case.large_model_lines,
+    )
+
+    result, elapsed_seconds, format_seconds = run_format_check(
+        project_dir=project_dir, timeout_seconds=test_case.hard_ceiling_seconds
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
+    assert "format-unsafe" not in result.stdout + result.stderr
+    assert (
+        f"{test_case.expected_file_count} files checked, {test_case.expected_file_count} changed"
+        in result.stderr
+    )
+    assert format_seconds <= test_case.expected_max_format_seconds
+    assert elapsed_seconds <= test_case.expected_max_elapsed_seconds
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelFormatScalingTestCase(
+            description="unformatted model formatting scales linearly across doublings",
+            model_counts=(325, 650, 1_300),
+            expected_max_doubling_ratio=2.75,
+            hard_ceiling_seconds=30.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_doubling_model_counts_when_checking_format_then_format_time_scales_linearly(
+    tmp_path: Path,
+    test_case: ModelFormatScalingTestCase,
+) -> None:
+    format_samples: list[float] = []
+    for model_count in test_case.model_counts:
+        project_dir: Path = tmp_path / f"model_format_scaling_{model_count}"
+        write_model_format_project(project_dir=project_dir, model_count=model_count)
+        result, _, format_seconds = run_format_check(
+            project_dir=project_dir, timeout_seconds=test_case.hard_ceiling_seconds
+        )
+        assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
+        format_samples.append(format_seconds)
+
+    for smaller, larger in zip(format_samples[:-1], format_samples[1:], strict=True):
+        assert larger <= smaller * test_case.expected_max_doubling_ratio + 0.05

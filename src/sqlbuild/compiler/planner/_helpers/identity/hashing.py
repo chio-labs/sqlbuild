@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
+from functools import partial
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import (
@@ -11,7 +13,19 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_TABLE_FN,
     NODE_TYPE_UDF,
 )
+from sqlbuild.compiler.fingerprints.exceptions import QueryFingerprintError
+from sqlbuild.compiler.fingerprints.main.compute_function_definition_hash import (
+    compute_function_definition_hash,
+)
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild.compiler.planner.constants import QUERY_FINGERPRINT_FAILED
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import GraphNodeKey
+
+_FINGERPRINT_HELP: str = (
+    "SQLBuild fingerprints the dialect token stream of compiled SQL to detect changes. "
+    "Fix the SQL so the warehouse dialect tokenizer accepts it."
+)
 
 
 def stable_version_identity_hash(value: str) -> str:
@@ -20,10 +34,46 @@ def stable_version_identity_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def build_model_local_identity_hash(*, query_sql: str, metadata_json: str) -> str:
-    """Build a model's local identity hash from query SQL and non-query metadata."""
+def model_definition_hash(*, model_name: str, query_sql: str, dialect: str | None) -> str:
+    """Fingerprint a model query for change detection, naming the model when it cannot."""
 
-    return stable_version_identity_hash("\n".join((query_sql, metadata_json)))
+    return _planner_fingerprint(
+        subject=f"Model '{model_name}' SQL",
+        compute=partial(compute_query_hash, query_sql=query_sql, dialect=dialect),
+    )
+
+
+def function_definition_hash(
+    *, function_name: str, fingerprint_sql: str, language: str, dialect: str | None
+) -> str:
+    """Fingerprint a function definition for change detection, naming it when it cannot."""
+
+    return _planner_fingerprint(
+        subject=f"Function '{function_name}'",
+        compute=partial(
+            compute_function_definition_hash,
+            fingerprint_sql=fingerprint_sql,
+            language=language,
+            dialect=dialect,
+        ),
+    )
+
+
+def _planner_fingerprint(*, subject: str, compute: Callable[[], str]) -> str:
+    try:
+        return compute()
+    except QueryFingerprintError as error:
+        raise PlannerInputError(
+            f"{subject} cannot be fingerprinted for change detection: {error}",
+            code=QUERY_FINGERPRINT_FAILED,
+            help=_FINGERPRINT_HELP,
+        ) from None
+
+
+def build_model_local_identity_hash(*, query_fingerprint: str, metadata_json: str) -> str:
+    """Build a model's local identity hash from its query fingerprint and non-query metadata."""
+
+    return stable_version_identity_hash("\n".join((query_fingerprint, metadata_json)))
 
 
 def graph_key_for_compiled_resource(

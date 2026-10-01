@@ -54,8 +54,10 @@ def test_given_table_function_return_contract_change_when_hashing_then_identity_
         return_columns=(FunctionReturnColumn(name="order_id", type=test_case.changed_type),),
     )
 
-    original_hash: str = build_function_local_hashes(functions=(function,))[function.name]
-    changed_hash: str = build_function_local_hashes(functions=(changed_function,))[
+    original_hash: str = build_function_local_hashes(functions=(function,), dialect=None)[
+        function.name
+    ]
+    changed_hash: str = build_function_local_hashes(functions=(changed_function,), dialect=None)[
         changed_function.name
     ]
 

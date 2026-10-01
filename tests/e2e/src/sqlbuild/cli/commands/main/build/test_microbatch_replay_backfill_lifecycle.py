@@ -341,5 +341,72 @@ def test_given_all_failed_f2_and_f3_when_code_returns_to_f2_then_old_requirement
     assert sorted(int(str(count)) for _version, count in requirement_counts) == [1, 2]
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConcurrentMicrobatchBehaviorE2ETestCase(
+            description="formatting-only edit keeps the pending replay requirement"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_pending_replay_when_model_is_only_reformatted_then_replay_still_completes(
+    test_case: ConcurrentMicrobatchBehaviorE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir, db_path = prepare_replay_microbatch_project(
+        tmp_path=tmp_path,
+        project_name="microbatch_reformatted_replay",
+        database_name="reformatted_replay.duckdb",
+        replay_policy="bounded-4h",
+    )
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE TABLE raw_events (id INTEGER, event_time TIMESTAMP, payload VARCHAR); "
+            "INSERT INTO raw_events VALUES "
+            "(1, '2026-01-01 00:30:00', '1'), "
+            "(2, '2026-01-01 01:30:00', '2'), "
+            "(3, '2026-01-01 02:30:00', '3')"
+        ),
+    )
+    initial: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    execute_duckdb(db_path=db_path, sql="UPDATE raw_events SET payload = 'bad' WHERE id = 2")
+    f2_sql: str = timestamp_microbatch_model_sql(
+        value_expression="CAST(payload AS INTEGER) + 10",
+        batch_concurrency=3,
+        replay_policy="bounded-4h",
+    )
+    model_path: Path = project_dir / "models" / "orders.sql"
+    model_path.write_text(f2_sql, encoding="utf-8")
+    partial: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    execute_duckdb(db_path=db_path, sql="UPDATE raw_events SET payload = '2' WHERE id = 2")
+    reformatted: str = f2_sql.replace(
+        "SELECT id, event_time,", "-- Orders with a shifted value.\nselect\n  id,\n  event_time,"
+    )
+    model_path.write_text(reformatted, encoding="utf-8")
+    retried: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert initial.returncode == test_case.expected_exit_code, initial.stdout + initial.stderr
+    assert partial.returncode != test_case.expected_exit_code
+    assert retried.returncode == test_case.expected_exit_code, retried.stdout + retried.stderr
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT id, value FROM main.orders ORDER BY id",
+    ) == [(1, 11), (2, 12), (3, 13)]
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT COUNT(DISTINCT replay_requirement_id) "
+            "FROM main._sqlbuild_microbatches WHERE record_type = 'replay_requirement'"
+        ),
+    ) == [(1,)]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

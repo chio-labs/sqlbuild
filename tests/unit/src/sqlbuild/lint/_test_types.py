@@ -95,3 +95,24 @@ class ExpandedTypedConstantTestCase:
     model_path: str
     authored_sql: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class KeywordNamedIdentifierFormatTestCase:
+    """A keyword-named identifier whose authored case formatting and fingerprints must keep."""
+
+    description: str
+    dialect: str
+    sql: str
+    name: str
+    expected_name_occurrences: int
+
+
+@dataclass(frozen=True)
+class ReservedKeywordFoldTestCase:
+    """A reserved keyword whose letter case the fingerprint must ignore."""
+
+    description: str
+    dialect: str
+    keyword: str
+    expected_same_fingerprint: bool

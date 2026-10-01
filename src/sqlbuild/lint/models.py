@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
-from sqlbuild.lint.types import LintSeverity
+from sqlbuild.lint.types import LintSeverity, RuleFixStatus
 
 
 @dataclass(frozen=True)
@@ -97,6 +97,17 @@ class LintViolation:
 
 
 @dataclass(frozen=True)
+class RuleFixResult:
+    """One applied, refused, or unavailable semantic Rule fix."""
+
+    file_path: Path
+    code: str
+    line: int
+    status: RuleFixStatus
+    reason: str
+
+
+@dataclass(frozen=True)
 class FormatChange:
     """One deterministic file-formatting change."""
 
@@ -126,6 +137,7 @@ class LintRunResult:
     violations: tuple[LintViolation, ...]
     formatted_files: tuple[Path, ...]
     format_changes: tuple[FormatChange, ...] = ()
+    rule_fixes: tuple[RuleFixResult, ...] = ()
     source_texts: Mapping[Path, str] = field(default_factory=dict, repr=False, compare=False)
 
     @property

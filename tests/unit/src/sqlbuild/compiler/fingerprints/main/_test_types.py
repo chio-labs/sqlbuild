@@ -84,6 +84,7 @@ class NormalizeQuerySqlTestCase:
 @dataclass(frozen=True)
 class ComputeQueryHashTestCase:
     description: str
+    dialect: str | None
     query_sql: str
     expected_hash: str
 
@@ -91,6 +92,15 @@ class ComputeQueryHashTestCase:
 @dataclass(frozen=True)
 class ComputeQueryHashStabilityTestCase:
     description: str
+    dialect: str | None
     query_a: str
     query_b: str
     expected_same_hash: bool
+
+
+@dataclass(frozen=True)
+class QueryFingerprintFailureTestCase:
+    description: str
+    dialect: str
+    query_sql: str
+    expected_message: str

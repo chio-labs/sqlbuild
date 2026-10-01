@@ -136,6 +136,14 @@ fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String>
         .map_err(value_error)
 }
 
+#[pyfunction]
+fn query_fingerprint(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        crate::sql_tokens::main::query_fingerprint::query_fingerprint(sql, dialect)
+    })
+    .map_err(value_error)
+}
+
 #[pyfunction(name = "validate_sql_with_schema_json")]
 fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| crate::semantic_validation::main::validation_json(request_json))
@@ -431,6 +439,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
+    module.add_function(wrap_pyfunction!(query_fingerprint, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validations_json, module)?)?;

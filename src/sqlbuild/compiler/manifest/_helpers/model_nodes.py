@@ -24,6 +24,7 @@ def build_model_node(
     plan_entry: ModelPlanEntry | None,
     project_name: str,
     python_hook_metadata: dict[str, dict[str, object]] | None = None,
+    sql_analysis_dialect: str | None = None,
 ) -> dict[str, object]:
     """Build one dbt-compatible model node dict."""
 
@@ -31,7 +32,7 @@ def build_model_node(
     relative_path: Path = model.relative_path
     raw_code: str = model.query_sql
     compiled_code: str = plan_entry.resolved_sql if plan_entry is not None else raw_code
-    query_hash: str = compute_query_hash(raw_code)
+    query_hash: str = compute_query_hash(query_sql=raw_code, dialect=sql_analysis_dialect)
 
     return {
         "database": model.destination.database,

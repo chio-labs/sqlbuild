@@ -79,6 +79,52 @@ pub(crate) struct DialectLintRuleTestCase {
     pub expected_reason: &'static str,
 }
 
+pub(crate) struct LineWrapTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub line_width: usize,
+    pub token_widths: &'static [(&'static str, usize)],
+    pub expected_sql: &'static str,
+}
+
+pub(crate) struct FunctionCallSpacingTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub line_width: usize,
+    pub argument: &'static str,
+    pub expected_refused: &'static [&'static str],
+}
+
+pub(crate) struct LayoutRuleTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub sql: &'static str,
+    pub line_width: usize,
+    pub expected_sql: &'static str,
+}
+
+pub(crate) struct FormatCorpusTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub expected_formatted: usize,
+    pub expected_refused: usize,
+}
+
+pub(crate) struct DialectFormatTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub sql: &'static str,
+    pub expected_sql: &'static str,
+}
+
+pub(crate) struct TokenInvariantTestCase {
+    pub description: &'static str,
+    pub before: &'static str,
+    pub after: &'static str,
+    pub recases: &'static [(usize, &'static str, bool)],
+    pub expected_error: Option<&'static str>,
+}
+
 pub(crate) struct FormatTestCase {
     pub description: &'static str,
     pub sql: &'static str,
@@ -103,12 +149,4 @@ pub(crate) struct FunctionDepthFailureTestCase {
     pub depth: usize,
     pub expected_code: &'static str,
     pub expected_limit: &'static str,
-}
-
-pub(crate) struct AuthoredTokenTestCase {
-    pub description: &'static str,
-    pub authored: &'static str,
-    pub generated: &'static str,
-    /// `None` when the formatter must refuse the change.
-    pub expected_sql: Option<&'static str>,
 }

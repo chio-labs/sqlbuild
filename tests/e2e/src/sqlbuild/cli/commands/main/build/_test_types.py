@@ -1172,3 +1172,14 @@ class PythonNodeSelectionE2ETestCase:
     expected_missing_tables: tuple[str, ...] = ()
     orders_sql: str = 'MODEL (materialized table);\nSELECT order_id FROM __source("raw_orders")\n'
     existing_sql: str = ""
+
+
+@dataclass(frozen=True)
+class QueryFingerprintEditE2ETestCase:
+    """One authored edit and the plan reasons the token fingerprint must produce."""
+
+    description: str
+    edits: tuple[tuple[str, str, str], ...]
+    format_flags: tuple[str, ...]
+    expected_format_summary: str
+    expected_reasons: dict[str, str]

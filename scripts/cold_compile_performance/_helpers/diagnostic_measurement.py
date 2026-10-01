@@ -5,13 +5,15 @@ import subprocess
 import sys
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
+import sqlbuild._native as _native
 from scripts.cold_compile_performance.exceptions import CompileBenchmarkFixtureError
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_location,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.compiler.sql_analysis.types import NativeDiagnosticRow, NativePositionsModule
 from sqlbuild.spec.contracts.models import SourceLocation
 
 
@@ -75,3 +77,25 @@ def measure_position_mapping(*, count: int, lines: int = 4000) -> float:
                 "mapping must preserve the authored comparison location"
             )
     return perf_counter() - started
+
+
+def measure_function_name_scan(*, calls: int) -> float:
+    """Measure locating many unsupported built-in spellings in one wide Snowflake query."""
+    sql: str = (
+        "SELECT\n"
+        + ",\n".join(
+            f"  STARTS_WITH(sku, 'a{index}') AS unsupported_{index}, "
+            f"STARTSWITH(sku, 'a') AS accepted_{index}, normalize_sku(sku) AS unknown_{index}"
+            for index in range(calls)
+        )
+        + "\nFROM products"
+    )
+    native: NativePositionsModule = cast(NativePositionsModule, _native)
+    started: float = perf_counter()
+    rows: list[NativeDiagnosticRow] = native.binding_diagnostics(
+        sql=sql, dialect="snowflake", rows=[]
+    )
+    elapsed: float = perf_counter() - started
+    if len(rows) != calls or rows[-1][2] != calls + 1:
+        raise CompileBenchmarkFixtureError("every unsupported spelling must keep its own location")
+    return elapsed

@@ -14,6 +14,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BacktickDialectFormatIntegrationTestCase,
     CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
+    DollarQuoteFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
     FormatPathArgumentsIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
@@ -21,16 +22,21 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatterDeclineIntegrationTestCase,
     FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
+    LayoutOnlyFormatIntegrationTestCase,
     LeadingCteCommentFormatIntegrationTestCase,
+    LineWidthWrapIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
     TypedNullFormatIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    query_duckdb_rows,
+    run_build,
     write_from_values_format_project,
     write_snowflake_format_test,
 )
 
 _UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order_id\n"
+_LAYOUT_ONLY_BODY: str = 'SELECT ALL\n  order_id id,\n  amount,\nFROM __source("raw_orders") o;\n'
 
 
 @pytest.mark.parametrize(
@@ -52,13 +58,19 @@ _UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order
             "Snowflake TIMESTAMPDIFF synonym is kept",
             "snowflake",
             "TIMESTAMPDIFF(day, ordered_at, shipped_at)",
-            "TIMESTAMPDIFF(DAY, ordered_at, shipped_at)",
+            "TIMESTAMPDIFF(day, ordered_at, shipped_at)",
         ),
         AuthoredSpellingFormatIntegrationTestCase(
             "Snowflake TRY_TO_DECIMAL synonym is kept",
             "snowflake",
             "TRY_TO_DECIMAL(amount_text, 10, 2)",
             "TRY_TO_DECIMAL(amount_text, 10, 2)",
+        ),
+        AuthoredSpellingFormatIntegrationTestCase(
+            "PostgreSQL comma SUBSTRING arguments are kept",
+            "postgres",
+            "substring(order_code, 1, 2)",
+            "SUBSTRING(order_code, 1, 2)",
         ),
         AuthoredSpellingFormatIntegrationTestCase(
             "DuckDB IFNULL and != spellings are kept",
@@ -87,7 +99,7 @@ def test_given_authored_function_spelling_when_formatting_then_only_layout_chang
     assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
     capsys.readouterr()
     formatted: str = model.read_text()
-    assert f"  {test_case.expected_expression} AS order_flag\n" in formatted
+    assert f"SELECT {test_case.expected_expression} AS order_flag\n" in formatted
     assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
     assert model.read_text() == formatted
 
@@ -800,15 +812,13 @@ def test_given_format_selectors_when_scoping_then_paths_and_default_exclusions_a
     models.mkdir()
     (models / "customers.sql").write_text(
         "MODEL (materialized table, columns (customer_id (type INTEGER),));\n"
-        "SELECT\n"
-        "  1 AS customer_id\n",
+        "SELECT 1 AS customer_id\n",
         encoding="utf-8",
     )
     (models / "orders.sql").write_text(
         'MODEL (description "Orders.", materialized table, '
         "columns (order_id (type INTEGER),));\n"
-        "SELECT\n"
-        "  customer_id AS order_id\n"
+        "SELECT customer_id AS order_id\n"
         'FROM __ref("customers")\n',
         encoding="utf-8",
     )
@@ -995,7 +1005,7 @@ def test_given_file_paths_when_formatting_then_only_named_files_change(
                 "distinct_rows AS (\n    SELECT order_id, customer_id\n    FROM upstream\n"
                 "    GROUP BY ALL\n)\n\nSELECT order_id, customer_id FROM distinct_rows\n"
             ),
-            expected_fragment="),\n-- Explains the next CTE: line one,\n-- line two.\ndistinct_rows AS (",
+            expected_fragment="),\n\n-- Explains the next CTE: line one,\n-- line two.\ndistinct_rows AS (",
         ),
     ],
     ids=lambda case: case.description,
@@ -1075,3 +1085,226 @@ def test_given_backtick_identifier_apostrophe_when_formatting_then_macro_call_st
 
     assert (format_exit, compile_exit) == (0, 0), output.out + output.err
     assert test_case.expected_literal in model_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DollarQuoteFormatIntegrationTestCase(
+            description="untagged dollar quote with an apostrophe",
+            literal="$$Customer's order$$",
+            expected_note="Customer's order",
+        ),
+        DollarQuoteFormatIntegrationTestCase(
+            description="tagged dollar quote with an apostrophe",
+            literal="$note$it's shipped$note$",
+            expected_note="it's shipped",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dollar_quoted_apostrophe_when_formatting_then_reference_survives_and_builds(
+    test_case: DollarQuoteFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "prod"\n\n'
+        '[connections.local]\ndatabase = "warehouse.duckdb"\n\n'
+        '[targets.prod]\nconnection = "local"\nschema = "prod"\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders", materialized table);\n\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    notes: Path = models / "order_notes.sql"
+    notes.write_text(
+        'MODEL (description "Order notes", materialized table);\n\n'
+        f'select {test_case.literal} as note, o.order_id from __ref("orders") o\n',
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    build_exit, build_output = run_build(project_dir=tmp_path, flags=(), capsys=capsys)
+
+    assert (format_exit, build_exit) == (0, 0), build_output
+    formatted: str = notes.read_text(encoding="utf-8")
+    assert f"  {test_case.literal} AS note," in formatted
+    assert 'FROM __ref("orders")' in formatted
+    assert query_duckdb_rows(
+        db_path=tmp_path / "warehouse.duckdb", sql="SELECT note, order_id FROM prod.order_notes"
+    ) == ((test_case.expected_note, 1),)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LayoutOnlyFormatIntegrationTestCase(f"{adapter} keeps authored tokens", adapter, body)
+        for adapter, body in (
+            ("duckdb", _LAYOUT_ONLY_BODY),
+            ("snowflake", _LAYOUT_ONLY_BODY),
+            ("postgres", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
+            ("bigquery", _LAYOUT_ONLY_BODY),
+            (
+                "databricks",
+                _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n").replace("ALL", "all"),
+            ),
+            ("sqlserver", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_select_all_and_implicit_aliases_when_formatting_then_only_layout_changes(
+    test_case: LayoutOnlyFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "{test_case.adapter}"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    authored: str = " ".join(test_case.expected_body.lower().split())
+    model.write_text(f'MODEL (description "Orders");\n\n{authored}\n', encoding="utf-8")
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    check_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format", "--check"])
+    output: CaptureResult[str] = capsys.readouterr()
+
+    assert (format_exit, check_exit) == (0, 0), output.out + output.err
+    assert model.read_text(encoding="utf-8").endswith(test_case.expected_body)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LineWidthWrapIntegrationTestCase(
+            description="long audit list and long reference arguments wrap at the project width",
+            line_width=60,
+            authored_sql=(
+                "MODEL (\n"
+                '  description "Order totals",\n'
+                "  materialized table,\n"
+                "  columns (\n"
+                "    order_id (audits [not_null, unique, accepted_values (values [1, 2, 3])]),\n"
+                "  ),\n"
+                ");\n\n"
+                "select o.order_id, coalesce(o.amount, o.fallback_amount, 0) + o.tax as total "
+                'from __ref("orders_with_a_long_name") o where o.amount > 0 and o.order_id > 0 '
+                "and o.tax >= 0 and o.fallback_amount is null\n"
+            ),
+            expected_sql=(
+                "MODEL (\n"
+                '  description "Order totals",\n'
+                "  materialized table,\n"
+                "  columns (\n"
+                "    order_id (audits [\n"
+                "      not_null,\n"
+                "      unique,\n"
+                "      accepted_values (values [1, 2, 3]),\n"
+                "    ]),\n"
+                "  ),\n"
+                ");\n\n"
+                "SELECT\n"
+                "  o.order_id,\n"
+                "  COALESCE(o.amount, o.fallback_amount, 0) + o.tax AS total\n"
+                'FROM __ref("orders_with_a_long_name") o\n'
+                "WHERE\n"
+                "  o.amount > 0\n"
+                "  AND o.order_id > 0\n"
+                "  AND o.tax >= 0\n"
+                "  AND o.fallback_amount IS NULL\n"
+            ),
+        ),
+        LineWidthWrapIntegrationTestCase(
+            description="CTE, VALUES, single-item and type-parameter layout rules build",
+            line_width=60,
+            authored_sql=(
+                'MODEL (description "Order totals", materialized table);\n\n'
+                'with orders as (select * from __ref("orders_with_a_long_name")),\n'
+                "-- paid orders only\n"
+                "paid as (select o.order_id, cast(coalesce(o.amount, o.fallback_amount, 0) "
+                "+ o.tax as decimal(18, 2)) as total from orders o where o.amount > 0),\n"
+                "labels as (select * from (values (1, 'paid and shipped to the customer'), "
+                "(2, 'cancelled by the customer')) as l(order_id, label))\n"
+                "select p.order_id, p.total from paid p join labels l on p.order_id = l.order_id\n"
+            ),
+            expected_sql=(
+                'MODEL (description "Order totals", materialized table);\n'
+                "\n"
+                "WITH orders AS (\n"
+                "  SELECT *\n"
+                '  FROM __ref("orders_with_a_long_name")\n'
+                "),\n"
+                "\n"
+                "-- paid orders only\n"
+                "paid AS (\n"
+                "  SELECT\n"
+                "    o.order_id,\n"
+                "    CAST(\n"
+                "      COALESCE(o.amount, o.fallback_amount, 0)\n"
+                "        + o.tax AS decimal(18, 2)\n"
+                "    ) AS total\n"
+                "  FROM orders o\n"
+                "  WHERE o.amount > 0\n"
+                "),\n"
+                "\n"
+                "labels AS (\n"
+                "  SELECT *\n"
+                "  FROM (\n"
+                "    VALUES\n"
+                "      (1, 'paid and shipped to the customer'),\n"
+                "      (2, 'cancelled by the customer')\n"
+                "  ) AS l(order_id, label)\n"
+                ")\n"
+                "\n"
+                "SELECT\n"
+                "  p.order_id,\n"
+                "  p.total\n"
+                "FROM paid p\n"
+                "JOIN labels l\n"
+                "  ON p.order_id = l.order_id\n"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_line_width_when_formatting_then_long_lines_wrap_and_project_builds(
+    test_case: LineWidthWrapIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "prod"\n\n'
+        f"[format]\nline_width = {test_case.line_width}\n\n"
+        '[connections.local]\ndatabase = "warehouse.duckdb"\n\n'
+        '[targets.prod]\nconnection = "local"\nschema = "prod"\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders_with_a_long_name.sql").write_text(
+        'MODEL (description "Orders", materialized table);\n\n'
+        "SELECT\n  1 AS order_id,\n  5 AS amount,\n  NULL AS fallback_amount,\n  1 AS tax\n",
+        encoding="utf-8",
+    )
+    model: Path = models / "order_totals.sql"
+    model.write_text(test_case.authored_sql, encoding="utf-8")
+
+    unformatted_check: int = main(
+        ["--project-dir", str(tmp_path), "--no-color", "format", "--check"]
+    )
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    formatted_check: int = main(["--project-dir", str(tmp_path), "--no-color", "format", "--check"])
+    build_exit, build_output = run_build(project_dir=tmp_path, flags=(), capsys=capsys)
+
+    assert (unformatted_check, format_exit, formatted_check, build_exit) == (1, 0, 0, 0), (
+        build_output
+    )
+    assert model.read_text(encoding="utf-8") == test_case.expected_sql
+    assert query_duckdb_rows(
+        db_path=tmp_path / "warehouse.duckdb", sql="SELECT order_id, total FROM prod.order_totals"
+    ) == ((1, 6),)
