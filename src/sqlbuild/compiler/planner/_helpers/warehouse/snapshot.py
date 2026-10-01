@@ -12,6 +12,18 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
+from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
+from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
+from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
+    list_relations_for_inspection,
+)
+from sqlbuild.adapter.relations.main.record_inspection_query import record_inspection_query
+from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
+from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
+    run_recorded_inspection_query,
+)
+from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -104,6 +116,15 @@ class _PhysicalCursorQuery:
     min_tags: tuple[str, ...]
     max_tags: tuple[str, ...]
     cursor_type: str = CursorType.TIMESTAMP
+
+
+@dataclass(frozen=True)
+class _CursorQueryOutcome:
+    """Result of one physical cursor statement; ``row`` is None when nothing was returned."""
+
+    row: Any
+    elapsed_seconds: float
+    error: Exception | None = None
 
 
 @dataclass(frozen=True)
@@ -240,6 +261,14 @@ def gather_warehouse_snapshot(
     if not schemas and metadata_names is None:
         return WarehouseSnapshot()
     query_schemas: tuple[str, ...] | None = schemas or None
+    _prefetch_inspection_schemas(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        database=database,
+        schemas=schemas,
+        relevant_keys=relevant_keys,
+    )
 
     relations: dict[str, RelationInfo]
     state_schemas: _StateTableSchemas
@@ -254,6 +283,7 @@ def gather_warehouse_snapshot(
     fingerprint_state_schemas: frozenset[str] = state_schemas.fingerprints
     freshness_state_schemas: frozenset[str] = state_schemas.source_freshness
     columns: dict[str, tuple[ColumnInfo, ...]] = _gather_columns(
+        project=project,
         adapter=adapter,
         connection=connection,
         relations=relations,
@@ -361,6 +391,36 @@ def gather_redirected_cursor_snapshots(
         for name, snapshot in snapshots.items()
         if name in model_map
     }
+
+
+def _prefetch_inspection_schemas(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    connection: Any,
+    database: str | None,
+    schemas: tuple[str, ...],
+    relevant_keys: frozenset[CompiledObjectKey] | None,
+) -> None:
+    """List target and source schemas together, concurrently; later reads report failures."""
+
+    catalog: InspectionCatalog | None = active_inspection_catalog(
+        adapter=adapter, connection=connection
+    )
+    if catalog is None:
+        return
+    scopes: list[tuple[str | None, str]] = [(database, schema) for schema in schemas]
+    source: CompiledSource
+    for source in project.sources:
+        entry: SourceEntry = source.source_entry
+        if (
+            (relevant_keys is not None and source.key not in relevant_keys)
+            or entry.expression is not None
+            or entry.schema is None
+        ):
+            continue
+        scopes.append((entry.database, entry.schema))
+    catalog.prefetch_schema_listings(scopes=tuple(scopes), best_effort=True)
 
 
 def _relevant_state_keys(
@@ -535,8 +595,8 @@ def _gather_relations(
 ) -> tuple[dict[str, RelationInfo], _StateTableSchemas]:
     """Fetch relations and the schemas where fingerprint, freshness and old-name state live."""
 
-    relations: tuple[RelationInfo, ...] = adapter.list_relations(
-        connection=connection, database=database, schemas=schemas, names=names
+    relations: tuple[RelationInfo, ...] = list_relations_for_inspection(
+        adapter=adapter, connection=connection, database=database, schemas=schemas, names=names
     )
     result: dict[str, RelationInfo] = {}
     logical_names_by_identity: dict[tuple[str | None, str | None, str], str] = {}
@@ -586,19 +646,35 @@ def _location_identity(
 
 def _gather_columns(
     *,
+    project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
     relations: dict[str, RelationInfo],
 ) -> dict[str, tuple[ColumnInfo, ...]]:
-    """Fetch column metadata for all relations across target schemas."""
+    """Fetch columns only for listed relations that planning looks up by node name."""
 
-    physical_relations: tuple[RelationInfo, ...] = tuple(relations.values())
+    node_names: frozenset[str] = frozenset(
+        (
+            *(model.name for model in project.models),
+            *(seed.name for seed in project.seeds),
+            *(function.name for function in project.functions),
+        )
+    )
+    needed: dict[str, RelationInfo] = {
+        logical_name: relation
+        for logical_name, relation in relations.items()
+        if logical_name in node_names
+    }
     all_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
-        adapter.get_columns_for_relations(connection=connection, relations=physical_relations)
+        get_columns_for_inspection(
+            adapter=adapter, connection=connection, relations=tuple(needed.values())
+        )
+        if needed
+        else {}
     )
     return {
         logical_name: all_columns[relation.identity]
-        for logical_name, relation in relations.items()
+        for logical_name, relation in needed.items()
         if relation.identity in all_columns
     }
 
@@ -696,11 +772,13 @@ def _gather_cursor_snapshots(
 
     queries: list[_PhysicalCursorQuery] = _build_cursor_queries(cursor_models)
     cursor_start: float = time.monotonic()
+    concurrency: int = _inspection_concurrency(adapter=adapter, connection=connection)
     results: dict[str, CursorScalar] = _execute_cursor_queries(
         queries=queries,
         connection=connection,
         execute=execute,
         on_progress=on_progress,
+        concurrency=concurrency,
     )
     results = _gather_eligible_target_maxes(
         cursor_models=cursor_models,
@@ -1020,76 +1098,168 @@ def _execute_cursor_queries(
     connection: Any,
     execute: AdapterExecute[Any, Any],
     on_progress: Callable[[str], None] | None,
+    concurrency: int = 1,
 ) -> dict[str, CursorScalar]:
-    """Execute standalone physical cursor queries and fan values out to logical tags."""
+    """Run one unmerged MIN/MAX statement per relation, bounded-parallel, merged in query order."""
 
-    results: dict[str, CursorScalar] = {}
     total: int = len(queries)
-    query_index: int
-    query: _PhysicalCursorQuery
-    for query_index, query in enumerate(queries, start=1):
-        query_results: dict[str, CursorScalar] = _execute_cursor_query(
-            query=query,
-            query_index=query_index,
-            total=total,
-            connection=connection,
-            execute=execute,
-            on_progress=on_progress,
+    if concurrency <= 1 or total <= 1:
+        results: dict[str, CursorScalar] = {}
+        query_index: int
+        query: _PhysicalCursorQuery
+        for query_index, query in enumerate(queries, start=1):
+            identity: str = _cursor_query_identity(query=query, index=query_index, total=total)
+            if on_progress is not None:
+                on_progress(f"Inspecting cursor bounds {identity}...")
+            outcome: _CursorQueryOutcome = _read_cursor_query(
+                query=query, connection=connection, execute=execute
+            )
+            _report_cursor_query(
+                query=query, outcome=outcome, identity=identity, on_progress=on_progress
+            )
+            results.update(_fan_out_cursor_row(query=query, row=outcome.row))
+        return results
+    if on_progress is not None:
+        on_progress(
+            f"Inspecting cursor bounds for {total} relations "
+            f"({min(concurrency, total)} concurrent)..."
         )
-        results.update(query_results)
+    progress: _CursorBoundsProgress = _CursorBoundsProgress(
+        queries=tuple(queries), on_progress=on_progress
+    )
+    outcomes: list[_CursorQueryOutcome] = run_bounded_inspections(
+        tasks=tuple(
+            _bind_cursor_query(query=query, connection=connection, execute=execute)
+            for query in queries
+        ),
+        concurrency=concurrency,
+        on_complete=progress.report,
+    )
+    merged: dict[str, CursorScalar] = {}
+    outcome_item: _CursorQueryOutcome
+    for query, outcome_item in zip(queries, outcomes, strict=True):
+        merged.update(_fan_out_cursor_row(query=query, row=outcome_item.row))
+    return merged
 
-    return results
+
+class _CursorBoundsProgress:
+    """Report concurrent cursor-bound completions in finish order from the planning thread."""
+
+    def __init__(
+        self,
+        *,
+        queries: tuple[_PhysicalCursorQuery, ...],
+        on_progress: Callable[[str], None] | None,
+    ) -> None:
+        self._queries: tuple[_PhysicalCursorQuery, ...] = queries
+        self._on_progress: Callable[[str], None] | None = on_progress
+        self._completed: int = 0
+
+    def report(self, *, index: int, result: _CursorQueryOutcome) -> None:
+        """Report one finished relation read."""
+
+        self._completed += 1
+        _report_cursor_query(
+            query=self._queries[index],
+            outcome=result,
+            identity=_cursor_query_identity(
+                query=self._queries[index], index=self._completed, total=len(self._queries)
+            ),
+            on_progress=self._on_progress,
+        )
 
 
-def _execute_cursor_query(
-    *,
-    query: _PhysicalCursorQuery,
-    query_index: int,
-    total: int,
-    connection: Any,
-    execute: AdapterExecute[Any, Any],
-    on_progress: Callable[[str], None] | None,
-) -> dict[str, CursorScalar]:
-    """Execute one physical cursor query and fan out its returned values."""
+def _inspection_concurrency(*, adapter: BaseAdapter, connection: Any) -> int:
+    catalog: InspectionCatalog | None = active_inspection_catalog(
+        adapter=adapter, connection=connection
+    )
+    return 1 if catalog is None else catalog.concurrency
 
+
+def _cursor_query_identity(*, query: _PhysicalCursorQuery, index: int, total: int) -> str:
+    return f"({index}/{total}): {query.relation}.{query.cursor_column} [{_cursor_bounds(query)}]"
+
+
+def _cursor_bounds(query: _PhysicalCursorQuery) -> str:
     bounds: str = ",".join(("min",) if query.min_tags else ())
     if query.max_tags:
         bounds = f"{bounds},max" if bounds else "max"
-    identity: str = f"({query_index}/{total}): {query.relation}.{query.cursor_column} [{bounds}]"
+    return bounds
+
+
+def _cursor_query_sql(query: _PhysicalCursorQuery) -> str:
     select_parts: list[str] = []
     if query.min_tags:
         select_parts.append(f"CAST(MIN({query.cursor_column}) AS VARCHAR) AS _min")
     if query.max_tags:
         select_parts.append(f"CAST(MAX({query.cursor_column}) AS VARCHAR) AS _max")
-    sql: str = f"SELECT {', '.join(select_parts)} FROM {query.relation}"
-    if on_progress is not None:
-        on_progress(f"Inspecting cursor bounds {identity}...")
+    return f"SELECT {', '.join(select_parts)} FROM {query.relation}"
 
+
+def _bind_cursor_query(
+    *, query: _PhysicalCursorQuery, connection: Any, execute: AdapterExecute[Any, Any]
+) -> Callable[[], _CursorQueryOutcome]:
+    def read() -> _CursorQueryOutcome:
+        return _read_cursor_query(query=query, connection=connection, execute=execute)
+
+    return read
+
+
+def _read_cursor_query(
+    *, query: _PhysicalCursorQuery, connection: Any, execute: AdapterExecute[Any, Any]
+) -> _CursorQueryOutcome:
+    """Run one physical cursor statement; a failure leaves only that relation unavailable."""
+
+    sql: str = _cursor_query_sql(query)
     query_start: float = time.monotonic()
     try:
         result: Any = execute(connection=connection, sql=sql)
         rows: list[Any] = result.fetchall()
     except Exception as error:
         elapsed: float = time.monotonic() - query_start
-        if on_progress is not None:
-            on_progress(f"Failed cursor bounds {identity} ({elapsed:.2f}s): {error}")
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="cursor bounds physical query failed; treating relation as unavailable",
-            sqlbuild_relation=query.relation,
-            sqlbuild_cursor_column=query.cursor_column,
-            sqlbuild_bounds=bounds,
-            sqlbuild_elapsed_seconds=f"{elapsed:.2f}",
-            sqlbuild_error=str(error),
+        record_inspection_query(
+            record=InspectionQueryRecord(
+                sql=sql, elapsed_seconds=elapsed, row_count=None, error=str(error)
+            )
         )
-        return {}
+        return _CursorQueryOutcome(row=None, elapsed_seconds=elapsed, error=error)
     elapsed = time.monotonic() - query_start
+    record_inspection_query(
+        record=InspectionQueryRecord(sql=sql, elapsed_seconds=elapsed, row_count=len(rows))
+    )
+    return _CursorQueryOutcome(row=rows[0] if rows else None, elapsed_seconds=elapsed)
+
+
+def _report_cursor_query(
+    *,
+    query: _PhysicalCursorQuery,
+    outcome: _CursorQueryOutcome,
+    identity: str,
+    on_progress: Callable[[str], None] | None,
+) -> None:
+    if outcome.error is None:
+        if on_progress is not None:
+            on_progress(f"Inspected cursor bounds {identity} ({outcome.elapsed_seconds:.2f}s)")
+        return
     if on_progress is not None:
-        on_progress(f"Inspected cursor bounds {identity} ({elapsed:.2f}s)")
-    if not rows:
+        on_progress(
+            f"Failed cursor bounds {identity} ({outcome.elapsed_seconds:.2f}s): {outcome.error}"
+        )
+    log_debug_event(
+        logger=_DEBUG_LOGGER,
+        message="cursor bounds physical query failed; treating relation as unavailable",
+        sqlbuild_relation=query.relation,
+        sqlbuild_cursor_column=query.cursor_column,
+        sqlbuild_bounds=_cursor_bounds(query),
+        sqlbuild_elapsed_seconds=f"{outcome.elapsed_seconds:.2f}",
+        sqlbuild_error=str(outcome.error),
+    )
+
+
+def _fan_out_cursor_row(*, query: _PhysicalCursorQuery, row: Any) -> dict[str, CursorScalar]:
+    if row is None:
         return {}
     output: dict[str, CursorScalar] = {}
-    row: Any = rows[0]
     value_index: int = 0
     if query.min_tags:
         min_value: Any = row[value_index]
@@ -1130,6 +1300,7 @@ def _gather_eligible_target_maxes(
     if invocation_time is None:
         return results
     eligible_results: dict[str, CursorScalar] = dict(results)
+    requests: list[tuple[_CursorModelInfo, str]] = []
     info: _CursorModelInfo
     for info in cursor_models:
         config: StartCursorsConfig | None = info.start_cursor_config
@@ -1154,22 +1325,29 @@ def _gather_eligible_target_maxes(
         )
         if compare(left=target_max, right=horizon) <= 0:
             continue
-        horizon_is_date: bool = isinstance(horizon, DateValue)
-        eligible_sql: str = adapter.render_max_cursor_at_or_before(
-            relation=info.target_relation,
-            cursor_column=info.physical_cursor_column,
-            maximum_allowed=render(value=horizon),
-            cursor_type=info.cursor_type,
-            is_date=horizon_is_date,
+        requests.append(
+            (
+                info,
+                adapter.render_max_cursor_at_or_before(
+                    relation=info.target_relation,
+                    cursor_column=info.physical_cursor_column,
+                    maximum_allowed=render(value=horizon),
+                    cursor_type=info.cursor_type,
+                    is_date=isinstance(horizon, DateValue),
+                ),
+            )
         )
-        try:
-            query_result: Any = execute(connection=connection, sql=eligible_sql)
-            rows: list[Any] = query_result.fetchall()
-        except Exception as error:
-            raise PlannerInputError(
-                f"model '{info.model_name}': failed to query highest eligible target cursor "
-                f"for {info.target_relation}.{info.cursor_column}: {error}"
-            ) from error
+    rows_by_request: list[list[Any]] = run_bounded_inspections(
+        tasks=tuple(
+            _bind_eligible_target_max(
+                info=request_info, sql=sql, connection=connection, execute=execute
+            )
+            for request_info, sql in requests
+        ),
+        concurrency=_inspection_concurrency(adapter=adapter, connection=connection),
+    )
+    rows: list[Any]
+    for (info, _sql), rows in zip(requests, rows_by_request, strict=True):
         if rows and rows[0][0] is not None:
             eligible_results[f"{info.model_name}__target__eligible_max"] = _normalize_cursor_grain(
                 value=parse(raw=rows[0][0], cursor_type=info.cursor_type or CursorType.TIMESTAMP),
@@ -1177,6 +1355,28 @@ def _gather_eligible_target_maxes(
                 cursor_grain=info.effective_cursor_grain,
             )
     return eligible_results
+
+
+def _bind_eligible_target_max(
+    *,
+    info: _CursorModelInfo,
+    sql: str,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+) -> Callable[[], list[Any]]:
+    def read() -> list[Any]:
+        try:
+            return run_recorded_inspection_query(
+                sql=sql,
+                run=lambda: execute(connection=connection, sql=sql).fetchall(),
+            )
+        except Exception as error:
+            raise PlannerInputError(
+                f"model '{info.model_name}': failed to query highest eligible target cursor "
+                f"for {info.target_relation}.{info.cursor_column}: {error}"
+            ) from error
+
+    return read
 
 
 def _normalize_cursor_grain(

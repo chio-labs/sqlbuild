@@ -8,7 +8,11 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
+from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
+from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
+    list_relations_for_inspection,
+)
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
@@ -1056,41 +1060,37 @@ def gather_source_columns(
     schemas: set[str]
     for db_key_iter, schemas in source_schemas.items():
         database: str | None = db_key_iter or None
-        names: tuple[str, ...] | None = _build_source_table_name_filter(
-            project=project,
-            database=database,
-            schemas=schemas,
-            source_entries=entries,
-        )
-        relations: tuple[RelationInfo, ...] = adapter.list_relations(
+        scoped: dict[str, tuple[str | None, str | None, str]] = {
+            entry_iter.name: RelationLookup.key(
+                database=database,
+                schema=entry_iter.schema,
+                name=entry_iter.table if entry_iter.table is not None else entry_iter.name,
+            )
+            for entry_iter in entries
+            if entry_iter.expression is None
+            and (entry_iter.database or None) == database
+            and entry_iter.schema in schemas
+        }
+        relations: tuple[RelationInfo, ...] = list_relations_for_inspection(
+            adapter=adapter,
             connection=connection,
             database=database,
             schemas=tuple(sorted(schemas)),
-            names=names,
+            names=_build_source_table_name_filter(
+                project=project, database=database, schemas=schemas, source_entries=entries
+            ),
         )
+        wanted: frozenset[tuple[str | None, str | None, str]] = frozenset(scoped.values())
         all_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
-            adapter.get_columns_for_relations(
+            get_columns_for_inspection(
+                adapter=adapter,
                 connection=connection,
-                relations=relations,
+                relations=tuple(relation for relation in relations if relation.identity in wanted),
             )
         )
-        entry_iter: SourceEntry
-        for entry_iter in entries:
-            if (
-                entry_iter.expression is not None
-                or (entry_iter.database or None) != database
-                or entry_iter.schema not in schemas
-            ):
-                continue
-            table_name: str = entry_iter.table if entry_iter.table is not None else entry_iter.name
-            identity: tuple[str | None, str | None, str] = (
-                None if database is None else database.lower(),
-                None if entry_iter.schema is None else entry_iter.schema.lower(),
-                table_name.lower(),
-            )
-            cols: tuple[ColumnInfo, ...] | None = all_columns.get(identity)
-            if cols is not None:
-                result[entry_iter.name] = cols
+        result.update(
+            {name: all_columns[key] for name, key in scoped.items() if key in all_columns}
+        )
 
     return result
 

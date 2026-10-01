@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import fields, replace
 from datetime import UTC, datetime
@@ -24,7 +26,9 @@ from sqlbuild.compiler.compile.models import (
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -32,6 +36,8 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
@@ -44,6 +50,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SettingsConfig,
@@ -53,6 +60,12 @@ from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
     SourceCursorInputPlanErrorTestCase,
+)
+from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
+    OfflineSnowflakeAdapter,
+    RecordedQuery,
+    RecordingSnowflakeWarehouse,
+    SyntheticSnowflakeProject,
 )
 
 
@@ -446,4 +459,54 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
         deferral=deferral,
         policies=policies,
         **kwargs,
+    )
+
+
+_OFFLINE_METADATA_KINDS: frozenset[str] = frozenset(
+    {"tables", "columns", "show_columns", "other_metadata"}
+)
+_CURSOR_BOUND_RELATION: re.Pattern[str] = re.compile(r"\sFROM\s+(\S+)\s*$", re.IGNORECASE)
+
+
+def plan_offline_snowflake_project(
+    *,
+    project: SyntheticSnowflakeProject,
+    warehouse: RecordingSnowflakeWarehouse,
+    no_cache: bool = True,
+) -> CompilePipelineResult:
+    """Compile and plan a synthetic Snowflake project against the recording warehouse."""
+
+    inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project.project_dir)
+    return run_compile_pipeline(
+        discovered_inputs=inputs,
+        adapter=OfflineSnowflakeAdapter(warehouse=warehouse),
+        options=CompilePipelineOptions(
+            no_sql_validation=True,
+            no_cache=no_cache,
+            connection_config=dict(inputs.project_config.connection),
+        ),
+        hooks=ConnectionHooks(),
+    )
+
+
+def offline_metadata_queries(warehouse: RecordingSnowflakeWarehouse) -> tuple[RecordedQuery, ...]:
+    """Return every catalog metadata statement the warehouse received."""
+
+    return tuple(filter(lambda query: query.kind in _OFFLINE_METADATA_KINDS, warehouse.queries))
+
+
+def offline_metadata_reads_by_schema(
+    *, warehouse: RecordingSnowflakeWarehouse, kind: str
+) -> dict[str, int]:
+    """Count schema-scoped metadata reads of one kind by their schema parameter."""
+
+    return dict(Counter(str(query.params[0]) for query in warehouse.queries_of_kind(kind)))
+
+
+def offline_cursor_bound_relations(warehouse: RecordingSnowflakeWarehouse) -> tuple[str, ...]:
+    """Return the single relation each cursor-bound statement reads."""
+
+    return tuple(
+        _CURSOR_BOUND_RELATION.findall(query.sql)[0]
+        for query in warehouse.queries_of_kind("cursor_bounds")
     )

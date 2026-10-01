@@ -101,3 +101,31 @@ class FutureCursorPlannerErrorTestCase:
 class TableTypePlanAssemblyTestCase:
     description: str
     expected_entry_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeInspectionBudgetTestCase:
+    """A synthetic multi-schema Snowflake project planned against a recording warehouse."""
+
+    description: str
+    unmanaged_relations_per_schema: int
+    expected_schema_reads: dict[str, int]
+    expected_metadata_budget: int
+    expected_in_list_limit: int
+
+
+@dataclass(frozen=True)
+class SnowflakeCursorBoundsBudgetTestCase:
+    """Cursor-bound reads issued while planning a synthetic Snowflake project."""
+
+    description: str
+    statement_latency_seconds: float
+    expected_max_concurrency: int
+
+
+@dataclass(frozen=True)
+class SnowflakeReplanTestCase:
+    """Planning the same project twice in separate invocations."""
+
+    description: str
+    expected_tables_reads: int
