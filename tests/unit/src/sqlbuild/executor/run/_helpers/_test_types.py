@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, ExecutionPhase
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
@@ -470,3 +471,10 @@ class PythonHookHardCodedRelationTestCase:
     description: str
     enforce_explicit_references: bool
     expected_warning_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CustomQueryChangeTestCase:
+    description: str
+    reason: PlanReason
+    expected_query_changed: bool
