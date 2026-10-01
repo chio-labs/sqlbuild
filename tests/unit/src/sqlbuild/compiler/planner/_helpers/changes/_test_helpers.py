@@ -214,6 +214,7 @@ def _build_schema_entry(test_case: DetectModelChangesTestCase) -> SchemaModelEnt
     schema_entry: SchemaModelEntry = SchemaModelEntry(
         name=test_case.model_name,
         columns=tuple(SchemaColumn(name=c[0], type=c[1]) for c in schema_cols),
+        type_enforcement=test_case.schema_type_enforcement,
     )
     return (None, schema_entry)[bool(schema_cols)]
 

@@ -15,7 +15,7 @@ A model's own change is any of:
 - **Config changed**: version-relevant configuration differs. A config change alone does not replay history.
 - **First run**: the model's relation does not exist yet. Only that model is built from scratch.
 
-References rewritten by a rename are not a change of their own. When an upstream model is renamed with `migrate_from` (for example by [`sqb rename`](/docs/cli/rename)), a downstream model whose only difference is the rewritten `__ref` and `cursor_inputs` name keeps its identity: views are recreated as usual, and incremental models continue forward. A downstream model that also has a real edit is a normal query change.
+References rewritten by a rename are not a change of their own. When an upstream model is renamed with `migrate_from` (for example by [`sqb rename`](/docs/cli/rename)), a downstream model whose only difference is the rewritten `__ref` and `cursor_inputs` name keeps its identity: views are recreated as usual, and incremental models continue forward. This also holds when the renamed model was built in an earlier run, for example by a selective build, or when its `migrate_from` was removed afterwards, because recorded renames are read from migration history. A downstream model that also has a real edit is a normal query change.
 
 For a query, function, or own declared schema change, the model's own `replay_on_change` decides the replay:
 

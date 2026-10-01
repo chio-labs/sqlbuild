@@ -313,6 +313,80 @@ def declare_downstream_column_type(*, project_dir: Path) -> None:
     )
 
 
+def udf_reference_merge_files() -> dict[str, str]:
+    """Return a protected full-replay merge model that reads the upstream through a UDF."""
+
+    return {
+        "functions/sql/udf__plus_one.sql": (
+            "FUNCTION (\n  arguments (value INTEGER),\n  returns INTEGER,\n);\n\nvalue + 1\n"
+        ),
+        "models/down_merge.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy merge,\n"
+            "  unique_key [id],\n"
+            "  cursor event_date,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_inputs (\n    upstream event_date,\n  ),\n"
+            "  replay_on_change full,\n"
+            "  full_refresh false,\n"
+            ");\n\n"
+            '-- reads __ref("upstream")\n'
+            "SELECT\n  u.id,\n  u.event_date,\n"
+            '  __udf("udf__plus_one")(u.id) AS next_id\n'
+            'FROM __ref("upstream") AS u\n'
+        ),
+    }
+
+
+def incremental_upstream_files() -> dict[str, str]:
+    """Return an incremental upstream so a rename moves its data instead of renaming it."""
+
+    return {
+        "models/upstream.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy merge,\n"
+            "  unique_key [id],\n"
+            "  cursor event_date,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_inputs (\n    events event_date,\n  ),\n"
+            ");\n\n"
+            "SELECT\n  id,\n  CAST(event_date AS DATE) AS event_date\n"
+            'FROM __seed("events")\n'
+        ),
+    }
+
+
+def build_selected(*, project_dir: Path, selector: str) -> None:
+    """Build only the selected nodes."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", selector), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def remove_migrate_from(*, project_dir: Path) -> None:
+    """Drop the migrate_from declaration from the renamed upstream model."""
+
+    path: Path = project_dir / "models/upstream_renamed.sql"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("  migrate_from upstream,\n", ""),
+        encoding="utf-8",
+    )
+
+
+def drop_upstream_column(*, project_dir: Path) -> None:
+    """Drop the event_date column from the star project's upstream table."""
+
+    (project_dir / "models/up.sql").write_text(
+        "MODEL (\n  materialized table,\n);\n\nSELECT 1 AS id\n", encoding="utf-8"
+    )
+
+
 def plan(*, project_dir: Path, args: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
     """Run sqb plan without colour."""
 
