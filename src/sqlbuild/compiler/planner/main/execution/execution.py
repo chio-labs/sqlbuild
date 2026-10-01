@@ -107,9 +107,9 @@ def build_execution_plan(
             include_stale_warning_identities=policies.selection_diagnostics,
         )
         check_selected_scope_buildability(
-            project=project,
+            runtime=runtime,
             scopes=scopes,
-            snapshot=warehouse.snapshot,
+            warehouse=warehouse,
             deferral=deferral,
         )
         changes: PlannerChangeResults

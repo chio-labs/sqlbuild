@@ -26,6 +26,14 @@ class BuiltinAdapter(StrEnum):
     SQLSERVER = "sqlserver"
 
 
+class TableFreshnessStatus(StrEnum):
+    """Per-table outcome of an adapter freshness metadata lookup."""
+
+    OBSERVED = "observed"
+    MISSING = "missing"
+    UNAVAILABLE = "unavailable"
+
+
 class CursorKind(StrEnum):
     TIMESTAMP = "timestamp"
     INTEGER = "integer"

@@ -36,6 +36,9 @@ from sqlbuild.adapter.contract.constants import (
     DIFF_RIGHT_SIDE,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
+    complete_table_freshness_results,
+)
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
@@ -825,29 +828,25 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                     continue
                 table_type: str = str(row[3]).upper()
                 if table_type != BASE_TABLE_METADATA_TYPE:
-                    raise AdapterUserError(
+                    results[matched_request] = TableFreshnessMetadata.unavailable(
                         message="Snowflake table freshness metadata only supports physical tables; "
-                        f"found {table_type}"
+                        f"found {table_type} for {matched_request.name}"
                     )
+                    continue
                 if row[4] is None:
-                    raise AdapterUserError(
+                    results[matched_request] = TableFreshnessMetadata.unavailable(
                         message="Snowflake table freshness metadata is missing LAST_ALTERED "
                         f"for {matched_request.name}"
                     )
+                    continue
                 results[matched_request] = TableFreshnessMetadata(
                     data_version=row[4],
                     value_kind="timestamp",
                     observed_at=row[4] if isinstance(row[4], datetime) else None,
                 )
-        missing_requests: list[TableFreshnessRequest] = [
-            request for request in requests if request not in results
-        ]
-        if missing_requests:
-            missing_names: str = ", ".join(request.name for request in missing_requests)
-            raise AdapterUserError(
-                message=f"Snowflake table freshness metadata not found for {missing_names}"
-            )
-        return results
+        return complete_table_freshness_results(
+            requests=requests, results=results, adapter_label="Snowflake"
+        )
 
     def persists_python_functions(self) -> bool:
         return True

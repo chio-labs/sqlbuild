@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -55,3 +55,11 @@ class VerboseInspectionPlanE2ETestCase:
     command: tuple[str, ...]
     expected_inspection_output: bool
     expected_json_stdout: bool
+
+
+@dataclass(frozen=True)
+class MissingSourceTableE2ETestCase:
+    description: str
+    expected_output_fragments: tuple[str, ...] = ()
+    expected_recorded_source_names: tuple[str, ...] = ()
+    expected_statuses: dict[str, str] = field(default_factory=dict)

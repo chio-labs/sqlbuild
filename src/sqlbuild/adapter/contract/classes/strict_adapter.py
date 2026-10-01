@@ -153,7 +153,7 @@ class StrictAdapter(
         connection: Any,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
-        """Return comparable freshness metadata for physical tables in batch."""
+        """Return one freshness outcome per requested table without failing the whole batch."""
         ...
 
     @abstractmethod

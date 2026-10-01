@@ -292,12 +292,15 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
         request: TableFreshnessRequest
         for request in requests:
-            results[request] = self.get_table_freshness_metadata(
-                connection=connection,
-                database=request.database,
-                schema=request.schema,
-                name=request.name,
-            )
+            try:
+                results[request] = self.get_table_freshness_metadata(
+                    connection=connection,
+                    database=request.database,
+                    schema=request.schema,
+                    name=request.name,
+                )
+            except AdapterUserError as error:
+                results[request] = TableFreshnessMetadata.unavailable(message=error.message)
         return results
 
     def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:

@@ -63,3 +63,11 @@ class LockOrderCase:
     description: str
     timeout_seconds: float
     expected_alive_threads: int
+
+
+@dataclass(frozen=True)
+class FreshnessMetadataProjectionCase:
+    description: str
+    terminal_event_type: str
+    terminal_payload: dict[str, object]
+    expected_terminal_line: str

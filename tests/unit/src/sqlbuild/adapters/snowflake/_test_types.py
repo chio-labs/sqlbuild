@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild.adapter.contract.models import FunctionInfo, SchemaDiffResult
+from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
 
@@ -130,6 +131,14 @@ class SnowflakeTableFreshnessBatchTestCase:
     description: str
     expected_data_versions: tuple[datetime, ...]
     expected_query_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeTableFreshnessOutcomeTestCase:
+    description: str
+    rows: tuple[tuple[object, ...], ...]
+    expected_statuses: dict[str, TableFreshnessStatus]
+    expected_message_fragments: dict[str, str]
 
 
 @dataclass(frozen=True)

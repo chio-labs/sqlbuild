@@ -37,6 +37,9 @@ from sqlbuild.adapter.contract.constants import (
     DIFF_RIGHT_SIDE,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
+    complete_table_freshness_results,
+)
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
@@ -82,6 +85,7 @@ from sqlbuild.adapter.contract.types import (
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
     StatementSizeLimit,
+    TableFreshnessStatus,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -562,9 +566,12 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             schema=schema,
             name=name,
         )
-        return self.get_tables_freshness_metadata(connection=connection, requests=(request,))[
-            request
-        ]
+        metadata: TableFreshnessMetadata = self.get_tables_freshness_metadata(
+            connection=connection, requests=(request,)
+        )[request]
+        if metadata.status != TableFreshnessStatus.OBSERVED:
+            raise AdapterUserError(message=metadata.message or f"freshness unavailable for {name}")
+        return metadata
 
     def get_tables_freshness_metadata(
         self,
@@ -574,22 +581,33 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         if not requests:
             return {}
-        request: TableFreshnessRequest
-        for request in requests:
-            if request.database is None or request.schema is None:
-                raise AdapterUserError(
-                    message="Databricks table freshness metadata requires catalog and schema"
-                )
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {
+            request: TableFreshnessMetadata.unavailable(
+                message="Databricks table freshness metadata requires catalog and schema"
+            )
+            for request in requests
+            if request.database is None or request.schema is None
+        }
+        lookup_requests: tuple[TableFreshnessRequest, ...] = tuple(
+            request for request in requests if request not in results
+        )
+        if not lookup_requests:
+            return results
         try:
-            return self._get_delta_history_freshness_metadata(
-                connection=connection,
-                requests=requests,
+            results.update(
+                self._get_delta_history_freshness_metadata(
+                    connection=connection,
+                    requests=lookup_requests,
+                )
             )
         except Exception:
-            return self._get_unity_catalog_freshness_metadata(
-                connection=connection,
-                requests=requests,
+            results.update(
+                self._get_unity_catalog_freshness_metadata(
+                    connection=connection,
+                    requests=lookup_requests,
+                )
             )
+        return results
 
     def _get_unity_catalog_freshness_metadata(
         self,
@@ -637,29 +655,25 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 continue
             table_type: str = str(row[3])
             if self._normalize_relation_type(table_type) != RelationType.TABLE:
-                raise AdapterUserError(
+                results[matched_request] = TableFreshnessMetadata.unavailable(
                     message="Databricks table freshness metadata only supports Delta tables; "
-                    f"found {table_type}"
+                    f"found {table_type} for {matched_request.name}"
                 )
+                continue
             if row[4] is None:
-                raise AdapterUserError(
+                results[matched_request] = TableFreshnessMetadata.unavailable(
                     message="Databricks table freshness metadata is missing LAST_ALTERED "
                     f"for {matched_request.name}"
                 )
+                continue
             results[matched_request] = TableFreshnessMetadata(
                 data_version=row[4],
                 value_kind="timestamp",
                 observed_at=row[4] if isinstance(row[4], datetime) else None,
             )
-        missing_requests: list[TableFreshnessRequest] = [
-            request for request in requests if request not in results
-        ]
-        if missing_requests:
-            missing_names: str = ", ".join(request.name for request in missing_requests)
-            raise AdapterUserError(
-                message=f"Databricks table freshness metadata not found for {missing_names}"
-            )
-        return results
+        return complete_table_freshness_results(
+            requests=requests, results=results, adapter_label="Databricks"
+        )
 
     def _get_delta_history_freshness_metadata(
         self,
@@ -714,23 +728,18 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             if matched_request is None:
                 continue
             if row[3] is None:
-                raise AdapterUserError(
+                results[matched_request] = TableFreshnessMetadata.unavailable(
                     message=f"Databricks Delta history not found for {matched_request.name}"
                 )
+                continue
             results[matched_request] = TableFreshnessMetadata(
                 data_version=row[3],
                 value_kind="timestamp",
                 observed_at=row[3] if isinstance(row[3], datetime) else None,
             )
-        missing_requests: list[TableFreshnessRequest] = [
-            request for request in requests if request not in results
-        ]
-        if missing_requests:
-            missing_names: str = ", ".join(request.name for request in missing_requests)
-            raise AdapterUserError(
-                message=f"Databricks Delta history not found for {missing_names}"
-            )
-        return results
+        return complete_table_freshness_results(
+            requests=requests, results=results, adapter_label="Databricks Delta history"
+        )
 
     def maximum_identifier_length(self) -> int:
         """Return the maximum unqualified identifier length supported by the adapter."""

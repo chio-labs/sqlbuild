@@ -76,6 +76,8 @@ _TTY_TRANSIENT_OWNER_OPERATIONS: frozenset[str] = frozenset(
 _TTY_RESOURCE_OWNER_OPERATIONS: frozenset[str] = frozenset(
     {"audit_evaluation", "sql_test_assertion"}
 )
+_FRESHNESS_METADATA_OPERATION: str = "source_freshness_metadata_observation"
+_FRESHNESS_QUERY_OPERATION: str = "source_freshness_query_observation"
 _RESOURCE_START: str = "resource_attempt_started"
 _OPERATION_START: str = "operation_started"
 _OPERATION_TERMINALS: frozenset[str] = frozenset({"operation_completed", "operation_failed"})
@@ -386,8 +388,10 @@ class NativeProgressProjector:
         )
         prefix: str = "    " if event.resource_attempt_id is not None else ""
         attempt: str = _operation_attempt_label(start)
+        detail: str = _operation_terminal_detail(operation_name=operation_name, event=event)
         self._write(
-            f"{prefix}{_VISIBLE_OPERATION_LABELS[operation_name]}{attempt}  {status}{elapsed}"
+            f"{prefix}{_VISIBLE_OPERATION_LABELS[operation_name]}{attempt}  "
+            f"{status}{detail}{elapsed}"
         )
 
     def _consume_retry_scheduled(self, event: LifecycleEvent) -> None:
@@ -515,3 +519,29 @@ def _operation_attempt_label(event: LifecycleEvent) -> str:
     if isinstance(attempt_number, int) and not isinstance(attempt_number, bool):
         return f" {attempt_number}"
     return ""
+
+
+def _operation_terminal_detail(*, operation_name: str, event: LifecycleEvent) -> str:
+    if operation_name == _FRESHNESS_QUERY_OPERATION:
+        return " (source freshness unknown)" if event.event_type.endswith("failed") else ""
+    if operation_name != _FRESHNESS_METADATA_OPERATION:
+        return ""
+    metadata: object = event.payload.get("metadata")
+    typed_metadata: Mapping[str, object] = (
+        cast(Mapping[str, object], metadata) if isinstance(metadata, Mapping) else {}
+    )
+    item_count: object = typed_metadata.get("item_count")
+    if isinstance(item_count, bool) or not isinstance(item_count, int):
+        return ""
+    noun: str = "source" if item_count == 1 else "sources"
+    if event.event_type.endswith("failed"):
+        error_type: object = event.payload.get("error_type")
+        reason: str = f": {error_type}" if isinstance(error_type, str) else ""
+        return f" ({item_count} {noun} unknown, metadata lookup failed{reason})"
+    unknown_count: object = typed_metadata.get("unknown_count")
+    unknown: int = (
+        unknown_count
+        if isinstance(unknown_count, int) and not isinstance(unknown_count, bool)
+        else 0
+    )
+    return f" ({item_count} {noun}, {unknown} unknown)"

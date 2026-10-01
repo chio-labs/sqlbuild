@@ -40,6 +40,9 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
+from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
+    complete_table_freshness_results,
+)
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -83,6 +86,7 @@ from sqlbuild.adapter.contract.types import (
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
     StatementSizeLimit,
+    TableFreshnessStatus,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -468,10 +472,13 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             schema=schema,
             name=name,
         )
-        return self.get_tables_freshness_metadata(
+        metadata: TableFreshnessMetadata = self.get_tables_freshness_metadata(
             connection=connection,
             requests=(request,),
         )[request]
+        if metadata.status != TableFreshnessStatus.OBSERVED:
+            raise AdapterUserError(message=metadata.message or f"freshness unavailable for {name}")
+        return metadata
 
     def get_tables_freshness_metadata(
         self,
@@ -481,26 +488,29 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         if not requests:
             return {}
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        lookup_requests: list[TableFreshnessRequest] = []
         request: TableFreshnessRequest
         for request in requests:
             if request.schema is None:
-                raise AdapterUserError(
+                results[request] = TableFreshnessMetadata.unavailable(
                     message="BigQuery table freshness metadata requires a dataset"
                 )
-            if TABLE_NAME_WILDCARD in request.name:
-                raise AdapterUserError(
+            elif TABLE_NAME_WILDCARD in request.name:
+                results[request] = TableFreshnessMetadata.unavailable(
                     message="BigQuery metadata freshness does not support wildcard tables; "
                     "configure a freshness column or query instead"
                 )
+            else:
+                lookup_requests.append(request)
 
         requests_by_location_project: dict[tuple[str, str | None], list[TableFreshnessRequest]] = {}
-        for request in requests:
+        for request in lookup_requests:
             location: str = self._metadata_location(connection=connection, request=request)
             requests_by_location_project.setdefault((location, request.database), []).append(
                 request
             )
 
-        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
         grouped_requests: list[TableFreshnessRequest]
         for (location, database), grouped_requests in requests_by_location_project.items():
             clauses: str = " OR ".join(
@@ -540,24 +550,19 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 if matched_request is None:
                     continue
                 if row[2] is None:
-                    raise AdapterUserError(
+                    results[matched_request] = TableFreshnessMetadata.unavailable(
                         message="BigQuery table freshness metadata is missing "
                         f"storage_last_modified_time for {matched_request.name}"
                     )
+                    continue
                 results[matched_request] = TableFreshnessMetadata(
                     data_version=row[2],
                     value_kind="timestamp",
                     observed_at=row[2] if isinstance(row[2], datetime) else None,
                 )
-        missing_requests: list[TableFreshnessRequest] = [
-            request for request in requests if request not in results
-        ]
-        if missing_requests:
-            missing_names: str = ", ".join(request.name for request in missing_requests)
-            raise AdapterUserError(
-                message=f"BigQuery table freshness metadata not found for {missing_names}"
-            )
-        return results
+        return complete_table_freshness_results(
+            requests=requests, results=results, adapter_label="BigQuery"
+        )
 
     def _legacy_tables_freshness_rows(
         self,

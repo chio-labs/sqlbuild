@@ -11,10 +11,16 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
+from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.source_freshness._helpers.datetime import normalize_presumed_utc_datetime
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
+from sqlbuild.compiler.source_freshness.models import (
+    AdapterSourceFreshnessBatch,
+    SourceFreshnessObservation,
+    SourceFreshnessUnknown,
+)
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessUnknownReason
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.models import OperationAttributes
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
@@ -141,10 +147,11 @@ def _observe_adapter_freshness(
         schema=source.schema,
         name=source.table,
     )
-    if metadata.data_version is None:
-        raise SourceFreshnessObservationError(
-            f"source '{source.name}' freshness data_version cannot be null"
-        )
+    source_unknown: SourceFreshnessUnknown | None = _adapter_metadata_unknown(
+        source_name=source.name, metadata=metadata
+    )
+    if source_unknown is not None:
+        raise SourceFreshnessObservationError(source_unknown.message)
     return SourceFreshnessObservation(
         source_name=source.name,
         strategy=SourceFreshnessStrategy.ADAPTER,
@@ -164,23 +171,27 @@ def observe_adapter_sources_freshness(
     connection: Any,
     sources: tuple[SourceEntry, ...],
     observed_at: datetime,
-) -> dict[str, SourceFreshnessObservation]:
-    """Observe adapter metadata freshness for physical table sources in one batch."""
+) -> AdapterSourceFreshnessBatch:
+    """Observe adapter metadata freshness per source, batching the warehouse lookups."""
 
     if not sources:
-        return {}
+        return AdapterSourceFreshnessBatch()
     with OperationLifecycle(
         operation_kind="freshness",
         operation_name="source_freshness_metadata_observation",
         metadata={"item_count": len(sources)},
         attributes=OperationAttributes(phase="observe", strategy="adapter", target_kind="source"),
-    ):
-        return _observe_adapter_sources_freshness(
+    ) as lifecycle:
+        batch: AdapterSourceFreshnessBatch = _observe_adapter_sources_freshness(
             adapter=adapter,
             connection=connection,
             sources=sources,
             observed_at=observed_at,
         )
+        lifecycle.completed(
+            metadata={"item_count": len(sources), "unknown_count": len(batch.unknown)}
+        )
+        return batch
 
 
 def _observe_adapter_sources_freshness(
@@ -189,44 +200,53 @@ def _observe_adapter_sources_freshness(
     connection: Any,
     sources: tuple[SourceEntry, ...],
     observed_at: datetime,
-) -> dict[str, SourceFreshnessObservation]:
-    if not adapter.supports_table_freshness_metadata():
-        raise SourceFreshnessObservationError(
-            f"adapter '{adapter.adapter_name}' does not support table freshness metadata"
-        )
+) -> AdapterSourceFreshnessBatch:
+    unknown: dict[str, SourceFreshnessUnknown] = {}
     requests_by_source_name: dict[str, TableFreshnessRequest] = {}
     source: SourceEntry
     for source in sources:
-        if source.expression is not None or source.table is None:
-            raise SourceFreshnessObservationError(
-                f"source '{source.name}' adapter freshness requires a physical table source"
+        unsupported_message: str | None = _adapter_freshness_unsupported_message(
+            adapter=adapter, source=source
+        )
+        if unsupported_message is not None:
+            unknown[source.name] = SourceFreshnessUnknown(
+                source_name=source.name,
+                reason=SourceFreshnessUnknownReason.UNAVAILABLE,
+                message=unsupported_message,
             )
+            continue
         requests_by_source_name[source.name] = TableFreshnessRequest(
             database=source.database,
             schema=source.schema,
-            name=source.table,
+            name=str(source.table),
         )
+    if not requests_by_source_name:
+        return AdapterSourceFreshnessBatch(unknown=unknown)
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
         adapter.get_tables_freshness_metadata(
             connection=connection,
-            requests=tuple(requests_by_source_name.values()),
+            requests=tuple(dict.fromkeys(requests_by_source_name.values())),
         )
     )
     observations: dict[str, SourceFreshnessObservation] = {}
-    for source in sources:
-        request: TableFreshnessRequest = requests_by_source_name[source.name]
-        metadata: TableFreshnessMetadata | None = metadata_by_request.get(request)
-        if metadata is None:
-            raise SourceFreshnessObservationError(
-                f"source '{source.name}' freshness metadata was not returned"
-            )
-        if metadata.data_version is None:
-            raise SourceFreshnessObservationError(
-                f"source '{source.name}' freshness data_version cannot be null"
-            )
-        observations[source.name] = SourceFreshnessObservation(
-            source_name=source.name,
+    source_name: str
+    request: TableFreshnessRequest
+    for source_name, request in requests_by_source_name.items():
+        metadata: TableFreshnessMetadata = metadata_by_request.get(
+            request,
+            TableFreshnessMetadata.missing(
+                message=f"source '{source_name}' freshness metadata was not returned"
+            ),
+        )
+        source_unknown: SourceFreshnessUnknown | None = _adapter_metadata_unknown(
+            source_name=source_name, metadata=metadata
+        )
+        if source_unknown is not None:
+            unknown[source_name] = source_unknown
+            continue
+        observations[source_name] = SourceFreshnessObservation(
+            source_name=source_name,
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=_normalize_adapter_datetime(metadata.data_version),
             value_kind=SourceFreshnessValueKind(metadata.value_kind),
@@ -236,7 +256,42 @@ def _observe_adapter_sources_freshness(
                 else observed_at
             ),
         )
-    return observations
+    return AdapterSourceFreshnessBatch(observations=observations, unknown=unknown)
+
+
+def _adapter_freshness_unsupported_message(
+    *, adapter: StrictAdapter, source: SourceEntry
+) -> str | None:
+    if not adapter.supports_table_freshness_metadata():
+        return f"adapter '{adapter.adapter_name}' does not support table freshness metadata"
+    if source.expression is not None or source.table is None:
+        return f"source '{source.name}' adapter freshness requires a physical table source"
+    return None
+
+
+def _adapter_metadata_unknown(
+    *, source_name: str, metadata: TableFreshnessMetadata
+) -> SourceFreshnessUnknown | None:
+    if metadata.status == TableFreshnessStatus.MISSING:
+        return SourceFreshnessUnknown(
+            source_name=source_name,
+            reason=SourceFreshnessUnknownReason.MISSING,
+            message=metadata.message
+            or f"source '{source_name}' table was not found in the warehouse",
+        )
+    if metadata.status == TableFreshnessStatus.UNAVAILABLE:
+        return SourceFreshnessUnknown(
+            source_name=source_name,
+            reason=SourceFreshnessUnknownReason.UNAVAILABLE,
+            message=metadata.message or f"source '{source_name}' freshness metadata unavailable",
+        )
+    if metadata.data_version is None:
+        return SourceFreshnessUnknown(
+            source_name=source_name,
+            reason=SourceFreshnessUnknownReason.UNAVAILABLE,
+            message=f"source '{source_name}' freshness data_version is null",
+        )
+    return None
 
 
 def _query_single_data_version(

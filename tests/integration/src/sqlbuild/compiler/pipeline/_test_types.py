@@ -179,6 +179,7 @@ class RunCompilePipelineIntegrationTestCase:
     expected_seed_count: int = 0
     expected_manifest_node_count: int = 0
     expected_declaration_usages: tuple[str, ...] = ()
+    warehouse_setup_sql: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -306,6 +307,7 @@ class SqlAnalysisChainCompileTargetIntegrationTestCase:
     compiled_test_path: str
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...]
+    warehouse_setup_sql: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

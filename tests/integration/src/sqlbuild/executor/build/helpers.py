@@ -207,7 +207,8 @@ def compile_capped_microbatch_intermediary_project(
         project_files={
             "sqlbuild_project.toml": 'name = "capped_dependency"\nadapter = "duckdb"\n',
             "sources/raw.yml": (
-                "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+                "sources:\n  - name: raw_events\n    expression: "
+                "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time\n"
             ),
             "models/capped_events.sql": capped_dependency_producer_sql(
                 action=MicrobatchLimitAction.CAP_FROM_END
@@ -240,7 +241,8 @@ def compile_capped_dependency_project(
     project_files: dict[str, str] = {
         "sqlbuild_project.toml": 'name = "capped_dependency"\nadapter = "duckdb"\n',
         "sources/raw.yml": (
-            "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+            "sources:\n  - name: raw_events\n    expression: "
+            "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time\n"
         ),
         "models/capped_events.sql": capped_dependency_producer_sql(action=action),
         "models/downstream_events.sql": consumer_sql,
@@ -262,6 +264,21 @@ def compile_capped_dependency_project(
     )
 
 
+class SharedConnectionDuckDbAdapter(DuckDbAdapter):
+    """Plan against the same in-memory warehouse that the build executes against."""
+
+    def __init__(self, *, connection: Any) -> None:
+        super().__init__()
+        self._shared_connection: Any = connection
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        del config
+        return self._shared_connection
+
+    def close(self, connection: Any) -> None:
+        del connection
+
+
 def run_build_for_project(
     *,
     test_case: BuildExecutionTestCase,
@@ -278,7 +295,7 @@ def run_build_for_project(
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
-        adapter=adapter,
+        adapter=SharedConnectionDuckDbAdapter(connection=connection),
         options=CompilePipelineOptions(no_sql_validation=True),
     )
 

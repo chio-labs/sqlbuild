@@ -8,7 +8,10 @@ from datetime import datetime
 
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.compiler.source_freshness._helpers.datetime import require_aware_utc_datetime
-from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.compiler.source_freshness.types import (
+    SourceFreshnessAgeStatus,
+    SourceFreshnessUnknownReason,
+)
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -45,6 +48,23 @@ class SourceFreshnessObservation:
                 "data_version",
                 require_aware_utc_datetime(value=self.data_version, field_name="data_version"),
             )
+
+
+@dataclass(frozen=True)
+class SourceFreshnessUnknown:
+    """One source whose freshness could not be observed, with the reason."""
+
+    source_name: str
+    reason: SourceFreshnessUnknownReason
+    message: str
+
+
+@dataclass(frozen=True)
+class AdapterSourceFreshnessBatch:
+    """Per-source outcomes of one batched adapter metadata observation."""
+
+    observations: dict[str, SourceFreshnessObservation] = field(default_factory=dict)
+    unknown: dict[str, SourceFreshnessUnknown] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -121,6 +141,7 @@ class DirectSourceFreshnessPlanningResult:
     changed_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unchanged_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unknown_source_names: tuple[str, ...] = ()
+    unknown_sources: dict[str, SourceFreshnessUnknown] = field(default_factory=dict)
     age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = field(
         default_factory=dict
     )

@@ -156,6 +156,7 @@ OPERATION_METADATA_FIELDS: frozenset[str] = frozenset(
         "added_count",
         "removed_count",
         "altered_count",
+        "unknown_count",
     }
 )
 OPERATION_PHASES: frozenset[str] = frozenset(
