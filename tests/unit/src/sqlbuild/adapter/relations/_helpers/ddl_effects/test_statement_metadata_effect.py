@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.relations._helpers.ddl_effects import statement_metadata_effect
+from sqlbuild.adapter.relations._helpers.ddl_effects import (
+    qualified_relation_name_key,
+    statement_metadata_effect,
+)
 from sqlbuild.adapter.relations.models import StatementMetadataEffect
 from tests.unit.src.sqlbuild.adapter.relations._helpers.ddl_effects._test_types import (
+    QualifiedNameKeyTestCase,
     StatementMetadataEffectTestCase,
 )
 
@@ -104,6 +108,24 @@ _NONE: frozenset[str] = frozenset()
             description="common table expression select into creates a table",
             sql="WITH v AS (SELECT 1 AS id) SELECT id INTO dbo.orders_history FROM v",
             expected_relation_names=frozenset({"orders_history"}),
+            expected_invalidates_all=False,
+        ),
+        StatementMetadataEffectTestCase(
+            description="databricks shallow clone names only the new relation",
+            sql="CREATE OR REPLACE TABLE main.marts.orders__prev SHALLOW CLONE main.marts.orders",
+            expected_relation_names=frozenset({"orders__prev"}),
+            expected_invalidates_all=False,
+        ),
+        StatementMetadataEffectTestCase(
+            description="databricks deep clone names only the new relation",
+            sql="CREATE TABLE IF NOT EXISTS main.marts.orders__copy DEEP CLONE main.marts.orders",
+            expected_relation_names=frozenset({"orders__copy"}),
+            expected_invalidates_all=False,
+        ),
+        StatementMetadataEffectTestCase(
+            description="unquoted name starting with a digit keeps its digits",
+            sql="CREATE OR REPLACE TABLE ds.2024_orders AS SELECT 1 AS id",
+            expected_relation_names=frozenset({"2024_orders"}),
             expected_invalidates_all=False,
         ),
         StatementMetadataEffectTestCase(
@@ -236,6 +258,43 @@ def test_given_transaction_end_statement_when_classifying_then_reports_possible_
     assert effect.relation_names == test_case.expected_relation_names
     assert effect.invalidates_all is test_case.expected_invalidates_all
     assert effect.ends_transaction is test_case.expected_ends_transaction
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QualifiedNameKeyTestCase(
+            description="unquoted part starting with a digit keeps its digits",
+            qualified="my-proj.ds.2024_orders",
+            expected_key="2024_orders",
+        ),
+        QualifiedNameKeyTestCase(
+            description="backticked path keys its last segment",
+            qualified="`my-proj.ds.Orders`",
+            expected_key="orders",
+        ),
+        QualifiedNameKeyTestCase(
+            description="quoted dotted part keeps its dot",
+            qualified='"ANALYTICS"."MARTS"."my.table"',
+            expected_key="my.table",
+        ),
+        QualifiedNameKeyTestCase(
+            description="trailing text is unparseable",
+            qualified="ds.orders extra",
+            expected_key=None,
+        ),
+        QualifiedNameKeyTestCase(
+            description="unquoted non-ascii part is unparseable",
+            qualified="ds.café",
+            expected_key=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_qualified_name_when_keying_then_uses_last_part_or_reports_unparseable(
+    test_case: QualifiedNameKeyTestCase,
+) -> None:
+    assert qualified_relation_name_key(test_case.qualified) == test_case.expected_key
 
 
 if __name__ == "__main__":

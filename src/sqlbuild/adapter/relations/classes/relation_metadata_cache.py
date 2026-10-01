@@ -43,8 +43,12 @@ class RelationMetadataCache:
     def invalidate_relations(self, *, qualified_names: tuple[str, ...]) -> None:
         """Evict relations changed outside SQL statements, such as by a warehouse copy job."""
 
-        names: frozenset[str] = frozenset(map(qualified_relation_name_key, qualified_names))
+        keys: tuple[str | None, ...] = tuple(map(qualified_relation_name_key, qualified_names))
+        names: frozenset[str] = frozenset(key for key in keys if key is not None)
         with self._lock:
+            if None in keys:
+                self._invalidate_all()
+                return
             self._invalidate_names(names=names)
 
     def observe_statement(self, *, sql: str) -> None:
