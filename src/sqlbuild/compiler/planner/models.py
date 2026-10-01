@@ -635,6 +635,8 @@ class WarehouseSnapshot:
     source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
     column_dialect: str | None = None
     renamed_models: frozenset[str] = field(default_factory=frozenset)
+    renamed_refs: dict[str, str] = field(default_factory=dict)
+    reference_only_changes: frozenset[str] = field(default_factory=frozenset)
     old_name_view_state_schemas: frozenset[str] = field(default_factory=frozenset)
     listed_state_schemas: frozenset[str] | None = field(default_factory=frozenset)
 

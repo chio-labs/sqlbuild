@@ -28,7 +28,11 @@ from sqlbuild.compiler.planner._helpers.migrations.compatibility import (
 )
 from sqlbuild.compiler.planner._helpers.migrations.discovery import (
     discover_model_migrations,
+    migration_metadata_jsons,
     stored_migration_fingerprint,
+)
+from sqlbuild.compiler.planner._helpers.migrations.fingerprint import (
+    migration_fingerprint_ref_names,
 )
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
@@ -209,6 +213,11 @@ def plan_model_migrations(
                 ),
             )
     renamed: frozenset[str] = _renamed_models(entries=tuple(entries), handovers=handovers)
+    renamed_refs: dict[str, str] = {
+        entry.model_name: entry.origin_model
+        for entry in entries
+        if entry.model_name in handovers and entry.origin_model is not None
+    }
     return ModelMigrationPlanning(
         snapshot=replace(
             _overlay_snapshot(
@@ -222,6 +231,14 @@ def plan_model_migrations(
                 deferral=deferral,
             ),
             renamed_models=renamed,
+            renamed_refs=renamed_refs,
+            reference_only_changes=_reference_only_changes(
+                runtime=runtime,
+                scope=scope,
+                snapshot=snapshot,
+                renamed_refs=renamed_refs,
+                fingerprints=fingerprints,
+            ),
         ),
         entries=tuple(entries),
         warnings=(
@@ -243,6 +260,47 @@ def _renamed_models(
         for entry in entries
         if entry.decision == MigrationDecision.RENAMED
         and handovers.get(entry.model_name) is not None
+    )
+
+
+def _reference_only_changes(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    renamed_refs: dict[str, str],
+    fingerprints: MigrationFingerprintCache,
+) -> frozenset[str]:
+    """Return selected models whose query differs only by references to renamed models."""
+
+    candidates: tuple[CompiledModel, ...] = tuple(
+        model
+        for key in scope.execution_order
+        if key in scope.selected_keys
+        and (model := scope.models_by_name.get(key.name)) is not None
+        and model.name not in renamed_refs
+        and (recorded := snapshot.fingerprints.models.get(model.name)) is not None
+        and compute_query_hash(model.query_sql) != recorded.definition_hash
+        and stored_migration_fingerprint(recorded) is not None
+    )
+    if not candidates:
+        return frozenset()
+    metadata_jsons: dict[str, str] = migration_metadata_jsons(runtime=runtime, models=candidates)
+    dialect: str | None = runtime.adapter.sql_analysis_dialect()
+    return frozenset(
+        model.name
+        for model in candidates
+        if migration_fingerprint_ref_names(
+            query_sql=model.query_sql, metadata_json=metadata_jsons[model.name]
+        )
+        & frozenset(renamed_refs)
+        and fingerprints.fingerprint(
+            query_sql=model.query_sql,
+            metadata_json=metadata_jsons[model.name],
+            ref_identities=renamed_refs,
+            dialect=dialect,
+        )
+        == stored_migration_fingerprint(snapshot.fingerprints.models[model.name])
     )
 
 

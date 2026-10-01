@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.fingerprints.constants import AUDIT_GATE_METADATA_KEY
 from sqlbuild.compiler.planner.constants import (
     LOCAL_FUNCTION_HASHES_METADATA_KEY,
@@ -64,3 +65,31 @@ def _local_function_hashes(metadata_json: str) -> dict[str, object]:
         return {}
     hashes: object = payload.get(LOCAL_FUNCTION_HASHES_METADATA_KEY)
     return {str(name): value for name, value in hashes.items()} if isinstance(hashes, dict) else {}
+
+
+def with_origin_cursor_input_names(*, metadata_json: str, renamed_refs: dict[str, str]) -> str:
+    """Return metadata JSON whose cursor_inputs name renamed models by their origin names."""
+
+    try:
+        payload: object = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return metadata_json
+    config: object = payload.get("config") if isinstance(payload, dict) else None
+    cursor_inputs: object = (
+        config.get(CURSOR_INPUTS_CONFIG_KEY) if isinstance(config, dict) else None
+    )
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(config, dict)
+        or not isinstance(cursor_inputs, dict)
+    ):
+        return metadata_json
+    origin_inputs: dict[str, object] = {
+        renamed_refs.get(str(name), str(name)): value for name, value in cursor_inputs.items()
+    }
+    return json.dumps(
+        {**payload, "config": {**config, CURSOR_INPUTS_CONFIG_KEY: origin_inputs}},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )

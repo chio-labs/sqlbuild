@@ -14,11 +14,13 @@ A model's own change is any of:
 
 - **Query changed**: its compiled SQL differs from the recorded definition.
 - **Function changed**: a UDF or table function that the model calls directly has a new definition. The model's SQL text is unchanged, but its results can differ, so this counts as a query change of the model. Models further downstream do not see it.
-- **Schema changed**: its declared or inferred columns differ from the warehouse.
+- **Schema changed**: its declared or inferred columns differ from the warehouse. Only a change to the model's own declared columns (its `columns` block, contract, or schema YAML) follows `replay_on_change`. Columns inferred from its unchanged SQL, for example a column an upstream added that `SELECT *` passes through, are applied forward through [`on_schema_change`](../incremental.md#on_schema_change) and never replay history.
 - **Config changed**: version-relevant configuration differs. A config change alone does not replay history.
 - **First run**: the model's relation does not exist yet. Only that model is built from scratch.
 
-For a query, function, or schema change, the model's own `replay_on_change` decides the replay:
+References rewritten by a rename are not a change of their own. When an upstream model is renamed with `migrate_from` (for example by [`sqb rename`](../../cli/rename.md)), a downstream model whose only difference is the rewritten `__ref` and `cursor_inputs` name keeps its identity: views are recreated as usual, and incremental models continue forward. A downstream model that also has a real edit is a normal query change.
+
+For a query, function, or own declared schema change, the model's own `replay_on_change` decides the replay:
 
 | `replay_on_change` | Effect on an incremental model |
 |--------------------|-------------------------------|

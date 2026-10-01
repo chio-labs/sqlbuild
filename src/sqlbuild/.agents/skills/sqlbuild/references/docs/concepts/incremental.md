@@ -368,7 +368,7 @@ MODEL (
 
 ## Replay on change
 
-When a model's own query changes, a function it calls directly changes, or its schema changes, `replay_on_change` is the explicit, per-model policy for how much data to reprocess. Reprocessing is a policy you set, not an automatic forced rebuild, so a definition change does not silently trigger a full rebuild of large tables. Upstream changes never replay a downstream model. You choose the cost per model:
+When a model's own query changes, a function it calls directly changes, or its own declared columns change, `replay_on_change` is the explicit, per-model policy for how much data to reprocess. Reprocessing is a policy you set, not an automatic forced rebuild, so a definition change does not silently trigger a full rebuild of large tables. Upstream changes never replay a downstream model. You choose the cost per model:
 
 | Value | Effect |
 |-------|--------|

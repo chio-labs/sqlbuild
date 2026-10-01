@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner._helpers.changes.metadata import (
     changed_local_function_names,
     non_function_identity_metadata_payload,
     version_identity_metadata_payload,
+    with_origin_cursor_input_names,
 )
 from sqlbuild.compiler.planner._helpers.changes.policy import (
     pick_more_aggressive,
@@ -47,7 +48,7 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, SchemaColumnSource
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -227,14 +228,19 @@ def detect_model_changes(
         if changed_functions
         else version_identity_metadata_payload
     )
+    references_only: bool = model_name in snapshot.reference_only_changes
     config_changed: bool = recorded_metadata_json is not None and identity_payload(
-        metadata_json
+        with_origin_cursor_input_names(
+            metadata_json=metadata_json, renamed_refs=snapshot.renamed_refs
+        )
+        if references_only
+        else metadata_json
     ) != identity_payload(recorded_metadata_json)
     replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
         compiled_query_hash: str = compute_query_hash(model.query_sql)
-        query_changed = detect_query_change(
+        query_changed = not references_only and detect_query_change(
             compiled_query_hash=compiled_query_hash,
             fingerprint=fingerprint,
         )
@@ -280,7 +286,7 @@ def detect_model_changes(
             ),
             dialect=snapshot.column_dialect,
         )
-        if schema_findings:
+        if any(finding.source == SchemaColumnSource.YML for finding in schema_findings):
             schema_backfill = resolve_replay_on_change(
                 replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
             )
