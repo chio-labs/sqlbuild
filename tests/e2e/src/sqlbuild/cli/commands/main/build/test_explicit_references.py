@@ -366,7 +366,7 @@ def test_given_typed_macro_references_and_hook_reads_when_building_then_graph_an
                 "orders_base()",
                 "--> models/sales/_sqlbuild/_macros/unions.py",
                 '@orders_base(__ref("stg_orders_eu"))',
-                "[references] enforce_explicit = false",
+                "[references]\n            enforce_explicit = false",
             ),
         ),
         ExplicitReferenceFailureE2ETestCase(
@@ -386,7 +386,7 @@ def test_given_typed_macro_references_and_hook_reads_when_building_then_graph_an
             expected_output_fragments=(
                 "error[P008]: task:export_orders names model:stg_customers as 'stg_customers'",
                 "--> python/tasks/export.py:7",
-                "[references] enforce_explicit = false",
+                "[references]\n            enforce_explicit = false",
             ),
         ),
         ExplicitReferenceFailureE2ETestCase(

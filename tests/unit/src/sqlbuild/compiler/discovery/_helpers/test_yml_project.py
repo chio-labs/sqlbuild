@@ -1653,7 +1653,7 @@ query_change_tracking = false
 [janitor]
 enabled = true
 """.strip(),
-            expected_error_fragment="janitor.delete_tracked_only requires",
+            expected_error_fragment="delete_tracked_only = true requires query change tracking",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when janitor direct state history versions is negative",

@@ -65,6 +65,45 @@ A model cannot re-enable analysis when either broader gate disables it. The olde
 and `--no-sql-validation` spellings remain compatibility aliases; use `sql_analysis` for new
 configuration.
 
+### Requiring SQL analysis
+
+A project can stop opt-outs from hiding real findings:
+
+```toml
+# sqlbuild_project.toml
+[settings]
+require_sql_analysis = true   # default false
+```
+
+With this setting, `sql_analysis false` from a MODEL header or a `[path_defaults]` entry is accepted
+only on a model whose SQL the parser cannot read: its query or one of its SQL hooks. On a model that
+parses, compile reports a `P009`
+error at the header key or `[path_defaults]` entry, with the findings the opt-out was hiding counted
+by kind:
+
+```text
+error[P009]: `sql_analysis false` is not needed for model 'orders_summary'
+  --> models/marts/orders_summary.sql:4:3
+  = note: sqlbuild_project.toml sets [settings] require_sql_analysis = true, which only allows `sql_analysis false` on SQL that SQLBuild cannot parse; this model parses successfully.
+  = help: remove `sql_analysis false` and fix the findings it was hiding: 2 unknown columns, 1 type mismatch (run `sqb compile` to see them)
+  = help: to allow `sql_analysis false` on any model, SQL test or audit, set this in sqlbuild_project.toml:
+            [settings]
+            require_sql_analysis = false
+```
+
+`TEST(...)` and `AUDIT(...)` headers (singular and generic audits) also accept
+`sql_analysis false`, which skips compile-time SQL checks on that test or audit; the SQL still runs.
+SQL tests of a model with `sql_analysis false`, and audits attached to it, are not analysed either.
+`require_sql_analysis = true` applies the same rule to these headers: the opt-out is accepted only
+when that test or audit SQL cannot be parsed, otherwise compile reports `P009` at the header key.
+
+`[settings] sql_analysis = false` in `sqlbuild_local.toml` is then a `D001` error, and
+`require_sql_analysis` itself can only be set in `sqlbuild_project.toml`. `--no-sql-analysis` still
+turns analysis off for one run, including the checks on audits, SQL tests and SQL hooks.
+
+When the parser cannot read a model, the `P001` syntax error shows the exact MODEL header entry
+(`sql_analysis false,`) and asks you to report the SQL so the parser can support it.
+
 ## Table fields
 
 | Field | Description |

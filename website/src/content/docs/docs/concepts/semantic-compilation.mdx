@@ -97,6 +97,9 @@ diagnostic warning count.
 
 Escape hatches are `MODEL (sql_analysis false)`, the corresponding path default, and
 `--no-sql-analysis`. Disabling SQL analysis also disables inference and lineage for that model.
+`[settings] require_sql_analysis = true` limits the MODEL and path-default opt-outs to SQL the
+parser cannot read; see [Requiring SQL analysis](/docs/concepts/models/configuration#requiring-sql-analysis).
+Help that names a setting always shows the exact file, section and `key = value` to write.
 
 ## Reading diagnostics
 

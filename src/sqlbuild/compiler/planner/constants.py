@@ -112,3 +112,6 @@ MISSING_ORIGIN_OUTCOMES: dict[MissingMigrationOriginPolicy, str] = {
     ),
 }
 SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE: str = "source freshness unknown"
+MICROBATCH_CONCURRENCY_MESSAGE: str = (
+    "batch_concurrency > 1 requires concurrent microbatches; selected model(s): "
+)

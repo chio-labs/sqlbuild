@@ -87,7 +87,7 @@ def _warn_if_duckdb_has_snowflake_like_keys(
     print(
         "Warning: DuckDB adapter is active, but connection contains "
         f"Snowflake-like keys: {key_list}. If this is a Snowflake local config, "
-        "add top-level `adapter: snowflake` to sqlbuild_local.toml.",
+        'add `adapter = "snowflake"` at the top of sqlbuild_local.toml, before any section.',
         file=sys.stderr,
     )
 

@@ -1,3 +1,5 @@
+use crate::configuration::main::setting_help::setting_help;
+use crate::configuration::main::toml_string_array::toml_string_array;
 use crate::constants::{
     DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, NEGATION_OPERATOR, REFERENCE_KIND,
     SOURCE_REFERENCE_KIND, VIEW_MATERIALIZATION,
@@ -1102,7 +1104,22 @@ fn name_grammar(
                     "model {:?} uses unknown domain {:?}",
                     parsed.model.name, parts.domain
                 ),
-                Some("Rename the model into a configured rules domain, or add this domain to rules.domains when it is an intentional project owner.".into()),
+                Some(format!(
+                    "Rename the model into a configured rules domain. The current value is [rules] domains = {}. {}",
+                    toml_string_array(config.domains.iter().map(String::as_str)),
+                    setting_help(
+                        "If this domain is an intentional project owner, add it",
+                        "rules",
+                        "domains",
+                        &toml_string_array(
+                            config
+                                .domains
+                                .iter()
+                                .map(String::as_str)
+                                .chain([parts.domain.as_str()]),
+                        ),
+                    )
+                )),
             ));
         }
         return;
@@ -1208,7 +1225,22 @@ fn source_token_rule(
                     "model {:?} uses unapproved source token {:?}",
                     parsed.model.name, token
                 ),
-                Some("Rename the source suffix to a token listed in rules.approved_source_tokens at this model path.".into()),
+                Some(format!(
+                    "Rename the source suffix to an approved token. The current value is [rules] approved_source_tokens = {}. {}",
+                    toml_string_array(config.approved_source_tokens.iter().map(String::as_str)),
+                    setting_help(
+                        "To approve this token",
+                        "rules",
+                        "approved_source_tokens",
+                        &toml_string_array(
+                            config
+                                .approved_source_tokens
+                                .iter()
+                                .map(String::as_str)
+                                .chain([token.as_str()]),
+                        ),
+                    )
+                )),
             ));
     }
 }

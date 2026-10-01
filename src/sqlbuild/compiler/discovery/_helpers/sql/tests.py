@@ -15,7 +15,10 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,
     prepare_model_header_tokens,
 )
-from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
+from sqlbuild.compiler.discovery.constants import (
+    SQL_ANALYSIS_CONFIG_KEY,
+    STATEMENT_HEADER_BODY_PATTERN,
+)
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
@@ -49,6 +52,7 @@ _TEST_HEADER_KEYS: frozenset[str] = frozenset(
         _TEST_CASES_HEADER_KEY,
         _TEST_CURSOR_START_HEADER_KEY,
         _TEST_CURSOR_END_HEADER_KEY,
+        SQL_ANALYSIS_CONFIG_KEY,
     }
 )
 _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
@@ -219,6 +223,10 @@ def _parse_test_header(*, header: str, header_line: int, file_path: Path) -> dic
         _validate_test_name(name_value=parsed_header[_TEST_NAME_HEADER_KEY], file_path=file_path)
     if _TEST_MODE_HEADER_KEY in parsed_header:
         _validate_test_mode(mode_value=parsed_header[_TEST_MODE_HEADER_KEY], file_path=file_path)
+    if SQL_ANALYSIS_CONFIG_KEY in parsed_header and not isinstance(
+        parsed_header[SQL_ANALYSIS_CONFIG_KEY], bool
+    ):
+        raise SqlTestParseError(f"TEST() sql_analysis in '{file_path}' must be a boolean")
 
     return parsed_header
 

@@ -2557,3 +2557,44 @@ def resource_sql_project_files(files: tuple[tuple[str, str], ...]) -> dict[str, 
     """Return the shared orders project plus case-specific files."""
 
     return {**_RESOURCE_SQL_BASE_FILES, **dict(files)}
+
+
+REQUIRE_SQL_ANALYSIS_PROJECT: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[settings]\nrequire_sql_analysis = true\n'
+)
+OPTIONAL_SQL_ANALYSIS_PROJECT: str = 'name = "orders"\nadapter = "duckdb"\n'
+PARSEABLE_OPT_OUT_MODEL: str = (
+    'MODEL (\n  description "Order flags",\n  sql_analysis false\n);\n'
+    "SELECT 1 = 'pending' AS is_pending, 2 = 'shipped' AS is_shipped\n"
+)
+UNPARSEABLE_OPT_OUT_MODEL: str = (
+    'MODEL (description "Order lookup", sql_analysis false);\nSELECT order_id FROM orders WHERE\n'
+)
+PATH_DEFAULT_MODEL: str = (
+    'MODEL (description "Order epochs");\n'
+    "SELECT CAST(TIMESTAMP '2026-04-01' AS INTEGER) AS ordered_epoch\n"
+)
+OPT_OUT_HELP: str = (
+    "= help: to allow `sql_analysis false` on any model, SQL test or audit, set this in "
+    "sqlbuild_project.toml:\n"
+    "            [settings]\n"
+    "            require_sql_analysis = false"
+)
+
+
+def require_sql_analysis_output(
+    result: subprocess.CompletedProcess[str],
+) -> tuple[tuple[tuple[str, str, int], ...], str]:
+    """Return `(code, path, line)` per JSON diagnostic and all JSON help, note and stderr text."""
+
+    payload: dict[str, Any] = json.loads(result.stdout or '{"diagnostics": []}')
+    diagnostics: list[dict[str, Any]] = payload["diagnostics"]
+    parts: list[str] = [result.stderr]
+    for item in diagnostics:
+        parts.append(str(item.get("help")))
+        parts.extend(item.get("notes", ()))
+    text: str = "\n".join(parts)
+    return (
+        tuple((item["code"], item["path"], item["line"]) for item in diagnostics),
+        text,
+    )

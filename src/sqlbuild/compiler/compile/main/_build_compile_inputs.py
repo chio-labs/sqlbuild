@@ -227,6 +227,7 @@ def build_compile_inputs(
             )
         ),
         effective_settings=effective_settings,
+        no_sql_validation=no_sql_validation,
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=declaration_scope.loaded_macros,

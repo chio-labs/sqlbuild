@@ -1727,9 +1727,12 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
             ),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[C455]: scenario test --local requires SQL analysis",
-                "= help: Enable settings.sql_analysis when running local scenario replay, "
-                "snapshot sync, or snapshot refresh.",
+                "error[C455]: scenario test --local requires SQL analysis; "
+                "sqlbuild_project.toml sets [settings] sql_analysis = false",
+                "= help: to run local scenario replay, snapshot sync, or snapshot refresh, "
+                "set this in sqlbuild_project.toml:\n"
+                "            [settings]\n"
+                "            sql_analysis = true",
             ),
             disabled_setting="sql_analysis",
         ),
@@ -1745,9 +1748,12 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
             ),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[C455]: scenario test --local requires SQL analysis",
-                "= help: Enable settings.sql_analysis when running local scenario replay, "
-                "snapshot sync, or snapshot refresh.",
+                "error[C455]: scenario test --local requires SQL analysis; "
+                "sqlbuild_project.toml sets [settings] sql_analysis = false",
+                "= help: to run local scenario replay, snapshot sync, or snapshot refresh, "
+                "set this in sqlbuild_project.toml:\n"
+                "            [settings]\n"
+                "            sql_analysis = true",
             ),
             disabled_setting="sql_validation",
         ),

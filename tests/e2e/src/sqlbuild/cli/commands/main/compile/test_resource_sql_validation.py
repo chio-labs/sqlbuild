@@ -11,6 +11,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     ResourceSqlHelpCase,
+    ResourceSqlOptOutCase,
     ResourceSqlValidationCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
@@ -25,6 +26,22 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     resource_sql_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+
+_REQUIRED_ANALYSIS_TOML: tuple[str, str] = (
+    "sqlbuild_project.toml",
+    'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "warehouse.duckdb"\n\n'
+    "[settings]\nrequire_sql_analysis = true\n",
+)
+_FINDING_AUDIT_BODY: str = (
+    'SELECT o.order_id\nFROM __ref("orders") AS o\n'
+    'JOIN __ref("customers") AS c ON o.order_id = c.order_id\n'
+    "WHERE STARTSWITH(o.status, 'x')\n"
+)
+_FINDING_TEST_BODY: str = (
+    "WITH __ref__customers AS (SELECT 1 AS order_id, 7 AS customer_id),\n"
+    "__expected__orders AS (SELECT 1 AS order_id, UPPERCASE('open') AS status)\n"
+    "SELECT 1\n"
+)
 
 
 @pytest.mark.parametrize(
@@ -393,6 +410,121 @@ def test_given_typed_resource_mismatch_when_compiling_then_message_names_owner_a
         tuple((item["code"], item["message"], item.get("help")) for item in payload["diagnostics"])
         == test_case.expected_diagnostics
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ResourceSqlOptOutCase(
+            description="--no-sql-analysis skips audit and SQL test checks",
+            files=(
+                resource_sql_orders_model(),
+                (RESOURCE_SQL_SINGULAR_AUDIT, "AUDIT ();\n" + _FINDING_AUDIT_BODY),
+                (RESOURCE_SQL_TEST, "TEST ();\n" + _FINDING_TEST_BODY),
+            ),
+            flags=("--no-sql-analysis",),
+            expected_diagnostics=(),
+        ),
+        ResourceSqlOptOutCase(
+            description="AUDIT and TEST header opt-outs skip their checks",
+            files=(
+                resource_sql_orders_model(),
+                (
+                    RESOURCE_SQL_SINGULAR_AUDIT,
+                    "AUDIT (sql_analysis false);\n" + _FINDING_AUDIT_BODY,
+                ),
+                (RESOURCE_SQL_TEST, "TEST (sql_analysis false);\n" + _FINDING_TEST_BODY),
+            ),
+            flags=(),
+            expected_diagnostics=(),
+        ),
+        ResourceSqlOptOutCase(
+            description="SQL tests of a model with sql_analysis false are not analysed",
+            files=(
+                resource_sql_orders_model(", sql_analysis false"),
+                (RESOURCE_SQL_TEST, "TEST ();\n" + _FINDING_TEST_BODY),
+            ),
+            flags=(),
+            expected_diagnostics=(),
+        ),
+        ResourceSqlOptOutCase(
+            description="required analysis rejects opt-outs on parseable audits and tests",
+            files=(
+                _REQUIRED_ANALYSIS_TOML,
+                resource_sql_orders_model(),
+                (
+                    RESOURCE_SQL_SINGULAR_AUDIT,
+                    "AUDIT (sql_analysis false);\n" + _FINDING_AUDIT_BODY,
+                ),
+                (RESOURCE_SQL_TEST, "TEST (sql_analysis false);\n" + _FINDING_TEST_BODY),
+            ),
+            flags=(),
+            expected_diagnostics=(
+                ("P009", RESOURCE_SQL_SINGULAR_AUDIT, 1),
+                ("P009", RESOURCE_SQL_TEST, 1),
+            ),
+            expected_returncode=1,
+        ),
+        ResourceSqlOptOutCase(
+            description="required analysis accepts an opt-out on an unparseable audit",
+            files=(
+                _REQUIRED_ANALYSIS_TOML,
+                resource_sql_orders_model(),
+                (
+                    RESOURCE_SQL_SINGULAR_AUDIT,
+                    "AUDIT (sql_analysis false);\n"
+                    + _FINDING_AUDIT_BODY.replace("STARTSWITH(o.status, 'x')", "o.status ===== 1"),
+                ),
+            ),
+            flags=(),
+            expected_diagnostics=(),
+        ),
+        ResourceSqlOptOutCase(
+            description="required analysis accepts a model opt-out for an unparseable hook",
+            files=(
+                _REQUIRED_ANALYSIS_TOML,
+                resource_sql_orders_model(
+                    ', sql_analysis false, post_hooks [inline_sql("CHECKPOINT")]'
+                ),
+            ),
+            flags=(),
+            expected_diagnostics=(),
+        ),
+        ResourceSqlOptOutCase(
+            description="required analysis rejects a model opt-out when its hooks parse",
+            files=(
+                _REQUIRED_ANALYSIS_TOML,
+                resource_sql_orders_model(
+                    ', sql_analysis false, post_hooks [inline_sql("SELECT 1")]'
+                ),
+            ),
+            flags=(),
+            expected_diagnostics=(("P009", RESOURCE_SQL_ORDERS, 1),),
+            expected_returncode=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sql_analysis_opt_outs_when_compiling_then_resource_checks_follow_them(
+    test_case: ResourceSqlOptOutCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="orders",
+        repo_files=resource_sql_project_files(test_case.files),
+    )
+
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir,
+        command=("--no-color", "compile", "--json", "--no-cache", *test_case.flags),
+    )
+
+    payload: dict[str, Any] = json.loads(compiled.stdout)
+    assert (
+        tuple((item["code"], item["path"], item["line"]) for item in payload["diagnostics"])
+        == test_case.expected_diagnostics
+    ), compiled.stdout + compiled.stderr
+    assert compiled.returncode == test_case.expected_returncode
 
 
 if __name__ == "__main__":

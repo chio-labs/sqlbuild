@@ -414,6 +414,15 @@ class ResourceSqlValidationCase:
 
 
 @dataclass(frozen=True)
+class ResourceSqlOptOutCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    flags: tuple[str, ...]
+    expected_diagnostics: tuple[tuple[str, str, int], ...]
+    expected_returncode: int = 0
+
+
+@dataclass(frozen=True)
 class ResourceSqlHelpCase:
     description: str
     files: tuple[tuple[str, str], ...]
@@ -426,3 +435,13 @@ class TypeFindingLocationCase:
     adapter: str
     query_sql: str
     expected_diagnostics: tuple[tuple[str, str, int, int], ...]
+
+
+@dataclass(frozen=True)
+class RequireSqlAnalysisCase:
+    description: str
+    repo_files: tuple[tuple[str, str], ...]
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_diagnostics: tuple[tuple[str, str, int], ...]
+    expected_text_fragments: tuple[str, ...]

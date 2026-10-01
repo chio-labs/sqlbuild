@@ -9,9 +9,18 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
     _replace_refs_with_stubs,
     substitute_placeholder_defaults,
 )
+from sqlbuild.compiler.compile.constants import SQL_ANALYSIS_OPT_OUT_ENTRY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.discovery.constants import (
+    PROJECT_CONFIG_FILENAME,
+    SETTINGS_SECTION,
+    SQL_ANALYSIS_CONFIG_KEY,
+)
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.errors.setting_help.main.join_helps import join_helps
+from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
 
 
 def validate_sql_syntax(
@@ -34,12 +43,8 @@ def validate_sql_syntax(
     if error_message is None:
         return
     raise CompileInputError(
-        f"SQL syntax error in model '{model_name}' ({file_path}): {error_message}\n\n"
-        f"To skip SQL analysis for this model, add `sql_analysis: false` "
-        f"to the MODEL header.\n"
-        f"To disable project-wide, set `settings.sql_analysis: false` "
-        f"in sqlbuild_project.toml.\n"
-        f"To skip for this run, use `--no-sql-analysis`."
+        f"SQL syntax error in model '{model_name}' ({file_path}): {error_message}",
+        help=sql_analysis_opt_out_help(model_owned=True),
     ) from None
 
 
@@ -180,7 +185,9 @@ def _validate_sql_syntax_with_message(
     except polyglot_module.PolyglotError as error:
         error_message = str(error)
     if error_message is not None:
-        _raise_sql_validation_error(error_prefix=error_prefix, error_message=error_message)
+        _raise_sql_validation_error(
+            error_prefix=error_prefix, error_message=error_message, model_owned=False
+        )
 
 
 def _validate_hook_sql_with_message(
@@ -199,7 +206,9 @@ def _validate_hook_sql_with_message(
     )
     error_message: str | None = _validate_sql_with_polyglot(sql=cleaned_sql, dialect=dialect)
     if error_message is not None:
-        _raise_sql_validation_error(error_prefix=error_prefix, error_message=error_message)
+        _raise_sql_validation_error(
+            error_prefix=error_prefix, error_message=error_message, model_owned=True
+        )
 
 
 def _clean_sql_for_validation(
@@ -217,12 +226,34 @@ def _clean_sql_for_validation(
     return cleaned_sql
 
 
-def _raise_sql_validation_error(*, error_prefix: str, error_message: str) -> None:
+def _raise_sql_validation_error(
+    *, error_prefix: str, error_message: str, model_owned: bool
+) -> None:
     raise CompileInputError(
-        f"{error_prefix}: {error_message}\n\n"
-        f"To skip SQL analysis for this model, add `sql_analysis: false` "
-        f"to the MODEL header.\n"
-        f"To disable project-wide, set `settings.sql_analysis: false` "
-        f"in sqlbuild_project.toml.\n"
-        f"To skip for this run, use `--no-sql-analysis`."
+        f"{error_prefix}: {error_message}", help=sql_analysis_opt_out_help(model_owned=model_owned)
     ) from None
+
+
+def sql_analysis_opt_out_help(*, model_owned: bool = True) -> str:
+    """Help for SQL the parser rejects: the exact header, project and single-run opt-outs."""
+
+    report: str = (
+        "if this SQL is valid for your warehouse, please report it so the parser can support it"
+    )
+    return join_helps(
+        model_header_help(
+            purpose="if this SQL is valid for your warehouse, skip SQL analysis for this model",
+            entry=SQL_ANALYSIS_OPT_OUT_ENTRY,
+            follow_up="and please report the SQL so the parser can support it",
+        )
+        if model_owned
+        else report,
+        setting_help(
+            purpose="SQL analysis is on for this project; to turn it off for every model",
+            file_name=PROJECT_CONFIG_FILENAME,
+            section=SETTINGS_SECTION,
+            key=SQL_ANALYSIS_CONFIG_KEY,
+            value=False,
+        ),
+        "to skip SQL analysis for one run, use `--no-sql-analysis`",
+    )

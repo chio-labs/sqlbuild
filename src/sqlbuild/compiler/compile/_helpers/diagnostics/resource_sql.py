@@ -16,6 +16,9 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import binding_relation_names
 from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql_help import resource_sql_help
+from sqlbuild.compiler.compile._helpers.diagnostics.sql_analysis_opt_outs import (
+    unneeded_opt_out_diagnostic,
+)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
@@ -31,6 +34,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
+from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_CONFIG_KEY
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
@@ -77,6 +81,13 @@ class _ResourceSql:
     relations: frozenset[str]
     label: str | None = None
     audit_definition: str | None = None
+    opt_out: SourceLocation | None = None
+
+
+@dataclass(frozen=True)
+class _HelpContext:
+    shapes: dict[str, dict[str, str]]
+    dialect: str | None
 
 
 def get_resource_sql_diagnostics(
@@ -88,13 +99,15 @@ def get_resource_sql_diagnostics(
     """Bind audits, SQL tests and SQL hooks against the same closed shapes as models."""
 
     resources: tuple[_ResourceSql, ...] = tuple(
-        dict.fromkeys(
+        resource
+        for resource in dict.fromkeys(
             (
                 *_audit_resources(project=project),
                 *_sql_test_resources(project=project),
                 *_hook_resources(project=project),
             )
         )
+        if resource.opt_out is None or project.settings.require_sql_analysis
     )
     if not resources:
         return ()
@@ -126,50 +139,81 @@ def get_resource_sql_diagnostics(
     )
     diagnostics: dict[tuple[object, ...], CompilerDiagnostic] = {}
     for resource, cleaned_sql, result in zip(resources, cleaned, results, strict=True):
-        for index, native in enumerate(result.diagnostics):
-            diagnostic: SqlBindingDiagnostic | None = _reported_diagnostic(
-                resource=resource, diagnostic=native
-            )
-            if diagnostic is None:
-                continue
-            location: SourceLocation = _location(
-                resource=resource, cleaned_sql=cleaned_sql, diagnostic=diagnostic
-            )
-            key: tuple[object, ...] = (
-                resource.path,
-                diagnostic.code,
-                diagnostic.message,
-                location.line,
-                location.column,
-                index if diagnostic.start is None else -1,
-            )
+        found: dict[tuple[object, ...], CompilerDiagnostic] = _resource_diagnostics(
+            resource=resource,
+            cleaned_sql=cleaned_sql,
+            result=result,
+            context=_HelpContext(shapes=shapes, dialect=dialect),
+        )
+        if resource.opt_out is None:
+            for key, diagnostic in found.items():
+                diagnostics.setdefault(key, diagnostic)
+        elif not any(item.code == _SYNTAX_ERROR_CODE for item in found.values()):
             diagnostics.setdefault(
-                key,
-                CompilerDiagnostic(
-                    phase=DiagnosticPhase.COMPILE,
-                    severity=DiagnosticSeverity(diagnostic.severity),
-                    code=diagnostic.code,
-                    message=diagnostic.message
-                    if resource.label is None or diagnostic.code == _SYNTAX_ERROR_CODE
-                    else f"{resource.label}: {diagnostic.message}",
+                (resource.opt_out.path, resource.opt_out.line, resource.opt_out.column),
+                unneeded_opt_out_diagnostic(
                     resource_type=resource.resource_type,
-                    resource_name=resource.resource_name,
-                    location=location,
-                    help=resource_sql_help(
-                        resource_type=resource.resource_type,
-                        diagnostic=diagnostic,
-                        authored_text=_text_from(resource=resource, location=location),
-                        authored_line=_line_at(resource=resource, location=location),
-                        column=location.column,
-                        authored_body=resource.authored_body,
-                        audit_definition=resource.audit_definition,
-                        shapes=shapes,
-                        relations=resource.relations,
-                        dialect=dialect,
-                    ),
+                    kind=_RESOURCE_KIND_LABELS[resource.resource_type],
+                    name=resource.resource_name,
+                    location=resource.opt_out,
+                    hidden=tuple(found.values()),
                 ),
             )
     return tuple(diagnostics.values())
+
+
+def _resource_diagnostics(
+    *,
+    resource: _ResourceSql,
+    cleaned_sql: str,
+    result: SqlBindingResult,
+    context: _HelpContext,
+) -> dict[tuple[object, ...], CompilerDiagnostic]:
+    found: dict[tuple[object, ...], CompilerDiagnostic] = {}
+    for index, native in enumerate(result.diagnostics):
+        diagnostic: SqlBindingDiagnostic | None = _reported_diagnostic(
+            resource=resource, diagnostic=native
+        )
+        if diagnostic is None:
+            continue
+        location: SourceLocation = _location(
+            resource=resource, cleaned_sql=cleaned_sql, diagnostic=diagnostic
+        )
+        key: tuple[object, ...] = (
+            resource.path,
+            diagnostic.code,
+            diagnostic.message,
+            location.line,
+            location.column,
+            index if diagnostic.start is None else -1,
+        )
+        found.setdefault(
+            key,
+            CompilerDiagnostic(
+                phase=DiagnosticPhase.COMPILE,
+                severity=DiagnosticSeverity(diagnostic.severity),
+                code=diagnostic.code,
+                message=diagnostic.message
+                if resource.label is None or diagnostic.code == _SYNTAX_ERROR_CODE
+                else f"{resource.label}: {diagnostic.message}",
+                resource_type=resource.resource_type,
+                resource_name=resource.resource_name,
+                location=location,
+                help=resource_sql_help(
+                    resource_type=resource.resource_type,
+                    diagnostic=diagnostic,
+                    authored_text=_text_from(resource=resource, location=location),
+                    authored_line=_line_at(resource=resource, location=location),
+                    column=location.column,
+                    authored_body=resource.authored_body,
+                    audit_definition=resource.audit_definition,
+                    shapes=context.shapes,
+                    relations=resource.relations,
+                    dialect=context.dialect,
+                ),
+            ),
+        )
+    return found
 
 
 def _relation_schema(
@@ -203,9 +247,7 @@ def _reported_diagnostic(
 
 
 def _audit_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
-    analysis_disabled: frozenset[str] = frozenset(
-        model.name for model in project.models if model.config.values.get("sql_analysis") is False
-    )
+    analysis_disabled: frozenset[str] = _analysis_disabled_models(project)
     resources: list[_ResourceSql] = []
     for audit in project.audits:
         if audit.attached_target_name in analysis_disabled:
@@ -221,17 +263,24 @@ def _audit_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
         ):
             if not sql or not sql.strip():
                 continue
+            body: str = authored or sql
             resources.append(
                 _ResourceSql(
                     resource_type=CompiledResourceType.AUDIT,
                     resource_name=audit.name,
                     path=audit.audit_file.relative_path,
                     contents=audit.audit_file.contents,
-                    authored_body=authored or sql,
+                    authored_body=body,
                     sql=sql,
                     relations=relations,
                     label=_audit_label(audit),
                     audit_definition=audit.definition_name,
+                    opt_out=_header_opt_out(
+                        header_values=audit.audit_block.header_values,
+                        path=audit.audit_file.relative_path,
+                        contents=audit.audit_file.contents,
+                        body=body,
+                    ),
                 )
             )
     return tuple(resources)
@@ -247,9 +296,10 @@ def _audit_label(audit: CompiledAudit) -> str:
 
 
 def _sql_test_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
+    analysis_disabled: frozenset[str] = _analysis_disabled_models(project)
     resources: list[_ResourceSql] = []
     for test in project.sql_tests:
-        if not test.sql_body.strip():
+        if not test.sql_body.strip() or analysis_disabled.intersection(test.expected_model_names):
             continue
         sql: str = _EMPTY_FIXTURE_CTE_PATTERN.sub(
             lambda match: match.group("prefix") + match.group("name"), test.sql_body
@@ -264,6 +314,12 @@ def _sql_test_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]
                 authored_body=test.test_block.sql_body,
                 sql=sql,
                 label=f"SQL test '{test.name}'",
+                opt_out=_header_opt_out(
+                    header_values=test.test_block.header_values,
+                    path=test.test_file.relative_path,
+                    contents=test.test_file.contents,
+                    body=test.test_block.sql_body,
+                ),
                 relations=frozenset(
                     (
                         *_REFERENCE_CALL_PATTERN.findall(test.sql_body),
@@ -284,7 +340,7 @@ def _hook_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
     }
     resources: list[_ResourceSql] = []
     for model in project.models:
-        if model.config.values.get("sql_analysis") is False:
+        if model.config.values.get(SQL_ANALYSIS_CONFIG_KEY) is False:
             continue
         for hook_key in _MODEL_HOOK_KEYS:
             entries: object = model.config.values.get(hook_key)
@@ -315,6 +371,28 @@ def _hook_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
                     )
                 )
     return tuple(resources)
+
+
+def _analysis_disabled_models(project: CompiledProject) -> frozenset[str]:
+    return frozenset(
+        model.name
+        for model in project.models
+        if model.config.values.get(SQL_ANALYSIS_CONFIG_KEY) is False
+    )
+
+
+def _header_opt_out(
+    *, header_values: dict[str, object], path: Path, contents: str, body: str
+) -> SourceLocation | None:
+    """Where a TEST or AUDIT header turns SQL analysis off, if it does."""
+
+    if header_values.get(SQL_ANALYSIS_CONFIG_KEY) is not False:
+        return None
+    body_offset: int = contents.find(body)
+    key_offset: int = contents.rfind(
+        SQL_ANALYSIS_CONFIG_KEY, 0, body_offset if body_offset >= 0 else len(contents)
+    )
+    return _offset_location(path=path, text=contents, offset=max(key_offset, 0))
 
 
 def _relations(references: tuple[CompileSqlReference, ...]) -> frozenset[str]:

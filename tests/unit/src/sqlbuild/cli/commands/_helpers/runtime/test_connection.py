@@ -43,7 +43,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
             expected_warning_fragment=(
                 "Warning: DuckDB adapter is active, but connection contains "
                 "Snowflake-like keys: role, warehouse. If this is a Snowflake local config, "
-                "add top-level `adapter: snowflake` to sqlbuild_local.toml."
+                'add `adapter = "snowflake"` at the top of sqlbuild_local.toml, before any section.'
             ),
         )
     ],

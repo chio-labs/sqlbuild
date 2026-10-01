@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.models import (
     PythonSqlReferenceReport,
 )
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
+from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main._model_python_hook_names import model_python_hook_names
 from sqlbuild.compiler.references.main._compiled_project_relations import (
@@ -345,7 +346,6 @@ def _hard_coded_relation_diagnostic(
         location=SourceLocation(path=owner.relative_path, line=literal.line, column=1),
         help=(
             f"{remedy}{qualify_help}\n"
-            "  = help: while migrating a project, allow hard-coded relation names with "
-            "[references] enforce_explicit = false in sqlbuild_project.toml"
+            "  = help: " + explicit_references_help(allowed="hard-coded relation names")
         ),
     )

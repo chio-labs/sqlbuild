@@ -15,6 +15,7 @@ from sqlbuild.compiler.discovery._helpers.validation.discovery import validate_d
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
+    validate_local_sql_analysis_policy,
 )
 from sqlbuild.compiler.discovery.constants import (
     DISCOVERY_FACT_CACHE_ALGORITHM,
@@ -70,6 +71,9 @@ def _assemble_discovered_project_inputs(
 ) -> DiscoveredProjectInputs:
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
+    validate_local_sql_analysis_policy(
+        project_dir=project_dir, project_config=project_config, local_config=local_config
+    )
     validate_project_python_paths(project_dir=project_dir)
     sql_analysis_enabled: bool = (
         sql_analysis_enabled_override

@@ -1375,7 +1375,12 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             raise AdapterUserError(
                 message="BigQuery connection requires non-empty 'project'",
                 code="A101",
-                help="set connection.project in sqlbuild_local.toml or the active target",
+                help=(
+                    "set the Google Cloud project in sqlbuild_local.toml (or in the active "
+                    "target's connection):\n"
+                    "            [connection]\n"
+                    '            project = "my-project"'
+                ),
             )
 
         try:

@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.discovery.constants import (
+    DBT_PROJECT_DIR_KEY,
+    DBT_SECTION,
+    PROJECT_CONFIG_FILENAME,
+)
+from sqlbuild.errors.setting_help.main.join_helps import join_helps
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, ResolvedDbtConfig
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
@@ -29,7 +36,16 @@ def resolve_dbt_config(
     if require_project_dir and project_dir is None:
         raise DbtInteropConfigError(
             "dbt project directory is not configured",
-            help="Add [dbt].project_dir to sqlbuild_project.toml or pass --project-dir to sqb dbt.",
+            help=join_helps(
+                setting_help(
+                    purpose="to point SQLBuild at the dbt project",
+                    file_name=PROJECT_CONFIG_FILENAME,
+                    section=DBT_SECTION,
+                    key=DBT_PROJECT_DIR_KEY,
+                    value="path/to/dbt_project",
+                ),
+                "or pass `--project-dir` to `sqb dbt`",
+            ),
         )
 
     raw_profiles_dir: str | None = (

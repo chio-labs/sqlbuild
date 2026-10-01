@@ -24,6 +24,7 @@ Online: https://sqlbuild.com/docs/concepts/testing/
 - Multiple tests per file
 - Repeating test logic
 - Test placement
+- Skipping SQL analysis
 - Running tests
 
 SQLBuild supports SQL-native unit tests that validate model logic by comparing actual query results against expected values. Tests can chain across multiple models (multi-model tests), use macros for reusable mock data, and include zero-row assertions.
@@ -687,6 +688,14 @@ tests/
   scenarios/
     ...
 ```
+
+## Skipping SQL analysis
+
+Compile checks SQL test fixtures and assertions like model SQL. For SQL the parser cannot read,
+add `sql_analysis false` to the `TEST` header; the test still runs. Tests of a model with
+`sql_analysis false`, and every test in a `--no-sql-analysis` run, are not analysed. With
+`[settings] require_sql_analysis = true`, the opt-out is accepted only on test SQL that cannot be
+parsed (see [Requiring SQL analysis](models/configuration.md#requiring-sql-analysis)).
 
 ## Running tests
 

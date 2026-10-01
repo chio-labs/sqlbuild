@@ -27,7 +27,6 @@ from sqlbuild.cli.commands._helpers.scenario_execution.namespace import resolve_
 from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
 from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
-    SQL_ANALYSIS_CONFIG_KEY,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
@@ -39,6 +38,7 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.main.sql_analysis_off_guidance import sql_analysis_off_guidance
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile_only import run_compile_only_pipeline
 from sqlbuild.compiler.pipeline.models import (
@@ -69,11 +69,9 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     force: bool = limit_inputs.force
     if no_sql_validation:
         raise CliUserError(
-            "scenario capture requires SQL analysis",
+            "scenario capture requires SQL analysis, but `--no-sql-analysis` turns it off",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
-            help=(
-                "Enable settings.sql_analysis when capturing snapshots for local scenario replay."
-            ),
+            help="run the capture without `--no-sql-analysis`",
         )
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
@@ -170,23 +168,14 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
 
 
 def _validate_capture_sql_analysis_enabled(*, discovered_inputs: DiscoveredProjectInputs) -> None:
-    if not _effective_sql_analysis_and_validation_enabled(discovered_inputs=discovered_inputs):
-        raise CliUserError(
-            "scenario capture requires SQL analysis",
-            code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
-            help=(
-                "Enable settings.sql_analysis when capturing snapshots for local scenario replay."
-            ),
-        )
-
-
-def _effective_sql_analysis_and_validation_enabled(
-    *, discovered_inputs: DiscoveredProjectInputs
-) -> bool:
-    setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
-    sql_analysis_enabled: bool = (
-        discovered_inputs.local_config.settings.sql_analysis
-        if SQL_ANALYSIS_CONFIG_KEY in setting_overrides
-        else discovered_inputs.project_config.settings.sql_analysis
+    guidance: tuple[str, str] | None = sql_analysis_off_guidance(
+        discovered_inputs=discovered_inputs,
+        purpose="to capture snapshots for local scenario replay",
     )
-    return sql_analysis_enabled
+    if guidance is not None:
+        note, help_text = guidance
+        raise CliUserError(
+            f"scenario capture requires SQL analysis; {note}",
+            code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+            help=help_text,
+        )

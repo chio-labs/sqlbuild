@@ -48,6 +48,9 @@ from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_storage_policies
+from sqlbuild.compiler.compile._helpers.diagnostics.sql_analysis_opt_outs import (
+    rejected_sql_analysis_opt_out,
+)
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     merge_call_site_references,
     resource_references,
@@ -117,7 +120,9 @@ from sqlbuild.compiler.compile.models import (
     ModelConfigScanCache,
     ModelHeaderColumnCache,
     ModelInputBuildContext,
+    SqlAnalysisOptOutRequest,
 )
+from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredHookFunction,
@@ -158,6 +163,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
+    SourceLocation,
     TargetConfig,
 )
 
@@ -232,6 +238,7 @@ class _VisibleModelDeclarationCache:
 class _ModelValidationContext:
     effective_settings: SettingsConfig
     no_sql_validation: bool
+    project_config_path: Path
     defer_model_sql_validation: bool
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
     extract_references: Callable[[str], tuple[CompileSqlReference, ...]]
@@ -434,6 +441,7 @@ def _build_model_inputs(
     validation_context: _ModelValidationContext = _ModelValidationContext(
         effective_settings=effective_settings,
         no_sql_validation=no_sql_validation,
+        project_config_path=(discovered_inputs.project_dir or Path()) / PROJECT_CONFIG_FILENAME,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         extract_references=extract_references,
@@ -588,7 +596,7 @@ def _build_model_inputs(
             if isinstance(raw_placeholders, dict)
             else None
         )
-        sql_validation_enabled, references = _validate_model_input(
+        sql_validation_enabled, references, rejected_opt_out = _validate_model_input(
             context=validation_context,
             model_file=model_file,
             config=effective_config,
@@ -701,6 +709,7 @@ def _build_model_inputs(
                     macro_source_sql=declaration_expanded_sql,
                     references=references,
                     sql_validation_enabled=sql_validation_enabled,
+                    rejected_sql_analysis_opt_out=rejected_opt_out,
                     enum_declarations=tuple(declarations.local_enums.values()),
                     constant_declarations=tuple(declarations.local_constants.values()),
                     enum_columns=enum_columns,
@@ -729,6 +738,7 @@ def _build_model_inputs(
                 references=references,
                 schema_entry=header_schema_entry,
                 sql_validation_enabled=sql_validation_enabled,
+                rejected_sql_analysis_opt_out=rejected_opt_out,
                 enum_declarations=tuple(declarations.local_enums.values()),
                 constant_declarations=tuple(declarations.local_constants.values()),
                 enum_columns=enum_columns,
@@ -783,13 +793,31 @@ def _validate_model_input(
     sql_validation_placeholders: dict[str, str] | None,
     model_schema_columns: tuple[SchemaColumn, ...] | None,
     argument_references: tuple[CompileSqlReference, ...],
-) -> tuple[bool, tuple[CompileSqlReference, ...]]:
+) -> tuple[bool, tuple[CompileSqlReference, ...], SourceLocation | None]:
     model_name: str = model_file.file_path.stem
     sql_validation_enabled: bool = _model_sql_validation_gate(
         effective_settings=context.effective_settings,
         no_sql_validation=context.no_sql_validation,
         model_config=config,
     )
+    rejected_opt_out: SourceLocation | None = (
+        None
+        if sql_validation_enabled
+        else rejected_sql_analysis_opt_out(
+            SqlAnalysisOptOutRequest(
+                model_file=model_file,
+                config=config,
+                settings=context.effective_settings,
+                no_sql_validation=context.no_sql_validation,
+                query_sql=cursor_intrinsics_analysis_sql(
+                    sql=expanded_query_sql, cursor_type=config.values.get("cursor_type")
+                ),
+                placeholders=sql_validation_placeholders,
+                project_config_path=context.project_config_path,
+            )
+        )
+    )
+    sql_validation_enabled = sql_validation_enabled or rejected_opt_out is not None
     if sql_validation_enabled and not context.defer_model_sql_validation:
         validate_sql_syntax(
             query_sql=cursor_intrinsics_analysis_sql(
@@ -846,7 +874,7 @@ def _validate_model_input(
         query_sql=expanded_query_sql,
         custom_materialization_names=context.custom_materialization_names,
     )
-    return sql_validation_enabled, references
+    return sql_validation_enabled, references, rejected_opt_out
 
 
 def _build_visible_declaration_indexes(

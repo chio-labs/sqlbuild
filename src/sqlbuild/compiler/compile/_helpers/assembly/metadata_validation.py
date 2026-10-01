@@ -20,8 +20,8 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
 )
-from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql import get_resource_sql_diagnostics
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
+from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql import get_resource_sql_diagnostics
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -61,8 +61,9 @@ def get_semantic_metadata_diagnostics(
     *,
     project: CompiledProject,
     profile: ExpressionInferenceProfile,
+    resource_sql_analysis: bool = True,
 ) -> tuple[CompilerDiagnostic, ...]:
-    """Reject metadata names only where absence can be proven."""
+    """Reject metadata names only where absence can be proven; resource SQL only when analysed."""
 
     if not project.settings.sql_analysis:
         return ()
@@ -176,9 +177,10 @@ def get_semantic_metadata_diagnostics(
                 )
             )
     diagnostics.extend(_sql_test_errors(project=project, shapes=shapes, profile=profile))
-    diagnostics.extend(
-        get_resource_sql_diagnostics(project=project, shapes=shapes, profile=profile)
-    )
+    if resource_sql_analysis:
+        diagnostics.extend(
+            get_resource_sql_diagnostics(project=project, shapes=shapes, profile=profile)
+        )
     return tuple(diagnostics)
 
 

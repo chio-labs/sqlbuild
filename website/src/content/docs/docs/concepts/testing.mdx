@@ -665,6 +665,14 @@ tests/
     ...
 ```
 
+## Skipping SQL analysis
+
+Compile checks SQL test fixtures and assertions like model SQL. For SQL the parser cannot read,
+add `sql_analysis false` to the `TEST` header; the test still runs. Tests of a model with
+`sql_analysis false`, and every test in a `--no-sql-analysis` run, are not analysed. With
+`[settings] require_sql_analysis = true`, the opt-out is accepted only on test SQL that cannot be
+parsed (see [Requiring SQL analysis](/docs/concepts/models/configuration#requiring-sql-analysis)).
+
 ## Running tests
 
 Tests run automatically during `sqb build` in DAG order, before their target model is materialized.

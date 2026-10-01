@@ -1,3 +1,4 @@
+use crate::configuration::main::setting_help::setting_help;
 use crate::models::{DeclarationKind, Fault, Model, RuleMetadata, ScopeDeclaration, ScopeKind};
 use crate::rules::_helpers::evaluation::path_fault;
 use crate::rules::models::ProjectEvaluationRequest;
@@ -187,7 +188,12 @@ fn evaluate_models(evaluation: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
                             "model has ambiguous domain-root and level candidates: {}",
                             candidates.join(", ")
                         ),
-                        "Set rules.layout.domain_roots to the intended normalized roots.".into(),
+                        setting_help(
+                            "List the intended normalized domain roots",
+                            "rules.layout",
+                            "domain_roots",
+                            r#"["<domain root>"]"#,
+                        ),
                     ));
                 }
                 continue;
@@ -207,10 +213,15 @@ fn evaluate_models(evaluation: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
                     max_depth
                 ),
                 format!(
-                    "Flatten this path beneath {}/{}, promote part of it into the domain root, or set rules.thresholds.max_subdomain_depth to at least {}.",
+                    "Flatten this path beneath {}/{}, or promote part of it into the domain root. {}",
                     resolved.domain,
                     resolved.level,
-                    resolved.owners.len()
+                    setting_help(
+                        &format!("To allow this depth (the current value is {max_depth})"),
+                        "rules.thresholds",
+                        "max_subdomain_depth",
+                        &resolved.owners.len().to_string(),
+                    )
                 ),
             ));
         }
@@ -513,12 +524,20 @@ fn inspect_container(
                 format!(
                     "declaration role {:?} has bucket depth {}; configured maximum is {}",
                     inspection.root,
-                    entry.buckets.len()
-                    ,inspection.max_depth
+                    entry.buckets.len(),
+                    inspection.max_depth
                 ),
                 format!(
-                    "Flatten this bucket path or set rules.thresholds.max_role_container_depth to at least {}.",
-                    entry.buckets.len()
+                    "Flatten this bucket path. {}",
+                    setting_help(
+                        &format!(
+                            "To allow this depth (the current value is {})",
+                            inspection.max_depth
+                        ),
+                        "rules.thresholds",
+                        "max_role_container_depth",
+                        &entry.buckets.len().to_string(),
+                    )
                 ),
             ));
         }

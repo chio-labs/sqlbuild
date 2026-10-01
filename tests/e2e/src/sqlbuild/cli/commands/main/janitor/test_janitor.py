@@ -433,7 +433,10 @@ def test_given_direct_state_history_when_running_janitor_then_it_prunes_history(
             description="tracked-only janitor requires query tracking",
             command=("janitor", "--auto-approve"),
             expected_exit_code=1,
-            expected_stderr_fragments=("janitor.delete_tracked_only requires",),
+            expected_stderr_fragments=(
+                "[janitor] delete_tracked_only = true requires query change tracking",
+                "            query_change_tracking = true",
+            ),
         )
     ],
     ids=lambda case: case.description,
