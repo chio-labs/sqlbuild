@@ -540,6 +540,72 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
             expected_error_fragment="must contain a top-level mapping",
         ),
         ParseSourcesYamlErrorTestCase(
+            description="raises when the file declares an unknown top-level key",
+            contents="""
+        version: 2
+        sources:
+          - name: raw_orders
+        """,
+            expected_error_fragment="sources file has unknown keys: version",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when a source declares a misspelled key",
+            contents="""
+        sources:
+          - name: raw_orders
+            descripton: Raw orders
+        """,
+            expected_error_fragment="source has unknown keys: descripton",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when a source column declares a misspelled key",
+            contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: order_id
+                nulable: false
+        """,
+            expected_error_fragment="source column has unknown keys: nulable",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness declares an unknown key",
+            contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: loaded_at
+              warn_after: 1d
+        """,
+            expected_error_fragment="source freshness has unknown keys: warn_after",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness age policy declares an unknown key",
+            contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: loaded_at
+              age_policy:
+                warn_afer: 1d
+        """,
+            expected_error_fragment="source freshness age_policy has unknown keys: warn_afer",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when ingestr config declares an unknown key",
+            contents="""
+        sources:
+          - name: raw_orders
+            ingestr:
+              source_uri: postgresql://localhost/shop
+              source_table: public.orders
+              incremental_column: updated_at
+        """,
+            expected_error_fragment="source ingestr has unknown keys: incremental_column",
+        ),
+        ParseSourcesYamlErrorTestCase(
             description="raises when source meta is not a mapping",
             contents="""
         sources:

@@ -8,6 +8,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.scenario._helpers.snapshots.core import (
+    build_scenario_snapshot_input_fingerprint,
+)
+from sqlbuild.executor.scenario.models import ScenarioSnapshotInputSpec
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
@@ -508,3 +513,54 @@ def assert_optional_local_replay_rows(
             sql=query_sql,
         )
         assert tuple(rows) == expected_local_rows
+
+
+def build_offline_snowflake_project_toml() -> str:
+    """Return a Snowflake project config that compiles offline for local replay."""
+
+    return (
+        'name = "scenario_demo"\n'
+        'adapter = "snowflake"\n\n'
+        "[connection]\n"
+        'account = "example"\n'
+        'user = "example"\n'
+        'database = "analytics"\n'
+        'warehouse = "compute"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+        'database = "analytics"\n'
+        'schema = "main"\n'
+    )
+
+
+def restamp_scenario_snapshot_capture_adapter(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    source_fixture_sql: dict[str, str],
+    capture_adapter: str,
+) -> None:
+    """Rewrite a captured snapshot so it reads as captured by another project adapter."""
+
+    manifest_path: Path = (
+        project_dir / "tests" / "_scenario_snapshots" / scenario_name / "scenario.json"
+    )
+    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest_data, dict)
+    manifest_data["capture_adapter"] = capture_adapter
+    manifest_data["capture_dialect"] = capture_adapter
+    manifest_data["input_fingerprint"] = build_scenario_snapshot_input_fingerprint(
+        scenario_name=scenario_name,
+        input_specs=tuple(
+            ScenarioSnapshotInputSpec(
+                kind=ScenarioArtifactKind.SOURCE,
+                logical_name=source_name,
+                file_path=Path("sources") / f"{source_name}.jsonl",
+                capture_sql=fixture_sql,
+            )
+            for source_name, fixture_sql in source_fixture_sql.items()
+        ),
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_adapter,
+    )
+    manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")

@@ -554,7 +554,10 @@ fn separators(
             " ".to_string()
         };
         separators[next] = if substitution {
-            let oracle_gap = gap(next_at - 1, next_at);
+            let oracle_gap = (previous_at + 1..next_at)
+                .rev()
+                .find(|&at| generated[at].key == authored[last].key)
+                .map_or_else(|| gap(next_at - 1, next_at), |at| gap(at, at + 1));
             let unspaced = default_space(&authored[last], &authored[next]).is_empty();
             if unspaced && !oracle_gap.contains('\n') {
                 String::new()

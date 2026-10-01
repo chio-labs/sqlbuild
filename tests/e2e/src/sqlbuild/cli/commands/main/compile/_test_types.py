@@ -397,3 +397,10 @@ class FunctionNameCompileTestCase:
     query_sql: str
     expected_exit_code: int
     expected_diagnostics: tuple[tuple[str, str, int, int], ...]
+
+
+@dataclass(frozen=True)
+class ModelHeaderKeyCompileCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_fragments: tuple[str, ...]

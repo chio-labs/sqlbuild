@@ -7,13 +7,23 @@ from collections.abc import Iterator
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.sql_analysis.constants import (
+    SQL_BLOCK_COMMENT_CLOSE,
+    SQL_BLOCK_COMMENT_OPEN,
     SQL_CLOSE_PARENTHESIS,
     SQL_DOLLAR_QUOTE_CHARACTER,
     SQL_ESCAPABLE_QUOTE_CHARACTERS,
+    SQL_ESCAPE_CHARACTER,
+    SQL_ESCAPE_STRING_PREFIX,
     SQL_IDENTIFIER_PREFIX,
     SQL_OPEN_PARENTHESIS,
+    SQL_RAW_STRING_PREFIX,
+    SQL_STRING_PREFIX_CHARACTERS,
+    SQL_STRING_PREFIX_MAX_LENGTH,
+    SQL_STRING_QUOTE_CHARACTER,
     SQL_TEXT_START_CHARACTERS,
+    SQL_TRIPLE_QUOTE_LENGTH,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _PAREN_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"[-/'\"`$()]")
 _DOLLAR_QUOTE_DELIMITER: re.Pattern[str] = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
@@ -45,6 +55,90 @@ def quoted_text_end_impl(*, sql: str, start: int, context: str = "SQL") -> int |
             index += 2
             continue
         return index + 1
+
+
+def dialect_non_code_end_impl(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax, context: str = "SQL"
+) -> int | None:
+    """Return the end of the quoted text or comment starting at the position, if any."""
+
+    if sql.startswith(SQL_BLOCK_COMMENT_OPEN, start):
+        return _dialect_block_comment_end(sql=sql, start=start, syntax=syntax, context=context)
+    if any(sql.startswith(prefix, start) for prefix in syntax.line_comment_prefixes):
+        return skip_line_comment_impl(sql=sql, start=start)
+    if sql[start] in SQL_TEXT_START_CHARACTERS:
+        return dialect_quoted_text_end_impl(sql=sql, start=start, syntax=syntax, context=context)
+    return None
+
+
+def _dialect_block_comment_end(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax, context: str
+) -> int:
+    depth: int = 1
+    index: int = start + len(SQL_BLOCK_COMMENT_OPEN)
+    while depth:
+        closing_index: int = sql.find(SQL_BLOCK_COMMENT_CLOSE, index)
+        if closing_index == -1:
+            raise CompileInputError(f"{context} contains an unclosed block comment")
+        opening_index: int = (
+            sql.find(SQL_BLOCK_COMMENT_OPEN, index, closing_index)
+            if syntax.nested_block_comments
+            else -1
+        )
+        if opening_index == -1:
+            depth -= 1
+            index = closing_index + len(SQL_BLOCK_COMMENT_CLOSE)
+        else:
+            depth += 1
+            index = opening_index + len(SQL_BLOCK_COMMENT_OPEN)
+    return index
+
+
+def dialect_quoted_text_end_impl(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax, context: str = "SQL"
+) -> int | None:
+    """Return the end of quoted text starting at the position under the dialect's escape rules."""
+
+    quote_character: str = sql[start]
+    if quote_character == SQL_DOLLAR_QUOTE_CHARACTER:
+        return _dollar_quoted_text_end(sql=sql, start=start, context=context)
+    prefix: str = _string_literal_prefix(sql=sql, start=start)
+    backslash_escapes: bool = quote_character in syntax.backslash_escape_quotes or (
+        syntax.escape_string_prefix
+        and quote_character == SQL_STRING_QUOTE_CHARACTER
+        and prefix == SQL_ESCAPE_STRING_PREFIX
+    )
+    if syntax.raw_string_prefix and SQL_RAW_STRING_PREFIX in prefix:
+        backslash_escapes = False
+    delimiter: str = quote_character
+    triple_quote: str = quote_character * SQL_TRIPLE_QUOTE_LENGTH
+    if syntax.triple_quoted_strings and sql.startswith(triple_quote, start):
+        delimiter = triple_quote
+    index: int = start + len(delimiter)
+    while index < len(sql):
+        if backslash_escapes and sql.startswith(SQL_ESCAPE_CHARACTER, index):
+            index += 2
+            continue
+        if sql.startswith(delimiter, index):
+            if delimiter == quote_character and sql.startswith(quote_character, index + 1):
+                index += 2
+                continue
+            return index + len(delimiter)
+        index += 1
+    raise CompileInputError(f"{context} contains an unclosed quoted string")
+
+
+def _string_literal_prefix(*, sql: str, start: int) -> str:
+    prefix_start: int = start
+    while (
+        prefix_start > 0
+        and start - prefix_start < SQL_STRING_PREFIX_MAX_LENGTH
+        and sql[prefix_start - 1] in SQL_STRING_PREFIX_CHARACTERS
+    ):
+        prefix_start -= 1
+    if prefix_start > 0 and _continues_dollar_word(sql[prefix_start - 1]):
+        return ""
+    return sql[prefix_start:start].lower()
 
 
 def _dollar_quoted_text_end(*, sql: str, start: int, context: str) -> int | None:

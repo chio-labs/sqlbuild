@@ -19,6 +19,7 @@ def enforce_model_execution_limit(
     model_count: int,
     target_name: str | None,
     limits: ExecutionLimitsConfig,
+    refusal_note: str,
 ) -> None:
     """Reject a build whose expanded model count exceeds its target policy."""
 
@@ -33,7 +34,7 @@ def enforce_model_execution_limit(
         f"Maximum models:  {maximum}\n"
         "Configuration:   "
         f"targets.{target_label}.execution_limits.max_models\n\n"
-        "No warehouse changes were made.",
+        f"{refusal_note}",
         code="C413",
         help=limits.remediation,
     )

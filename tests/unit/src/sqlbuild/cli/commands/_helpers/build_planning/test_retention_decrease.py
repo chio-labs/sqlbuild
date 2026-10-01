@@ -7,6 +7,7 @@ import pytest
 from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
     enforce_retention_decrease_policy,
 )
+from sqlbuild.cli.commands.constants import RETENTION_DECREASE_BUILD_HELP
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import RetentionDirection
@@ -80,6 +81,7 @@ def test_given_unsafe_retention_decrease_when_enforcing_then_raises_user_error(
         enforce_retention_decrease_policy(
             plan=test_case.plan_output,
             allow_retention_decrease=test_case.allow_retention_decrease,
+            non_interactive_help=RETENTION_DECREASE_BUILD_HELP,
             input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
             output_stream=StringIO(),
         )
@@ -137,6 +139,7 @@ def test_given_safe_or_confirmed_retention_change_when_enforcing_then_allows_exe
     enforce_retention_decrease_policy(
         plan=test_case.plan_output,
         allow_retention_decrease=test_case.allow_retention_decrease,
+        non_interactive_help=RETENTION_DECREASE_BUILD_HELP,
         input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
         output_stream=output_stream,
     )

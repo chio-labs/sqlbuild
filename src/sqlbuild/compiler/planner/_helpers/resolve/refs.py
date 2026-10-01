@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
@@ -32,8 +32,10 @@ from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
@@ -255,6 +257,27 @@ def resolve_table_function_references(
     return "".join(parts)
 
 
+def replace_executable_matches(
+    *,
+    sql: str,
+    pattern: re.Pattern[str],
+    replace: Callable[[re.Match[str]], str],
+    lexical_syntax: SqlLexicalSyntax,
+) -> str:
+    """Replace pattern matches in executable SQL, leaving quoted text and comments untouched."""
+
+    parts: list[str] = []
+    last_index: int = 0
+    for match in _iter_dialect_executable_matches(
+        sql=sql, pattern=pattern, lexical_syntax=lexical_syntax
+    ):
+        parts.append(sql[last_index : match.start()])
+        parts.append(replace(match))
+        last_index = match.end()
+    parts.append(sql[last_index:])
+    return "".join(parts)
+
+
 def _iter_executable_matches(*, sql: str, pattern: re.Pattern[str]) -> Iterator[re.Match[str]]:
     index: int = 0
     while index < len(sql):
@@ -266,6 +289,25 @@ def _iter_executable_matches(*, sql: str, pattern: re.Pattern[str]) -> Iterator[
             continue
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context="SQL reference resolution")
+            continue
+        match: re.Match[str] | None = pattern.match(sql, index)
+        if match is None:
+            index += 1
+            continue
+        yield match
+        index = match.end()
+
+
+def _iter_dialect_executable_matches(
+    *, sql: str, pattern: re.Pattern[str], lexical_syntax: SqlLexicalSyntax
+) -> Iterator[re.Match[str]]:
+    index: int = 0
+    while index < len(sql):
+        non_code_end: int | None = dialect_non_code_end(
+            sql=sql, start=index, syntax=lexical_syntax, context="SQL reference resolution"
+        )
+        if non_code_end is not None:
+            index = non_code_end
             continue
         match: re.Match[str] | None = pattern.match(sql, index)
         if match is None:

@@ -24,3 +24,16 @@ pub(crate) struct LocatedFunctionDiagnosticTestCase {
     pub(crate) expected_location: (Option<usize>, Option<usize>),
     pub(crate) expected_span: (Option<usize>, Option<usize>),
 }
+
+pub(crate) struct UniqueWordOffsetTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) authored: &'static str,
+    pub(crate) identifier: &'static str,
+    pub(crate) expected_offset: Option<usize>,
+}
+
+pub(crate) struct UniqueWordScalingTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) identifiers: usize,
+    pub(crate) expected_max_duration: std::time::Duration,
+}

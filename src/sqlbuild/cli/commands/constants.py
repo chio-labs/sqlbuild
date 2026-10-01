@@ -111,4 +111,30 @@ MISSING_ORIGIN_DBT_HELP: str = (
     "models with sqb build --allow-missing-migration-origin and leave them out of this dbt "
     "selection, or set the target's missing_migration_origin to 'allow'."
 )
+SNAPSHOT_FULL_REFRESH_BUILD_HELP: str = (
+    "Pass --allow-snapshot-full-refresh to confirm in non-interactive runs."
+)
+SNAPSHOT_FULL_REFRESH_DBT_HELP: str = (
+    "sqb dbt has no confirmation flag: confirm on an interactive terminal, build the affected "
+    "snapshots with sqb build --allow-snapshot-full-refresh and leave them out of this dbt "
+    "selection, or relax the snapshot_full_refresh policy."
+)
+TABLE_TYPE_DOWNGRADE_BUILD_HELP: str = (
+    "Pass --allow-table-type-downgrade to confirm in non-interactive runs."
+)
+TABLE_TYPE_DOWNGRADE_DBT_HELP: str = (
+    "sqb dbt has no confirmation flag: confirm on an interactive terminal, build the affected "
+    "models with sqb build --allow-table-type-downgrade and leave them out of this dbt "
+    "selection, or set the target's table_type_downgrade to 'allow'."
+)
+RETENTION_DECREASE_BUILD_HELP: str = (
+    "Pass --allow-retention-decrease to confirm in non-interactive runs."
+)
+RETENTION_DECREASE_DBT_HELP: str = (
+    "sqb dbt has no confirmation flag: confirm on an interactive terminal, build the affected "
+    "models with sqb build --allow-retention-decrease and leave them out of this dbt "
+    "selection, or set the target's time_travel_retention_decrease to 'allow'."
+)
+EXECUTION_LIMIT_BUILD_NOTE: str = "No warehouse changes were made."
+EXECUTION_LIMIT_DBT_NOTE: str = "dbt work has already run; no SQLBuild models were built."
 QUERY_DIFF_INCOMPLETE_EXECUTION_CODES: frozenset[str] = frozenset({"C237", "C238", "C239"})

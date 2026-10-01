@@ -185,3 +185,11 @@ class FirstFailureDetailsTestCase:
     expected_error_code: str | None
     expected_error_help: str | None
     expected_error_message: str | None
+
+
+@dataclass(frozen=True)
+class LocalScenarioSqlTestCase:
+    description: str
+    source_dialect: str | None
+    sql: str
+    expected_sql: str

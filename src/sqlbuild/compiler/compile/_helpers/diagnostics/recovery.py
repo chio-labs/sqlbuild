@@ -20,7 +20,6 @@ from sqlbuild.compiler.compile._helpers.diagnostics.details import (
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.type_recovery import recover_output_types
 from sqlbuild.compiler.compile.models import (
-    CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
@@ -61,13 +60,17 @@ def recover_diagnostics(project: CompiledProject) -> CompiledProject:
     poisoned: dict[tuple[str, str], CompilerDiagnostic] = {}
     origins: dict[CompilerDiagnostic, tuple[str, str]] = {}
     projections: dict[str, set[str]] = {}
+    inferred_names: dict[str, set[str]] = {}
+    upstream_sources: dict[str, dict[str, set[tuple[str, str]]]] = {}
     for diagnostic in roots:
         model: CompiledModel | None = models.get(diagnostic.resource_name or "")
         missing: tuple[str, str | None] | None = missing_column(diagnostic.message)
         if model is None or missing is None:
             continue
         column, table = missing
-        if column not in {item.name for item in model.inferred_columns or ()}:
+        if model.name not in inferred_names:
+            inferred_names[model.name] = {item.name for item in model.inferred_columns or ()}
+        if column not in inferred_names[model.name]:
             continue
         if model.name not in projections:
             projections[model.name] = unaliased_output_columns(
@@ -75,14 +78,9 @@ def recover_diagnostics(project: CompiledProject) -> CompiledProject:
             )
         if column not in projections[model.name]:
             continue
-        upstream_columns: list[CompiledLineageSourceFact] = []
-        for output in model.fast_lineage_columns or ():
-            if output.output_column == column:
-                upstream_columns.extend(output.upstream_columns)
-        if not any(
-            source.resource_name == table and source.column_name == column
-            for source in upstream_columns
-        ):
+        if model.name not in upstream_sources:
+            upstream_sources[model.name] = _upstream_sources_by_output(model=model)
+        if table is None or (table, column) not in upstream_sources[model.name].get(column, set()):
             continue
         suggestion: str | None = closest_column(name=column, columns=shapes.get(table or "", {}))
         if suggestion is not None:
@@ -132,3 +130,12 @@ def recover_diagnostics(project: CompiledProject) -> CompiledProject:
         diagnostics=diagnostics,
         models=update_binding_models(models=project.models, diagnostics=diagnostics),
     )
+
+
+def _upstream_sources_by_output(*, model: CompiledModel) -> dict[str, set[tuple[str, str]]]:
+    sources: dict[str, set[tuple[str, str]]] = {}
+    for output in model.fast_lineage_columns or ():
+        sources.setdefault(output.output_column, set()).update(
+            (source.resource_name, source.column_name) for source in output.upstream_columns
+        )
+    return sources

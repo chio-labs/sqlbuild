@@ -12,6 +12,9 @@ from sqlbuild.compiler.authored_values.main._optional_non_empty_string import (
 from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
     require_non_empty_string,
 )
+from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
+    reject_unknown_mapping_keys,
+)
 from sqlbuild.compiler.discovery.constants import (
     DLT_LOADER_KIND,
     DLT_RESOURCE_WRITE_STRATEGY_KEY,
@@ -30,6 +33,18 @@ from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 
 _ingestr_strategies: frozenset[str] = frozenset(
     {"replace", "append", "merge", "delete+insert", "truncate+insert"}
+)
+_INGESTR_SOURCE_KEYS: frozenset[str] = frozenset(
+    {
+        "columns",
+        "extra_args",
+        "incremental_key",
+        "primary_key",
+        "source_table",
+        "source_uri",
+        "strategy",
+        "unique_key",
+    }
 )
 
 
@@ -91,6 +106,13 @@ def _parse_ingestr_source_config(*, raw_config: object, file_path: Path) -> Inge
     if not isinstance(raw_config, dict):
         raise SourceParseError(f"{file_path} source 'ingestr' must be a mapping")
     config: dict[str, object] = cast(dict[str, object], raw_config)
+    reject_unknown_mapping_keys(
+        mapping=config,
+        allowed=_INGESTR_SOURCE_KEYS,
+        file_path=file_path,
+        label="source ingestr",
+        error_class=SourceParseError,
+    )
     parsed: IngestrSourceConfig = IngestrSourceConfig(
         source_uri=require_non_empty_string(
             entry=config,

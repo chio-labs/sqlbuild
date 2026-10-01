@@ -912,3 +912,12 @@ class FunctionHeaderKeysTestCase:
     contents: str
     expected_error: str = ""
     expected_keys: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StatementHeaderKeysTestCase:
+    description: str
+    file_name: str
+    contents: str
+    expected_error: str
+    expected_help: str

@@ -99,7 +99,7 @@ def test_given_sql_scenario_file_variants_when_parsing_then_it_returns_expected_
 
         SELECT 1
         """,
-            expected_error_fragment="only supports `description` and `tags`",
+            expected_error_fragment="has unsupported keys: name",
         ),
         ParseSqlScenarioFileErrorTestCase(
             description="raises when description is not a string",

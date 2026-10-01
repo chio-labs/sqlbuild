@@ -38,3 +38,15 @@ class SqlSchemaValidationRequest:
     known_types: tuple[str, ...] = ()
     quoted_identifiers_ignore_case: bool = False
     catalog: Any | None = field(default=None, repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class SqlLexicalSyntax:
+    """Dialect rules for where SQL quoted text and comments end."""
+
+    backslash_escape_quotes: frozenset[str] = frozenset()
+    escape_string_prefix: bool = False
+    raw_string_prefix: bool = False
+    triple_quoted_strings: bool = False
+    nested_block_comments: bool = False
+    line_comment_prefixes: frozenset[str] = frozenset({"--"})

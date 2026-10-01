@@ -6,6 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlScenario,
@@ -18,16 +24,21 @@ from sqlbuild.compiler.planner._helpers.scenario.relations import (
     build_scenario_relation_plan,
     resolve_scenario_check_sql,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationPlan,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    ScenarioCheckSqlResolutionErrorTestCase,
     ScenarioCheckSqlResolutionTestCase,
+    ScenarioDialectCheckSqlResolutionTestCase,
     ScenarioExecutionPlanTestCase,
     ScenarioFixturePlanTestCase,
+    ScenarioFixtureSqlResolutionErrorTestCase,
     ScenarioRelationPlanErrorTestCase,
     ScenarioRelationPlanTestCase,
     ScenarioUnmockedSeedExecutionPlanTestCase,
@@ -44,6 +55,9 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 
 HASH_PREFIX: str = "51b385aebe20"
 SCENARIO_NAME: str = "revenue__customer_refund"
+SCENARIO_PATH: str = "tests/scenarios/customer_refund.sql"
+DAILY_REVENUE_TARGET: str = "scenario_schema.__sqb_51b385aebe20__model__daily_revenue"
+STG_CUSTOMERS_TARGET: str = "scenario_schema.__sqb_51b385aebe20__ref__stg_customers"
 
 
 @pytest.mark.parametrize(
@@ -208,6 +222,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
         adapter=PlannerTestAdapter(),
+        source_lexical_syntax=SqlLexicalSyntax(),
     )
 
     assert {
@@ -240,7 +255,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
             fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
         ),
         ScenarioFixturePlanTestCase(
-            description="resolves project source refs with polyglot without changing literals",
+            description="resolves project source refs in authored sql without touching literals",
             graph_plan=ScenarioGraphPlan(
                 key=build_scenario_relation_test_project().models[0].key,
                 name=SCENARIO_NAME,
@@ -250,7 +265,8 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
             ),
             expected_fixture_sql={
                 "source:raw__orders": (
-                    "SELECT '__source(\"raw__orders\")' AS marker_text FROM public.raw__orders AS o"
+                    "SELECT '__source(\"raw__orders\")' AS marker_text "
+                    'FROM public.raw__orders o -- __source("raw__orders")'
                 ),
             },
             expected_fixture_targets={
@@ -260,24 +276,6 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                 "SELECT '__source(\"raw__orders\")' AS marker_text "
                 'FROM __source("raw__orders") o -- __source("raw__orders")'
             ),
-        ),
-        ScenarioFixturePlanTestCase(
-            description="falls back to regex source resolution when sql_analysis is disabled",
-            graph_plan=ScenarioGraphPlan(
-                key=build_scenario_relation_test_project().models[0].key,
-                name=SCENARIO_NAME,
-                target_model_names=("daily_revenue",),
-                model_names=("daily_revenue",),
-                source_fixture_names=("raw__orders",),
-            ),
-            expected_fixture_sql={
-                "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
-            },
-            expected_fixture_targets={
-                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
-            },
-            fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
-            sql_analysis_enabled=False,
         ),
     ],
     ids=lambda case: case.description,
@@ -311,8 +309,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
         adapter=PlannerTestAdapter(),
-        sql_analysis_enabled=test_case.sql_analysis_enabled,
-        sql_analysis_dialect=test_case.sql_analysis_dialect,
+        source_lexical_syntax=SqlLexicalSyntax(),
     )
 
     assert {
@@ -430,6 +427,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
         scenario=build_scenario_relation_test_scenario(),
         project=project,
         adapter=PlannerTestAdapter(),
+        source_lexical_syntax=SqlLexicalSyntax(),
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
     )
@@ -527,6 +525,7 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
         scenario=build_scenario_relation_test_scenario(include_seed_fixture=False),
         project=project,
         adapter=PlannerTestAdapter(),
+        source_lexical_syntax=SqlLexicalSyntax(),
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
     )
@@ -551,8 +550,8 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
                 "JOIN __ref(stg_customers) sc ON dr.customer_id = sc.customer_id"
             ),
             expected_sql=(
-                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr "
-                "JOIN scenario_schema.__sqb_51b385aebe20__ref__stg_customers AS sc "
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue dr "
+                "JOIN scenario_schema.__sqb_51b385aebe20__ref__stg_customers sc "
                 "ON dr.customer_id = sc.customer_id"
             ),
         ),
@@ -563,8 +562,8 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
                 "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
             ),
             expected_sql=(
-                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes AS c "
-                "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders AS o "
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
+                "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders o "
                 "ON c.country_code = o.country_code"
             ),
         ),
@@ -572,32 +571,31 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
             description="resolves dbt ref markers to scenario fixture relations",
             sql='SELECT * FROM __dbt_ref("stripe", "payments") p',
             expected_sql=(
-                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments AS p"
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments p"
             ),
         ),
         ScenarioCheckSqlResolutionTestCase(
-            description="polyglot check sql resolution ignores strings and comments",
+            description="check sql resolution keeps strings and comments as authored",
             sql=(
                 "SELECT '__ref(daily_revenue)' AS marker_text "
                 "FROM __ref(daily_revenue) dr -- __source(raw__orders)"
             ),
             expected_sql=(
                 "SELECT '__ref(daily_revenue)' AS marker_text "
-                "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr"
+                "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue dr "
+                "-- __source(raw__orders)"
             ),
         ),
         ScenarioCheckSqlResolutionTestCase(
-            description="regex fallback resolves markers when sql_analysis is disabled",
+            description="authored function spellings and keyword case are not regenerated",
             sql=(
-                "SELECT * FROM __seed(country_codes) c "
-                "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
+                "select STARTSWITH(name, 'a') as flagged, IFNULL(total, 0) as total "
+                "from __ref(daily_revenue) where total != 0"
             ),
             expected_sql=(
-                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
-                "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders o "
-                "ON c.country_code = o.country_code"
+                "select STARTSWITH(name, 'a') as flagged, IFNULL(total, 0) as total "
+                "from scenario_schema.__sqb_51b385aebe20__model__daily_revenue where total != 0"
             ),
-            sql_analysis_enabled=False,
         ),
     ],
     ids=lambda case: case.description,
@@ -627,11 +625,277 @@ def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
         sql=test_case.sql,
         relation_plan=relation_plan,
         adapter=PlannerTestAdapter(),
-        sql_analysis_enabled=test_case.sql_analysis_enabled,
-        sql_analysis_dialect=test_case.sql_analysis_dialect,
+        source_lexical_syntax=SqlLexicalSyntax(),
+        source_label=SCENARIO_PATH,
     )
 
     assert result == test_case.expected_sql
+
+
+BACKSLASH_LEXICAL_SYNTAXES: tuple[SqlLexicalSyntax, ...] = (
+    SnowflakeAdapter.sql_lexical_syntax,
+    BigQueryAdapter.sql_lexical_syntax,
+    DatabricksAdapter.sql_lexical_syntax,
+)
+ESCAPE_LEXICAL_SYNTAXES: tuple[SqlLexicalSyntax, ...] = (
+    DuckDbAdapter.sql_lexical_syntax,
+    PostgresAdapter.sql_lexical_syntax,
+)
+CHECK_SQL_GRAPH_PLAN: ScenarioGraphPlan = ScenarioGraphPlan(
+    key=build_scenario_relation_test_project().models[0].key,
+    name=SCENARIO_NAME,
+    target_model_names=("daily_revenue",),
+    model_names=("daily_revenue",),
+    source_fixture_names=("raw__orders",),
+    ref_fixture_names=("stg_customers",),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="backslash-escaped quote before a later marker",
+            lexical_syntaxes=BACKSLASH_LEXICAL_SYNTAXES,
+            sql=(
+                "select * from __ref(\"daily_revenue\") where note = 'O\\'Brien' "
+                'union all select * from __ref("stg_customers")'
+            ),
+            expected_sql=(
+                f"select * from {DAILY_REVENUE_TARGET} where note = 'O\\'Brien' "
+                f"union all select * from {STG_CUSTOMERS_TARGET}"
+            ),
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="even backslash-escaped quotes around a marker",
+            lexical_syntaxes=BACKSLASH_LEXICAL_SYNTAXES,
+            sql=(
+                "select * from __ref(daily_revenue) where note = 'O\\'Brien' "
+                "union all select * from __ref(stg_customers) where note = 'D\\'Arcy'"
+            ),
+            expected_sql=(
+                f"select * from {DAILY_REVENUE_TARGET} where note = 'O\\'Brien' "
+                f"union all select * from {STG_CUSTOMERS_TARGET} where note = 'D\\'Arcy'"
+            ),
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="escape strings around a marker",
+            lexical_syntaxes=ESCAPE_LEXICAL_SYNTAXES,
+            sql=(
+                "select * from __ref(daily_revenue) where note = E'O\\'Brien' "
+                "union all select * from __ref(stg_customers) where note = e'D\\'Arcy'"
+            ),
+            expected_sql=(
+                f"select * from {DAILY_REVENUE_TARGET} where note = E'O\\'Brien' "
+                f"union all select * from {STG_CUSTOMERS_TARGET} where note = e'D\\'Arcy'"
+            ),
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="dollar-quoted text hides quotes and markers",
+            lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax, *ESCAPE_LEXICAL_SYNTAXES),
+            sql="select $$O'Brien __ref(stg_customers)$$ as note from __ref(daily_revenue)",
+            expected_sql=(
+                f"select $$O'Brien __ref(stg_customers)$$ as note from {DAILY_REVENUE_TARGET}"
+            ),
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="snowflake quoted identifier ending in a backslash",
+            lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax,),
+            sql='select "note\\", "it""s" from __ref(daily_revenue)',
+            expected_sql=f'select "note\\", "it""s" from {DAILY_REVENUE_TARGET}',
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="bigquery backtick identifier with an escaped backtick",
+            lexical_syntaxes=(BigQueryAdapter.sql_lexical_syntax,),
+            sql="select `note\\`s` from __ref(daily_revenue)",
+            expected_sql=f"select `note\\`s` from {DAILY_REVENUE_TARGET}",
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="bigquery triple-quoted string with an apostrophe",
+            lexical_syntaxes=(BigQueryAdapter.sql_lexical_syntax,),
+            sql="select '''it's''' as note from __ref(daily_revenue)",
+            expected_sql=f"select '''it's''' as note from {DAILY_REVENUE_TARGET}",
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="nested block comment with an apostrophe",
+            lexical_syntaxes=(
+                PostgresAdapter.sql_lexical_syntax,
+                DuckDbAdapter.sql_lexical_syntax,
+                DatabricksAdapter.sql_lexical_syntax,
+                SqlServerAdapter.sql_lexical_syntax,
+            ),
+            sql="select * /* a /* b */ it's __ref(stg_customers) */ from __ref(daily_revenue)",
+            expected_sql=(
+                f"select * /* a /* b */ it's __ref(stg_customers) */ from {DAILY_REVENUE_TARGET}"
+            ),
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="bigquery hash line comment with an apostrophe",
+            lexical_syntaxes=(BigQueryAdapter.sql_lexical_syntax,),
+            sql="select * # it's __ref(stg_customers)\nfrom __ref(daily_revenue)",
+            expected_sql=f"select * # it's __ref(stg_customers)\nfrom {DAILY_REVENUE_TARGET}",
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="snowflake double slash line comment with an apostrophe",
+            lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax,),
+            sql="select * // it's __ref(stg_customers)\nfrom __ref(daily_revenue)",
+            expected_sql=f"select * // it's __ref(stg_customers)\nfrom {DAILY_REVENUE_TARGET}",
+        ),
+        ScenarioDialectCheckSqlResolutionTestCase(
+            description="databricks raw string ending in a backslash",
+            lexical_syntaxes=(DatabricksAdapter.sql_lexical_syntax,),
+            sql="select r'C:\\' as path from __ref(daily_revenue)",
+            expected_sql=f"select r'C:\\' as path from {DAILY_REVENUE_TARGET}",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dialect_lexical_syntax_when_resolving_check_sql_then_replaces_every_marker(
+    test_case: ScenarioDialectCheckSqlResolutionTestCase,
+) -> None:
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=build_scenario_relation_test_project(),
+        graph_plan=CHECK_SQL_GRAPH_PLAN,
+        relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
+        schema="scenario_schema",
+    )
+
+    results: tuple[str, ...] = tuple(
+        resolve_scenario_check_sql(
+            sql=test_case.sql,
+            relation_plan=relation_plan,
+            adapter=PlannerTestAdapter(),
+            source_lexical_syntax=lexical_syntax,
+            source_label=SCENARIO_PATH,
+        )
+        for lexical_syntax in test_case.lexical_syntaxes
+    )
+
+    assert results == tuple(test_case.expected_sql for _ in test_case.lexical_syntaxes)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioCheckSqlResolutionErrorTestCase(
+            description="backslash before a quote is not an escape outside escape strings",
+            lexical_syntaxes=ESCAPE_LEXICAL_SYNTAXES,
+            sql=(
+                "select * from __ref(daily_revenue) where note = 'O\\'Brien' "
+                "union all select * from __ref(stg_customers)"
+            ),
+            expected_error_code="S511",
+            expected_error_fragment="unclosed quoted string",
+        ),
+        ScenarioCheckSqlResolutionErrorTestCase(
+            description="escaped closing quote leaves the string unclosed",
+            lexical_syntaxes=BACKSLASH_LEXICAL_SYNTAXES,
+            sql="select * from __ref(daily_revenue) where note = 'O\\'",
+            expected_error_code="S511",
+            expected_error_fragment="unclosed quoted string",
+        ),
+        ScenarioCheckSqlResolutionErrorTestCase(
+            description="non-nesting block comment ends before the apostrophe",
+            lexical_syntaxes=(
+                SnowflakeAdapter.sql_lexical_syntax,
+                BigQueryAdapter.sql_lexical_syntax,
+            ),
+            sql="select * /* a /* b */ it's */ from __ref(daily_revenue)",
+            expected_error_code="S511",
+            expected_error_fragment="unclosed quoted string",
+        ),
+        ScenarioCheckSqlResolutionErrorTestCase(
+            description="marker naming a relation outside the scenario",
+            lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax,),
+            sql="select * from __ref(daily_revenue) join __ref(unknown_orders) using (id)",
+            expected_error_code="S511",
+            expected_error_fragment="references '__ref(unknown_orders)'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unresolvable_check_sql_when_resolving_then_raises_scenario_error(
+    test_case: ScenarioCheckSqlResolutionErrorTestCase,
+) -> None:
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=build_scenario_relation_test_project(),
+        graph_plan=CHECK_SQL_GRAPH_PLAN,
+        relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
+        schema="scenario_schema",
+    )
+
+    for lexical_syntax in test_case.lexical_syntaxes:
+        with pytest.raises(PlannerInputError) as error_info:
+            resolve_scenario_check_sql(
+                sql=test_case.sql,
+                relation_plan=relation_plan,
+                adapter=PlannerTestAdapter(),
+                source_lexical_syntax=lexical_syntax,
+                source_label=SCENARIO_PATH,
+            )
+
+        assert error_info.value.code == test_case.expected_error_code
+        assert SCENARIO_PATH in error_info.value.message
+        assert test_case.expected_error_fragment in error_info.value.message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioFixtureSqlResolutionErrorTestCase(
+            description="unclosed string in duckdb fixture sql",
+            lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
+            fixture_sql="SELECT 'O\\'Brien' AS note FROM __source(raw__orders)",
+            expected_error_code="S511",
+            expected_error_fragment="unclosed quoted string",
+        ),
+        ScenarioFixtureSqlResolutionErrorTestCase(
+            description="fixture sql naming an unknown project source",
+            lexical_syntax=SnowflakeAdapter.sql_lexical_syntax,
+            fixture_sql="SELECT * FROM __source(raw__returns)",
+            expected_error_code="S511",
+            expected_error_fragment="references '__source(raw__returns)'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unresolvable_fixture_sql_when_planning_fixtures_then_raises_naming_file(
+    test_case: ScenarioFixtureSqlResolutionErrorTestCase,
+) -> None:
+    scenario: CompiledSqlScenario = replace(
+        build_scenario_relation_test_scenario(include_seed_fixture=False),
+        authored_ctes=(
+            CompileSqlScenarioCte(name="__source__raw__orders", sql_body=test_case.fixture_sql),
+        ),
+        source_fixture_names=("raw__orders",),
+        ref_fixture_names=(),
+        dbt_ref_fixture_names=(),
+        seed_fixture_names=(),
+        source_path=Path(SCENARIO_PATH),
+    )
+    graph_plan: ScenarioGraphPlan = replace(CHECK_SQL_GRAPH_PLAN, ref_fixture_names=())
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=build_scenario_relation_test_project(),
+        graph_plan=graph_plan,
+        relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
+        schema="scenario_schema",
+    )
+
+    with pytest.raises(PlannerInputError) as error_info:
+        build_scenario_fixture_plans(
+            scenario=scenario,
+            graph_plan=graph_plan,
+            relation_plan=relation_plan,
+            adapter=PlannerTestAdapter(),
+            source_lexical_syntax=test_case.lexical_syntax,
+        )
+
+    assert error_info.value.code == test_case.expected_error_code
+    assert SCENARIO_PATH in error_info.value.message
+    assert test_case.expected_error_fragment in error_info.value.message
 
 
 @pytest.mark.parametrize(
@@ -660,40 +924,4 @@ def test_given_missing_scenario_artifact_when_building_relation_plan_then_raises
             relation_map=build_scenario_relation_test_map(),
             render_qualified_name=PlannerTestAdapter().render_qualified_name,
             schema="scenario_schema",
-        )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ScenarioCheckSqlResolutionTestCase(
-            description="raises on polyglot parse failure without regex fallback",
-            sql="SELECT * FROM __ref(daily_revenue) WHERE (",
-            expected_sql="could not be parsed with Polyglot",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_invalid_check_sql_when_sql_analysis_enabled_then_raises_without_regex_fallback(
-    test_case: ScenarioCheckSqlResolutionTestCase,
-) -> None:
-    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
-        project=build_scenario_relation_test_project(),
-        graph_plan=ScenarioGraphPlan(
-            key=build_scenario_relation_test_project().models[0].key,
-            name=SCENARIO_NAME,
-            target_model_names=("daily_revenue",),
-            model_names=("daily_revenue",),
-        ),
-        relation_map=build_scenario_relation_test_map(),
-        render_qualified_name=PlannerTestAdapter().render_qualified_name,
-        schema="scenario_schema",
-    )
-
-    with pytest.raises(ValueError, match=test_case.expected_sql):
-        resolve_scenario_check_sql(
-            sql=test_case.sql,
-            relation_plan=relation_plan,
-            adapter=PlannerTestAdapter(),
-            sql_analysis_enabled=True,
         )

@@ -65,6 +65,7 @@ pub(crate) struct BindingPositions {
     pub(super) cleaned_lines: Vec<usize>,
     pub(super) offsets: Vec<usize>,
     pub(super) passes: Vec<Vec<Expansion>>,
+    pub(super) words: std::sync::OnceLock<HashMap<String, (usize, bool)>>,
 }
 
 impl std::fmt::Debug for ProjectCatalog {

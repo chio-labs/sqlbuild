@@ -4176,28 +4176,6 @@ path = "${CTX:schema}"
             expected_error_fragment="SQL syntax error in model 'broken'",
         ),
         BuildCompileInputsErrorTestCase(
-            description="raises when legacy pre_hook config is used",
-            repo_files=base_repo_files()
-            | {
-                "models/staging/broken.sql": ("MODEL (pre_hook 'SELECT 1');\n\nSELECT 1 AS id\n"),
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment="uses legacy 'pre_hook'",
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when legacy post_hook config is used",
-            repo_files=base_repo_files()
-            | {
-                "models/staging/broken.sql": (
-                    "MODEL (post_hook ['SELECT 1']);\n\nSELECT 1 AS id\n"
-                ),
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment="uses legacy 'post_hook'",
-        ),
-        BuildCompileInputsErrorTestCase(
             description="raises when plural hooks use bare SQL strings",
             repo_files=base_repo_files()
             | {

@@ -7,6 +7,11 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_enum_files,
     discover_macro_files,
 )
+from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
+from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
+from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_model_sql
+from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
+from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
@@ -96,3 +101,22 @@ def write_unreadable_files(*, project_dir: Path, relative_paths: tuple[str, ...]
         file_path: Path = project_dir / relative_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
         _ = file_path.write_bytes(b"\xff\xfe\xfa")
+
+
+_STATEMENT_HEADER_PARSERS: dict[str, Callable[..., object]] = {
+    "MODEL": parse_model_sql,
+    "AUDIT": parse_sql_audit_file,
+    "TEST": parse_sql_test_file,
+    "HOOK": lambda *, contents, file_path: parse_sql_hook_file(
+        contents=contents, file_path=file_path, relative_path=file_path
+    ),
+    "SCENARIO": lambda *, contents, file_path: parse_sql_scenario_file(
+        contents=contents, file_path=file_path, relative_path=file_path
+    ),
+}
+
+
+def parse_statement_header_file(*, statement: str, contents: str, file_path: Path) -> object:
+    """Parse one authored statement file with the discovery parser for its header kind."""
+
+    return _STATEMENT_HEADER_PARSERS[statement](contents=contents, file_path=file_path)

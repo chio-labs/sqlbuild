@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.main.execution.connection_progress import (
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
     execute_dbt_commands,
@@ -34,6 +35,8 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
 
 
 def resolve_dbt_connection_config(
@@ -190,6 +193,11 @@ def run_dbt_sqlbuild_work(
             adapter_name=compiled.adapter_name,
             output_stream=invocation.output_stream,
             use_color=request.use_color,
+            snapshots_config=invocation.discovered_inputs.project_config.snapshots,
+            execution_limits=_execution_limits(
+                discovered_inputs=invocation.discovered_inputs,
+                target_name=compiled.project.effective_target_name,
+            ),
         ),
         command=request.command,
         project=compiled.project,
@@ -207,3 +215,15 @@ def write_sqlbuild_skip_notice(
     invocation.output_stream.write("\n")
     invocation.output_stream.flush()
     report_progress(on_progress=request.on_progress, message=message)
+
+
+def _execution_limits(
+    *, discovered_inputs: DiscoveredProjectInputs, target_name: str | None
+) -> ExecutionLimitsConfig:
+    if target_name is None:
+        return ExecutionLimitsConfig()
+    return resolve_target_config(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        target_name=target_name,
+    ).execution_limits

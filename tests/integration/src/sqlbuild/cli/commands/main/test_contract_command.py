@@ -112,6 +112,47 @@ def test_given_missing_declarations_when_generating_additively_then_preserves_me
     "test_case",
     [
         ContractCommandIntegrationTestCase(
+            description="generated contracts in a commented header re-compile cleanly",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_generated_contracts_when_compiling_then_project_compiles_cleanly(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ = prepare_contract_project(tmp_path)
+    generate_exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "generate",
+            "--from",
+            "prod",
+            "--select",
+            "orders",
+            "source:raw_orders",
+            "--write",
+        ]
+    )
+    assert generate_exit_code == test_case.expected_exit_code
+    _ = capsys.readouterr()
+
+    compile_exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile"])
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert compile_exit_code == test_case.expected_exit_code, captured.out + captured.err
+    assert "error[" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
             description="parameterized physical type is unquoted in a generated model header",
             expected_exit_code=0,
         )

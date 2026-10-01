@@ -6,7 +6,10 @@ from typing import Any, NoReturn
 
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_SQL_TRANSPILE_FAILED
+from sqlbuild.executor.scenario.constants import (
+    LOCAL_SCENARIO_DIALECT,
+    SCENARIO_LOCAL_SQL_TRANSPILE_FAILED,
+)
 
 
 def transpile_sql_for_local_duckdb(
@@ -17,14 +20,16 @@ def transpile_sql_for_local_duckdb(
     resource_kind: str,
     resource_name: str,
 ) -> str:
-    """Parse SQL in the source dialect and render DuckDB SQL for local execution."""
+    """Render captured-dialect SQL as DuckDB SQL; DuckDB SQL is executed as authored."""
 
+    if source_dialect == LOCAL_SCENARIO_DIALECT:
+        return sql
     polyglot_module: Any = import_polyglot_sql()
     try:
         transpiled: list[str] = polyglot_module.transpile(
             sql,
             read=source_dialect,
-            write="duckdb",
+            write=LOCAL_SCENARIO_DIALECT,
         )
     except (polyglot_module.PolyglotError, ValueError) as exc:
         _raise_transpile_error(

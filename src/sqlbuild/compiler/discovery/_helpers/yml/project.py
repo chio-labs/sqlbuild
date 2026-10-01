@@ -15,6 +15,7 @@ from yaml import YAMLError
 
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY
+from sqlbuild.compiler.discovery._helpers.validation.supported_keys import unsupported_keys_help
 from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
     DBT_DEFER_CLONE_CONFIG_KEY,
@@ -29,6 +30,7 @@ from sqlbuild.compiler.discovery.constants import (
     MODELS_DIRECTORY_NAME,
     PROJECT_CONFIG_FILENAME,
     SQL_ANALYSIS_CONFIG_KEY,
+    SQL_MODEL_HEADER_KEYS,
     TOML_FILE_SUFFIX,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
@@ -105,6 +107,42 @@ _DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
 _MAX_BATCHES_CONFIG_KEY: str = "max_batches"
 _EVENT_EXPORTER_FILTER_KEYS: frozenset[str] = frozenset({"event_kinds", "min_severity"})
+_DEFAULTS_KEYS: frozenset[str] = frozenset(
+    {
+        "append_cursor_inclusive",
+        "batch_concurrency",
+        "batch_size",
+        "contract",
+        "cursor_end",
+        "cursor_future_action",
+        "cursor_future_max_distance",
+        "cursor_start",
+        "cursor_start_max_action",
+        "cursor_start_max_ahead",
+        "cursor_watermark_mode",
+        "database",
+        "full_refresh",
+        "function_database",
+        "function_schema",
+        "incremental_mode",
+        "incremental_strategy",
+        "lookback",
+        "materialized",
+        "max_microbatches",
+        "merge_exclude_columns",
+        "microbatch_strategy",
+        "replay_on_change",
+        "row_diff_exclude_columns",
+        "row_diff_sample_rows",
+        "row_diff_sample_seed",
+        "row_diff_tolerances",
+        "schema",
+        "seed_database",
+        "seed_schema",
+        "tags",
+        "unaccounted_partition_policy",
+    }
+)
 _LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY: str = "shutdown_timeout"
 _LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS: int = 600
 _ZERO_FIXED_DURATION: str = "0s"
@@ -818,7 +856,8 @@ def _validate_allowed_keys(
     allowed: str = ", ".join(sorted(allowed_keys))
     unknown: str = ", ".join(unknown_keys)
     raise ProjectConfigError(
-        f"{file_path} {label} contains unknown key(s): {unknown}. Allowed keys: {allowed}"
+        f"{file_path} {label} contains unknown key(s): {unknown}. Allowed keys: {allowed}",
+        help=unsupported_keys_help(keys=unknown_keys, supported_keys=allowed_keys),
     )
 
 
@@ -872,6 +911,9 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         removed_keys=frozenset({"run_despite_unchanged"}),
         label="defaults",
         file_path=file_path,
+    )
+    _validate_allowed_keys(
+        mapping=mapping, allowed_keys=_DEFAULTS_KEYS, label="[defaults]", file_path=file_path
     )
     row_diff_exclude_columns: tuple[str, ...] = tuple(
         _load_string_sequence(
@@ -964,6 +1006,12 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
             mapping=path_dict,
             removed_keys=frozenset({"run_despite_unchanged"}),
             label="path_defaults",
+            file_path=file_path,
+        )
+        _validate_allowed_keys(
+            mapping=path_dict,
+            allowed_keys=SQL_MODEL_HEADER_KEYS,
+            label=f"path_defaults['{path_key}']",
             file_path=file_path,
         )
         _validate_path_default_tags(path_dict=path_dict, path_key=path_key, file_path=file_path)

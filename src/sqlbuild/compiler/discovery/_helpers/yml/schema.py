@@ -18,6 +18,9 @@ from sqlbuild.compiler.authored_values.main._optional_string_tuple import option
 from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
     require_non_empty_string,
 )
+from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
+    reject_unknown_mapping_keys,
+)
 from sqlbuild.compiler.discovery.constants import NOT_NULL_AUDIT_NAME, SEEDS_DIRECTORY_NAME
 from sqlbuild.compiler.discovery.exceptions import SchemaParseError
 from sqlbuild.spec.contracts.models import (
@@ -200,12 +203,13 @@ def _parse_model_entry(*, entry: dict[str, object], file_path: Path) -> SchemaMo
 def _reject_unknown_keys(
     *, mapping: dict[str, object], allowed: frozenset[str], file_path: Path, label: str
 ) -> None:
-    unknown: tuple[str, ...] = tuple(sorted(str(key) for key in mapping if key not in allowed))
-    if unknown:
-        raise SchemaParseError(
-            f"{file_path} {label} has unknown keys: {', '.join(unknown)}; allowed keys: "
-            f"{', '.join(sorted(allowed))}"
-        )
+    reject_unknown_mapping_keys(
+        mapping=mapping,
+        allowed=allowed,
+        file_path=file_path,
+        label=label,
+        error_class=SchemaParseError,
+    )
 
 
 def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSeedEntry:

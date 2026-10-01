@@ -83,7 +83,12 @@ from sqlbuild.integrations.dbt.models import DbtInitRequest
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import NodeStartCallback
-from sqlbuild.spec.contracts.models import CostConfig, ExecutionLimitsConfig, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    CostConfig,
+    ExecutionLimitsConfig,
+    SnapshotsConfig,
+    SourceEntry,
+)
 
 
 @dataclass(frozen=True)
@@ -390,6 +395,23 @@ class DbtSqlbuildWorkContext:
     adapter_name: str
     output_stream: TextIO
     use_color: bool
+    snapshots_config: SnapshotsConfig
+    execution_limits: ExecutionLimitsConfig
+
+
+@dataclass(frozen=True)
+class PlanSafetyGates:
+    """Pre-confirmed plan safety gates and the guidance shown when one needs a terminal."""
+
+    allow_missing_migration_origin: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    missing_origin_help: str
+    snapshot_full_refresh_help: str
+    table_type_downgrade_help: str
+    retention_decrease_help: str
+    execution_limit_note: str
 
 
 @dataclass(frozen=True)

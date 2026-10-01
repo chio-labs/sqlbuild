@@ -13,6 +13,7 @@ from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.constants import EXECUTION_LIMIT_BUILD_NOTE
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
@@ -196,6 +197,7 @@ def run_defer_clone_boundary_prephase(
         model_count=selected_model_count,
         target_name=invocation.effective_target_name,
         limits=invocation.execution_limits,
+        refusal_note=EXECUTION_LIMIT_BUILD_NOTE,
     )
     run_defer_clone_prephase(
         inputs=DeferClonePrephaseInputs(

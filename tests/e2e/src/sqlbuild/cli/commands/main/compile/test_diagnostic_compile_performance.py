@@ -17,6 +17,7 @@ from scripts.cold_compile_performance._helpers.diagnostic_project import (
     write_cascade_project,
     write_diagnostic_project,
     write_function_name_project,
+    write_single_model_diagnostic_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import DiagnosticPerformanceCase
 
@@ -69,6 +70,36 @@ def test_given_many_spans_on_large_sql_when_mapping_then_scales_linearly(
     _LOGGER.info("mapping cold=%.3fs N=%.3fs 2N=%.3fs", cold, single, doubled)
     assert cold + doubled < test_case.expected_max_wall_seconds
     assert doubled <= single * 2.8 + 0.1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiagnosticPerformanceCase(
+            "many_diagnostics_in_one_model",
+            diagnostic_count=1000,
+            expected_max_wall_seconds=20.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_one_model_with_many_diagnostics_when_compiling_then_scales_linearly(
+    test_case: DiagnosticPerformanceCase, tmp_path: Path
+) -> None:
+    timings: list[float] = []
+    for multiplier in (1, 4):
+        project: Path = tmp_path / f"diagnostics_{multiplier}"
+        count: int = test_case.diagnostic_count * multiplier
+        write_single_model_diagnostic_project(project_dir=project, diagnostics=count)
+        elapsed, payload = measure_diagnostic_compile(
+            project_dir=project, timeout=test_case.expected_timeout_seconds
+        )
+        codes: Counter[str] = Counter(item["code"] for item in payload["diagnostics"])
+        assert codes == Counter({"B002": count // 2, "B218": count // 2})
+        timings.append(elapsed)
+    _LOGGER.info("single-model diagnostics 1x/4x wall=%s", timings)
+    assert max(timings) < test_case.expected_max_wall_seconds
+    assert timings[1] <= timings[0] * 4.5 + 1.0
 
 
 @pytest.mark.parametrize(

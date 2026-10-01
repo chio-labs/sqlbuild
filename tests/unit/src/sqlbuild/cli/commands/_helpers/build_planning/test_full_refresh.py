@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
+from sqlbuild.cli.commands.constants import SNAPSHOT_FULL_REFRESH_BUILD_HELP
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.spec.contracts.models import SnapshotsConfig
@@ -82,6 +83,7 @@ def test_given_unsafe_snapshot_full_refresh_when_enforcing_policy_then_raises_us
             plan=test_case.plan_output,
             snapshots_config=test_case.snapshots_config,
             allow_snapshot_full_refresh=test_case.allow_snapshot_full_refresh,
+            non_interactive_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
             input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
             output_stream=StringIO(),
         )
@@ -140,6 +142,7 @@ def test_given_safe_or_confirmed_snapshot_full_refresh_when_enforcing_policy_the
         plan=test_case.plan_output,
         snapshots_config=test_case.snapshots_config,
         allow_snapshot_full_refresh=test_case.allow_snapshot_full_refresh,
+        non_interactive_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
         input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
         output_stream=output_stream,
     )

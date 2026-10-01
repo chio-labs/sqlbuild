@@ -127,6 +127,7 @@ from sqlbuild.adapters.bigquery.constants import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
@@ -150,6 +151,11 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
+    sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
+        backslash_escape_quotes=frozenset({"'", '"', "`"}),
+        triple_quoted_strings=True,
+        line_comment_prefixes=frozenset({"--", "#"}),
+    )
     views_read_with_reader_access: ClassVar[bool] = True
     max_identifier_length: ClassVar[int] = 1024
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(

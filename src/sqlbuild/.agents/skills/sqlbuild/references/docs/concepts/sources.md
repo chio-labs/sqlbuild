@@ -228,6 +228,8 @@ Use [`sqb freshness`](../cli/freshness.md) to observe source freshness on demand
 | `column` | Column name for `column` strategy |
 | `query` | SQL query for `sql` strategy |
 | `lag_tolerance` | Duration tolerance for timestamp comparisons (e.g. `15m`, `2h`, `1d`). Only valid with `type: timestamp`. |
+| `filter` | Row filter for the `column` strategy |
+| `age_policy` | `warn_after` and `error_after` durations |
 
 ## Config reference
 
@@ -246,5 +248,12 @@ Use [`sqb freshness`](../cli/freshness.md) to observe source freshness on demand
 | `description` | Human-readable description |
 | `type_enforcement` | Override implicit type enforcement (`true`/`false`). Defaults to `true` when any column declares a type. |
 | `contract` | `enforced` or `none`. When enforced, downstream models validate configured column references against source columns. |
-| `columns` | Column declarations with optional types and audits |
+| `columns` | Column declarations with `name`, `type`, `nullable`, `description`, `meta`, and `audits` |
 | `audits` | Source-level audits |
+| `meta` | Free-form metadata mapping |
+| `load_batch_size` | Positive row batch size for managed loaders |
+| `ingestr` | Declarative ingestr loader config (see [ingestr](../integrations/ingestr.md)) |
+
+A sources file contains only `sources` and `dlt_sources`. Unknown keys in a sources file, a source,
+a source column, `freshness`, `freshness.age_policy`, or `ingestr` fail discovery with `D006`,
+naming the key and suggesting the nearest supported key.

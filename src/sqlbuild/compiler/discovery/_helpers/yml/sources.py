@@ -22,6 +22,9 @@ from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     parse_dlt_sources,
     parse_source_integration_loader,
 )
+from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
+    reject_unknown_mapping_keys,
+)
 from sqlbuild.compiler.discovery.constants import (
     NOT_NULL_AUDIT_NAME,
     SOURCE_AGE_POLICY_CONFIG_KEY,
@@ -45,6 +48,36 @@ from sqlbuild.spec.contracts.types import (
     SourceWriteStrategy,
 )
 
+_SOURCE_FILE_KEYS: frozenset[str] = frozenset({"sources", "dlt_sources"})
+_SOURCE_ENTRY_KEYS: frozenset[str] = frozenset(
+    {
+        "audits",
+        "columns",
+        "contract",
+        "cursor_column",
+        "database",
+        "description",
+        "expression",
+        "freshness",
+        "ingestr",
+        "load_batch_size",
+        "managed",
+        "meta",
+        "name",
+        "schema",
+        "table",
+        "type_enforcement",
+        "unique_key",
+        "write_strategy",
+    }
+)
+_SOURCE_COLUMN_KEYS: frozenset[str] = frozenset(
+    {"audits", "description", "meta", "name", "nullable", "type"}
+)
+_SOURCE_FRESHNESS_KEYS: frozenset[str] = frozenset(
+    {"age_policy", "column", "filter", "lag_tolerance", "query", "strategy", "type"}
+)
+_SOURCE_FRESHNESS_AGE_POLICY_KEYS: frozenset[str] = frozenset({"error_after", "warn_after"})
 _SOURCE_WRITE_STRATEGIES: frozenset[str] = frozenset(
     strategy.value for strategy in SourceWriteStrategy
 )
@@ -60,6 +93,9 @@ def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, .
     """Parse one sources/*.yml file into raw source declarations."""
 
     payload: dict[str, object] = _load_sources_payload(contents=contents, file_path=file_path)
+    _reject_unknown_source_keys(
+        mapping=payload, allowed=_SOURCE_FILE_KEYS, file_path=file_path, label="sources file"
+    )
     raw_sources: object = payload.get("sources", [])
     if not isinstance(raw_sources, list):
         raise SourceParseError(f"{file_path} sources must be a list")
@@ -123,6 +159,9 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             f"{file_path} source 'loader' is not supported; use managed: true and name "
             "the terminal loader after the source"
         )
+    _reject_unknown_source_keys(
+        mapping=entry, allowed=_SOURCE_ENTRY_KEYS, file_path=file_path, label="source"
+    )
     source_name: str = require_non_empty_string(
         entry=entry,
         key="name",
@@ -357,6 +396,12 @@ def _optional_freshness_config(
     if not isinstance(raw_freshness, dict):
         raise SourceParseError(f"{file_path} source 'freshness' must be a mapping")
     freshness: dict[str, object] = cast(dict[str, object], raw_freshness)
+    _reject_unknown_source_keys(
+        mapping=freshness,
+        allowed=_SOURCE_FRESHNESS_KEYS,
+        file_path=file_path,
+        label="source freshness",
+    )
     raw_strategy: str = require_non_empty_string(
         entry=freshness,
         key="strategy",
@@ -484,6 +529,12 @@ def _optional_freshness_age_policy(
         label="source freshness",
         error_class=SourceParseError,
     )
+    _reject_unknown_source_keys(
+        mapping=age_policy,
+        allowed=_SOURCE_FRESHNESS_AGE_POLICY_KEYS,
+        file_path=file_path,
+        label="source freshness age_policy",
+    )
     warn_after: str | None = optional_non_empty_string(
         entry=age_policy,
         key="warn_after",
@@ -580,6 +631,9 @@ def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[Source
             raise SourceParseError(f"{file_path} source columns must contain only mappings")
         column: dict[str, object] = cast(dict[str, object], raw_column)
         column_label: str = "source column"
+        _reject_unknown_source_keys(
+            mapping=column, allowed=_SOURCE_COLUMN_KEYS, file_path=file_path, label=column_label
+        )
         column_name: str = require_non_empty_string(
             entry=column,
             key="name",
@@ -645,3 +699,15 @@ def _validate_nullable_audits(
         raise SourceParseError(
             f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null"
         )
+
+
+def _reject_unknown_source_keys(
+    *, mapping: dict[str, object], allowed: frozenset[str], file_path: Path, label: str
+) -> None:
+    reject_unknown_mapping_keys(
+        mapping=mapping,
+        allowed=allowed,
+        file_path=file_path,
+        label=label,
+        error_class=SourceParseError,
+    )

@@ -75,6 +75,7 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError
@@ -101,6 +102,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
 
     adapter_name: ClassVar[str]
     sql_analysis_dialect_name: ClassVar[str | None] = None
+    sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax()
     max_identifier_length: ClassVar[int] = 63
     state_tables_transient: ClassVar[bool] = False
     relation_grants_supported: ClassVar[bool] = True

@@ -162,7 +162,6 @@ from sqlbuild.spec.contracts.models import (
 )
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _REUSABLE_MODEL_HEADER_KEYS: frozenset[str] = frozenset({"columns"})
 _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
@@ -1241,16 +1240,6 @@ def expand_model_hook_macros_result(
 
 
 def validate_model_hook_config(*, values: dict[str, object], model_name: str) -> None:
-    legacy_key: str
-    for legacy_key in sorted(_LEGACY_MODEL_HOOK_KEYS):
-        if legacy_key in values:
-            plural_key: str = f"{legacy_key}s"
-            raise CompileInputError(
-                f"model '{model_name}' uses legacy '{legacy_key}'; use typed '{plural_key}' "
-                'entries like inline_sql("..."), sql("hook_name"), or '
-                'python("hook_name")'
-            )
-
     hook_key: str
     for hook_key in sorted(_MODEL_HOOK_KEYS):
         if hook_key not in values:

@@ -144,6 +144,47 @@ pub(crate) fn invalid_headers_return_each_exact_error_in_order() -> bool {
     true
 }
 
+pub(crate) fn header_comments_are_skipped_without_shifting_offsets() -> bool {
+    let headers = vec![
+        "materialized table -- keep model metadata\n  columns (id ()) /* it's, (fine) */"
+            .to_owned(),
+        "materialized table--trailing note\n".to_owned(),
+        "materialized table /* unclosed".to_owned(),
+    ];
+
+    let results = parse_batch(&headers).expect("worker pool builds");
+
+    let AuthoredValue::Map(values) = results[0].0.as_ref().expect("header values") else {
+        panic!("header values must be a map");
+    };
+    assert_eq!(
+        values
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .collect::<Vec<_>>(),
+        vec!["materialized", "columns"]
+    );
+    assert_eq!(
+        results[0].1.as_ref().expect("column offsets"),
+        &vec![("id".to_owned(), 53, 2)]
+    );
+    let AuthoredValue::Map(values) = results[1].0.as_ref().expect("header values") else {
+        panic!("header values must be a map");
+    };
+    assert_eq!(
+        values
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .collect::<Vec<_>>(),
+        vec!["materialized"]
+    );
+    assert_eq!(
+        results[2].2.as_deref(),
+        Some("unterminated block comment at position 19")
+    );
+    true
+}
+
 pub(crate) fn nested_and_root_columns_return_only_root_offsets() -> bool {
     let headers = vec![
         "config (columns (nested (type INTEGER))), columns (top (type INTEGER))".to_owned(),

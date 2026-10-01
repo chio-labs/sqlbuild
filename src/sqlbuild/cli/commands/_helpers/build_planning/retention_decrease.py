@@ -13,6 +13,7 @@ def enforce_retention_decrease_policy(
     *,
     plan: PlanOutput,
     allow_retention_decrease: bool,
+    non_interactive_help: str,
     input_stream: TextIO,
     output_stream: TextIO,
 ) -> None:
@@ -42,7 +43,7 @@ def enforce_retention_decrease_policy(
     if not input_stream.isatty():
         raise CliUserError(
             "time travel retention decrease requires confirmation",
-            help="Pass --allow-retention-decrease to confirm in non-interactive runs.",
+            help=non_interactive_help,
         )
     expected: str = _confirmation_text(confirmation)
     output_stream.write(

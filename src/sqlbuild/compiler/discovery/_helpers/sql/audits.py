@@ -9,6 +9,7 @@ from typing import cast
 
 from sqlbuild.compiler.auditing.models import MeasurementContract
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
+from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
@@ -61,6 +62,7 @@ def parse_sql_audit_file(*, contents: str, file_path: Path) -> tuple[DiscoveredA
             _parse_single_sql_audit_block(
                 file_path=file_path,
                 raw_audit_block=contents[start:end].strip(),
+                block_line=contents.count("\n", 0, start) + 1,
                 audit_index=index,
             )
         )
@@ -70,7 +72,7 @@ def parse_sql_audit_file(*, contents: str, file_path: Path) -> tuple[DiscoveredA
 
 
 def _parse_single_sql_audit_block(
-    *, file_path: Path, raw_audit_block: str, audit_index: int
+    *, file_path: Path, raw_audit_block: str, block_line: int, audit_index: int
 ) -> DiscoveredAuditBlock:
     open_index: int = _keyword_open_paren(
         text=raw_audit_block, keyword="AUDIT", file_path=file_path
@@ -88,7 +90,9 @@ def _parse_single_sql_audit_block(
         label="AUDIT(...) header",
     )
     header_values: dict[str, object] = _parse_audit_header(
-        header=raw_audit_block[open_index + 1 : close_index], file_path=file_path
+        header=raw_audit_block[open_index + 1 : close_index],
+        header_line=block_line + raw_audit_block.count("\n", 0, open_index + 1),
+        file_path=file_path,
     )
     evaluation_mode: AuditEvaluationMode = _parse_evaluation_mode(
         header_values=header_values, file_path=file_path
@@ -130,20 +134,22 @@ def _parse_single_sql_audit_block(
     )
 
 
-def _parse_audit_header(*, header: str, file_path: Path) -> dict[str, object]:
+def _parse_audit_header(*, header: str, header_line: int, file_path: Path) -> dict[str, object]:
     parsed_header: dict[str, object] = parse_header_values(
         header=header,
         file_path=file_path,
         statement_name="AUDIT",
         error_class=SqlAuditParseError,
     )
-    unsupported_keys: tuple[str, ...] = tuple(
-        str(key) for key in parsed_header if key not in _SUPPORTED_AUDIT_HEADER_KEYS
+    reject_unsupported_header_keys(
+        header_values=parsed_header,
+        supported_keys=_SUPPORTED_AUDIT_HEADER_KEYS,
+        statement="AUDIT()",
+        header=header,
+        header_line=header_line,
+        file_path=file_path,
+        error_class=SqlAuditParseError,
     )
-    if unsupported_keys:
-        raise SqlAuditParseError(
-            f"AUDIT() in '{file_path}' has unsupported keys: {', '.join(unsupported_keys)}"
-        )
     for key in (
         _AUDIT_NAME_HEADER_KEY,
         _AUDIT_SEVERITY_HEADER_KEY,

@@ -16,6 +16,19 @@ Online: https://sqlbuild.com/docs/concepts/models/configuration/
 - Custom materialization fields
 - Diff fields
 
+Every `MODEL()` key must be one of the fields on this page. Any other key fails compilation with
+`D002`, naming the key and its file and line and suggesting the nearest supported key. SQL comments
+(`-- ...` and `/* ... */`) inside a header are ignored:
+
+```text
+error[D002]: MODEL() in 'models/fct_orders.sql:3' has unsupported keys: descripton
+  = help: did you mean 'description'?
+```
+
+`[defaults]` and `[path_defaults.*]` in `sqlbuild_project.toml` reject unknown keys in the same way
+with `D001`. Values that a custom materialization reads belong inside its `config (...)` block,
+which accepts any keys.
+
 ## Common fields
 
 | Field | Description |
@@ -36,6 +49,8 @@ Online: https://sqlbuild.com/docs/concepts/models/configuration/
 | `enabled` | Set to `false` to disable the model |
 | `contract` | `none` for an open statically checked declaration, or `enforced` for an exact declaration |
 | `sql_analysis` | Per-model SQL-analysis override |
+| `dynamic_columns` | Named pivot column families with `pivot_column`, `value_column`, `aggregate`, `type`, and `name_pattern` |
+| `audit_factories` | Audit factories that generate audit cases for this model; see [Audits](../audits.md) |
 
 ## SQL analysis
 
@@ -54,6 +69,8 @@ configuration.
 
 | Field | Description |
 |-------|-------------|
+| `table_type` | Snowflake table type: `permanent`, `transient`, or `inherit` |
+| `time_travel_retention` | Managed time travel retention such as `7d`, `inherit`, or `disabled` |
 | `run_despite_unchanged` | Removed with virtual environments. It is rejected in MODEL headers, project defaults, and path defaults. |
 
 Table promotion mode is a project setting rather than a `MODEL()` field. Staged promotion is the default. Immediate promotion is incompatible with model type enforcement and exact contracts; see [Materializations](materializations.md#table).
@@ -67,6 +84,11 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Timestamp grain such as `second`, `hour`, or `day` |
 | `cursor_start` | Lower cursor bound |
+| `cursor_end` | Upper cursor bound |
+| `cursor_start_max_ahead` | Largest distance a discovered automatic start may sit ahead of the invocation time, or `disabled` |
+| `cursor_start_max_action` | `cap` or `error` when the start exceeds `cursor_start_max_ahead` |
+| `cursor_future_max_distance` | Largest distance a discovered cursor watermark may sit in the future, or `disabled` |
+| `cursor_future_action` | `cap` or `error` when a watermark exceeds `cursor_future_max_distance` |
 | `cursor_inputs` | Upstream names mapped to cursor columns |
 | `unique_key` | Merge or delete/insert matching columns |
 | `incremental_mode` | Set to `microbatch` for batched execution |
@@ -75,6 +97,8 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `batch_size` | Timestamp duration string such as `1d` or `1h`; use a numeric string such as `"1000"` for an integer cursor |
 | `batch_concurrency` | Concurrent batch workers; values above `1` require `delete_insert` and the project concurrency gate |
 | `microbatch_limit` | Nested `max_batches` and `action` policy for watermark execution |
+| `max_microbatches` | Legacy scalar batch-count guard; use `microbatch_limit` for new models |
+| `unaccounted_partition_policy` | Handling for microbatch partitions with no recorded completion: `synthesize`, `recover_empty`, or `recover_all` |
 | `lookback` | Backward replay extension |
 | `append_cursor_inclusive` | Include (`true`, default) or exclude (`false`) the current append-cursor boundary |
 | `merge_exclude_columns` | Columns left unchanged by matched-row merge updates |

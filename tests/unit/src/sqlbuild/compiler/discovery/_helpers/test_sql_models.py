@@ -46,8 +46,8 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
 ) -> None:
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
-    first_header = "batch_marker_first one, columns (café (type INTEGER))"
-    second_header = "batch_marker_second two, columns (total (type DECIMAL(10,2)))"
+    first_header = 'description "one", columns (café (type INTEGER))'
+    second_header = 'description "two", columns (total (type DECIMAL(10,2)))'
     (models_dir / "first.sql").write_text(
         f"MODEL ({first_header});\nSELECT 1 AS café\n", encoding="utf-8"
     )
@@ -79,14 +79,14 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
     assert len(native_calls) == test_case.expected_count
     assert native_calls == [[first_header, second_header]]
     assert [model.header_values for model in discovered] == [
-        {"batch_marker_first": "one", "columns": {"café": {"type": "INTEGER"}}},
+        {"description": "one", "columns": {"café": {"type": "INTEGER"}}},
         {
-            "batch_marker_second": "two",
+            "description": "two",
             "columns": {"total": {"type": "DECIMAL(10,2)"}},
         },
     ]
     assert discovered[0].header_column_locations["café"] == SourceLocation(
-        path=Path("models/first.sql"), line=1, column=41, end_line=1, end_column=45
+        path=Path("models/first.sql"), line=1, column=36, end_line=1, end_column=40
     )
 
 
@@ -600,6 +600,24 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
         SELECT 1
         """,
             expected_header_values={"tags": ["orders);archive"]},
+            expected_query="SELECT 1",
+        ),
+        ParseModelSqlHeaderTestCase(
+            description="skips line and block comments between header entries",
+            contents="""
+        MODEL (
+          materialized table -- keep model metadata
+          /* tags stay, it's fine */ tags [orders],
+          description "Orders -- not a comment"
+        );
+
+        SELECT 1
+        """,
+            expected_header_values={
+                "materialized": "table",
+                "tags": ["orders"],
+                "description": "Orders -- not a comment",
+            },
             expected_query="SELECT 1",
         ),
     ],
