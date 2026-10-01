@@ -248,6 +248,19 @@ class RecordingSnowflakeWarehouse:
         with self._lock:
             return tuple(filter(lambda query: query.kind == kind, self.queries))
 
+    def replace_relations(self, *, relations: tuple[FakeRelation, ...]) -> None:
+        """Replace the catalog that SHOW and INFORMATION_SCHEMA reads answer from."""
+
+        self.relations = relations
+        self._database.execute("DELETE FROM fake_tables")
+        self._database.execute("DELETE FROM fake_columns")
+        self._load(table="fake_tables", rows=[_table_row(relation) for relation in relations])
+        column_rows: list[dict[str, object]] = []
+        relation: FakeRelation
+        for relation in relations:
+            column_rows.extend(_column_rows(relation))
+        self._load(table="fake_columns", rows=column_rows)
+
     def reset(self) -> None:
         """Forget recorded statements and concurrency peaks."""
 
