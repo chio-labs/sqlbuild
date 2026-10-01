@@ -2,8 +2,8 @@
 
 use crate::semantic_validation::models::FunctionProbes;
 use crate::semantic_validation::types::ProbeKey;
+use crate::sql_scan::main::comment_end::comment_end;
 use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::main::skip_whitespace::skip_whitespace;
 use crate::sql_scan::models::{QuotePolicy, Unclosed};
 use polyglot_sql::{Dialect, DialectType, Expression, ValidationError};
 use polyglot_sql_function_catalogs::{CatalogSink, FunctionNameCase, FunctionSignature};
@@ -24,10 +24,29 @@ const NON_CALL_KEYWORDS: &str = "ALL AND ANY AS ASOF AT BEFORE BETWEEN BY CASE C
     OR OVER PARTITION PATTERN PERCENT PIVOT PRIOR QUALIFY RANGE RENAME ROLLUP ROW ROWS SAMPLE \
     SELECT SETS SOME TABLE TABLESAMPLE THEN UNION UNPIVOT USING VALUES WHEN WHERE WITH WITHIN";
 
+/// Words after which an expression, and so a function call, may start.
+const EXPRESSION_KEYWORDS: &str = "ALL AND ANY BETWEEN BY CASE DISTINCT ELSE ELSEIF ESCAPE HAVING \
+    ILIKE INTERVAL IS LATERAL LIKE LIMIT MEASURES NOT OFFSET ON OR PRIOR QUALIFY REGEXP RETURN \
+    RLIKE SELECT SET SOME THEN TOP WHEN WHERE WITH";
+/// Clause keywords that end a `FROM` list or a `DEFINE` list at the same nesting depth.
+const CLAUSE_KEYWORD_LIST: &str = "CONNECT EXCEPT FETCH GROUP HAVING INTERSECT LIMIT \
+    MATCH_RECOGNIZE MEASURES MINUS OFFSET ON ORDER PATTERN PIVOT QUALIFY SAMPLE START TABLESAMPLE \
+    UNION UNPIVOT USING WHERE WINDOW";
+const FROM_KEYWORD: &str = "FROM";
+const DISTINCT_KEYWORD: &str = "DISTINCT";
+
 type SpellingIndex = HashMap<Signature, Vec<String>>;
 
 static KEYWORDS: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| NON_CALL_KEYWORDS.split_whitespace().collect());
+static EXPRESSION_STARTS: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| EXPRESSION_KEYWORDS.split_whitespace().collect());
+static CLAUSE_KEYWORDS: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| CLAUSE_KEYWORD_LIST.split_whitespace().collect());
+static ROOT_FRAME: Frame = Frame {
+    select_seen: false,
+    clause: Clause::Other,
+};
 static SNOWFLAKE: LazyLock<HashSet<String>> = LazyLock::new(|| accepted_names(SNOWFLAKE_FUNCTIONS));
 static DUCKDB: LazyLock<HashSet<String>> = LazyLock::new(|| {
     let mut sink: CatalogNames = CatalogNames::default();
@@ -46,6 +65,31 @@ pub(crate) struct UnsupportedCall {
     pub(crate) start: usize,
     pub(crate) end: usize,
     pub(crate) suggestion: String,
+}
+
+/// The clause a scan is inside at one parenthesis depth.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Clause {
+    #[default]
+    Other,
+    From,
+    Define,
+}
+
+/// Lexical state at one parenthesis depth.
+#[derive(Debug, Default)]
+struct Frame {
+    select_seen: bool,
+    clause: Clause,
+}
+
+/// Lexical context of the previous token, used to tell calls from relation and column lists.
+struct Scan {
+    frames: Vec<Frame>,
+    previous_word: Option<String>,
+    word_before: Option<String>,
+    previous_byte: Option<u8>,
+    path_colon: bool,
 }
 
 /// How the parser represents one probe call.
@@ -191,14 +235,20 @@ pub(crate) fn unsupported_calls(
     };
     let bytes: &[u8] = sql.as_bytes();
     let mut calls: Vec<UnsupportedCall> = Vec::new();
+    let mut scan: Scan = Scan::new();
     let mut index: usize = 0;
-    let mut previous_word: Option<(usize, usize)> = None;
-    let mut previous_byte: Option<u8> = None;
     while index < bytes.len() {
+        match comment_end(bytes, index) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
+            }
+            Ok(None) => {}
+            Err(Unclosed::BlockComment | Unclosed::Quote | Unclosed::Parenthesis) => break,
+        }
         match non_code_end(bytes, index, QuotePolicy::COMPILER) {
             Ok(Some(end)) => {
-                previous_word = None;
-                previous_byte = Some(bytes[index]);
+                scan.punctuation(bytes[index]);
                 index = end;
                 continue;
             }
@@ -211,8 +261,7 @@ pub(crate) fn unsupported_calls(
             continue;
         }
         if !(byte.is_ascii_alphabetic() || byte == b'_') {
-            previous_word = None;
-            previous_byte = Some(byte);
+            scan.punctuation(byte);
             index += 1;
             continue;
         }
@@ -221,18 +270,15 @@ pub(crate) fn unsupported_calls(
             index += 1;
         }
         let name: &str = &sql[start..index];
-        let open: usize = skip_whitespace(sql, index);
-        let after_qualifier: bool = matches!(previous_byte, Some(b'.' | b'@' | b':'));
-        let type_position: bool = previous_word
-            .is_some_and(|(from, to)| sql[from..to].eq_ignore_ascii_case(TYPE_POSITION_KEYWORD));
+        let upper: String = name.to_ascii_uppercase();
+        let open: usize = skip_trivia(bytes, index);
         if bytes.get(open) == Some(&b'(')
-            && !after_qualifier
-            && !type_position
+            && scan.call_position()
             && !name.starts_with("__")
-            && let upper = name.to_ascii_uppercase()
             && !names.contains(&upper)
             && !KEYWORDS.contains(upper.as_str())
-            && let Some(arity) = arity(bytes, open)
+            && let Some((arity, close)) = arguments(bytes, open)
+            && !opens_cte_body(bytes, close + 1)
             && let Some(suggestion) = probes.suggestion(dialect, &upper, arity)
         {
             calls.push(UnsupportedCall {
@@ -242,10 +288,109 @@ pub(crate) fn unsupported_calls(
                 suggestion,
             });
         }
-        previous_word = Some((start, index));
-        previous_byte = None;
+        scan.word(upper);
     }
     calls
+}
+
+impl Scan {
+    fn new() -> Self {
+        Self {
+            frames: vec![Frame::default()],
+            previous_word: None,
+            word_before: None,
+            previous_byte: None,
+            path_colon: false,
+        }
+    }
+
+    fn frame(&self) -> &Frame {
+        self.frames.last().unwrap_or(&ROOT_FRAME)
+    }
+
+    /// Return whether a name followed by `(` here is a call rather than a relation or column list.
+    fn call_position(&self) -> bool {
+        match self.previous_byte {
+            Some(b'.' | b'@' | b')' | b'"' | b'`') => return false,
+            Some(b':') if self.path_colon => return false,
+            Some(b',') if self.frame().clause == Clause::From => return false,
+            _ => {}
+        }
+        let Some(word) = self.previous_word.as_deref() else {
+            return true;
+        };
+        match word {
+            TYPE_POSITION_KEYWORD => self.frame().clause == Clause::Define,
+            FROM_KEYWORD => !self.relation_from(),
+            _ => EXPRESSION_STARTS.contains(word),
+        }
+    }
+
+    /// Return whether a `FROM` just seen introduces relations rather than an operand.
+    fn relation_from(&self) -> bool {
+        self.frame().select_seen && self.word_before.as_deref() != Some(DISTINCT_KEYWORD)
+    }
+
+    fn punctuation(&mut self, byte: u8) {
+        self.path_colon = byte == b':' && self.previous_byte != Some(b'\'');
+        match byte {
+            b'(' => self.frames.push(Frame::default()),
+            b')' if self.frames.len() > 1 => {
+                self.frames.pop();
+            }
+            _ => {}
+        }
+        self.previous_word = None;
+        self.word_before = None;
+        self.previous_byte = Some(byte);
+    }
+
+    fn word(&mut self, upper: String) {
+        let relation_from: bool = upper == FROM_KEYWORD
+            && self.frame().select_seen
+            && self.previous_word.as_deref() != Some(DISTINCT_KEYWORD);
+        if let Some(frame) = self.frames.last_mut() {
+            match upper.as_str() {
+                "SELECT" => {
+                    frame.select_seen = true;
+                    frame.clause = Clause::Other;
+                }
+                "JOIN" => frame.clause = Clause::From,
+                FROM_KEYWORD if relation_from => frame.clause = Clause::From,
+                "DEFINE" => frame.clause = Clause::Define,
+                keyword if CLAUSE_KEYWORDS.contains(keyword) => frame.clause = Clause::Other,
+                _ => {}
+            }
+        }
+        self.word_before = self.previous_word.replace(upper);
+        self.previous_byte = None;
+        self.path_colon = false;
+    }
+}
+
+/// Skip whitespace and comments between a name and its opening parenthesis.
+fn skip_trivia(sql: &[u8], mut index: usize) -> usize {
+    loop {
+        while sql.get(index).is_some_and(u8::is_ascii_whitespace) {
+            index += 1;
+        }
+        match comment_end(sql, index) {
+            Ok(Some(end)) => index = end,
+            Ok(None) | Err(Unclosed::BlockComment | Unclosed::Quote | Unclosed::Parenthesis) => {
+                return index;
+            }
+        }
+    }
+}
+
+/// Return whether `AS (` follows, so the preceding parenthesis was a CTE column list.
+fn opens_cte_body(sql: &[u8], index: usize) -> bool {
+    let start: usize = skip_trivia(sql, index);
+    let end: usize = start + TYPE_POSITION_KEYWORD.len();
+    sql.get(start..end)
+        .is_some_and(|word| word.eq_ignore_ascii_case(TYPE_POSITION_KEYWORD.as_bytes()))
+        && !sql.get(end).copied().is_some_and(is_word_byte)
+        && sql.get(skip_trivia(sql, end)) == Some(&b'(')
 }
 
 fn is_word_byte(byte: u8) -> bool {
@@ -259,13 +404,21 @@ fn is_identifier(name: &str) -> bool {
         && name.bytes().all(is_word_byte)
 }
 
-/// Count the top-level arguments of the call whose parenthesis opens at `open`.
-fn arity(sql: &[u8], open: usize) -> Option<usize> {
+/// Return the top-level argument count and closing index of the call opening at `open`.
+fn arguments(sql: &[u8], open: usize) -> Option<(usize, usize)> {
     let mut depth: usize = 0;
     let mut commas: usize = 0;
     let mut empty: bool = true;
     let mut index: usize = open;
     while index < sql.len() {
+        match comment_end(sql, index) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
+            }
+            Ok(None) => {}
+            Err(Unclosed::BlockComment | Unclosed::Quote | Unclosed::Parenthesis) => return None,
+        }
         match non_code_end(sql, index, QuotePolicy::COMPILER) {
             Ok(Some(end)) => {
                 empty = false;
@@ -280,7 +433,7 @@ fn arity(sql: &[u8], open: usize) -> Option<usize> {
             b')' | b']' | b'}' => {
                 depth = depth.checked_sub(1)?;
                 if depth == 0 {
-                    return Some(if empty { 0 } else { commas + 1 });
+                    return Some((if empty { 0 } else { commas + 1 }, index));
                 }
             }
             b',' if depth == 1 => commas += 1,

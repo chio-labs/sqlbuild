@@ -377,6 +377,6 @@ class CompileCacheDisabledTestCase:
 class FunctionNameCompileTestCase:
     description: str
     project_toml: str
-    projection_sql: str
+    query_sql: str
     expected_exit_code: int
     expected_diagnostics: tuple[tuple[str, str, int, int], ...]

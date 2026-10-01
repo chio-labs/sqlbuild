@@ -40,6 +40,38 @@ fn given_unsupported_builtin_spelling_when_scanning_then_reports_dialect_spellin
             ],
         },
         UnsupportedFunctionTestCase {
+            description: "an object literal value after a string key is checked",
+            dialect: DialectType::Snowflake,
+            sql: "SELECT {'featured': STARTS_WITH(product_name, 'a')} FROM products",
+            expected_calls: &[("STARTS_WITH", "STARTSWITH")],
+        },
+        UnsupportedFunctionTestCase {
+            description: "a MATCH_RECOGNIZE DEFINE condition after AS is checked",
+            dialect: DialectType::Snowflake,
+            sql: "SELECT * FROM products MATCH_RECOGNIZE (ORDER BY sku PATTERN (featured) \
+                  DEFINE featured AS STARTS_WITH(product_name, 'a'))",
+            expected_calls: &[("STARTS_WITH", "STARTSWITH")],
+        },
+        UnsupportedFunctionTestCase {
+            description: "comments between the name and its parenthesis are skipped",
+            dialect: DialectType::Snowflake,
+            sql: "SELECT LCASE /* lower */ (sku), UCASE -- upper\n (sku) FROM products",
+            expected_calls: &[("LCASE", "LOWER"), ("UCASE", "UPPER")],
+        },
+        UnsupportedFunctionTestCase {
+            description: "operand FROM and select lists inside a FROM subquery are checked",
+            dialect: DialectType::Snowflake,
+            sql: "SELECT TRIM(BOTH 'x' FROM LCASE(sku)), sku IS DISTINCT FROM UCASE(sku) \
+                  FROM (SELECT sku, LCASE(sku) AS lowered FROM products) AS listed, catalog \
+                  WHERE sku IN (1, 2) AND LCASE(sku) = 'a'",
+            expected_calls: &[
+                ("LCASE", "LOWER"),
+                ("UCASE", "UPPER"),
+                ("LCASE", "LOWER"),
+                ("LCASE", "LOWER"),
+            ],
+        },
+        UnsupportedFunctionTestCase {
             description: "DuckDB STARTSWITH suggests the catalogue spelling",
             dialect: DialectType::DuckDB,
             sql: "SELECT STARTSWITH(product_name, 'a') FROM products",
@@ -107,6 +139,28 @@ fn given_supported_or_non_builtin_call_when_scanning_then_reports_nothing() {
                   ROW_NUMBER() OVER (ORDER BY b) FROM products WHERE NOT (a IN (1, 2)) \
                   AND EXISTS (SELECT 1)) \
                   SELECT CAST(sku AS VARCHAR(10)), position_rank::NUMBER(10, 2) FROM ranked",
+            expected_calls: &[],
+        },
+        UnsupportedFunctionTestCase {
+            description: "CTE column lists are not calls",
+            dialect: DialectType::Snowflake,
+            sql: "WITH listed AS (SELECT 1 AS dow), day_of_week (dow) AS (SELECT 1), \
+                  lcase(x) AS (SELECT 2) SELECT dow FROM day_of_week",
+            expected_calls: &[],
+        },
+        UnsupportedFunctionTestCase {
+            description: "derived-table, table-function and table aliases are not calls",
+            dialect: DialectType::Snowflake,
+            sql: "SELECT x FROM (VALUES (1)) day_of_week (x), products lcase (y), \
+                  TABLE(FLATTEN(input => tags)) ucase (z), day_of_month (w) \
+                  JOIN char_length (v) ON TRUE",
+            expected_calls: &[],
+        },
+        UnsupportedFunctionTestCase {
+            description: "INSERT and CREATE column lists are not calls",
+            dialect: DialectType::Snowflake,
+            sql: "CREATE TABLE day_of_week (dow INTEGER); CREATE VIEW lcase (x) AS SELECT 1; \
+                  INSERT INTO ucase (x) SELECT 1; CREATE TABLE IF NOT EXISTS char_length (x INT)",
             expected_calls: &[],
         },
         UnsupportedFunctionTestCase {

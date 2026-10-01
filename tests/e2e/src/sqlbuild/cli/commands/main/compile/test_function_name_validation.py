@@ -24,6 +24,8 @@ _STARTS_WITH_FUNCTION: str = (
     "LEFT(value, LENGTH(prefix)) = prefix\n"
 )
 
+_SELECT: str = "SELECT\n"
+_FROM: str = "\nFROM (SELECT 'anvil' AS product_name) AS catalog_items\n"
 _SNOWFLAKE_PROJECT: str = 'name = "products"\nadapter = "snowflake"\n'
 _DUCKDB_PROJECT: str = (
     'name = "products"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
@@ -36,7 +38,7 @@ _DUCKDB_PROJECT: str = (
         FunctionNameCompileTestCase(
             description="snowflake STARTS_WITH is rejected with the Snowflake spelling",
             project_toml=_SNOWFLAKE_PROJECT,
-            projection_sql="    STARTS_WITH(product_name, 'a') AS is_featured",
+            query_sql=_SELECT + "    STARTS_WITH(product_name, 'a') AS is_featured" + _FROM,
             expected_exit_code=1,
             expected_diagnostics=(
                 (
@@ -50,20 +52,34 @@ _DUCKDB_PROJECT: str = (
         FunctionNameCompileTestCase(
             description="snowflake accepted spellings and an alias-named UDF compile",
             project_toml=_SNOWFLAKE_PROJECT,
-            projection_sql=(
-                "    STARTSWITH(product_name, 'a') AS is_featured,\n"
+            query_sql=(
+                _SELECT + "    STARTSWITH(product_name, 'a') AS is_featured,\n"
                 "    SUBSTR(product_name, 1, 2) AS short_name,\n"
                 "    TIMESTAMPDIFF(day, '2026-01-01'::date, '2026-01-02'::date) AS age_days,\n"
                 "    TRY_TO_DECIMAL('1.25', 10, 2) AS unit_price,\n"
-                "    __udf(\"starts_with\")(product_name, 'a') AS has_prefix"
+                "    __udf(\"starts_with\")(product_name, 'a') AS has_prefix" + _FROM
             ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        FunctionNameCompileTestCase(
+            description="snowflake CTE column list named like an alias compiles",
+            project_toml=_SNOWFLAKE_PROJECT,
+            query_sql="WITH day_of_week (dow) AS (SELECT 1) SELECT dow FROM day_of_week\n",
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        FunctionNameCompileTestCase(
+            description="snowflake derived-table alias named like an alias compiles",
+            project_toml=_SNOWFLAKE_PROJECT,
+            query_sql="SELECT x FROM (VALUES (1)) day_of_week (x)\n",
             expected_exit_code=0,
             expected_diagnostics=(),
         ),
         FunctionNameCompileTestCase(
             description="duckdb STARTSWITH is rejected with the DuckDB spelling",
             project_toml=_DUCKDB_PROJECT,
-            projection_sql="    STARTSWITH(product_name, 'a') AS is_featured",
+            query_sql=_SELECT + "    STARTSWITH(product_name, 'a') AS is_featured" + _FROM,
             expected_exit_code=1,
             expected_diagnostics=(
                 (
@@ -77,10 +93,10 @@ _DUCKDB_PROJECT: str = (
         FunctionNameCompileTestCase(
             description="duckdb catalogue spellings compile",
             project_toml=_DUCKDB_PROJECT,
-            projection_sql=(
-                "    starts_with(product_name, 'a') AS is_featured,\n"
+            query_sql=(
+                _SELECT + "    starts_with(product_name, 'a') AS is_featured,\n"
                 "    prefix(product_name, 'a') AS has_prefix,\n"
-                "    substr(product_name, 1, 2) AS short_name"
+                "    substr(product_name, 1, 2) AS short_name" + _FROM
             ),
             expected_exit_code=0,
             expected_diagnostics=(),
@@ -98,10 +114,7 @@ def test_given_builtin_spelling_when_compiling_then_dialect_support_is_enforced(
             "sqlbuild_project.toml": test_case.project_toml,
             "functions/sql/starts_with.sql": _STARTS_WITH_FUNCTION,
             "models/products.sql": (
-                "MODEL (database warehouse, schema analytics);\n\n"
-                "SELECT\n"
-                f"{test_case.projection_sql}\n"
-                "FROM (SELECT 'anvil' AS product_name) AS catalog_items\n"
+                f"MODEL (database warehouse, schema analytics);\n\n{test_case.query_sql}"
             ),
         },
     )
