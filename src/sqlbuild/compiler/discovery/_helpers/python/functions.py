@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_UDF_DECORATOR_NAME,
     PYTHON_UDF_IMPORT_MODULES,
+    PYTHON_UDF_KEYS,
 )
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 
@@ -60,6 +61,14 @@ def parse_python_function(*, contents: str, file_path: Path) -> tuple[dict[str, 
     if decorator_call.args:
         raise ModelSqlParseError(
             f"Python function '{file_path}' @udf(...) must use keyword arguments only"
+        )
+    unsupported: tuple[ast.keyword, ...] = tuple(
+        keyword for keyword in decorator_call.keywords if keyword.arg not in PYTHON_UDF_KEYS
+    )
+    if unsupported:
+        raise ModelSqlParseError(
+            f"@udf(...) in '{file_path}:{unsupported[0].lineno}' has unsupported keys: "
+            f"{', '.join(str(keyword.arg) for keyword in unsupported)}"
         )
 
     entry_point: object | None = values.get("entry_point")

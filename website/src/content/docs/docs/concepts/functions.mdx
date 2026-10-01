@@ -11,7 +11,7 @@ Scalar UDFs return a single value per row. They can be written in SQL or Python.
 
 ### SQL UDFs
 
-Place SQL function files under `functions/sql/`. Each file has a `FUNCTION()` header declaring arguments and return type, followed by a SQL expression body:
+Place SQL function files under `functions/sql/`. Each file has a `FUNCTION()` header declaring arguments and return type, followed by a SQL expression body. The header accepts `arguments`, `returns`, `database`, `schema`, and `tags`; any other key fails compilation with `D002`, naming the key and its file and line:
 
 ```sql
 -- functions/sql/udf__is_completed_order.sql
@@ -157,6 +157,8 @@ The `@udf` decorator accepts these keyword arguments:
 | `runtime_version` | No | Python runtime version (e.g. `"3.11"`) |
 | `entry_point` | No | Function name to use as the entry point (defaults to the decorated function name) |
 | `packages` | No | List of Python packages required at runtime |
+
+`database`, `schema`, and `tags` are also accepted. Any other keyword fails compilation with `D002`, naming the keyword and its file and line.
 
 ## Adapter support
 
