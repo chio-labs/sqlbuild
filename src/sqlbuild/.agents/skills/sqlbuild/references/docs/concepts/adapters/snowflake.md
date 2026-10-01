@@ -6,6 +6,15 @@
 
 Online: https://sqlbuild.com/docs/concepts/adapters/snowflake/
 
+## Contents
+
+- Connection config
+- Session initialization
+- Planning metadata
+- Build metadata
+- Shared connections across targets
+- Cost estimates
+
 Snowflake requires the optional `snowflake-connector-python` dependency:
 
 ```bash
@@ -53,6 +62,13 @@ and need a running warehouse:
   limit at which the output may be cut off.
 
 Run `sqb plan -v` to see each metadata query with its elapsed time and row count.
+
+## Build metadata
+
+During a build, checks for whether one relation exists use `SHOW TERSE TABLES` and
+`SHOW TERSE VIEWS`, and reads of one relation's columns use `SHOW COLUMNS`, so they also don't
+need a running warehouse. Each build reuses these answers until it changes that relation, for
+example by replacing a delta table or adding a column, and then reads it again.
 
 ## Shared connections across targets
 
