@@ -101,3 +101,62 @@ class FutureCursorPlannerErrorTestCase:
 class TableTypePlanAssemblyTestCase:
     description: str
     expected_entry_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeInspectionBudgetTestCase:
+    """A synthetic multi-schema Snowflake project planned against a recording warehouse."""
+
+    description: str
+    unmanaged_relations_per_schema: int
+    expected_schema_reads: dict[str, int]
+    expected_metadata_budget: int
+    expected_in_list_limit: int
+    expected_freshness_reads: int
+
+
+@dataclass(frozen=True)
+class SnowflakeCursorBoundsBudgetTestCase:
+    """Cursor-bound reads issued while planning a synthetic Snowflake project."""
+
+    description: str
+    statement_latency_seconds: float
+    expected_max_concurrency: int
+
+
+@dataclass(frozen=True)
+class SnowflakeReplanTestCase:
+    """Planning the same project twice in separate invocations."""
+
+    description: str
+    expected_listing_reads: int
+
+
+@dataclass(frozen=True)
+class SnowflakeManySchemasTestCase:
+    """Many small model schemas planned against a recording warehouse."""
+
+    description: str
+    schema_count: int
+    models_per_schema: int
+    expected_per_relation_column_reads: int
+    expected_schema_column_reads: int
+
+
+@dataclass(frozen=True)
+class SnowflakeFreshTargetTestCase:
+    """Planning before the first build, when target schemas or the database do not exist."""
+
+    description: str
+    warehouse_schemas: frozenset[str]
+    expected_reason: str
+    expected_schema_checks: int
+
+
+@dataclass(frozen=True)
+class SnowflakeMissingDatabaseTestCase:
+    """Planning against a database that does not exist or the role cannot use."""
+
+    description: str
+    warehouse_database: str
+    expected_error_fragment: str

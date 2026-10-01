@@ -6,6 +6,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
+from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
+    list_relations_for_inspection,
+)
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -78,7 +82,8 @@ class MigrationStateInspection:
         if not pending:
             return
         self._column_event_schemas.update(schema.lower() for schema in pending)
-        listed: tuple[RelationInfo, ...] = self._adapter.list_relations(
+        listed: tuple[RelationInfo, ...] = list_relations_for_inspection(
+            adapter=self._adapter,
             connection=self._connection,
             database=self._database,
             schemas=pending,
@@ -117,7 +122,8 @@ class MigrationStateInspection:
         if not pending:
             return
         self._old_name_schemas.update(schema.lower() for schema in pending)
-        listed: tuple[RelationInfo, ...] = self._adapter.list_relations(
+        listed: tuple[RelationInfo, ...] = list_relations_for_inspection(
+            adapter=self._adapter,
             connection=self._connection,
             database=self._database,
             schemas=pending,
@@ -167,7 +173,8 @@ class MigrationStateInspection:
         if not pending:
             return
         self._read_schemas.update(schema.lower() for schema in pending)
-        listed: tuple[RelationInfo, ...] = self._adapter.list_relations(
+        listed: tuple[RelationInfo, ...] = list_relations_for_inspection(
+            adapter=self._adapter,
             connection=self._connection,
             database=self._database,
             schemas=pending,
@@ -217,7 +224,8 @@ class MigrationStateInspection:
         )
         if not pending:
             return
-        listed: tuple[RelationInfo, ...] = self._adapter.list_relations(
+        listed: tuple[RelationInfo, ...] = list_relations_for_inspection(
+            adapter=self._adapter,
             connection=self._connection,
             database=self._database,
             schemas=tuple(sorted({location.schema or "" for location in pending})),
@@ -228,7 +236,9 @@ class MigrationStateInspection:
             relation for relation in listed if _listed_key(relation) in wanted
         )
         columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
-            self._adapter.get_columns_for_relations(connection=self._connection, relations=matched)
+            get_columns_for_inspection(
+                adapter=self._adapter, connection=self._connection, relations=matched
+            )
             if matched
             else {}
         )

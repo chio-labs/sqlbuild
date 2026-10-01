@@ -197,7 +197,10 @@ _REVENUE_KEY: CompiledObjectKey = CompiledObjectKey(
             expected_fingerprint_names=frozenset(),
         ),
         GatherWarehouseSnapshotTestCase(
-            description="falls back to schema-wide metadata when selected scope exceeds threshold",
+            description=(
+                "lists the whole schema beyond the name threshold but reads columns only for "
+                "project relations"
+            ),
             setup_sql=(
                 *(f"CREATE TABLE staging.model_{index} (id INTEGER)" for index in range(251)),
                 "CREATE TABLE staging.unrelated (value VARCHAR)",
@@ -213,9 +216,7 @@ _REVENUE_KEY: CompiledObjectKey = CompiledObjectKey(
             expected_relation_names=frozenset(
                 {*(f"model_{index}" for index in range(251)), "unrelated"}
             ),
-            expected_column_table_names=frozenset(
-                {*(f"model_{index}" for index in range(251)), "unrelated"}
-            ),
+            expected_column_table_names=frozenset(f"model_{index}" for index in range(251)),
             expected_fingerprint_names=frozenset(),
         ),
     ],

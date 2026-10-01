@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
@@ -84,12 +85,15 @@ def build_execution_plan(
         selection=selection,
         policies=policies,
     )
-    with BackgroundSqlTestPlanning(
-        project=project,
-        adapter=adapter,
-        selected_keys=scopes.inspection_scope.selected_keys,
-        enabled=policies.plan_sql_tests,
-    ) as test_planning:
+    with (
+        BackgroundSqlTestPlanning(
+            project=project,
+            adapter=adapter,
+            selected_keys=scopes.inspection_scope.selected_keys,
+            enabled=policies.plan_sql_tests,
+        ) as test_planning,
+        open_inspection_catalog(adapter=adapter, connection=connection),
+    ):
         warehouse: PlannerWarehouseState = gather_planner_warehouse_state(
             runtime=runtime,
             scopes=scopes,

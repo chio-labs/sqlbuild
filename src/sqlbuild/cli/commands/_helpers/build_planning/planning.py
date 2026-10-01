@@ -9,6 +9,7 @@ from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildInvocation,
 )
+from sqlbuild.cli.progress.main.verbose_inspection_output import verbose_inspection_output
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
@@ -26,6 +27,13 @@ def compile_build_plan(
 
     invocation.progress_stream.write("\n")
     invocation.progress_stream.flush()
+    with verbose_inspection_output(enabled=request.verbose):
+        return _run_build_compile_pipeline(request=request, invocation=invocation)
+
+
+def _run_build_compile_pipeline(
+    *, request: BuildCommandRequest, invocation: BuildInvocation
+) -> CompilePipelineResult:
     return run_compile_pipeline(
         discovered_inputs=invocation.discovered_inputs,
         adapter=invocation.adapter,

@@ -41,6 +41,19 @@ On connect, SQLBuild applies the connection's role and warehouse, then applies t
 target's authoritative database and schema. These ensure the session context is set correctly
 regardless of the user's default settings.
 
+## Planning metadata
+
+Planning reads relation and column metadata with `SHOW TABLES`, `SHOW VIEWS`, and `SHOW COLUMNS`
+once per schema, several schemas at a time. `SHOW` commands are served by Snowflake's metadata
+service, so they don't wait for, or resume, a warehouse. Two reads still use `INFORMATION_SCHEMA`
+and need a running warehouse:
+
+- `LAST_ALTERED` for source freshness, read only for the sources the plan observes.
+- Columns for a schema whose `SHOW COLUMNS` output is exactly 10,000 rows, the documented
+  limit at which the output may be cut off.
+
+Run `sqb plan -v` to see each metadata query with its elapsed time and row count.
+
 ## Shared connections across targets
 
 Use multiple targets to reuse one Snowflake connection while selecting different authoritative
