@@ -32,3 +32,37 @@ class FormatScalingGuardTestCase:
     expected_max_largest_elapsed_seconds: float
     hard_ceiling_seconds: float
     expected_returncode: int
+
+
+@dataclass(frozen=True)
+class ExampleProjectFormatTestCase:
+    """One repository example project that formatting must leave semantically unchanged."""
+
+    description: str
+    relative_path: str
+    expected_format_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class ModelFormatPerformanceTestCase:
+    """One generated unformatted model workload and its format budgets."""
+
+    description: str
+    model_count: int
+    large_model_lines: int
+    expected_file_count: int
+    expected_max_format_seconds: float
+    expected_max_elapsed_seconds: float
+    hard_ceiling_seconds: float
+    expected_returncode: int = 1
+
+
+@dataclass(frozen=True)
+class ModelFormatScalingTestCase:
+    """One doubling profile for unformatted model formatting."""
+
+    description: str
+    model_counts: tuple[int, ...]
+    expected_max_doubling_ratio: float
+    hard_ceiling_seconds: float
+    expected_returncode: int = 1

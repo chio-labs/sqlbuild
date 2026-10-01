@@ -6,6 +6,8 @@ mod batch_lint;
 mod comment_formatter;
 #[path = "tests/test_empty_fixture_lint.rs"]
 mod empty_fixture_lint;
+#[path = "tests/test_format_corpus.rs"]
+mod format_corpus;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_sql_lint.rs"]

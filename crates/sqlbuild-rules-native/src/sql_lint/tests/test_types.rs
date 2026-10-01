@@ -79,6 +79,13 @@ pub(crate) struct DialectLintRuleTestCase {
     pub expected_reason: &'static str,
 }
 
+pub(crate) struct FormatCorpusTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub expected_formatted: usize,
+    pub expected_refused: usize,
+}
+
 pub(crate) struct DialectFormatTestCase {
     pub description: &'static str,
     pub dialect: &'static str,
