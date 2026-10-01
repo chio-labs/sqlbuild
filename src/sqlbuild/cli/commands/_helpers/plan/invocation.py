@@ -9,7 +9,7 @@ from typing import TextIO
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands._helpers.runtime.preview_target import validate_preview_target
 from sqlbuild.cli.commands.models import (
     AdapterConnectionContext,
     PlanCommandRequest,
@@ -34,7 +34,9 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir, extract_output_column_locations=False
     )
-    _validate_preview_target(discovered_inputs=discovered_inputs, as_target=request.as_target)
+    validate_preview_target(
+        discovered_inputs=discovered_inputs, as_target=request.as_target, command_name="plan"
+    )
     adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(
         discovered_inputs=discovered_inputs,
         effective_project_dir=effective_project_dir,
@@ -64,18 +66,3 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
         planning_progress=reporters.planning,
         should_load_sources=should_load_sources,
     )
-
-
-def _validate_preview_target(
-    *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None
-) -> None:
-    if as_target is None:
-        return
-    configured: set[str] = set(discovered_inputs.project_config.targets) | set(
-        discovered_inputs.local_config.targets
-    )
-    if as_target not in configured:
-        raise CliUserError(
-            f"unknown target '{as_target}' for plan --as",
-            help=f"Configured targets: {', '.join(sorted(configured)) or 'none'}.",
-        )

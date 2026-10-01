@@ -630,6 +630,16 @@ def _add_maintenance_parsers(
         metavar="NAME",
         dest="drop_old_name_views",
     )
+    janitor_parser.add_argument("--target", default=None)
+    janitor_parser.add_argument(
+        "--as",
+        dest="as_target",
+        default=None,
+        help=(
+            "Preview the janitor plan as another configured target through the active "
+            "target's connection; inspection only"
+        ),
+    )
 
 
 def _add_workspace_parsers(

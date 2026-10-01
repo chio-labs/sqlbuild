@@ -129,6 +129,10 @@ def parse_cli_invocation(
             _validate_scope_args(args=args, parser=parser)
         if args.command == CliCommand.TEST:
             _validate_test_args(args=args, parser=parser)
+        if args.command == CliCommand.JANITOR and args.as_target is not None and args.auto_approve:
+            parser.error(
+                "janitor --as is inspection only and cannot be combined with --auto-approve"
+            )
     except SystemExit as error:
         exit_code: int = error.code if isinstance(error.code, int) else 1
         return ParsedCliInvocation(args=None, exit_code=exit_code)

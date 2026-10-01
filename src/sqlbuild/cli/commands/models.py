@@ -652,6 +652,8 @@ class JanitorCommandRequest:
     retention_days: int | None = None
     direct_state_history_versions: int | None = None
     drop_old_name_views: tuple[str, ...] = ()
+    selected_target: str | None = None
+    as_target: str | None = None
 
 
 @dataclass(frozen=True)
@@ -661,6 +663,9 @@ class JanitorInvocation:
     effective_project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
     use_color: bool
+    selected_target: str | None = None
+    active_target_name: str | None = None
+    as_target: str | None = None
 
 
 @dataclass(frozen=True)

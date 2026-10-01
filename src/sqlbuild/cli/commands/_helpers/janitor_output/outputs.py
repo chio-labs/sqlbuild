@@ -26,6 +26,39 @@ def write_janitor_disabled(*, invocation: JanitorInvocation) -> None:
     write_disabled(stream=sys.stdout, use_color=invocation.use_color)
 
 
+def write_janitor_preview_start(*, invocation: JanitorInvocation) -> None:
+    """Announce an inspection-only ``--as`` janitor preview before any work starts."""
+
+    sys.stdout.write(
+        f"Previewing janitor as target '{invocation.as_target}' through "
+        f"{_active_connection_label(invocation=invocation)} (inspection only).\n"
+    )
+    sys.stdout.flush()
+
+
+def write_janitor_preview_complete(*, invocation: JanitorInvocation) -> None:
+    """Close an ``--as`` janitor preview with an unambiguous nothing-changed state."""
+
+    style: CliStyle = CliStyle(use_color=invocation.use_color)
+    sys.stdout.write(
+        style.success(
+            f"Previewed janitor as target '{invocation.as_target}' through "
+            f"{_active_connection_label(invocation=invocation)}. Nothing was changed."
+        )
+        + "\n"
+    )
+    sys.stdout.write(
+        f"Rerun with `--target {invocation.as_target}` instead of "
+        f"`--as {invocation.as_target}` to apply it.\n"
+    )
+
+
+def _active_connection_label(*, invocation: JanitorInvocation) -> str:
+    if invocation.active_target_name is None:
+        return "the active connection"
+    return f"the connection of target '{invocation.active_target_name}'"
+
+
 def write_janitor_plan(
     *, invocation: JanitorInvocation, planning_result: JanitorPlanningResult
 ) -> None:

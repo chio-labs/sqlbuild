@@ -13,6 +13,8 @@ def compile_project(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
+    selected_target: str | None = None,
+    resolved_connection: dict[str, object] | None = None,
     no_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompiledProject:
@@ -21,6 +23,8 @@ def compile_project(
     return build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
+        resolved_connection=resolved_connection,
         no_sql_validation=no_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
