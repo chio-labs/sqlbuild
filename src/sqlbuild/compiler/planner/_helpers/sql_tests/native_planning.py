@@ -25,9 +25,6 @@ from sqlbuild.compiler.planner._helpers.sql_tests.cursor_window import (
     render_test_cursor_intrinsics,
 )
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError, PlannerInputError
-from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
-    restore_sql_test_dialect_function_names,
-)
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     NativeSqlTestArtifact,
@@ -137,9 +134,8 @@ def plan_sql_tests_natively(
         raise NativeSqlTestPlanningError(
             "native SQL-test planning returned an invalid batch response"
         )
-    dialect: str | None = adapter.sql_analysis_dialect()
     plans: tuple[NativeSqlTestPlan, ...] = tuple(
-        _plan_from_payload(value=value, dialect=dialect) for value in response
+        _plan_from_payload(value=value) for value in response
     )
     elapsed_ns: int = time.perf_counter_ns() - start_ns
     boundary_overhead_ns: int = max(0, elapsed_ns - planning_ns - rendering_ns)
@@ -188,7 +184,7 @@ def _planning_error(*, error: ValueError) -> Exception:
     return NativeSqlTestPlanningError(f"native SQL-test planning failed: {message}")
 
 
-def _plan_from_payload(*, value: object, dialect: str | None) -> NativeSqlTestPlan:
+def _plan_from_payload(*, value: object) -> NativeSqlTestPlan:
     payload: dict[str, Any] = _object(value=value, context="result")
     sql: object = payload.get("sql")
     chain: object = payload.get("chain")
@@ -206,11 +202,7 @@ def _plan_from_payload(*, value: object, dialect: str | None) -> NativeSqlTestPl
         assertions=tuple(_assertion_step(value=step) for step in assertions),
         model_names=_string_tuple(value=payload.get("modelNames"), context="model names"),
         warnings=tuple(_warning(value=warning) for warning in warnings),
-        sql=(
-            restore_sql_test_dialect_function_names(sql=sql, dialect=dialect)
-            if isinstance(sql, str)
-            else None
-        ),
+        sql=sql if isinstance(sql, str) else None,
     )
 
 

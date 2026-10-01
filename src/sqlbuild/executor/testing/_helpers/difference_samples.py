@@ -11,9 +11,6 @@ import orjson
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
-    restore_sql_test_dialect_function_names,
-)
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -143,7 +140,7 @@ def build_sql_test_difference_sample_sql(
     sql: object = response.get("sql") if isinstance(response, dict) else None
     if not isinstance(sql, str):
         raise SqlTestRenderingError("native SQL-test difference rendering returned invalid SQL")
-    return restore_sql_test_dialect_function_names(sql=sql, dialect=sql_analysis_dialect)
+    return sql
 
 
 def _fetch_difference_samples(
