@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::sql_lint::_helpers::formatter::preserve_authored_tokens;
+use crate::sql_lint::_helpers::token_layout::verify_token_invariant;
 use crate::sql_lint::main::formatter::format_json;
 use crate::sql_lint::tests::test_types;
 
@@ -47,49 +47,142 @@ fn given_generator_respellings_when_formatting_then_authored_spellings_are_kept(
 }
 
 #[test]
-fn given_generated_token_changes_when_preserving_authored_tokens_then_only_layout_survives() {
-    let dialect = polyglot_sql::Dialect::get(polyglot_sql::DialectType::Snowflake);
+fn given_generator_restructuring_when_formatting_then_authored_tokens_are_laid_out()
+-> Result<(), String> {
     let test_cases = [
-        test_types::AuthoredTokenTestCase {
-            description: "renamed function is restored to its authored spelling",
-            authored: "select startswith(code, 'EU') from orders",
-            generated: "SELECT\n  STARTS_WITH(code, 'EU')\nFROM orders",
-            expected_sql: Some("SELECT\n  startswith(code, 'EU')\nFROM orders"),
+        test_types::DialectFormatTestCase {
+            description: "PostgreSQL comma SUBSTRING arguments are not rewritten to FROM/FOR",
+            dialect: "postgres",
+            sql: "select substring(code, 1, 2) as region from orders",
+            expected_sql: "SELECT\n  SUBSTRING(code, 1, 2) AS region\nFROM orders",
         },
-        test_types::AuthoredTokenTestCase {
-            description: "swapped arguments are restored to authored order",
-            authored: "select datediff(day, a, b) from orders",
-            generated: "SELECT\n  DATEDIFF(DAY, b, a)\nFROM orders",
-            expected_sql: Some("SELECT\n  DATEDIFF(DAY, a, b)\nFROM orders"),
+        test_types::DialectFormatTestCase {
+            description: "DuckDB SELECT ALL keeps ALL",
+            dialect: "duckdb",
+            sql: "select all order_id from orders",
+            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
         },
-        test_types::AuthoredTokenTestCase {
-            description: "an explicit alias keyword may be added",
-            authored: "select a b from orders",
-            generated: "SELECT\n  a AS b\nFROM orders",
-            expected_sql: Some("SELECT\n  a AS b\nFROM orders"),
+        test_types::DialectFormatTestCase {
+            description: "Snowflake SELECT ALL keeps ALL",
+            dialect: "snowflake",
+            sql: "select all order_id from orders",
+            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
         },
-        test_types::AuthoredTokenTestCase {
-            description: "a structural change refuses the format",
-            authored: "select a from orders where a <> 1",
-            generated: "SELECT\n  a\nFROM orders\nWHERE\n  NOT a = 1",
-            expected_sql: None,
+        test_types::DialectFormatTestCase {
+            description: "PostgreSQL SELECT ALL keeps ALL",
+            dialect: "postgres",
+            sql: "select all order_id from orders",
+            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
         },
-        test_types::AuthoredTokenTestCase {
-            description: "a dropped token refuses the format",
-            authored: "select a from orders left outer join items using (id)",
-            generated: "SELECT\n  a\nFROM orders\nLEFT JOIN items USING (id)",
-            expected_sql: None,
+        test_types::DialectFormatTestCase {
+            description: "BigQuery SELECT ALL keeps ALL",
+            dialect: "bigquery",
+            sql: "select all order_id from orders",
+            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+        },
+        test_types::DialectFormatTestCase {
+            description: "Databricks SELECT ALL keeps ALL",
+            dialect: "databricks",
+            sql: "select all order_id from orders",
+            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+        },
+        test_types::DialectFormatTestCase {
+            description: "T-SQL SELECT ALL keeps ALL",
+            dialect: "tsql",
+            sql: "select all order_id from orders",
+            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+        },
+        test_types::DialectFormatTestCase {
+            description: "implicit aliases stay implicit",
+            dialect: "duckdb",
+            sql: "select order_id id, amount from orders o",
+            expected_sql: "SELECT\n  order_id id,\n  amount\nFROM orders o",
+        },
+        test_types::DialectFormatTestCase {
+            description: "a trailing select comma and statement terminator are kept",
+            dialect: "duckdb",
+            sql: "select order_id, amount, from orders;",
+            expected_sql: "SELECT\n  order_id,\n  amount,\nFROM orders;",
+        },
+        test_types::DialectFormatTestCase {
+            description: "adjacent authored tokens are never split",
+            dialect: "duckdb",
+            sql: "select $name as v from orders where status != 1",
+            expected_sql: "SELECT\n  $name AS v\nFROM orders\nWHERE\n  status != 1",
+        },
+        test_types::DialectFormatTestCase {
+            description: "BigQuery numeric-prefixed path parts stay joined",
+            dialect: "bigquery",
+            sql: "select * from orders.archive.25_",
+            expected_sql: "SELECT\n  *\nFROM orders.archive.25_",
         },
     ];
-    for test_case in test_cases {
-        let actual = preserve_authored_tokens(
-            test_case.authored,
-            test_case.generated.to_string(),
-            &dialect,
-        );
+    for test_case in &test_cases {
+        let response = format_json(
+            &json!({"version": 1, "sql": test_case.sql, "dialect": test_case.dialect}).to_string(),
+        )?;
+        let payload: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
         assert_eq!(
-            actual.ok().as_deref(),
-            test_case.expected_sql,
+            payload["sql"], test_case.expected_sql,
+            "{}",
+            test_case.description
+        );
+        let again = format_json(
+            &json!({"version": 1, "sql": test_case.expected_sql, "dialect": test_case.dialect})
+                .to_string(),
+        )?;
+        let repeated: Value = serde_json::from_str(&again).map_err(|error| error.to_string())?;
+        assert_eq!(repeated["changed"], false, "{}", test_case.description);
+    }
+    Ok(())
+}
+
+#[test]
+fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may_differ() {
+    let test_cases = [
+        test_types::TokenInvariantTestCase {
+            description: "whitespace and word case may change",
+            before: "select a,b from orders -- note",
+            after: "SELECT\n  a,\n  b\nFROM orders -- note",
+            expected_error: None,
+        },
+        test_types::TokenInvariantTestCase {
+            description: "a renamed function is refused",
+            before: "select startswith(code, 'EU') from orders",
+            after: "SELECT STARTS_WITH(code, 'EU') FROM orders",
+            expected_error: Some(
+                "native formatter would change authored SQL tokens, not only layout",
+            ),
+        },
+        test_types::TokenInvariantTestCase {
+            description: "an added alias keyword is refused",
+            before: "select a b from orders",
+            after: "SELECT a AS b FROM orders",
+            expected_error: Some(
+                "native formatter would change authored SQL tokens, not only layout",
+            ),
+        },
+        test_types::TokenInvariantTestCase {
+            description: "string literal whitespace is refused",
+            before: "select 'a  b' from orders",
+            after: "SELECT 'a b' FROM orders",
+            expected_error: Some(
+                "native formatter would change authored SQL tokens, not only layout",
+            ),
+        },
+        test_types::TokenInvariantTestCase {
+            description: "a comment moved to another token is refused",
+            before: "select a, -- note\n b from orders",
+            after: "SELECT a, b -- note\nFROM orders",
+            expected_error: Some("native formatter could not preserve comment token attachments"),
+        },
+    ];
+    let dialect = polyglot_sql::Dialect::get(polyglot_sql::DialectType::Snowflake);
+    for test_case in test_cases {
+        let actual = verify_token_invariant(test_case.before, test_case.after, &dialect);
+        assert_eq!(
+            actual.err().as_deref(),
+            test_case.expected_error,
             "{}",
             test_case.description
         );

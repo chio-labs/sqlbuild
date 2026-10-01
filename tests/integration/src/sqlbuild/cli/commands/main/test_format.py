@@ -22,6 +22,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatterDeclineIntegrationTestCase,
     FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
+    LayoutOnlyFormatIntegrationTestCase,
     LeadingCteCommentFormatIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
     TypedNullFormatIntegrationTestCase,
@@ -34,6 +35,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
 )
 
 _UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order_id\n"
+_LAYOUT_ONLY_BODY: str = 'SELECT ALL\n  order_id id,\n  amount,\nFROM __source("raw_orders") o;\n'
 
 
 @pytest.mark.parametrize(
@@ -62,6 +64,12 @@ _UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order
             "snowflake",
             "TRY_TO_DECIMAL(amount_text, 10, 2)",
             "TRY_TO_DECIMAL(amount_text, 10, 2)",
+        ),
+        AuthoredSpellingFormatIntegrationTestCase(
+            "PostgreSQL comma SUBSTRING arguments are kept",
+            "postgres",
+            "substring(order_code, 1, 2)",
+            "SUBSTRING(order_code, 1, 2)",
         ),
         AuthoredSpellingFormatIntegrationTestCase(
             "DuckDB IFNULL and != spellings are kept",
@@ -1130,3 +1138,39 @@ def test_given_dollar_quoted_apostrophe_when_formatting_then_reference_survives_
     assert query_duckdb_rows(
         db_path=tmp_path / "warehouse.duckdb", sql="SELECT note, order_id FROM prod.order_notes"
     ) == ((test_case.expected_note, 1),)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LayoutOnlyFormatIntegrationTestCase(f"{adapter} keeps authored tokens", adapter, body)
+        for adapter, body in (
+            ("duckdb", _LAYOUT_ONLY_BODY),
+            ("snowflake", _LAYOUT_ONLY_BODY),
+            ("postgres", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
+            ("bigquery", _LAYOUT_ONLY_BODY),
+            ("databricks", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
+            ("sqlserver", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_select_all_and_implicit_aliases_when_formatting_then_only_layout_changes(
+    test_case: LayoutOnlyFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "{test_case.adapter}"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    authored: str = " ".join(test_case.expected_body.lower().split())
+    model.write_text(f'MODEL (description "Orders");\n\n{authored}\n', encoding="utf-8")
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    check_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format", "--check"])
+    output: CaptureResult[str] = capsys.readouterr()
+
+    assert (format_exit, check_exit) == (0, 0), output.out + output.err
+    assert model.read_text(encoding="utf-8").endswith(test_case.expected_body)

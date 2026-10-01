@@ -1878,7 +1878,7 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "cast-free token expansion remains supported",
             sql: "select id label from items",
-            expected_sql: "SELECT\n  id AS label\nFROM items",
+            expected_sql: "SELECT\n  id label\nFROM items",
             expected_changed: true,
         },
         test_types::FormatTestCase {
@@ -1888,9 +1888,9 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
             expected_changed: true,
         },
         test_types::FormatTestCase {
-            description: "trailing comment",
+            description: "trailing comment after a kept statement terminator",
             sql: "select a from items; -- retained",
-            expected_sql: "SELECT\n  a\nFROM items -- retained\n",
+            expected_sql: "SELECT\n  a\nFROM items; -- retained\n",
             expected_changed: true,
         },
         test_types::FormatTestCase {

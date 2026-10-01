@@ -230,6 +230,15 @@ class AuthoredSpellingFormatIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class LayoutOnlyFormatIntegrationTestCase:
+    """One adapter whose authored keywords, aliases and terminators formatting must keep."""
+
+    description: str
+    adapter: str
+    expected_body: str
+
+
+@dataclass(frozen=True)
 class DollarQuoteFormatIntegrationTestCase:
     """One dollar-quoted literal whose quote state must not hide a later intrinsic call."""
 
