@@ -30,12 +30,12 @@ impl QuotePolicy {
         dollar_quotes: true,
     };
 
-    /// SQL lint base policy: backslashes escape; lint enables backticks per dialect.
+    /// SQL lint policy: backslashes escape, backticks per dialect, dollar quotes as in the compiler.
     pub(crate) const SQL_LINT: Self = Self {
         backtick_identifiers: false,
         single_quote_backslash_escapes: true,
         double_quote_backslash_escapes: true,
-        dollar_quotes: false,
+        dollar_quotes: true,
     };
 
     /// Return this policy with backtick-delimited identifiers enabled or disabled.

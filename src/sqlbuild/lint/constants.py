@@ -80,6 +80,7 @@ ADAPTER_CONFIG_KEY: str = "adapter"
 
 SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
 BACKTICK_CHARACTER: str = "`"
+DOLLAR_QUOTE_CHARACTER: str = "$"
 SQL_ESCAPE_CHARACTER: str = "\\"
 SINGLE_QUOTE_CHARACTER: str = "'"
 OPENING_PAREN_CHARACTER: str = "("

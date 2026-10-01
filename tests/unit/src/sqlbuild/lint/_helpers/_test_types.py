@@ -184,3 +184,13 @@ class UnicodePreparationTestCase:
     description: str
     prefix: str
     expected_lint_calls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DollarQuotePreparationTestCase:
+    """Dollar-quoted text that the Python and native lint scanners must treat as opaque."""
+
+    description: str
+    dialect: str
+    literal: str
+    expected_sites: tuple[str, ...]

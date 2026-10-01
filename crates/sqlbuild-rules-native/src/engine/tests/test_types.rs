@@ -169,6 +169,12 @@ pub(crate) struct EmptyInputMinimumTestsTestCase {
 }
 
 /// One SQL fragment scanned by every native quote- and comment-aware scanner.
+pub(crate) struct DollarQuoteSiteTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) expected_sites: &'static [&'static str],
+}
+
 pub(crate) struct LintDialectSiteTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: &'static str,

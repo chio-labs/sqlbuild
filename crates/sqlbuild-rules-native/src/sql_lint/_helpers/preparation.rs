@@ -8,19 +8,11 @@ use regex::Regex;
 use crate::rules::main::quote_policy::quote_policy;
 use crate::sql_lint::types::{InterpolationSite, PreparedSql};
 use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
+use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::models::QuotePolicy;
 
-const SITE_PATTERN: &str =
-    r#"(?P<site>@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\s*\()"#;
-const NON_CODE_PATTERN: &str = r#"--[^\n]*(?:\n|\z)|/\*[\s\S]*?(?:\*/|\z)|'(?:\\.|''|[^'\\])*(?:'|\z)|"(?:\\.|""|[^"\\])*(?:"|\z)"#;
-const BACKTICK_PATTERN: &str = r#"`(?:``|[^`])*(?:`|\z)"#;
-
-static SITES: LazyLock<Result<Regex, regex::Error>> =
-    LazyLock::new(|| Regex::new(&format!("{NON_CODE_PATTERN}|{SITE_PATTERN}")));
-static BACKTICK_SITES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
-    Regex::new(&format!(
-        "{NON_CODE_PATTERN}|{BACKTICK_PATTERN}|{SITE_PATTERN}"
-    ))
+static SITE_START: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+    Regex::new(r"^(?:@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\s*\()")
 });
 static CTES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
     Regex::new(
@@ -47,23 +39,14 @@ pub(crate) fn prepare(
         return Ok(None);
     }
     let policy = QuotePolicy::SQL_LINT.with_backtick_identifiers(backtick_identifiers(dialect));
-    let sites_regex = if policy.backtick_identifiers {
-        &BACKTICK_SITES
-    } else {
-        &SITES
-    };
-    let site_pattern = sites_regex.as_ref().map_err(|error| error.to_string())?;
+    let site_pattern = SITE_START.as_ref().map_err(|error| error.to_string())?;
     let cte_pattern = CTES.as_ref().map_err(|error| error.to_string())?;
     let word_pattern = WORDS.as_ref().map_err(|error| error.to_string())?;
     let opaque_pattern = OPAQUE_CTE.as_ref().map_err(|error| error.to_string())?;
     let mut text = String::with_capacity(expanded.len());
     let mut sites: Vec<InterpolationSite> = Vec::new();
     let mut copied_to = 0;
-    for captures in site_pattern.captures_iter(expanded) {
-        let Some(site) = captures.name("site") else {
-            continue;
-        };
-        let start = site.start();
+    for start in site_starts(expanded, site_pattern, policy) {
         if start < copied_to {
             continue;
         }
@@ -114,6 +97,30 @@ pub(crate) fn prepare(
     let mut referenced: Vec<String> = referenced.into_iter().collect();
     referenced.sort();
     Ok(Some((text, sites, referenced)))
+}
+
+/// Offsets of candidate interpolation sites outside comments and quoted text.
+fn site_starts(text: &str, site_pattern: &Regex, policy: QuotePolicy) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let mut starts: Vec<usize> = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        match non_code_end(bytes, index, policy) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
+            }
+            Err(_) => break,
+            Ok(None) => {}
+        }
+        if let Some(found) = site_pattern.find(&text[index..]) {
+            starts.push(index);
+            index += found.end();
+        } else {
+            index += 1;
+        }
+    }
+    starts
 }
 
 fn site_end(text: &str, start: usize, policy: QuotePolicy) -> Option<usize> {

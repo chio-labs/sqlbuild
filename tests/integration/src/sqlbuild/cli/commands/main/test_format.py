@@ -14,6 +14,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BacktickDialectFormatIntegrationTestCase,
     CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
+    DollarQuoteFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
     FormatPathArgumentsIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
@@ -26,6 +27,8 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     TypedNullFormatIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    query_duckdb_rows,
+    run_build,
     write_from_values_format_project,
     write_snowflake_format_test,
 )
@@ -1075,3 +1078,55 @@ def test_given_backtick_identifier_apostrophe_when_formatting_then_macro_call_st
 
     assert (format_exit, compile_exit) == (0, 0), output.out + output.err
     assert test_case.expected_literal in model_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DollarQuoteFormatIntegrationTestCase(
+            description="untagged dollar quote with an apostrophe",
+            literal="$$Customer's order$$",
+            expected_note="Customer's order",
+        ),
+        DollarQuoteFormatIntegrationTestCase(
+            description="tagged dollar quote with an apostrophe",
+            literal="$note$it's shipped$note$",
+            expected_note="it's shipped",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dollar_quoted_apostrophe_when_formatting_then_reference_survives_and_builds(
+    test_case: DollarQuoteFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "prod"\n\n'
+        '[connections.local]\ndatabase = "warehouse.duckdb"\n\n'
+        '[targets.prod]\nconnection = "local"\nschema = "prod"\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders", materialized table);\n\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    notes: Path = models / "order_notes.sql"
+    notes.write_text(
+        'MODEL (description "Order notes", materialized table);\n\n'
+        f'select {test_case.literal} as note, o.order_id from __ref("orders") o\n',
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    build_exit, build_output = run_build(project_dir=tmp_path, flags=(), capsys=capsys)
+
+    assert (format_exit, build_exit) == (0, 0), build_output
+    formatted: str = notes.read_text(encoding="utf-8")
+    assert f"  {test_case.literal} AS note," in formatted
+    assert 'FROM __ref("orders")' in formatted
+    assert query_duckdb_rows(
+        db_path=tmp_path / "warehouse.duckdb", sql="SELECT note, order_id FROM prod.order_notes"
+    ) == ((test_case.expected_note, 1),)

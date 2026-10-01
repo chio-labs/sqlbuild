@@ -230,6 +230,15 @@ class AuthoredSpellingFormatIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class DollarQuoteFormatIntegrationTestCase:
+    """One dollar-quoted literal whose quote state must not hide a later intrinsic call."""
+
+    description: str
+    literal: str
+    expected_note: str
+
+
+@dataclass(frozen=True)
 class BacktickDialectFormatIntegrationTestCase:
     """One backtick-identifier adapter whose macro call must survive formatting."""
 

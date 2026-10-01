@@ -72,8 +72,14 @@ fn given_quote_policies_when_matching_parentheses_then_policy_decides_quote_boun
         MatchingParenPolicyTestCase {
             description: "dollar quotes are code when the policy disables them",
             sql: "($$ ) $$ x) y",
-            policy: QuotePolicy::SQL_LINT,
+            policy: QUOTES_ONLY,
             expected_close: Ok(4),
+        },
+        MatchingParenPolicyTestCase {
+            description: "SQL lint policy skips dollar-quoted text like the compiler",
+            sql: "($$ ) $$ x) y",
+            policy: QuotePolicy::SQL_LINT,
+            expected_close: Ok(10),
         },
         MatchingParenPolicyTestCase {
             description: "multibyte text keeps byte offsets on character boundaries",
