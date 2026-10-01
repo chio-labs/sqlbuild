@@ -16,6 +16,7 @@ from sqlbuild.cli.commands._helpers.lint.runs import (
 )
 from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
 from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.main.has_fixture_typed_null_candidates import (
     has_fixture_typed_null_candidates,
@@ -34,6 +35,7 @@ def run_format_command(
     check: bool = False,
     diff: bool = False,
     fixtures_only: bool = False,
+    fix: bool = False,
     json_output: bool = False,
     no_color: bool = False,
 ) -> int:
@@ -41,8 +43,6 @@ def run_format_command(
 
     base_dir: Path = project_dir if project_dir is not None else Path.cwd()
     prepared: tuple[LintConfig, str | None] = prepare_lint_run(project_dir=base_dir)
-    if prepared[1] is not None:
-        print(f"WARN  {prepared[1]}")
     config: LintConfig = prepared[0]
     value_renderer: BaseAdapter | None = None
     selected_paths: frozenset[Path] | None = None
@@ -50,7 +50,7 @@ def run_format_command(
     has_fixture_candidates: bool = False
     if not select and not exclude:
         has_fixture_candidates = has_fixture_typed_null_candidates(project_dir=base_dir)
-    if select or exclude or has_fixture_candidates:
+    if select or exclude or has_fixture_candidates or fix:
         try:
             value_renderer, selected_paths, discovered_inputs = resolve_lint_inputs(
                 project_dir=base_dir,
@@ -58,7 +58,7 @@ def run_format_command(
                 exclude=exclude,
             )
         except Exception:
-            if select or exclude:
+            if select or exclude or fix:
                 raise
         else:
             has_fixture_candidates = bool(discovered_inputs.test_files)
@@ -67,6 +67,8 @@ def run_format_command(
                 dialect=value_renderer.sql_analysis_dialect_name or "generic",
             )
     fixture_inputs: DiscoveredProjectInputs | None = None
+    if fix:
+        discovered_inputs = discover_project_inputs(project_dir=base_dir)
     if discovered_inputs is not None and has_fixture_candidates:
         local_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
         sql_analysis_enabled: bool = (
@@ -88,20 +90,16 @@ def run_format_command(
             config=config,
             value_renderer=value_renderer,
             selected_paths=selected_paths,
-            discovered_inputs=fixture_inputs,
+            discovered_inputs=discovered_inputs if fix else fixture_inputs,
             fixtures_only=fixtures_only,
             write=not (check or diff),
+            fix=fix,
         )
     except Exception:
         format_status.error("Formatting SQL  ERROR")
         raise
     elapsed_seconds: float = time.monotonic() - format_started_at
-    format_status.complete(
-        message=(
-            f"Formatting SQL  OK  ({elapsed_seconds:.2f}s; "
-            f"{result.files_checked} files checked, {len(result.formatted_files)} changed)"
-        )
-    )
+    _ = _complete_format_status(status=format_status, result=result, elapsed=elapsed_seconds)
     if diff:
         _ = _render_format_diff(result=result)
     if json_output:
@@ -115,6 +113,20 @@ def run_format_command(
             formatted_heading="Would format files:" if check or diff else "Formatted files:",
         )
     return 1 if result.faults or (check and result.formatted_files) else 0
+
+
+def _complete_format_status(
+    *, status: TransientStatusReporter, result: LintRunResult, elapsed: float
+) -> None:
+    if result.faults:
+        status.error(f"Formatting SQL  ERROR  ({elapsed:.2f}s; {len(result.faults)} faults)")
+    else:
+        status.complete(
+            message=(
+                f"Formatting SQL  OK  ({elapsed:.2f}s; "
+                f"{result.files_checked} files checked, {len(result.formatted_files)} changed)"
+            )
+        )
 
 
 def _render_format_diff(*, result: LintRunResult) -> None:

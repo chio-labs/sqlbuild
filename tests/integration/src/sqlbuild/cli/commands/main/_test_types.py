@@ -8,6 +8,15 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class SemanticFixTestCase:
+    description: str
+    sql: str
+    expected_code: str
+    dialect: str = "duckdb"
+    expected_status: str = "applied"
+
+
+@dataclass(frozen=True)
 class VariedCompileFixtureTestCase:
     description: str
     model_count: int

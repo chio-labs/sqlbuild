@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.compiler.scopes.types import DeclarationKind
@@ -97,6 +98,17 @@ class LintViolation:
 
 
 @dataclass(frozen=True)
+class RuleFixResult:
+    """One applied, refused, or unavailable semantic Rule fix."""
+
+    file_path: Path
+    code: str
+    line: int
+    status: Literal["applied", "refused", "unavailable"]
+    reason: str
+
+
+@dataclass(frozen=True)
 class FormatChange:
     """One deterministic file-formatting change."""
 
@@ -126,6 +138,7 @@ class LintRunResult:
     violations: tuple[LintViolation, ...]
     formatted_files: tuple[Path, ...]
     format_changes: tuple[FormatChange, ...] = ()
+    rule_fixes: tuple[RuleFixResult, ...] = ()
     source_texts: Mapping[Path, str] = field(default_factory=dict, repr=False, compare=False)
 
     @property
