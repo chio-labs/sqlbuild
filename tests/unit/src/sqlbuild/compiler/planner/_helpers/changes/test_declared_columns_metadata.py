@@ -8,6 +8,7 @@ from sqlbuild.compiler.planner._helpers.changes.metadata import (
     recorded_declared_columns_hash,
     version_identity_metadata_payload,
     with_declared_columns_hash,
+    without_declared_columns_hash,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DeclaredColumnsMetadataTestCase,
@@ -43,6 +44,7 @@ def test_given_fingerprint_metadata_when_reading_declared_columns_hash_then_tole
     assert version_identity_metadata_payload(test_case.metadata_json) == (
         version_identity_metadata_payload(_METADATA_JSON)
     )
+    assert without_declared_columns_hash(test_case.metadata_json) == _METADATA_JSON
 
 
 if __name__ == "__main__":

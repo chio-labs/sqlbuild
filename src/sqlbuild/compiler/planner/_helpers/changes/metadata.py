@@ -127,3 +127,20 @@ def with_declared_columns_hash(*, metadata_json: str, declared_columns_hash: str
         separators=(",", ":"),
         default=str,
     )
+
+
+def without_declared_columns_hash(metadata_json: str) -> str:
+    """Return fingerprint metadata JSON without the declared-columns hash key, if present."""
+
+    try:
+        payload: object = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return metadata_json
+    if not isinstance(payload, dict) or DECLARED_COLUMNS_METADATA_KEY not in payload:
+        return metadata_json
+    return json.dumps(
+        {key: value for key, value in payload.items() if key != DECLARED_COLUMNS_METADATA_KEY},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
