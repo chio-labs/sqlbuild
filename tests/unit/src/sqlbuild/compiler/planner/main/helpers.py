@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlanOutput,
 )
+from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
 
 def model_definition_hash(project: CompiledProject, name: str) -> str:
@@ -91,4 +92,41 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
         deferral=deferral,
         policies=policies,
         **kwargs,
+    )
+
+
+def build_protected_schema_replay_project() -> CompiledProject:
+    """Build a full_refresh false incremental whose declared column forces a full replay."""
+
+    model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="order_history"),
+        deps=(),
+        name="order_history",
+        relative_path=Path("models/order_history.sql"),
+        query_sql="SELECT 1 AS id, 2 AS amount",
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "replay_on_change": "full",
+                "full_refresh": False,
+            }
+        ),
+        destination=CompiledRelationLocation(
+            database=None, schema="main", name="order_history", qualified_name="main.order_history"
+        ),
+        schema_entry=SchemaModelEntry(
+            name="order_history",
+            columns=(
+                SchemaColumn(name="id", type="INTEGER"),
+                SchemaColumn(name="amount", type="INTEGER"),
+            ),
+        ),
+    )
+    return CompiledProject(
+        run_id="protected-rebuild-run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=(model,),
     )

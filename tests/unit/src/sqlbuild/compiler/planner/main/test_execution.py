@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     PlanOutput,
@@ -21,9 +22,11 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     DirectSourceFreshnessPlanOutputTestCase,
     ExternalBlockedPlanOutputTestCase,
     HookFunctionPlanOutputTestCase,
+    ProtectedRebuildBlockedTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
     build_execution_plan_from_kwargs,
+    build_protected_schema_replay_project,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
@@ -146,3 +149,64 @@ def test_given_external_blocked_model_when_building_execution_plan_then_only_tha
     assert entries_by_name["blocked"].action == PlanAction.SKIP
     assert entries_by_name["blocked"].reason == PlanReason.EXTERNAL_UPSTREAM_FAILED
     assert entries_by_name["unrelated"].action != PlanAction.SKIP
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProtectedRebuildBlockedTestCase(
+            description="externally blocked protected model is skipped without S203",
+            external_blocked_model_names=("order_history",),
+            expected_action="skip",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_blocked_protected_model_when_planning_then_full_rebuild_protection_is_not_evaluated(
+    test_case: ProtectedRebuildBlockedTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        adapter.execute(connection=connection, sql="CREATE TABLE main.order_history (id INTEGER)")
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
+            project=build_protected_schema_replay_project(),
+            adapter=adapter,
+            connection=connection,
+            external_blocked_model_names=test_case.external_blocked_model_names,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert plan_output.model_entries[0].action.value == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProtectedRebuildBlockedTestCase(
+            description="unblocked protected model refuses the declared-column full replay",
+            external_blocked_model_names=(),
+            expected_action="S203",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unblocked_protected_model_when_planning_then_full_rebuild_is_refused(
+    test_case: ProtectedRebuildBlockedTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        adapter.execute(connection=connection, sql="CREATE TABLE main.order_history (id INTEGER)")
+        with pytest.raises(PlannerInputError) as raised:
+            build_execution_plan_from_kwargs(
+                project=build_protected_schema_replay_project(),
+                adapter=adapter,
+                connection=connection,
+                external_blocked_model_names=test_case.external_blocked_model_names,
+            )
+    finally:
+        adapter.close(connection)
+
+    assert raised.value.code == test_case.expected_action

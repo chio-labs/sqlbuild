@@ -458,6 +458,8 @@ def build_plan_entries(
             ),
             change_result=resolved.change,
             external_sql_reference_resolver=project.external_sql_reference_resolver,
+            protect_full_refresh=key.name not in source_freshness_blocked_model_names
+            and key.name not in external_blocked_model_names,
         )
         if entry.name in source_freshness_blocked_model_names:
             entry = replace(
@@ -676,6 +678,7 @@ def plan_model_from_change(
     cursor_overrides: CursorOverridePair,
     change_result: ChangeDetectionResult,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    protect_full_refresh: bool = True,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
     """Build a model plan entry from a resolved change result."""
 
@@ -710,7 +713,7 @@ def plan_model_from_change(
         if replaces_relation
         else None
     )
-    if full_rebuild_cause is not None and not full_refresh:
+    if full_rebuild_cause is not None and protect_full_refresh and not full_refresh:
         check_full_rebuild_allowed(
             model=model, change_result=change_result, full_rebuild_cause=full_rebuild_cause
         )
