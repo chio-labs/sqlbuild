@@ -32,7 +32,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             columns=100,
             expected_screen_fragments=(
                 "Compiled project.",
-                "Evaluated rules.",
+                "Evaluated rules. (",
+                "s; built-in ",
                 "Connecting to duckdb...",
                 "✓ Warehouse connected  duckdb",
                 "Generated plan.",
