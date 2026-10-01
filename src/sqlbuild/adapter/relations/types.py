@@ -1,6 +1,12 @@
-"""Adapter relation naming contracts."""
+"""Adapter relation naming and inspection contracts."""
 
-from typing import Protocol
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+    from sqlbuild.adapter.relations.models import SchemaColumnListing, SchemaRelationListing
 
 
 class RelationLocation(Protocol):
@@ -10,3 +16,40 @@ class RelationLocation(Protocol):
     schema: str | None
     name: str
     qualified_name: str | None
+
+
+@runtime_checkable
+class SchemaScopedMetadataReader(Protocol):
+    """Adapter able to list a whole schema's relations and columns in one read each."""
+
+    exact_column_inspection_limit: int
+
+    def read_schema_relation_listing(
+        self, *, connection: Any, database: str | None, schema: str
+    ) -> SchemaRelationListing:
+        """Read every relation in one schema."""
+        ...
+
+    def read_schema_column_listing(
+        self, *, connection: Any, database: str | None, schema: str
+    ) -> SchemaColumnListing:
+        """Read every column in one schema."""
+        ...
+
+    def read_relation_columns(
+        self, *, connection: Any, relation: RelationInfo
+    ) -> tuple[ColumnInfo, ...]:
+        """Read one relation's columns."""
+        ...
+
+    def metadata_name_key(self, name: str) -> str:
+        """Return the stored metadata name a logical identifier filter matches."""
+        ...
+
+
+class InspectionCompletion[ResultT](Protocol):
+    """Callback receiving one finished inspection read on the calling thread."""
+
+    def __call__(self, *, index: int, result: ResultT) -> None:
+        """Handle the result of the task at ``index``."""
+        ...
