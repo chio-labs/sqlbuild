@@ -86,7 +86,7 @@ def prepare_incremental_diamond_project(*, tmp_path: Path) -> Path:
 
 
 def change_incremental_diamond_root(*, project_dir: Path) -> None:
-    """Change the root query so every downstream model inherits a full replay."""
+    """Change the root query, which replays fully under its own replay_on_change."""
 
     (project_dir / _DIAMOND_ROOT_PATH).write_text(
         _diamond_root_sql(amount_offset=1), encoding="utf-8"
@@ -94,7 +94,7 @@ def change_incremental_diamond_root(*, project_dir: Path) -> None:
 
 
 def prepare_changed_incremental_diamond_project(*, tmp_path: Path) -> Path:
-    """Build the incremental diamonds, then change the root so the plan cascades."""
+    """Build the incremental diamonds, then change the root query."""
 
     project_dir: Path = prepare_incremental_diamond_project(tmp_path=tmp_path)
     build: subprocess.CompletedProcess[str] = run_sqb(

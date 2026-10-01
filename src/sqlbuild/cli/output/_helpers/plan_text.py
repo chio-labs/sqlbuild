@@ -26,7 +26,6 @@ from sqlbuild.compiler.planner.main.pre_build.pre_build_work_display import (
     format_pre_build_work,
 )
 from sqlbuild.compiler.planner.models import (
-    CascadeResult,
     ColumnRenameHint,
     CursorBounds,
     FunctionPlanEntry,
@@ -72,6 +71,7 @@ _TREE_EXEMPT_CHARS: frozenset[str] = frozenset({" ", "."})
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.FULL_REFRESH,
     PlanReason.QUERY_CHANGED,
+    PlanReason.FUNCTION_CHANGED,
     PlanReason.CONFIG_CHANGED,
     PlanReason.SCHEMA_CHANGED,
     PlanReason.FIRST_RUN,
@@ -81,6 +81,7 @@ _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
 _REASON_GROUP_LABELS: dict[PlanReason, str] = {
     PlanReason.FULL_REFRESH: "Full refresh",
     PlanReason.QUERY_CHANGED: "Query changed",
+    PlanReason.FUNCTION_CHANGED: "Function changed",
     PlanReason.CONFIG_CHANGED: "Config changed",
     PlanReason.SCHEMA_CHANGED: "Schema changed",
     PlanReason.FIRST_RUN: "First run",
@@ -206,10 +207,7 @@ def format_plan(
     )
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
-    cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
-    groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(
-        entries=active, cascade_entries=cascade
-    )
+    groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(entries=active)
 
     lines = _format_changed_functions(
         lines=lines,
@@ -239,25 +237,6 @@ def format_plan(
             lines=lines,
             total_count=len(entries),
             visible_count=len(visible),
-            indent="  ",
-            options=resolved_display_options,
-        )
-
-    if cascade:
-        lines.append("")
-        lines.append(resolved_section_header_style(f"Upstream changed ({len(cascade)})"))
-        entry_c: ModelPlanEntry
-        visible_cascade: Sequence[ModelPlanEntry] = visible_entries(
-            entries=cascade, options=resolved_display_options
-        )
-        for entry_c in visible_cascade:
-            lines = _format_upstream_changed_entry(
-                lines=lines, entry=entry_c, name_column_width=name_column_width
-            )
-        lines = append_overflow_line(
-            lines=lines,
-            total_count=len(cascade),
-            visible_count=len(visible_cascade),
             indent="  ",
             options=resolved_display_options,
         )
@@ -854,38 +833,17 @@ def _collect_normal(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:
     for entry in entries:
         if entry.reason not in (PlanReason.NO_CHANGE, PlanReason.NORMAL_INCREMENTAL):
             continue
-        if entry.cascade is not None:
-            continue
         result.append(entry)
     return result
 
 
-def _collect_upstream_changed(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:
-    """Collect entries where cascade upgraded the effective window beyond own backfill."""
+def _group_by_reason(*, entries: list[ModelPlanEntry]) -> dict[PlanReason, list[ModelPlanEntry]]:
+    """Group entries by reason, excluding normal/no-change entries."""
 
-    result: list[ModelPlanEntry] = []
-    entry: ModelPlanEntry
-    for entry in entries:
-        if entry.cascade is None:
-            continue
-        result.append(entry)
-    return result
-
-
-def _group_by_reason(
-    *,
-    entries: list[ModelPlanEntry],
-    cascade_entries: list[ModelPlanEntry],
-) -> dict[PlanReason, list[ModelPlanEntry]]:
-    """Group entries by reason, excluding normal/no-change and cascade entries."""
-
-    cascade_names: frozenset[str] = frozenset(e.name for e in cascade_entries)
     groups: dict[PlanReason, list[ModelPlanEntry]] = {}
     entry: ModelPlanEntry
     for entry in entries:
         if entry.reason in (PlanReason.NO_CHANGE, PlanReason.NORMAL_INCREMENTAL):
-            continue
-        if entry.name in cascade_names:
             continue
         groups.setdefault(entry.reason, []).append(entry)
     return groups
@@ -957,41 +915,11 @@ def _format_detail_entry(
         show_range=reason != PlanReason.FULL_REFRESH,
     )
     lines = _append_policy_line(lines=lines, entry=entry)
+    if entry.changed_functions:
+        lines.append(f"    cause: function {', '.join(entry.changed_functions)} changed")
     lines = _append_schema_diff(lines=lines, entry=entry)
     lines = _append_config_diff(lines=lines, entry=entry)
     lines = _append_query_diff(lines=lines, entry=entry)
-    return lines
-
-
-def _format_upstream_changed_entry(
-    *, lines: list[str], entry: ModelPlanEntry, name_column_width: int
-) -> list[str]:
-    """Format a per-model entry in the Upstream changed group."""
-
-    cascade: CascadeResult | None = entry.cascade
-    action: str = _cascade_action_text(cascade)
-    if entry.action == PlanAction.CREATE_VIEW:
-        action = "recreate view"
-    elif entry.action == PlanAction.CUSTOM:
-        materialization: str = entry.custom_materialization_name or "custom materialization"
-        action = f"run {materialization}"
-    action_text: str = CliStyle(use_color=True).accent(action)
-    lines.append(
-        _format_name_value_line(
-            name=entry.name,
-            value=action_text,
-            name_column_width=name_column_width,
-            dim_value=False,
-        )
-    )
-    lines = _append_cursor_detail(
-        lines=lines,
-        entry=entry,
-        show_range=cascade is None or cascade.effective_action != BackfillAction.FULL,
-    )
-    if cascade is not None and cascade.root_cause is not None:
-        cause_desc: str = _cascade_cause_description(cascade)
-        lines.append(f"    cause: {cause_desc}")
     return lines
 
 
@@ -1139,59 +1067,6 @@ def _action_text(entry: ModelPlanEntry) -> str:
         suffix = _schema_change_suffix(entry)
         return f"full rebuild, {suffix}" if suffix else "full rebuild"
     return "continue forward"
-
-
-def _cascade_action_text(cascade: CascadeResult | None) -> str:
-    """Action text for an upstream-changed entry."""
-
-    if cascade is None:
-        return ""
-    if cascade.effective_action == BackfillAction.FULL:
-        return "full rebuild"
-    if (
-        cascade.effective_action == BackfillAction.BOUNDED
-        and cascade.effective_duration is not None
-    ):
-        return f"rebuild last {cascade.effective_duration}"
-    return "continue forward"
-
-
-def _cascade_cause_description(cascade: CascadeResult) -> str:
-    """Format the cause line content for an upstream-changed entry."""
-
-    root: str = cascade.root_cause or "unknown"
-    if cascade.root_reason is not None:
-        reason_text: str = _plan_reason_text(cascade.root_reason)
-        if reason_text:
-            return f"{root} ({reason_text})"
-    if cascade.effective_action == BackfillAction.FULL:
-        return f"{root} (full)"
-    if (
-        cascade.effective_action == BackfillAction.BOUNDED
-        and cascade.effective_duration is not None
-    ):
-        return f"{root} ({cascade.effective_duration})"
-    return root
-
-
-def _plan_reason_text(reason: PlanReason) -> str:
-    """Format a plan reason for cascade cause output."""
-
-    if reason == PlanReason.QUERY_CHANGED:
-        return "query changed"
-    if reason == PlanReason.FUNCTION_CHANGED:
-        return "function changed"
-    if reason == PlanReason.CONFIG_CHANGED:
-        return "config changed"
-    if reason == PlanReason.SCHEMA_CHANGED:
-        return "schema changed"
-    if reason == PlanReason.FIRST_RUN:
-        return "first run"
-    if reason == PlanReason.RENAMED:
-        return "renamed"
-    if reason == PlanReason.FULL_REFRESH:
-        return "full refresh"
-    return ""
 
 
 def _schema_change_suffix(entry: ModelPlanEntry) -> str:
@@ -1391,12 +1266,6 @@ def _format_function_entry(
     elif function_entry.reason == PlanReason.FULL_REFRESH:
         lines.append("    reason: full refresh")
     elif function_entry.reason == PlanReason.QUERY_CHANGED:
-        if function_entry.backfill.action != BackfillAction.FORWARD_ONLY:
-            duration: str = function_entry.backfill.duration or "full"
-            policy_value: str = _backfill_value(
-                action=function_entry.backfill.action, duration=duration
-            )
-            lines.append(f"    policy: replay_on_change={policy_value}")
         if function_entry.previous_query_sql is not None:
             style: CliStyle = CliStyle(use_color=True)
             lines.append(style.label("    query diff:"))

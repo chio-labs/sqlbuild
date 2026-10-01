@@ -1683,7 +1683,6 @@ def _assemble_compiled_function(
         runtime_version=function_input.runtime_version,
         entry_point=function_input.entry_point,
         packages=function_input.packages,
-        replay_on_change=function_input.replay_on_change,
         tags=function_input.tags,
     )
 

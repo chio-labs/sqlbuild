@@ -842,38 +842,11 @@ class CursorTypeCheckTestCase:
 
 
 @dataclass(frozen=True)
-class ResolveCascadeTestCase:
-    description: str
-    own_action: BackfillAction
-    own_duration: str | None
-    own_cursor_type: str | None
-    upstream_entries: tuple[tuple[str, BackfillAction, str | None, str | None], ...]
-    expected_cascade: bool
-    local_policy: str | None = None
-    expected_action: BackfillAction | None = None
-    expected_duration: str | None = None
-    expected_root_cause: str | None = None
-    expected_cause_count: int = 0
-
-
-@dataclass(frozen=True)
-class ResolveCascadeRootCauseTestCase:
-    description: str
-    expected_action: BackfillAction
-    expected_root_cause: str
-    expected_root_reason: PlanReason
-    expected_immediate_cause: str
-
-
-@dataclass(frozen=True)
 class DetectFunctionChangeTestCase:
     description: str
     body_sql: str
     existing_function_fingerprints: dict[str, Fingerprint]
-    replay_on_change: str | None
     expected_reason: PlanReason
-    expected_action: BackfillAction
-    expected_duration: str | None = None
     target_schema: str = "main"
 
 

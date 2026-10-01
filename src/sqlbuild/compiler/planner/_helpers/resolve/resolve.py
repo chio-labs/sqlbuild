@@ -77,9 +77,9 @@ def resolve_model_sql(
     backfill: BackfillResult,
     full_refresh: bool,
     cursor_overrides: CursorOverridePair,
-    suppress_runtime_cursor_bounds: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     replaces_relation: bool = False,
+    full_rebuild_cause: str | None = None,
 ) -> str:
     """Resolve all references in a model's query SQL to produce executable SQL."""
 
@@ -100,7 +100,6 @@ def resolve_model_sql(
         start_cursor_override=cursor_overrides.start_cursor_override,
         end_cursor_override=cursor_overrides.end_cursor_override,
         runtime_cursor_producer_names=context.runtime_cursor_producer_names,
-        suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
         context=context,
         replaces_relation=replaces_relation,
     )
@@ -148,14 +147,10 @@ def resolve_model_sql(
     _, has_intrinsics = resolve_cursor_intrinsics(sql=query_sql)
     if has_intrinsics:
         if cursor_bounds is None:
-            if full_refresh:
-                raise PlannerInputError(
-                    f"Model '{model.name}' uses cursor intrinsics, but non-microbatch full "
-                    "refresh has no cursor interval"
-                )
-            raise PlannerInputError(
-                f"Model '{model.name}' uses cursor intrinsics, but cursor bounds could not be "
-                "resolved"
+            raise _unresolved_cursor_bounds_error(
+                model_name=model.name,
+                full_rebuild_cause=full_rebuild_cause
+                or ("--full-refresh" if full_refresh else None),
             )
         query_sql = render_cursor_intrinsic_bounds(
             sql=query_sql, bounds=cursor_bounds, cursor_type=cursor_type, adapter=adapter
@@ -163,6 +158,24 @@ def resolve_model_sql(
 
     assert_no_unresolved_sql_markers(sql=query_sql, context=f"Model '{model.name}' planned SQL")
     return query_sql
+
+
+def _unresolved_cursor_bounds_error(
+    *, model_name: str, full_rebuild_cause: str | None
+) -> PlannerInputError:
+    if full_rebuild_cause is None:
+        return PlannerInputError(
+            f"Model '{model_name}' uses cursor intrinsics, but cursor bounds could not be resolved"
+        )
+    return PlannerInputError(
+        f"Model '{model_name}' was given a FULL backfill ({full_rebuild_cause}), but it uses "
+        "cursor intrinsics and a non-microbatch full rebuild has no cursor interval",
+        help=(
+            "rebuild it with an explicit cursor interval (--start-cursor-ts and "
+            "--end-cursor-ts, or the -int forms), or make it a microbatch model so a full "
+            "rebuild can run batch by batch"
+        ),
+    )
 
 
 def resolve_function_sql(
@@ -204,7 +217,6 @@ def _compute_model_cursor_bounds(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     runtime_cursor_producer_names: frozenset[str],
-    suppress_runtime_cursor_bounds: bool,
     context: ModelPlanContext,
     replaces_relation: bool = False,
 ) -> CursorBounds | None:
@@ -246,7 +258,6 @@ def _compute_model_cursor_bounds(
     )
     if (
         not full_refresh
-        and not suppress_runtime_cursor_bounds
         and not runtime_owned
         and cursor_snapshot is not None
         and not cursor_snapshot.watermarks_available
@@ -258,7 +269,7 @@ def _compute_model_cursor_bounds(
             code="S302",
         )
 
-    if full_refresh or suppress_runtime_cursor_bounds:
+    if full_refresh:
         return None
 
     if runtime_owned:

@@ -10,8 +10,6 @@ from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
-    CascadeCause,
-    CascadeResult,
     ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
@@ -553,90 +551,27 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
         ),
         FormatPlanTestCase(
-            description="upstream changed shows cascade cause",
+            description="direct caller of a changed function shows function changed cause",
             plan_output=build_plan_output(
                 model_entries=(
                     build_model_entry(
-                        name="fact_daily_revenue",
+                        name="hourly_order_activity",
                         action=PlanAction.INCREMENTAL_DELETE_INSERT,
-                        reason=PlanReason.NORMAL_INCREMENTAL,
+                        reason=PlanReason.FUNCTION_CHANGED,
                         materialization_type=MaterializationType.INCREMENTAL,
                         incremental_strategy="delete_insert",
-                        cursor_column="event_time",
-                        cursor_type="timestamp",
                         backfill_action=BackfillAction.FORWARD_ONLY,
-                        cascade=CascadeResult(
-                            effective_action=BackfillAction.BOUNDED,
-                            effective_duration="90d",
-                            root_cause="fact_orders",
-                            causes=(
-                                CascadeCause(
-                                    model_name="fact_orders",
-                                    effective_action=BackfillAction.BOUNDED,
-                                    effective_duration="90d",
-                                ),
-                            ),
-                        ),
+                        changed_functions=("is_completed_order",),
                     ),
                 ),
             ),
             expected_fragments=(
-                "Upstream changed (1)",
-                "fact_daily_revenue",
-                "rebuild last 90d",
-                "cause  fact_orders (90d)",
+                "Function changed (1)",
+                "hourly_order_activity",
+                "continue forward",
+                "cause  function is_completed_order changed",
             ),
-            unexpected_fragments=("Normal",),
-        ),
-        FormatPlanTestCase(
-            description="upstream changed with full shows full in cause",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="dim_summary",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.NO_CHANGE,
-                        cascade=CascadeResult(
-                            effective_action=BackfillAction.FULL,
-                            effective_duration=None,
-                            root_cause="fact_orders",
-                            causes=(
-                                CascadeCause(
-                                    model_name="fact_orders",
-                                    effective_action=BackfillAction.FULL,
-                                    effective_duration=None,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            expected_fragments=(
-                "Upstream changed (1)",
-                "dim_summary",
-                "full rebuild",
-                "cause  fact_orders (full)",
-            ),
-        ),
-        FormatPlanTestCase(
-            description="upstream changed view shows recreate action",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="stg_orders",
-                        action=PlanAction.CREATE_VIEW,
-                        reason=PlanReason.NO_CHANGE,
-                        materialization_type=MaterializationType.VIEW,
-                        cascade=CascadeResult(
-                            effective_action=BackfillAction.FULL,
-                            effective_duration=None,
-                            root_cause="raw_orders",
-                        ),
-                    ),
-                ),
-            ),
-            expected_fragments=("stg_orders", "recreate view"),
-            unexpected_fragments=("full rebuild",),
+            unexpected_fragments=("Upstream changed", "Normal"),
         ),
         FormatPlanTestCase(
             description="seeds section shows seed names",
@@ -848,7 +783,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
         ),
         FormatPlanTestCase(
-            description="function query change shows diff and policy",
+            description="function query change shows diff without replay policy",
             plan_output=build_plan_output(
                 model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
                 function_entries=(
@@ -856,7 +791,6 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                         name="is_completed_order",
                         language=FunctionLanguage.SQL,
                         reason=PlanReason.QUERY_CHANGED,
-                        backfill_action=BackfillAction.FULL,
                         previous_query_sql="returns=BOOLEAN\nbody=\norder_status = 'completed'",
                     ),
                 ),
@@ -865,45 +799,9 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Changed functions (1)",
                 "is_completed_order",
                 "sql udf",
-                "policy  replay_on_change=full",
                 "query diff:",
                 "--- previous",
                 "+++ current",
-            ),
-        ),
-        FormatPlanTestCase(
-            description="upstream changed prefers root function changed cause",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="daily_activity_rollup",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.NO_CHANGE,
-                        cascade=CascadeResult(
-                            effective_action=BackfillAction.FULL,
-                            effective_duration=None,
-                            root_cause="is_completed_order",
-                            root_reason=PlanReason.FUNCTION_CHANGED,
-                            causes=(
-                                CascadeCause(
-                                    model_name="hourly_order_activity",
-                                    effective_action=BackfillAction.FULL,
-                                    effective_duration=None,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            expected_fragments=(
-                "Upstream changed (1)",
-                "daily_activity_rollup",
-                "full rebuild",
-                "cause  is_completed_order (function changed)",
-            ),
-            unexpected_fragments=(
-                "cause  hourly_order_activity",
-                "cause  is_completed_order (full)",
             ),
         ),
         FormatPlanTestCase(
@@ -1132,7 +1030,6 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                     build_function_entry(
                         name="normalize_email",
                         reason=PlanReason.QUERY_CHANGED,
-                        backfill_action=BackfillAction.FULL,
                         previous_query_sql="returns=TEXT\nbody=old_email",
                     ),
                 ),

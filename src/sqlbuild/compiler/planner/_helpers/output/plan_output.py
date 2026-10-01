@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -43,7 +41,6 @@ from sqlbuild.compiler.planner.exceptions import (
 )
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
-    BackfillResult,
     FunctionChangeResult,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -367,7 +364,6 @@ def _build_function_entries(
                     else None
                 ),
                 reason=function_change.reason,
-                backfill=function_change.backfill,
             )
         )
     return entries
@@ -381,11 +377,10 @@ def plan_function(
     fingerprint_query_sql: str,
     previous_query_sql: str | None = None,
     reason: PlanReason = PlanReason.NO_CHANGE,
-    backfill: BackfillResult | None = None,
 ) -> FunctionPlanEntry:
     """Build one canonical function entry from resolved relation inputs."""
 
-    entry: FunctionPlanEntry = FunctionPlanEntry(
+    return FunctionPlanEntry(
         key=function.key,
         name=function.name,
         relative_path=function.relative_path,
@@ -413,7 +408,6 @@ def plan_function(
         previous_query_sql=previous_query_sql,
         reason=reason,
     )
-    return entry if backfill is None else replace(entry, backfill=backfill)
 
 
 def build_selected_audit_entries(

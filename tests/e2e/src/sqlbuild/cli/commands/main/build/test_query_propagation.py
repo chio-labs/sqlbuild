@@ -150,7 +150,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         ),
         QueryPropagationBuildE2ETestCase(
-            description="changed SQL UDF propagates full rebuild to downstream incremental model",
+            description="changed SQL UDF applies the direct caller's own full replay",
             repo_files={
                 "sqlbuild_project.toml": dedent(
                     """
@@ -189,7 +189,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 FUNCTION (
                   arguments (amount_cents INTEGER),
                   returns BOOLEAN,
-                  replay_on_change full,
                 );
 
                 amount_cents > 100
@@ -206,7 +205,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   cursor_inputs (
                     raw_orders id,
                   ),
-                  unique_key order_id
+                  unique_key order_id,
+                  replay_on_change full
                 );
 
                 SELECT
@@ -224,12 +224,12 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             before_text="amount_cents > 100",
             after_text="amount_cents >= 100",
             expected_exit_code=0,
-            expected_reasons={"fact_orders": "upstream_changed"},
+            expected_reasons={"fact_orders": "function_changed"},
             expected_actions={"fact_orders": "create_table"},
             expected_fingerprint_models=("fact_orders", "is_high_value_order"),
         ),
         QueryPropagationBuildE2ETestCase(
-            description="bounded query change propagates downstream",
+            description="bounded query change does not propagate downstream",
             repo_files={
                 "sqlbuild_project.toml": dedent(
                     """
@@ -347,7 +347,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_exit_code=0,
             expected_reasons={
                 "hourly_order_activity": "query_changed",
-                "daily_activity_rollup": "upstream_changed",
+                "daily_activity_rollup": "normal_incremental",
             },
             expected_fingerprint_models=(
                 "daily_activity_rollup",

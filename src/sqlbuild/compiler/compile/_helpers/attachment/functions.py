@@ -255,13 +255,6 @@ def build_sql_function_inputs(
                 fingerprint_schema=function_schema,
                 fingerprint_logical_database=function_logical_database,
                 fingerprint_logical_schema=function_logical_schema,
-                replay_on_change=_parse_optional_function_header(
-                    header_values=header_values,
-                    key="replay_on_change",
-                    effective_vars=effective_vars,
-                    relative_path=function_file.relative_path,
-                    language="SQL",
-                ),
                 tags=_parse_function_tags(
                     header_values=header_values,
                     relative_path=function_file.relative_path,
@@ -442,13 +435,6 @@ def _build_python_function_input(
         runtime_version=runtime_version,
         entry_point=entry_point,
         packages=packages,
-        replay_on_change=_parse_optional_function_header(
-            header_values=header_values,
-            key="replay_on_change",
-            effective_vars=effective_vars,
-            relative_path=python_function_file.relative_path,
-            language="Python",
-        ),
         tags=_parse_function_tags(
             header_values=header_values,
             relative_path=python_function_file.relative_path,
@@ -584,26 +570,6 @@ def _parse_required_string_header(
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise CompileInputError(f"{language} function file {relative_path} must declare {key}")
     return raw_value.strip()
-
-
-def _parse_optional_function_header(
-    *,
-    header_values: dict[str, object],
-    key: str,
-    effective_vars: dict[str, object],
-    relative_path: Path,
-    language: str,
-) -> str | None:
-    raw_value: object | None = header_values.get(key)
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise CompileInputError(f"{language} function file {relative_path} {key} must be a string")
-    return _expand_function_header_value(
-        raw_value=raw_value.strip(),
-        effective_vars=effective_vars,
-        context_label=f"{language} function {relative_path} {key}",
-    )
 
 
 def _parse_python_packages(*, raw_packages: object | None, relative_path: Path) -> tuple[str, ...]:

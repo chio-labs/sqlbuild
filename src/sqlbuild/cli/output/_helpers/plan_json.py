@@ -13,7 +13,6 @@ from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.compiler.migrations.types import MigrationDecision
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
-    CascadeResult,
     FunctionPlanEntry,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
@@ -26,7 +25,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     SourceLoadPlanEntry,
 )
-from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanReason
+from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
@@ -112,15 +111,12 @@ def format_plan_json(
 def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
     """Serialize one ModelPlanEntry for plan JSON output."""
 
-    effective_reason: PlanReason = (
-        PlanReason.UPSTREAM_CHANGED if entry.cascade is not None else entry.reason
-    )
     model: dict[str, object] = {
         "name": entry.name,
         "relative_path": str(entry.relative_path),
         "materialization_type": entry.materialization_type.value,
         "action": entry.action.value,
-        "reason": effective_reason.value,
+        "reason": entry.reason.value,
         "expected_version_hash": entry.fingerprint_version_hash,
         "built_version_hash": entry.previous_version_hash,
         "built_version_present": entry.previous_version_hash is not None,
@@ -191,8 +187,8 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         "duration": entry.backfill.duration,
     }
 
-    if entry.cascade is not None:
-        model["cascade"] = _serialize_cascade(entry.cascade)
+    if entry.changed_functions:
+        model["changed_functions"] = list(entry.changed_functions)
 
     if entry.destination.qualified_name is not None:
         model["qualified_name"] = entry.destination.qualified_name
@@ -246,18 +242,6 @@ def _model_identity_status(entry: ModelPlanEntry) -> str:
     if entry.previous_version_hash == entry.fingerprint_version_hash:
         return "current"
     return "stale"
-
-
-def _serialize_cascade(cascade: CascadeResult) -> dict[str, object]:
-    """Serialize a CascadeResult."""
-
-    result: dict[str, object] = {
-        "effective_action": cascade.effective_action.value,
-        "effective_duration": cascade.effective_duration,
-        "root_cause": cascade.root_cause,
-        "cause_count": len(cascade.causes),
-    }
-    return result
 
 
 def _serialize_seed_entry(entry: SeedPlanEntry) -> dict[str, object]:

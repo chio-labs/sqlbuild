@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (
+    BackfillResult,
     ChangeDetectionResult,
     PlannerChangeResults,
     PlannerScope,
@@ -34,6 +35,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
+    build_function_caller_metadata_case,
     build_metadata_json_with_audit_gate,
     build_model_from_metadata_test_case,
     build_model_from_test_case,
@@ -43,6 +45,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers imp
     build_snapshot_from_test_case,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
+    DetectFunctionCallerChangeTestCase,
     DetectModelChangesTestCase,
     DetectModelMetadataTestCase,
     DroppedRelationPlanActionTestCase,
@@ -379,7 +382,7 @@ def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_fir
     "test_case",
     [
         DetectModelMetadataTestCase(
-            description="detects config change when dependent function hash changes",
+            description="detects function change when dependent function hash changes",
             config_values={},
             schema_columns=(),
             deps=("is_large_order",),
@@ -389,7 +392,7 @@ def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_fir
                 config_values={},
                 local_function_hashes={"is_large_order": "old"},
             ),
-            expected_change_kind=ChangeKind.CONFIG_CHANGED,
+            expected_change_kind=ChangeKind.FUNCTION_CHANGED,
             expected_metadata_fragments=('"local_function_hashes":{"is_large_order":"new"}',),
         ),
         DetectModelMetadataTestCase(
@@ -473,6 +476,96 @@ def test_given_model_identity_metadata_when_detecting_changes_then_uses_aligned_
 @pytest.mark.parametrize(
     "test_case",
     [
+        DetectFunctionCallerChangeTestCase(
+            description="changed function continues forward by default",
+            metadata_case=build_function_caller_metadata_case(
+                config_values={},
+                function_local_hashes={"is_large_order": "new"},
+                previous_function_hashes={"is_large_order": "old"},
+                previous_config_values={},
+            ),
+            query_change_tracking=True,
+            expected_changed_functions=("is_large_order",),
+            expected_config_changed=False,
+            expected_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+        DetectFunctionCallerChangeTestCase(
+            description="changed function applies the caller's own bounded replay",
+            metadata_case=build_function_caller_metadata_case(
+                config_values={"replay_on_change": "bounded-7d"},
+                function_local_hashes={"is_large_order": "new", "normalize_status": "same"},
+                previous_function_hashes={"is_large_order": "old", "normalize_status": "same"},
+                previous_config_values={"replay_on_change": "bounded-7d"},
+            ),
+            query_change_tracking=True,
+            expected_changed_functions=("is_large_order",),
+            expected_config_changed=False,
+            expected_backfill=BackfillResult(action=BackfillAction.BOUNDED, duration="7d"),
+        ),
+        DetectFunctionCallerChangeTestCase(
+            description="function change alongside a config change reports both",
+            metadata_case=build_function_caller_metadata_case(
+                config_values={"replay_on_change": "full", "lookback": "1d"},
+                function_local_hashes={"is_large_order": "new"},
+                previous_function_hashes={"is_large_order": "old"},
+                previous_config_values={"replay_on_change": "full"},
+            ),
+            query_change_tracking=True,
+            expected_changed_functions=("is_large_order",),
+            expected_config_changed=True,
+            expected_backfill=BackfillResult(action=BackfillAction.FULL),
+        ),
+        DetectFunctionCallerChangeTestCase(
+            description="newly called function is not a function change",
+            metadata_case=build_function_caller_metadata_case(
+                config_values={"replay_on_change": "full"},
+                function_local_hashes={"is_large_order": "new"},
+                previous_function_hashes={},
+                previous_config_values={"replay_on_change": "full"},
+            ),
+            query_change_tracking=True,
+            expected_changed_functions=(),
+            expected_config_changed=True,
+            expected_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+        DetectFunctionCallerChangeTestCase(
+            description="disabled query change tracking keeps a function change as config only",
+            metadata_case=build_function_caller_metadata_case(
+                config_values={"replay_on_change": "full"},
+                function_local_hashes={"is_large_order": "new"},
+                previous_function_hashes={"is_large_order": "old"},
+                previous_config_values={"replay_on_change": "full"},
+            ),
+            query_change_tracking=False,
+            expected_changed_functions=(),
+            expected_config_changed=True,
+            expected_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_called_function_change_when_detecting_caller_changes_then_caller_policy_decides(
+    test_case: DetectFunctionCallerChangeTestCase,
+) -> None:
+    result: ChangeDetectionResult = detect_model_changes(
+        model=build_model_from_metadata_test_case(test_case.metadata_case),
+        snapshot=build_snapshot_for_metadata_test_case(test_case.metadata_case),
+        sql_analysis_enabled=False,
+        query_change_tracking=test_case.query_change_tracking,
+        full_refresh=False,
+        function_local_hashes=test_case.metadata_case.function_local_hashes,
+    )
+
+    assert (result.changed_functions, result.config_changed, result.backfill) == (
+        test_case.expected_changed_functions,
+        test_case.expected_config_changed,
+        test_case.expected_backfill,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DetectModelMetadataTestCase(
             description="direct project function hash change marks dependent model changed",
             config_values={},
@@ -480,7 +573,7 @@ def test_given_model_identity_metadata_when_detecting_changes_then_uses_aligned_
             deps=("is_large_order",),
             function_local_hashes={"is_large_order": "old"},
             previous_metadata_json="{}",
-            expected_change_kind=ChangeKind.CONFIG_CHANGED,
+            expected_change_kind=ChangeKind.FUNCTION_CHANGED,
         )
     ],
     ids=lambda case: case.description,

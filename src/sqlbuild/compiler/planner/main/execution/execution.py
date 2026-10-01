@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.planner._helpers.changes.actions import resolve_model_actions
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
     check_selected_scope_buildability,
@@ -29,7 +30,6 @@ from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_s
 from sqlbuild.compiler.planner._helpers.planning.warehouse_state import (
     gather_planner_warehouse_state,
 )
-from sqlbuild.compiler.planner._helpers.pruning.cascade import resolve_cascades
 from sqlbuild.compiler.planner._helpers.warehouse.source_freshness import (
     build_planner_source_freshness_result,
 )
@@ -118,7 +118,7 @@ def build_execution_plan(
             overrides=overrides,
             policies=policies,
         )
-        resolved_actions: PlannerResolvedActions = resolve_cascades(
+        resolved_actions: PlannerResolvedActions = resolve_model_actions(
             scope=scopes.inspection_scope,
             changes=changes,
         )

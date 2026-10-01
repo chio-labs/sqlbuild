@@ -40,6 +40,7 @@ class DiamondPlanE2ETestCase:
     description: str
     expected_fragments: tuple[str, ...]
     expected_max_lines_per_model: int
+    unexpected_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
