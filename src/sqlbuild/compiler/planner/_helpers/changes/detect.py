@@ -19,7 +19,9 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.changes.metadata import (
     changed_local_function_names,
     non_function_identity_metadata_payload,
+    recorded_declared_columns_hash,
     version_identity_metadata_payload,
+    with_declared_columns_hash,
     with_origin_cursor_input_names,
 )
 from sqlbuild.compiler.planner._helpers.changes.policy import (
@@ -33,6 +35,7 @@ from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
 )
+from sqlbuild.compiler.planner._helpers.identity.model_metadata import declared_columns_hash
 from sqlbuild.compiler.planner.constants import EMPTY_FINGERPRINT_METADATA_JSON
 from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
     build_function_local_hashes,
@@ -157,10 +160,15 @@ def detect_model_changes(
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
-    metadata_json: str = expected_metadata_json or build_model_version_identity_metadata_json(
-        model=model,
-        function_local_hashes=function_local_hashes,
-        hook_version_hashes=hook_version_hashes,
+    current_columns_hash: str = declared_columns_hash(model=model)
+    metadata_json: str = with_declared_columns_hash(
+        metadata_json=expected_metadata_json
+        or build_model_version_identity_metadata_json(
+            model=model,
+            function_local_hashes=function_local_hashes,
+            hook_version_hashes=hook_version_hashes,
+        ),
+        declared_columns_hash=current_columns_hash,
     )
 
     if full_refresh:
@@ -297,7 +305,13 @@ def detect_model_changes(
             ),
             dialect=snapshot.column_dialect,
         )
-        if schema_findings and (query_changed or changed_functions or config_changed):
+        recorded_columns_hash: str | None = recorded_declared_columns_hash(recorded_metadata_json)
+        declared_columns_changed: bool = (
+            recorded_columns_hash is not None and recorded_columns_hash != current_columns_hash
+        )
+        if schema_findings and (
+            query_changed or changed_functions or config_changed or declared_columns_changed
+        ):
             schema_backfill = resolve_replay_on_change(
                 replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
             )

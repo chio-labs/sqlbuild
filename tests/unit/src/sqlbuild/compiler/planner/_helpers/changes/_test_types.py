@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
@@ -28,6 +28,7 @@ class DetectModelChangesTestCase:
     expected_recorded_build_relation_missing: bool = False
     renamed_by_migration: bool = False
     schema_type_enforcement: bool | None = None
+    fingerprint_extra_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -104,3 +105,10 @@ class OriginReferenceNamesTestCase:
     recorded_query_sql: str
     renames: tuple[ReferenceRename, ...]
     expected_mapping: dict[str, str] | None
+
+
+@dataclass(frozen=True)
+class DeclaredColumnsMetadataTestCase:
+    description: str
+    metadata_json: str
+    expected_recorded_hash: str | None
