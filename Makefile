@@ -94,6 +94,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_validation_failures.py
 
 E2E_DUCKDB_BUILD_INCREMENTAL_PATHS := \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/own_change_replay \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_append_cursor_build.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_capped_microbatch_build.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_concurrent_microbatch_build.py \

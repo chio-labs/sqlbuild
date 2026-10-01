@@ -1,0 +1,309 @@
+"""Project builders for own-change replay e2e tests."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    execute_duckdb,
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+)
+
+DATABASE_FILE: str = "warehouse.duckdb"
+FIRST_DAY: str = "2026-09-01"
+_PROJECT_TOML: str = (
+    'name = "own_change_replay"\nadapter = "duckdb"\n\n'
+    f'[connection]\ndatabase = "{DATABASE_FILE}"\n'
+)
+_EVENTS_SEED_YML: str = (
+    "seeds:\n"
+    "- name: events\n"
+    "  columns:\n"
+    "  - name: id\n"
+    "    type: INTEGER\n"
+    "  - name: event_date\n"
+    "    type: DATE\n"
+)
+_EVENTS_CSV: str = "id,event_date\n1,2026-09-01\n2,2026-09-02\n3,2026-09-03\n"
+_UPSTREAM_SQL: str = (
+    "MODEL (\n  materialized table,\n);\n\n"
+    "SELECT\n  id,\n  CAST(event_date AS DATE) AS event_date\n"
+    'FROM __seed("events")\n'
+)
+_DOWNSTREAM_MB_SQL: str = (
+    "MODEL (\n"
+    "  materialized incremental,\n"
+    "  incremental_strategy delete_insert,\n"
+    "  cursor event_date,\n"
+    "  cursor_type timestamp,\n"
+    "  cursor_grain day,\n"
+    "  cursor_inputs (\n"
+    "    upstream_v (\n"
+    "      column event_date,\n"
+    "      roles [filter, watermark],\n"
+    "    ),\n"
+    "  ),\n"
+    "  incremental_mode microbatch,\n"
+    "  microbatch_strategy watermark,\n"
+    "  batch_size 1d,\n"
+    "  cursor_watermark_mode all,\n"
+    "  lookback 1d,\n"
+    "  full_refresh false,\n"
+    '  cursor_start "2026-09-01",\n'
+    ");\n\n"
+    'SELECT\n  id,\n  event_date\nFROM __ref("upstream_v")\n'
+)
+_DOWNSTREAM_MERGE_SQL: str = (
+    "MODEL (\n"
+    "  materialized incremental,\n"
+    "  incremental_strategy merge,\n"
+    "  unique_key [id],\n"
+    "  cursor event_date,\n"
+    "  cursor_type timestamp,\n"
+    "  cursor_grain day,\n"
+    "  lookback 1d,\n"
+    "  cursor_inputs (\n"
+    "    upstream_v event_date,\n"
+    "  ),\n"
+    "{extra_config}"
+    ");\n\n"
+    'SELECT\n  id,\n  event_date\nFROM __ref("upstream_v")\n'
+    "WHERE\n  event_date >= __cursor_start()::DATE\n"
+)
+_ADJUST_FUNCTION_PATH: str = "functions/sql/udf__adjust_amount.sql"
+
+
+def _upstream_view_sql(*, upstream: str) -> str:
+    return (
+        "MODEL (\n  materialized view,\n);\n\n"
+        f'SELECT\n  id,\n  event_date\nFROM __ref("{upstream}")\n'
+    )
+
+
+def build_event_project(*, tmp_path: Path, extra_files: dict[str, str]) -> Path:
+    """Write and build the event chain of table, view and microbatch plus any extra files."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "seeds/seeds.yml": _EVENTS_SEED_YML,
+        "seeds/events.csv": _EVENTS_CSV,
+        "models/upstream.sql": _UPSTREAM_SQL,
+        "models/upstream_v.sql": _upstream_view_sql(upstream="upstream"),
+        "models/downstream_mb.sql": _DOWNSTREAM_MB_SQL,
+        **extra_files,
+    }
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="own_change_replay", repo_files=files
+    )
+    _build_ok(project_dir=project_dir)
+    return project_dir
+
+
+def merge_downstream_files(*, extra_config: str) -> dict[str, str]:
+    """Return a merge model whose SQL reads its interval through cursor intrinsics."""
+
+    return {"models/downstream.sql": _DOWNSTREAM_MERGE_SQL.format(extra_config=extra_config)}
+
+
+def mark_first_day(*, project_dir: Path, relations: tuple[str, ...]) -> None:
+    """Offset ids of the first, out-of-window day so a replay of that day is detectable."""
+
+    relation: str
+    for relation in relations:
+        execute_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=f"UPDATE main.{relation} SET id = id + 100 WHERE event_date = DATE '{FIRST_DAY}'",
+        )
+
+
+def insert_table_between_upstream_and_view(*, project_dir: Path) -> None:
+    """Add a new table between the upstream table and its view."""
+
+    (project_dir / "models/upstream_new.sql").write_text(
+        "MODEL (\n  materialized table,\n);\n\n"
+        'SELECT\n  id,\n  event_date\nFROM __ref("upstream")\n',
+        encoding="utf-8",
+    )
+    _write_upstream_view(project_dir=project_dir, upstream="upstream_new")
+
+
+def rename_upstream_with_migrate_from(*, project_dir: Path, extra_sql: str) -> None:
+    """Rename the upstream table by hand, declaring migrate_from, optionally changing its SQL."""
+
+    (project_dir / "models/upstream.sql").unlink()
+    (project_dir / "models/upstream_renamed.sql").write_text(
+        _UPSTREAM_SQL.replace(
+            "  materialized table,\n", "  materialized table,\n  migrate_from upstream,\n"
+        )
+        + extra_sql,
+        encoding="utf-8",
+    )
+    _write_upstream_view(project_dir=project_dir, upstream="upstream_renamed")
+
+
+def rename_upstream_with_cli(*, project_dir: Path, extra_sql: str) -> None:
+    """Rename the upstream table with sqb rename, then append SQL to the renamed model."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "rename", "model:upstream", "upstream_renamed"),
+        project_dir=project_dir,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    renamed_path: Path = project_dir / "models/upstream_renamed.sql"
+    renamed_path.write_text(renamed_path.read_text(encoding="utf-8") + extra_sql, encoding="utf-8")
+
+
+def _write_upstream_view(*, project_dir: Path, upstream: str) -> None:
+    (project_dir / "models/upstream_v.sql").write_text(
+        _upstream_view_sql(upstream=upstream), encoding="utf-8"
+    )
+
+
+def build_function_project(*, tmp_path: Path, caller_config: str) -> Path:
+    """Write and build a UDF called by an incremental model that feeds another incremental."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "seeds/seeds.yml": (
+            "seeds:\n"
+            "- name: orders\n"
+            "  columns:\n"
+            "  - name: id\n"
+            "    type: INTEGER\n"
+            "  - name: ordered_at\n"
+            "    type: DATE\n"
+            "  - name: amount\n"
+            "    type: INTEGER\n"
+        ),
+        "seeds/orders.csv": (
+            "id,ordered_at,amount\n1,2026-09-01,10\n2,2026-09-02,20\n3,2026-09-03,30\n"
+        ),
+        _ADJUST_FUNCTION_PATH: (
+            "FUNCTION (\n  arguments (amount INTEGER),\n  returns INTEGER,\n);\n\namount + 1\n"
+        ),
+        "models/order_amounts.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy merge,\n"
+            "  unique_key [id],\n"
+            "  cursor ordered_at,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_inputs (\n    orders ordered_at,\n  ),\n"
+            f"{caller_config}"
+            ");\n\n"
+            "SELECT\n  id,\n  CAST(ordered_at AS DATE) AS ordered_at,\n"
+            '  __udf("udf__adjust_amount")(amount) AS adjusted_amount\n'
+            'FROM __seed("orders")\n'
+        ),
+        "models/order_totals.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy merge,\n"
+            "  unique_key [id],\n"
+            "  cursor ordered_at,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_inputs (\n    order_amounts ordered_at,\n  ),\n"
+            ");\n\n"
+            "SELECT\n  id,\n  ordered_at,\n  adjusted_amount * 2 AS doubled_amount\n"
+            'FROM __ref("order_amounts")\n'
+        ),
+    }
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="function_caller_replay", repo_files=files
+    )
+    _build_ok(project_dir=project_dir)
+    (project_dir / _ADJUST_FUNCTION_PATH).write_text(
+        (project_dir / _ADJUST_FUNCTION_PATH)
+        .read_text(encoding="utf-8")
+        .replace("amount + 1", "amount + 100"),
+        encoding="utf-8",
+    )
+    return project_dir
+
+
+def plan(*, project_dir: Path, args: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
+    """Run sqb plan without colour."""
+
+    return run_sqb(command=("--no-color", "plan", *args), project_dir=project_dir)
+
+
+def plan_models(*, project_dir: Path) -> dict[str, dict[str, Any]]:
+    """Return plan JSON model entries keyed by model name."""
+
+    result: subprocess.CompletedProcess[str] = plan(project_dir=project_dir, args=("--json",))
+    assert result.returncode == 0, result.stdout + result.stderr
+    return {str(model["name"]): model for model in json.loads(result.stdout)["models"]}
+
+
+def build(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run sqb build without colour."""
+
+    return run_sqb(command=("--no-color", "build"), project_dir=project_dir)
+
+
+def _build_ok(*, project_dir: Path) -> None:
+    result: subprocess.CompletedProcess[str] = build(project_dir=project_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def relation_rows(*, project_dir: Path, relation: str) -> list[tuple[Any, ...]]:
+    """Return every row of a relation ordered by its first column."""
+
+    return query_duckdb(
+        db_path=project_dir / DATABASE_FILE, sql=f"SELECT * FROM main.{relation} ORDER BY 1"
+    )
+
+
+def relation_types(*, project_dir: Path, name: str) -> list[str]:
+    """Return the information-schema table types of a main-schema relation name."""
+
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / DATABASE_FILE,
+        sql=(
+            "SELECT table_type FROM information_schema.tables "
+            f"WHERE table_schema = 'main' AND table_name = '{name}'"
+        ),
+    )
+    return [str(row[0]) for row in rows]
+
+
+def build_and_assert_rows(
+    *, project_dir: Path, expected_rows: dict[str, list[tuple[Any, ...]]]
+) -> None:
+    """Build the project and compare every listed relation's rows."""
+
+    result: subprocess.CompletedProcess[str] = build(project_dir=project_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert {
+        relation: relation_rows(project_dir=project_dir, relation=relation)
+        for relation in expected_rows
+    } == expected_rows
+
+
+def assert_plan_text(
+    *, project_dir: Path, expected: tuple[str, ...], unexpected: tuple[str, ...]
+) -> None:
+    """Plan the project and check the text output for expected and unexpected fragments."""
+
+    result: subprocess.CompletedProcess[str] = plan(project_dir=project_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert all(fragment in result.stdout for fragment in expected), result.stdout
+    assert not any(fragment in result.stdout for fragment in unexpected), result.stdout
+
+
+def assert_plan_fails(
+    *, project_dir: Path, args: tuple[str, ...], expected: tuple[str, ...]
+) -> None:
+    """Plan the project, expect failure, and check the output for expected fragments."""
+
+    result: subprocess.CompletedProcess[str] = plan(project_dir=project_dir, args=args)
+    output: str = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert all(fragment in output for fragment in expected), output
