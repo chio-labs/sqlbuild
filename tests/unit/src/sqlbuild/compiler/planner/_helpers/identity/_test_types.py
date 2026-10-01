@@ -15,3 +15,12 @@ class MergeRecomputedModelChangesTestCase:
     expected_change_kind: ChangeKind
     expected_backfill_action: BackfillAction
     expected_version_hash: str | None
+
+
+@dataclass(frozen=True)
+class DefinitionHashFailureTestCase:
+    """One untokenizable definition whose planning error must name its resource."""
+
+    description: str
+    expected_message: str
+    expected_code: str

@@ -13,3 +13,7 @@ class FingerprintInputError(ValueError):
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
+
+
+class QueryFingerprintError(ValueError):
+    """Raised when SQL cannot be tokenized into a change fingerprint."""

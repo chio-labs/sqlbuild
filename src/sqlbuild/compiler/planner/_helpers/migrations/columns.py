@@ -196,7 +196,7 @@ def _candidate(
     }
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
     changed: bool = fingerprint is not None and fingerprint.definition_hash != compute_query_hash(
-        model.query_sql
+        query_sql=model.query_sql, dialect=snapshot.column_dialect
     )
     if not warehouse or (not declared and not changed):
         return None
@@ -441,7 +441,9 @@ def _overlay_snapshot(
             fingerprints[candidate.model.name] = replace(
                 candidate.fingerprint,
                 definition=candidate.model.query_sql,
-                definition_hash=compute_query_hash(candidate.model.query_sql),
+                definition_hash=compute_query_hash(
+                    query_sql=candidate.model.query_sql, dialect=snapshot.column_dialect
+                ),
             )
     return replace(
         snapshot,

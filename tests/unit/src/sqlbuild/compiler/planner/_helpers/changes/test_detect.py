@@ -54,7 +54,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
 )
 
 _QUERY_SQL: str = "SELECT id, name FROM orders"
-_MATCHING_HASH: str = compute_query_hash(_QUERY_SQL)
+_MATCHING_HASH: str = compute_query_hash(query_sql=_QUERY_SQL, dialect=None)
 _DIFFERENT_HASH: str = "completely_different_hash"
 
 
@@ -697,7 +697,8 @@ def test_given_direct_project_function_hash_change_when_detecting_changes_then_m
                     target_name="orders",
                     run_id="run_001",
                     definition_hash=compute_query_hash(
-                        "SELECT is_large_order(amount) AS large_order FROM orders"
+                        query_sql="SELECT is_large_order(amount) AS large_order FROM orders",
+                        dialect=None,
                     ),
                     schema_fingerprint="schema_a",
                     definition="SELECT is_large_order(amount) AS large_order FROM orders",
@@ -765,7 +766,7 @@ def test_given_renamed_model_when_detecting_changes_then_reports_rename_and_own_
     handover: Fingerprint = replace(
         snapshot.fingerprints.models["orders"],
         definition=test_case.previous_definition,
-        definition_hash=compute_query_hash(test_case.previous_definition),
+        definition_hash=compute_query_hash(query_sql=test_case.previous_definition, dialect=None),
     )
 
     result: ChangeDetectionResult = detect_model_changes(

@@ -70,10 +70,12 @@ def test_given_function_fingerprint_when_detecting_change_then_returns_reason(
         target_schema=test_case.target_schema,
     )
     reason: PlanReason = detect_function_change(
+        function=function,
         fingerprint_sql=build_compiled_function_fingerprint_sql(function),
         fingerprint=test_case.existing_function_fingerprints.get(function.name),
         query_change_tracking=True,
         full_refresh=False,
+        dialect=None,
     )
 
     assert reason == test_case.expected_reason

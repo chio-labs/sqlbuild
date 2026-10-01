@@ -9,6 +9,7 @@ from sqlbuild.compiler.planner._helpers.identity.hashing import (
     build_model_local_identity_hash,
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
+    model_definition_hash,
 )
 from sqlbuild.compiler.planner._helpers.identity.seed import build_seed_identity
 from sqlbuild.compiler.planner.main.identity._graph_identity import (
@@ -37,10 +38,13 @@ def build_direct_model_version_identities(
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    dialect: str | None,
 ) -> DirectModelVersionIdentities:
     """Compute current direct model identities from code and upstream identities."""
 
-    function_local_hashes: dict[str, str] = build_function_local_hashes(functions=functions)
+    function_local_hashes: dict[str, str] = build_function_local_hashes(
+        functions=functions, dialect=dialect
+    )
     hook_version_hashes: dict[str, str] = {
         name: identity.version_hash
         for name, identity in build_hook_identities(hook_functions).items()
@@ -119,7 +123,9 @@ def build_direct_model_version_identities(
         )
         model_metadata_jsons[model.name] = metadata_json
         local_hash: str = build_model_local_identity_hash(
-            query_sql=model.query_sql,
+            query_fingerprint=model_definition_hash(
+                model_name=model.name, query_sql=model.query_sql, dialect=dialect
+            ),
             metadata_json=metadata_json,
         )
         model_local_hashes[model.name] = local_hash

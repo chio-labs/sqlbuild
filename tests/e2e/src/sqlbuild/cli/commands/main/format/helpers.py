@@ -9,6 +9,8 @@ import sys
 import time
 from pathlib import Path
 
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+
 _FORMAT_ELAPSED_PATTERN: re.Pattern[str] = re.compile(r"Formatting SQL  OK  \(([0-9.]+)s;")
 
 
@@ -84,7 +86,7 @@ def run_format_check(
 
 
 def compiled_contract(*, project_dir: Path) -> dict[str, list[tuple[object, ...]]]:
-    """Compile a project and return each resource's dependencies, lineage and column count."""
+    """Compile a project; return each resource's dependencies, lineage, columns and fingerprint."""
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
@@ -114,4 +116,5 @@ def _resource_contract(resource: dict[str, object]) -> tuple[object, ...]:
         json.dumps(resource.get("depends_on"), sort_keys=True),
         json.dumps(resource.get("lineage"), sort_keys=True),
         resource.get("column_count"),
+        compute_query_hash(query_sql=str(resource.get("query_sql", "")), dialect="duckdb"),
     )

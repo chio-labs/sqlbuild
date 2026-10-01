@@ -10,7 +10,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import FunctionDefinition
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild.compiler.fingerprints.main.compute_function_definition_hash import (
+    compute_function_definition_hash,
+)
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
@@ -153,6 +155,11 @@ def _try_write_function_fingerprint(
                 statement_recorder=statement_recorder,
             )
         schema_fp: str = hashlib.sha256(b"").hexdigest()
+        definition_hash: str = compute_function_definition_hash(
+            fingerprint_sql=entry.fingerprint_query_sql,
+            language=str(entry.language),
+            dialect=adapter.sql_analysis_dialect(),
+        )
         fingerprint: Fingerprint = Fingerprint(
             node_type=function_node_type(return_columns=entry.return_columns),
             node_name=entry.name,
@@ -160,8 +167,8 @@ def _try_write_function_fingerprint(
             target_schema=entry.destination.schema,
             target_name=entry.destination.name,
             run_id=run_id,
-            definition_hash=compute_query_hash(entry.fingerprint_query_sql),
-            version_hash=compute_query_hash(entry.fingerprint_query_sql),
+            definition_hash=definition_hash,
+            version_hash=definition_hash,
             schema_fingerprint=schema_fp,
             definition=entry.fingerprint_query_sql,
             metadata_json="{}",

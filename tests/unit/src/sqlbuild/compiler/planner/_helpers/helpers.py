@@ -1309,7 +1309,7 @@ def build_fingerprint(*, query_sql: str) -> Fingerprint:
         target_schema="main",
         target_name="is_completed_order",
         run_id="run-1",
-        definition_hash=compute_query_hash(query_sql),
+        definition_hash=compute_query_hash(query_sql=query_sql, dialect=None),
         schema_fingerprint="",
         definition=query_sql,
         ts=datetime(2026, 1, 1, tzinfo=UTC),

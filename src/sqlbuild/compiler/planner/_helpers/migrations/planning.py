@@ -218,6 +218,7 @@ def plan_model_migrations(
             handovers[request.model.name] = _equivalent_definition(
                 model=request.model,
                 handover=handover,
+                dialect=snapshot.column_dialect,
                 destination_fingerprints=discovery.destination_fingerprints.get(
                     request.model.name, ()
                 ),
@@ -273,14 +274,18 @@ def _renamed_models(
 
 
 def _equivalent_definition(
-    *, model: CompiledModel, handover: Fingerprint | None, destination_fingerprints: tuple[str, ...]
+    *,
+    model: CompiledModel,
+    handover: Fingerprint | None,
+    destination_fingerprints: tuple[str, ...],
+    dialect: str | None,
 ) -> Fingerprint | None:
     if handover is None or stored_migration_fingerprint(handover) not in destination_fingerprints:
         return handover
     return replace(
         handover,
         definition=model.query_sql,
-        definition_hash=compute_query_hash(model.query_sql),
+        definition_hash=compute_query_hash(query_sql=model.query_sql, dialect=dialect),
     )
 
 

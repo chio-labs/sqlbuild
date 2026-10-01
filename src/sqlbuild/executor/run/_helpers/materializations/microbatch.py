@@ -1733,7 +1733,7 @@ def _prepare_microbatch_history(
                 cursor_type=context.entry.cursor_type or "",
                 cursor_grain=context.entry.cursor_grain,
                 model_version_hash=expected_version_hash,
-                definition_hash=compute_query_hash(context.entry.fingerprint_query_sql),
+                definition_hash=_definition_hash(context=context),
                 fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
                 replay_requirement_id=requirement_id,
                 required_model_version_hash=expected_version_hash,
@@ -1907,7 +1907,7 @@ def _record_microbatch_completion(
         cursor_type=context.entry.cursor_type or "",
         cursor_grain=context.entry.cursor_grain,
         model_version_hash=_expected_model_version_hash(context=context),
-        definition_hash=compute_query_hash(context.entry.fingerprint_query_sql),
+        definition_hash=_definition_hash(context=context),
         fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
         replay_requirement_id=(
             recovery_origin.replay_requirement_id
@@ -1953,11 +1953,18 @@ def _microbatch_run_type(*, context: ModelMaterializationContext) -> MicrobatchR
     return MicrobatchRunType.NORMAL
 
 
+def _definition_hash(*, context: ModelMaterializationContext) -> str:
+    return compute_query_hash(
+        query_sql=context.entry.fingerprint_query_sql,
+        dialect=context.adapter.sql_analysis_dialect(),
+    )
+
+
 def _expected_model_version_hash(*, context: ModelMaterializationContext) -> str:
     return (
         context.microbatch_model_version_hash
         or context.entry.fingerprint_version_hash
-        or compute_query_hash(context.entry.fingerprint_query_sql)
+        or _definition_hash(context=context)
     )
 
 

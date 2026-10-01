@@ -34,7 +34,7 @@ from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 def model_definition_hash(project: CompiledProject, name: str) -> str:
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
     model: CompiledModel = models_by_name[name]
-    return compute_query_hash(model.query_sql)
+    return compute_query_hash(query_sql=model.query_sql, dialect=project.sql_analysis_dialect)
 
 
 def build_sqlbuild_model_selector_project() -> CompiledProject:
@@ -156,7 +156,7 @@ def create_protected_model_state(*, adapter: DuckDbAdapter, connection: Any) -> 
             target_schema="main",
             target_name="order_history",
             run_id="previous-run",
-            definition_hash=compute_query_hash(query_sql),
+            definition_hash=compute_query_hash(query_sql=query_sql, dialect=None),
             schema_fingerprint="",
             definition=query_sql,
             metadata_json=build_version_identity_metadata_json(

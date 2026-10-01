@@ -105,7 +105,9 @@ def build_snapshot_for_metadata_test_case(
                     target_schema=None,
                     target_name="orders",
                     run_id="run_001",
-                    definition_hash=compute_query_hash("SELECT 1 AS order_id"),
+                    definition_hash=compute_query_hash(
+                        query_sql="SELECT 1 AS order_id", dialect=None
+                    ),
                     schema_fingerprint="schema_a",
                     definition="SELECT 1 AS order_id",
                     metadata_json=test_case.previous_metadata_json,

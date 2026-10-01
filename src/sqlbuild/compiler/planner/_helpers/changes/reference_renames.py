@@ -50,7 +50,8 @@ def origin_reference_names(
             name: origin for name, origin in zip(names, combination, strict=True) if origin != name
         }
         if mapping and compute_query_hash(
-            _substitute(query_sql=query_sql, spans=spans, mapping=mapping)
+            query_sql=_substitute(query_sql=query_sql, spans=spans, mapping=mapping),
+            dialect=dialect,
         ) == (recorded.definition_hash):
             return mapping
     return None

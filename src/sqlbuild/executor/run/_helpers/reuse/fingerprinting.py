@@ -41,6 +41,9 @@ def try_write_fingerprint(
         )
     try:
         schema_fp: str = hashlib.sha256(b"").hexdigest()
+        definition_hash: str = compute_query_hash(
+            query_sql=entry.fingerprint_query_sql, dialect=adapter.sql_analysis_dialect()
+        )
         metadata_json: str = model_fingerprint_metadata_with_audit_gate(
             metadata_json=entry.fingerprint_metadata_json,
             model_audits=model_audits,
@@ -57,9 +60,8 @@ def try_write_fingerprint(
             target_schema=entry.destination.schema,
             target_name=entry.destination.name,
             run_id=run_id,
-            definition_hash=compute_query_hash(entry.fingerprint_query_sql),
-            version_hash=entry.fingerprint_version_hash
-            or compute_query_hash(entry.fingerprint_query_sql),
+            definition_hash=definition_hash,
+            version_hash=entry.fingerprint_version_hash or definition_hash,
             schema_fingerprint=schema_fp,
             definition=entry.fingerprint_query_sql,
             metadata_json=metadata_json,

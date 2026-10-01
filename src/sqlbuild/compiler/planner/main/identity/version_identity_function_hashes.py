@@ -6,13 +6,15 @@ import hashlib
 import json
 
 from sqlbuild.compiler.compile.models import CompiledFunction
+from sqlbuild.compiler.planner._helpers.identity.hashing import function_definition_hash
 
 
 def build_function_local_hashes(
     *,
     functions: tuple[CompiledFunction, ...],
+    dialect: str | None,
 ) -> dict[str, str]:
-    """Derive local-only semantic hashes for functions."""
+    """Derive local-only semantic hashes for functions; SQL bodies ignore layout and comments."""
 
     hashes: dict[str, str] = {}
     for function in functions:
@@ -28,7 +30,12 @@ def build_function_local_hashes(
                     "arguments": arguments,
                     "returns": function.returns,
                     "return_columns": return_columns,
-                    "body_sql": function.body_sql,
+                    "body_sql": function_definition_hash(
+                        function_name=function.name,
+                        fingerprint_sql=function.body_sql,
+                        language=function.language.value,
+                        dialect=dialect,
+                    ),
                     "language": function.language.value,
                     "runtime_version": function.runtime_version,
                     "entry_point": function.entry_point,

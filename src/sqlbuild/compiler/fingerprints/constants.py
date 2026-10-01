@@ -31,3 +31,6 @@ NODE_TYPE_HOOK: str = "hook"
 NODE_TYPE_QUERY_DIFF_ARTIFACT: str = "query_diff_artifact"
 
 AUDIT_GATE_METADATA_KEY: str = "audit_gate"
+GENERIC_FINGERPRINT_DIALECT: str = "generic"
+QUERY_FINGERPRINT_CACHE_SIZE: int = 16_384
+SQL_FUNCTION_LANGUAGE: str = "sql"
