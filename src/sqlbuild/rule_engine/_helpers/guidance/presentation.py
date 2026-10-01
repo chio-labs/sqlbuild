@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from sqlbuild.rule_engine._helpers.guidance.thresholds import format_threshold_lines
+from sqlbuild.rule_engine.constants import RULE_FIX_AVAILABLE_NOTE
 from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult
 
 _MINIMUM_RULES_CODES: frozenset[str] = frozenset({"SQBRTEST201", "SQBRTEST202"})
@@ -25,6 +26,8 @@ def format_result_text(*, result: RulesResult) -> str:
         )
         if finding.affected_rules:
             blocks.append(f"  Affected Rules: {', '.join(finding.affected_rules)}")
+        if finding.fixable:
+            blocks.append(f"  {RULE_FIX_AVAILABLE_NOTE}")
     blocks.append(f"Found {len(result.findings)} Rules findings")
     if result.unevaluated_resources:
         blocks.append(
@@ -50,6 +53,7 @@ def format_result_json(*, result: RulesResult) -> str:
                     if finding.affected_rules
                     else {}
                 ),
+                **({"fixable": True} if finding.fixable else {}),
             }
         )
     payload: dict[str, object] = {

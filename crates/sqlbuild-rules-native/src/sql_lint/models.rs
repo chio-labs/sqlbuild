@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::tokens::Span;
@@ -73,6 +74,12 @@ pub(crate) struct LintRequest {
     pub allows_dynamic_output_star: bool,
     #[serde(default)]
     pub allows_empty_fixture_star: bool,
+    #[serde(default)]
+    pub max_literal_length: Option<usize>,
+    #[serde(default)]
+    pub max_ranking_order_by: Option<usize>,
+    #[serde(default)]
+    pub relation_keys: HashMap<String, Vec<Vec<String>>>,
 }
 
 #[derive(Debug)]
@@ -94,7 +101,7 @@ pub(crate) struct LintResponse {
 pub(crate) struct LintDiagnostic {
     pub code: &'static str,
     pub message: &'static str,
-    pub remediation: &'static str,
+    pub remediation: Cow<'static, str>,
     pub start: usize,
     pub end: usize,
     #[serde(skip_serializing_if = "Option::is_none")]

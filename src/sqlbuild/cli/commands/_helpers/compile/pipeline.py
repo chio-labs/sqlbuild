@@ -52,6 +52,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
+from sqlbuild.rule_engine.constants import RULE_FIX_AVAILABLE_NOTE
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.render_rules_progress import format_rules_progress
 from sqlbuild.rule_engine.main.run_rules import run_rules
@@ -233,6 +234,7 @@ def _analyze_compile_project(
             line=fault.line,
             column=fault.column,
             help=fault.remediation,
+            notes=(RULE_FIX_AVAILABLE_NOTE,) if fault.fixable else (),
             affected_rules=fault.affected_rules,
         )
         for fault in rules_result.findings

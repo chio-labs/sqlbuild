@@ -25,12 +25,25 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
+from sqlbuild.lint.constants import (
+    DEFAULT_MAX_LITERAL_LENGTH,
+    DEFAULT_MAX_RANKING_ORDER_BY,
+    MAX_LITERAL_LENGTH_THRESHOLD,
+    MAX_RANKING_ORDER_BY_THRESHOLD,
+    RELATION_KIND_REF,
+    RELATION_KIND_SEED,
+    RELATION_KIND_SOURCE,
+    SAFE_RULE_FIX_CODES,
+    TEMPLATE_INTERPOLATION_START,
+)
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.main.build_expansion_context import build_expansion_context
 from sqlbuild.lint.main.collect_project_files import collect_project_files
+from sqlbuild.lint.main.compiled_relation_keys import compiled_relation_keys
+from sqlbuild.lint.main.declared_relation_keys import declared_relation_keys
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
+from sqlbuild.lint.types import RelationKeys
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
@@ -42,6 +55,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     rules_cache_exists,
 )
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
+from sqlbuild.rule_engine._helpers.run.literal_duplicates import with_duplicate_literal_hints
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
@@ -56,7 +70,7 @@ from sqlbuild.rule_engine.models import (
     SqlExpansionReuse,
 )
 
-_SQL_RULE_CACHE_VERSION: str = "sql-rules-v3"
+_SQL_RULE_CACHE_VERSION: str = "sql-rules-v5"
 _SQLBUILD_VERSION: str = version("sqlbuild")
 _SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
 
@@ -124,10 +138,16 @@ def evaluate_rules(
         select=tuple(rule.code for rule in selected),
         ignore=(),
     )
+    lint_config: LintConfig = sql_lint_config(
+        dialect=dialect,
+        codes=_sql_rule_codes(native_rules),
+        thresholds=effective_config.thresholds,
+        relation_keys=compiled_relation_keys(graph.project),
+    )
     sql_rule_inputs: _SqlRuleInputs = _prepare_sql_rule_inputs(
         rules=native_rules,
         project=selected_project,
-        dialect=dialect,
+        dialect=_lint_identity(lint_config),
         project_dir=resolved_project_dir,
         collect_files=prepared_sql is None and model_paths is None,
     )
@@ -148,7 +168,7 @@ def evaluate_rules(
             project_dir=resolved_project_dir,
             discovered_inputs=discovered_inputs,
             project=selected_project,
-            dialect=dialect,
+            lint_config=lint_config,
             selected_model_paths=model_paths,
             cache_enabled=effective_config.cache.enabled,
             prepared_sql=prepared_sql,
@@ -246,8 +266,36 @@ def prepare_sql_rules(
         future=executor.submit(
             _prepare_sql_lint,
             project_dir=project_dir,
-            config=LintConfig(
-                dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
+            config=sql_lint_config(
+                dialect=dialect,
+                codes=codes,
+                thresholds=config.thresholds,
+                relation_keys=declared_relation_keys(
+                    relations=(
+                        *(
+                            (
+                                RELATION_KIND_REF,
+                                model.model_file.file_path.stem,
+                                model.schema_entry,
+                                model.config.values,
+                            )
+                            for model in inputs.model_inputs
+                        ),
+                        *(
+                            (RELATION_KIND_SEED, seed.schema_entry.name, seed.schema_entry, {})
+                            for seed in inputs.seed_inputs
+                        ),
+                        *(
+                            (
+                                RELATION_KIND_SOURCE,
+                                source.source_entry.name,
+                                source.source_entry,
+                                {},
+                            )
+                            for source in inputs.source_inputs
+                        ),
+                    )
+                ),
             ),
             discovered_inputs=inputs.discovered_inputs,
             static_declaration_scope=inputs.declaration_scope,
@@ -406,7 +454,7 @@ def _run_sql_rules(
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
     project: CompiledProject,
-    dialect: str,
+    lint_config: LintConfig,
     selected_model_paths: frozenset[str] | None,
     cache_enabled: bool,
     prepared_sql: PreparedSqlLint | None = None,
@@ -423,7 +471,9 @@ def _run_sql_rules(
     identities: dict[str, str] = (
         prepared_inputs.identities
         if prepared_inputs is not None
-        else _sql_model_rule_identities(rules=rules, project=project, dialect=dialect)
+        else _sql_model_rule_identities(
+            rules=rules, project=project, dialect=_lint_identity(lint_config)
+        )
     )
     findings: list[Finding] = []
     misses: set[str] = set()
@@ -462,7 +512,7 @@ def _run_sql_rules(
                 relative_path=relative_path,
                 contents=contents,
                 codes=codes,
-                dialect=dialect,
+                dialect=_lint_identity(lint_config),
                 sql_expansions=project.sql_expansions,
             )
             cached_file: tuple[Finding, ...] | None = (
@@ -479,9 +529,7 @@ def _run_sql_rules(
     result: LintRunResult | None = (
         _run_prepared_lint(
             project_dir=project_dir,
-            config=LintConfig(
-                dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
-            ),
+            config=lint_config,
             selected_paths=frozenset(selected_paths),
             discovered_inputs=discovered_inputs,
             compiled_expansions=project.sql_expansions,
@@ -502,9 +550,17 @@ def _run_sql_rules(
     evaluated: list[Finding] = []
     for violation in () if result is None else result.violations:
         if violation.code in selected_codes:
-            evaluated.append(_lint_finding(violation=violation, project_dir=project_dir))
+            evaluated.append(
+                _lint_finding(
+                    violation=violation,
+                    project_dir=project_dir,
+                    fixable_paths=frozenset(models_by_path),
+                )
+            )
         elif violation.code == NativeLintError.code:
-            finding: Finding = _lint_finding(violation=violation, project_dir=project_dir)
+            finding: Finding = _lint_finding(
+                violation=violation, project_dir=project_dir, fixable_paths=frozenset()
+            )
             evaluated.extend(
                 replace(
                     finding,
@@ -532,7 +588,7 @@ def _run_sql_rules(
             }
         _write_sql_rule_cache(project_dir=project_dir, bucket=bucket)
     return _SqlRulesEvaluation(
-        findings=tuple(findings),
+        findings=with_duplicate_literal_hints(findings=tuple(findings), project_dir=project_dir),
         cache_hits=len(identities) - len(misses),
         cache_misses=len(misses),
     )
@@ -558,7 +614,11 @@ def _lint_expansion_context(
     )
 
 
-def _lint_finding(*, violation: LintViolation, project_dir: Path) -> Finding:
+def _lint_finding(
+    *, violation: LintViolation, project_dir: Path, fixable_paths: frozenset[str]
+) -> Finding:
+    """Convert one lint violation; fixable when `format --fix` would attempt its edit."""
+
     path: Path = violation.file_path
     if path.is_absolute() and path.is_relative_to(project_dir.resolve()):
         path = path.relative_to(project_dir.resolve())
@@ -569,6 +629,44 @@ def _lint_finding(*, violation: LintViolation, project_dir: Path) -> Finding:
         column=violation.column,
         message=violation.message,
         remediation=violation.remediation or "Update the authored SQL to satisfy this rule.",
+        fixable=violation.fix is not None
+        and violation.code in SAFE_RULE_FIX_CODES
+        and path.as_posix() in fixable_paths,
+    )
+
+
+def sql_lint_config(
+    *,
+    dialect: str,
+    codes: tuple[str, ...],
+    thresholds: dict[str, int],
+    relation_keys: RelationKeys,
+) -> LintConfig:
+    """Build the native SQL lint configuration that SQL Rules run with."""
+
+    return LintConfig(
+        dialect=dialect,
+        enabled_native_rules=codes,
+        header_rules_enabled=False,
+        max_literal_length=thresholds.get(MAX_LITERAL_LENGTH_THRESHOLD, DEFAULT_MAX_LITERAL_LENGTH),
+        max_ranking_order_by=thresholds.get(
+            MAX_RANKING_ORDER_BY_THRESHOLD, DEFAULT_MAX_RANKING_ORDER_BY
+        ),
+        relation_keys=relation_keys,
+    )
+
+
+def _lint_identity(config: LintConfig) -> str:
+    """Cache identity of everything besides SQL text that changes SQL Rule findings."""
+
+    return json.dumps(
+        [
+            config.dialect,
+            config.max_literal_length,
+            config.max_ranking_order_by,
+            sorted(config.relation_keys.items()),
+        ],
+        separators=(",", ":"),
     )
 
 
@@ -689,6 +787,7 @@ def _finding_cache_payload(finding: Finding) -> dict[str, object]:
         "column": finding.column,
         "message": finding.message,
         "remediation": finding.remediation,
+        "fixable": finding.fixable,
     }
 
 

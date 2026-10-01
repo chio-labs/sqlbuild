@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::str::FromStr;
 
@@ -256,7 +257,7 @@ const DEFAULT_RULES: [&str; 13] = [
     INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 41] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 44] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -298,6 +299,9 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 41] = [
     &INLINE_QUERY_RELATION,
     &JOIN_EXPRESSION,
     &FINAL_CTE_NAME,
+    &crate::sql_quality::constants::UNUSED_CTE_OUTPUT,
+    &crate::sql_quality::constants::RANKING_SORT_CAP,
+    &crate::sql_quality::constants::LONG_LITERAL,
 ];
 
 fn is_ceremonial_cte_name(name: &str) -> bool {
@@ -434,6 +438,22 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
             Some("renaming a CTE requires updating its references"),
         ));
     }
+    diagnostics.extend(crate::sql_quality::main::diagnostics::diagnostics(
+        &crate::sql_quality::models::QualityRequest {
+            statements: &statements,
+            tokens: &tokens,
+            enabled: &enabled,
+            max_literal_length: request
+                .max_literal_length
+                .unwrap_or(crate::sql_quality::constants::DEFAULT_MAX_LITERAL_LENGTH),
+            max_ranking_order_by: request
+                .max_ranking_order_by
+                .unwrap_or(crate::sql_quality::constants::DEFAULT_MAX_RANKING_ORDER_BY),
+            relation_keys: &request.relation_keys,
+            externally_referenced_ctes: &externally_referenced_ctes,
+            fixture_body: request.allows_ceremonial_select,
+        },
+    )?);
     diagnostics.sort_by_key(|diagnostic| (diagnostic.start, diagnostic.end, diagnostic.code));
     Ok(LintResponse {
         version: LINT_API_VERSION,
@@ -1845,7 +1865,7 @@ fn diagnostic(
     LintDiagnostic {
         code: rule.code,
         message: rule.message,
-        remediation: rule.remediation,
+        remediation: Cow::Borrowed(rule.remediation),
         start: span.start,
         end: span.end,
         fix_unavailable_reason: fix.is_none().then_some(fix_unavailable_reason).flatten(),

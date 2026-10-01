@@ -8,13 +8,19 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.lint._helpers.native_format import with_newline_style
-from sqlbuild.lint.constants import LINT_ENGINE_NATIVE, VIOLATION_SEVERITY_FAULT
+from sqlbuild.lint.constants import (
+    LINT_ENGINE_NATIVE,
+    SAFE_RULE_FIX_CODES,
+    VIOLATION_SEVERITY_FAULT,
+)
 from sqlbuild.lint.exceptions import ProjectCompileError
+from sqlbuild.lint.main.compiled_relation_keys import compiled_relation_keys
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import (
     FormatChange,
@@ -24,19 +30,8 @@ from sqlbuild.lint.models import (
     LintViolation,
     RuleFixResult,
 )
-from sqlbuild.lint.types import RuleFixStatus
+from sqlbuild.lint.types import RelationKeys, RuleFixStatus
 
-_SAFE_RULES: frozenset[str] = frozenset(
-    {
-        "SQBRSQL002",
-        "SQBRSQL003",
-        "SQBRSQL005",
-        "SQBRSQL006",
-        "SQBRSQL008",
-        "SQBRSQL017",
-        "SQBRSQL025",
-    }
-)
 _MAX_PASSES: int = 128
 _APPLIED: str = "applied"
 _CONDITIONLESS_JOIN_CODE: str = "SQBRSQL003"
@@ -88,7 +83,11 @@ class _FixSession:
     ) -> tuple[dict[Path, list[LintEdit]], list[RuleFixResult], list[RuleFixResult]]:
         result: LintRunResult = run_lint(
             project_dir=self.project_dir,
-            config=replace(self.config, enabled_native_rules=("SQBRSQL",)),
+            config=replace(
+                self.config,
+                enabled_native_rules=("SQBRSQL",),
+                relation_keys=self._relation_keys(),
+            ),
             value_renderer=self.adapter,
             discovered_inputs=_updated_inputs(inputs=self.inputs, files=files),
             source_files=files,
@@ -123,7 +122,7 @@ class _FixSession:
             return _VERIFICATION_FAILURE
         if violation.file_path not in model_paths:
             return "Compiler-verified Rule fixes currently require a model SQL body"
-        if violation.fix is not None and violation.code not in _SAFE_RULES:
+        if violation.fix is not None and violation.code not in SAFE_RULE_FIX_CODES:
             return "This proposed rewrite is not proven meaning-preserving in this dialect"
         if violation.code == _CONDITIONLESS_JOIN_CODE and self.config.dialect != _SNOWFLAKE_DIALECT:
             return "Conditionless JOIN equivalence is only established for Snowflake"
@@ -167,6 +166,16 @@ class _FixSession:
             for report in (*self.reports, *pending)
         ]
         return candidate
+
+    def _relation_keys(self) -> RelationKeys:
+        """Declared keys from the baseline compile, so determinism proofs match compile."""
+
+        if self.baseline is None:
+            try:
+                self.baseline = compile_project(discovered_inputs=self.inputs, adapter=self.adapter)
+            except CompileInputError:
+                return {}
+        return compiled_relation_keys(self.baseline)
 
     def _equivalent_to_baseline(self, *, files: dict[Path, str]) -> bool:
         try:

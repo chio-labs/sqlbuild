@@ -209,7 +209,24 @@ def finalize_native_findings(
         raise RulesError(str(error)) from error
     if not isinstance(payload, list):
         raise RulesError("native rules engine returned invalid finalized findings")
-    return tuple(decode_rule_finding(value) for value in payload)
+    fixable: frozenset[tuple[str, str, int, int, str]] = frozenset(
+        _finding_identity(finding) for finding in findings if finding.fixable
+    )
+    finalized: tuple[Finding, ...] = tuple(decode_rule_finding(value) for value in payload)
+    return tuple(
+        replace(finding, fixable=True) if _finding_identity(finding) in fixable else finding
+        for finding in finalized
+    )
+
+
+def _finding_identity(finding: Finding) -> tuple[str, str, int, int, str]:
+    return (
+        finding.code,
+        finding.path.as_posix(),
+        finding.line,
+        finding.column,
+        finding.message,
+    )
 
 
 def load_native_config(project_dir: Path) -> dict[str, object]:
@@ -822,6 +839,7 @@ def decode_rule_finding(value: object) -> Finding:
         message=message,
         remediation=remediation,
         unevaluated=payload.get("unevaluated") is True,
+        fixable=payload.get("fixable") is True,
     )
 
 

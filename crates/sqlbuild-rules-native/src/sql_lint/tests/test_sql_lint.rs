@@ -1420,10 +1420,10 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
-            description: "ordered row number is clean",
+            description: "ordered row number without a declared key is unproven",
             sql: "SELECT ROW_NUMBER() OVER (PARTITION BY id ORDER BY created_at, id) FROM items",
             rule: "SQBRSQL018",
-            expected_anchor: None,
+            expected_anchor: Some("ROW_NUMBER"),
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {

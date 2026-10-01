@@ -120,3 +120,6 @@ RULES_THRESHOLD_DEFAULTS: dict[str, int] = {
     MAX_ENUM_CONTAINER_FILES: 10,
     MIN_SHARED_CONTAINER_PREFIX_FILES: 2,
 }
+RULE_FIX_AVAILABLE_NOTE: str = (
+    "Fix available: `sqb format --fix` applies it after compiler verification"
+)

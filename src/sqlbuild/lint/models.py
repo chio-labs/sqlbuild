@@ -8,7 +8,12 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.compiler.scopes.types import DeclarationKind
-from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
+from sqlbuild.lint.constants import (
+    DEFAULT_MAX_LITERAL_LENGTH,
+    DEFAULT_MAX_RANKING_ORDER_BY,
+    VIOLATION_SEVERITY_FAULT,
+    VIOLATION_SEVERITY_WARNING,
+)
 from sqlbuild.lint.types import LintSeverity, RuleFixStatus
 
 
@@ -57,6 +62,7 @@ class LintBody:
     allows_ceremonial_select: bool = False
     allows_dynamic_output_star: bool = False
     allows_empty_fixture_star: bool = False
+    dependency_relations: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -127,6 +133,11 @@ class LintConfig:
     enabled_native_rules: tuple[str, ...] | None = None
     ignored_native_rules: tuple[str, ...] = ()
     header_rules_enabled: bool = True
+    max_literal_length: int = DEFAULT_MAX_LITERAL_LENGTH
+    max_ranking_order_by: int = DEFAULT_MAX_RANKING_ORDER_BY
+    relation_keys: Mapping[str, tuple[tuple[str, ...], ...]] = field(
+        default_factory=dict, compare=False
+    )
 
 
 @dataclass(frozen=True)

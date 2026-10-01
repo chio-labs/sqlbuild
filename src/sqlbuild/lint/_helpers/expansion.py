@@ -29,7 +29,7 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import (
     neutralize_interpolation,
     sentinel_spans,
 )
-from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
+from sqlbuild.lint.constants import RELATION_IDENTITY_TEMPLATE, TEMPLATE_INTERPOLATION_START
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.models import InterpolationSite, LintBody, LintFileRole
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -38,6 +38,9 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 
 _DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
     r"^__(?:ref|source)\s*\(", re.IGNORECASE
+)
+_KEYED_RELATION_PATTERN: re.Pattern[str] = re.compile(
+    r"^__(ref|source|seed)\s*\(\s*['\"]([^'\"]+)['\"]\s*\)$", re.IGNORECASE
 )
 
 _CTE_DEFINITION_PATTERN: re.Pattern[str] = re.compile(
@@ -225,6 +228,14 @@ def prepare_lint_body(
         externally_referenced_ctes=externally_referenced_ctes,
         allows_ceremonial_select=allows_ceremonial_select,
         allows_dynamic_output_star=allows_dynamic_output_star,
+        dependency_relations=tuple(
+            (
+                site.sentinel,
+                RELATION_IDENTITY_TEMPLATE.format(kind=match.group(1).lower(), name=match.group(2)),
+            )
+            for site in sites
+            if (match := _KEYED_RELATION_PATTERN.match(site.original_text)) is not None
+        ),
     )
 
 

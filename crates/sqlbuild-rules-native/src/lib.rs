@@ -13,5 +13,6 @@ mod scope_metadata;
 mod semantic_usage;
 mod semantic_validation;
 mod sql_lint;
+mod sql_quality;
 mod sql_scan;
 mod sql_tokens;

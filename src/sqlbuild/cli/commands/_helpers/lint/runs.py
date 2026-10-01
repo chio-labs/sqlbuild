@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.cli.commands._helpers.lint.diagnostics import format_lint_diagnostics
 from sqlbuild.compiler.discovery.constants import LOCAL_CONFIG_FILENAME
@@ -13,9 +14,13 @@ from sqlbuild.lint.constants import (
     ADAPTER_DIALECT_TRANSLATIONS,
     DEFAULT_LINE_WIDTH,
     DEFAULT_MAX_DESCRIPTION_LINES,
+    DEFAULT_MAX_LITERAL_LENGTH,
+    DEFAULT_MAX_RANKING_ORDER_BY,
     FORMAT_SECTION_KEY,
     LINE_WIDTH_KEY,
     MAX_DESCRIPTION_LINES_KEY,
+    MAX_LITERAL_LENGTH_THRESHOLD,
+    MAX_RANKING_ORDER_BY_THRESHOLD,
     PROJECT_CONFIG_FILENAME_KEY,
 )
 from sqlbuild.lint.models import (
@@ -31,10 +36,12 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
     max_description_lines: int = DEFAULT_MAX_DESCRIPTION_LINES
     line_width: int = DEFAULT_LINE_WIDTH
     dialect: str = "generic"
+    thresholds: dict[str, object] = {}
     config_file: Path = project_dir / PROJECT_CONFIG_FILENAME_KEY
     if config_file.is_file():
         with config_file.open("rb") as handle:
             payload: dict[str, object] = tomllib.load(handle)
+        thresholds = _rule_thresholds(payload)
         format_section: object = payload.get(FORMAT_SECTION_KEY)
         raw_adapter: object = payload.get(ADAPTER_CONFIG_KEY)
         if isinstance(raw_adapter, str):
@@ -61,6 +68,31 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
         line_width=line_width,
         max_description_lines=max_description_lines,
         dialect=dialect,
+        max_literal_length=_threshold(
+            thresholds=thresholds,
+            key=MAX_LITERAL_LENGTH_THRESHOLD,
+            default=DEFAULT_MAX_LITERAL_LENGTH,
+        ),
+        max_ranking_order_by=_threshold(
+            thresholds=thresholds,
+            key=MAX_RANKING_ORDER_BY_THRESHOLD,
+            default=DEFAULT_MAX_RANKING_ORDER_BY,
+        ),
+    )
+
+
+def _rule_thresholds(payload: dict[str, object]) -> dict[str, object]:
+    rules: object = payload.get("rules")
+    if not isinstance(rules, dict):
+        return {}
+    thresholds: object = cast(dict[str, object], rules).get("thresholds")
+    return cast(dict[str, object], thresholds) if isinstance(thresholds, dict) else {}
+
+
+def _threshold(*, thresholds: dict[str, object], key: str, default: int) -> int:
+    value: object = thresholds.get(key)
+    return (
+        value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
     )
 
 
