@@ -228,6 +228,91 @@ def build_function_project(*, tmp_path: Path, caller_config: str) -> Path:
     return project_dir
 
 
+def direct_reference_merge_files() -> dict[str, str]:
+    """Return a protected full-replay merge model that reads the upstream table directly."""
+
+    return {
+        "models/down_merge.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy merge,\n"
+            "  unique_key [id],\n"
+            "  cursor event_date,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_inputs (\n    upstream event_date,\n  ),\n"
+            "  replay_on_change full,\n"
+            "  full_refresh false,\n"
+            ");\n\n"
+            'SELECT\n  id,\n  event_date\nFROM __ref("upstream")\n'
+        )
+    }
+
+
+def edit_direct_reference_merge(*, project_dir: Path) -> None:
+    """Make a real query edit to the direct-reference merge model."""
+
+    path: Path = project_dir / "models/down_merge.sql"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  event_date\nFROM", "  event_date,\n  id * 2 AS doubled_id\nFROM"
+        ),
+        encoding="utf-8",
+    )
+
+
+def build_star_project(*, tmp_path: Path, downstream_config: str) -> Path:
+    """Write and build a table and an append incremental that selects all of its columns."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="star_projection",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_TOML,
+            "models/up.sql": (
+                "MODEL (\n  materialized table,\n);\n\n"
+                "SELECT 1 AS id, DATE '2026-09-01' AS event_date\n"
+            ),
+            "models/down.sql": (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy append,\n"
+                "  replay_on_change full,\n"
+                f"{downstream_config}"
+                ");\n\n"
+                'SELECT * FROM __ref("up")\n'
+            ),
+        },
+    )
+    _build_ok(project_dir=project_dir)
+    return project_dir
+
+
+def add_upstream_column(*, project_dir: Path) -> None:
+    """Add a column to the star project's upstream table."""
+
+    path: Path = project_dir / "models/up.sql"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "AS event_date", "AS event_date, 'web' AS channel"
+        ),
+        encoding="utf-8",
+    )
+
+
+def declare_downstream_column_type(*, project_dir: Path) -> None:
+    """Declare a new type for the star downstream's id column in its own header."""
+
+    path: Path = project_dir / "models/down.sql"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  replay_on_change full,\n",
+            "  replay_on_change full,\n  columns (\n    id (type BIGINT),\n  ),\n",
+        ),
+        encoding="utf-8",
+    )
+
+
 def plan(*, project_dir: Path, args: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
     """Run sqb plan without colour."""
 
