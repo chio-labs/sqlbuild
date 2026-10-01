@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -189,6 +190,17 @@ class LifecycleEvent:
             raise ObservabilityValidationError("payload must be a JSON object")
         object.__setattr__(self, "payload", frozen_payload)
         validate_known_lifecycle_event(event=self)
+
+    def with_invocation_sequence(self, sequence: int) -> LifecycleEvent:
+        """Return this validated event with a dispatcher-assigned invocation sequence."""
+
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
+            raise ObservabilityValidationError(
+                "invocation_sequence must be a non-negative integer excluding bool"
+            )
+        sequenced: LifecycleEvent = copy.copy(self)
+        object.__setattr__(sequenced, "invocation_sequence", sequence)
+        return sequenced
 
 
 @dataclass(frozen=True)

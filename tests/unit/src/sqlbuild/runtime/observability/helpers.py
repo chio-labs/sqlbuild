@@ -1,12 +1,16 @@
 """Test builders for runtime observability contracts."""
 
 import asyncio
-from collections.abc import Mapping
+import threading
+import time
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Context, copy_context
 from datetime import UTC, datetime
 from threading import Lock
 from types import MappingProxyType
+
+import pytest
 
 from sqlbuild.runtime.observability._helpers.dispatcher import dispatcher_scope
 from sqlbuild.runtime.observability._helpers.factory import create_lifecycle_event
@@ -14,6 +18,7 @@ from sqlbuild.runtime.observability._helpers.identity import invocation_scope
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.classes.microbatch_lifecycle import MicrobatchLifecycle
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
+from sqlbuild.runtime.observability.classes.statement_monitor import StatementMonitor
 from sqlbuild.runtime.observability.models import (
     DiagnosticLog,
     LifecycleEvent,
@@ -208,3 +213,60 @@ def diagnostic_log() -> DiagnosticLog:
         message="diagnostic",
         invocation_id="inv-1",
     )
+
+
+def count_monitor_thread_starts(*, monkeypatch: pytest.MonkeyPatch, statement_count: int) -> int:
+    """Run fast statements without query-ID providers and count monitor threads started."""
+
+    started: list[str] = []
+    original_start: Callable[[threading.Thread], None] = threading.Thread.start
+
+    def recording_start(thread: threading.Thread) -> None:
+        started.append(thread.name)
+        original_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", recording_start)
+    dispatcher: EventDispatcher
+    dispatcher, _ = capture_lifecycle_events()
+    with invocation_scope("inv-fast-statements"), dispatcher_scope(dispatcher):
+        for index in range(statement_count):
+            with StatementLifecycle(adapter="duckdb", sql=f"SELECT {index}", intent="execute"):
+                pass
+    return started.count("sqlbuild-statement-monitor")
+
+
+def submissions_after_late_provider(*, threshold_seconds: float, query_id: str) -> tuple[str, ...]:
+    """Install a query-ID provider after a deferred start and return published submissions."""
+
+    submitted: threading.Event = threading.Event()
+    submissions: list[str] = []
+
+    def record_submission(value: str) -> None:
+        submissions.append(value)
+        submitted.set()
+
+    monitor: StatementMonitor = StatementMonitor(
+        on_submitted=record_submission,
+        on_heartbeat=lambda elapsed, current_query_id: None,
+        threshold_seconds=threshold_seconds,
+    )
+    monitor.start()
+    monitor.set_query_id_provider(lambda: query_id)
+    _ = submitted.wait(timeout=5.0)
+    _ = monitor.stop()
+    return tuple(submissions)
+
+
+def heartbeats_after_early_stop(*, threshold_seconds: float) -> int:
+    """Stop a deferred monitor before its threshold and count heartbeats after the deadline."""
+
+    heartbeats: list[float] = []
+    monitor: StatementMonitor = StatementMonitor(
+        on_submitted=lambda value: None,
+        on_heartbeat=lambda elapsed, current_query_id: heartbeats.append(elapsed),
+        threshold_seconds=threshold_seconds,
+    )
+    monitor.start()
+    _ = monitor.stop()
+    time.sleep(threshold_seconds * 4)
+    return len(heartbeats)

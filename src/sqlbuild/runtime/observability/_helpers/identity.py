@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import asdict, replace
+from dataclasses import fields, replace
 from types import MappingProxyType
 from typing import cast
 from uuid import uuid4
@@ -18,6 +18,9 @@ from sqlbuild.runtime.observability.types import JSONValue
 _CURRENT_EXECUTION_IDENTITY: ContextVar[ExecutionIdentity | None] = ContextVar(
     "sqlbuild_execution_identity", default=None
 )
+
+
+_IDENTITY_FIELD_NAMES: tuple[str, ...] = tuple(field.name for field in fields(ExecutionIdentity))
 
 
 _CURRENT_INVOCATION_EXTERNAL_CONTEXT: ContextVar[Mapping[str, JSONValue]] = ContextVar(
@@ -39,7 +42,7 @@ def identity_scope(identity: ExecutionIdentity) -> Iterator[ExecutionIdentity]:
 
 
 def execution_identity_to_dict(identity: ExecutionIdentity) -> dict[str, str | None]:
-    return asdict(identity)
+    return {name: getattr(identity, name) for name in _IDENTITY_FIELD_NAMES}
 
 
 def _required_current_identity() -> ExecutionIdentity:
