@@ -404,3 +404,17 @@ class ModelHeaderKeyCompileCase:
     description: str
     repo_files: dict[str, str]
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ResourceSqlValidationCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    expected_diagnostics: tuple[tuple[str, str, str, int], ...]
+
+
+@dataclass(frozen=True)
+class ResourceSqlHelpCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    expected_diagnostics: tuple[tuple[str, str, str | None], ...]

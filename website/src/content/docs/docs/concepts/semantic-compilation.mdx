@@ -41,6 +41,18 @@ Known output shapes also validate `unique_key`, `cursor`, `cursor_type`, `cursor
 `config.partition_column`, `row_diff_exclude_columns`, `row_diff_tolerances.by_column`, source
 `cursor_column`, audit expressions/relationships/accepted values, and SQL-test mock/expected names.
 
+The same binding, function-name and type checks run on every SQL body a project owns, not only
+model queries: singular and generic audits (including measurement and evidence queries), SQL unit
+tests (mock, helper, expected and assertion CTEs), and inline and named SQL hooks. An audit reading
+`__ref("orders")` is checked against the closed `orders` output shape, so `WHERE o.shipped_at IS
+NULL` on a model without that column fails compile instead of the warehouse. Each diagnostic names
+its owner: `SQL test 'orders_are_open': ...`, `audit 'recent_rows' on model 'orders': ...` (with the
+attached column when there is one), or `post_hooks[1] SQL hook: ...` at the hook file. Type
+mismatches show the explicit conversion to write, such as `CAST('1' AS NUMBER)` in a test's expected
+rows or `TO_DATE(@date_column)` in a generic audit. An
+audit or SQL-test body the SQL parser cannot read is a P001 syntax error, never a silent pass.
+Relations without a closed shape, such as physical tables written in hooks, stay open.
+
 Expression type checks are enabled for **DuckDB (including MotherDuck), PostgreSQL, Snowflake,
 and BigQuery**. Other adapters retain reference and semantic checks without expression type checks.
 

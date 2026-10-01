@@ -1010,7 +1010,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
                     "MODEL (\n  materialized table\n"
-                    "  pre_hooks [inline_sql('INVALID SQL STATEMENT')]\n);\n\n"
+                    "  pre_hooks [inline_sql('SELECT * FROM missing_hook_table')]\n);\n\n"
                     "SELECT 1 AS id"
                 ),
                 "models/orders.sql": (
@@ -1032,7 +1032,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
                     "MODEL (\n  materialized table\n"
-                    "  post_hooks [inline_sql('INVALID SQL STATEMENT')]\n);\n\n"
+                    "  post_hooks [inline_sql('SELECT * FROM missing_hook_table')]\n);\n\n"
                     "SELECT 88 AS id"
                 ),
                 "models/orders.sql": (

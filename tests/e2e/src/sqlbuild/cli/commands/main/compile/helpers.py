@@ -2515,3 +2515,45 @@ def prepare_compile_cache_invalidation_project(*, project_dir: Path) -> None:
         "[settings]",
         '[vars]\nquantity_multiplier = "2"\n\n[settings]',
     )
+
+
+RESOURCE_SQL_MODELS: str = "models/staging"
+RESOURCE_SQL_ORDERS: str = f"{RESOURCE_SQL_MODELS}/orders.sql"
+RESOURCE_SQL_SINGULAR_AUDIT: str = (
+    f"{RESOURCE_SQL_MODELS}/_sqlbuild/audits/singular/orders_have_customers.sql"
+)
+RESOURCE_SQL_GENERIC_AUDIT: str = (
+    f"{RESOURCE_SQL_MODELS}/_sqlbuild/_audits/generic/status_is_known.sql"
+)
+RESOURCE_SQL_RECENT_ROWS_AUDIT: str = (
+    f"{RESOURCE_SQL_MODELS}/_sqlbuild/_audits/generic/recent_rows.sql"
+)
+RESOURCE_SQL_TEST: str = "tests/unit/test_orders.sql"
+RESOURCE_SQL_NAMED_HOOK: str = f"{RESOURCE_SQL_MODELS}/_sqlbuild/_hooks/sql/record_orders.sql"
+_RESOURCE_SQL_BASE_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "warehouse.duckdb"\n'
+    ),
+    f"{RESOURCE_SQL_MODELS}/customers.sql": (
+        'MODEL (description "Customers per order");\n'
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST(7 AS INTEGER) AS customer_id\n"
+    ),
+}
+
+
+def resource_sql_orders_model(options: str = "") -> tuple[str, str]:
+    """Return the orders model file whose header carries the given extra options."""
+
+    return (
+        RESOURCE_SQL_ORDERS,
+        f'MODEL (description "Orders with their status"{options});\n'
+        'WITH customers AS (SELECT * FROM __ref("customers"))\n'
+        "SELECT CAST(c.order_id AS INTEGER) AS order_id, CAST('open' AS VARCHAR) AS status\n"
+        "FROM customers AS c\n",
+    )
+
+
+def resource_sql_project_files(files: tuple[tuple[str, str], ...]) -> dict[str, str]:
+    """Return the shared orders project plus case-specific files."""
+
+    return {**_RESOURCE_SQL_BASE_FILES, **dict(files)}
