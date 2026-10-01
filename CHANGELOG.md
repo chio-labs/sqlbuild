@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.130.0](https://github.com/chio-labs/sqlbuild/compare/v0.129.1...v0.130.0) (2026-10-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **compiler:** unknown keys in MODEL() headers, project defaults, path defaults and sources files now fail compilation.
+
+### Bug Fixes
+
+* **compiler:** reject unknown config keys and keep scenario SQL as authored ([#906](https://github.com/chio-labs/sqlbuild/issues/906)) ([e160823](https://github.com/chio-labs/sqlbuild/commit/e1608238dccefdef0fa9141ed3ae65a7cc6ecb64))
+
 ## [0.129.1](https://github.com/chio-labs/sqlbuild/compare/v0.129.0...v0.129.1) (2026-10-01)
 
 
