@@ -9,6 +9,8 @@ from sqlbuild.cli.commands._helpers.janitor_output.outputs import (
     write_janitor_completion,
     write_janitor_disabled,
     write_janitor_plan,
+    write_janitor_preview_complete,
+    write_janitor_preview_start,
 )
 from sqlbuild.cli.commands._helpers.janitor_runtime.compilation import compile_janitor_project
 from sqlbuild.cli.commands._helpers.janitor_runtime.connections import (
@@ -42,6 +44,8 @@ def run_janitor(request: JanitorCommandRequest) -> int:
         write_janitor_disabled(invocation=invocation)
         return 0
     settings: JanitorSettings = resolve_janitor_settings(request=request, invocation=invocation)
+    if invocation.as_target is not None:
+        write_janitor_preview_start(invocation=invocation)
     compile_context: JanitorCompileContext = compile_janitor_project(invocation=invocation)
     connection_context: JanitorConnectionContext = connect_janitor_warehouse(
         invocation=invocation,
@@ -55,6 +59,9 @@ def run_janitor(request: JanitorCommandRequest) -> int:
             connection_context=connection_context,
         )
         write_janitor_plan(invocation=invocation, planning_result=planning_result)
+        if invocation.as_target is not None:
+            write_janitor_preview_complete(invocation=invocation)
+            return 1 if planning_result.plan.blocked_schemas else 0
         if planning_result.plan.blocked_schemas:
             return 1
         if not janitor_plan_has_work(planning_result):

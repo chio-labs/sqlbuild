@@ -5,10 +5,11 @@ from __future__ import annotations
 import sys
 import time
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import resolve_connection_config
+from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
+    resolve_adapter_connection_context,
+)
 from sqlbuild.cli.commands.models import (
+    AdapterConnectionContext,
     JanitorCompileContext,
     JanitorInvocation,
 )
@@ -16,21 +17,16 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
-from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
 
 
 def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileContext:
-    """Resolve adapter, compile project, and prepare connection config."""
+    """Compile for the janitor or ``--as`` target and resolve the active target connection."""
 
-    adapter_name: str = resolve_effective_adapter_name(
-        project_config=invocation.discovered_inputs.project_config,
-        local_config=invocation.discovered_inputs.local_config,
-    )
-    adapter: BaseAdapter = resolve_adapter(
-        adapter_name=adapter_name,
-        project_dir=invocation.effective_project_dir,
+    adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(
+        discovered_inputs=invocation.discovered_inputs,
+        effective_project_dir=invocation.effective_project_dir,
+        selected_target=invocation.selected_target,
+        cli_vars=None,
     )
     compile_start: float = time.perf_counter()
     status: PlanningProgressReporter = PlanningProgressReporter(
@@ -41,17 +37,18 @@ def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileC
         status.on_progress("Compiling project...")
         project: CompiledProject = compile_project(
             discovered_inputs=invocation.discovered_inputs,
-            adapter=adapter,
+            adapter=adapter_context.adapter,
+            selected_target=(
+                invocation.as_target
+                if invocation.as_target is not None
+                else invocation.selected_target
+            ),
+            resolved_connection=adapter_context.connection_config,
         )
         status.on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config=project.effective_connection,
-        project_dir=invocation.effective_project_dir,
-        adapter_name=adapter_name,
-    )
     return JanitorCompileContext(
-        adapter_name=adapter_name,
-        adapter=adapter,
+        adapter_name=adapter_context.adapter_name,
+        adapter=adapter_context.adapter,
         project=project,
-        connection_config=connection_config,
+        connection_config=adapter_context.connection_config,
     )

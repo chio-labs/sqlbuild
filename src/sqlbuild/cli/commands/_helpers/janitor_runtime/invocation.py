@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.cli.commands._helpers.runtime.preview_target import validate_preview_target
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
@@ -14,6 +15,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.janitor.main.resolve_retention_days import resolve_janitor_retention_days
 from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 
 
 def resolve_janitor_invocation(*, request: JanitorCommandRequest) -> JanitorInvocation:
@@ -25,10 +27,21 @@ def resolve_janitor_invocation(*, request: JanitorCommandRequest) -> JanitorInvo
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    validate_preview_target(
+        discovered_inputs=discovered_inputs, as_target=request.as_target, command_name="janitor"
+    )
+    active_target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=request.selected_target,
+    )
     return JanitorInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
         use_color=not request.no_color and supports_color(),
+        selected_target=request.selected_target,
+        active_target_name=active_target_name,
+        as_target=request.as_target,
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,8 +18,10 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRenderers,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     query_duckdb,
+    run_sqb,
 )
 
 
@@ -137,7 +140,7 @@ def create_janitor_scenario_relations(*, db_path: Path) -> None:
         connection.close()
 
 
-def create_direct_state_history(*, db_path: Path) -> None:
+def create_direct_state_history(*, db_path: Path, schema: str = "main") -> None:
     import duckdb
 
     adapter: DuckDbAdapter = DuckDbAdapter()
@@ -155,12 +158,12 @@ def create_direct_state_history(*, db_path: Path) -> None:
                 connection=connection,
                 execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,
-                schema="main",
+                schema=schema,
                 fingerprint=Fingerprint(
                     node_type="model",
                     node_name="janitor_state_probe",
                     target_database=None,
-                    target_schema="main",
+                    target_schema=schema,
                     target_name="janitor_state_probe",
                     run_id=run_id,
                     definition_hash=f"definition_{run_id}",
@@ -176,7 +179,7 @@ def create_direct_state_history(*, db_path: Path) -> None:
                 connection=connection,
                 execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,
-                schema="main",
+                schema=schema,
                 records=(
                     SourceFreshnessRecord(
                         source_name="raw.janitor_state_probe",
@@ -360,3 +363,98 @@ def read_current_janitor_events(*, db_path: Path, run_id: str) -> list[tuple[obj
             "ORDER BY archive_name"
         ),
     )
+
+
+def prepare_two_target_janitor_project(
+    *, tmp_path: Path, project_name: str, model_names: tuple[str, ...]
+) -> Path:
+    """Create a DuckDB janitor project with `dev` (default) and `prod` targets in two schemas."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                f'database = "{(tmp_path / project_name / "janitor.duckdb").as_posix()}"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n\n'
+                "[targets.prod]\n"
+                'schema = "prod"\n\n'
+                "[janitor]\n"
+                "enabled = true\n"
+                "retention_days = 0\n"
+                "archive_retention_days = 14\n"
+                "direct_state_history_versions = 2\n\n"
+                "[defaults]\n"
+                'materialized = "table"\n'
+            ),
+            **{
+                f"models/{model_name}.sql": f"MODEL ();\n\nSELECT 1 AS {model_name}_id\n"
+                for model_name in model_names
+            },
+        },
+    )
+
+
+def snapshot_schema_contents(
+    *, db_path: Path, schemas: tuple[str, ...]
+) -> tuple[tuple[str, str, str, tuple[tuple[object, ...], ...]], ...]:
+    """Return every relation in the schemas with its type and complete sorted contents."""
+
+    schema_list: str = ", ".join(f"'{schema}'" for schema in schemas)
+    relations: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT table_schema, table_name, table_type FROM information_schema.tables "
+            f"WHERE table_schema IN ({schema_list}) ORDER BY 1, 2"
+        ),
+    )
+    snapshot: list[tuple[str, str, str, tuple[tuple[object, ...], ...]]] = []
+    for schema, name, table_type in relations:
+        rows: list[tuple[object, ...]] = query_duckdb(
+            db_path=db_path, sql=f'SELECT * FROM "{schema}"."{name}" ORDER BY ALL'
+        )
+        snapshot.append((str(schema), str(name), str(table_type), tuple(rows)))
+    return tuple(snapshot)
+
+
+EXPIRED_ARCHIVE_NAME: str = "_sqb_archive__20200101t000000z__old_products"
+
+
+def prepare_cruft_in_both_targets(*, tmp_path: Path, project_name: str) -> Path:
+    """Build both targets, retire one model, and seed an expired archive and state history."""
+
+    project_dir: Path = prepare_two_target_janitor_project(
+        tmp_path=tmp_path, project_name=project_name, model_names=("orders", "customers")
+    )
+    for build_command in (("--no-color", "build"), ("--no-color", "build", "--target", "prod")):
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=build_command, project_dir=project_dir
+        )
+        assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    (project_dir / "models" / "customers.sql").unlink()
+    db_path: Path = project_dir / "janitor.duckdb"
+    for schema in ("dev", "prod"):
+        execute_duckdb(
+            db_path=db_path,
+            sql=f'CREATE TABLE {schema}."{EXPIRED_ARCHIVE_NAME}" AS SELECT 1 AS product_id',
+        )
+        create_direct_state_history(db_path=db_path, schema=schema)
+    return project_dir
+
+
+def probe_fingerprint_count(*, db_path: Path, schema: str) -> int:
+    """Return how many seeded probe fingerprint rows remain in one schema."""
+
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            f"SELECT COUNT(*) FROM {schema}._sqlbuild_fingerprints "
+            "WHERE node_name = 'janitor_state_probe'"
+        ),
+    )
+    return int(str(rows[0][0]))

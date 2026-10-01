@@ -141,3 +141,37 @@ class JanitorUnaddressableRelationE2ETestCase:
     plain_relation: str
     quoted_relation: str
     expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorTargetPreviewE2ETestCase:
+    """Test case for an inspection-only janitor --as preview of another target."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorTargetCleanupE2ETestCase:
+    """Test case for janitor cleanup scoped to one selected target namespace."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    cleaned_schema: str
+    untouched_schema: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_deleted_names: tuple[str, ...]
+    expected_archived_original_names: tuple[str, ...]
+    expected_fingerprint_probe_count_after: int
+
+
+@dataclass(frozen=True)
+class JanitorTargetErrorE2ETestCase:
+    """Test case for rejected janitor target flags."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]

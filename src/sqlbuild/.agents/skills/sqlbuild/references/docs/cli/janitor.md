@@ -10,6 +10,7 @@ Online: https://sqlbuild.com/docs/cli/janitor/
 
 - Usage
 - Flags
+- Targets
 - Lifecycle
 - Compatibility views
 - Pending migration origins
@@ -33,10 +34,33 @@ sqb --project-dir <path> janitor [flags]
 
 | Flag | Description |
 |------|-------------|
+| `--target <name>` | Clean up a configured target instead of the active/default target, using that target's connection, schemas and state |
+| `--as <name>` | Preview the janitor plan for another configured target's schemas through the active target's connection. Inspection only: nothing is archived, dropped or pruned, and there is no prompt. Cannot be combined with `--auto-approve` |
 | `--auto-approve` | Skip the confirmation prompt and run the planned actions immediately |
 | `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
 | `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
 | `--drop-old-name-view <name>` | Drop the [compatibility view](../concepts/models/migrations.md#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
+
+## Targets
+
+By default the janitor cleans up the active target. `--target <name>` selects another configured target, exactly like `sqb build --target`: the janitor connects with that target's connection and inspects and cleans that target's schemas and state tables. Other targets are never touched.
+
+`--as <name>` previews what the janitor would do in another target without changing anything, like [`sqb plan --as`](plan.md). The project compiles for that target, and its schemas are inspected through the active target's connection, which can be the default target or the one given with `--target`. The janitor lists every relation it would archive, every archive it would delete, every compatibility view it would drop and every state table it would prune, then exits. It drops nothing, writes no audit or state rows, prunes nothing and does not prompt. `--drop-old-name-view` is allowed with `--as` and only previews the drop.
+
+```
+Previewing janitor as target 'prod' through the connection of target 'dev' (inspection only).
+...
+Relations to archive
+  prod.customers  ->  prod._sqb_archive__20261001t101500z__customers  age unknown, delete after 2026-10-15 10:15:00 UTC
+
+Archives to delete
+  prod._sqb_archive__20200101t000000z__old_products  archived 2020-01-01 00:00:00 UTC, age 2465d, expired 2020-01-15 00:00:00 UTC
+
+Previewed janitor as target 'prod' through the connection of target 'dev'. Nothing was changed.
+Rerun with `--target prod` instead of `--as prod` to apply it.
+```
+
+An unknown target name fails before anything connects. A preview exits with `0`, or with `1` when a schema is blocked, as a normal run would.
 
 ## Lifecycle
 
@@ -134,6 +158,12 @@ sqb janitor --auto-approve
 
 # Override retention to 7 days
 sqb janitor --retention-days 7
+
+# Preview the prod cleanup through the current connection, changing nothing
+sqb janitor --as prod
+
+# Clean up the prod target
+sqb janitor --target prod
 ```
 
 ## State history pruning
