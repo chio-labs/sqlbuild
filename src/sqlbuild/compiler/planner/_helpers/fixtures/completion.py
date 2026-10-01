@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections import ChainMap
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from typing import Any
 
@@ -91,7 +92,7 @@ def build_relation_fixture_completion(
         authoritative_columns=context.authoritative_columns,
         adapter=adapter,
     )
-    expected_types: dict[FixtureKey, dict[str, str]] = _expected_fixture_types(
+    expected_types: Mapping[FixtureKey, dict[str, str]] = _expected_fixture_types(
         base_expected_types=context.expected_types,
         ordered_model_names=ordered_model_names,
         model_map=model_map,
@@ -327,7 +328,7 @@ def complete_empty_fixture_sql(
 def _typed_null_fixture_types(
     *,
     null_literal_names_by_fixture: dict[FixtureKey, frozenset[str]],
-    expected_types: dict[FixtureKey, dict[str, str]],
+    expected_types: Mapping[FixtureKey, dict[str, str]],
 ) -> dict[FixtureKey, dict[str, str]]:
     result: dict[FixtureKey, dict[str, str]] = {}
     for key, null_literal_names in null_literal_names_by_fixture.items():
@@ -665,8 +666,8 @@ def _expected_fixture_types(
     base_expected_types: dict[FixtureKey, dict[str, str]],
     ordered_model_names: tuple[str, ...],
     model_map: dict[str, CompiledModel],
-) -> dict[FixtureKey, dict[str, str]]:
-    expected_types: dict[FixtureKey, dict[str, str]] = dict(base_expected_types)
+) -> Mapping[FixtureKey, dict[str, str]]:
+    expected_types: ChainMap[FixtureKey, dict[str, str]] = ChainMap({}, base_expected_types)
     for model_name in ordered_model_names:
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:

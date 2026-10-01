@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -120,7 +120,7 @@ class RelationFixtureCompletion:
 
     fixture_sql_by_key: dict[FixtureKey, str]
     inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
-    expected_types: dict[FixtureKey, dict[str, str]]
+    expected_types: Mapping[FixtureKey, dict[str, str]]
     diagnostics: tuple[RelationFixtureDiagnostic, ...]
 
 
