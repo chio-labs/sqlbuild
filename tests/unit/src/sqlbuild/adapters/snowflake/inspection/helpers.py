@@ -50,7 +50,9 @@ _CURSOR_BOUND_PATTERN: re.Pattern[str] = re.compile(
 )
 _ANY_PATTERN: re.Pattern[str] = re.compile(r"")
 _CURRENT_DATABASE_PATTERN: re.Pattern[str] = re.compile(r"^SELECT CURRENT_DATABASE\(\)$")
-_USE_DATABASE_PATTERN: re.Pattern[str] = re.compile(r'^USE DATABASE "?(?P<database>[^"]+)"?$')
+_USE_DATABASE_PATTERN: re.Pattern[str] = re.compile(
+    r'^(?s:.*?)USE DATABASE "?(?P<database>[^";]+)"?(?s:.*)$'
+)
 _SHOW_SCHEMAS_PATTERN: re.Pattern[str] = re.compile(
     r"^SHOW SCHEMAS LIKE '(?P<pattern>(?:[^']|'')*)' IN DATABASE \"(?P<database>[^\"]*)\"$"
 )

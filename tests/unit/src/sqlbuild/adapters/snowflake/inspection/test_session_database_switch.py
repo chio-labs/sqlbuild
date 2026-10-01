@@ -30,6 +30,12 @@ _SCOPE_PATTERN: re.Pattern[str] = re.compile(r'IN SCHEMA ("[^"]+")\.')
             expected_session_reads=2,
         ),
         SessionDatabaseSwitchTestCase(
+            description="commented scripting block is treated as a possible switch",
+            switch_sql='-- switch\n/* block */ BEGIN\n  USE DATABASE "ARCHIVE";\nEND;',
+            expected_scopes=(*('"ANALYTICS"',) * 3, *('"ARCHIVE"',) * 3),
+            expected_session_reads=2,
+        ),
+        SessionDatabaseSwitchTestCase(
             description="statements that cannot switch databases keep the remembered one",
             switch_sql="SELECT 1",
             expected_scopes=('"ANALYTICS"',) * 6,
