@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 
 import pytest
 
@@ -17,12 +18,15 @@ from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCata
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection._test_types import (
+    CappedColumnFallbackTestCase,
     ColumnRequestEquivalenceTestCase,
+    DroppedRelationTestCase,
     FreshnessErrorTestCase,
     FreshnessReuseTestCase,
     RelationRequestEquivalenceTestCase,
     RepeatedLookupTestCase,
     ShowResultCapTestCase,
+    ShowScopeTestCase,
     SpeculativePrefetchTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
@@ -381,6 +385,166 @@ def test_given_schema_beyond_show_cap_when_listing_then_matches_direct_adapter(
     assert sorted_relation_reprs(served) == sorted_relation_reprs(direct)
     assert served_columns == direct_columns
     assert tuple(query.kind for query in warehouse.queries) == test_case.expected_query_kinds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ShowScopeTestCase(
+            description="session database is resolved once and qualifies every SHOW",
+            database=None,
+            expected_relation_count=69,
+            expected_error_fragment=None,
+            expected_attempted_sql=(
+                "SELECT CURRENT_DATABASE()",
+                'SHOW TABLES IN SCHEMA "ANALYTICS"."STAGING" LIMIT 10000',
+                'SHOW VIEWS IN SCHEMA "ANALYTICS"."STAGING" LIMIT 10000',
+                'SHOW TABLES IN SCHEMA "ANALYTICS"."MARTS" LIMIT 10000',
+                'SHOW VIEWS IN SCHEMA "ANALYTICS"."MARTS" LIMIT 10000',
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_database_when_listing_schemas_then_show_uses_the_session_database(
+    test_case: ShowScopeTestCase,
+) -> None:
+    adapter, connection, warehouse = build_offline_snowflake(
+        relations=build_inspection_catalog_relations()
+    )
+    catalog: InspectionCatalog = InspectionCatalog(adapter=adapter, connection=connection)
+
+    staging: tuple[RelationInfo, ...] = catalog.list_relations(
+        database=test_case.database, schemas=("staging",)
+    )
+    marts: tuple[RelationInfo, ...] = catalog.list_relations(
+        database=test_case.database, schemas=("marts",)
+    )
+
+    assert len(staging) + len(marts) == test_case.expected_relation_count
+    assert {relation.database for relation in (*staging, *marts)} == {None}
+    assert tuple(warehouse.attempted_sql) == test_case.expected_attempted_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ShowScopeTestCase(
+            description="a missing database fails instead of listing nothing",
+            database="restricted_catalog",
+            expected_relation_count=0,
+            expected_error_fragment="Database 'RESTRICTED_CATALOG' does not exist",
+            expected_attempted_sql=(
+                'SHOW TABLES IN SCHEMA "RESTRICTED_CATALOG"."STAGING" LIMIT 10000',
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_database_when_listing_schema_then_inspection_fails(
+    test_case: ShowScopeTestCase,
+) -> None:
+    adapter, connection, warehouse = build_offline_snowflake(
+        relations=build_inspection_catalog_relations()
+    )
+    catalog: InspectionCatalog = InspectionCatalog(adapter=adapter, connection=connection)
+
+    with pytest.raises(RuntimeError, match=test_case.expected_error_fragment or ""):
+        _ = catalog.list_relations(database=test_case.database, schemas=("staging",))
+
+    assert tuple(warehouse.attempted_sql) == test_case.expected_attempted_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DroppedRelationTestCase(
+            description="a relation dropped after listing has no columns instead of failing",
+            relation_names=("orders", "customers_v", "transient_events"),
+            dropped_name="orders_archive",
+            expected_column_relations=("customers_v", "orders", "transient_events"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dropped_relation_when_reading_exact_columns_then_it_is_missing(
+    test_case: DroppedRelationTestCase,
+) -> None:
+    adapter, connection, _ = build_offline_snowflake(relations=build_inspection_catalog_relations())
+    listed: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection,
+        database="analytics",
+        schemas=("staging",),
+        names=test_case.relation_names,
+    )
+    relations: tuple[RelationInfo, ...] = (
+        *listed,
+        replace(listed[0], name=test_case.dropped_name),
+    )
+
+    direct: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(connection=connection, relations=relations)
+    )
+    served: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = InspectionCatalog(
+        adapter=adapter, connection=connection
+    ).get_columns_for_relations(relations=relations)
+
+    assert served == direct
+    assert tuple(sorted(identity[2] for identity in served)) == test_case.expected_column_relations
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CappedColumnFallbackTestCase(
+            description="a cap-sized schema rereads only needed relations in capped chunks",
+            relation_count=100,
+            columns_per_relation=100,
+            request_batches=(60, 40),
+            expected_query_kinds=("columns", "columns", "columns", "show_schema_columns"),
+            expected_in_list_sizes=(10, 40, 50),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cap_sized_column_listing_when_reading_then_only_needed_relations_are_reread(
+    test_case: CappedColumnFallbackTestCase,
+) -> None:
+    adapter, connection, warehouse = build_offline_snowflake(
+        relations=build_wide_schema_relations(
+            relation_count=test_case.relation_count,
+            columns_per_relation=test_case.columns_per_relation,
+        )
+    )
+    listed: tuple[RelationInfo, ...] = tuple(
+        sorted(
+            adapter.list_relations(
+                connection=connection, database="analytics", schemas=("inventory",)
+            ),
+            key=lambda relation: relation.name,
+        )
+    )
+    direct: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(connection=connection, relations=listed)
+    )
+    warehouse.reset()
+    catalog: InspectionCatalog = InspectionCatalog(adapter=adapter, connection=connection)
+    offsets: tuple[int, ...] = tuple(
+        sum(test_case.request_batches[:index]) for index in range(len(test_case.request_batches))
+    )
+
+    served: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = {}
+    for offset, size in zip(offsets, test_case.request_batches, strict=True):
+        served.update(catalog.get_columns_for_relations(relations=listed[offset : offset + size]))
+
+    assert served == direct
+    assert tuple(sorted(query.kind for query in warehouse.queries)) == (
+        test_case.expected_query_kinds
+    )
+    assert (
+        tuple(sorted(query.largest_in_list for query in warehouse.queries_of_kind("columns")))
+        == test_case.expected_in_list_sizes
+    )
 
 
 if __name__ == "__main__":

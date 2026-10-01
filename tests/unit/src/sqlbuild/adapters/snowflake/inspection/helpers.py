@@ -48,6 +48,7 @@ _CURSOR_BOUND_PATTERN: re.Pattern[str] = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _ANY_PATTERN: re.Pattern[str] = re.compile(r"")
+_CURRENT_DATABASE_PATTERN: re.Pattern[str] = re.compile(r"^SELECT CURRENT_DATABASE\(\)$")
 _IN_LIST_PATTERN: re.Pattern[str] = re.compile(r"\bIN\s*\(([^()]*)\)", re.IGNORECASE)
 _TABLES_PATTERN: re.Pattern[str] = re.compile(r"information_schema\.tables\b", re.IGNORECASE)
 _COLUMNS_PATTERN: re.Pattern[str] = re.compile(r"information_schema\.columns\b", re.IGNORECASE)
@@ -59,6 +60,7 @@ _QUERY_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^SHOW VIEWS IN SCHEMA "), "show_views"),
     (_SHOW_SCHEMA_COLUMNS_PATTERN, "show_schema_columns"),
     (_CURSOR_BOUND_PATTERN, "cursor_bounds"),
+    (_CURRENT_DATABASE_PATTERN, "session"),
     (_OTHER_INFORMATION_SCHEMA_PATTERN, "other_metadata"),
     (_SHOW_PATTERN, "other_metadata"),
     (_ANY_PATTERN, "data"),
@@ -286,6 +288,7 @@ class RecordingSnowflakeWarehouse:
             (_SHOW_SCHEMA_RELATIONS_PATTERN, self._answer_show_schema_relations),
             (_SHOW_SCHEMA_COLUMNS_PATTERN, self._answer_show_schema_columns),
             (_CURSOR_BOUND_PATTERN, self._answer_cursor_bounds),
+            (_CURRENT_DATABASE_PATTERN, self._answer_current_database),
             (_ANY_PATTERN, _answer_status),
         )
         route: tuple[re.Pattern[str], Callable[..., Any]] = next(
@@ -335,12 +338,21 @@ class RecordingSnowflakeWarehouse:
         database: str = (match.group("database") or self.current_database).replace("'", "''")
         return f"(SELECT * FROM {table} WHERE table_catalog = '{database}') AS {table}"
 
+    def _answer_current_database(
+        self, *, sql: str, params: tuple[object, ...]
+    ) -> tuple[list[tuple[Any, ...]], Any]:
+        del sql, params
+        return [(self.current_database,)], (("CURRENT_DATABASE()",),)
+
     def _schema_relations(self, *, scope: str) -> tuple[FakeRelation, ...]:
         parts: tuple[str, ...] = (
             self.current_database,
             *(part.strip('"') for part in scope.split(".")),
         )[-2:]
         _FAILED_SCHEMA_ACTIONS[parts[-1] in self.failing_metadata_schemas](scope)
+        _MISSING_DATABASE_ACTIONS[parts[0] not in {fake.database for fake in self.relations}](
+            parts[0]
+        )
         matches: tuple[FakeRelation, ...] = tuple(
             filter(
                 lambda fake: (fake.database, fake.schema)[-len(parts) :] == parts, self.relations
@@ -454,6 +466,17 @@ def _raise_failed_schema(scope: str) -> None:
     raise FakeSnowflakeProgrammingError(f"Metadata service unavailable for {scope}.", errno=390)
 
 
+def _raise_missing_database(database: str) -> None:
+    raise FakeSnowflakeProgrammingError(
+        f"SQL compilation error: Database '{database}' does not exist or not authorized.",
+        errno=2003,
+    )
+
+
+_MISSING_DATABASE_ACTIONS: dict[bool, Callable[[str], None]] = {
+    False: _accept_relation,
+    True: _raise_missing_database,
+}
 _MISSING_SCHEMA_ACTIONS: dict[bool, Callable[[str], None]] = {
     False: _accept_relation,
     True: _raise_missing_schema,

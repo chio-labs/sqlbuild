@@ -37,8 +37,15 @@ class InspectionCatalog:
         self._concurrency: int = max(1, int(getattr(adapter, "metadata_inspection_concurrency", 1)))
         self._relation_listings: dict[_SchemaKey, SchemaRelationListing] = {}
         self._column_listings: dict[_SchemaKey, SchemaColumnListing] = {}
+        self._capped_column_schemas: set[_SchemaKey] = set()
         self._relation_requests: dict[_RelationRequestKey, tuple[RelationInfo, ...]] = {}
         self._relation_columns: dict[_RelationIdentity, tuple[ColumnInfo, ...] | None] = {}
+
+    @property
+    def schema_scoped(self) -> bool:
+        """Return whether schema listings come from one case-aware read per schema."""
+
+        return self._reader is not None
 
     @property
     def concurrency(self) -> int:
@@ -237,54 +244,66 @@ class InspectionCatalog:
     def _read_columns_by_schema(
         self, *, reader: SchemaScopedMetadataReader, relations: tuple[RelationInfo, ...]
     ) -> None:
+        """Use exact per-relation reads for small requests and one read per schema otherwise."""
+
         unscoped: list[RelationInfo] = []
-        by_schema: dict[_SchemaKey, list[RelationInfo]] = {}
+        remaining: list[RelationInfo] = []
         relation: RelationInfo
         for relation in relations:
             if relation.schema is None:
                 unscoped.append(relation)
                 continue
-            by_schema.setdefault(
-                self._schema_key(database=relation.database, schema=relation.schema), []
-            ).append(relation)
+            listing: SchemaColumnListing | None = self._column_listings.get(
+                self._schema_key(database=relation.database, schema=relation.schema)
+            )
+            if listing is None:
+                remaining.append(relation)
+                continue
+            self._relation_columns[relation.identity] = listing.columns_by_stored_name.get(
+                reader.metadata_name_key(relation.name)
+            )
         if unscoped:
             self._read_columns_directly(relations=tuple(unscoped))
-        listing_keys: list[_SchemaKey] = []
-        listing_tasks: list[Callable[[], SchemaColumnListing]] = []
-        exact_relations: list[RelationInfo] = []
+        if not remaining:
+            return
+        if len(remaining) <= reader.exact_column_inspection_limit:
+            exact_results: list[tuple[ColumnInfo, ...] | None] = run_bounded_inspections(
+                tasks=tuple(
+                    self._bind_relation_columns(reader=reader, relation=exact)
+                    for exact in remaining
+                ),
+                concurrency=self._concurrency,
+            )
+            exact_columns: tuple[ColumnInfo, ...] | None
+            for relation, exact_columns in zip(remaining, exact_results, strict=True):
+                self._relation_columns[relation.identity] = exact_columns
+            return
+        by_schema: dict[_SchemaKey, list[RelationInfo]] = {}
+        for relation in remaining:
+            by_schema.setdefault(
+                self._schema_key(database=relation.database, schema=relation.schema or ""), []
+            ).append(relation)
+        listings: list[SchemaColumnListing] = run_bounded_inspections(
+            tasks=tuple(
+                self._bind_column_listing(
+                    reader=reader,
+                    database=scoped[0].database,
+                    schema=scoped[0].schema or "",
+                    stored_names=self._stored_names(reader=reader, relations=scoped),
+                    known_capped=schema_key in self._capped_column_schemas,
+                )
+                for schema_key, scoped in by_schema.items()
+            ),
+            concurrency=self._concurrency,
+        )
         schema_key: _SchemaKey
         scoped: list[RelationInfo]
-        for schema_key, scoped in by_schema.items():
-            if schema_key in self._column_listings:
-                continue
-            if len(scoped) <= reader.exact_column_inspection_limit:
-                exact_relations.extend(scoped)
-                continue
-            listing_keys.append(schema_key)
-            listing_tasks.append(
-                self._bind_column_listing(
-                    reader=reader, database=scoped[0].database, schema=scoped[0].schema or ""
-                )
-            )
-        exact_tasks: list[Callable[[], tuple[ColumnInfo, ...]]] = [
-            self._bind_relation_columns(reader=reader, relation=exact) for exact in exact_relations
-        ]
-        results: list[SchemaColumnListing | tuple[ColumnInfo, ...]] = run_bounded_inspections(
-            tasks=(*listing_tasks, *exact_tasks), concurrency=self._concurrency
-        )
-        listing: SchemaColumnListing | tuple[ColumnInfo, ...]
-        for schema_key, listing in zip(listing_keys, results[: len(listing_keys)], strict=True):
-            if isinstance(listing, SchemaColumnListing):
-                self._column_listings[schema_key] = listing
-        exact: RelationInfo
-        exact_columns: SchemaColumnListing | tuple[ColumnInfo, ...]
-        for exact, exact_columns in zip(exact_relations, results[len(listing_keys) :], strict=True):
-            if not isinstance(exact_columns, SchemaColumnListing):
-                self._relation_columns[exact.identity] = exact_columns
-        for schema_key, scoped in by_schema.items():
-            column_listing: SchemaColumnListing | None = self._column_listings.get(schema_key)
-            if column_listing is None:
-                continue
+        column_listing: SchemaColumnListing
+        for (schema_key, scoped), column_listing in zip(by_schema.items(), listings, strict=True):
+            if column_listing.complete:
+                self._column_listings[schema_key] = column_listing
+            else:
+                self._capped_column_schemas.add(schema_key)
             for relation in scoped:
                 self._relation_columns[relation.identity] = (
                     column_listing.columns_by_stored_name.get(
@@ -292,20 +311,36 @@ class InspectionCatalog:
                     )
                 )
 
+    @staticmethod
+    def _stored_names(
+        *, reader: SchemaScopedMetadataReader, relations: list[RelationInfo]
+    ) -> frozenset[str]:
+        return frozenset(reader.metadata_name_key(relation.name) for relation in relations)
+
     def _bind_column_listing(
-        self, *, reader: SchemaScopedMetadataReader, database: str | None, schema: str
+        self,
+        *,
+        reader: SchemaScopedMetadataReader,
+        database: str | None,
+        schema: str,
+        stored_names: frozenset[str],
+        known_capped: bool,
     ) -> Callable[[], SchemaColumnListing]:
         def read_listing() -> SchemaColumnListing:
             return reader.read_schema_column_listing(
-                connection=self.connection, database=database, schema=schema
+                connection=self.connection,
+                database=database,
+                schema=schema,
+                stored_names=stored_names,
+                known_capped=known_capped,
             )
 
         return read_listing
 
     def _bind_relation_columns(
         self, *, reader: SchemaScopedMetadataReader, relation: RelationInfo
-    ) -> Callable[[], tuple[ColumnInfo, ...]]:
-        def read_columns() -> tuple[ColumnInfo, ...]:
+    ) -> Callable[[], tuple[ColumnInfo, ...] | None]:
+        def read_columns() -> tuple[ColumnInfo, ...] | None:
             return reader.read_relation_columns(connection=self.connection, relation=relation)
 
         return read_columns

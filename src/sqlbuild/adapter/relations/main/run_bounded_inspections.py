@@ -28,28 +28,46 @@ def run_bounded_inspections[ResultT](
                 on_complete(index=index, result=result)
             results.append(result)
         return results
+    pool: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=min(concurrency, len(tasks)))
+    try:
+        completed: dict[int, ResultT] = _collect(pool=pool, tasks=tasks, on_complete=on_complete)
+    except BaseException:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    pool.shutdown(wait=True)
+    return [completed[index] for index in range(len(tasks))]
+
+
+def _collect[ResultT](
+    *,
+    pool: ThreadPoolExecutor,
+    tasks: Sequence[Callable[[], ResultT]],
+    on_complete: InspectionCompletion[ResultT] | None,
+) -> dict[int, ResultT]:
+    """Stop starting tasks after a failure, let running ones finish, raise the lowest failure."""
+
+    futures: dict[Future[ResultT], int] = {
+        cast(Future[ResultT], pool.submit(copy_context().run, task)): index
+        for index, task in enumerate(tasks)
+    }
     completed: dict[int, ResultT] = {}
     failures: dict[int, BaseException] = {}
-    with ThreadPoolExecutor(max_workers=min(concurrency, len(tasks))) as pool:
-        futures: dict[Future[ResultT], int] = {
-            cast(Future[ResultT], pool.submit(copy_context().run, task)): index
-            for index, task in enumerate(tasks)
-        }
-        future: Future[ResultT]
-        for future in as_completed(futures):
-            if future.cancelled():
-                continue
-            future_index: int = futures[future]
-            error: BaseException | None = future.exception()
-            if error is not None:
-                failures[future_index] = error
+    future: Future[ResultT]
+    for future in as_completed(futures):
+        if future.cancelled():
+            continue
+        future_index: int = futures[future]
+        error: BaseException | None = future.exception()
+        if error is not None:
+            if not failures:
                 pending: Future[ResultT]
                 for pending in futures:
                     _ = pending.cancel()
-                continue
-            completed[future_index] = future.result()
-            if on_complete is not None and not failures:
-                on_complete(index=future_index, result=completed[future_index])
+            failures[future_index] = error
+            continue
+        completed[future_index] = future.result()
+        if on_complete is not None and not failures:
+            on_complete(index=future_index, result=completed[future_index])
     if failures:
         raise failures[min(failures)]
-    return [completed[index] for index in range(len(tasks))]
+    return completed

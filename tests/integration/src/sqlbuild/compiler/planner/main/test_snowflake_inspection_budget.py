@@ -15,6 +15,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     SnowflakeCursorBoundsBudgetTestCase,
     SnowflakeInspectionBudgetTestCase,
+    SnowflakeManySchemasTestCase,
     SnowflakeReplanTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
@@ -163,6 +164,49 @@ def test_given_planned_project_when_planning_again_then_cursor_bounds_are_read_a
 
     assert len(warehouse.queries_of_kind("cursor_bounds")) == first
     assert len(warehouse.queries_of_kind("show_tables")) == test_case.expected_listing_reads
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeManySchemasTestCase(
+            description="many small schemas read model columns once per schema",
+            schema_count=24,
+            models_per_schema=2,
+            expected_per_relation_column_reads=30,
+            expected_schema_column_reads=24,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_many_small_schemas_when_planning_then_columns_are_read_per_schema(
+    test_case: SnowflakeManySchemasTestCase, tmp_path: Path
+) -> None:
+    project: SyntheticSnowflakeProject = write_synthetic_snowflake_project(
+        project_dir=tmp_path / "orders_platform",
+        model_schemas=tuple(f"region_{index}" for index in range(test_case.schema_count)),
+        models_per_schema=test_case.models_per_schema,
+        sources=30,
+        unmanaged_relations_per_schema=5,
+    )
+    warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(
+        relations=project.relations
+    )
+
+    result: CompilePipelineResult = plan_offline_snowflake_project(
+        project=project, warehouse=warehouse
+    )
+
+    assert len(result.plan_output.model_entries) == len(project.model_schemas)
+    assert (
+        len(warehouse.queries_of_kind("show_columns"))
+        == test_case.expected_per_relation_column_reads
+    )
+    assert (
+        len(warehouse.queries_of_kind("show_schema_columns"))
+        == test_case.expected_schema_column_reads
+    )
+    assert warehouse.queries_of_kind("columns") == ()
 
 
 if __name__ == "__main__":

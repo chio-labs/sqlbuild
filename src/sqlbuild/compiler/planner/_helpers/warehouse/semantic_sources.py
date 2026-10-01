@@ -6,6 +6,8 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
+from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
 from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
 from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
     list_relations_for_inspection,
@@ -89,12 +91,15 @@ def get_semantic_source_columns(
 def _list_source_candidates(
     *, adapter: BaseAdapter, connection: Any, database: str | None, entries: tuple[SourceEntry, ...]
 ) -> tuple[RelationInfo, ...]:
-    """List schema-qualified sources from their schemas and unqualified ones by name."""
+    """List candidates by name in any schema; schema listings first answer scoped catalogs."""
 
-    scoped: tuple[SourceEntry, ...] = tuple(entry for entry in entries if entry.schema is not None)
-    unscoped: tuple[SourceEntry, ...] = tuple(entry for entry in entries if entry.schema is None)
+    pending: tuple[SourceEntry, ...] = entries
     relations: list[RelationInfo] = []
-    if scoped:
+    catalog: InspectionCatalog | None = active_inspection_catalog(
+        adapter=adapter, connection=connection
+    )
+    scoped: tuple[SourceEntry, ...] = tuple(entry for entry in entries if entry.schema is not None)
+    if catalog is not None and catalog.schema_scoped and scoped:
         relations.extend(
             list_relations_for_inspection(
                 adapter=adapter,
@@ -104,14 +109,26 @@ def _list_source_candidates(
                 names=tuple(sorted({entry.table or entry.name for entry in scoped})),
             )
         )
-    if unscoped:
+        pending = tuple(
+            entry for entry in entries if not _has_candidate(entry=entry, relations=relations)
+        )
+    if pending:
         relations.extend(
             list_relations_for_inspection(
                 adapter=adapter,
                 connection=connection,
                 database=database,
                 schemas=None,
-                names=tuple(sorted({entry.table or entry.name for entry in unscoped})),
+                names=tuple(sorted({entry.table or entry.name for entry in pending})),
             )
         )
     return tuple(dict.fromkeys(relations))
+
+
+def _has_candidate(*, entry: SourceEntry, relations: list[RelationInfo]) -> bool:
+    name: str = (entry.table or entry.name).casefold()
+    return any(
+        relation.name.casefold() == name
+        and (entry.schema is None or (relation.schema or "").casefold() == entry.schema.casefold())
+        for relation in relations
+    )

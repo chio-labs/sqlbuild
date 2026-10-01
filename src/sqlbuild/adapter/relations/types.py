@@ -31,15 +31,21 @@ class SchemaScopedMetadataReader(Protocol):
         ...
 
     def read_schema_column_listing(
-        self, *, connection: Any, database: str | None, schema: str
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        stored_names: frozenset[str],
+        known_capped: bool = False,
     ) -> SchemaColumnListing:
-        """Read every column in one schema."""
+        """Read one schema's columns; an incomplete listing covers only ``stored_names``."""
         ...
 
     def read_relation_columns(
         self, *, connection: Any, relation: RelationInfo
-    ) -> tuple[ColumnInfo, ...]:
-        """Read one relation's columns."""
+    ) -> tuple[ColumnInfo, ...] | None:
+        """Read one relation's columns, or None when it no longer exists."""
         ...
 
     def metadata_name_key(self, name: str) -> str:

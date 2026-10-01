@@ -10,6 +10,7 @@ import pytest
 from sqlbuild.adapter.relations.models import ListedRelation
 from sqlbuild.adapters.snowflake._helpers.show_metadata import (
     is_missing_object_error,
+    is_missing_schema_error,
     listed_relation_from_show_table,
     listed_relation_from_show_view,
 )
@@ -160,22 +161,40 @@ def test_given_show_row_when_mapping_then_matches_information_schema_relation(
     "test_case",
     [
         MissingObjectErrorTestCase(
-            description="driver error number",
+            description="driver error number alone",
             errno=2003,
             message="SQL compilation error",
             expected_missing=True,
+            expected_missing_schema=False,
         ),
         MissingObjectErrorTestCase(
-            description="message without error number",
+            description="missing schema message",
             errno=None,
             message="Schema 'ANALYTICS.STAGING' does not exist or not authorized.",
             expected_missing=True,
+            expected_missing_schema=True,
+        ),
+        MissingObjectErrorTestCase(
+            description="missing database fails the plan",
+            errno=2003,
+            message="SQL compilation error: Database 'ANALYTICS' does not exist or not authorized.",
+            expected_missing=True,
+            expected_missing_schema=False,
+        ),
+        MissingObjectErrorTestCase(
+            description="missing table",
+            errno=2003,
+            message="SQL compilation error: Table 'ANALYTICS.RAW.ORDERS' does not exist or not "
+            "authorized.",
+            expected_missing=True,
+            expected_missing_schema=False,
         ),
         MissingObjectErrorTestCase(
             description="other failure",
             errno=390,
             message="Metadata service unavailable",
             expected_missing=False,
+            expected_missing_schema=False,
         ),
     ],
     ids=lambda case: case.description,
@@ -189,6 +208,7 @@ def test_given_show_failure_when_classifying_then_only_missing_schemas_list_noth
     )[test_case.errno is not None]
 
     assert is_missing_object_error(error) is test_case.expected_missing
+    assert is_missing_schema_error(error) is test_case.expected_missing_schema
 
 
 if __name__ == "__main__":

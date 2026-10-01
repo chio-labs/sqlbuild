@@ -130,3 +130,14 @@ class SnowflakeReplanTestCase:
 
     description: str
     expected_listing_reads: int
+
+
+@dataclass(frozen=True)
+class SnowflakeManySchemasTestCase:
+    """Many small model schemas planned against a recording warehouse."""
+
+    description: str
+    schema_count: int
+    models_per_schema: int
+    expected_per_relation_column_reads: int
+    expected_schema_column_reads: int

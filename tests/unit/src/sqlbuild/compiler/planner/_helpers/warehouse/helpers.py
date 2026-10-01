@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _CursorModelInfo,
     _PhysicalCursorQuery,
@@ -143,3 +144,9 @@ def build_eligible_max_cursor_models(count: int) -> list[_CursorModelInfo]:
         )
         for index in range(count)
     ]
+
+
+def column_names(columns: tuple[ColumnInfo, ...]) -> tuple[str, ...]:
+    """Return inspected column names in order."""
+
+    return tuple(column.name for column in columns)

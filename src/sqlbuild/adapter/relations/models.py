@@ -31,6 +31,7 @@ class SchemaColumnListing:
     database: str | None
     schema: str
     columns_by_stored_name: dict[str, tuple[ColumnInfo, ...]]
+    complete: bool = True
 
 
 @dataclass(frozen=True)

@@ -11,6 +11,8 @@ from sqlbuild.adapter.relations.models import ListedRelation
 _MISSING_OBJECT_ERRNO: int = 2003
 _MISSING_OBJECT_MESSAGE: str = "does not exist or not authorized"
 _TRUE_FLAGS: frozenset[str] = frozenset({"Y", "YES", "TRUE"})
+_MISSING_SCHEMA_MARKER: str = "schema '"
+_MISSING_DATABASE_MARKER: str = "database '"
 _TRANSIENT_KIND: str = "TRANSIENT"
 _TEMPORARY_KIND: str = "TEMPORARY"
 
@@ -57,6 +59,17 @@ def is_missing_object_error(error: Exception) -> bool:
     return (
         getattr(error, "errno", None) == _MISSING_OBJECT_ERRNO
         or _MISSING_OBJECT_MESSAGE in str(error).lower()
+    )
+
+
+def is_missing_schema_error(error: Exception) -> bool:
+    """Return whether SHOW failed for a missing schema; a missing database is a real failure."""
+
+    message: str = str(error).lower()
+    return (
+        is_missing_object_error(error)
+        and _MISSING_SCHEMA_MARKER in message
+        and _MISSING_DATABASE_MARKER not in message
     )
 
 

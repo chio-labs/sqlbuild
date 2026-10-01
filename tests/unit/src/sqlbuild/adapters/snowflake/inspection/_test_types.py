@@ -102,6 +102,7 @@ class MissingObjectErrorTestCase:
     errno: int | None
     message: str
     expected_missing: bool
+    expected_missing_schema: bool
 
 
 @dataclass(frozen=True)
@@ -112,3 +113,36 @@ class ShowResultCapTestCase:
     relation_count: int
     columns_per_relation: int
     expected_query_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ShowScopeTestCase:
+    """A schema listing whose database is missing or comes from the session."""
+
+    description: str
+    database: str | None
+    expected_relation_count: int
+    expected_error_fragment: str | None
+    expected_attempted_sql: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DroppedRelationTestCase:
+    """Columns requested for a relation dropped after it was listed."""
+
+    description: str
+    relation_names: tuple[str, ...]
+    dropped_name: str
+    expected_column_relations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CappedColumnFallbackTestCase:
+    """Columns needed from a schema whose SHOW COLUMNS output is exactly the cap."""
+
+    description: str
+    relation_count: int
+    columns_per_relation: int
+    request_batches: tuple[int, ...]
+    expected_query_kinds: tuple[str, ...]
+    expected_in_list_sizes: tuple[int, ...]
