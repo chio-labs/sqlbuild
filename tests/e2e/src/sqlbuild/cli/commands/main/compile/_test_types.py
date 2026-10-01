@@ -371,3 +371,12 @@ class CompileCacheDisabledTestCase:
     edit: Callable[[Path], None] = lambda _root: None
     expected_fact_cache_counts: tuple[int, int] = (0, 0)
     expected_fact_databases: tuple[Path, ...] = ()
+
+
+@dataclass(frozen=True)
+class FunctionNameCompileTestCase:
+    description: str
+    project_toml: str
+    projection_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[tuple[str, str, int, int], ...]

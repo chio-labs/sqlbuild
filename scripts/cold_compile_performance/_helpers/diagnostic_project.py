@@ -73,3 +73,28 @@ def write_cascade_project(*, project_dir: Path, depth: int, width: int = 50) -> 
             + f' FROM __ref("{previous}")'
         )
         previous = name
+
+
+def write_function_name_project(*, project_dir: Path, model_count: int, calls: int) -> None:
+    """Generate wide Snowflake models mixing unsupported, accepted, and unknown function calls."""
+    project_dir.mkdir(parents=True, exist_ok=True)
+    models: Path = project_dir / "models"
+    models.mkdir(exist_ok=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "function_name_orders"\nadapter = "snowflake"\n[rules]\nselect = []\n'
+    )
+    for model_index in range(model_count):
+        projections: list[str] = []
+        for index in range(calls):
+            projections.extend(
+                (
+                    f"  STARTS_WITH(sku, 'a{index}') AS unsupported_{index:05}",
+                    f"  STARTSWITH(sku, 'a{index}') AS accepted_{index:05}",
+                    f"  normalize_sku(sku, {index}) AS unknown_{index:05}",
+                )
+            )
+        (models / f"wide_products_{model_index}.sql").write_text(
+            "MODEL (database warehouse, schema analytics);\nSELECT\n"
+            + ",\n".join(projections)
+            + "\nFROM (SELECT 'anvil' AS sku) AS products\nWHERE NOT (sku IN ('a', 'b'))\n"
+        )
