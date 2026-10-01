@@ -6,6 +6,7 @@ from sqlbuild.cli.commands._helpers.plan.invocation import resolve_plan_invocati
 from sqlbuild.cli.commands._helpers.plan.outputs import write_plan_command_output
 from sqlbuild.cli.commands._helpers.plan.planning import compile_plan_pipeline
 from sqlbuild.cli.commands.models import PlanCommandRequest, PlanInvocation
+from sqlbuild.cli.progress.main.verbose_inspection_output import verbose_inspection_output
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 
 
@@ -16,10 +17,9 @@ def run_plan(request: PlanCommandRequest) -> int:
     if not request.json_output:
         invocation.progress_stream.write("\n")
         invocation.progress_stream.flush()
-    pipeline_result: CompilePipelineResult = compile_plan_pipeline(
-        request=request,
-        invocation=invocation,
-    )
+    pipeline_result: CompilePipelineResult
+    with verbose_inspection_output(enabled=request.verbose):
+        pipeline_result = compile_plan_pipeline(request=request, invocation=invocation)
     write_plan_command_output(
         request=request,
         invocation=invocation,

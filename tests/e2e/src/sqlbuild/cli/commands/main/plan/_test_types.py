@@ -46,3 +46,11 @@ class DiamondPlanE2ETestCase:
 class DiamondPlanJsonE2ETestCase:
     description: str
     expected_reasons: dict[str, str]
+
+
+@dataclass(frozen=True)
+class VerboseInspectionPlanE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_inspection_output: bool
+    expected_json_stdout: bool
