@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner._helpers.changes.policy import (
     resolve_replay_on_change,
 )
 from sqlbuild.compiler.planner._helpers.changes.query import detect_query_change
+from sqlbuild.compiler.planner._helpers.changes.reference_renames import origin_reference_names
 from sqlbuild.compiler.planner._helpers.changes.schema import detect_schema_changes
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
@@ -228,19 +229,29 @@ def detect_model_changes(
         if changed_functions
         else version_identity_metadata_payload
     )
-    references_only: bool = model_name in snapshot.reference_only_changes
-    config_changed: bool = recorded_metadata_json is not None and identity_payload(
-        with_origin_cursor_input_names(
-            metadata_json=metadata_json, renamed_refs=snapshot.renamed_refs
+    origin_names: dict[str, str] | None = (
+        origin_reference_names(
+            query_sql=model.query_sql,
+            recorded=fingerprint,
+            renames=snapshot.reference_renames,
+            dialect=snapshot.column_dialect,
         )
-        if references_only
+        if query_change_tracking
+        and fingerprint is not None
+        and snapshot.reference_renames
+        and compute_query_hash(model.query_sql) != fingerprint.definition_hash
+        else None
+    )
+    config_changed: bool = recorded_metadata_json is not None and identity_payload(
+        with_origin_cursor_input_names(metadata_json=metadata_json, renamed_refs=origin_names)
+        if origin_names is not None
         else metadata_json
     ) != identity_payload(recorded_metadata_json)
     replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
         compiled_query_hash: str = compute_query_hash(model.query_sql)
-        query_changed = not references_only and detect_query_change(
+        query_changed = origin_names is None and detect_query_change(
             compiled_query_hash=compiled_query_hash,
             fingerprint=fingerprint,
         )

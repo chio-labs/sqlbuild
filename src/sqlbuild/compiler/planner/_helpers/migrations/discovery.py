@@ -75,7 +75,7 @@ def discover_model_migrations(
     )
     if not triggered and not manual_requests:
         return ModelMigrationDiscovery()
-    metadata_jsons: dict[str, str] = migration_metadata_jsons(runtime=runtime, models=models)
+    metadata_jsons: dict[str, str] = _metadata_jsons(runtime=runtime, models=models)
     dialect: str | None = runtime.adapter.sql_analysis_dialect()
     state.inspect_schemas(schemas=project_schemas)
     declared_renames: dict[str, str] = _declared_renames(declarations=declarations, state=state)
@@ -353,11 +353,9 @@ def _new_model_names(
     )
 
 
-def migration_metadata_jsons(
+def _metadata_jsons(
     *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...]
 ) -> dict[str, str]:
-    """Return each model's current version identity metadata JSON."""
-
     function_hashes: dict[str, str] = build_function_local_hashes(
         functions=runtime.project.functions
     )

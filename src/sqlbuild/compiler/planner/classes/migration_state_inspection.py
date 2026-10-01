@@ -47,6 +47,7 @@ class MigrationStateInspection:
         self._read_schemas: set[str] = set()
         self._fingerprints: dict[str, tuple[Fingerprint, ...]] = {}
         self._events: list[MigrationEvent] = []
+        self._event_schemas: set[str] = set()
         self._relations: dict[tuple[str, str], RelationInfo] = {}
         self._columns: dict[tuple[str, str], tuple[ColumnInfo, ...]] = {}
         self._column_event_schemas: set[str] = set()
@@ -164,6 +165,24 @@ class MigrationStateInspection:
                 )
             )
 
+    def inspect_migration_events(self, *, schemas: set[str]) -> None:
+        """Read migration events once from schemas known to hold the migration table."""
+
+        schema: str
+        for schema in sorted(schemas):
+            if schema.lower() in self._event_schemas:
+                continue
+            self._event_schemas.add(schema.lower())
+            self._events.extend(
+                read_migration_events(
+                    connection=self._connection,
+                    execute=self._adapter.execute,
+                    database=self._database,
+                    schema=schema,
+                    render_qualified_name=self._adapter.render_qualified_name,
+                )
+            )
+
     def inspect_schemas(self, *, schemas: set[str]) -> None:
         """Read state tables once for every schema not inspected yet."""
 
@@ -186,15 +205,7 @@ class MigrationStateInspection:
         schema: str
         for schema in pending:
             if (schema.lower(), MIGRATION_TABLE_NAME) in state_tables:
-                self._events.extend(
-                    read_migration_events(
-                        connection=self._connection,
-                        execute=self._adapter.execute,
-                        database=self._database,
-                        schema=schema,
-                        render_qualified_name=self._adapter.render_qualified_name,
-                    )
-                )
+                self.inspect_migration_events(schemas={schema})
             if (schema.lower(), FINGERPRINT_TABLE_NAME) in state_tables:
                 self._fingerprints[schema.lower()] = self._read_model_fingerprints(schema=schema)
 

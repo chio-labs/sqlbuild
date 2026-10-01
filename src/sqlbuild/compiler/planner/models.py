@@ -625,6 +625,15 @@ class MaximumStartPolicyInputs:
 
 
 @dataclass(frozen=True)
+class ReferenceRename:
+    """One model rename that downstream references may have been rewritten for."""
+
+    new_name: str
+    origin_name: str
+    recorded_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
@@ -635,8 +644,8 @@ class WarehouseSnapshot:
     source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
     column_dialect: str | None = None
     renamed_models: frozenset[str] = field(default_factory=frozenset)
-    renamed_refs: dict[str, str] = field(default_factory=dict)
-    reference_only_changes: frozenset[str] = field(default_factory=frozenset)
+    reference_renames: tuple[ReferenceRename, ...] = ()
+    migration_state_schemas: frozenset[str] = field(default_factory=frozenset)
     old_name_view_state_schemas: frozenset[str] = field(default_factory=frozenset)
     listed_state_schemas: frozenset[str] | None = field(default_factory=frozenset)
 

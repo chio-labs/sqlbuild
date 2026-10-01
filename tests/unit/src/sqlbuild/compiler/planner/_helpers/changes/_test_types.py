@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
+from sqlbuild.compiler.planner.models import BackfillResult, ReferenceRename, SchemaFinding
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
@@ -27,6 +27,7 @@ class DetectModelChangesTestCase:
     fast_lineage_has_star: bool = False
     expected_recorded_build_relation_missing: bool = False
     renamed_by_migration: bool = False
+    schema_type_enforcement: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -94,3 +95,12 @@ class DetectRenamedModelTestCase:
     config_values: dict[str, object]
     expected_query_changed: bool
     expected_backfill: BackfillResult
+
+
+@dataclass(frozen=True)
+class OriginReferenceNamesTestCase:
+    description: str
+    query_sql: str
+    recorded_query_sql: str
+    renames: tuple[ReferenceRename, ...]
+    expected_mapping: dict[str, str] | None
