@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import cast
 
 from sqlbuild.adapter.relations._helpers.ddl_effects import (
+    qualified_relation_name_key,
     relation_name_key,
     statement_metadata_effect,
 )
@@ -38,6 +39,13 @@ class RelationMetadataCache:
         """Return the cached answer for this exact lookup, reading it on a miss."""
 
         return cast(ValueT, self._lookup(key=(kind, database, schema, name), read=read))
+
+    def invalidate_relations(self, *, qualified_names: tuple[str, ...]) -> None:
+        """Evict relations changed outside SQL statements, such as by a warehouse copy job."""
+
+        names: frozenset[str] = frozenset(map(qualified_relation_name_key, qualified_names))
+        with self._lock:
+            self._invalidate_names(names=names)
 
     def observe_statement(self, *, sql: str) -> None:
         """Invalidate entries the finished statement ``sql`` may have changed."""

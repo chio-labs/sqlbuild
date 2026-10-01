@@ -88,6 +88,7 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
+from sqlbuild.adapter.relations.main.invalidate_cached_relations import invalidate_cached_relations
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
@@ -2010,12 +2011,15 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         )
         statement_recorder.record(f"COPY WRITE_TRUNCATE {origin} TO {destination}")
-        connection.client.copy_table(
-            origin_table,
-            destination_table,
-            job_config=job_config,
-            location=connection.location,
-        ).result()
+        try:
+            connection.client.copy_table(
+                origin_table,
+                destination_table,
+                job_config=job_config,
+                location=connection.location,
+            ).result()
+        finally:
+            invalidate_cached_relations(adapter=self, qualified_names=(destination, origin))
 
     def move_or_copy_relation(
         self,
@@ -2313,13 +2317,16 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement_recorder.record(
             f"LOAD CSV {file_path} INTO {destination} ({', '.join(col.name for col in columns)})"
         )
-        with file_path.open("rb") as seed_file:
-            connection.client.load_table_from_file(
-                seed_file,
-                self._strip_identifier_quotes(destination),
-                job_config=job_config,
-                location=connection.location,
-            ).result()
+        try:
+            with file_path.open("rb") as seed_file:
+                connection.client.load_table_from_file(
+                    seed_file,
+                    self._strip_identifier_quotes(destination),
+                    job_config=job_config,
+                    location=connection.location,
+                ).result()
+        finally:
+            invalidate_cached_relations(adapter=self, qualified_names=(destination,))
 
     def add_columns(
         self,
