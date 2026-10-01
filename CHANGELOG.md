@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.129.1](https://github.com/chio-labs/sqlbuild/compare/v0.129.0...v0.129.1) (2026-10-01)
+
+
+### Performance Improvements
+
+* **planner:** read fingerprint state once and keep plan generation linear ([#904](https://github.com/chio-labs/sqlbuild/issues/904)) ([3b5f131](https://github.com/chio-labs/sqlbuild/commit/3b5f131af759c34ff457ea8a6f296f2cd80d0503))
+
 ## [0.129.0](https://github.com/chio-labs/sqlbuild/compare/v0.128.0...v0.129.0) (2026-10-01)
 
 
