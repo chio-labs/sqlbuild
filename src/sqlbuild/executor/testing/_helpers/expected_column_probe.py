@@ -9,9 +9,6 @@ import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
-    restore_sql_test_dialect_function_names,
-)
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -68,9 +65,7 @@ def _probe_actual_columns(
     try:
         cursor: Any = adapter.execute(
             connection=connection,
-            sql=restore_sql_test_dialect_function_names(
-                sql=sql, dialect=adapter.sql_analysis_dialect()
-            ),
+            sql=sql,
         )
         description: Any | None = getattr(cursor, "description", None)
     except Exception as error:

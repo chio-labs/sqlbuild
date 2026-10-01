@@ -7,9 +7,6 @@ from typing import Any, cast
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
-    restore_sql_test_dialect_function_names,
-)
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.native_requests import comparison_request
 from sqlbuild.executor.testing.constants import SQL_TEST_NATIVE_RENDER_WORKERS
@@ -53,10 +50,5 @@ def build_sql_test_comparison_sql_batch(
         sql: object = item_dict.get("sql") if item_dict is not None else None
         if not isinstance(sql, str):
             raise SqlTestRenderingError("native SQL-test rendering returned an invalid result")
-        rendered.append(
-            restore_sql_test_dialect_function_names(
-                sql=sql,
-                dialect=sql_analysis_dialect,
-            )
-        )
+        rendered.append(sql)
     return tuple(rendered)

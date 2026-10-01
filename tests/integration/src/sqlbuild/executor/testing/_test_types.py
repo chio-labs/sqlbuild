@@ -55,3 +55,12 @@ class SqlTestDiagnosticsTestCase:
 class ExpectedBooleanTestCase:
     description: str
     expected_result: bool
+
+
+@dataclass(frozen=True)
+class SqlTestBuildParityTestCase:
+    description: str
+    test_name: str
+    model_name: str
+    expected_whole_body_rendered: bool
+    expected_verbatim_fragments: tuple[str, ...] = ()

@@ -10,6 +10,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::compiler::_helpers::sql_tests::cte_slices::SliceDialect;
 use crate::compiler::_helpers::sql_tests::cte_sql::{
     cte_definition_sql, leading_with_prefix_end, with_leading_ctes, with_unique_ctes,
 };
@@ -22,7 +23,7 @@ use crate::compiler::_helpers::sql_tests::markers::{
     replace_dbt_ref_markers, replace_named_markers,
 };
 use crate::compiler::_helpers::sql_tests::rendering::{
-    AssertionStep, ChainStep, RenderRequest, StatementCache, render_comparison_sql, render_dialect,
+    AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
     rendered_chain_steps,
 };
 use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
@@ -206,7 +207,7 @@ struct ProjectContext {
     analysis_templates: Arc<AnalysisTemplateCache>,
     patterns: SqlTestPatterns,
     render_dialect: Arc<Dialect>,
-    rendered_statements: Arc<StatementCache>,
+    rejects_nested_with: bool,
 }
 
 #[derive(Clone)]
@@ -587,6 +588,8 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
     let render_sql = request.render_sql;
     let include_plan = request.include_plan;
     let render_dialect = Arc::new(render_dialect(request.sql_analysis_dialect.as_deref()));
+    let rejects_nested_with =
+        SliceDialect::new(request.sql_analysis_dialect.as_deref()).rejects_nested_with();
     let context = ProjectContext {
         models: request
             .models
@@ -615,7 +618,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
         analysis_templates: Arc::new(Mutex::new(HashMap::new())),
         patterns: SqlTestPatterns::new()?,
         render_dialect,
-        rendered_statements: Arc::default(),
+        rejects_nested_with,
     };
     let workers = request.workers.clamp(1, MAX_WORKERS);
     let pool = rayon::ThreadPoolBuilder::new()
@@ -630,16 +633,24 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
             .into_par_iter()
             .map(|test| {
                 let planning_start = Instant::now();
+                let test_name = test.name.clone();
                 let mut planned = plan_test(test, &context)?;
                 let planning_ns = planning_start.elapsed().as_nanos();
                 let rendering_start = Instant::now();
-                let sql = render_sql.then(|| {
-                    render_comparison_sql(
-                        &planned.request,
-                        &context.render_dialect,
-                        Some(&context.rendered_statements),
-                    )
-                });
+                let rendered = (render_sql || context.rejects_nested_with)
+                    .then(|| render_comparison_sql(&planned.request));
+                let sql = match rendered {
+                    Some(Ok(sql)) => render_sql.then_some(sql),
+                    Some(Err(message)) => {
+                        planned.warnings.push(PlanWarning {
+                            model_name: None,
+                            severity: "error",
+                            message: format!("test '{test_name}' cannot be rendered: {message}"),
+                        });
+                        render_sql.then(String::new)
+                    }
+                    None => None,
+                };
                 if !include_plan {
                     planned.request.chain.clear();
                     planned.request.assertions.clear();

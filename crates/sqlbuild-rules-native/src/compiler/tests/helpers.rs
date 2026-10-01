@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 
-use crate::compiler::_helpers::sql_tests::cte_namespace::CteNamespace;
-use polyglot_sql::{Dialect, DialectType, Expression};
 use serde_json::{Value, json};
 
 use crate::compiler::_helpers::model_headers::tokenization::{
@@ -1379,69 +1377,30 @@ pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope()
     }
     true
 }
-pub(super) fn bounded_names_are_unique() -> bool {
-    let dialect = Dialect::get(DialectType::DuckDB);
-    let long = "orders_".repeat(40);
-    let sql = format!(
-        "WITH {long} AS (SELECT 1 AS order_id), __sqb_cte_0 AS (SELECT * FROM {long}), \
-         final AS (SELECT * FROM __sqb_cte_0) SELECT final.* FROM final"
-    );
-    let reserved = "__sqb_cte_1 __SQB_CTE_2 __ref__orders __source__orders __expected__orders __actual__orders";
-    let mut first = CteNamespace::default();
-    first.reserve(&sql);
-    first.reserve(reserved);
-    let parsed = dialect.parse(&sql).expect("valid CTE query").remove(0);
-    let rewritten = first
-        .rewrite(parsed.clone(), dialect.dialect_type())
-        .expect("valid rename");
-    let Expression::Select(select) = &rewritten else {
-        return false;
-    };
-    let names: Vec<_> = select
-        .with
-        .as_ref()
-        .expect("WITH retained")
-        .ctes
-        .iter()
-        .map(|cte| cte.alias.name.as_str())
-        .collect();
-    let second_step = first
-        .rewrite(parsed.clone(), dialect.dialect_type())
-        .expect("second rename");
-    let mut replay = CteNamespace::default();
-    replay.reserve(&sql);
-    replay.reserve(reserved);
-    names.len() == 3
-        && names
-            .iter()
-            .all(|name| name.len() <= 30 && name.starts_with("__sqb_cte_"))
-        && !names.contains(&"__sqb_cte_0")
-        && !names.contains(&"__sqb_cte_1")
-        && !names.contains(&"__sqb_cte_2")
-        && rewritten != second_step
-        && rewritten
-            == replay
-                .rewrite(parsed, dialect.dialect_type())
-                .expect("deterministic rename")
+fn render_one(request: Value) -> Result<String, String> {
+    let response = crate::compiler::_helpers::sql_tests::rendering::render_json(
+        &json!({"requests": [request]}).to_string(),
+    )?;
+    let response: Vec<Value> = serde_json::from_str(&response).expect("render response");
+    Ok(response[0]["sql"]
+        .as_str()
+        .expect("rendered query")
+        .to_string())
 }
 
-pub(super) fn quoted_names_keep_bindings() -> bool {
-    let dialect = Dialect::get(DialectType::Snowflake);
-    let sql = "WITH final AS (SELECT 1 AS order_id), \"final\" AS (SELECT 2 AS order_id) \
-               SELECT a.order_id, b.order_id, 'final' AS label FROM FINAL a CROSS JOIN \"final\" b";
-    let mut namespace = CteNamespace::default();
-    namespace.reserve(sql);
-    let rewritten = namespace
-        .rewrite(
-            dialect.parse(sql).expect("valid quoted CTEs").remove(0),
-            dialect.dialect_type(),
-        )
-        .expect("quoted rename");
-    let rendered = dialect.generate(&rewritten).expect("render renamed CTEs");
-    rendered.contains("FROM __sqb_cte_0 AS a")
-        && rendered.contains("JOIN __sqb_cte_1 AS b")
-        && rendered.contains("'final' AS label")
+fn colliding_chain_request(dialect: &str, name: &str) -> Value {
+    json!({
+        "sqlAnalysisDialect": dialect,
+        "chain": [{
+            "modelName": "orders",
+            "resolvedSql": format!("WITH {name} AS (SELECT 2 AS order_id) SELECT final.order_id FROM final"),
+            "comparisonBodySql": format!("WITH {name} AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders) SELECT final.order_id FROM final"),
+            "liftedCtes": [["__ref__stg_orders", format!("WITH {name} AS (SELECT 1 AS order_id) SELECT * FROM {name}")]],
+            "expectedCteSql": "SELECT 2 AS order_id"
+        }]
+    })
 }
+
 pub(super) fn repeated_model_sql_renders_like_separate_batches() -> bool {
     let step = |reserved: &str| {
         json!({
@@ -1461,37 +1420,175 @@ pub(super) fn repeated_model_sql_renders_like_separate_batches() -> bool {
         serde_json::from_str::<Vec<Value>>(&response).expect("render response")
     };
     let plain = step("");
-    let reserved = step("-- __sqb_cte_0");
-    let separate: Vec<Value> = [&plain, &reserved, &plain]
+    let commented = step("-- trailing comment");
+    let separate: Vec<Value> = [&plain, &commented, &plain]
         .into_iter()
         .flat_map(|request| render(vec![request.clone()]))
         .collect();
-    let batched = render(vec![plain.clone(), reserved.clone(), plain]);
+    let batched = render(vec![plain.clone(), commented.clone(), plain]);
     separate == batched
         && batched[0] != batched[1]
-        && batched[0]["sql"]
-            .as_str()
-            .is_some_and(|sql| sql.contains("__sqb_cte_0 AS"))
+        && batched[0]["sql"].as_str().is_some_and(|sql| {
+            sql.starts_with("WITH final AS (SELECT 2 AS order_id),\n")
+                && sql.contains("__actual__orders AS (SELECT final.order_id FROM final)")
+        })
 }
 
-pub(super) fn model_cte_names_are_isolated_across_dialects() -> bool {
-    [("duckdb", "final"), ("snowflake", "final"), ("postgres", "final"), ("tsql", "final"), ("bigquery", "`final`"), ("databricks", "`final`")].iter().all(|(dialect, name)| {
-        let request = json!({
-            "requests": [{
-                "sqlAnalysisDialect": dialect,
-                "chain": [{
+pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
+    [
+        ("duckdb", "final"),
+        ("snowflake", "final"),
+        ("postgres", "final"),
+        ("bigquery", "`final`"),
+        ("databricks", "`final`"),
+    ]
+    .iter()
+    .all(|(dialect, name)| {
+        let upstream = format!("WITH {name} AS (SELECT 1 AS order_id) SELECT * FROM {name}");
+        let downstream = format!(
+            "WITH {name} AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders) SELECT final.order_id FROM final"
+        );
+        let sql = render_one(json!({
+            "sqlAnalysisDialect": dialect,
+            "chain": [
+                {"modelName": "stg_orders", "resolvedSql": upstream, "expectedCteSql": "SELECT 1 AS order_id"},
+                {
                     "modelName": "orders",
-                    "resolvedSql": format!("WITH {name} AS (SELECT 2 AS order_id) SELECT final.order_id FROM final"),
-                    "comparisonBodySql": format!("WITH {name} AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders) SELECT final.order_id FROM final"),
-                    "liftedCtes": [["__ref__stg_orders", format!("WITH {name} AS (SELECT 1 AS order_id) SELECT * FROM {name}")]],
+                    "resolvedSql": format!("WITH __ref__stg_orders AS ({upstream}), {}", &downstream[5..]),
+                    "comparisonBodySql": downstream,
+                    "liftedCtes": [["__ref__stg_orders", upstream]],
                     "expectedCteSql": "SELECT 2 AS order_id"
-                }]
-            }]
-        });
-        let response = crate::compiler::_helpers::sql_tests::rendering::render_json(&request.to_string()).expect("supported render dialect");
-        let response: Value = serde_json::from_str(&response).expect("render response");
-        let sql = response[0]["sql"].as_str().expect("rendered query");
-        sql.contains("__sqb_cte_0 AS") && sql.contains("FROM __sqb_cte_0 ")
-            && sql.contains("__sqb_cte_1 AS") && !sql.contains("AS (WITH")
+                }
+            ]
+        }))
+        .expect("nested fallback");
+        sql.starts_with(&format!(
+            "WITH {name} AS (SELECT 1 AS order_id),\n__ref__stg_orders AS ({upstream}),\n"
+        )) && sql.contains(&format!("__actual__stg_orders AS (SELECT * FROM {name})"))
+            && sql.contains(&format!("__actual__orders AS ({downstream})"))
     })
+}
+
+pub(super) fn generated_with_bodies_stay_nested_verbatim() -> bool {
+    let sql = render_one(colliding_chain_request("duckdb", "final")).expect("render");
+    sql.starts_with(
+        "WITH __ref__stg_orders AS (WITH final AS (SELECT 1 AS order_id) SELECT * FROM final),\n\
+         final AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
+         __actual__orders AS (SELECT final.order_id FROM final),\n",
+    )
+}
+
+pub(super) fn tsql_model_cte_collisions_are_renamed_by_token_span() -> bool {
+    let sql = render_one(colliding_chain_request("tsql", "final")).expect("T-SQL rename");
+    sql.starts_with(
+        "WITH final AS (SELECT 1 AS order_id),\n\
+         __ref__stg_orders AS (SELECT * FROM final),\n\
+         __sqb_cte_0 AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
+         __actual__orders AS (SELECT __sqb_cte_0.order_id FROM __sqb_cte_0),\n",
+    )
+}
+
+pub(super) fn tsql_unprovable_cte_renames_are_refused_with_named_ctes() -> bool {
+    let mut request = colliding_chain_request("tsql", "final");
+    request["chain"][0]["comparisonBodySql"] = json!(
+        "WITH final AS (SELECT 2 AS order_id FROM __ref__stg_orders) SELECT order_id AS final FROM final"
+    );
+    let error = render_one(request).expect_err("T-SQL refusal");
+    assert_eq!(
+        error,
+        "CTE 'final' of model 'orders' collides with CTE 'final' of model 'stg_orders'; \
+         T-SQL does not allow a nested WITH, so rename the CTE in the model or the fixture so \
+         the names are unique"
+    );
+    true
+}
+
+pub(super) fn tsql_fixture_and_model_cte_collisions_are_refused() -> bool {
+    let error = render_one(json!({
+        "sqlAnalysisDialect": "tsql",
+        "chain": [{
+            "modelName": "orders",
+            "resolvedSql": "WITH helper_rows AS (SELECT 1 AS order_id) SELECT order_id FROM helper_rows",
+            "expectedCteSql": "SELECT order_id FROM helper_rows",
+            "expectedLiftedCtes": [["helper_rows", "SELECT 2 AS order_id"]]
+        }]
+    }))
+    .expect_err("T-SQL refusal");
+    assert_eq!(
+        error,
+        "CTE 'helper_rows' of the expected rows of model 'orders' collides with CTE \
+         'helper_rows' of model 'orders'; T-SQL does not allow a nested WITH, so rename the \
+         CTE in the model or the fixture so the names are unique"
+    );
+    true
+}
+
+pub(super) fn tsql_identical_helper_ending_in_line_comment_is_shared() -> bool {
+    let sql = render_one(json!({
+        "sqlAnalysisDialect": "tsql",
+        "chain": [{
+            "modelName": "orders",
+            "resolvedSql": "SELECT order_id FROM __source__raw",
+            "liftedCtes": [["__source__raw", "WITH h AS (SELECT 1 AS order_id -- one\n) SELECT * FROM h"]],
+            "comparisonBodySql": "SELECT order_id FROM __source__raw",
+            "expectedCteSql": "SELECT order_id FROM h",
+            "expectedLiftedCtes": [["h", "SELECT 1 AS order_id -- one"]]
+        }]
+    }))
+    .expect("shared helper");
+    sql.starts_with(
+        "WITH h AS (SELECT 1 AS order_id -- one\n),\n__source__raw AS (SELECT * FROM h),\n",
+    ) && sql.contains("__expected__orders AS (SELECT order_id FROM h)")
+}
+
+pub(super) fn trailing_statement_terminators_are_dropped() -> bool {
+    [
+        "WITH a AS (SELECT 1 AS id) SELECT * FROM a; -- done\n",
+        "SELECT 1 AS id ;;\n",
+    ]
+    .iter()
+    .all(|model| {
+        let sql = render_one(json!({
+            "sqlAnalysisDialect": "duckdb",
+            "chain": [{"modelName": "m", "resolvedSql": model, "expectedCteSql": "SELECT 1 AS id"}]
+        }))
+        .expect("render");
+        !sql.contains(';')
+            && (sql.contains("__actual__m AS (SELECT * FROM a)")
+                || sql.contains("__actual__m AS (SELECT 1 AS id)"))
+    })
+}
+
+pub(super) fn tsql_distinct_ctes_lift_verbatim() -> bool {
+    let sql = render_one(json!({
+        "sqlAnalysisDialect": "tsql",
+        "chain": [{
+            "modelName": "orders",
+            "resolvedSql": "WITH [base rows] (order_id) AS (SELECT 1 /* ) */ AS order_id), \
+                            staged AS (SELECT order_id FROM [base rows]) SELECT TOP 5 order_id FROM staged",
+            "expectedCteSql": "SELECT 1 AS order_id"
+        }]
+    }))
+    .expect("distinct T-SQL CTEs lift");
+    sql.starts_with(
+        "WITH [base rows] (order_id) AS (SELECT 1 /* ) */ AS order_id),\n\
+         staged AS (SELECT order_id FROM [base rows]),\n\
+         __actual__orders AS (SELECT TOP 5 order_id FROM staged),\n",
+    )
+}
+
+pub(super) fn snowflake_function_synonyms_stay_as_authored() -> bool {
+    let model = "WITH picked AS (SELECT STARTSWITH(name, 'A') AS matches, SUBSTR(name, 1, 2) AS prefix, \
+                 TIMESTAMPDIFF(day, created_at, updated_at) AS age, TRY_TO_DECIMAL(amount, 10, 2) AS total \
+                 FROM items) SELECT * FROM picked";
+    let sql = render_one(json!({
+        "sqlAnalysisDialect": "snowflake",
+        "chain": [{"modelName": "items", "resolvedSql": model, "expectedCteSql": "SELECT 1 AS matches"}]
+    }))
+    .expect("Snowflake render");
+    let (ctes, body) = model.split_once(") SELECT").expect("authored model");
+    sql.contains(&format!("{})", ctes.trim_start_matches("WITH ")))
+        && sql.contains(&format!("__actual__items AS (SELECT{body})"))
+        && !sql.contains("STARTS_WITH")
+        && !sql.contains("SUBSTRING")
 }

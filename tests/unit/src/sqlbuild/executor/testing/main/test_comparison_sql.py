@@ -90,15 +90,18 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     "test_case",
     [
         BuildComparisonSqlTestCase(
-            description="Snowflake comparison lifting preserves STARTSWITH",
+            description="Snowflake comparison lifting keeps the authored CTE text",
             adapter_name="snowflake",
-            expected_fragments=("STARTSWITH(name, 'A')", "__sqb_cte_0 AS (", "AS picked"),
+            expected_fragments=(
+                "picked AS (SELECT STARTSWITH(name, 'A') AS matches FROM items)",
+                "__actual__orders AS (SELECT matches FROM picked)",
+            ),
             expected_absent_fragments=("STARTS_WITH",),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_snowflake_function_when_lifting_comparison_ctes_then_emits_supported_spelling(
+def test_given_snowflake_function_when_lifting_comparison_ctes_then_keeps_authored_spelling(
     test_case: BuildComparisonSqlTestCase,
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
@@ -205,19 +208,18 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
     "test_case",
     [
         BuildComparisonSqlTestCase(
-            description="matching helper CTEs retain independent actual and expected scopes",
+            description="identical helper CTEs are lifted once for both scopes",
             adapter_name="duckdb",
             expected_fragments=(
-                "__sqb_cte_0 AS",
-                "INPUT_VALUES AS",
-                "__actual__orders AS (",
-                "__expected__orders AS (",
+                "WITH input_values AS (SELECT 1 AS order_id),\n",
+                "__actual__orders AS (SELECT order_id FROM input_values)",
+                "__expected__orders AS (SELECT order_id FROM INPUT_VALUES)",
             ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_matching_helper_ctes_when_building_comparison_sql_then_keeps_scopes_separate(
+def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_them_once(
     test_case: BuildComparisonSqlTestCase,
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
@@ -255,7 +257,7 @@ def test_given_unasserted_transitive_steps_when_building_comparison_then_emits_o
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
     assert "__actual__stg_orders AS" not in comparison_sql
-    assert comparison_sql.lower().count("__sqb_cte_0 as (") == 1
+    assert comparison_sql.count("shared AS (SELECT 1 AS order_id)") == 1
 
 
 @pytest.mark.parametrize(
@@ -350,9 +352,9 @@ def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_
     )
 
     assert (
-        comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("__sqb_cte_0 AS")
+        comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("picked AS")
     ) is test_case.expected_result
-    assert comparison_sql.index("__sqb_cte_0 AS") < comparison_sql.index("__actual__orders AS")
+    assert comparison_sql.index("picked AS") < comparison_sql.index("__actual__orders AS")
     assert "__actual__orders AS (\nWITH picked" not in comparison_sql
 
 

@@ -205,3 +205,10 @@ class ChainCteScopeTestCase:
     queries: tuple[str, ...]
     expected_sql: str
     expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class AuthoredSqlParityTestCase:
+    description: str
+    compiled_test_name: str
+    expected_fragments: tuple[str, ...]
