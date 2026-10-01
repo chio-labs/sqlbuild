@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -83,3 +84,40 @@ def run_concurrent_fingerprint_write_round(
     ).fetchone()
     check_connection.close()
     return int(getattr(row, "__getitem__", lambda _index: 0)(0))
+
+
+_MIXED_IDENTITIES: tuple[tuple[str, str], ...] = (
+    ("model", "orders"),
+    ("model", "customers"),
+    ("seed", "orders"),
+    ("udf", "is_large_order"),
+    ("python", "export_orders"),
+)
+_HISTORY_RUNS: tuple[tuple[str, int], ...] = (("run_001", 10), ("run_002", 12), ("run_003", 12))
+
+
+def _history_fingerprint(*, identity: tuple[str, str], run: tuple[str, int]) -> Fingerprint:
+    node_type, node_name = identity
+    run_id, hour = run
+    return Fingerprint(
+        node_type=node_type,
+        node_name=node_name,
+        target_database=None,
+        target_schema=None,
+        target_name=node_name,
+        run_id=run_id,
+        definition_hash=f"{node_name}_{run_id}",
+        version_hash=f"{node_name}_{run_id}",
+        schema_fingerprint="",
+        definition=f"SELECT '{run_id}'",
+        ts=datetime(2026, 1, 15, hour, 0, 0),
+    )
+
+
+def mixed_fingerprint_history() -> tuple[Fingerprint, ...]:
+    """Return three runs of history for models, a seed, a function, and a Python node."""
+
+    return tuple(
+        _history_fingerprint(identity=identity, run=run)
+        for identity, run in itertools.product(_MIXED_IDENTITIES, _HISTORY_RUNS)
+    )

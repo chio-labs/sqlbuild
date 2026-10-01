@@ -601,6 +601,10 @@ class WarehouseFingerprints:
     functions: dict[str, Fingerprint] = field(default_factory=dict)
     seeds: dict[str, Fingerprint] = field(default_factory=dict)
     python_nodes: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
+    unfiltered_schemas: dict[str, tuple[Fingerprint, ...]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
+    unfiltered_database: str | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

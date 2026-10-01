@@ -24,6 +24,7 @@ from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
     run_recorded_inspection_query,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
+from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -42,6 +43,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
+from sqlbuild.compiler.fingerprints.main._select_latest import select_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
@@ -297,6 +299,9 @@ def gather_warehouse_snapshot(
         schemas=query_schemas,
         fingerprint_state_schemas=fingerprint_state_schemas,
         node_names=_selected_node_names(relevant_keys),
+        read_unfiltered=_shares_unfiltered_fingerprints(
+            project=project, selected_keys=relevant_keys
+        ),
     )
 
     effective_full_refresh_names: frozenset[str] = (
@@ -695,8 +700,9 @@ def _gather_fingerprints(
     schemas: tuple[str, ...] | None,
     fingerprint_state_schemas: frozenset[str],
     node_names: tuple[str, ...] | None,
+    read_unfiltered: bool,
 ) -> WarehouseFingerprints:
-    """Read latest fingerprints across all target schemas grouped by node type."""
+    """Read latest fingerprints per target schema, keeping unfiltered reads for migrations."""
 
     if schemas is None:
         return WarehouseFingerprints()
@@ -704,6 +710,8 @@ def _gather_fingerprints(
     function_fingerprints: dict[str, Fingerprint] = {}
     seed_fingerprints: dict[str, Fingerprint] = {}
     python_fingerprints: dict[tuple[str, str], Fingerprint] = {}
+    unfiltered_schemas: dict[str, tuple[Fingerprint, ...]] = {}
+    filtered_node_types: tuple[str, ...] = (NODE_TYPE_MODEL, *FUNCTION_NODE_TYPES, NODE_TYPE_SEED)
     schema: str
     for schema in schemas:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
@@ -714,9 +722,19 @@ def _gather_fingerprints(
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
             render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
-            node_names=node_names,
-            filtered_node_types=(NODE_TYPE_MODEL, *FUNCTION_NODE_TYPES, NODE_TYPE_SEED),
+            node_names=None if read_unfiltered else node_names,
+            filtered_node_types=filtered_node_types,
         )
+        if read_unfiltered:
+            unfiltered_schemas[schema.lower()] = tuple(
+                (fingerprint_set.fingerprints_by_identity or {}).values()
+            )
+            if node_names is not None:
+                fingerprint_set = select_latest_fingerprints(
+                    fingerprint_set=fingerprint_set,
+                    node_names=node_names,
+                    filtered_node_types=filtered_node_types,
+                )
         node_name: str
         fingerprint: Fingerprint
         for node_name, fingerprint in fingerprint_set.fingerprints.items():
@@ -740,6 +758,8 @@ def _gather_fingerprints(
         functions=function_fingerprints,
         seeds=seed_fingerprints,
         python_nodes=python_fingerprints,
+        unfiltered_schemas=unfiltered_schemas,
+        unfiltered_database=database,
     )
 
 
@@ -749,6 +769,22 @@ def _selected_node_names(
     if selected_keys is None:
         return None
     return tuple(sorted({key.name for key in selected_keys}))
+
+
+def _shares_unfiltered_fingerprints(
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> bool:
+    """Return whether one unfiltered read can serve this selection and migration inspection."""
+
+    if selected_keys is None:
+        return True
+    selected: frozenset[str] = frozenset(key.name for key in selected_keys)
+    return all(model.name in selected for model in project.models) or any(
+        isinstance(model.config.values.get(MIGRATE_FROM_CONFIG_KEY), str)
+        for model in project.models
+    )
 
 
 def _gather_cursor_snapshots(
