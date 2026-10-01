@@ -1,5 +1,6 @@
 """Chained model CTEs retain their lexical scope through the real DuckDB CLI."""
 
+import re
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -8,6 +9,8 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import ChainCteScopeTestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import build_cte_scope_project_files
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+
+_RELATION_MARKER: re.Pattern[str] = re.compile(r'__(ref|source)\("(\w+)"\)')
 
 _FIRST: str = (
     'WITH final AS (SELECT order_id FROM __source("raw_orders")) SELECT final.order_id FROM final'
@@ -74,7 +77,11 @@ def test_given_overlapping_ctes_when_testing_chain_then_each_model_uses_its_own_
     sql: str = next(
         (project / "target" / "compiled" / "tests").rglob("order_chain.sql")
     ).read_text()
-    assert "__sqb_cte_" in sql
+    assert "__sqb_cte_" not in sql
+    upstream_queries: tuple[str, ...] = tuple(
+        _RELATION_MARKER.sub(r"__\1__\2", query) for query in test_case.queries[:-1]
+    )
+    assert all(f"AS ({query})" in sql for query in upstream_queries), sql
 
 
 @pytest.mark.parametrize(

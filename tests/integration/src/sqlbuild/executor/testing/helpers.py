@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.executor.testing.main._execute import execute_sql_test
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
+    run_compile_pipeline_for_project,
+)
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     SqlTestExecutionTestCase,
 )
@@ -76,3 +83,98 @@ def verify_test_result(
         models_by_outcome[step_result.outcome].append(step_result.model_name)
     failed_models: tuple[str, ...] = tuple(models_by_outcome[SqlTestOutcome.FAIL])
     assert failed_models == test_case.expected_failed_models
+
+
+_MARKER_CALL: re.Pattern[str] = re.compile(
+    r'__(?:ref|source|seed|dbt_ref|udf|table_fn)\(\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\)'
+)
+_FIXTURE_RELATION: str = r'(?:[\w."`]+|\((?s:.*?)\))'
+
+
+def build_sql_matches_test_body(*, build_sql: str, test_body: str) -> bool:
+    """Whether a test body is the build SQL byte for byte, apart from relation markers.
+
+    A marker becomes a fixture or chain CTE name, or an inlined parenthesised fixture query.
+    """
+
+    parts: list[str] = _MARKER_CALL.split(build_sql)
+    return (
+        re.fullmatch(_FIXTURE_RELATION.join(re.escape(part) for part in parts), test_body)
+        is not None
+    )
+
+
+def render_project_test_step(
+    *, project_dir: Path, test_name: str, model_name: str
+) -> tuple[str, str, str]:
+    """Compile a DuckDB project and return one step's build SQL, test body and rendered test SQL."""
+
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=project_dir, adapter=adapter
+    )
+    entry: SqlTestPlanEntry = {item.name: item for item in result.plan_output.test_entries}[
+        test_name
+    ]
+    step: ChainStep = {item.model_name: item for item in entry.chain}[model_name]
+    build_sql: str = {model.name: model.query_sql for model in result.project.models}[model_name]
+    rendered_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+    return build_sql, step.comparison_body_sql or step.resolved_sql, rendered_sql
+
+
+def build_authored_cte_project_files() -> dict[str, str]:
+    """Build a DuckDB project whose models use comments, dollar quotes and nested WITH in CTEs."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "authored_ctes"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "authored_ctes.duckdb"\n\n'
+            "[settings]\n"
+            "sql_analysis = true\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (materialized table);\n\n"
+            "WITH base AS (\n"
+            "  -- a comment with an unmatched ) parenthesis\n"
+            "  SELECT id AS order_id, amount, 'it''s (fine)' AS note /* ( */\n"
+            '  FROM __source("raw_orders")\n'
+            "),\n"
+            "tagged AS (SELECT order_id, amount, note, $$a ) b$$ AS tag FROM base)\n"
+            "SELECT order_id, amount, note, tag FROM tagged\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized table);\n\n"
+            "WITH totals AS (\n"
+            '  WITH ranked AS (SELECT order_id, amount, tag FROM __ref("stg_orders"))\n'
+            "  SELECT order_id, amount * 2 AS doubled, tag FROM ranked\n"
+            "),\n"
+            "helper_rows AS (SELECT order_id, doubled, tag FROM totals)\n"
+            "SELECT order_id, doubled, tag FROM helper_rows\n"
+        ),
+        "tests/unit/test_stg_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS id, 10 AS amount),\n"
+            "__expected__stg_orders AS (\n"
+            "  SELECT 1 AS order_id, 10 AS amount, 'it''s (fine)' AS note, 'a ) b' AS tag\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 10 AS amount, 'x' AS tag),\n"
+            "helper_rows AS (SELECT 1 AS order_id, 20 AS doubled, 'x' AS tag),\n"
+            "__expected__orders AS (SELECT order_id, doubled, tag FROM helper_rows)\n"
+            "SELECT 1\n"
+        ),
+    }

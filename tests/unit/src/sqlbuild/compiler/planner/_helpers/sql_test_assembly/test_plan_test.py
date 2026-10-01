@@ -1407,11 +1407,41 @@ def test_given_sql_analysis_assertion_when_planning_then_uses_shared_chain_ctes(
             dialect="snowflake",
             expected_sql_fragment="STARTSWITH(name, 'A')",
             expected_absent_sql_fragment="STARTS_WITH",
-        )
+        ),
+        SqlAnalysisDialectTestCase(
+            description="Snowflake SUBSTR spelling is preserved",
+            query_sql=(
+                "WITH picked AS (SELECT SUBSTR(name, 1, 2) AS matches "
+                'FROM __ref("items")) SELECT matches FROM picked'
+            ),
+            dialect="snowflake",
+            expected_sql_fragment="picked AS (SELECT SUBSTR(name, 1, 2) AS matches FROM",
+            expected_absent_sql_fragment="SUBSTRING",
+        ),
+        SqlAnalysisDialectTestCase(
+            description="Snowflake TIMESTAMPDIFF spelling is preserved",
+            query_sql=(
+                "WITH picked AS (SELECT TIMESTAMPDIFF(day, created_at, updated_at) AS matches "
+                'FROM __ref("items")) SELECT matches FROM picked'
+            ),
+            dialect="snowflake",
+            expected_sql_fragment="TIMESTAMPDIFF(day, created_at, updated_at) AS matches",
+            expected_absent_sql_fragment="DATEDIFF",
+        ),
+        SqlAnalysisDialectTestCase(
+            description="Snowflake TRY_TO_DECIMAL spelling is preserved",
+            query_sql=(
+                "WITH picked AS (SELECT TRY_TO_DECIMAL(name, 10, 2) AS matches "
+                'FROM __ref("items")) SELECT matches FROM picked'
+            ),
+            dialect="snowflake",
+            expected_sql_fragment="TRY_TO_DECIMAL(name, 10, 2) AS matches",
+            expected_absent_sql_fragment="TRY_CAST",
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_adapter_function_when_resolving_with_analysis_then_emits_supported_spelling(
+def test_given_adapter_function_when_resolving_with_analysis_then_keeps_authored_spelling(
     test_case: SqlAnalysisDialectTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
@@ -1452,6 +1482,54 @@ def test_given_adapter_function_when_resolving_with_analysis_then_emits_supporte
     assert test_case.expected_sql_fragment in entry.chain[0].resolved_sql
     assert test_case.expected_sql_fragment in comparison_sql
     assert test_case.expected_absent_sql_fragment not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="model and fixture CTEs share a name on T-SQL",
+            model_queries={
+                "orders": (
+                    'WITH helper_rows AS (SELECT order_id FROM __ref("raw_orders")) '
+                    "SELECT order_id FROM helper_rows"
+                )
+            },
+            mock_ref_ctes={"raw_orders": "SELECT 1 AS order_id"},
+            mock_source_ctes={},
+            helper_ctes={"helper_rows": "SELECT 2 AS order_id"},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_error_fragments=(
+                "CTE 'helper_rows' of the expected rows of model 'orders' collides with "
+                "CTE 'helper_rows' of model 'orders'",
+                "T-SQL does not allow a nested WITH, so rename the CTE in the model or the fixture",
+            ),
+            expected_cte_bodies={"orders": "SELECT order_id FROM helper_rows"},
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_tsql_cte_name_collision_when_planning_then_test_is_refused_naming_the_ctes(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    result: SqlTestPlanResult
+    result, _ = plan_single_test_allowing_errors(
+        test=compiled_test,
+        project=project,
+        adapter=build_comparison_test_adapter("sqlserver"),
+        sql_analysis_enabled=True,
+    )
+
+    assert result.entry is None
+    for expected_fragment in test_case.expected_error_fragments:
+        assert any(expected_fragment in message for message in result.fixture_diagnostics), (
+            result.fixture_diagnostics
+        )
 
 
 @pytest.mark.parametrize(
