@@ -10,3 +10,4 @@ DOUBLE_QUOTE: str = '"'
 IDENTIFIER_QUOTE_PAIRS: frozenset[tuple[str, str]] = frozenset({("`", "`"), ("[", "]")})
 RELATION_COLUMNS_LOOKUP: str = "columns"
 RELATION_EXISTS_LOOKUP: str = "exists"
+BACKTICK: str = "`"

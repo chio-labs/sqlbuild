@@ -77,6 +77,24 @@ _NONE: frozenset[str] = frozenset()
             expected_invalidates_all=False,
         ),
         StatementMetadataEffectTestCase(
+            description="quoted dotted name keeps its dot like a lookup name",
+            sql='CREATE TABLE "s"."my.table" (id INT)',
+            expected_relation_names=frozenset({"my.table"}),
+            expected_invalidates_all=False,
+        ),
+        StatementMetadataEffectTestCase(
+            description="statement separator inside a literal is data",
+            sql="CREATE OR REPLACE TABLE marts.notes AS SELECT 'a;b -- c' AS note",
+            expected_relation_names=frozenset({"notes"}),
+            expected_invalidates_all=False,
+        ),
+        StatementMetadataEffectTestCase(
+            description="escaped backslash literal reads the same either way",
+            sql="CREATE OR REPLACE TABLE marts.codes AS SELECT REGEXP_LIKE(code, '\\\\d+') AS ok",
+            expected_relation_names=frozenset({"codes"}),
+            expected_invalidates_all=False,
+        ),
+        StatementMetadataEffectTestCase(
             description="select into creates a table",
             sql="SELECT * INTO [dbo].[orders__staging] FROM (SELECT 1 AS id) AS __create_source",
             expected_relation_names=frozenset({"orders__staging"}),
@@ -128,6 +146,8 @@ def test_given_targeted_ddl_statement_when_classifying_then_reports_possible_met
                 "CREATE SCHEMA IF NOT EXISTS analytics.marts",
                 "CREATE OR REPLACE FUNCTION marts.add_one(x NUMBER) RETURNS NUMBER AS $$ x + 1 $$",
                 "TRUNCATE TABLE marts.orders",
+                "CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$ SELECT 1; SELECT 2 $$",
+                "INSERT INTO marts.notes VALUES ('drop table u; --')",
             )
         )
     ],
@@ -165,6 +185,21 @@ def test_given_read_or_data_statement_when_classifying_then_reports_possible_met
             ("session parameters may change identifier resolution", "ALTER SESSION SET X = 1"),
             ("unparseable relation name", 'CREATE TABLE "unterminated AS SELECT 1'),
             ("empty statement", "   "),
+            ("keyword before the relation name", 'ALTER TABLE ONLY "s"."t" ADD COLUMN c INT'),
+            ("several dropped relations", "DROP TABLE IF EXISTS a, b"),
+            ("unquoted non-ascii name", "CREATE TABLE s.café (id INT)"),
+            ("comment marker inside a literal hides nothing", "SELECT 'a--b'; DROP TABLE u"),
+            ("separator after a literal", "INSERT INTO t VALUES ('x'); DROP TABLE u"),
+            (
+                "backslash-escaped quote is ambiguous",
+                "SELECT 'a\\' AS x FROM t WHERE y = '; DROP TABLE u'",
+            ),
+            ("unterminated literal", "CREATE TABLE t AS SELECT 'open"),
+            (
+                "unexpected clause after the name",
+                "CREATE DYNAMIC TABLE t TARGET_LAG = '1 hour' AS SELECT 1",
+            ),
+            ("rename target followed by more text", "ALTER TABLE a RENAME TO b c"),
         )
     ],
     ids=lambda case: case.description,
