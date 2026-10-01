@@ -61,7 +61,8 @@ fn skip_leading_ignorable(sql: &str, mut index: usize) -> usize {
     }
 }
 
-fn keyword_end(sql: &str, start: usize, keyword: &str) -> Option<usize> {
+/// Return the offset after `keyword` at `start` when it is a whole word.
+pub(crate) fn keyword_end(sql: &str, start: usize, keyword: &str) -> Option<usize> {
     let end = start + keyword.len();
     if !sql.get(start..end)?.eq_ignore_ascii_case(keyword) {
         return None;

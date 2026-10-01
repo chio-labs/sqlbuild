@@ -1,4 +1,4 @@
-pub(crate) mod cte_namespace;
+pub(crate) mod cte_slices;
 pub(crate) mod cte_sql;
 pub(crate) mod expected_columns;
 pub(crate) mod extraction;

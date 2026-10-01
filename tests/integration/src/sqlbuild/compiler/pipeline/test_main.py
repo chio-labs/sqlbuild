@@ -713,8 +713,9 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
                 "WITH __source__raw AS (",
                 "__ref__stg_orders AS (",
                 "FROM __source__raw",
-                "__sqb_cte_0 AS (",
-                "__actual__fact_orders AS (",
+                "local_helper AS (SELECT 1 AS one),\n",
+                "__actual__fact_orders AS (SELECT id, amount + one AS adjusted "
+                "FROM __ref__stg_orders CROSS JOIN local_helper)",
                 "FROM __ref__stg_orders",
                 "'stg_orders' AS model_name",
             ),
