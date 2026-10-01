@@ -120,7 +120,7 @@ def detect_schema_changes(
                         column_name=col_name,
                         source=(
                             SchemaColumnSource.YML
-                            if yml_columns and inferred_columns is None
+                            if yml_columns
                             else SchemaColumnSource.SQL_ANALYSIS
                         ),
                         actual_type=col_type,

@@ -300,15 +300,29 @@ def add_upstream_column(*, project_dir: Path) -> None:
     )
 
 
+ENFORCED_CONTRACT_CONFIG: str = (
+    "  contract enforced,\n  columns (\n    id (type INTEGER),\n    event_date (type DATE),\n  ),\n"
+)
+
+
 def declare_downstream_column_type(*, project_dir: Path) -> None:
-    """Declare a new type for the star downstream's id column in its own header."""
+    """Change the declared type of the star downstream's id column in its own contract."""
 
     path: Path = project_dir / "models/down.sql"
     path.write_text(
-        path.read_text(encoding="utf-8").replace(
-            "  replay_on_change full,\n",
-            "  replay_on_change full,\n  columns (\n    id (type BIGINT),\n  ),\n",
-        ),
+        path.read_text(encoding="utf-8").replace("id (type INTEGER)", "id (type BIGINT)"),
+        encoding="utf-8",
+    )
+
+
+def remove_downstream_declared_column(*, project_dir: Path) -> None:
+    """Remove event_date from the star downstream's own contract and select list."""
+
+    path: Path = project_dir / "models/down.sql"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        .replace("    event_date (type DATE),\n", "")
+        .replace("SELECT *", "SELECT id"),
         encoding="utf-8",
     )
 

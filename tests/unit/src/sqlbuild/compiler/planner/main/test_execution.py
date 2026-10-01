@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
     build_execution_plan_from_kwargs,
     build_protected_schema_replay_project,
+    create_protected_model_state,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
@@ -168,7 +169,7 @@ def test_given_blocked_protected_model_when_planning_then_full_rebuild_protectio
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection=connection, sql="CREATE TABLE main.order_history (id INTEGER)")
+        create_protected_model_state(adapter=adapter, connection=connection)
         plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=build_protected_schema_replay_project(),
             adapter=adapter,
@@ -185,7 +186,7 @@ def test_given_blocked_protected_model_when_planning_then_full_rebuild_protectio
     "test_case",
     [
         ProtectedRebuildBlockedTestCase(
-            description="unblocked protected model refuses the declared-column full replay",
+            description="unblocked protected model refuses its own header-change full replay",
             external_blocked_model_names=(),
             expected_action="S203",
         )
@@ -198,7 +199,7 @@ def test_given_unblocked_protected_model_when_planning_then_full_rebuild_is_refu
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection=connection, sql="CREATE TABLE main.order_history (id INTEGER)")
+        create_protected_model_state(adapter=adapter, connection=connection)
         with pytest.raises(PlannerInputError) as raised:
             build_execution_plan_from_kwargs(
                 project=build_protected_schema_replay_project(),
