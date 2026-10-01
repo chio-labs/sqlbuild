@@ -260,9 +260,18 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
             definition_hash=test_case.fingerprint_query_hash or "",
             schema_fingerprint="schema_a",
             definition="SELECT 1",
-            metadata_json=build_version_identity_metadata_json(
-                model_name=test_case.model_name,
-                config_values=fingerprint_config_values,
+            metadata_json=json.dumps(
+                {
+                    **json.loads(
+                        build_version_identity_metadata_json(
+                            model_name=test_case.model_name,
+                            config_values=fingerprint_config_values,
+                        )
+                    ),
+                    **test_case.fingerprint_extra_metadata,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
             ),
             ts=_STUB_TS,
             version_hash="recorded_version",

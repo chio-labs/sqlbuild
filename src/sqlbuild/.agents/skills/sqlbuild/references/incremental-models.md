@@ -130,7 +130,7 @@ plan or build is a one-run hard ceiling and explicit authorization for an intent
 ## Replay, full refresh and schema changes
 
 - `replay_on_change` decides how much to reprocess when the model's own query changes, a
-  function it calls directly changes, or its own header or contract changes its columns:
+  function it calls directly changes, or its own header, contract or declared columns change:
   `forward` (default), `full`, or `bounded-<duration>` such as `bounded-14d`. Upstream changes,
   first runs and renames never replay a downstream model; it continues forward. Schema
   differences of an unchanged model come from upstream and evolve via `on_schema_change` (an
