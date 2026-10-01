@@ -45,7 +45,7 @@ from sqlbuild.compiler.fingerprints.constants import (
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
-from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_TABLE_NAME
+from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME
 from sqlbuild.compiler.planner._helpers.graph.buildability import (
     check_buildability,
     missing_upstream_message,
@@ -188,6 +188,7 @@ class _StateTableSchemas:
     fingerprints: frozenset[str]
     source_freshness: frozenset[str]
     old_name_views: frozenset[str]
+    migrations: frozenset[str]
 
 
 def build_warehouse_snapshot(
@@ -337,6 +338,7 @@ def gather_warehouse_snapshot(
         source_freshness_state_schemas=freshness_state_schemas,
         column_dialect=adapter.sql_analysis_dialect(),
         old_name_view_state_schemas=state_schemas.old_name_views,
+        migration_state_schemas=state_schemas.migrations,
         listed_state_schemas=(
             frozenset(schema.lower() for schema in query_schemas)
             if query_schemas is not None
@@ -549,6 +551,7 @@ def _build_metadata_name_filter(
     names.add(FINGERPRINT_TABLE_NAME)
     names.add(SOURCE_FRESHNESS_TABLE_NAME)
     names.add(OLD_NAME_VIEW_TABLE_NAME)
+    names.add(MIGRATION_TABLE_NAME)
     return tuple(sorted(names))
 
 
@@ -612,8 +615,11 @@ def _gather_relations(
     fingerprint_schemas: set[str] = set()
     freshness_schemas: set[str] = set()
     old_name_schemas: set[str] = set()
+    migration_schemas: set[str] = set()
     relation: RelationInfo
     for relation in relations:
+        if relation.name == MIGRATION_TABLE_NAME and relation.schema is not None:
+            migration_schemas.add(relation.schema.lower())
         if relation.name == OLD_NAME_VIEW_TABLE_NAME:
             if relation.schema is not None:
                 old_name_schemas.add(relation.schema.lower())
@@ -631,6 +637,7 @@ def _gather_relations(
         fingerprints=frozenset(fingerprint_schemas),
         source_freshness=frozenset(freshness_schemas),
         old_name_views=frozenset(old_name_schemas),
+        migrations=frozenset(migration_schemas),
     )
 
 

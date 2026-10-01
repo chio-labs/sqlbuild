@@ -174,3 +174,10 @@ class FutureCursorSafetyTestCase:
     expected_end: str
     expected_has_safety: bool
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ProtectedRebuildBlockedTestCase:
+    description: str
+    external_blocked_model_names: tuple[str, ...]
+    expected_action: str

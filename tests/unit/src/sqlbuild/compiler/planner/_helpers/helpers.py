@@ -59,7 +59,6 @@ from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
-    CascadeResult,
     ChangeDetectionResult,
     GraphIdentityNode,
     GraphNodeKey,
@@ -1271,40 +1270,7 @@ def build_microbatch_lookback_model(
     )
 
 
-def build_cascade_upstream_state(
-    entries: tuple[tuple[str, BackfillAction, str | None, str | None], ...],
-) -> tuple[
-    tuple[CompiledObjectKey, ...],
-    dict[str, CascadeResult],
-    dict[str, str | None],
-]:
-    """Build upstream keys, effective cascades, and cursor types from test tuples.
-
-    Each tuple is (model_name, effective_action, effective_duration, cursor_type).
-    """
-
-    keys: list[CompiledObjectKey] = []
-    cascades: dict[str, CascadeResult] = {}
-    cursor_types: dict[str, str | None] = {}
-    name: str
-    action: BackfillAction
-    duration: str | None
-    cursor_type: str | None
-    for name, action, duration, cursor_type in entries:
-        keys.append(model_key(name))
-        cascades[name] = CascadeResult(
-            effective_action=action,
-            effective_duration=duration,
-            root_cause=None,
-            causes=(),
-        )
-        cursor_types[name] = cursor_type
-    return tuple(keys), cascades, cursor_types
-
-
-def build_compiled_function(
-    *, body_sql: str, replay_on_change: str | None = None, target_schema: str = "main"
-) -> CompiledFunction:
+def build_compiled_function(*, body_sql: str, target_schema: str = "main") -> CompiledFunction:
     """Build a minimal compiled function for planner tests."""
 
     return CompiledFunction(
@@ -1330,7 +1296,6 @@ def build_compiled_function(
             name="is_completed_order",
             qualified_name=f"{target_schema}.is_completed_order",
         ),
-        replay_on_change=replay_on_change,
     )
 
 

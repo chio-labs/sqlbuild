@@ -1210,7 +1210,6 @@ def test_given_table_function_argument_when_running_alias_rule_then_left_alias_i
     function.parent.mkdir(parents=True)
     function.write_text(
         """FUNCTION (
-  description "Expand one order",
   arguments (order_id INTEGER),
   returns table (order_id INTEGER)
 );

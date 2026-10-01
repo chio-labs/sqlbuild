@@ -55,7 +55,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Functions](concepts/functions.md) (`concepts/functions`) - User-defined functions and table functions managed as part of your project.
 - [Incremental Models](concepts/incremental.md) (`concepts/incremental`) - Cursor-based incremental strategies, microbatch execution, and backfill policies.
 - [Planning and change detection](concepts/planning.md) (`concepts/planning`) - How SQLBuild explains build work, detects changes, and chooses safe model actions.
-- [Cascade propagation](concepts/planning/cascade-propagation.md) (`concepts/planning/cascade-propagation`) - How a change signal propagates downstream through the DAG, and how each materialization type responds.
+- [Replay decisions](concepts/planning/replay-decisions.md) (`concepts/planning/replay-decisions`) - How much history each model reprocesses: decided by its own change and its own replay_on_change, never inherited from upstream.
 - [Source freshness](concepts/planning/source-freshness.md) (`concepts/planning/source-freshness`) - Observe external source changes and propagate them through planning.
 - [Selection and staleness](concepts/planning/selection-and-staleness.md) (`concepts/planning/selection-and-staleness`) - How selection interacts with change detection, and the stale warnings that stop silent partial rebuilds.
 - [Snapshots (SCD Type 2)](concepts/snapshots.md) (`concepts/snapshots`) - Preserve row history over time using SCD Type 2 semantics with timestamp or check-based change detection.

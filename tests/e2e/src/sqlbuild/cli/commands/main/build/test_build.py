@@ -208,8 +208,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
                 'database = "warehouse.duckdb"\n'
             ),
             "functions/sql/is_large_order.sql": (
-                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "replay_on_change full);\n\namount > 100\n"
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount > 100\n"
             ),
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT __udf("is_large_order")(150) AS is_large\n'

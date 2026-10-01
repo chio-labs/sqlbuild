@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
+from sqlbuild.compiler.planner.models import BackfillResult, ReferenceRename, SchemaFinding
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
@@ -27,6 +27,8 @@ class DetectModelChangesTestCase:
     fast_lineage_has_star: bool = False
     expected_recorded_build_relation_missing: bool = False
     renamed_by_migration: bool = False
+    schema_type_enforcement: bool | None = None
+    fingerprint_extra_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,16 @@ class DetectModelMetadataTestCase:
     previous_metadata_json: str
     expected_change_kind: ChangeKind
     expected_metadata_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DetectFunctionCallerChangeTestCase:
+    description: str
+    metadata_case: DetectModelMetadataTestCase
+    query_change_tracking: bool
+    expected_changed_functions: tuple[str, ...]
+    expected_config_changed: bool
+    expected_backfill: BackfillResult
 
 
 @dataclass(frozen=True)
@@ -75,3 +87,28 @@ class ResolveBackfillTestCase:
     description: str
     raw_value: str | None
     expected_result: BackfillResult
+
+
+@dataclass(frozen=True)
+class DetectRenamedModelTestCase:
+    description: str
+    previous_definition: str
+    config_values: dict[str, object]
+    expected_query_changed: bool
+    expected_backfill: BackfillResult
+
+
+@dataclass(frozen=True)
+class OriginReferenceNamesTestCase:
+    description: str
+    query_sql: str
+    recorded_query_sql: str
+    renames: tuple[ReferenceRename, ...]
+    expected_mapping: dict[str, str] | None
+
+
+@dataclass(frozen=True)
+class DeclaredColumnsMetadataTestCase:
+    description: str
+    metadata_json: str
+    expected_recorded_hash: str | None

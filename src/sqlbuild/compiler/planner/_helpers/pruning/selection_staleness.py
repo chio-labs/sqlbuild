@@ -24,6 +24,16 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import ChangeKind, WarningSeverity
 from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 
+_OWN_CHANGE_KINDS: frozenset[ChangeKind] = frozenset(
+    {
+        ChangeKind.FIRST_RUN,
+        ChangeKind.QUERY_CHANGED,
+        ChangeKind.FUNCTION_CHANGED,
+        ChangeKind.CONFIG_CHANGED,
+        ChangeKind.SCHEMA_CHANGED,
+    }
+)
+
 
 def build_stale_out_of_selection_warnings(
     *,
@@ -136,13 +146,7 @@ def _changed_model_names(
     changed: set[str] = {
         model_name
         for model_name, change in changes.models.items()
-        if change.change_kind
-        in {
-            ChangeKind.FIRST_RUN,
-            ChangeKind.QUERY_CHANGED,
-            ChangeKind.CONFIG_CHANGED,
-            ChangeKind.SCHEMA_CHANGED,
-        }
+        if change.change_kind in _OWN_CHANGE_KINDS
     }
     changed.update(
         model_name
@@ -194,21 +198,9 @@ def _model_own_identity_changed(
 ) -> bool:
     selected_change: ChangeDetectionResult | None = changes.models.get(model_name)
     if selected_change is not None and (
-        model_changes_complete
-        or selected_change.change_kind
-        in {
-            ChangeKind.FIRST_RUN,
-            ChangeKind.QUERY_CHANGED,
-            ChangeKind.CONFIG_CHANGED,
-            ChangeKind.SCHEMA_CHANGED,
-        }
+        model_changes_complete or selected_change.change_kind in _OWN_CHANGE_KINDS
     ):
-        return selected_change.change_kind in {
-            ChangeKind.FIRST_RUN,
-            ChangeKind.QUERY_CHANGED,
-            ChangeKind.CONFIG_CHANGED,
-            ChangeKind.SCHEMA_CHANGED,
-        }
+        return selected_change.change_kind in _OWN_CHANGE_KINDS
     model: CompiledModel | None = original_scope.models_by_name.get(model_name)
     if model is None:
         return False
@@ -221,12 +213,7 @@ def _model_own_identity_changed(
         expected_version_hash=version_identities.model_version_hashes.get(model_name),
         expected_metadata_json=version_identities.model_metadata_jsons.get(model_name),
     )
-    return change.change_kind in {
-        ChangeKind.FIRST_RUN,
-        ChangeKind.QUERY_CHANGED,
-        ChangeKind.CONFIG_CHANGED,
-        ChangeKind.SCHEMA_CHANGED,
-    }
+    return change.change_kind in _OWN_CHANGE_KINDS
 
 
 def _seed_identity_changed(

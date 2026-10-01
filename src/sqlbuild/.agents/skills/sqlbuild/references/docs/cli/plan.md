@@ -85,7 +85,9 @@ Seeds (1)
 ✓ Plan complete  13 selected
 ```
 
-When query or schema changes are detected, the plan shows the affected models with backfill actions and cascade information.
+When query, function, or schema changes are detected, the plan lists each affected model under its own change with its backfill action. A model that calls a changed function directly appears under `Function changed` with `cause: function <name> changed`; models further downstream continue forward. See [Replay decisions](../concepts/planning/replay-decisions.md).
+
+In `sqb plan --json`, each model's `reason` is its own change. A direct caller of a changed function has `"reason": "function_changed"` and a `changed_functions` list, and a renamed model whose query also changed has `"reason": "renamed"` and `"query_changed": true`.
 
 Warnings and maintenance notices, such as `migrate_from can be removed`, are listed in a `Warnings` section before the final `Plan complete` line. `sqb plan --json` output is unchanged.
 

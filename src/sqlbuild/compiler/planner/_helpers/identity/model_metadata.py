@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.discovery.models import EnumDeclaration
 from sqlbuild.compiler.planner.types import ContractPolicy
@@ -53,3 +56,31 @@ def _column_output_signature(*, model: CompiledModel, column: SchemaColumn) -> d
             ],
         }
     return signature
+
+
+def declared_columns_hash(*, model: CompiledModel) -> str:
+    """Hash the model's own declared columns, column families, and contract setting."""
+
+    schema_entry: SchemaModelEntry | None = model.schema_entry
+    payload: dict[str, object] = {
+        "contract": model.config.values.get("contract"),
+        "columns": [
+            {"name": column.name, "type": column.type, "nullable": column.nullable}
+            for column in (schema_entry.columns if schema_entry is not None else ())
+        ],
+        "dynamic_columns": [
+            {
+                "name": family.name,
+                "pivot_column": family.pivot_column,
+                "value_column": family.value_column,
+                "aggregate": family.aggregate,
+                "type": family.type,
+                "name_pattern": family.name_pattern,
+            }
+            for family in (schema_entry.dynamic_columns if schema_entry is not None else ())
+        ],
+        "type_enforcement": schema_entry.type_enforcement if schema_entry is not None else None,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()

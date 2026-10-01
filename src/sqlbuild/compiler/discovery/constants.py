@@ -17,6 +17,21 @@ PYTHON_CACHE_DIRECTORY_NAME: str = "__pycache__"
 LANGUAGE_PYTHON_ROOT_PART_COUNT: int = 2
 PYTHON_NODE_ROOT: str = "python"
 PYTHON_UDF_DECORATOR_NAME: str = "udf"
+SQL_FUNCTION_HEADER_KEYS: frozenset[str] = frozenset(
+    {"arguments", "returns", "database", "schema", "tags"}
+)
+PYTHON_UDF_KEYS: frozenset[str] = frozenset(
+    {
+        "arguments",
+        "returns",
+        "runtime_version",
+        "entry_point",
+        "packages",
+        "database",
+        "schema",
+        "tags",
+    }
+)
 PYTHON_UDF_IMPORT_MODULES: frozenset[str] = frozenset({"sqlbuild", "sqlbuild.functions"})
 
 DLT_LOADER_KIND: str = "dlt"

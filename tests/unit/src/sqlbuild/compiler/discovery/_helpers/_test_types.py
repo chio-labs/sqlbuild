@@ -903,3 +903,12 @@ class MissingMigrationOriginConfigTestCase:
     description: str
     target_lines: tuple[str, ...]
     expected_policy: MissingMigrationOriginPolicy
+
+
+@dataclass(frozen=True)
+class FunctionHeaderKeysTestCase:
+    description: str
+    file_name: str
+    contents: str
+    expected_error: str = ""
+    expected_keys: tuple[str, ...] = ()

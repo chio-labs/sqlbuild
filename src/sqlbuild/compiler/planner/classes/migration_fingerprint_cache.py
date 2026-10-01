@@ -11,6 +11,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild.compiler.planner._helpers.changes.metadata import without_declared_columns_hash
 from sqlbuild.compiler.planner._helpers.migrations.fingerprint import (
     build_migration_fingerprint,
     migration_fingerprint_ref_names,
@@ -57,6 +58,7 @@ class MigrationFingerprintCache:
     ) -> str | None:
         """Return the migration fingerprint, keyed only by the renames this model can see."""
 
+        metadata_json = without_declared_columns_hash(metadata_json)
         definition: tuple[str, str] = (query_sql, metadata_json)
         names: frozenset[str] | None = self._ref_names.get(definition)
         if names is None:

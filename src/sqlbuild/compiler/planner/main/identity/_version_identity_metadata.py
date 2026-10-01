@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild.compiler.planner.constants import LOCAL_FUNCTION_HASHES_METADATA_KEY
 from sqlbuild.compiler.planner.main.identity._version_identity_config import (
     build_version_identity_config,
 )
@@ -22,7 +23,7 @@ def build_version_identity_metadata_json(
         {
             "config": build_version_identity_config(config_values),
             "execution_signature": execution_signature or {},
-            "local_function_hashes": local_function_hashes or {},
+            LOCAL_FUNCTION_HASHES_METADATA_KEY: local_function_hashes or {},
             "model_name": model_name,
         },
         sort_keys=True,

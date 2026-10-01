@@ -40,6 +40,8 @@ Use `schema.name` when the old relation is in a different schema of the same dat
 
 On the next build, SQLBuild copies the old relation's data to the new name through a staging table (see [How a move runs](#how-a-move-runs)), records the move, and builds the model incrementally from the migrated state. There is no first-run rebuild, and no `replay_on_change` replay caused by the rename. After the model builds, the old relation is archived and a compatibility view takes its name (see [Old names](#old-names)).
 
+A rename is usually made together with other edits, for example a changed filter or a renamed upstream reference. If the renamed model's query also differs from the old model's, the plan still recognises the rename: the model is listed as `Renamed` with its query diff, never as a first run. The query change follows the model's own `replay_on_change`, exactly as it would without the rename (forward-only by default). Models downstream of the renamed model are not replayed because of the rename; see [Replay decisions](../planning/replay-decisions.md).
+
 After the move is recorded, `migrate_from` has no further effect, and SQLBuild tells you it can be removed. Keep it until every target that needs the move has built.
 
 ## Decisions
@@ -66,7 +68,7 @@ Table and view models only ever see `migrate`, `done`, and `origin missing`: not
 
 If a selected model has never been built, SQLBuild compares it with models that were removed from the project but whose relations still exist. When exactly one removed model has equivalent logic, it is migrated automatically. Equivalent means the same query and configuration, ignoring the model's own name, CTE and table alias names, comments, formatting, and storage-only settings. Renamed upstream models are matched first, so a renamed chain of models is migrated together. Removed models whose data was already moved on by a recorded migration are not candidates, so a model renamed several times matches its latest table.
 
-Renamed tables and views are matched the same way. They are rebuilt under the new name, since they hold no history, but they keep their identity for change detection, so incremental models downstream of a renamed view are not replayed or rebuilt. These renames are recorded as `renamed` events.
+Renamed tables and views are matched the same way. They are rebuilt under the new name, since they hold no history, but they keep their identity for change detection. These renames are recorded as `renamed` events.
 
 Automatic discovery never guesses. If a match is ambiguous, SQLBuild warns (`M107`) and builds from scratch; declare `migrate_from` to choose. An explicit `migrate_from` always wins. Automatic discovery covers renames within the project's schemas; use `migrate_from` to move a model to another schema. Relations last built before this feature carry no stored fingerprint and aren't matched automatically.
 

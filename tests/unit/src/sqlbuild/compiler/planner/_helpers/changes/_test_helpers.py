@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, WarehouseFingerprints, WarehouseSnapshot
+from sqlbuild.compiler.planner.types import ChangeKind
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectModelChangesTestCase,
@@ -213,6 +214,7 @@ def _build_schema_entry(test_case: DetectModelChangesTestCase) -> SchemaModelEnt
     schema_entry: SchemaModelEntry = SchemaModelEntry(
         name=test_case.model_name,
         columns=tuple(SchemaColumn(name=c[0], type=c[1]) for c in schema_cols),
+        type_enforcement=test_case.schema_type_enforcement,
     )
     return (None, schema_entry)[bool(schema_cols)]
 
@@ -258,12 +260,45 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
             definition_hash=test_case.fingerprint_query_hash or "",
             schema_fingerprint="schema_a",
             definition="SELECT 1",
-            metadata_json=build_version_identity_metadata_json(
-                model_name=test_case.model_name,
-                config_values=fingerprint_config_values,
+            metadata_json=json.dumps(
+                {
+                    **json.loads(
+                        build_version_identity_metadata_json(
+                            model_name=test_case.model_name,
+                            config_values=fingerprint_config_values,
+                        )
+                    ),
+                    **test_case.fingerprint_extra_metadata,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
             ),
             ts=_STUB_TS,
             version_hash="recorded_version",
         )
     }
     return ({}, fingerprints)[test_case.fingerprint_query_hash is not None]
+
+
+def build_function_caller_metadata_case(
+    *,
+    config_values: dict[str, object],
+    function_local_hashes: dict[str, str],
+    previous_function_hashes: dict[str, str],
+    previous_config_values: dict[str, object],
+) -> DetectModelMetadataTestCase:
+    """Build metadata detection inputs for a model calling the given functions."""
+
+    return DetectModelMetadataTestCase(
+        description="caller metadata",
+        config_values=config_values,
+        schema_columns=(),
+        deps=tuple(function_local_hashes),
+        function_local_hashes=function_local_hashes,
+        previous_metadata_json=build_version_identity_metadata_json(
+            model_name="orders",
+            config_values=previous_config_values,
+            local_function_hashes=previous_function_hashes,
+        ),
+        expected_change_kind=ChangeKind.FUNCTION_CHANGED,
+    )

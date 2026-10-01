@@ -371,3 +371,10 @@ class CompileCacheDisabledTestCase:
     edit: Callable[[Path], None] = lambda _root: None
     expected_fact_cache_counts: tuple[int, int] = (0, 0)
     expected_fact_databases: tuple[Path, ...] = ()
+
+
+@dataclass(frozen=True)
+class FunctionHeaderKeyCompileCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_fragments: tuple[str, ...]

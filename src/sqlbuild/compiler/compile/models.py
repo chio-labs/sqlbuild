@@ -718,7 +718,6 @@ class CompileSqlFunctionInput:
     runtime_version: str | None = None
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
-    replay_on_change: str | None = None
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     tags: tuple[str, ...] = field(default_factory=tuple)
 
@@ -958,7 +957,6 @@ class CompiledFunction:
     runtime_version: str | None = None
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
-    replay_on_change: str | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
 
 

@@ -130,9 +130,6 @@ def test_given_renamed_chain_with_full_replay_when_building_then_migrated_histor
     assert model_entry(plan=first_plan, name="customer_orders_enriched")["reason"] == (
         test_case.expected_first_view_reason
     )
-    assert model_entry(plan=first_plan, name="customer_daily_order_totals")["reason"] != (
-        "upstream_changed"
-    )
     assert model_entry(plan=retry_plan, name="customer_daily_order_totals")["reason"] == (
         test_case.expected_retry_totals_reason
     )

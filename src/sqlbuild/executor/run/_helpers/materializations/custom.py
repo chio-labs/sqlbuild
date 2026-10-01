@@ -218,7 +218,7 @@ def _run_custom_materialization(
         declared_columns=declared_columns,
         is_first_run=existing_relation is None,
         is_full_refresh=entry.reason == PlanReason.FULL_REFRESH,
-        query_changed=entry.reason == PlanReason.QUERY_CHANGED,
+        query_changed=reports_query_change(reason=entry.reason),
         schema_findings=entry.schema_findings,
         run_audits=run_audits_fn,
         on_progress=on_progress,
@@ -467,3 +467,9 @@ def _cleanup_relations(
             )
         except Exception:
             pass
+
+
+def reports_query_change(*, reason: PlanReason) -> bool:
+    """Return whether a custom materialization sees its model's query as changed."""
+
+    return reason in {PlanReason.QUERY_CHANGED, PlanReason.FUNCTION_CHANGED}

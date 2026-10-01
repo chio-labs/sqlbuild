@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
@@ -15,17 +16,26 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.changes.metadata import version_identity_metadata_payload
+from sqlbuild.compiler.planner._helpers.changes.metadata import (
+    changed_local_function_names,
+    non_function_identity_metadata_payload,
+    recorded_declared_columns_hash,
+    version_identity_metadata_payload,
+    with_declared_columns_hash,
+    with_origin_cursor_input_names,
+)
 from sqlbuild.compiler.planner._helpers.changes.policy import (
     pick_more_aggressive,
     resolve_replay_on_change,
 )
 from sqlbuild.compiler.planner._helpers.changes.query import detect_query_change
+from sqlbuild.compiler.planner._helpers.changes.reference_renames import origin_reference_names
 from sqlbuild.compiler.planner._helpers.changes.schema import detect_schema_changes
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
 )
+from sqlbuild.compiler.planner._helpers.identity.model_metadata import declared_columns_hash
 from sqlbuild.compiler.planner.constants import EMPTY_FINGERPRINT_METADATA_JSON
 from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
     build_function_local_hashes,
@@ -42,7 +52,7 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -77,21 +87,14 @@ def detect_changes(
                 fingerprint_sql=fingerprint_sql,
             )
             continue
-        function_reason: PlanReason
-        function_backfill: BackfillResult
-        function_reason, function_backfill = detect_function_change(
-            function=function,
-            fingerprint_sql=fingerprint_sql,
-            snapshot=snapshot,
-            query_change_tracking=project.settings.query_change_tracking,
-            full_refresh=full_refresh,
-        )
-        if full_refresh:
-            function_backfill = BackfillResult(action=BackfillAction.FORWARD_ONLY)
         function_changes[function.name] = FunctionChangeResult(
             fingerprint_sql=fingerprint_sql,
-            reason=function_reason,
-            backfill=function_backfill,
+            reason=detect_function_change(
+                fingerprint_sql=fingerprint_sql,
+                fingerprint=snapshot.fingerprints.functions.get(function.name),
+                query_change_tracking=project.settings.query_change_tracking,
+                full_refresh=full_refresh,
+            ),
         )
 
     return PlannerChangeResults(models=model_changes, functions=function_changes)
@@ -157,10 +160,15 @@ def detect_model_changes(
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
-    metadata_json: str = expected_metadata_json or build_model_version_identity_metadata_json(
-        model=model,
-        function_local_hashes=function_local_hashes,
-        hook_version_hashes=hook_version_hashes,
+    current_columns_hash: str = declared_columns_hash(model=model)
+    metadata_json: str = with_declared_columns_hash(
+        metadata_json=expected_metadata_json
+        or build_model_version_identity_metadata_json(
+            model=model,
+            function_local_hashes=function_local_hashes,
+            hook_version_hashes=hook_version_hashes,
+        ),
+        declared_columns_hash=current_columns_hash,
     )
 
     if full_refresh:
@@ -176,12 +184,30 @@ def detect_model_changes(
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model_name)
 
     if not relation_exists and model_name in snapshot.renamed_models:
+        renamed_query_changed: bool = (
+            query_change_tracking
+            and fingerprint is not None
+            and detect_query_change(
+                compiled_query_hash=compute_query_hash(model.query_sql), fingerprint=fingerprint
+            )
+        )
         return ChangeDetectionResult(
             model_name=model_name,
             change_kind=ChangeKind.RENAMED,
-            backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            query_changed=renamed_query_changed,
+            backfill=(
+                resolve_replay_on_change(
+                    replay_on_change=get_config_str(
+                        values=model.config.values, key="replay_on_change"
+                    )
+                )
+                if renamed_query_changed
+                else BackfillResult(action=BackfillAction.FORWARD_ONLY)
+            ),
             fingerprint_metadata_json=metadata_json,
+            previous_metadata_json=fingerprint.metadata_json if fingerprint is not None else None,
             fingerprint_version_hash=expected_version_hash,
+            previous_version_hash=fingerprint.version_hash if fingerprint is not None else None,
         )
     if not relation_exists:
         return ChangeDetectionResult(
@@ -194,17 +220,46 @@ def detect_model_changes(
         )
 
     query_changed: bool = False
-    config_changed: bool = (
-        fingerprint is not None
-        and fingerprint.metadata_json != EMPTY_FINGERPRINT_METADATA_JSON
-        and version_identity_metadata_payload(metadata_json)
-        != version_identity_metadata_payload(fingerprint.metadata_json)
+    recorded_metadata_json: str | None = (
+        fingerprint.metadata_json
+        if fingerprint is not None and fingerprint.metadata_json != EMPTY_FINGERPRINT_METADATA_JSON
+        else None
     )
+    changed_functions: tuple[str, ...] = (
+        changed_local_function_names(
+            metadata_json=metadata_json, previous_metadata_json=recorded_metadata_json
+        )
+        if query_change_tracking and recorded_metadata_json is not None
+        else ()
+    )
+    identity_payload: Callable[[str | None], object] = (
+        non_function_identity_metadata_payload
+        if changed_functions
+        else version_identity_metadata_payload
+    )
+    origin_names: dict[str, str] | None = (
+        origin_reference_names(
+            query_sql=model.query_sql,
+            recorded=fingerprint,
+            renames=snapshot.reference_renames,
+            dialect=snapshot.column_dialect,
+        )
+        if query_change_tracking
+        and fingerprint is not None
+        and snapshot.reference_renames
+        and compute_query_hash(model.query_sql) != fingerprint.definition_hash
+        else None
+    )
+    config_changed: bool = recorded_metadata_json is not None and identity_payload(
+        with_origin_cursor_input_names(metadata_json=metadata_json, renamed_refs=origin_names)
+        if origin_names is not None
+        else metadata_json
+    ) != identity_payload(recorded_metadata_json)
     replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
         compiled_query_hash: str = compute_query_hash(model.query_sql)
-        query_changed = detect_query_change(
+        query_changed = origin_names is None and detect_query_change(
             compiled_query_hash=compiled_query_hash,
             fingerprint=fingerprint,
         )
@@ -224,11 +279,10 @@ def detect_model_changes(
         )
         log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
         log_sql(logger=debug_logger, sql=fingerprint.definition, action="fingerprint_definition")
-        if query_changed:
-            raw_policy: str | None = get_config_str(
-                values=model.config.values, key="replay_on_change"
-            )
-            replay_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
+    if query_changed or changed_functions:
+        replay_backfill = resolve_replay_on_change(
+            replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
+        )
 
     schema_findings: tuple[SchemaFinding, ...] = ()
     schema_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
@@ -251,15 +305,24 @@ def detect_model_changes(
             ),
             dialect=snapshot.column_dialect,
         )
-        if schema_findings:
-            raw_policy = get_config_str(values=model.config.values, key="replay_on_change")
-            schema_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
+        recorded_columns_hash: str | None = recorded_declared_columns_hash(recorded_metadata_json)
+        declared_columns_changed: bool = (
+            recorded_columns_hash is not None and recorded_columns_hash != current_columns_hash
+        )
+        if schema_findings and (
+            query_changed or changed_functions or config_changed or declared_columns_changed
+        ):
+            schema_backfill = resolve_replay_on_change(
+                replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
+            )
 
     backfill: BackfillResult = pick_more_aggressive(a=replay_backfill, b=schema_backfill)
 
     change_kind: ChangeKind
     if query_changed:
         change_kind = ChangeKind.QUERY_CHANGED
+    elif changed_functions:
+        change_kind = ChangeKind.FUNCTION_CHANGED
     elif schema_findings:
         change_kind = ChangeKind.SCHEMA_CHANGED
     elif config_changed:
@@ -278,6 +341,7 @@ def detect_model_changes(
         previous_version_hash=fingerprint.version_hash if fingerprint is not None else None,
         schema_findings=schema_findings,
         backfill=backfill,
+        changed_functions=changed_functions,
     )
 
 

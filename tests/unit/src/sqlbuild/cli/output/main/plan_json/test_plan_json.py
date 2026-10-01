@@ -10,8 +10,6 @@ import pytest
 from sqlbuild.cli.output.main._plan_json import format_plan_json
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
-    CascadeCause,
-    CascadeResult,
     CursorBounds,
     CursorInputEvidence,
     CursorInputRelation,
@@ -435,35 +433,37 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
             ),
         ),
         JsonOutputTestCase(
-            description="plan json includes cascade when present",
+            description="plan json lists changed functions on the direct caller",
             plan_output=build_plan_output(
                 model_entries=(
                     build_model_entry(
-                        name="fact_daily",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.NO_CHANGE,
-                        cascade=CascadeResult(
-                            effective_action=BackfillAction.BOUNDED,
-                            effective_duration="90d",
-                            root_cause="fact_orders",
-                            causes=(
-                                CascadeCause(
-                                    model_name="fact_orders",
-                                    effective_action=BackfillAction.BOUNDED,
-                                    effective_duration="90d",
-                                ),
-                            ),
-                        ),
+                        name="hourly_order_activity",
+                        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                        reason=PlanReason.FUNCTION_CHANGED,
+                        changed_functions=("is_completed_order",),
                     ),
                 ),
             ),
             expected_keys=("selected_count", "models"),
             expected_fragments=(
-                '"reason": "upstream_changed"',
-                '"cascade"',
-                '"root_cause": "fact_orders"',
-                '"effective_duration": "90d"',
+                '"reason": "function_changed"',
+                '"changed_functions": [\n        "is_completed_order"\n      ]',
             ),
+        ),
+        JsonOutputTestCase(
+            description="plan json marks a renamed model whose query changed",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="order_lines",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.RENAMED,
+                        query_changed=True,
+                    ),
+                ),
+            ),
+            expected_keys=("models",),
+            expected_fragments=('"reason": "renamed"', '"query_changed": true'),
         ),
         JsonOutputTestCase(
             description="plan json includes seeds and warnings",

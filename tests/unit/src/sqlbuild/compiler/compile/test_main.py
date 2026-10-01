@@ -1707,7 +1707,6 @@ sources:
             expected_sql_function_runtime_versions=(None,),
             expected_sql_function_entry_points=(None,),
             expected_sql_function_packages=((),),
-            expected_sql_function_replay_on_changes=(None,),
             expected_effective_target_name=None,
             expected_effective_connection={},
             expected_effective_vars={
@@ -2019,7 +2018,6 @@ FUNCTION (
   schema ${udf_schema},
   arguments (order_status ${status_type}),
   returns ${return_type},
-  replay_on_change bounded-${backfill_days}d
 );
 
 @status_match("order_status", "completed") AND order_status <> @@cancelled_status
@@ -2050,7 +2048,6 @@ FUNCTION (
             expected_sql_function_runtime_versions=(None,),
             expected_sql_function_entry_points=(None,),
             expected_sql_function_packages=((),),
-            expected_sql_function_replay_on_changes=("bounded-30d",),
             expected_effective_target_name="dev",
             expected_effective_connection={},
             expected_effective_vars={
@@ -2120,7 +2117,6 @@ WHERE customer_id = p_customer_id
             expected_sql_function_runtime_versions=(None,),
             expected_sql_function_entry_points=(None,),
             expected_sql_function_packages=((),),
-            expected_sql_function_replay_on_changes=(None,),
             expected_effective_target_name=None,
             expected_effective_connection={},
             expected_effective_vars={},
@@ -2177,7 +2173,6 @@ FROM (VALUES (1, 'open')) AS orders(order_id, status)
             expected_sql_function_runtime_versions=(None,),
             expected_sql_function_entry_points=(None,),
             expected_sql_function_packages=((),),
-            expected_sql_function_replay_on_changes=(None,),
             expected_effective_target_name=None,
             expected_effective_connection={},
             expected_effective_vars={},
@@ -2352,7 +2347,6 @@ def main(order_status):
             expected_sql_function_runtime_versions=("3.11",),
             expected_sql_function_entry_points=("main",),
             expected_sql_function_packages=(("faker",),),
-            expected_sql_function_replay_on_changes=(None,),
             expected_effective_target_name="dev",
             expected_effective_connection={},
             expected_effective_vars={
@@ -2973,12 +2967,6 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(function_input.packages for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_packages
-    )
-    assert (
-        tuple(
-            function_input.replay_on_change for function_input in compile_inputs.sql_function_inputs
-        )
-        == test_case.expected_sql_function_replay_on_changes
     )
     actual_model_references: list[tuple[tuple[str, str], ...]] = []
     for model_input in compile_inputs.model_inputs:

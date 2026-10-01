@@ -49,7 +49,11 @@ from sqlbuild.compiler.planner._helpers.output.strategy import (
     resolve_model_plan_action,
     resolve_schema_actions,
 )
-from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
+from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
+    check_full_rebuild_allowed,
+    describe_full_rebuild_cause,
+    resolve_model_full_refresh,
+)
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
     normalize_cursor_snapshot_grain,
@@ -331,7 +335,6 @@ def plan_model(
     query_change_tracking: bool,
     full_refresh: bool,
     cursor_overrides: CursorOverridePair,
-    backfill_override: BackfillResult | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
     """Detect changes and build a plan entry and warnings for a single model."""
@@ -353,7 +356,6 @@ def plan_model(
         full_refresh=full_refresh,
         cursor_overrides=cursor_overrides,
         change_result=change_result,
-        backfill_override=backfill_override,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
 
@@ -370,7 +372,7 @@ def build_plan_entries(
     full_refresh: bool,
     build_inputs: PlanEntryBuildInputs | None = None,
 ) -> PlannerModelEntryResults:
-    """Build model plan entries from snapshot and cascade-resolved actions."""
+    """Build model plan entries from snapshot and per-model resolved actions."""
 
     inputs: PlanEntryBuildInputs = (
         build_inputs if build_inputs is not None else PlanEntryBuildInputs()
@@ -428,9 +430,6 @@ def build_plan_entries(
             start_cursor_override=start_cursor_override,
             end_cursor_override=end_cursor_override,
         )
-        backfill_override: BackfillResult | None = (
-            resolved.backfill if resolved.backfill != resolved.change.backfill else None
-        )
         entry: ModelPlanEntry
         entry_warnings: tuple[PlanWarning, ...]
         effective_full_refresh: bool = resolve_model_full_refresh(
@@ -462,11 +461,10 @@ def build_plan_entries(
                 end_cursor_override=resolved_end,
             ),
             change_result=resolved.change,
-            backfill_override=backfill_override,
             external_sql_reference_resolver=project.external_sql_reference_resolver,
+            protect_full_refresh=key.name not in source_freshness_blocked_model_names
+            and key.name not in external_blocked_model_names,
         )
-        if resolved.cascade is not None:
-            entry = replace(entry, cascade=resolved.cascade)
         if entry.name in source_freshness_blocked_model_names:
             entry = replace(
                 entry,
@@ -683,21 +681,15 @@ def plan_model_from_change(
     full_refresh: bool,
     cursor_overrides: CursorOverridePair,
     change_result: ChangeDetectionResult,
-    backfill_override: BackfillResult | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    protect_full_refresh: bool = True,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
     """Build a model plan entry from a resolved change result."""
-
-    if backfill_override is not None:
-        change_result = replace(change_result, backfill=backfill_override)
 
     start_cursor_override: str | None = cursor_overrides.start_cursor_override
     end_cursor_override: str | None = cursor_overrides.end_cursor_override
     backfill: BackfillResult = (
         BackfillResult(action=BackfillAction.FULL) if full_refresh else change_result.backfill
-    )
-    suppress_runtime_cursor_bounds: bool = (
-        backfill_override is not None and backfill_override.action == BackfillAction.FULL
     )
     cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
     validate_source_cursor_input_columns(
@@ -720,6 +712,15 @@ def plan_model_from_change(
     replaces_relation: bool = replaces_incremental_relation(
         materialization_type=materialization_type, action=action
     )
+    full_rebuild_cause: str | None = (
+        describe_full_rebuild_cause(change_result=change_result, full_refresh=full_refresh)
+        if replaces_relation
+        else None
+    )
+    if full_rebuild_cause is not None and protect_full_refresh and not full_refresh:
+        check_full_rebuild_allowed(
+            model=model, change_result=change_result, full_rebuild_cause=full_rebuild_cause
+        )
 
     resolved_sql: str = resolve_model_sql(
         adapter=adapter,
@@ -729,9 +730,9 @@ def plan_model_from_change(
         backfill=backfill,
         full_refresh=full_refresh,
         cursor_overrides=cursor_overrides,
-        suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
         external_sql_reference_resolver=external_sql_reference_resolver,
         replaces_relation=replaces_relation,
+        full_rebuild_cause=full_rebuild_cause,
     )
 
     on_schema_change: OnSchemaChange | None = _get_on_schema_change(model)
@@ -773,24 +774,22 @@ def plan_model_from_change(
     effective_future_cursor_config, effective_start_cursor_config = _resolve_cursor_safety_configs(
         model=model, context=context
     )
-    cursor_input_relations: tuple[CursorInputRelation, ...] = ()
     validate_capped_watermark_inputs(
         model=model,
         models_by_name=context.models_by_name,
         functions_by_name=context.functions_by_name,
     )
-    if not suppress_runtime_cursor_bounds:
-        cursor_input_relations = _build_cursor_input_relations(
-            model=model,
-            adapter=adapter,
-            model_locations=context.model_locations,
-            models_by_name=context.models_by_name,
-            functions_by_name=context.functions_by_name,
-            seed_locations=context.seed_locations,
-            source_map=context.source_map,
-            cursor_column=cursor_column,
-            runtime_cursor_producer_names=context.runtime_cursor_producer_names,
-        )
+    cursor_input_relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+        model=model,
+        adapter=adapter,
+        model_locations=context.model_locations,
+        models_by_name=context.models_by_name,
+        functions_by_name=context.functions_by_name,
+        seed_locations=context.seed_locations,
+        source_map=context.source_map,
+        cursor_column=cursor_column,
+        runtime_cursor_producer_names=context.runtime_cursor_producer_names,
+    )
     runtime_owned_cursor_bounds: bool = _has_runtime_owned_cursor_watermarks(
         cursor_input_relations
     ) and not (start_cursor_override is not None and end_cursor_override is not None)
@@ -960,6 +959,7 @@ def plan_model_from_change(
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,
+        changed_functions=change_result.changed_functions,
         custom_materialization_name=custom.name,
         custom_config=custom.config,
         custom_placeholders=custom.placeholders,

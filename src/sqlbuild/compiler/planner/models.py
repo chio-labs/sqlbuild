@@ -625,6 +625,15 @@ class MaximumStartPolicyInputs:
 
 
 @dataclass(frozen=True)
+class ReferenceRename:
+    """One model rename that downstream references may have been rewritten for."""
+
+    new_name: str
+    origin_name: str
+    recorded_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
@@ -635,6 +644,8 @@ class WarehouseSnapshot:
     source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
     column_dialect: str | None = None
     renamed_models: frozenset[str] = field(default_factory=frozenset)
+    reference_renames: tuple[ReferenceRename, ...] = ()
+    migration_state_schemas: frozenset[str] = field(default_factory=frozenset)
     old_name_view_state_schemas: frozenset[str] = field(default_factory=frozenset)
     listed_state_schemas: frozenset[str] | None = field(default_factory=frozenset)
 
@@ -689,28 +700,6 @@ class BackfillResult:
 
 
 @dataclass(frozen=True)
-class CascadeCause:
-    """One upstream model that contributed to a backfill cascade."""
-
-    model_name: str
-    effective_action: BackfillAction
-    effective_duration: str | None
-    root_cause: str | None = None
-    root_reason: PlanReason | None = None
-
-
-@dataclass(frozen=True)
-class CascadeResult:
-    """Effective backfill after upstream cascade propagation."""
-
-    effective_action: BackfillAction
-    effective_duration: str | None
-    root_cause: str | None
-    root_reason: PlanReason | None = None
-    causes: tuple[CascadeCause, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class ChangeDetectionResult:
     """Per-model output from change detection and policy resolution."""
 
@@ -727,6 +716,7 @@ class ChangeDetectionResult:
         default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
     recorded_build_relation_missing: bool = False
+    changed_functions: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -805,9 +795,6 @@ class FunctionChangeResult:
 
     fingerprint_sql: str
     reason: PlanReason = PlanReason.NO_CHANGE
-    backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
-    )
 
 
 @dataclass(frozen=True)
@@ -820,16 +807,15 @@ class PlannerChangeResults:
 
 @dataclass(frozen=True)
 class ResolvedModelAction:
-    """Effective model change and backfill after cascade resolution."""
+    """Effective model change and backfill decided from the model's own change."""
 
     change: ChangeDetectionResult
     backfill: BackfillResult
-    cascade: CascadeResult | None = None
 
 
 @dataclass(frozen=True)
 class PlannerResolvedActions:
-    """Cascade-resolved planning decisions keyed by model name."""
+    """Per-model planning decisions keyed by model name."""
 
     models: dict[str, ResolvedModelAction]
 
@@ -1192,7 +1178,7 @@ class ModelPlanEntry:
     backfill: BackfillResult = field(
         default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
-    cascade: CascadeResult | None = None
+    changed_functions: tuple[str, ...] = field(default_factory=tuple)
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
@@ -1262,9 +1248,6 @@ class FunctionPlanEntry:
     packages: tuple[str, ...] = field(default_factory=tuple)
     previous_query_sql: str | None = None
     reason: PlanReason = PlanReason.NO_CHANGE
-    backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
-    )
 
 
 @dataclass(frozen=True)

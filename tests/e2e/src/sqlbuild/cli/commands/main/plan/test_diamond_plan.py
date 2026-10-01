@@ -29,13 +29,13 @@ _PLAN_ENTRY: re.Pattern[str] = re.compile(r"^[├└]── (orders_\w+)\s", re.
     "test_case",
     [
         DiamondPlanE2ETestCase(
-            description="plan tree lists each diamond model once with its cascade cause",
+            description="plan tree lists each diamond model once without inherited replay",
             expected_fragments=(
                 "Query changed (1)",
-                f"Upstream changed ({len(diamond_model_names()) - 1})",
+                f"Models ({len(diamond_model_names()) - 1})",
                 f"└── orders_{DIAMOND_LAYERS} ",
-                "cause  orders_0 (query changed)",
             ),
+            unexpected_fragments=("Upstream changed", "cause"),
             expected_max_lines_per_model=4,
         )
     ],
@@ -54,6 +54,8 @@ def test_given_changed_diamond_root_when_planning_then_tree_lists_each_model_onc
     assert result.returncode == 0, result.stdout + result.stderr
     for fragment in test_case.expected_fragments:
         assert fragment in result.stdout, result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in result.stdout, result.stdout
     plan_output: str = result.stdout[result.stdout.index("Plan ready") :]
     assert sorted(_PLAN_ENTRY.findall(plan_output)) == sorted(diamond_model_names())
     assert len(plan_output.splitlines()) <= test_case.expected_max_lines_per_model * len(
@@ -65,10 +67,10 @@ def test_given_changed_diamond_root_when_planning_then_tree_lists_each_model_onc
     "test_case",
     [
         DiamondPlanJsonE2ETestCase(
-            description="plan json lists each diamond model once with its cascade reason",
+            description="plan json lists each diamond model once with its own reason",
             expected_reasons={
                 "orders_0": "query_changed",
-                **{name: "upstream_changed" for name in diamond_model_names()[1:]},
+                **{name: "normal_incremental" for name in diamond_model_names()[1:]},
             },
         )
     ],

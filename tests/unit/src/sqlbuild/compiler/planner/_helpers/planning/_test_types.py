@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import RetentionState
+from sqlbuild.compiler.planner.models import ChangeDetectionResult
 from sqlbuild.compiler.planner.types import RetentionDirection, RetentionPlanPhase
 from sqlbuild.spec.contracts.types import TableType, TableTypeDowngradePolicy
 
@@ -74,3 +75,11 @@ class PlannerScopesTestCase:
     select: tuple[str, ...]
     expected_selected_names: frozenset[str]
     expected_stale_warning_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FullRebuildCheckTestCase:
+    description: str
+    model_config: dict[str, object]
+    change: ChangeDetectionResult
+    expected_cause: str

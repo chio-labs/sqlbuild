@@ -28,6 +28,17 @@ from sqlbuild.compiler.planner.types import (
 )
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
+_OWN_CHANGE_REASONS: dict[ChangeKind, PlanReason] = {
+    ChangeKind.FIRST_RUN: PlanReason.FIRST_RUN,
+    ChangeKind.QUERY_CHANGED: PlanReason.QUERY_CHANGED,
+    ChangeKind.FUNCTION_CHANGED: PlanReason.FUNCTION_CHANGED,
+    ChangeKind.CONFIG_CHANGED: PlanReason.CONFIG_CHANGED,
+    ChangeKind.SCHEMA_CHANGED: PlanReason.SCHEMA_CHANGED,
+}
+_VIEW_CHANGE_REASONS: dict[ChangeKind, PlanReason] = {
+    **_OWN_CHANGE_REASONS,
+    ChangeKind.RENAMED: PlanReason.RENAMED,
+}
 
 
 def resolve_model_plan_action(
@@ -198,15 +209,20 @@ def build_model_warnings(
 
     if (
         materialization_type == MaterializationType.INCREMENTAL
-        and change_result.query_changed
+        and (change_result.query_changed or change_result.changed_functions)
         and change_result.backfill.action == BackfillAction.FORWARD_ONLY
     ):
+        changed_subject: str = (
+            "the model's SQL changed"
+            if change_result.query_changed
+            else f"function {', '.join(change_result.changed_functions)} changed"
+        )
         warnings.append(
             PlanWarning(
                 model_name=model_name,
                 severity=WarningSeverity.WARNING,
                 message=(
-                    f"{model_name}: the model's SQL changed, so already-built dates keep "
+                    f"{model_name}: {changed_subject}, so already-built dates keep "
                     "their old results - only new dates will use the new query. To apply "
                     "the change to existing data, choose how much to reprocess: "
                     "replay_on_change full (rebuild every date with the new SQL), "
@@ -251,15 +267,7 @@ def _custom_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) 
 
     if full_refresh:
         return PlanReason.FULL_REFRESH
-    if change_result.change_kind == ChangeKind.FIRST_RUN:
-        return PlanReason.FIRST_RUN
-    if change_result.change_kind == ChangeKind.QUERY_CHANGED:
-        return PlanReason.QUERY_CHANGED
-    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
-        return PlanReason.CONFIG_CHANGED
-    if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
-        return PlanReason.SCHEMA_CHANGED
-    return PlanReason.NO_CHANGE
+    return _OWN_CHANGE_REASONS.get(change_result.change_kind, PlanReason.NO_CHANGE)
 
 
 def _view_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
@@ -267,17 +275,7 @@ def _view_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) ->
 
     if full_refresh:
         return PlanReason.FULL_REFRESH
-    if change_result.change_kind == ChangeKind.FIRST_RUN:
-        return PlanReason.FIRST_RUN
-    if change_result.change_kind == ChangeKind.RENAMED:
-        return PlanReason.RENAMED
-    if change_result.change_kind == ChangeKind.QUERY_CHANGED:
-        return PlanReason.QUERY_CHANGED
-    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
-        return PlanReason.CONFIG_CHANGED
-    if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
-        return PlanReason.SCHEMA_CHANGED
-    return PlanReason.NO_CHANGE
+    return _VIEW_CHANGE_REASONS.get(change_result.change_kind, PlanReason.NO_CHANGE)
 
 
 def _snapshot_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
@@ -285,15 +283,7 @@ def _snapshot_reason(*, change_result: ChangeDetectionResult, full_refresh: bool
 
     if full_refresh:
         return PlanReason.FULL_REFRESH
-    if change_result.change_kind == ChangeKind.FIRST_RUN:
-        return PlanReason.FIRST_RUN
-    if change_result.change_kind == ChangeKind.QUERY_CHANGED:
-        return PlanReason.QUERY_CHANGED
-    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
-        return PlanReason.CONFIG_CHANGED
-    if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
-        return PlanReason.SCHEMA_CHANGED
-    return PlanReason.NORMAL_INCREMENTAL
+    return _OWN_CHANGE_REASONS.get(change_result.change_kind, PlanReason.NORMAL_INCREMENTAL)
 
 
 def _backfill_reason(change_result: ChangeDetectionResult) -> PlanReason:
@@ -301,6 +291,8 @@ def _backfill_reason(change_result: ChangeDetectionResult) -> PlanReason:
 
     if change_result.query_changed:
         return PlanReason.QUERY_CHANGED
+    if change_result.changed_functions:
+        return PlanReason.FUNCTION_CHANGED
     if change_result.config_changed:
         return PlanReason.CONFIG_CHANGED
     if change_result.schema_findings:
@@ -315,6 +307,8 @@ def _table_action(
 
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.FUNCTION_CHANGED:
+        return PlanAction.CREATE_TABLE, PlanReason.FUNCTION_CHANGED
     if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
@@ -339,6 +333,8 @@ def _incremental_action(
     reason: PlanReason
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         reason = PlanReason.QUERY_CHANGED
+    elif change_result.change_kind == ChangeKind.FUNCTION_CHANGED:
+        reason = PlanReason.FUNCTION_CHANGED
     elif change_result.change_kind == ChangeKind.CONFIG_CHANGED:
         reason = PlanReason.CONFIG_CHANGED
     elif change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
