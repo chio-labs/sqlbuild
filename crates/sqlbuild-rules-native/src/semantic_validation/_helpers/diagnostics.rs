@@ -1,6 +1,8 @@
 //! SQLBuild codes and dialect-specific diagnostic evidence.
 
 use crate::semantic_validation::_helpers::catalog::diagnostic_row;
+use crate::semantic_validation::_helpers::function_names;
+use crate::semantic_validation::models::FunctionProbes;
 use crate::semantic_validation::types::DiagnosticRow;
 use polyglot_sql::expressions::Select;
 use polyglot_sql::{
@@ -144,6 +146,7 @@ pub(crate) fn map_diagnostics(
     sql: &str,
     dialect: DialectType,
     result: ValidationResult,
+    probes: &FunctionProbes,
 ) -> Result<ValidationResult, String> {
     let mut context = DiagnosticContext {
         sql,
@@ -156,6 +159,9 @@ pub(crate) fn map_diagnostics(
             errors.push(error);
         }
     }
+    errors.extend(function_names::unsupported_function_errors(
+        sql, dialect, probes,
+    ));
     let valid = !errors
         .iter()
         .any(|error| error.severity == ValidationSeverity::Error);
@@ -405,6 +411,7 @@ pub(crate) fn binding_diagnostics(
             valid: false,
             errors,
         },
+        &FunctionProbes::default(),
     )?;
     Ok(result.errors.into_iter().map(diagnostic_row).collect())
 }

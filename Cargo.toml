@@ -29,6 +29,9 @@ polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "25ad0
     "semantic",
     "stacker",
 ] }
+polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.git", rev = "25ad011c49f2c7cd48f4427abb8fc0a6af2e4120", default-features = false, features = [
+    "dialect-duckdb",
+] }
 quote = "1"
 rayon = "1"
 regex = "1"

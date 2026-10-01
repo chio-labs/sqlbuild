@@ -19,6 +19,7 @@ fensu-policy.workspace = true
 globset.workspace = true
 mimalloc.workspace = true
 polyglot-sql.workspace = true
+polyglot-sql-function-catalogs.workspace = true
 pyo3.workspace = true
 rayon.workspace = true
 regex.workspace = true
