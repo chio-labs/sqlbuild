@@ -21,7 +21,7 @@ fn given_lines_over_the_width_when_formatting_then_each_wrap_rule_applies_idempo
             sql: "select order_id from orders where region in ('north', 'south', 'east', 'west', 'central', 'remote')",
             line_width: 50,
             token_widths: &[],
-            expected_sql: "SELECT\n  order_id\nFROM orders\nWHERE\n  region IN (\n    'north',\n    'south',\n    'east',\n    'west',\n    'central',\n    'remote'\n  )",
+            expected_sql: "SELECT order_id\nFROM orders\nWHERE\n  region IN (\n    'north',\n    'south',\n    'east',\n    'west',\n    'central',\n    'remote'\n  )",
         },
         test_types::LineWrapTestCase {
             description: "window PARTITION BY and ORDER BY go on separate lines",
@@ -35,7 +35,7 @@ fn given_lines_over_the_width_when_formatting_then_each_wrap_rule_applies_idempo
             sql: "select o.order_id from orders o join customers c on o.customer_id = c.customer_id and o.amount between 1 and 9 and o.store = c.store",
             line_width: 60,
             token_widths: &[],
-            expected_sql: "SELECT\n  o.order_id\nFROM orders o\nJOIN customers c\n  ON o.customer_id = c.customer_id\n  AND o.amount BETWEEN 1 AND 9\n  AND o.store = c.store",
+            expected_sql: "SELECT o.order_id\nFROM orders o\nJOIN customers c\n  ON o.customer_id = c.customer_id\n  AND o.amount BETWEEN 1 AND 9\n  AND o.store = c.store",
         },
         test_types::LineWrapTestCase {
             description: "arithmetic chains break before operators",
@@ -49,7 +49,7 @@ fn given_lines_over_the_width_when_formatting_then_each_wrap_rule_applies_idempo
             sql: "select order_id from orders where cast(ordered_at as DATE) >= cast(@start as DATE) and cast(ordered_at as DATE) < cast(@end as DATE)",
             line_width: 60,
             token_widths: &[],
-            expected_sql: "SELECT\n  order_id\nFROM orders\nWHERE\n  CAST(ordered_at AS DATE) >= CAST(@start AS DATE)\n  AND CAST(ordered_at AS DATE) < CAST(@end AS DATE)",
+            expected_sql: "SELECT order_id\nFROM orders\nWHERE\n  CAST(ordered_at AS DATE) >= CAST(@start AS DATE)\n  AND CAST(ordered_at AS DATE) < CAST(@end AS DATE)",
         },
         test_types::LineWrapTestCase {
             description: "a long string literal is never broken",
@@ -77,7 +77,7 @@ fn given_lines_over_the_width_when_formatting_then_each_wrap_rule_applies_idempo
             sql: "select coalesce(first_amount, second_amount) as amount from orders",
             line_width: 100,
             token_widths: &[],
-            expected_sql: "SELECT\n  COALESCE(first_amount, second_amount) AS amount\nFROM orders",
+            expected_sql: "SELECT COALESCE(first_amount, second_amount) AS amount\nFROM orders",
         },
     ];
     for test_case in &test_cases {

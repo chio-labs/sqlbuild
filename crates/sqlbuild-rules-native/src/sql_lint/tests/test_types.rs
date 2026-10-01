@@ -87,6 +87,14 @@ pub(crate) struct LineWrapTestCase {
     pub expected_sql: &'static str,
 }
 
+pub(crate) struct LayoutRuleTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub sql: &'static str,
+    pub line_width: usize,
+    pub expected_sql: &'static str,
+}
+
 pub(crate) struct FormatCorpusTestCase {
     pub description: &'static str,
     pub dialect: &'static str,

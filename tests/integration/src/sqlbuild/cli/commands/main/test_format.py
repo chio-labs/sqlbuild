@@ -99,7 +99,7 @@ def test_given_authored_function_spelling_when_formatting_then_only_layout_chang
     assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
     capsys.readouterr()
     formatted: str = model.read_text()
-    assert f"  {test_case.expected_expression} AS order_flag\n" in formatted
+    assert f"SELECT {test_case.expected_expression} AS order_flag\n" in formatted
     assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
     assert model.read_text() == formatted
 
@@ -812,15 +812,13 @@ def test_given_format_selectors_when_scoping_then_paths_and_default_exclusions_a
     models.mkdir()
     (models / "customers.sql").write_text(
         "MODEL (materialized table, columns (customer_id (type INTEGER),));\n"
-        "SELECT\n"
-        "  1 AS customer_id\n",
+        "SELECT 1 AS customer_id\n",
         encoding="utf-8",
     )
     (models / "orders.sql").write_text(
         'MODEL (description "Orders.", materialized table, '
         "columns (order_id (type INTEGER),));\n"
-        "SELECT\n"
-        "  customer_id AS order_id\n"
+        "SELECT customer_id AS order_id\n"
         'FROM __ref("customers")\n',
         encoding="utf-8",
     )
@@ -1007,7 +1005,7 @@ def test_given_file_paths_when_formatting_then_only_named_files_change(
                 "distinct_rows AS (\n    SELECT order_id, customer_id\n    FROM upstream\n"
                 "    GROUP BY ALL\n)\n\nSELECT order_id, customer_id FROM distinct_rows\n"
             ),
-            expected_fragment="),\n-- Explains the next CTE: line one,\n-- line two.\ndistinct_rows AS (",
+            expected_fragment="),\n\n-- Explains the next CTE: line one,\n-- line two.\ndistinct_rows AS (",
         ),
     ],
     ids=lambda case: case.description,
@@ -1219,6 +1217,56 @@ def test_given_select_all_and_implicit_aliases_when_formatting_then_only_layout_
                 "  AND o.order_id > 0\n"
                 "  AND o.tax >= 0\n"
                 "  AND o.fallback_amount IS NULL\n"
+            ),
+        ),
+        LineWidthWrapIntegrationTestCase(
+            description="CTE, VALUES, single-item and type-parameter layout rules build",
+            line_width=60,
+            authored_sql=(
+                'MODEL (description "Order totals", materialized table);\n\n'
+                'with orders as (select * from __ref("orders_with_a_long_name")),\n'
+                "-- paid orders only\n"
+                "paid as (select o.order_id, cast(coalesce(o.amount, o.fallback_amount, 0) "
+                "+ o.tax as decimal(18, 2)) as total from orders o where o.amount > 0),\n"
+                "labels as (select * from (values (1, 'paid and shipped to the customer'), "
+                "(2, 'cancelled by the customer')) as l(order_id, label))\n"
+                "select p.order_id, p.total from paid p join labels l on p.order_id = l.order_id\n"
+            ),
+            expected_sql=(
+                'MODEL (description "Order totals", materialized table);\n'
+                "\n"
+                "WITH orders AS (\n"
+                "  SELECT *\n"
+                '  FROM __ref("orders_with_a_long_name")\n'
+                "),\n"
+                "\n"
+                "-- paid orders only\n"
+                "paid AS (\n"
+                "  SELECT\n"
+                "    o.order_id,\n"
+                "    CAST(\n"
+                "      COALESCE(o.amount, o.fallback_amount, 0)\n"
+                "        + o.tax AS decimal(18, 2)\n"
+                "    ) AS total\n"
+                "  FROM orders o\n"
+                "  WHERE o.amount > 0\n"
+                "),\n"
+                "\n"
+                "labels AS (\n"
+                "  SELECT *\n"
+                "  FROM (\n"
+                "    VALUES\n"
+                "      (1, 'paid and shipped to the customer'),\n"
+                "      (2, 'cancelled by the customer')\n"
+                "  ) AS l(order_id, label)\n"
+                ")\n"
+                "\n"
+                "SELECT\n"
+                "  p.order_id,\n"
+                "  p.total\n"
+                "FROM paid p\n"
+                "JOIN labels l\n"
+                "  ON p.order_id = l.order_id\n"
             ),
         ),
     ],

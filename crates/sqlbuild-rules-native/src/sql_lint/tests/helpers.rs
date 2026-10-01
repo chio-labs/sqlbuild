@@ -76,8 +76,16 @@ pub(crate) fn check_dialect_corpus(
             only_keyword_case_differs(sql, printed, dialect)?,
             "{dialect} fingerprint changed beyond keyword case: {sql}"
         );
-        let layouts = [&entry["formatted"], &entry["previously_formatted"]];
-        for stable in layouts.iter().filter_map(|layout| layout.as_str()) {
+        let previous_layout: Option<String> = entry["previously_formatted"]
+            .as_str()
+            .map(|previous| relaid_previous_layout(previous, dialect))
+            .transpose()?;
+        let layouts = [
+            entry["formatted"].as_str().map(str::to_string),
+            previous_layout,
+        ];
+        for stable in layouts.iter().flatten() {
+            let stable = stable.as_str();
             let again = format_once(stable, dialect, None)?;
             assert_eq!(again["sql"], stable, "{dialect} layout drifted: {stable}");
             assert_eq!(
@@ -119,6 +127,26 @@ fn only_keyword_case_differs(sql: &str, printed: &str, dialect: &str) -> Result<
                 || (before.text.eq_ignore_ascii_case(&after.text)
                     && after.text == after.text.to_ascii_uppercase())
         }))
+}
+
+/// Re-format a layout of an earlier formatter release, which must keep its fingerprint.
+fn relaid_previous_layout(previous: &str, dialect: &str) -> Result<String, String> {
+    let relaid = format_once(previous, dialect, None)?;
+    let sql = relaid["sql"].as_str().unwrap_or_default().to_string();
+    assert_eq!(
+        query_fingerprint(&sql, dialect)?,
+        query_fingerprint(previous, dialect)?,
+        "{dialect} formatting changed the fingerprint of a previous layout: {previous}"
+    );
+    Ok(sql)
+}
+
+pub(crate) fn format_at_width(
+    sql: &str,
+    dialect: &str,
+    line_width: usize,
+) -> Result<Value, String> {
+    format_once(sql, dialect, Some(line_width))
 }
 
 fn format_once(sql: &str, dialect: &str, line_width: Option<usize>) -> Result<Value, String> {

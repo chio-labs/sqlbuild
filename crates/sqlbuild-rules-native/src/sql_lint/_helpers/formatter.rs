@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
 use polyglot_sql::tokens::{Token, TokenType};
@@ -6,7 +6,7 @@ use polyglot_sql::{ComplexityGuardOptions, Dialect, DialectType, ParseOptions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::sql_lint::_helpers::formatter_syntax::{cte_macro_indices, protect_syntax};
-use crate::sql_lint::_helpers::line_wrap::{WrapOptions, wrap_lines};
+use crate::sql_lint::_helpers::printed_layout::{PrintedSql, WrapOptions, wrap_lines};
 use crate::sql_lint::_helpers::token_layout::{
     AuthoredSql, KeywordRecase, comments_in, neutralize_comments, print_authored_tokens,
     verify_token_invariant,
@@ -150,11 +150,17 @@ impl Layout<'_> {
         oracle: &str,
     ) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
         let (printed, recases) = print_authored_tokens(authored, oracle, self.dialect)?;
-        let laid_out = match self.wrap {
-            Some(wrap) => wrap_lines(&printed, self.dialect, wrap)?,
-            None => printed,
+        let no_widths: HashMap<String, usize> = HashMap::new();
+        let token_widths = self.wrap.map_or(&no_widths, |wrap| wrap.token_widths);
+        let Some(mut sql) = PrintedSql::parse(&printed, self.dialect, token_widths)? else {
+            return Ok((printed, recases));
         };
-        Ok((laid_out, recases))
+        sql.arrange_clauses(self.wrap.map_or(usize::MAX, |wrap| wrap.line_width));
+        if let Some(wrap) = self.wrap {
+            wrap_lines(&mut sql, wrap.line_width);
+        }
+        sql.lead_operators_of_multiline_operands();
+        Ok((sql.render(), recases))
     }
 }
 

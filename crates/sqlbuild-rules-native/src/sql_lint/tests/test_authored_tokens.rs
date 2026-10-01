@@ -13,7 +13,7 @@ fn given_generator_respellings_when_formatting_then_authored_spellings_are_kept(
         test_types::FormatTestCase {
             description: "Snowflake STARTSWITH keeps its authored name",
             sql: "select startswith(order_code, 'EU') as is_eu_order from orders",
-            expected_sql: "SELECT\n  startswith(order_code, 'EU') AS is_eu_order\nFROM orders",
+            expected_sql: "SELECT startswith(order_code, 'EU') AS is_eu_order\nFROM orders",
             expected_changed: true,
         },
         test_types::FormatTestCase {
@@ -25,7 +25,7 @@ fn given_generator_respellings_when_formatting_then_authored_spellings_are_kept(
         test_types::FormatTestCase {
             description: "operator and function spellings stay authored",
             sql: "select IFNULL(status, 'open') as status from orders where quantity != 0",
-            expected_sql: "SELECT\n  IFNULL(status, 'open') AS status\nFROM orders\nWHERE\n  quantity != 0",
+            expected_sql: "SELECT IFNULL(status, 'open') AS status\nFROM orders\nWHERE quantity != 0",
             expected_changed: true,
         },
     ];
@@ -56,43 +56,43 @@ fn given_generator_restructuring_when_formatting_then_authored_tokens_are_laid_o
             description: "PostgreSQL comma SUBSTRING arguments are not rewritten to FROM/FOR",
             dialect: "postgres",
             sql: "select substring(code, 1, 2) as region from orders",
-            expected_sql: "SELECT\n  SUBSTRING(code, 1, 2) AS region\nFROM orders",
+            expected_sql: "SELECT SUBSTRING(code, 1, 2) AS region\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "DuckDB SELECT ALL keeps ALL",
             dialect: "duckdb",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+            expected_sql: "SELECT ALL order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "Snowflake SELECT ALL keeps ALL",
             dialect: "snowflake",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+            expected_sql: "SELECT ALL order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "PostgreSQL SELECT ALL keeps ALL",
             dialect: "postgres",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+            expected_sql: "SELECT ALL order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "BigQuery SELECT ALL keeps ALL",
             dialect: "bigquery",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+            expected_sql: "SELECT ALL order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "Databricks SELECT ALL keeps ALL",
             dialect: "databricks",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT all\n  order_id\nFROM orders",
+            expected_sql: "SELECT all order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "T-SQL SELECT ALL keeps ALL",
             dialect: "tsql",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+            expected_sql: "SELECT ALL order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "implicit aliases stay implicit",
@@ -110,13 +110,13 @@ fn given_generator_restructuring_when_formatting_then_authored_tokens_are_laid_o
             description: "adjacent authored tokens are never split",
             dialect: "duckdb",
             sql: "select $name as v from orders where status != 1",
-            expected_sql: "SELECT\n  $name AS v\nFROM orders\nWHERE\n  status != 1",
+            expected_sql: "SELECT $name AS v\nFROM orders\nWHERE status != 1",
         },
         test_types::DialectFormatTestCase {
             description: "BigQuery numeric-prefixed path parts stay joined",
             dialect: "bigquery",
             sql: "select * from orders.archive.25_",
-            expected_sql: "SELECT\n  *\nFROM orders.archive.25_",
+            expected_sql: "SELECT *\nFROM orders.archive.25_",
         },
     ];
     for test_case in &test_cases {
@@ -153,7 +153,7 @@ fn given_case_or_line_sensitive_tokens_when_formatting_then_they_are_kept_exactl
             description: "BigQuery keyword-named table names keep their case",
             dialect: "bigquery",
             sql: "select * from inventory.view",
-            expected_sql: "SELECT\n  *\nFROM inventory.view",
+            expected_sql: "SELECT *\nFROM inventory.view",
         },
         test_types::DialectFormatTestCase {
             description: "Snowflake path keys keep their case",
@@ -177,7 +177,7 @@ fn given_case_or_line_sensitive_tokens_when_formatting_then_they_are_kept_exactl
             description: "BigQuery comma-joined keyword-named tables keep their case",
             dialect: "bigquery",
             sql: "select * from ds.a, View v",
-            expected_sql: "SELECT\n  *\nFROM ds.a, View v",
+            expected_sql: "SELECT *\nFROM ds.a, View v",
         },
         test_types::DialectFormatTestCase {
             description: "DuckDB adjacent string literals keep their line break",
@@ -207,7 +207,7 @@ fn given_case_or_line_sensitive_tokens_when_formatting_then_they_are_kept_exactl
             description: "T-SQL temporary table hashes are not comments",
             dialect: "tsql",
             sql: "select #orders.order_id from #orders",
-            expected_sql: "SELECT\n  #orders.order_id\nFROM #orders",
+            expected_sql: "SELECT #orders.order_id\nFROM #orders",
         },
         test_types::DialectFormatTestCase {
             description: "DuckDB integer division and slashes inside strings are not comments",
@@ -219,7 +219,7 @@ fn given_case_or_line_sensitive_tokens_when_formatting_then_they_are_kept_exactl
             description: "Snowflake double slashes inside strings are not comments",
             dialect: "snowflake",
             sql: "select 'https://example.com//a' as url from orders",
-            expected_sql: "SELECT\n  'https://example.com//a' AS url\nFROM orders",
+            expected_sql: "SELECT 'https://example.com//a' AS url\nFROM orders",
         },
     ];
     for test_case in &test_cases {
@@ -251,6 +251,20 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             after: "SELECT\n  a,\n  b\nFROM orders -- note",
             recases: &[],
             expected_error: None,
+        },
+        test_types::TokenInvariantTestCase {
+            description: "blank lines between CTEs keep comments on their tokens",
+            before: "WITH orders AS (SELECT 1), -- note\n-- paid only\npaid AS (SELECT 2) SELECT * FROM paid",
+            after: "WITH orders AS (\n  SELECT 1\n), -- note\n\n-- paid only\npaid AS (\n  SELECT 2\n)\n\nSELECT *\nFROM paid",
+            recases: &[],
+            expected_error: None,
+        },
+        test_types::TokenInvariantTestCase {
+            description: "a comment moved across a CTE blank line is refused",
+            before: "WITH orders AS (SELECT 1), -- note\npaid AS (SELECT 2) SELECT * FROM paid",
+            after: "WITH orders AS (\n  SELECT 1\n)\n-- note\n,\n\npaid AS (\n  SELECT 2\n)\n\nSELECT *\nFROM paid",
+            recases: &[],
+            expected_error: Some("native formatter could not preserve comment token attachments"),
         },
         test_types::TokenInvariantTestCase {
             description: "a renamed function is refused",

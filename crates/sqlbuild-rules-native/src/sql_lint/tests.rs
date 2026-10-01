@@ -10,6 +10,8 @@ mod empty_fixture_lint;
 mod format_corpus;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_layout_rules.rs"]
+mod layout_rules;
 #[path = "tests/test_line_wrap.rs"]
 mod line_wrap;
 #[path = "tests/test_sql_lint.rs"]

@@ -237,7 +237,7 @@ def test_given_comment_free_body_when_formatting_twice_then_output_is_canonical_
 
     assert len(first.formatted_files) == test_case.expected_value
     assert second.formatted_files == ()
-    assert "SELECT\n  a,\n  b\nFROM items\nWHERE\n  a = 1\n" in target.read_text(encoding="utf-8")
+    assert "SELECT\n  a,\n  b\nFROM items\nWHERE a = 1\n" in target.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
