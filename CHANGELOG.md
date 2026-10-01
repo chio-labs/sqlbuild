@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.130.1](https://github.com/chio-labs/sqlbuild/compare/v0.130.0...v0.130.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **planner:** observe source freshness per source and fail plans on missing source tables ([#908](https://github.com/chio-labs/sqlbuild/issues/908)) ([d79e9b7](https://github.com/chio-labs/sqlbuild/commit/d79e9b736e8ad0686309b9b6d50905d050d6b833))
+
 ## [0.130.0](https://github.com/chio-labs/sqlbuild/compare/v0.129.1...v0.130.0) (2026-10-01)
 
 
