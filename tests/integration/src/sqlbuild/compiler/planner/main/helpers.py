@@ -62,6 +62,7 @@ from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     SourceCursorInputPlanErrorTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
+    FakeRelation,
     OfflineSnowflakeAdapter,
     RecordedQuery,
     RecordingSnowflakeWarehouse,
@@ -534,3 +535,19 @@ def offline_cursor_bound_relations(warehouse: RecordingSnowflakeWarehouse) -> tu
         _CURSOR_BOUND_RELATION.findall(query.sql)[0]
         for query in warehouse.queries_of_kind("cursor_bounds")
     )
+
+
+def relations_in_schemas(
+    *, project: SyntheticSnowflakeProject, schemas: frozenset[str]
+) -> tuple[FakeRelation, ...]:
+    """Keep only the synthetic relations that already exist in the given schemas."""
+
+    return tuple(filter(lambda relation: relation.schema in schemas, project.relations))
+
+
+def relations_in_database(
+    *, project: SyntheticSnowflakeProject, database: str
+) -> tuple[FakeRelation, ...]:
+    """Move every synthetic relation into another database."""
+
+    return tuple(replace(relation, database=database) for relation in project.relations)

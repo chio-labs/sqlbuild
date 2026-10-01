@@ -122,7 +122,11 @@ def _list_source_candidates(
                 names=tuple(sorted({entry.table or entry.name for entry in pending})),
             )
         )
-    return tuple(dict.fromkeys(relations))
+    unique: dict[tuple[str | None, str | None, str], RelationInfo] = {}
+    relation: RelationInfo
+    for relation in relations:
+        _ = unique.setdefault(relation.identity, relation)
+    return tuple(unique.values())
 
 
 def _has_candidate(*, entry: SourceEntry, relations: list[RelationInfo]) -> bool:

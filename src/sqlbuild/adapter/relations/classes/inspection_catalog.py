@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations._helpers.inspection_context import emit_inspection_record
@@ -38,8 +39,21 @@ class InspectionCatalog:
         self._relation_listings: dict[_SchemaKey, SchemaRelationListing] = {}
         self._column_listings: dict[_SchemaKey, SchemaColumnListing] = {}
         self._capped_column_schemas: set[_SchemaKey] = set()
+        self._remembered: dict[tuple[str, ...], object] = {}
+        self._remember_lock: threading.Lock = threading.Lock()
         self._relation_requests: dict[_RelationRequestKey, tuple[RelationInfo, ...]] = {}
         self._relation_columns: dict[_RelationIdentity, tuple[ColumnInfo, ...] | None] = {}
+
+    def remember[ValueT](self, *, key: tuple[str, ...], compute: Callable[[], ValueT]) -> ValueT:
+        """Compute one adapter-owned metadata fact at most once per planning invocation."""
+
+        with self._remember_lock:
+            if key in self._remembered:
+                return cast(ValueT, self._remembered[key])
+        value: ValueT = compute()
+        with self._remember_lock:
+            self._remembered.setdefault(key, value)
+        return value
 
     @property
     def schema_scoped(self) -> bool:

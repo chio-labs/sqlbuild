@@ -141,3 +141,22 @@ class SnowflakeManySchemasTestCase:
     models_per_schema: int
     expected_per_relation_column_reads: int
     expected_schema_column_reads: int
+
+
+@dataclass(frozen=True)
+class SnowflakeFreshTargetTestCase:
+    """Planning before the first build, when target schemas or the database do not exist."""
+
+    description: str
+    warehouse_schemas: frozenset[str]
+    expected_reason: str
+    expected_schema_checks: int
+
+
+@dataclass(frozen=True)
+class SnowflakeMissingDatabaseTestCase:
+    """Planning against a database that does not exist or the role cannot use."""
+
+    description: str
+    warehouse_database: str
+    expected_error_fragment: str

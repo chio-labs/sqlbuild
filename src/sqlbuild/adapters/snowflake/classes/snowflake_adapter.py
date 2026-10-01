@@ -116,7 +116,6 @@ from sqlbuild.adapters.snowflake._helpers.metadata_types import (
 )
 from sqlbuild.adapters.snowflake._helpers.show_metadata import (
     is_missing_object_error,
-    is_missing_schema_error,
     listed_relation_from_show_table,
     listed_relation_from_show_view,
 )
@@ -1817,14 +1816,23 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> SchemaRelationListing:
         """List one schema's tables and views with SHOW, which needs no running warehouse."""
 
+        show_database: str = self._show_database(
+            connection=connection, database=database, schema=schema
+        )
         scope: str = self._show_schema_scope(
             connection=connection, database=database, schema=schema
         )
         tables: list[dict[str, object]] = self._fetch_paged_show_rows(
-            connection=connection, query=f"SHOW TABLES IN SCHEMA {scope}"
+            connection=connection,
+            query=f"SHOW TABLES IN SCHEMA {scope}",
+            show_database=show_database,
+            schema=schema,
         )
         views: list[dict[str, object]] = self._fetch_paged_show_rows(
-            connection=connection, query=f"SHOW VIEWS IN SCHEMA {scope}"
+            connection=connection,
+            query=f"SHOW VIEWS IN SCHEMA {scope}",
+            show_database=show_database,
+            schema=schema,
         )
         entries: dict[str, ListedRelation] = {}
         row: dict[str, object]
@@ -1853,8 +1861,13 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             scope: str = self._show_schema_scope(
                 connection=connection, database=database, schema=schema
             )
-            rows: list[dict[str, object]] = self._fetch_show_rows(
-                connection=connection, query=f"SHOW COLUMNS IN SCHEMA {scope}"
+            rows: list[dict[str, object]] = self._fetch_schema_show_rows(
+                connection=connection,
+                query=f"SHOW COLUMNS IN SCHEMA {scope}",
+                show_database=self._show_database(
+                    connection=connection, database=database, schema=schema
+                ),
+                schema=schema,
             )
             if len(rows) != _SHOW_RESULT_LIMIT:
                 columns: dict[str, list[ColumnInfo]] = {}
@@ -1955,6 +1968,12 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         """Qualify SHOW with the database so a missing one is reported, never listed empty."""
 
+        resolved: str = self._show_database(connection=connection, database=database, schema=schema)
+        return f"{self.render_identifier(resolved)}.{self.render_identifier(schema)}"
+
+    def _show_database(
+        self, *, connection: _SnowflakeConnection, database: str | None, schema: str
+    ) -> str:
         resolved: str | None = (
             database if database is not None else self._current_database(connection=connection)
         )
@@ -1962,7 +1981,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             raise AdapterUserError(
                 message=f"Snowflake schema {schema} needs a database; the session has none"
             )
-        return f"{self.render_identifier(resolved)}.{self.render_identifier(schema)}"
+        return resolved
 
     @staticmethod
     def _current_database(*, connection: _SnowflakeConnection) -> str | None:
@@ -1980,15 +1999,15 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return current
 
     def _fetch_paged_show_rows(
-        self, *, connection: _SnowflakeConnection, query: str
+        self, *, connection: _SnowflakeConnection, query: str, show_database: str, schema: str
     ) -> list[dict[str, object]]:
         """Page SHOW output past its row cap; SHOW orders rows by name."""
 
         rows: list[dict[str, object]] = []
         page_query: str = f"{query} LIMIT {_SHOW_RESULT_LIMIT}"
         while True:
-            page: list[dict[str, object]] = self._fetch_show_rows(
-                connection=connection, query=page_query
+            page: list[dict[str, object]] = self._fetch_schema_show_rows(
+                connection=connection, query=page_query, show_database=show_database, schema=schema
             )
             rows.extend(page)
             if len(page) < _SHOW_RESULT_LIMIT:
@@ -2000,23 +2019,79 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def _fetch_show_rows(
         *, connection: _SnowflakeConnection, query: str
     ) -> list[dict[str, object]]:
-        """Run one SHOW command; a missing or unauthorized schema lists nothing."""
+        """Run one SHOW command and return its rows keyed by lowercase output column."""
 
         def fetch() -> list[dict[str, object]]:
             cursor: Any = connection.cursor()
             try:
-                try:
-                    cursor.execute(query)
-                except Exception as error:
-                    if is_missing_schema_error(error):
-                        return []
-                    raise
+                cursor.execute(query)
                 names: list[str] = [str(column[0]).lower() for column in cursor.description or ()]
                 return [dict(zip(names, row, strict=False)) for row in cursor.fetchall()]
             finally:
                 cursor.close()
 
         return run_recorded_inspection_query(sql=query, run=fetch)
+
+    def _fetch_schema_show_rows(
+        self, *, connection: _SnowflakeConnection, query: str, show_database: str, schema: str
+    ) -> list[dict[str, object]]:
+        """Run SHOW ... IN SCHEMA; a schema that does not exist lists nothing, as before."""
+
+        try:
+            return self._fetch_show_rows(connection=connection, query=query)
+        except Exception as error:
+            if not is_missing_object_error(error) or self._schema_exists(
+                connection=connection, show_database=show_database, schema=schema
+            ):
+                raise
+            return []
+
+    def _schema_exists(
+        self, *, connection: _SnowflakeConnection, show_database: str, schema: str
+    ) -> bool:
+        """Tell a missing schema from a missing database or another failure, once per plan."""
+
+        def read() -> bool:
+            return self._read_schema_exists(
+                connection=connection, show_database=show_database, schema=schema
+            )
+
+        catalog: InspectionCatalog | None = active_inspection_catalog(
+            adapter=self, connection=connection
+        )
+        if catalog is None:
+            return read()
+        return catalog.remember(
+            key=(
+                "snowflake_schema_exists",
+                self._information_schema_identifier(show_database),
+                self._information_schema_identifier(schema),
+            ),
+            compute=read,
+        )
+
+    def _read_schema_exists(
+        self, *, connection: _SnowflakeConnection, show_database: str, schema: str
+    ) -> bool:
+        stored_schema: str = self._information_schema_identifier(schema)
+        query: str = (
+            f"SHOW SCHEMAS LIKE '{stored_schema.replace(chr(39), chr(39) * 2)}' "
+            f"IN DATABASE {self.render_identifier(show_database)}"
+        )
+        try:
+            rows: list[dict[str, object]] = self._fetch_show_rows(
+                connection=connection, query=query
+            )
+        except Exception as error:
+            if not is_missing_object_error(error):
+                raise
+            raise AdapterUserError(
+                message=(
+                    f"Snowflake database {show_database} does not exist or the current role "
+                    f"cannot use it: {error}"
+                )
+            ) from error
+        return any(str(row.get("name")) == stored_schema for row in rows)
 
     def read_relation_columns(
         self, *, connection: _SnowflakeConnection, relation: RelationInfo

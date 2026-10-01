@@ -102,7 +102,6 @@ class MissingObjectErrorTestCase:
     errno: int | None
     message: str
     expected_missing: bool
-    expected_missing_schema: bool
 
 
 @dataclass(frozen=True)
@@ -146,3 +145,27 @@ class CappedColumnFallbackTestCase:
     request_batches: tuple[int, ...]
     expected_query_kinds: tuple[str, ...]
     expected_in_list_sizes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MissingSchemaTestCase:
+    """SHOW reads of a schema the warehouse does not have, or hides from the role."""
+
+    description: str
+    schema: str
+    forbidden_schemas: frozenset[str]
+    expected_error_fragment: str
+    expected_schema_checks: int
+
+
+@dataclass(frozen=True)
+class NestedConcurrencyTestCase:
+    """Several cap-sized schemas whose fallback reads would nest inside schema workers."""
+
+    description: str
+    schema_count: int
+    relations_per_schema: int
+    columns_per_relation: int
+    statement_latency_seconds: float
+    expected_max_concurrent: int
+    expected_column_reads: int

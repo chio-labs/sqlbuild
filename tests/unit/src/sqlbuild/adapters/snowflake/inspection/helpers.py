@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from itertools import compress
+from itertools import chain, compress
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +49,9 @@ _CURSOR_BOUND_PATTERN: re.Pattern[str] = re.compile(
 )
 _ANY_PATTERN: re.Pattern[str] = re.compile(r"")
 _CURRENT_DATABASE_PATTERN: re.Pattern[str] = re.compile(r"^SELECT CURRENT_DATABASE\(\)$")
+_SHOW_SCHEMAS_PATTERN: re.Pattern[str] = re.compile(
+    r"^SHOW SCHEMAS LIKE '(?P<pattern>(?:[^']|'')*)' IN DATABASE \"(?P<database>[^\"]*)\"$"
+)
 _IN_LIST_PATTERN: re.Pattern[str] = re.compile(r"\bIN\s*\(([^()]*)\)", re.IGNORECASE)
 _TABLES_PATTERN: re.Pattern[str] = re.compile(r"information_schema\.tables\b", re.IGNORECASE)
 _COLUMNS_PATTERN: re.Pattern[str] = re.compile(r"information_schema\.columns\b", re.IGNORECASE)
@@ -61,6 +64,7 @@ _QUERY_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
     (_SHOW_SCHEMA_COLUMNS_PATTERN, "show_schema_columns"),
     (_CURSOR_BOUND_PATTERN, "cursor_bounds"),
     (_CURRENT_DATABASE_PATTERN, "session"),
+    (_SHOW_SCHEMAS_PATTERN, "show_schemas"),
     (_OTHER_INFORMATION_SCHEMA_PATTERN, "other_metadata"),
     (_SHOW_PATTERN, "other_metadata"),
     (_ANY_PATTERN, "data"),
@@ -183,6 +187,8 @@ class RecordingSnowflakeWarehouse:
     failing_relations: frozenset[str] = frozenset()
     failing_metadata_schemas: frozenset[str] = frozenset()
     current_database: str = "ANALYTICS"
+    extra_schemas: frozenset[tuple[str, str]] = frozenset()
+    forbidden_schemas: frozenset[str] = frozenset()
     cursor_values: tuple[str, str] = ("2026-01-01 00:00:00.000", "2026-01-31 00:00:00.000")
     queries: list[RecordedQuery] = field(default_factory=list)
     attempted_sql: list[str] = field(default_factory=list)
@@ -289,6 +295,7 @@ class RecordingSnowflakeWarehouse:
             (_SHOW_SCHEMA_COLUMNS_PATTERN, self._answer_show_schema_columns),
             (_CURSOR_BOUND_PATTERN, self._answer_cursor_bounds),
             (_CURRENT_DATABASE_PATTERN, self._answer_current_database),
+            (_SHOW_SCHEMAS_PATTERN, self._answer_show_schemas),
             (_ANY_PATTERN, _answer_status),
         )
         route: tuple[re.Pattern[str], Callable[..., Any]] = next(
@@ -344,22 +351,51 @@ class RecordingSnowflakeWarehouse:
         del sql, params
         return [(self.current_database,)], (("CURRENT_DATABASE()",),)
 
-    def _schema_relations(self, *, scope: str) -> tuple[FakeRelation, ...]:
+    def _existing_schemas(self) -> frozenset[tuple[str, str]]:
+        return self.extra_schemas | {(fake.database, fake.schema) for fake in self.relations}
+
+    def _schema_relations(
+        self, *, scope: str, reports_missing_database: bool
+    ) -> tuple[FakeRelation, ...]:
+        """Mimic Snowflake: SHOW TABLES/VIEWS report 2043 for a missing database or schema."""
+
         parts: tuple[str, ...] = (
             self.current_database,
             *(part.strip('"') for part in scope.split(".")),
         )[-2:]
         _FAILED_SCHEMA_ACTIONS[parts[-1] in self.failing_metadata_schemas](scope)
-        _MISSING_DATABASE_ACTIONS[parts[0] not in {fake.database for fake in self.relations}](
-            parts[0]
+        existing: frozenset[tuple[str, str]] = self._existing_schemas()
+        database_missing: bool = parts[0] not in {database for database, _ in existing}
+        _MISSING_DATABASE_ACTIONS[database_missing and reports_missing_database](parts[0])
+        _OBJECT_MISSING_ACTIONS[parts not in existing or parts[-1] in self.forbidden_schemas](scope)
+        return tuple(filter(lambda fake: (fake.database, fake.schema) == parts, self.relations))
+
+    def _answer_show_schemas(
+        self, *, sql: str, params: tuple[object, ...]
+    ) -> tuple[list[tuple[Any, ...]], Any]:
+        del params
+        match: re.Match[str] = next(_SHOW_SCHEMAS_PATTERN.finditer(sql))
+        database: str = match.group("database")
+        existing: frozenset[tuple[str, str]] = self._existing_schemas()
+        _MISSING_DATABASE_ACTIONS[database not in {name for name, _ in existing}](database)
+        pattern: re.Pattern[str] = re.compile(
+            re.escape(match.group("pattern").replace("''", "'"))
+            .replace("%", ".*")
+            .replace("_", "."),
+            re.IGNORECASE,
         )
-        matches: tuple[FakeRelation, ...] = tuple(
-            filter(
-                lambda fake: (fake.database, fake.schema)[-len(parts) :] == parts, self.relations
+        names: list[str] = sorted(
+            schema
+            for name, schema in filter(
+                lambda entry: entry[0] == database and pattern.fullmatch(entry[1]) is not None,
+                existing,
             )
         )
-        _MISSING_SCHEMA_ACTIONS[not matches](scope)
-        return matches
+        return [(_FIXED_CREATED_AT, name, database) for name in names], (
+            ("created_on",),
+            ("name",),
+            ("database_name",),
+        )
 
     def _answer_show_schema_relations(
         self, *, sql: str, params: tuple[object, ...]
@@ -373,7 +409,7 @@ class RecordingSnowflakeWarehouse:
                 lambda fake: (
                     (fake.table_type in _VIEW_TABLE_TYPES) is wants_views and fake.name > after
                 ),
-                self._schema_relations(scope=match.group("scope")),
+                self._schema_relations(scope=match.group("scope"), reports_missing_database=False),
             ),
             key=lambda fake: fake.name,
         )
@@ -392,7 +428,10 @@ class RecordingSnowflakeWarehouse:
         scope: str = next(_SHOW_SCHEMA_COLUMNS_PATTERN.finditer(sql)).group("scope")
         rows: list[tuple[Any, ...]] = []
         fake: FakeRelation
-        for fake in sorted(self._schema_relations(scope=scope), key=lambda item: item.name):
+        for fake in sorted(
+            self._schema_relations(scope=scope, reports_missing_database=True),
+            key=lambda item: item.name,
+        ):
             rows.extend(
                 (
                     fake.name,
@@ -456,9 +495,12 @@ class FakeSnowflakeProgrammingError(RuntimeError):
         self.errno: int = errno
 
 
-def _raise_missing_schema(scope: str) -> None:
+def _raise_missing_object(scope: str) -> None:
+    del scope
     raise FakeSnowflakeProgrammingError(
-        f"SQL compilation error: Schema '{scope}' does not exist or not authorized.", errno=2003
+        "002043 (02000): SQL compilation error: Object does not exist, or operation cannot be "
+        "performed.",
+        errno=2043,
     )
 
 
@@ -468,7 +510,8 @@ def _raise_failed_schema(scope: str) -> None:
 
 def _raise_missing_database(database: str) -> None:
     raise FakeSnowflakeProgrammingError(
-        f"SQL compilation error: Database '{database}' does not exist or not authorized.",
+        f"002003 (02000): SQL compilation error: Database '{database}' does not exist or not "
+        "authorized. Your primary role must have USAGE on the database.",
         errno=2003,
     )
 
@@ -477,9 +520,9 @@ _MISSING_DATABASE_ACTIONS: dict[bool, Callable[[str], None]] = {
     False: _accept_relation,
     True: _raise_missing_database,
 }
-_MISSING_SCHEMA_ACTIONS: dict[bool, Callable[[str], None]] = {
+_OBJECT_MISSING_ACTIONS: dict[bool, Callable[[str], None]] = {
     False: _accept_relation,
-    True: _raise_missing_schema,
+    True: _raise_missing_object,
 }
 _FAILED_SCHEMA_ACTIONS: dict[bool, Callable[[str], None]] = {
     False: _accept_relation,
@@ -871,7 +914,7 @@ def _sources_yml(*, database: str, source_schema: str, sources: int) -> str:
 
 
 def build_wide_schema_relations(
-    *, relation_count: int, columns_per_relation: int
+    *, relation_count: int, columns_per_relation: int, schema: str = "INVENTORY"
 ) -> tuple[FakeRelation, ...]:
     """Return one schema of identical relations sized to exercise SHOW result caps."""
 
@@ -881,11 +924,28 @@ def build_wide_schema_relations(
     return tuple(
         FakeRelation(
             database="ANALYTICS",
-            schema="INVENTORY",
+            schema=schema,
             name=f"STOCK_{index:05d}",
             columns=columns,
         )
         for index in range(relation_count)
+    )
+
+
+def build_wide_schemas_relations(
+    *, schema_count: int, relation_count: int, columns_per_relation: int
+) -> tuple[FakeRelation, ...]:
+    """Return several wide schemas named WAREHOUSE_<index>."""
+
+    return tuple(
+        chain.from_iterable(
+            build_wide_schema_relations(
+                relation_count=relation_count,
+                columns_per_relation=columns_per_relation,
+                schema=f"WAREHOUSE_{index}",
+            )
+            for index in range(schema_count)
+        )
     )
 
 

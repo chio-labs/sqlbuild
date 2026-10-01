@@ -18,6 +18,7 @@ _LOGGER: logging.Logger = logging.getLogger("sqlbuild.inspection")
 _ACTIVE_CATALOG: ContextVar[InspectionCatalog | None] = ContextVar(
     "sqlbuild_inspection_catalog", default=None
 )
+_INSIDE_WORKER: ContextVar[bool] = ContextVar("sqlbuild_inside_inspection_worker", default=False)
 _QUERY_SINK: ContextVar[Callable[[InspectionQueryRecord], None] | None] = ContextVar(
     "sqlbuild_inspection_query_sink", default=None
 )
@@ -72,3 +73,15 @@ def deactivate_query_sink(token: Token[Callable[[InspectionQueryRecord], None] |
     """Restore the sink that was active before ``activate_query_sink``."""
 
     _QUERY_SINK.reset(token)
+
+
+def inside_inspection_worker() -> bool:
+    """Return whether this thread is running one bounded inspection read."""
+
+    return _INSIDE_WORKER.get()
+
+
+def mark_inspection_worker() -> None:
+    """Mark this worker context so nested bounded reads run serially."""
+
+    _ = _INSIDE_WORKER.set(True)

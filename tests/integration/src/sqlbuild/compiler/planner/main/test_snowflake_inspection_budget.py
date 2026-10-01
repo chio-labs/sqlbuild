@@ -10,12 +10,16 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.types import PlanReason
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     SnowflakeCursorBoundsBudgetTestCase,
+    SnowflakeFreshTargetTestCase,
     SnowflakeInspectionBudgetTestCase,
     SnowflakeManySchemasTestCase,
+    SnowflakeMissingDatabaseTestCase,
     SnowflakeReplanTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
@@ -24,6 +28,8 @@ from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     offline_metadata_queries,
     offline_metadata_reads_by_schema,
     plan_offline_snowflake_project,
+    relations_in_database,
+    relations_in_schemas,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
     OfflineSnowflakeAdapter,
@@ -207,6 +213,65 @@ def test_given_many_small_schemas_when_planning_then_columns_are_read_per_schema
         == test_case.expected_schema_column_reads
     )
     assert warehouse.queries_of_kind("columns") == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeFreshTargetTestCase(
+            description="target schemas created by the first build do not exist yet",
+            warehouse_schemas=frozenset({"RAW"}),
+            expected_reason=PlanReason.FIRST_RUN,
+            expected_schema_checks=3,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_fresh_target_when_planning_then_every_model_is_a_first_run(
+    test_case: SnowflakeFreshTargetTestCase, tmp_path: Path
+) -> None:
+    project: SyntheticSnowflakeProject = write_synthetic_snowflake_project(
+        project_dir=tmp_path / "orders_platform", unmanaged_relations_per_schema=5
+    )
+    warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(
+        relations=relations_in_schemas(project=project, schemas=test_case.warehouse_schemas)
+    )
+
+    result: CompilePipelineResult = plan_offline_snowflake_project(
+        project=project, warehouse=warehouse
+    )
+
+    assert {entry.reason for entry in result.plan_output.model_entries} == {
+        test_case.expected_reason
+    }
+    assert len(result.plan_output.model_entries) == len(project.model_schemas)
+    assert len(warehouse.queries_of_kind("show_schemas")) == test_case.expected_schema_checks
+    assert warehouse.queries_of_kind("columns") == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeMissingDatabaseTestCase(
+            description="target database absent from the account",
+            warehouse_database="ARCHIVE",
+            expected_error_fragment="database analytics does not exist",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_database_when_planning_then_plan_fails_naming_it(
+    test_case: SnowflakeMissingDatabaseTestCase, tmp_path: Path
+) -> None:
+    project: SyntheticSnowflakeProject = write_synthetic_snowflake_project(
+        project_dir=tmp_path / "orders_platform", unmanaged_relations_per_schema=5
+    )
+    warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(
+        relations=relations_in_database(project=project, database=test_case.warehouse_database)
+    )
+
+    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
+        _ = plan_offline_snowflake_project(project=project, warehouse=warehouse)
 
 
 if __name__ == "__main__":

@@ -8,11 +8,12 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.relations.models import ListedRelation
 
-_MISSING_OBJECT_ERRNO: int = 2003
-_MISSING_OBJECT_MESSAGE: str = "does not exist or not authorized"
+_MISSING_OBJECT_ERRNOS: frozenset[int] = frozenset({2003, 2043})
+_MISSING_OBJECT_MESSAGES: tuple[str, ...] = (
+    "does not exist or not authorized",
+    "object does not exist, or operation cannot be performed",
+)
 _TRUE_FLAGS: frozenset[str] = frozenset({"Y", "YES", "TRUE"})
-_MISSING_SCHEMA_MARKER: str = "schema '"
-_MISSING_DATABASE_MARKER: str = "database '"
 _TRANSIENT_KIND: str = "TRANSIENT"
 _TEMPORARY_KIND: str = "TEMPORARY"
 
@@ -54,22 +55,11 @@ def listed_relation_from_show_view(
 
 
 def is_missing_object_error(error: Exception) -> bool:
-    """Return whether SHOW failed because the schema is absent or invisible to the role."""
-
-    return (
-        getattr(error, "errno", None) == _MISSING_OBJECT_ERRNO
-        or _MISSING_OBJECT_MESSAGE in str(error).lower()
-    )
-
-
-def is_missing_schema_error(error: Exception) -> bool:
-    """Return whether SHOW failed for a missing schema; a missing database is a real failure."""
+    """Return whether SHOW failed because an object is absent or invisible to the role."""
 
     message: str = str(error).lower()
-    return (
-        is_missing_object_error(error)
-        and _MISSING_SCHEMA_MARKER in message
-        and _MISSING_DATABASE_MARKER not in message
+    return getattr(error, "errno", None) in _MISSING_OBJECT_ERRNOS or any(
+        marker in message for marker in _MISSING_OBJECT_MESSAGES
     )
 
 

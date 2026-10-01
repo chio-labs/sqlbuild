@@ -17,12 +17,16 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
+from sqlbuild.adapter.relations.models import SchemaColumnListing
+from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection._test_types import (
     CappedColumnFallbackTestCase,
     ColumnRequestEquivalenceTestCase,
     DroppedRelationTestCase,
     FreshnessErrorTestCase,
     FreshnessReuseTestCase,
+    MissingSchemaTestCase,
+    NestedConcurrencyTestCase,
     RelationRequestEquivalenceTestCase,
     RepeatedLookupTestCase,
     ShowResultCapTestCase,
@@ -30,11 +34,13 @@ from tests.unit.src.sqlbuild.adapters.snowflake.inspection._test_types import (
     SpeculativePrefetchTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
+    FakeRelation,
     OfflineSnowflakeAdapter,
     RecordingSnowflakeWarehouse,
     build_inspection_catalog_relations,
     build_offline_snowflake,
     build_wide_schema_relations,
+    build_wide_schemas_relations,
     sorted_relation_reprs,
 )
 
@@ -433,9 +439,10 @@ def test_given_no_database_when_listing_schemas_then_show_uses_the_session_datab
             description="a missing database fails instead of listing nothing",
             database="restricted_catalog",
             expected_relation_count=0,
-            expected_error_fragment="Database 'RESTRICTED_CATALOG' does not exist",
+            expected_error_fragment="database restricted_catalog does not exist",
             expected_attempted_sql=(
                 'SHOW TABLES IN SCHEMA "RESTRICTED_CATALOG"."STAGING" LIMIT 10000',
+                "SHOW SCHEMAS LIKE 'STAGING' IN DATABASE \"RESTRICTED_CATALOG\"",
             ),
         )
     ],
@@ -449,7 +456,7 @@ def test_given_missing_database_when_listing_schema_then_inspection_fails(
     )
     catalog: InspectionCatalog = InspectionCatalog(adapter=adapter, connection=connection)
 
-    with pytest.raises(RuntimeError, match=test_case.expected_error_fragment or ""):
+    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment or ""):
         _ = catalog.list_relations(database=test_case.database, schemas=("staging",))
 
     assert tuple(warehouse.attempted_sql) == test_case.expected_attempted_sql
@@ -545,6 +552,114 @@ def test_given_cap_sized_column_listing_when_reading_then_only_needed_relations_
         tuple(sorted(query.largest_in_list for query in warehouse.queries_of_kind("columns")))
         == test_case.expected_in_list_sizes
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingSchemaTestCase(
+            description="a schema not created yet lists empty after one existence check",
+            schema="fresh_target",
+            forbidden_schemas=frozenset(),
+            expected_error_fragment="",
+            expected_schema_checks=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_schema_when_listing_then_relations_and_columns_are_empty(
+    test_case: MissingSchemaTestCase,
+) -> None:
+    adapter, connection, warehouse = build_offline_snowflake(
+        relations=build_inspection_catalog_relations()
+    )
+
+    with open_inspection_catalog(adapter=adapter, connection=connection) as catalog:
+        relations: tuple[RelationInfo, ...] = catalog.list_relations(
+            database="analytics", schemas=(test_case.schema,)
+        )
+        listing: SchemaColumnListing = adapter.read_schema_column_listing(
+            connection=connection,
+            database="analytics",
+            schema=test_case.schema,
+            stored_names=frozenset(),
+        )
+
+    assert relations == ()
+    assert listing.columns_by_stored_name == {}
+    assert len(warehouse.queries_of_kind("show_schemas")) == test_case.expected_schema_checks
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingSchemaTestCase(
+            description="an existing schema the role cannot list re-raises the SHOW error",
+            schema="staging",
+            forbidden_schemas=frozenset({"STAGING"}),
+            expected_error_fragment="Object does not exist, or operation cannot be performed",
+            expected_schema_checks=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_existing_schema_when_show_reports_missing_then_original_error_is_raised(
+    test_case: MissingSchemaTestCase,
+) -> None:
+    warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(
+        relations=build_inspection_catalog_relations(),
+        forbidden_schemas=test_case.forbidden_schemas,
+    )
+    adapter: OfflineSnowflakeAdapter = OfflineSnowflakeAdapter(warehouse=warehouse)
+    connection: _SnowflakeConnection = adapter.connect({})
+
+    with (
+        open_inspection_catalog(adapter=adapter, connection=connection) as catalog,
+        pytest.raises(RuntimeError, match=test_case.expected_error_fragment),
+    ):
+        _ = catalog.list_relations(database="analytics", schemas=(test_case.schema,))
+
+    assert len(warehouse.queries_of_kind("show_schemas")) == test_case.expected_schema_checks
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedConcurrencyTestCase(
+            description="fallback chunks inside schema workers share the outer bound",
+            schema_count=4,
+            relations_per_schema=125,
+            columns_per_relation=80,
+            statement_latency_seconds=0.02,
+            expected_max_concurrent=4,
+            expected_column_reads=12,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_capped_schemas_when_reading_columns_then_nested_reads_do_not_multiply_bound(
+    test_case: NestedConcurrencyTestCase,
+) -> None:
+    relations: tuple[FakeRelation, ...] = build_wide_schemas_relations(
+        schema_count=test_case.schema_count,
+        relation_count=test_case.relations_per_schema,
+        columns_per_relation=test_case.columns_per_relation,
+    )
+    adapter, connection, warehouse = build_offline_snowflake(
+        relations=relations, statement_latency_seconds=test_case.statement_latency_seconds
+    )
+    listed: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection,
+        database="analytics",
+        schemas=tuple(f"warehouse_{index}" for index in range(test_case.schema_count)),
+    )
+    warehouse.reset()
+
+    with open_inspection_catalog(adapter=adapter, connection=connection) as catalog:
+        _ = catalog.get_columns_for_relations(relations=listed)
+
+    assert warehouse.max_concurrent_metadata <= test_case.expected_max_concurrent
+    assert len(warehouse.queries_of_kind("columns")) == test_case.expected_column_reads
 
 
 if __name__ == "__main__":

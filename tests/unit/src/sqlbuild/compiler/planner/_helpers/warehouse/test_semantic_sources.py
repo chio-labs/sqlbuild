@@ -145,18 +145,32 @@ def test_given_source_schema_case_differs_when_inspecting_then_columns_are_found
     [
         SnowflakeSourceCandidateCase(
             description="unquoted schema is answered from its SHOW listing",
-            declared_schema="raw",
+            declared_schemas=("raw",),
             expected_candidates=(("analytics", "raw", "orders"),),
             expected_query_kinds=("show_tables", "show_views"),
         ),
         SnowflakeSourceCandidateCase(
             description="quoted lowercase schema falls back to a database-wide name lookup",
-            declared_schema="landing",
+            declared_schemas=("landing",),
             expected_candidates=(
                 ("analytics", "raw", "orders"),
                 ("analytics", "landing", "orders"),
             ),
-            expected_query_kinds=("tables",),
+            expected_query_kinds=("show_schemas", "tables"),
+        ),
+        SnowflakeSourceCandidateCase(
+            description="a relation found by SHOW and by the name lookup is listed once",
+            declared_schemas=("raw", "landing"),
+            expected_candidates=(
+                ("analytics", "raw", "orders"),
+                ("analytics", "landing", "orders"),
+            ),
+            expected_query_kinds=(
+                "show_tables",
+                "show_views",
+                "show_schemas",
+                "tables",
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -176,18 +190,18 @@ def test_given_snowflake_source_schema_when_listing_candidates_then_finds_relati
             adapter=adapter,
             connection=connection,
             database="analytics",
-            entries=(
+            entries=tuple(
                 SourceEntry(
-                    name="orders",
-                    database="analytics",
-                    schema=test_case.declared_schema,
-                    table="orders",
-                ),
+                    name=f"orders_{schema}", database="analytics", schema=schema, table="orders"
+                )
+                for schema in test_case.declared_schemas
             ),
         )
 
     assert tuple(relation.identity for relation in candidates) == test_case.expected_candidates
-    assert tuple(query.kind for query in warehouse.queries) == test_case.expected_query_kinds
+    assert sorted(query.kind for query in warehouse.queries) == sorted(
+        test_case.expected_query_kinds
+    )
 
 
 if __name__ == "__main__":

@@ -38,6 +38,6 @@ class SemanticSourceSchemaCaseCase:
 @dataclass(frozen=True)
 class SnowflakeSourceCandidateCase:
     description: str
-    declared_schema: str
+    declared_schemas: tuple[str, ...]
     expected_candidates: tuple[tuple[str | None, str | None, str], ...]
     expected_query_kinds: tuple[str, ...]
