@@ -11,12 +11,10 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner._helpers.changes import detect as change_detection
 from sqlbuild.compiler.planner._helpers.planning import identities as identity_planning
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
-    CascadeResult,
     CursorBounds,
     ModelPlanEntry,
     PlanOutput,
@@ -702,7 +700,7 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
     "test_case",
     [
         BuildExecutionPlanTestCase(
-            description="upstream first run full cascades to existing downstream",
+            description="upstream first run does not replay existing downstream table",
             setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
             model_locations={
                 "stg_orders": "staging",
@@ -724,13 +722,12 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
             },
             expected_reason={
                 "stg_orders": PlanReason.FIRST_RUN,
-                "fact_orders": PlanReason.FULL_REFRESH,
+                "fact_orders": PlanReason.NO_CHANGE,
             },
-            expected_cascade_action={"fact_orders": BackfillAction.FULL},
-            expected_cascade_root_cause={"fact_orders": "stg_orders"},
+            expected_backfill_action={"fact_orders": BackfillAction.FORWARD_ONLY},
         ),
         BuildExecutionPlanTestCase(
-            description="upstream full cascade forces existing incremental downstream rebuild",
+            description="upstream first run leaves existing incremental downstream incremental",
             setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
             model_locations={
                 "stg_orders": "staging",
@@ -754,83 +751,16 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
             full_refresh=False,
             expected_action={
                 "stg_orders": PlanAction.CREATE_TABLE,
-                "fact_orders": PlanAction.CREATE_TABLE,
+                "fact_orders": PlanAction.INCREMENTAL_DELETE_INSERT,
             },
             expected_reason={
                 "stg_orders": PlanReason.FIRST_RUN,
-                "fact_orders": PlanReason.FULL_REFRESH,
+                "fact_orders": PlanReason.NORMAL_INCREMENTAL,
             },
-            expected_ddl_fragments={
-                "fact_orders": "CREATE OR REPLACE TABLE staging.fact_orders AS",
-            },
-            expected_cascade_action={"fact_orders": BackfillAction.FULL},
-            expected_cascade_root_cause={"fact_orders": "stg_orders"},
+            expected_backfill_action={"fact_orders": BackfillAction.FORWARD_ONLY},
         ),
         BuildExecutionPlanTestCase(
-            description="changed SQL UDF cascades full rebuild to incremental downstream",
-            setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-            model_locations={"fact_orders": "staging"},
-            function_locations={"is_priority_order": "staging"},
-            function_bodies={"is_priority_order": "value = 2"},
-            previous_function_bodies={"is_priority_order": "value = 1"},
-            function_replay_on_changes={"is_priority_order": "full"},
-            function_deps={"fact_orders": ("is_priority_order",)},
-            model_configs={
-                "fact_orders": {
-                    "materialized": "incremental",
-                    "incremental_strategy": "delete_insert",
-                    "cursor": "id",
-                    "cursor_type": "integer",
-                    "unique_key": "id",
-                },
-            },
-            model_queries={"fact_orders": "SELECT 1 AS id"},
-            full_refresh=False,
-            expected_action={"fact_orders": PlanAction.CREATE_TABLE},
-            expected_reason={"fact_orders": PlanReason.FULL_REFRESH},
-            expected_ddl_fragments={
-                "fact_orders": "CREATE OR REPLACE TABLE staging.fact_orders AS",
-            },
-            expected_cascade_action={"fact_orders": BackfillAction.FULL},
-            expected_cascade_root_cause={"fact_orders": "is_priority_order"},
-        ),
-        BuildExecutionPlanTestCase(
-            description="changed Python UDF cascades full rebuild to incremental downstream",
-            setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-            model_locations={"fact_orders": "staging"},
-            function_locations={"is_priority_order_py": "staging"},
-            function_languages={"is_priority_order_py": FunctionLanguage.PYTHON},
-            function_bodies={
-                "is_priority_order_py": "def main(value: int) -> int:\n    return value + 2",
-            },
-            previous_function_bodies={
-                "is_priority_order_py": "def main(value: int) -> int:\n    return value + 1",
-            },
-            function_replay_on_changes={"is_priority_order_py": "full"},
-            function_deps={"fact_orders": ("is_priority_order_py",)},
-            model_configs={
-                "fact_orders": {
-                    "materialized": "incremental",
-                    "incremental_strategy": "delete_insert",
-                    "cursor": "id",
-                    "cursor_type": "integer",
-                    "unique_key": "id",
-                },
-            },
-            model_queries={"fact_orders": "SELECT 1 AS id"},
-            full_refresh=False,
-            expected_action={"fact_orders": PlanAction.CREATE_TABLE},
-            expected_reason={"fact_orders": PlanReason.FULL_REFRESH},
-            expected_ddl_fragments={
-                "fact_orders": "CREATE OR REPLACE TABLE staging.fact_orders AS",
-            },
-            expected_cascade_action={"fact_orders": BackfillAction.FULL},
-            expected_cascade_root_cause={"fact_orders": "is_priority_order_py"},
-        ),
-        BuildExecutionPlanTestCase(
-            description=(
-                "downstream local bounded policy replaces upstream full and propagates downstream"
-            ),
+            description="downstream replay policy applies only to its own change",
             setup_sql=(
                 "CREATE TABLE staging.fact_orders AS SELECT 1 AS id",
                 "CREATE TABLE staging.order_metrics AS SELECT 1 AS id",
@@ -878,23 +808,15 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
                 "fact_orders": PlanReason.NORMAL_INCREMENTAL,
                 "order_metrics": PlanReason.NORMAL_INCREMENTAL,
             },
-            expected_cascade_action={
-                "fact_orders": BackfillAction.BOUNDED,
-                "order_metrics": BackfillAction.BOUNDED,
-            },
-            expected_cascade_duration={
-                "fact_orders": "1d",
-                "order_metrics": "1d",
-            },
-            expected_cascade_root_cause={
-                "fact_orders": "stg_orders",
-                "order_metrics": "stg_orders",
+            expected_backfill_action={
+                "fact_orders": BackfillAction.FORWARD_ONLY,
+                "order_metrics": BackfillAction.FORWARD_ONLY,
             },
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream(
+def test_given_upstream_first_run_when_building_plan_then_downstream_keeps_own_backfill(
     test_case: BuildExecutionPlanTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
@@ -932,23 +854,9 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
     for model_name, expected_fragment in test_case.expected_ddl_fragments.items():
         assert expected_fragment in entry_map[model_name].logical_ddl
 
-    expected_cascade_action: BackfillAction
-    for model_name, expected_cascade_action in test_case.expected_cascade_action.items():
-        cascade: CascadeResult | None = entry_map[model_name].cascade
-        assert cascade is not None
-        assert cascade.effective_action == expected_cascade_action
-
-    expected_cascade_duration: str | None
-    for model_name, expected_cascade_duration in test_case.expected_cascade_duration.items():
-        cascade_for_duration: CascadeResult | None = entry_map[model_name].cascade
-        assert cascade_for_duration is not None
-        assert cascade_for_duration.effective_duration == expected_cascade_duration
-
-    expected_root: str
-    for model_name, expected_root in test_case.expected_cascade_root_cause.items():
-        cascade_for_root: CascadeResult | None = entry_map[model_name].cascade
-        assert cascade_for_root is not None
-        assert cascade_for_root.root_cause == expected_root
+    expected_backfill: BackfillAction
+    for model_name, expected_backfill in test_case.expected_backfill_action.items():
+        assert entry_map[model_name].backfill.action == expected_backfill
 
 
 @pytest.mark.parametrize(
@@ -984,7 +892,7 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
             unexpected_format_fragments=("Normal", "Query changed", "Upstream changed"),
         ),
         FormatPlanIntegrationTestCase(
-            description="cascade formats with upstream changed group and cause line",
+            description="upstream first run formats downstream table as routine work",
             setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
             model_locations={
                 "stg_orders": "staging",
@@ -1004,11 +912,10 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
                 "Plan ready",
                 "\033[1mFirst run\033[0m \033[2m(1)\033[0m",
                 "stg_orders",
-                "\033[1mUpstream changed\033[0m \033[2m(1)\033[0m",
+                "\033[1mModels\033[0m \033[2m(1)\033[0m",
                 "fact_orders",
-                "full rebuild",
-                "cause[0m  stg_orders",
             ),
+            unexpected_format_fragments=("Upstream changed", "full rebuild", "cause"),
         ),
     ],
     ids=lambda case: case.description,

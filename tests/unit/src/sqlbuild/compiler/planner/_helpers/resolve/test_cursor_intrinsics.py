@@ -94,7 +94,9 @@ def test_given_cursor_interval_when_resolving_then_renders_expected_sql(
             },
             full_refresh=True,
             cursor_snapshots={},
-            expected_error_fragment="full refresh has no cursor interval",
+            expected_error_fragment=(
+                r"given a FULL backfill \(--full-refresh\).*full rebuild has no cursor interval"
+            ),
         )
     ],
     ids=lambda case: case.description,

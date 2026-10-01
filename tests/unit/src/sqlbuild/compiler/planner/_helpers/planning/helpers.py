@@ -144,3 +144,21 @@ def _retention_model(
             qualified_name=f"warehouse.analytics.{name}",
         ),
     )
+
+
+def build_full_refresh_model(*, config_values: dict[str, object]) -> CompiledModel:
+    """Build an incremental model with the given header configuration."""
+
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="order_history"),
+        deps=(),
+        name="order_history",
+        relative_path=Path("models/order_history.sql"),
+        query_sql="SELECT 1 AS id",
+        config=CompileModelConfig(
+            values={"materialized": "incremental", "incremental_strategy": "merge", **config_values}
+        ),
+        destination=CompiledRelationLocation(
+            database=None, schema="main", name="order_history", qualified_name=None
+        ),
+    )

@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, WarehouseFingerprints, WarehouseSnapshot
+from sqlbuild.compiler.planner.types import ChangeKind
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectModelChangesTestCase,
@@ -267,3 +268,27 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
         )
     }
     return ({}, fingerprints)[test_case.fingerprint_query_hash is not None]
+
+
+def build_function_caller_metadata_case(
+    *,
+    config_values: dict[str, object],
+    function_local_hashes: dict[str, str],
+    previous_function_hashes: dict[str, str],
+    previous_config_values: dict[str, object],
+) -> DetectModelMetadataTestCase:
+    """Build metadata detection inputs for a model calling the given functions."""
+
+    return DetectModelMetadataTestCase(
+        description="caller metadata",
+        config_values=config_values,
+        schema_columns=(),
+        deps=tuple(function_local_hashes),
+        function_local_hashes=function_local_hashes,
+        previous_metadata_json=build_version_identity_metadata_json(
+            model_name="orders",
+            config_values=previous_config_values,
+            local_function_hashes=previous_function_hashes,
+        ),
+        expected_change_kind=ChangeKind.FUNCTION_CHANGED,
+    )

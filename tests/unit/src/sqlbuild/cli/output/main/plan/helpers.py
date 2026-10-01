@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLangua
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
-    CascadeResult,
     ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
@@ -67,7 +66,7 @@ def build_model_entry(
     observed_at_column: str | None = None,
     historical_input: str | None = None,
     schema_findings: tuple[SchemaFinding, ...] = (),
-    cascade: CascadeResult | None = None,
+    changed_functions: tuple[str, ...] = (),
     custom_materialization_name: str | None = None,
     query_changed: bool = False,
     config_changed: bool = False,
@@ -113,7 +112,7 @@ def build_model_entry(
         previous_version_hash=previous_version_hash,
         schema_findings=schema_findings,
         backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
-        cascade=cascade,
+        changed_functions=changed_functions,
         custom_materialization_name=custom_materialization_name,
         query_changed=query_changed,
         config_changed=config_changed,
@@ -254,8 +253,6 @@ def build_function_entry(
     name: str,
     language: FunctionLanguage = FunctionLanguage.SQL,
     reason: PlanReason = PlanReason.NO_CHANGE,
-    backfill_action: BackfillAction = BackfillAction.FORWARD_ONLY,
-    backfill_duration: str | None = None,
     previous_query_sql: str | None = None,
 ) -> FunctionPlanEntry:
     """Build a minimal FunctionPlanEntry for formatter tests."""
@@ -277,7 +274,6 @@ def build_function_entry(
         language=language,
         previous_query_sql=previous_query_sql,
         reason=reason,
-        backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
     )
 
 

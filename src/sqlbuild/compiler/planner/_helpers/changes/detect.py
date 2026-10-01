@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
@@ -15,7 +16,11 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.changes.metadata import version_identity_metadata_payload
+from sqlbuild.compiler.planner._helpers.changes.metadata import (
+    changed_local_function_names,
+    non_function_identity_metadata_payload,
+    version_identity_metadata_payload,
+)
 from sqlbuild.compiler.planner._helpers.changes.policy import (
     pick_more_aggressive,
     resolve_replay_on_change,
@@ -42,7 +47,7 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -77,21 +82,14 @@ def detect_changes(
                 fingerprint_sql=fingerprint_sql,
             )
             continue
-        function_reason: PlanReason
-        function_backfill: BackfillResult
-        function_reason, function_backfill = detect_function_change(
-            function=function,
-            fingerprint_sql=fingerprint_sql,
-            snapshot=snapshot,
-            query_change_tracking=project.settings.query_change_tracking,
-            full_refresh=full_refresh,
-        )
-        if full_refresh:
-            function_backfill = BackfillResult(action=BackfillAction.FORWARD_ONLY)
         function_changes[function.name] = FunctionChangeResult(
             fingerprint_sql=fingerprint_sql,
-            reason=function_reason,
-            backfill=function_backfill,
+            reason=detect_function_change(
+                fingerprint_sql=fingerprint_sql,
+                fingerprint=snapshot.fingerprints.functions.get(function.name),
+                query_change_tracking=project.settings.query_change_tracking,
+                full_refresh=full_refresh,
+            ),
         )
 
     return PlannerChangeResults(models=model_changes, functions=function_changes)
@@ -194,12 +192,26 @@ def detect_model_changes(
         )
 
     query_changed: bool = False
-    config_changed: bool = (
-        fingerprint is not None
-        and fingerprint.metadata_json != EMPTY_FINGERPRINT_METADATA_JSON
-        and version_identity_metadata_payload(metadata_json)
-        != version_identity_metadata_payload(fingerprint.metadata_json)
+    recorded_metadata_json: str | None = (
+        fingerprint.metadata_json
+        if fingerprint is not None and fingerprint.metadata_json != EMPTY_FINGERPRINT_METADATA_JSON
+        else None
     )
+    changed_functions: tuple[str, ...] = (
+        changed_local_function_names(
+            metadata_json=metadata_json, previous_metadata_json=recorded_metadata_json
+        )
+        if query_change_tracking and recorded_metadata_json is not None
+        else ()
+    )
+    identity_payload: Callable[[str | None], object] = (
+        non_function_identity_metadata_payload
+        if changed_functions
+        else version_identity_metadata_payload
+    )
+    config_changed: bool = recorded_metadata_json is not None and identity_payload(
+        metadata_json
+    ) != identity_payload(recorded_metadata_json)
     replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
@@ -224,11 +236,10 @@ def detect_model_changes(
         )
         log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
         log_sql(logger=debug_logger, sql=fingerprint.definition, action="fingerprint_definition")
-        if query_changed:
-            raw_policy: str | None = get_config_str(
-                values=model.config.values, key="replay_on_change"
-            )
-            replay_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
+    if query_changed or changed_functions:
+        replay_backfill = resolve_replay_on_change(
+            replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
+        )
 
     schema_findings: tuple[SchemaFinding, ...] = ()
     schema_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
@@ -252,14 +263,17 @@ def detect_model_changes(
             dialect=snapshot.column_dialect,
         )
         if schema_findings:
-            raw_policy = get_config_str(values=model.config.values, key="replay_on_change")
-            schema_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
+            schema_backfill = resolve_replay_on_change(
+                replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
+            )
 
     backfill: BackfillResult = pick_more_aggressive(a=replay_backfill, b=schema_backfill)
 
     change_kind: ChangeKind
     if query_changed:
         change_kind = ChangeKind.QUERY_CHANGED
+    elif changed_functions:
+        change_kind = ChangeKind.FUNCTION_CHANGED
     elif schema_findings:
         change_kind = ChangeKind.SCHEMA_CHANGED
     elif config_changed:
@@ -278,6 +292,7 @@ def detect_model_changes(
         previous_version_hash=fingerprint.version_hash if fingerprint is not None else None,
         schema_findings=schema_findings,
         backfill=backfill,
+        changed_functions=changed_functions,
     )
 
 

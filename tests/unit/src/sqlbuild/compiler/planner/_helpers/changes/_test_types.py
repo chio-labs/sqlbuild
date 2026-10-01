@@ -50,6 +50,16 @@ class DetectModelMetadataTestCase:
 
 
 @dataclass(frozen=True)
+class DetectFunctionCallerChangeTestCase:
+    description: str
+    metadata_case: DetectModelMetadataTestCase
+    query_change_tracking: bool
+    expected_changed_functions: tuple[str, ...]
+    expected_config_changed: bool
+    expected_backfill: BackfillResult
+
+
+@dataclass(frozen=True)
 class DetectQueryChangeTestCase:
     description: str
     compiled_query_hash: str
@@ -75,3 +85,4 @@ class ResolveBackfillTestCase:
     description: str
     raw_value: str | None
     expected_result: BackfillResult
+

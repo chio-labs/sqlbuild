@@ -175,7 +175,6 @@ def build_project_from_test_case(
                 ),
                 language=language,
                 entry_point=(None, "main")[language == FunctionLanguage.PYTHON],
-                replay_on_change=test_case.function_replay_on_changes.get(function_name),
             )
         )
 

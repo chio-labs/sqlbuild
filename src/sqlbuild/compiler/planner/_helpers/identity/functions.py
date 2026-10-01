@@ -9,9 +9,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.changes.policy import resolve_replay_on_change
-from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
-from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
+from sqlbuild.compiler.planner.types import PlanReason
 
 
 def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
@@ -31,28 +29,20 @@ def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
 
 def detect_function_change(
     *,
-    function: CompiledFunction,
     fingerprint_sql: str,
-    snapshot: WarehouseSnapshot,
+    fingerprint: Fingerprint | None,
     query_change_tracking: bool,
     full_refresh: bool,
-) -> tuple[PlanReason, BackfillResult]:
-    """Resolve function definition changes and downstream backfill policy."""
+) -> PlanReason:
+    """Resolve why a function is redeployed; callers decide their own replay."""
 
     if full_refresh:
-        return PlanReason.FULL_REFRESH, BackfillResult(action=BackfillAction.FULL)
-    fingerprint: Fingerprint | None = snapshot.fingerprints.functions.get(function.name)
+        return PlanReason.FULL_REFRESH
     if fingerprint is None:
-        return PlanReason.FIRST_RUN, resolve_replay_on_change(
-            replay_on_change=function.replay_on_change
-        )
-    if not query_change_tracking:
-        return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.FORWARD_ONLY)
-    if compute_query_hash(fingerprint_sql) != fingerprint.definition_hash:
-        return PlanReason.QUERY_CHANGED, resolve_replay_on_change(
-            replay_on_change=function.replay_on_change
-        )
-    return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.FORWARD_ONLY)
+        return PlanReason.FIRST_RUN
+    if query_change_tracking and compute_query_hash(fingerprint_sql) != fingerprint.definition_hash:
+        return PlanReason.QUERY_CHANGED
+    return PlanReason.NO_CHANGE
 
 
 def build_function_fingerprint_sql(
