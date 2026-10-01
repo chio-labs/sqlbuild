@@ -1,10 +1,11 @@
 //! Compile-owned native catalog, mapping state and Python-boundary requests.
 
-use crate::semantic_validation::types::{Expansion, Relations};
+use crate::semantic_validation::types::{Expansion, ProbeKey, Relations};
 use polyglot_sql::validation::SchemaTable;
 use polyglot_sql::{DialectType, SchemaValidationOptions};
 use pyo3::{FromPyObject, pyclass};
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 #[derive(Default, Debug)]
 pub(crate) struct Columns(pub(crate) Vec<(String, Option<String>)>);
@@ -38,6 +39,12 @@ pub(crate) struct PositionInput {
     pub(crate) passes: Vec<Vec<Expansion>>,
 }
 
+/// Memoized call-site function-name probes, owned by the catalog that validates a compile.
+#[derive(Debug, Default)]
+pub(crate) struct FunctionProbes {
+    pub(crate) suggestions: Mutex<HashMap<ProbeKey, Option<String>>>,
+}
+
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct ProjectCatalog {
     pub(crate) dialect: DialectType,
@@ -46,6 +53,7 @@ pub(crate) struct ProjectCatalog {
     pub(super) tables: HashMap<String, SchemaTable>,
     pub(super) overrides: Vec<HashMap<String, SchemaTable>>,
     pub(super) analysis_tables: HashMap<String, SchemaTable>,
+    pub(crate) function_probes: FunctionProbes,
 }
 
 #[pyclass(module = "sqlbuild._native")]

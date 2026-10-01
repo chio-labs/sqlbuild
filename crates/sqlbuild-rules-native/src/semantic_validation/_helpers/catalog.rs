@@ -4,7 +4,7 @@ use crate::bindings::main::compiler_error::compiler_error;
 use crate::bindings::types::CompilerDetach;
 use std::collections::HashMap;
 
-use crate::semantic_validation::models::{CatalogInput, Columns, ProjectCatalog};
+use crate::semantic_validation::models::{CatalogInput, Columns, FunctionProbes, ProjectCatalog};
 use crate::semantic_validation::types::{BindingRequest, DiagnosticRow, Relations};
 use crate::semantic_validation::{
     _helpers::{diagnostics, identifiers},
@@ -129,6 +129,7 @@ impl ProjectCatalog {
             tables: HashMap::new(),
             overrides: Vec::new(),
             analysis_tables: HashMap::new(),
+            function_probes: FunctionProbes::default(),
         };
         catalog.update_relations(relations);
         Ok(catalog)
@@ -148,6 +149,7 @@ impl ProjectCatalog {
             tables: self.tables.clone(),
             overrides: Vec::new(),
             analysis_tables: self.analysis_tables.clone(),
+            function_probes: FunctionProbes::default(),
         };
         catalog.update_relations(relations);
         catalog
@@ -229,7 +231,12 @@ impl ProjectCatalog {
                     .map(|(sql, references, overrides)| {
                         let schema = self.schema(&references, overrides)?;
                         let result = self.validate(&sql, &schema)?;
-                        let result = diagnostics::map_diagnostics(&sql, self.dialect, result)?;
+                        let result = diagnostics::map_diagnostics(
+                            &sql,
+                            self.dialect,
+                            result,
+                            &self.function_probes,
+                        )?;
                         Ok(result.errors.into_iter().map(diagnostic_row).collect())
                     })
                     .collect::<Result<Vec<_>, String>>()
@@ -252,6 +259,7 @@ impl ProjectCatalog {
             tables: HashMap::new(),
             overrides: Vec::new(),
             analysis_tables: HashMap::new(),
+            function_probes: FunctionProbes::default(),
         }
     }
     pub(crate) fn analysis_schema(
