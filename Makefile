@@ -82,6 +82,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_node_identity.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_sql_hook_identity.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_query_change_tracking.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_query_fingerprint_changes.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_query_propagation.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_remove_column_semantics.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_reusable_model_schemas.py \
@@ -131,7 +132,9 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/databricks \
 	tests/e2e/src/sqlbuild/cli/commands/main/dbt \
 	tests/e2e/src/sqlbuild/cli/commands/main/debug \
+	tests/e2e/src/sqlbuild/cli/commands/main/format/test_format_example_projects.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/format/test_rule_fixes.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/format/test_token_preservation.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/freshness \
 	tests/e2e/src/sqlbuild/cli/commands/main/init \
 	tests/e2e/src/sqlbuild/cli/commands/main/rules \
