@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import PromotionStrategy
+from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import BoundViewGuard
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
@@ -47,7 +48,8 @@ def promote_relation_to_destination(
             target_kind="relation",
         ),
     ) as lifecycle:
-        existing: bool = adapter.relation_exists(
+        existing: bool = cached_relation_exists(
+            adapter=adapter,
             connection=connection,
             database=destination_database,
             schema=destination_schema,

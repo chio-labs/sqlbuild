@@ -14,6 +14,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -654,7 +655,8 @@ def _no_work_microbatch_result(
 ) -> ModelExecutionResult | None:
     if batch_plan.batches:
         return None
-    destination_exists: bool = context.adapter.relation_exists(
+    destination_exists: bool = cached_relation_exists(
+        adapter=context.adapter,
         connection=context.connection,
         database=context.entry.destination.database,
         schema=context.entry.destination.schema,
@@ -2345,7 +2347,8 @@ def _physical_cursor_envelope(
     state: MicrobatchLifecycleState,
     targets: MicrobatchTargets,
 ) -> CursorBounds | None | ModelExecutionResult:
-    if not context.adapter.relation_exists(
+    if not cached_relation_exists(
+        adapter=context.adapter,
         connection=context.connection,
         database=targets.target_database,
         schema=targets.target_schema,

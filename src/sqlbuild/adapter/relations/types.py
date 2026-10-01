@@ -9,6 +9,10 @@ if TYPE_CHECKING:
     from sqlbuild.adapter.relations.models import SchemaColumnListing, SchemaRelationListing
 
 
+type RelationCacheKey = tuple[str, str | None, str | None, str]
+type RelationCacheVersion = tuple[int, int]
+
+
 class RelationLocation(Protocol):
     """Structural relation location accepted by adapter naming."""
 

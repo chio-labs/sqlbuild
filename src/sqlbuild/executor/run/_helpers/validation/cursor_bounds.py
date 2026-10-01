@@ -9,6 +9,7 @@ from functools import partial
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import (
@@ -625,7 +626,8 @@ def _query_target_max(
 ) -> CursorScalar | None:
     """Read the target cursor high-water mark or None when the target does not exist."""
 
-    if not adapter.relation_exists(
+    if not cached_relation_exists(
+        adapter=adapter,
         connection=connection,
         database=target_database,
         schema=target_schema,

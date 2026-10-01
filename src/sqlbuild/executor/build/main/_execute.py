@@ -6,6 +6,9 @@ from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relations.main.relation_metadata_cache_scope import (
+    relation_metadata_cache_scope,
+)
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.executor.auditing.main._project_results import (
@@ -54,6 +57,34 @@ def execute_build_plan(
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
+    with relation_metadata_cache_scope(adapter=adapter):
+        return _execute_build_plan(
+            plan=plan,
+            adapter=adapter,
+            connection_config=connection_config,
+            connections=connections,
+            scheduler_connection=scheduler_connection,
+            runtime=runtime,
+            callbacks=callbacks,
+            customizations=customizations,
+            initial_state=initial_state,
+            schema_prepared=schema_prepared,
+        )
+
+
+def _execute_build_plan(
+    *,
+    plan: PlanOutput,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connections: tuple[Any, ...],
+    scheduler_connection: Any,
+    runtime: BuildRuntimeParams,
+    callbacks: BuildCallbacks | None,
+    customizations: BuildCustomizations | None,
+    initial_state: BuildInitialState | None,
+    schema_prepared: bool,
+) -> BuildExecutionResult:
     resolved_callbacks: BuildCallbacks = callbacks if callbacks is not None else BuildCallbacks()
     resolved_customizations: BuildCustomizations = (
         customizations if customizations is not None else BuildCustomizations()

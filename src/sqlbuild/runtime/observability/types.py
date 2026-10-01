@@ -1,7 +1,7 @@
 """Type declarations for runtime observability contracts."""
 
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from sqlbuild.runtime.observability.models import (
@@ -22,3 +22,11 @@ type LifecycleRegistration = tuple[
     object, KnownLifecycleSubscriber | OpaqueLifecycleSubscriber, bool
 ]
 type DiagnosticRegistration = tuple[object, DiagnosticSubscriber]
+
+
+class StatementListener(Protocol):
+    """In-process callback receiving the SQL text of each finished outermost statement."""
+
+    def __call__(self, *, sql: str) -> None:
+        """Handle one statement that finished, successfully or not."""
+        ...

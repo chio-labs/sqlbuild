@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -70,8 +71,8 @@ def relation_exists(
 ) -> bool:
     """Inspect whether one full-refresh relation exists."""
 
-    return adapter.relation_exists(
-        connection=connection, database=database, schema=schema, name=name
+    return cached_relation_exists(
+        adapter=adapter, connection=connection, database=database, schema=schema, name=name
     )
 
 
