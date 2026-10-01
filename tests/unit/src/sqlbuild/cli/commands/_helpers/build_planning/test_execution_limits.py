@@ -6,6 +6,7 @@ from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
     enforce_model_execution_limit,
 )
 from sqlbuild.cli.commands._helpers.build_planning.invocation import resolve_build_invocation
+from sqlbuild.cli.commands.constants import EXECUTION_LIMIT_BUILD_NOTE
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import BuildCommandRequest
 from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
@@ -34,6 +35,7 @@ def test_given_model_count_within_limit_when_enforcing_then_build_is_allowed(
         model_count=test_case.model_count,
         target_name="dev",
         limits=ExecutionLimitsConfig(max_models=test_case.maximum_models),
+        refusal_note=EXECUTION_LIMIT_BUILD_NOTE,
     )
     assert result is test_case.expected_code
 
@@ -65,6 +67,7 @@ def test_given_model_count_above_limit_when_enforcing_then_error_has_custom_reme
                 max_models=test_case.maximum_models,
                 remediation=test_case.remediation,
             ),
+            refusal_note=EXECUTION_LIMIT_BUILD_NOTE,
         )
 
     assert raised.value.code == test_case.expected_code

@@ -7,6 +7,7 @@ import pytest
 from sqlbuild.cli.commands._helpers.build_planning.table_type import (
     enforce_table_type_downgrade_policy,
 )
+from sqlbuild.cli.commands.constants import TABLE_TYPE_DOWNGRADE_BUILD_HELP
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (
@@ -65,6 +66,7 @@ def test_given_unsafe_table_type_downgrade_when_enforcing_then_raises_user_error
         enforce_table_type_downgrade_policy(
             plan=test_case.plan_output,
             allow_table_type_downgrade=test_case.allow_table_type_downgrade,
+            non_interactive_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
             input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
             output_stream=StringIO(),
         )
@@ -124,6 +126,7 @@ def test_given_safe_or_confirmed_table_type_change_when_enforcing_then_allows_ex
     enforce_table_type_downgrade_policy(
         plan=test_case.plan_output,
         allow_table_type_downgrade=test_case.allow_table_type_downgrade,
+        non_interactive_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
         input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
         output_stream=output,
     )

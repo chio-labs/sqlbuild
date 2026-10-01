@@ -19,9 +19,20 @@ from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
 from sqlbuild.cli.commands._helpers.build_planning.table_type import (
     enforce_table_type_downgrade_policy,
 )
-from sqlbuild.cli.commands.constants import MISSING_ORIGIN_BUILD_HELP
+from sqlbuild.cli.commands.constants import (
+    EXECUTION_LIMIT_BUILD_NOTE,
+    EXECUTION_LIMIT_DBT_NOTE,
+    MISSING_ORIGIN_BUILD_HELP,
+    MISSING_ORIGIN_DBT_HELP,
+    RETENTION_DECREASE_BUILD_HELP,
+    RETENTION_DECREASE_DBT_HELP,
+    SNAPSHOT_FULL_REFRESH_BUILD_HELP,
+    SNAPSHOT_FULL_REFRESH_DBT_HELP,
+    TABLE_TYPE_DOWNGRADE_BUILD_HELP,
+    TABLE_TYPE_DOWNGRADE_DBT_HELP,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import BuildCommandRequest, BuildInvocation
+from sqlbuild.cli.commands.models import BuildCommandRequest, BuildInvocation, PlanSafetyGates
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
 from sqlbuild.compiler.planner.constants import HIDDEN_ORIGIN_REMEDY
 from sqlbuild.compiler.planner.models import (
@@ -31,6 +42,7 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 _OLD_NAME_CODES: frozenset[str] = frozenset({"M114", "P008"})
@@ -45,39 +57,91 @@ _COLUMN_BLOCK_CODES: dict[ColumnMigrationDecision, str] = {
 def enforce_build_plan_policies(
     *, request: BuildCommandRequest, invocation: BuildInvocation, plan: PlanOutput
 ) -> None:
+    """Apply every plan safety gate before a direct build executes anything."""
+
+    enforce_plan_safety_policies(
+        plan=plan,
+        gates=PlanSafetyGates(
+            allow_missing_migration_origin=request.allow_missing_migration_origin,
+            allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
+            allow_table_type_downgrade=request.allow_table_type_downgrade,
+            allow_retention_decrease=request.allow_retention_decrease,
+            missing_origin_help=MISSING_ORIGIN_BUILD_HELP,
+            snapshot_full_refresh_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
+            table_type_downgrade_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
+            retention_decrease_help=RETENTION_DECREASE_BUILD_HELP,
+            execution_limit_note=EXECUTION_LIMIT_BUILD_NOTE,
+        ),
+        snapshots_config=invocation.discovered_inputs.project_config.snapshots,
+        target_name=invocation.effective_target_name,
+        execution_limits=invocation.execution_limits,
+        streams=(sys.stdin, sys.stdout),
+    )
+
+
+def dbt_interop_plan_safety_gates() -> PlanSafetyGates:
+    """Gates for sqb dbt, which has no allow flags and confirms only on a terminal."""
+
+    return PlanSafetyGates(
+        allow_missing_migration_origin=False,
+        allow_snapshot_full_refresh=False,
+        allow_table_type_downgrade=False,
+        allow_retention_decrease=False,
+        missing_origin_help=MISSING_ORIGIN_DBT_HELP,
+        snapshot_full_refresh_help=SNAPSHOT_FULL_REFRESH_DBT_HELP,
+        table_type_downgrade_help=TABLE_TYPE_DOWNGRADE_DBT_HELP,
+        retention_decrease_help=RETENTION_DECREASE_DBT_HELP,
+        execution_limit_note=EXECUTION_LIMIT_DBT_NOTE,
+    )
+
+
+def enforce_plan_safety_policies(
+    *,
+    plan: PlanOutput,
+    gates: PlanSafetyGates,
+    snapshots_config: SnapshotsConfig,
+    target_name: str | None,
+    execution_limits: ExecutionLimitsConfig,
+    streams: tuple[TextIO, TextIO],
+) -> None:
     """Apply migration, execution-limit, and storage safety gates in their required order."""
 
+    input_stream, output_stream = streams
     enforce_migration_plan_policies(
         plan=plan,
-        allow_missing_migration_origin=request.allow_missing_migration_origin,
-        non_interactive_help=MISSING_ORIGIN_BUILD_HELP,
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
+        allow_missing_migration_origin=gates.allow_missing_migration_origin,
+        non_interactive_help=gates.missing_origin_help,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     _enforce_old_name_policy(plan=plan)
     enforce_model_execution_limit(
         model_count=executable_model_count(plan=plan),
-        target_name=invocation.effective_target_name,
-        limits=invocation.execution_limits,
+        target_name=target_name,
+        limits=execution_limits,
+        refusal_note=gates.execution_limit_note,
     )
     enforce_snapshot_full_refresh_policy(
         plan=plan,
-        snapshots_config=invocation.discovered_inputs.project_config.snapshots,
-        allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
+        snapshots_config=snapshots_config,
+        allow_snapshot_full_refresh=gates.allow_snapshot_full_refresh,
+        non_interactive_help=gates.snapshot_full_refresh_help,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     enforce_table_type_downgrade_policy(
         plan=plan,
-        allow_table_type_downgrade=request.allow_table_type_downgrade,
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
+        allow_table_type_downgrade=gates.allow_table_type_downgrade,
+        non_interactive_help=gates.table_type_downgrade_help,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     enforce_retention_decrease_policy(
         plan=plan,
-        allow_retention_decrease=request.allow_retention_decrease,
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
+        allow_retention_decrease=gates.allow_retention_decrease,
+        non_interactive_help=gates.retention_decrease_help,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
 
 

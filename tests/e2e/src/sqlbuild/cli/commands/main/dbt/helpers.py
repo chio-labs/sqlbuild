@@ -207,3 +207,34 @@ def _assert_dbt_local_replay_row_query(
     db_path: Path = project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb"
     rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
     assert tuple(rows) == expected_rows
+
+
+def declare_sqlbuild_main_target(*, project_dir: Path, target_settings: str) -> None:
+    """Make `main` the default SQLBuild target of a dbt interop fixture with extra settings."""
+
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            'adapter = "duckdb"\n', 'adapter = "duckdb"\ndefault_target = "main"\n'
+        )
+        + '\n[targets.main]\nschema = "main"\n'
+        + target_settings,
+        encoding="utf-8",
+    )
+
+
+def write_sqlbuild_order_status_snapshot(*, project_dir: Path) -> None:
+    """Add a current-state SQLBuild snapshot whose full refresh needs confirmation."""
+
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + '\n[snapshots]\ncurrent_state_full_refresh = "require_confirmation"\n',
+        encoding="utf-8",
+    )
+    project_dir.joinpath("models", "order_status_history.sql").write_text(
+        "MODEL (\n  materialized snapshot,\n  unique_key [order_id],\n"
+        "  snapshot_strategy check,\n  check_columns [status],\n);\n\n"
+        "SELECT 10 AS order_id, 'open' AS status\n",
+        encoding="utf-8",
+    )

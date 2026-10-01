@@ -13,6 +13,7 @@ def enforce_table_type_downgrade_policy(
     *,
     plan: PlanOutput,
     allow_table_type_downgrade: bool,
+    non_interactive_help: str,
     input_stream: TextIO,
     output_stream: TextIO,
 ) -> None:
@@ -38,7 +39,7 @@ def enforce_table_type_downgrade_policy(
     if not input_stream.isatty():
         raise CliUserError(
             "table-type downgrade requires confirmation",
-            help="Pass --allow-table-type-downgrade to confirm in non-interactive runs.",
+            help=non_interactive_help,
         )
     expected: str = _confirmation_text(confirmation)
     output_stream.write(

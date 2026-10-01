@@ -57,3 +57,14 @@ class RetentionDecreasePolicyTestCase:
     expected_output: str = ""
     input_text: str = ""
     input_is_tty: bool = False
+
+
+@dataclass(frozen=True)
+class DbtPlanSafetyPolicyTestCase:
+    description: str
+    plan_output: PlanOutput
+    expected_error_fragment: str | None = None
+    expected_help_fragment: str = ""
+    expected_output: str = ""
+    input_text: str = ""
+    input_is_tty: bool = False

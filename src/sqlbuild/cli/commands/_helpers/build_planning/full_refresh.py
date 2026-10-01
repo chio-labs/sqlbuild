@@ -25,6 +25,7 @@ def enforce_snapshot_full_refresh_policy(
     plan: PlanOutput,
     snapshots_config: SnapshotsConfig,
     allow_snapshot_full_refresh: bool,
+    non_interactive_help: str,
     input_stream: TextIO,
     output_stream: TextIO,
 ) -> None:
@@ -69,7 +70,7 @@ def enforce_snapshot_full_refresh_policy(
         raise CliUserError(
             "snapshot full refresh requires confirmation",
             code="C239",
-            help="Pass --allow-snapshot-full-refresh to confirm in non-interactive runs.",
+            help=non_interactive_help,
         )
 
     if not _confirm(

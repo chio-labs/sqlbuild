@@ -114,3 +114,11 @@ class DbtMissingOriginE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_output: str
+
+
+@dataclass(frozen=True)
+class DbtPlanSafetyE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
