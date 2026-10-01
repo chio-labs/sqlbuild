@@ -204,3 +204,13 @@ class ShowColumnsEquivalenceTestCase:
     schema: str
     name: str
     expected_column_count: int
+
+
+@dataclass(frozen=True)
+class SessionDatabaseSwitchTestCase:
+    """Unqualified lookups before and after a USE statement switches the session database."""
+
+    description: str
+    switch_sql: str
+    expected_scopes: tuple[str, ...]
+    expected_session_reads: int

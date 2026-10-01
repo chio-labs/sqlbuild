@@ -1,8 +1,14 @@
 """Snowflake connection wrapper with statement telemetry."""
 
+import re
 from typing import Any
 
 from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCursor
+from sqlbuild.adapters.snowflake.constants import CURRENT_DATABASE_ATTRIBUTE
+
+_SESSION_CONTEXT_STATEMENT: re.Pattern[str] = re.compile(
+    r"^(?:\s+|--[^\n]*|/\*.*?\*/)*(?:USE|CALL|EXECUTE)\b", re.IGNORECASE | re.DOTALL
+)
 
 
 class _SnowflakeConnection:
@@ -21,4 +27,12 @@ class _SnowflakeConnection:
         self.raw_connection.close()
 
     def cursor(self) -> _SnowflakeCursor:
-        return _SnowflakeCursor(self.raw_connection.cursor())
+        return _SnowflakeCursor(
+            self.raw_connection.cursor(), on_executed=self._forget_changed_session_context
+        )
+
+    def _forget_changed_session_context(self, *, sql: str) -> None:
+        """Drop the remembered session database once a statement may have switched it."""
+
+        if _SESSION_CONTEXT_STATEMENT.match(sql) is not None:
+            _ = self.__dict__.pop(CURRENT_DATABASE_ATTRIBUTE, None)

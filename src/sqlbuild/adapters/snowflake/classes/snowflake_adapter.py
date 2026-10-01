@@ -123,6 +123,7 @@ from sqlbuild.adapters.snowflake._helpers.show_metadata import (
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.snowflake.constants import (
     BASE_TABLE_METADATA_TYPE,
+    CURRENT_DATABASE_ATTRIBUTE,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
@@ -151,7 +152,6 @@ _METADATA_INSPECTION_CONCURRENCY: int = 8
 _SHOW_RESULT_LIMIT: int = 10_000
 _SHOW_COLUMN_KIND: str = "COLUMN"
 _SHOW_COLUMN_KINDS: frozenset[str] = frozenset({_SHOW_COLUMN_KIND, "VIRTUAL_COLUMN"})
-_CURRENT_DATABASE_ATTRIBUTE: str = "_sqlbuild_current_database"
 _UNRESOLVED: object = object()
 _RELATION_LISTING_COLUMNS: str = (
     "table_name, table_schema, table_type, is_transient, created, last_altered, retention_time"
@@ -2021,7 +2021,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     @staticmethod
     def _current_database(*, connection: _SnowflakeConnection) -> str | None:
-        cached: object = getattr(connection, _CURRENT_DATABASE_ATTRIBUTE, _UNRESOLVED)
+        cached: object = getattr(connection, CURRENT_DATABASE_ATTRIBUTE, _UNRESOLVED)
         if cached is not _UNRESOLVED:
             return cast(str | None, cached)
         cursor: Any = connection.cursor()
@@ -2031,7 +2031,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         finally:
             cursor.close()
         current: str | None = None if row is None or row[0] is None else str(row[0])
-        setattr(connection, _CURRENT_DATABASE_ATTRIBUTE, current)
+        setattr(connection, CURRENT_DATABASE_ATTRIBUTE, current)
         return current
 
     def _fetch_paged_show_rows(

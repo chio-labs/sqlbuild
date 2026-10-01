@@ -50,6 +50,7 @@ _CURSOR_BOUND_PATTERN: re.Pattern[str] = re.compile(
 )
 _ANY_PATTERN: re.Pattern[str] = re.compile(r"")
 _CURRENT_DATABASE_PATTERN: re.Pattern[str] = re.compile(r"^SELECT CURRENT_DATABASE\(\)$")
+_USE_DATABASE_PATTERN: re.Pattern[str] = re.compile(r'^USE DATABASE "?(?P<database>[^"]+)"?$')
 _SHOW_SCHEMAS_PATTERN: re.Pattern[str] = re.compile(
     r"^SHOW SCHEMAS LIKE '(?P<pattern>(?:[^']|'')*)' IN DATABASE \"(?P<database>[^\"]*)\"$"
 )
@@ -317,6 +318,7 @@ class RecordingSnowflakeWarehouse:
             (_SHOW_SCHEMA_COLUMNS_PATTERN, self._answer_show_schema_columns),
             (_CURSOR_BOUND_PATTERN, self._answer_cursor_bounds),
             (_CURRENT_DATABASE_PATTERN, self._answer_current_database),
+            (_USE_DATABASE_PATTERN, self._answer_use_database),
             (_SHOW_SCHEMAS_PATTERN, self._answer_show_schemas),
             (_ANY_PATTERN, _answer_status),
         )
@@ -372,6 +374,14 @@ class RecordingSnowflakeWarehouse:
     ) -> tuple[list[tuple[Any, ...]], Any]:
         del sql, params
         return [(self.current_database,)], (("CURRENT_DATABASE()",),)
+
+    def _answer_use_database(
+        self, *, sql: str, params: tuple[object, ...]
+    ) -> tuple[list[tuple[Any, ...]], Any]:
+        del params
+        with self._lock:
+            self.current_database = next(_USE_DATABASE_PATTERN.finditer(sql)).group("database")
+        return [], _STATUS_DESCRIPTION
 
     def _existing_schemas(self) -> frozenset[tuple[str, str]]:
         return self.extra_schemas | {(fake.database, fake.schema) for fake in self.relations}
