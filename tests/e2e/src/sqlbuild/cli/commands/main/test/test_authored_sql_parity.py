@@ -9,6 +9,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import AuthoredSq
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 from tests.integration.src.sqlbuild.executor.testing.helpers import (
     build_authored_cte_project_files,
+    build_terminated_model_project_files,
 )
 
 
@@ -58,6 +59,41 @@ def test_given_authored_ctes_when_testing_then_passes_and_runs_the_authored_sql(
 
     assert tested.returncode == 0, tested.stdout + tested.stderr
     assert "PASS=2  FAIL=0" in tested.stdout, tested.stdout
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    sql: str = next(
+        (project / "target" / "compiled" / "tests").rglob(test_case.compiled_test_name)
+    ).read_text()
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql, sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuthoredSqlParityTestCase(
+            description="a WITH model ending in a statement terminator",
+            compiled_test_name="test_m.sql",
+            expected_fragments=("__actual__m AS (SELECT id FROM a)",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_model_ending_in_semicolon_when_testing_then_terminator_is_dropped_and_passes(
+    tmp_path: Path, test_case: AuthoredSqlParityTestCase
+) -> None:
+    project: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="terminated",
+        repo_files=build_terminated_model_project_files(),
+    )
+
+    tested: CompletedProcess[str] = run_sqb(command=("--no-color", "test"), project_dir=project)
+    compiled: CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project
+    )
+
+    assert tested.returncode == 0, tested.stdout + tested.stderr
+    assert "PASS=1  FAIL=0" in tested.stdout, tested.stdout
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     sql: str = next(
         (project / "target" / "compiled" / "tests").rglob(test_case.compiled_test_name)

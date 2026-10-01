@@ -1478,15 +1478,85 @@ pub(super) fn generated_with_bodies_stay_nested_verbatim() -> bool {
     )
 }
 
-pub(super) fn tsql_cte_collisions_are_refused_with_named_ctes() -> bool {
-    let error = render_one(colliding_chain_request("tsql", "final")).expect_err("T-SQL refusal");
+pub(super) fn tsql_model_cte_collisions_are_renamed_by_token_span() -> bool {
+    let sql = render_one(colliding_chain_request("tsql", "final")).expect("T-SQL rename");
+    sql.starts_with(
+        "WITH final AS (SELECT 1 AS order_id),\n\
+         __ref__stg_orders AS (SELECT * FROM final),\n\
+         __sqb_cte_0 AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
+         __actual__orders AS (SELECT __sqb_cte_0.order_id FROM __sqb_cte_0),\n",
+    )
+}
+
+pub(super) fn tsql_unprovable_cte_renames_are_refused_with_named_ctes() -> bool {
+    let mut request = colliding_chain_request("tsql", "final");
+    request["chain"][0]["comparisonBodySql"] = json!(
+        "WITH final AS (SELECT 2 AS order_id FROM __ref__stg_orders) SELECT order_id AS final FROM final"
+    );
+    let error = render_one(request).expect_err("T-SQL refusal");
     assert_eq!(
         error,
-        "CTE 'final' of model 'orders' collides with CTE 'final' of CTE '__ref__stg_orders'; \
+        "CTE 'final' of model 'orders' collides with CTE 'final' of model 'stg_orders'; \
          T-SQL does not allow a nested WITH, so rename the CTE in the model or the fixture so \
          the names are unique"
     );
     true
+}
+
+pub(super) fn tsql_fixture_and_model_cte_collisions_are_refused() -> bool {
+    let error = render_one(json!({
+        "sqlAnalysisDialect": "tsql",
+        "chain": [{
+            "modelName": "orders",
+            "resolvedSql": "WITH helper_rows AS (SELECT 1 AS order_id) SELECT order_id FROM helper_rows",
+            "expectedCteSql": "SELECT order_id FROM helper_rows",
+            "expectedLiftedCtes": [["helper_rows", "SELECT 2 AS order_id"]]
+        }]
+    }))
+    .expect_err("T-SQL refusal");
+    assert_eq!(
+        error,
+        "CTE 'helper_rows' of the expected rows of model 'orders' collides with CTE \
+         'helper_rows' of model 'orders'; T-SQL does not allow a nested WITH, so rename the \
+         CTE in the model or the fixture so the names are unique"
+    );
+    true
+}
+
+pub(super) fn tsql_identical_helper_ending_in_line_comment_is_shared() -> bool {
+    let sql = render_one(json!({
+        "sqlAnalysisDialect": "tsql",
+        "chain": [{
+            "modelName": "orders",
+            "resolvedSql": "SELECT order_id FROM __source__raw",
+            "liftedCtes": [["__source__raw", "WITH h AS (SELECT 1 AS order_id -- one\n) SELECT * FROM h"]],
+            "comparisonBodySql": "SELECT order_id FROM __source__raw",
+            "expectedCteSql": "SELECT order_id FROM h",
+            "expectedLiftedCtes": [["h", "SELECT 1 AS order_id -- one"]]
+        }]
+    }))
+    .expect("shared helper");
+    sql.starts_with(
+        "WITH h AS (SELECT 1 AS order_id -- one\n),\n__source__raw AS (SELECT * FROM h),\n",
+    ) && sql.contains("__expected__orders AS (SELECT order_id FROM h)")
+}
+
+pub(super) fn trailing_statement_terminators_are_dropped() -> bool {
+    [
+        "WITH a AS (SELECT 1 AS id) SELECT * FROM a; -- done\n",
+        "SELECT 1 AS id ;;\n",
+    ]
+    .iter()
+    .all(|model| {
+        let sql = render_one(json!({
+            "sqlAnalysisDialect": "duckdb",
+            "chain": [{"modelName": "m", "resolvedSql": model, "expectedCteSql": "SELECT 1 AS id"}]
+        }))
+        .expect("render");
+        !sql.contains(';')
+            && (sql.contains("__actual__m AS (SELECT * FROM a)")
+                || sql.contains("__actual__m AS (SELECT 1 AS id)"))
+    })
 }
 
 pub(super) fn tsql_distinct_ctes_lift_verbatim() -> bool {

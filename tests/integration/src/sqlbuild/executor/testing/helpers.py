@@ -178,3 +178,63 @@ def build_authored_cte_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_shared_cte_name_chain_entry() -> SqlTestPlanEntry:
+    """Build a two-model chain whose upstream and tested models both define CTE `final`."""
+
+    upstream: str = "WITH final AS (SELECT id FROM __source__raw) SELECT * FROM final"
+    tested: str = "WITH final AS (SELECT id + 1 AS id FROM __ref__stg) SELECT final.id FROM final"
+    source_mock: tuple[str, str] = ("__source__raw", "SELECT 1 AS id")
+    return SqlTestPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name="mart_chain"),
+        name="mart_chain",
+        chain=(
+            ChainStep(
+                model_name="stg",
+                resolved_sql=upstream,
+                lifted_ctes=(source_mock,),
+                comparison_body_sql=upstream,
+                expected_cte_sql="SELECT 1 AS id",
+            ),
+            ChainStep(
+                model_name="mart",
+                resolved_sql=tested,
+                lifted_ctes=(source_mock, ("__ref__stg", upstream)),
+                comparison_body_sql=tested,
+                expected_cte_sql="SELECT 2 AS id",
+            ),
+        ),
+    )
+
+
+def comparison_rows(*, adapter: DuckDbAdapter, connection: Any, sql: str) -> list[tuple[Any, ...]]:
+    """Execute rendered comparison SQL and return its count rows."""
+
+    return list(adapter.execute(connection=connection, sql=sql).fetchall())
+
+
+def build_terminated_model_project_files() -> dict[str, str]:
+    """Build a DuckDB project whose WITH model ends in a statement terminator."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "terminated"\nadapter = "duckdb"\n\n[connection]\n'
+            'database = "terminated.duckdb"\n\n[settings]\nsql_analysis = true\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/m.sql": (
+            "MODEL (materialized table);\n\n"
+            'WITH a AS (SELECT id FROM __source("raw_orders"))\n'
+            "SELECT id FROM a;\n"
+        ),
+        "tests/unit/test_m.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS id),\n"
+            "__expected__m AS (SELECT 1 AS id)\n"
+            "SELECT 1\n"
+        ),
+    }

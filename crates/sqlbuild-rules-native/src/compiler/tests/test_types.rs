@@ -53,3 +53,10 @@ pub(crate) struct CteSliceTestCase {
     pub(crate) sql: &'static str,
     pub(crate) expected_slices: Result<CteSlices, Unclosed>,
 }
+
+pub(crate) struct CteRenameTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) renamed_index: usize,
+    pub(crate) expected_sql: Option<&'static str>,
+}

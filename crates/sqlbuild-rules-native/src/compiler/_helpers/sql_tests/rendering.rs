@@ -4,8 +4,10 @@ use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::{Dialect, DialectType};
 
+use crate::compiler::_helpers::sql_tests::cte_rename::{CteRename, rename_ctes};
 use crate::compiler::_helpers::sql_tests::cte_slices::{
-    CteSlice, SliceDialect, split_top_level_with, used_ctes,
+    SliceDialect, WithSlices, identifier_keys, split_top_level_with, strip_statement_terminators,
+    used_ctes,
 };
 use crate::compiler::_helpers::sql_tests::cte_sql::{
     cte_definition_sql, leading_with_prefix_end, with_leading_ctes,
@@ -110,7 +112,8 @@ struct LiftedCte {
 
 impl LiftedCte {
     fn conflicts(&self, key: &str, header: &str, authored: &str) -> bool {
-        self.key == key && (!same_header(&self.header, header) || self.authored != authored)
+        self.key == key
+            && (!same_header(&self.header, header) || self.authored.trim() != authored.trim())
     }
 }
 
@@ -123,6 +126,7 @@ struct RenderCteState {
     dialect: SliceDialect,
     lifted: Vec<LiftedCte>,
     name_counts: CteSuffixCounter,
+    renamed_ctes: usize,
 }
 
 impl RenderCteState {
@@ -131,11 +135,13 @@ impl RenderCteState {
             dialect,
             lifted: Vec::new(),
             name_counts: CteSuffixCounter::default(),
+            renamed_ctes: 0,
         }
     }
 
     /// Lift a query's CTEs verbatim and return its body, nesting it unchanged on a name clash.
     fn lift(&mut self, sql: &str, enabled: bool, origin: &str) -> Result<String, String> {
+        let sql = strip_statement_terminators(sql, self.dialect);
         if !enabled || leading_with_prefix_end(sql).is_none() {
             return Ok(sql.to_string());
         }
@@ -143,9 +149,12 @@ impl RenderCteState {
             Ok(Some(split)) => split,
             Ok(None) | Err(_) => return self.nested(sql, enabled, origin, &[]),
         };
-        let collisions = self.collisions(split.ctes.iter());
-        if !collisions.is_empty() {
-            let message = collision_message(origin, &collisions);
+        let colliding = self.colliding_indices(&split, &vec![true; split.ctes.len()]);
+        if !colliding.is_empty() {
+            if let Some(renamed) = self.rename_colliding(sql, &split, &colliding) {
+                return self.lift(&renamed, enabled, origin);
+            }
+            let message = self.collision_description(origin, &split, &colliding);
             return self.nested(sql, enabled, origin, &[message]);
         }
         if has_duplicate_keys(split.ctes.iter().map(|cte| cte.key.as_str())) {
@@ -165,6 +174,7 @@ impl RenderCteState {
         origin: &str,
         collisions: &[String],
     ) -> Result<String, String> {
+        let sql = strip_statement_terminators(sql, self.dialect);
         if !(enabled
             && self.dialect.rejects_nested_with()
             && leading_with_prefix_end(sql).is_some())
@@ -268,7 +278,7 @@ impl RenderCteState {
             if self.lifted.iter().any(|existing| existing.key == key) {
                 continue;
             }
-            let origin = format!("CTE '{name}'");
+            let origin = generated_cte_origin(name);
             let body = if enabled && self.dialect.rejects_nested_with() {
                 self.flatten(sql, &origin)?
             } else {
@@ -299,35 +309,78 @@ impl RenderCteState {
             Ok(Some(split)) => split,
             Ok(None) | Err(_) => return self.nested(sql, true, origin, &[]),
         };
-        let used_flags = used_ctes(&split, self.dialect);
-        let used: Vec<&CteSlice<'_>> = split
-            .ctes
-            .iter()
-            .zip(used_flags)
-            .filter_map(|(cte, used)| used.then_some(cte))
-            .collect();
-        let collisions = self.collisions(used.iter().copied());
-        if !collisions.is_empty() {
-            let message = collision_message(origin, &collisions);
+        let used = used_ctes(&split, self.dialect);
+        let colliding = self.colliding_indices(&split, &used);
+        if !colliding.is_empty() {
+            if let Some(renamed) = self.rename_colliding(sql, &split, &colliding) {
+                return self.flatten(&renamed, origin);
+            }
+            let message = self.collision_description(origin, &split, &colliding);
             return self.nested(sql, true, origin, &[message]);
         }
-        for cte in used {
+        for (cte, _) in split.ctes.iter().zip(used).filter(|(_, used)| *used) {
             self.push(cte.key.clone(), cte.header, cte.body, origin);
         }
         Ok(split.body.to_string())
     }
 
-    fn collisions<'s>(
+    /// Indices of the selected CTEs whose names are already lifted with different text.
+    fn colliding_indices(&self, split: &WithSlices<'_>, selected: &[bool]) -> Vec<usize> {
+        let mut indices: Vec<usize> = Vec::new();
+        for (index, (cte, selected)) in split.ctes.iter().zip(selected).enumerate() {
+            if *selected && self.conflict(&cte.key, cte.header, cte.body).is_some() {
+                indices.push(index);
+            }
+        }
+        indices
+    }
+
+    fn collision_description(
         &self,
-        ctes: impl Iterator<Item = &'s CteSlice<'s>>,
-    ) -> Vec<(&'s str, &LiftedCte)> {
-        let mut collisions: Vec<(&'s str, &LiftedCte)> = Vec::new();
-        for cte in ctes {
+        origin: &str,
+        split: &WithSlices<'_>,
+        indices: &[usize],
+    ) -> String {
+        let mut collisions: Vec<(&str, &LiftedCte)> = Vec::new();
+        for cte in indices.iter().filter_map(|index| split.ctes.get(*index)) {
             if let Some(existing) = self.conflict(&cte.key, cte.header, cte.body) {
                 collisions.push((cte.header, existing));
             }
         }
-        collisions
+        collision_message(origin, &collisions)
+    }
+
+    /// Where a nested WITH is rejected, rename colliding CTEs by token span to fresh names.
+    fn rename_colliding(
+        &mut self,
+        sql: &str,
+        split: &WithSlices<'_>,
+        indices: &[usize],
+    ) -> Option<String> {
+        if !self.dialect.rejects_nested_with() {
+            return None;
+        }
+        let taken = identifier_keys(sql, self.dialect);
+        let names: Vec<String> = indices.iter().map(|_| self.fresh_name(&taken)).collect();
+        let renames: Vec<CteRename<'_>> = indices
+            .iter()
+            .zip(&names)
+            .map(|(index, name)| CteRename {
+                index: *index,
+                name,
+            })
+            .collect();
+        rename_ctes(sql, split, &renames, self.dialect)
+    }
+
+    fn fresh_name(&mut self, taken: &HashSet<String>) -> String {
+        loop {
+            let name = format!("__sqb_cte_{}", self.renamed_ctes);
+            self.renamed_ctes += 1;
+            if !taken.contains(&name) && !self.lifted.iter().any(|cte| cte.key == name) {
+                return name;
+            }
+        }
     }
 
     fn conflict(&self, key: &str, header: &str, body: &str) -> Option<&LiftedCte> {
@@ -372,6 +425,20 @@ fn collision_message(origin: &str, collisions: &[(&str, &LiftedCte)]) -> String 
         })
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+/// Describe a generated CTE by what it stands in for: an upstream model, source or seed.
+fn generated_cte_origin(name: &str) -> String {
+    for (prefix, kind) in [
+        ("__ref__", "model"),
+        ("__source__", "source"),
+        ("__seed__", "seed"),
+    ] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            return format!("{kind} '{rest}'");
+        }
+    }
+    format!("CTE '{name}'")
 }
 
 fn has_duplicate_keys<'k>(keys: impl Iterator<Item = &'k str>) -> bool {

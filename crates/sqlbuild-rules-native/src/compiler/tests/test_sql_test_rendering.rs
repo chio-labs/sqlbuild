@@ -8,7 +8,11 @@ use crate::compiler::tests::helpers::{
 use crate::compiler::tests::helpers::{
     colliding_model_ctes_nest_on_nested_with_dialects, generated_with_bodies_stay_nested_verbatim,
     repeated_model_sql_renders_like_separate_batches, snowflake_function_synonyms_stay_as_authored,
-    tsql_cte_collisions_are_refused_with_named_ctes, tsql_distinct_ctes_lift_verbatim,
+    trailing_statement_terminators_are_dropped, tsql_distinct_ctes_lift_verbatim,
+    tsql_fixture_and_model_cte_collisions_are_refused,
+    tsql_identical_helper_ending_in_line_comment_is_shared,
+    tsql_model_cte_collisions_are_renamed_by_token_span,
+    tsql_unprovable_cte_renames_are_refused_with_named_ctes,
 };
 use crate::compiler::tests::test_types::SqlTestRenderingTestCase;
 
@@ -26,8 +30,28 @@ fn given_sql_rendering_cases_when_rendering_native_batches_then_expected_behavio
             expected_success: true,
         },
         SqlTestRenderingTestCase {
-            description: "T-SQL CTE collisions are refused naming the colliding CTEs",
-            run: tsql_cte_collisions_are_refused_with_named_ctes,
+            description: "T-SQL model CTE collisions are renamed by token span",
+            run: tsql_model_cte_collisions_are_renamed_by_token_span,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "T-SQL renames that cannot be proven safe are refused naming the CTEs",
+            run: tsql_unprovable_cte_renames_are_refused_with_named_ctes,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "T-SQL fixture and model CTE collisions are refused",
+            run: tsql_fixture_and_model_cte_collisions_are_refused,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "T-SQL identical helpers ending in a line comment are shared",
+            run: tsql_identical_helper_ending_in_line_comment_is_shared,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "trailing statement terminators are dropped from lifted bodies",
+            run: trailing_statement_terminators_are_dropped,
             expected_success: true,
         },
         SqlTestRenderingTestCase {

@@ -38,6 +38,7 @@ impl SliceDialect {
 /// One authored CTE: its header (name plus optional column list) and parenthesised body.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct CteSlice<'a> {
+    pub(crate) header_start: usize,
     pub(crate) header: &'a str,
     pub(crate) key: String,
     pub(crate) body: &'a str,
@@ -83,6 +84,7 @@ pub(crate) fn split_top_level_with(
         }
         let close = matching_paren(sql, cursor, dialect)?;
         ctes.push(CteSlice {
+            header_start: index,
             header: &sql[index..header_end],
             key,
             body: &sql[cursor + 1..close],
@@ -92,7 +94,7 @@ pub(crate) fn split_top_level_with(
             index = skip_ignorable(sql, next + 1)?;
             continue;
         }
-        let body = sql[skip_whitespace(sql, close + 1)..].trim_end();
+        let body = strip_statement_terminators(&sql[skip_whitespace(sql, close + 1)..], dialect);
         if body.is_empty() || matches!(sql.as_bytes().get(next), Some(b')' | b';') | None) {
             return Ok(None);
         }
@@ -114,7 +116,7 @@ pub(crate) fn used_ctes(split: &WithSlices<'_>, dialect: SliceDialect) -> Vec<bo
 }
 
 /// Case-folded identifiers of code outside comments and string literals, quoted ones unquoted.
-fn identifier_keys(sql: &str, dialect: SliceDialect) -> HashSet<String> {
+pub(crate) fn identifier_keys(sql: &str, dialect: SliceDialect) -> HashSet<String> {
     let bytes = sql.as_bytes();
     let mut keys: HashSet<String> = HashSet::new();
     let mut index = 0;
@@ -144,7 +146,45 @@ fn is_tsql(name: &str) -> bool {
     )
 }
 
-fn read_identifier(
+/// Drop trailing `;` terminators and the whitespace or comments after them.
+pub(crate) fn strip_statement_terminators(sql: &str, dialect: SliceDialect) -> &str {
+    let bytes = sql.as_bytes();
+    let mut code_end = 0;
+    let mut terminated = false;
+    let mut index = 0;
+    while index < bytes.len() {
+        match comment_end(bytes, index) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
+            }
+            Ok(None) => {}
+            Err(_) => return sql.trim_end(),
+        }
+        let next = match opaque_end(bytes, index, dialect) {
+            Ok(Some(end)) => end,
+            Ok(None) => index + sql[index..].chars().next().map_or(1, char::len_utf8),
+            Err(_) => return sql.trim_end(),
+        };
+        match bytes[index] {
+            b';' => terminated = true,
+            byte if byte.is_ascii_whitespace() => {}
+            _ => {
+                code_end = next;
+                terminated = false;
+            }
+        }
+        index = next;
+    }
+    if terminated {
+        sql[..code_end].trim_end()
+    } else {
+        sql.trim_end()
+    }
+}
+
+/// Read the identifier at `start`, returning its case-folded key and end offset.
+pub(crate) fn read_identifier(
     sql: &str,
     start: usize,
     dialect: SliceDialect,
@@ -217,7 +257,8 @@ fn matching_paren(sql: &str, open: usize, dialect: SliceDialect) -> Result<usize
     Err(Unclosed::Parenthesis)
 }
 
-fn opaque_end(
+/// Return the end of the comment, string or quoted identifier at `index`, if one starts there.
+pub(crate) fn opaque_end(
     bytes: &[u8],
     index: usize,
     dialect: SliceDialect,

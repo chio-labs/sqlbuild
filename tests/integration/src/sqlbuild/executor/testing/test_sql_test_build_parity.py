@@ -5,15 +5,22 @@ from __future__ import annotations
 import shutil
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
+    ExpectedBooleanTestCase,
     SqlTestBuildParityTestCase,
 )
 from tests.integration.src.sqlbuild.executor.testing.helpers import (
     build_authored_cte_project_files,
+    build_shared_cte_name_chain_entry,
     build_sql_matches_test_body,
+    comparison_rows,
     render_project_test_step,
 )
 
@@ -99,6 +106,29 @@ def test_given_model_ctes_when_rendering_then_build_sql_slices_appear_verbatim(
     assert all(fragment in rendered_sql for fragment in test_case.expected_verbatim_fragments), (
         rendered_sql
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="T-SQL rename matches nesting", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_shared_cte_name_in_chain_when_rendering_tsql_then_rename_runs_like_nesting(
+    test_case: ExpectedBooleanTestCase, adapter: DuckDbAdapter, connection: Any
+) -> None:
+    entry: SqlTestPlanEntry = build_shared_cte_name_chain_entry()
+
+    renamed_sql: str = build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="tsql")
+    nested_sql: str = build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="duckdb")
+
+    assert "__sqb_cte_0 AS (SELECT id + 1 AS id FROM __ref__stg)" in renamed_sql
+    assert "__actual__mart AS (SELECT __sqb_cte_0.id FROM __sqb_cte_0)" in renamed_sql
+    assert "AS (WITH" not in renamed_sql
+    assert (
+        comparison_rows(adapter=adapter, connection=connection, sql=renamed_sql)
+        == comparison_rows(adapter=adapter, connection=connection, sql=nested_sql)
+        == [(0, "stg", 1, 1, 0, 0), (1, "mart", 1, 1, 0, 0)]
+    ) is test_case.expected_result
 
 
 if __name__ == "__main__":
