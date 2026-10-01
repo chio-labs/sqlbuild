@@ -22,3 +22,11 @@ class SourceFreshnessAgeStatus(StrEnum):
     WARN = "warn"
     ERROR = "error"
     UNKNOWN = "unknown"
+
+
+class SourceFreshnessUnknownReason(StrEnum):
+    """Why one source's freshness could not be observed."""
+
+    UNAVAILABLE = "unavailable"
+    ERROR = "error"
+    NO_FRESHNESS_CONFIG = "no_freshness_config"

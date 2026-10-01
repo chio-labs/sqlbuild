@@ -22,6 +22,7 @@ from sqlbuild.presentation.main.transient_line_coordinator import shared_transie
 from sqlbuild.runtime.observability.classes.operation_lifecycle import publish_retry_scheduled
 from tests.unit.src.sqlbuild.cli.progress.classes._test_types import (
     CursorCleanupCase,
+    FreshnessMetadataProjectionCase,
     LockOrderCase,
     NativeProjectionCase,
     RetryProjectionCase,
@@ -658,6 +659,56 @@ def test_given_clone_finalization_lifecycle_when_projected_then_phase_is_visible
     projector.consume(terminal)
 
     assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FreshnessMetadataProjectionCase(
+            description="completed batch reports source and unknown counts",
+            terminal_event_type="operation_completed",
+            terminal_payload={"metadata": {"item_count": 257, "unknown_count": 3}},
+            expected_terminal_line="Freshness metadata  OK (257 sources, 3 unknown)  (0.01s)",
+        ),
+        FreshnessMetadataProjectionCase(
+            description="failed batch explains that every source is unknown",
+            terminal_event_type="operation_failed",
+            terminal_payload={"metadata": {"item_count": 2}, "error_type": "AdapterUserError"},
+            expected_terminal_line=(
+                "Freshness metadata  FAIL (2 sources unknown, metadata lookup failed: "
+                "AdapterUserError)  (0.01s)"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_freshness_metadata_terminal_when_projected_then_line_explains_outcome(
+    test_case: FreshnessMetadataProjectionCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream()
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    start: LifecycleEvent = lifecycle_event(
+        "operation_started",
+        operation_id="freshness-metadata",
+        payload={
+            "operation_kind": "freshness",
+            "operation_name": "source_freshness_metadata_observation",
+        },
+    )
+    terminal: LifecycleEvent = replace(
+        start,
+        event_id="freshness-metadata-terminal",
+        event_type=test_case.terminal_event_type,
+        payload={**start.payload, **test_case.terminal_payload, "duration_ms": 10.0},
+    )
+
+    projector.consume(start)
+    projector.consume(terminal)
+
+    assert stream.getvalue().splitlines() == [
+        "Freshness metadata  START",
+        test_case.expected_terminal_line,
+    ]
 
 
 @pytest.mark.parametrize(

@@ -31,11 +31,16 @@ from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.models import (
+    AdapterSourceFreshnessBatch,
     SourceFreshnessIdentity,
     SourceFreshnessObservation,
     SourceFreshnessRecord,
+    SourceFreshnessUnknown,
 )
-from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.compiler.source_freshness.types import (
+    SourceFreshnessAgeStatus,
+    SourceFreshnessUnknownReason,
+)
 from sqlbuild.runtime.observability.main.run_scope import run_scope
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
@@ -124,11 +129,11 @@ def _observe_source_freshness_for_command(
         ):
             adapter_observation_sources.append(observation_source)
 
-    adapter_observations: dict[str, SourceFreshnessObservation] = {}
+    adapter_batch: AdapterSourceFreshnessBatch = AdapterSourceFreshnessBatch()
     adapter_observation_error: Exception | None = None
     if adapter_observation_sources:
         try:
-            adapter_observations = observe_adapter_sources_freshness(
+            adapter_batch = observe_adapter_sources_freshness(
                 adapter=adapter,
                 connection=connection,
                 sources=tuple(adapter_observation_sources),
@@ -153,7 +158,26 @@ def _observe_source_freshness_for_command(
                     )
                 )
                 continue
-            observation: SourceFreshnessObservation | None = adapter_observations.get(source_name)
+            source_unknown: SourceFreshnessUnknown | None = adapter_batch.unknown.get(source_name)
+            if source_unknown is not None:
+                results.append(
+                    FreshnessSourceResult(
+                        name=source_name,
+                        status=(
+                            FreshnessSourceStatus.UNKNOWN
+                            if source_unknown.reason == SourceFreshnessUnknownReason.UNAVAILABLE
+                            else FreshnessSourceStatus.ERROR
+                        ),
+                        target_database=observation_source.database,
+                        target_schema=observation_source.schema,
+                        target_name=observation_source.table,
+                        message=source_unknown.message,
+                    )
+                )
+                continue
+            observation: SourceFreshnessObservation | None = adapter_batch.observations.get(
+                source_name
+            )
             if observation is None:
                 results.append(
                     FreshnessSourceResult(

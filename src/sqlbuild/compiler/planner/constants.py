@@ -111,3 +111,4 @@ MISSING_ORIGIN_OUTCOMES: dict[MissingMigrationOriginPolicy, str] = {
         "elsewhere or is no longer needed, remove migrate_from"
     ),
 }
+SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE: str = "source freshness unknown"

@@ -103,3 +103,66 @@ def prepare_changed_incremental_diamond_project(*, tmp_path: Path) -> Path:
     assert build.returncode == 0, build.stdout + build.stderr
     change_incremental_diamond_root(project_dir=project_dir)
     return project_dir
+
+
+_MISSING_SOURCE_TABLES_SOURCES_YML: str = """sources:
+  - name: raw_orders
+    schema: raw
+    table: orders
+    freshness:
+      strategy: column
+      column: updated_at
+      type: timestamp
+  - name: raw_customers
+    schema: raw
+    table: customers
+    freshness:
+      strategy: column
+      column: updated_at
+      type: timestamp
+  - name: raw_payments
+    schema: raw
+    table: payments
+    freshness:
+      strategy: column
+      column: updated_at
+      type: timestamp
+"""
+
+
+def prepare_missing_source_tables_project(*, tmp_path: Path) -> Path:
+    """Write three source-reading models where only the payments source table is missing."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="missing_source_tables",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "missing_source_tables"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": _MISSING_SOURCE_TABLES_SOURCES_YML,
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "models/customers.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_customers")\n'
+            ),
+            "models/payments.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_payments")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    statement: str
+    for statement in (
+        "CREATE SCHEMA raw",
+        "CREATE TABLE raw.orders AS SELECT 1 AS order_id, "
+        "TIMESTAMP '2026-01-01 00:00:00' AS updated_at",
+        "CREATE TABLE raw.customers AS SELECT 1 AS customer_id, "
+        "TIMESTAMP '2026-01-02 00:00:00' AS updated_at",
+    ):
+        execute_duckdb(db_path=db_path, sql=statement)
+    return project_dir

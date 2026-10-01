@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.contract.models import (
+    RelationLookup,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
+)
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -22,6 +26,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -284,3 +289,43 @@ def compiled_key(raw: str) -> CompiledObjectKey:
     name: str
     raw_type, name = raw.split(":", 1)
     return CompiledObjectKey(resource_type=CompiledResourceType(raw_type), name=name)
+
+
+class PerTableFreshnessDuckDbAdapter(DuckDbAdapter):
+    """DuckDB adapter double returning configured per-table freshness outcomes."""
+
+    def __init__(self, *, outcomes: dict[str, TableFreshnessMetadata]) -> None:
+        super().__init__()
+        self.outcomes: dict[str, TableFreshnessMetadata] = outcomes
+        self.batch_requests: list[tuple[TableFreshnessRequest, ...]] = []
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return True
+
+    def get_tables_freshness_metadata(
+        self,
+        *,
+        connection: Any,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        del connection
+        self.batch_requests.append(requests)
+        requests_by_name: dict[str, TableFreshnessRequest] = {
+            request.name: request for request in requests
+        }
+        return {requests_by_name[name]: metadata for name, metadata in self.outcomes.items()}
+
+
+def observed_table_freshness(version: int) -> TableFreshnessMetadata:
+    """Return an observed integer table freshness outcome."""
+
+    return TableFreshnessMetadata(data_version=version, value_kind="integer")
+
+
+def physical_table_sources(*, freshness: SourceFreshnessConfig | None) -> tuple[SourceEntry, ...]:
+    """Return the orders, customers, and payments physical table sources."""
+
+    return tuple(
+        SourceEntry(name=name, schema="raw", table=name, freshness=freshness)
+        for name in ("orders", "customers", "payments")
+    )

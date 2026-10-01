@@ -30,6 +30,7 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
+from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -41,6 +42,7 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationGrant,
     RelationInfo,
+    RelationReadProbe,
     RowDiffCoverage,
     RowDiffPreparedRelations,
     RowDiffResult,
@@ -271,6 +273,16 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         cursor: Any = self.execute(connection=connection, sql=f"DESCRIBE {relation}")
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        """Probe a rendered relation; only the adapter's not-found errors become missing."""
+
+        return run_relation_read_probe(
+            execute=self.execute,
+            connection=connection,
+            relation=relation,
+            classify_not_found=lambda error: None,
+        )
+
     def get_table_freshness_metadata(
         self,
         *,
@@ -292,12 +304,15 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
         request: TableFreshnessRequest
         for request in requests:
-            results[request] = self.get_table_freshness_metadata(
-                connection=connection,
-                database=request.database,
-                schema=request.schema,
-                name=request.name,
-            )
+            try:
+                results[request] = self.get_table_freshness_metadata(
+                    connection=connection,
+                    database=request.database,
+                    schema=request.schema,
+                    name=request.name,
+                )
+            except AdapterUserError as error:
+                results[request] = TableFreshnessMetadata.unavailable(message=error.message)
         return results
 
     def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:

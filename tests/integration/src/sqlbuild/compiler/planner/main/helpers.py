@@ -12,6 +12,7 @@ from tempfile import gettempdir
 from types import MappingProxyType
 from typing import Any, cast
 
+from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -550,3 +551,64 @@ def relations_in_database(
     """Move every synthetic relation into another database."""
 
     return tuple(replace(relation, database=database) for relation in project.relations)
+
+
+class CountingSourceDuckDbAdapter(DuckDbAdapter):
+    """Plan against one shared DuckDB connection, counting source listings and probes."""
+
+    def __init__(self, *, connection: Any) -> None:
+        super().__init__()
+        self._shared_connection: Any = connection
+        self.listed_schema_sets: list[tuple[str, ...]] = []
+        self.probed_relations: list[str] = []
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        del config
+        return self._shared_connection
+
+    def close(self, connection: Any) -> None:
+        del connection
+
+    def list_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        self.listed_schema_sets.append(tuple(schema.lower() for schema in schemas or ()))
+        return super().list_relations(
+            connection=connection, database=database, schemas=schemas, names=names
+        )
+
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        self.probed_relations.append(relation)
+        return super().probe_relation_read(connection=connection, relation=relation)
+
+
+def plan_source_reading_project(
+    *, project_dir: Path, adapter: DuckDbAdapter, source_schema: str, source_table: str
+) -> CompilePipelineResult:
+    """Write and plan one model reading one declared table source."""
+
+    project_files: dict[str, str] = {
+        "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+        "sources/raw.yml": (
+            f"sources:\n  - name: raw_orders\n    schema: {source_schema}\n"
+            f"    table: {source_table}\n"
+        ),
+        "models/orders.sql": (
+            'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+        ),
+    }
+    relative_path: str
+    contents: str
+    for relative_path, contents in project_files.items():
+        (project_dir / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        (project_dir / relative_path).write_text(contents, encoding="utf-8")
+    return run_compile_pipeline(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=adapter,
+        options=CompilePipelineOptions(no_sql_validation=True),
+    )

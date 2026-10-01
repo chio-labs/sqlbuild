@@ -157,3 +157,12 @@ class SnowflakeMissingDatabaseTestCase:
     description: str
     warehouse_database: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SourceTableProbeBudgetTestCase:
+    description: str
+    source_schema: str
+    source_table: str
+    expected_source_listings: int
+    expected_probes: tuple[str, ...]

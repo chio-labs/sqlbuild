@@ -17,7 +17,11 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapter.contract.types import (
+    CursorKind,
+    FunctionNullabilityRule,
+    TableFreshnessStatus,
+)
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.models import (
     FunctionArgument,
@@ -46,6 +50,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeTableFreshnessBatchTestCase,
     SnowflakeTableFreshnessMetadataErrorTestCase,
     SnowflakeTableFreshnessMetadataTestCase,
+    SnowflakeTableFreshnessOutcomeTestCase,
     SnowflakeTableTypeDdlTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
@@ -957,6 +962,60 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last
     assert " OR " not in cursor.executed_sql
     assert cursor.executed_params == ("ANALYTICS", "RAW", "ORDERS", "CUSTOMERS")
     assert cursor.closed is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTableFreshnessOutcomeTestCase(
+            description="isolates absent, view, and null metadata per table",
+            rows=(
+                ("ANALYTICS", "RAW", "ORDERS", "BASE TABLE", datetime(2026, 1, 2, 3, 4, 5)),
+                ("ANALYTICS", "RAW", "CUSTOMERS_V", "VIEW", datetime(2026, 1, 2, 3, 4, 5)),
+                ("ANALYTICS", "RAW", "PAYMENTS", "BASE TABLE", None),
+            ),
+            expected_statuses={
+                "ORDERS": TableFreshnessStatus.OBSERVED,
+                "CUSTOMERS_V": TableFreshnessStatus.UNAVAILABLE,
+                "PAYMENTS": TableFreshnessStatus.UNAVAILABLE,
+                "SHIPMENTS": TableFreshnessStatus.UNAVAILABLE,
+            },
+            expected_message_fragments={
+                "CUSTOMERS_V": "only supports physical tables",
+                "PAYMENTS": "missing LAST_ALTERED",
+                "SHIPMENTS": "not found for SHIPMENTS",
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_batch_with_missing_and_unusable_tables_when_getting_freshness_then_reports_each_table(
+    test_case: SnowflakeTableFreshnessOutcomeTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    requests: tuple[TableFreshnessRequest, ...] = tuple(
+        TableFreshnessRequest(database="ANALYTICS", schema="RAW", name=name)
+        for name in test_case.expected_statuses
+    )
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(rows=list(test_case.rows))
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+
+    metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
+        adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
+    )
+
+    assert {
+        request.name: metadata_by_request[request].status for request in requests
+    } == test_case.expected_statuses
+    assert metadata_by_request[requests[0]].data_version == test_case.rows[0][4]
+    messages_by_name: dict[str, str] = {
+        request.name: str(metadata.message) for request, metadata in metadata_by_request.items()
+    }
+    assert {
+        name: fragment in messages_by_name[name]
+        for name, fragment in test_case.expected_message_fragments.items()
+    } == dict.fromkeys(test_case.expected_message_fragments, True)
+    assert cursor.executed_params == ("ANALYTICS", "RAW", *test_case.expected_statuses)
 
 
 @pytest.mark.parametrize(

@@ -29,3 +29,7 @@ PYTHON_INIT_FILE_NAME: str = "__init__.py"
 PYTHON_IDENTIFIER_REPLACEMENT: str = "_"
 
 SNAPSHOT_VERSION_START_COLUMN: str = "__version_start"
+DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES: frozenset[str] = frozenset(
+    {"CatalogException", "BinderException"}
+)
+DUCKDB_MISSING_OBJECT_MARKER: str = "does not exist"

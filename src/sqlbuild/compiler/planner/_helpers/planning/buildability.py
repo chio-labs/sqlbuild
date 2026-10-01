@@ -8,24 +8,31 @@ from sqlbuild.compiler.planner._helpers.graph.buildability import (
     missing_upstream_message,
 )
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_edge_origins
+from sqlbuild.compiler.planner._helpers.warehouse.source_tables import (
+    check_selected_source_tables_exist,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     MissingUpstream,
+    PlannerRuntime,
     PlannerScopeResolution,
+    PlannerWarehouseState,
     WarehouseSnapshot,
 )
 
 
 def check_selected_scope_buildability(
     *,
-    project: CompiledProject,
+    runtime: PlannerRuntime,
     scopes: PlannerScopeResolution,
-    snapshot: WarehouseSnapshot,
+    warehouse: PlannerWarehouseState,
     deferral: DeferralInputs,
 ) -> None:
-    """Raise a planner input error when selected upstream dependencies are missing."""
+    """Raise a planner input error when selected upstream inputs are missing."""
 
+    project: CompiledProject = runtime.project
+    snapshot: WarehouseSnapshot = warehouse.snapshot
     external_seed_keys: frozenset[CompiledObjectKey] = frozenset(
         seed.key for seed in project.seeds if seed.external
     )
@@ -43,3 +50,10 @@ def check_selected_scope_buildability(
             ),
             code="S301",
         )
+    check_selected_source_tables_exist(
+        project=project,
+        adapter=runtime.adapter,
+        connection=runtime.connection,
+        scope=scopes.selected_scope,
+        relations=warehouse.inspection_relations,
+    )

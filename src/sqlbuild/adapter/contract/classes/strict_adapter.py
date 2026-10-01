@@ -17,6 +17,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     MigrationStagePlan,
     RelationGrant,
+    RelationReadProbe,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -135,6 +136,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        """Probe a rendered relation; only the adapter's not-found errors become missing."""
+        ...
+
+    @abstractmethod
     def get_table_freshness_metadata(
         self,
         *,
@@ -153,7 +159,7 @@ class StrictAdapter(
         connection: Any,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
-        """Return comparable freshness metadata for physical tables in batch."""
+        """Return one freshness outcome per requested table without failing the whole batch."""
         ...
 
     @abstractmethod

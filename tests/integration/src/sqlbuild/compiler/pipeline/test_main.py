@@ -32,12 +32,16 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     SqlAnalysisChainCompileTargetIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
+    apply_warehouse_setup_sql,
     build_manifest_for_pipeline_result,
     run_compile_pipeline_for_project,
     validate_manifest_against_dbt_schema,
 )
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+_FILE_PROJECT_TOML: str = (
+    'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "warehouse.duckdb"\n'
+)
 
 
 @pytest.mark.parametrize(
@@ -234,8 +238,9 @@ def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_i
         ),
         RunCompilePipelineIntegrationTestCase(
             description="model with source reference resolves source to qualified name",
+            warehouse_setup_sql=("CREATE TABLE main.payments AS SELECT 1 AS payment_id",),
             project_files={
-                "sqlbuild_project.toml": _PROJECT_TOML,
+                "sqlbuild_project.toml": _FILE_PROJECT_TOML,
                 "sources/raw.yml": (
                     "sources:\n  - name: raw_payments\n    schema: main\n    table: payments\n"
                 ),
@@ -368,8 +373,11 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
     test_case: RunCompilePipelineIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
+    monkeypatch.chdir(tmp_path)
+    apply_warehouse_setup_sql(project_dir=tmp_path, statements=test_case.warehouse_setup_sql)
 
     result: CompilePipelineResult = run_compile_pipeline_for_project(
         project_dir=tmp_path,
@@ -683,7 +691,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
                     'name = "demo"\n'
                     'adapter = "duckdb"\n\n'
                     "[connection]\n"
-                    'database = ":memory:"\n\n'
+                    'database = "warehouse.duckdb"\n\n'
                     "[settings]\n"
                     "sql_analysis = true\n"
                 ),
@@ -706,6 +714,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
                     "SELECT 1\n"
                 ),
             },
+            warehouse_setup_sql=("CREATE TABLE main.raw AS SELECT 1 AS id, 100 AS amount",),
             compiled_test_path=(
                 "target/compiled/tests/_chain_/fact_orders__stg_orders/test_chain.sql"
             ),
@@ -737,8 +746,11 @@ def test_given_sql_analysis_enabled_chain_test_when_writing_compile_target_then_
     test_case: SqlAnalysisChainCompileTargetIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
+    monkeypatch.chdir(tmp_path)
+    apply_warehouse_setup_sql(project_dir=tmp_path, statements=test_case.warehouse_setup_sql)
 
     result: CompilePipelineResult = run_compile_pipeline_for_project(
         project_dir=tmp_path,

@@ -202,3 +202,17 @@ def trace_native_compact_batches(monkeypatch: pytest.MonkeyPatch) -> list[Compac
 
     monkeypatch.setattr(compact, "_run_compact_analysis_batch", traced)
     return preparations
+
+
+def apply_warehouse_setup_sql(*, project_dir: Path, statements: tuple[str, ...]) -> None:
+    """Create pre-existing warehouse objects in the project's file-backed DuckDB database."""
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / "warehouse.duckdb"))
+    try:
+        statement: str
+        for statement in statements:
+            connection.execute(statement)
+    finally:
+        connection.close()

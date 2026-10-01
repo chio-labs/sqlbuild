@@ -33,13 +33,18 @@ from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.models import (
+    AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
     SourceFreshnessObservation,
     SourceFreshnessRecord,
     SourceFreshnessSet,
+    SourceFreshnessUnknown,
 )
-from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.compiler.source_freshness.types import (
+    SourceFreshnessAgeStatus,
+    SourceFreshnessUnknownReason,
+)
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 
@@ -73,7 +78,7 @@ def build_direct_source_freshness_planning_result(
         )
     )
     observed_records: list[SourceFreshnessRecord] = []
-    unknown_source_names: list[str] = []
+    unconfigured_sources: dict[str, SourceFreshnessUnknown] = {}
     changed_identities: set[SourceFreshnessIdentity] = set()
     unchanged_identities: set[SourceFreshnessIdentity] = set()
     age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = {}
@@ -89,7 +94,11 @@ def build_direct_source_freshness_planning_result(
             source=source,
         )
         if observation_source is None:
-            unknown_source_names.append(source.name)
+            unconfigured_sources[source.name] = SourceFreshnessUnknown(
+                source_name=source.name,
+                reason=SourceFreshnessUnknownReason.NO_FRESHNESS_CONFIG,
+                message="no freshness config and adapter metadata unavailable",
+            )
             continue
         observation_sources_by_name[source.name] = observation_source
         if observation_source.freshness is not None and (
@@ -97,23 +106,24 @@ def build_direct_source_freshness_planning_result(
         ):
             adapter_observation_sources.append(observation_source)
 
-    adapter_observations: dict[str, SourceFreshnessObservation] = {}
-    if adapter_observation_sources:
-        try:
-            adapter_observations = observe_adapter_sources_freshness(
-                adapter=adapter,
-                connection=connection,
-                sources=tuple(adapter_observation_sources),
-                observed_at=observed_at,
-            )
-        except (AdapterUserError, SourceFreshnessObservationError):
-            unknown_source_names.extend(source.name for source in adapter_observation_sources)
+    adapter_batch: AdapterSourceFreshnessBatch = _observe_adapter_batch(
+        adapter=adapter,
+        connection=connection,
+        sources=tuple(adapter_observation_sources),
+        observed_at=observed_at,
+    )
+    unknown_sources: dict[str, SourceFreshnessUnknown] = {
+        **unconfigured_sources,
+        **adapter_batch.unknown,
+    }
 
     for source_name, observation_source in observation_sources_by_name.items():
         if observation_source.freshness is not None and (
             observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
         ):
-            observation: SourceFreshnessObservation | None = adapter_observations.get(source_name)
+            observation: SourceFreshnessObservation | None = adapter_batch.observations.get(
+                source_name
+            )
             if observation is None:
                 continue
         else:
@@ -124,13 +134,17 @@ def build_direct_source_freshness_planning_result(
                     source=observation_source,
                     observed_at=observed_at,
                 )
-            except AdapterUserError:
-                unknown_source_names.append(source_name)
+            except AdapterUserError as exc:
+                unknown_sources[source_name] = _error_unknown(
+                    source_name=source_name, message=exc.message
+                )
                 continue
             except SourceFreshnessObservationError as exc:
                 if _source_freshness_error_is_configuration_error(error=exc):
                     raise
-                unknown_source_names.append(source_name)
+                unknown_sources[source_name] = _error_unknown(
+                    source_name=source_name, message=str(exc)
+                )
                 continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(
             observation=observation,
@@ -171,8 +185,41 @@ def build_direct_source_freshness_planning_result(
         ),
         changed_identities=frozenset(changed_identities),
         unchanged_identities=frozenset(unchanged_identities),
-        unknown_source_names=tuple(sorted(unknown_source_names)),
+        unknown_source_names=tuple(sorted(unknown_sources)),
+        unknown_sources=dict(sorted(unknown_sources.items())),
         age_statuses=age_statuses,
+    )
+
+
+def _observe_adapter_batch(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    sources: tuple[SourceEntry, ...],
+    observed_at: datetime,
+) -> AdapterSourceFreshnessBatch:
+    try:
+        return observe_adapter_sources_freshness(
+            adapter=adapter,
+            connection=connection,
+            sources=sources,
+            observed_at=observed_at,
+        )
+    except (AdapterUserError, SourceFreshnessObservationError) as exc:
+        message: str = exc.message if isinstance(exc, AdapterUserError) else str(exc)
+        return AdapterSourceFreshnessBatch(
+            unknown={
+                source.name: _error_unknown(source_name=source.name, message=message)
+                for source in sources
+            }
+        )
+
+
+def _error_unknown(*, source_name: str, message: str) -> SourceFreshnessUnknown:
+    return SourceFreshnessUnknown(
+        source_name=source_name,
+        reason=SourceFreshnessUnknownReason.ERROR,
+        message=message,
     )
 
 

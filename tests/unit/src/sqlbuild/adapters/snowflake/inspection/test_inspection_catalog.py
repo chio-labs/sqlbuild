@@ -14,6 +14,7 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
+from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
@@ -229,29 +230,33 @@ def test_given_open_catalog_when_reading_source_freshness_then_reads_requested_t
     "test_case",
     [
         FreshnessErrorTestCase(
-            description="view freshness fails like the direct read",
+            description="view freshness is unavailable like the direct read",
             request=("analytics", "staging", "customers_v"),
             expected_error_fragment="only supports physical tables",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_open_catalog_when_freshness_targets_a_view_then_raises_like_direct_read(
+def test_given_open_catalog_when_freshness_targets_a_view_then_reports_unavailable_like_direct_read(
     test_case: FreshnessErrorTestCase,
 ) -> None:
     adapter, connection, _ = build_offline_snowflake(relations=build_inspection_catalog_relations())
     database, schema, name = test_case.request
-    requests: tuple[TableFreshnessRequest, ...] = (
-        TableFreshnessRequest(database=database, schema=schema, name=name),
+    request: TableFreshnessRequest = TableFreshnessRequest(
+        database=database, schema=schema, name=name
     )
-    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
-        _ = adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
+    direct: TableFreshnessMetadata = adapter.get_tables_freshness_metadata(
+        connection=connection, requests=(request,)
+    )[request]
 
-    with (
-        open_inspection_catalog(adapter=adapter, connection=connection),
-        pytest.raises(AdapterUserError, match=test_case.expected_error_fragment),
-    ):
-        _ = adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
+    with open_inspection_catalog(adapter=adapter, connection=connection):
+        served: TableFreshnessMetadata = adapter.get_tables_freshness_metadata(
+            connection=connection, requests=(request,)
+        )[request]
+
+    assert served == direct
+    assert direct.status == TableFreshnessStatus.UNAVAILABLE
+    assert test_case.expected_error_fragment in str(direct.message)
 
 
 @pytest.mark.parametrize(

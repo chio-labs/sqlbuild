@@ -12,6 +12,7 @@ Online: https://sqlbuild.com/docs/cli/plan/
 - Flags
 - Output
 - Missing upstream dependencies
+- Missing source tables
 
 Shows the execution plan without making any changes. Useful for inspecting change detection, backfill policies, and selector scope before building.
 
@@ -122,3 +123,10 @@ error[S301]: cannot build selected scope: audit 'relationships' on 'stg_orders' 
 
 Load or build the resource first (for a seed, `sqb seed`), or add it to the selection. When both
 kinds are missing, the error lists the missing upstream dependencies and then the audit reads.
+
+## Missing source tables
+
+When a selected model reads an external source whose table does not exist in the warehouse,
+planning fails with `S405` before anything runs. The error names each missing source, its table,
+the selected models that read it, and the source declaration file and line. See
+[Source freshness: Missing source tables](../concepts/planning/source-freshness.md#missing-source-tables).

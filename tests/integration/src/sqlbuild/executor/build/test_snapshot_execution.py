@@ -29,6 +29,7 @@ from tests.integration.src.sqlbuild.executor.build._test_types import (
     SnapshotTimestampFailureTestCase,
 )
 from tests.integration.src.sqlbuild.executor.build.helpers import (
+    SharedConnectionDuckDbAdapter,
     run_build_for_project,
     verify_model_statuses,
 )
@@ -3086,6 +3087,10 @@ def test_given_check_snapshot_with_execution_initial_validity_when_building_then
                     'SELECT customer_id, updated_at FROM __source("raw_customers")'
                 ),
             },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+            ),
             expected_status=BuildStatus.SUCCESS,
             expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
         )
@@ -3096,14 +3101,17 @@ def test_given_snapshot_initial_validity_config_when_planning_then_plan_entry_pr
     test_case: BuildExecutionTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
-    adapter: DuckDbAdapter,
+    connection: Any,
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
+    sql: str
+    for sql in test_case.setup_sql:
+        connection.execute(sql)
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
-        adapter=adapter,
+        adapter=SharedConnectionDuckDbAdapter(connection=connection),
         options=CompilePipelineOptions(no_sql_validation=True),
     )
     plan: PlanOutput = pipeline_result.plan_output

@@ -13,6 +13,9 @@ from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention
 from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
 )
+from sqlbuild.compiler.planner._helpers.warehouse.source_freshness_warnings import (
+    build_source_freshness_unknown_warnings,
+)
 from sqlbuild.compiler.planner.models import (
     ColumnRenameHint,
     ModelPlanEntry,
@@ -142,8 +145,16 @@ def with_plan_warnings(
     plan_output: PlanOutput,
     policies: PlannerPolicies,
 ) -> PlanOutput:
-    """Append stale-out-of-selection warnings to the plan."""
+    """Append source freshness and stale-out-of-selection warnings to the plan."""
 
+    freshness_warnings: tuple[PlanWarning, ...] = build_source_freshness_unknown_warnings(
+        source_freshness=source_freshness
+    )
+    if freshness_warnings:
+        plan_output = replace(
+            plan_output,
+            warnings=(*plan_output.warnings, *freshness_warnings),
+        )
     if not policies.selection_diagnostics:
         return plan_output
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
@@ -242,6 +253,14 @@ def _serialize_direct_source_freshness_metadata(
         "changed_source_names": changed_source_names,
         "unchanged_source_names": unchanged_source_names,
         "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
+        "unknown_source_details": tuple(
+            {
+                "source_name": unknown.source_name,
+                "reason": unknown.reason.value,
+                "message": unknown.message,
+            }
+            for unknown in source_freshness.unknown_sources.values()
+        ),
         "age_warning_source_names": age_warning_source_names,
         "age_error_source_names": age_error_source_names,
         "stale_model_names": stale_model_names,

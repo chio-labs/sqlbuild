@@ -18,7 +18,11 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapter.contract.types import (
+    CursorKind,
+    FunctionNullabilityRule,
+    TableFreshnessStatus,
+)
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
@@ -246,14 +250,14 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_bigquery_use
     "test_case",
     [
         BigQueryTableFreshnessWildcardTestCase(
-            description="rejects wildcard table metadata freshness",
+            description="reports wildcard table metadata freshness unavailable",
             table_name="events_*",
             expected_error_fragment="does not support wildcard tables",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_raises_clear_error(
+def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_reports_unavailable(
     test_case: BigQueryTableFreshnessWildcardTestCase,
 ) -> None:
     adapter: BigQueryAdapter = BigQueryAdapter()
@@ -267,8 +271,12 @@ def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_rais
         location="US",
     )
 
-    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
-        adapter.get_tables_freshness_metadata(connection=connection, requests=(request,))
+    metadata: TableFreshnessMetadata = adapter.get_tables_freshness_metadata(
+        connection=connection, requests=(request,)
+    )[request]
+
+    assert metadata.status == TableFreshnessStatus.UNAVAILABLE
+    assert test_case.expected_error_fragment in str(metadata.message)
 
 
 @pytest.mark.parametrize(

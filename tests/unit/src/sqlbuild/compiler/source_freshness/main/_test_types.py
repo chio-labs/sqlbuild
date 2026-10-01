@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild.adapter.contract.models import TableFreshnessMetadata
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessUnknownReason
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 
 
@@ -190,3 +192,11 @@ class DirectSourceFreshnessExpressionTestCase:
     expression: str
     column: str
     expected_data_version: str
+
+
+@dataclass(frozen=True)
+class AdapterBatchIsolationTestCase:
+    description: str
+    outcomes: dict[str, TableFreshnessMetadata]
+    expected_observed_names: tuple[str, ...]
+    expected_unknown_reasons: dict[str, SourceFreshnessUnknownReason]

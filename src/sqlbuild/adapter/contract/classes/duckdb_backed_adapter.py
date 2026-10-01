@@ -32,9 +32,12 @@ from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
+    DUCKDB_MISSING_OBJECT_MARKER,
+    DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES,
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -46,6 +49,7 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationGrant,
     RelationInfo,
+    RelationReadProbe,
     RowDiffColumnResult,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -66,6 +70,7 @@ from sqlbuild.adapter.contract.types import (
     LoaderLogicalType,
     MigrationTransfer,
     PromotionStrategy,
+    RelationReadStatus,
     StatementSizeLimit,
     TablePromotionMode,
 )
@@ -119,6 +124,23 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
 
     def supports_table_freshness_metadata(self) -> bool:
         return False
+
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        return run_relation_read_probe(
+            execute=self.execute,
+            connection=connection,
+            relation=relation,
+            classify_not_found=self._classify_relation_not_found,
+        )
+
+    @staticmethod
+    def _classify_relation_not_found(error: BaseException) -> RelationReadStatus | None:
+        return (
+            RelationReadStatus.MISSING
+            if type(error).__name__ in DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES
+            and DUCKDB_MISSING_OBJECT_MARKER in str(error)
+            else None
+        )
 
     def get_table_freshness_metadata(
         self,

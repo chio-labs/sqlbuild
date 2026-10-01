@@ -20,9 +20,9 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _build_cursor_input_relations,
     _runtime_cursor_producer_names,
     build_planner_relations_context,
-    gather_source_columns,
     validate_source_cursor_input_columns,
 )
+from sqlbuild.compiler.planner._helpers.warehouse.source_columns import gather_source_columns
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorInputRelation,

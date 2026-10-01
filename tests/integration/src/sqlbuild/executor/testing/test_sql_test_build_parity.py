@@ -22,6 +22,7 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
     build_sql_matches_test_body,
     comparison_rows,
     render_project_test_step,
+    render_project_test_step_over_tables,
 )
 
 _WAFFLE_SHOP: Path = Path(__file__).resolve().parents[6] / "tests/e2e/fixtures/waffle_shop"
@@ -98,8 +99,11 @@ def test_given_model_ctes_when_rendering_then_build_sql_slices_appear_verbatim(
 ) -> None:
     write_repo_files(tmp_path, build_authored_cte_project_files())
 
-    build_sql, test_body, rendered_sql = render_project_test_step(
-        project_dir=tmp_path, test_name=test_case.test_name, model_name=test_case.model_name
+    build_sql, test_body, rendered_sql = render_project_test_step_over_tables(
+        project_dir=tmp_path,
+        test_name=test_case.test_name,
+        model_name=test_case.model_name,
+        setup_sql=("CREATE TABLE main.raw_orders (id INTEGER, amount INTEGER)",),
     )
 
     assert build_sql_matches_test_body(build_sql=build_sql, test_body=test_body), test_body

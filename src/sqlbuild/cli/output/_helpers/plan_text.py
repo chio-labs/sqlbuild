@@ -16,6 +16,7 @@ from sqlbuild.cli.output._helpers.selection_diagnostics import direct_selection_
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus, PlanRowKind
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
+from sqlbuild.compiler.planner.constants import SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
@@ -1300,6 +1301,10 @@ def _format_warnings(
         and (
             include_stale_input_warnings
             or not warning.message.startswith(_STALE_INPUT_WARNING_TITLE)
+        )
+        and not (
+            include_direct_freshness_diagnostics
+            and warning.message.startswith(SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE)
         )
     ]
     style: CliStyle = CliStyle(use_color=True)

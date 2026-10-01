@@ -9,7 +9,7 @@ from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness._helpers.observation import (
     observe_adapter_sources_freshness as _observe_adapter_sources_freshness,
 )
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
+from sqlbuild.compiler.source_freshness.models import AdapterSourceFreshnessBatch
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -19,8 +19,8 @@ def observe_adapter_sources_freshness(
     connection: Any,
     sources: tuple[SourceEntry, ...],
     observed_at: datetime,
-) -> dict[str, SourceFreshnessObservation]:
-    """Observe adapter metadata freshness for physical table sources in one batch."""
+) -> AdapterSourceFreshnessBatch:
+    """Observe adapter metadata freshness per source, batching the warehouse lookups."""
 
     return _observe_adapter_sources_freshness(
         adapter=adapter,

@@ -16,10 +16,12 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotInsertStyle,
     LifeCycleEventKind,
     MigrationTransfer,
+    RelationReadStatus,
     RetentionChangePhase,
     RetentionScope,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
+    TableFreshnessStatus,
     TypeFamily,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -136,12 +138,33 @@ class RelationLookup:
 
 
 @dataclass(frozen=True)
+class RelationReadProbe:
+    """Whether a rendered relation is readable, and the role used when the adapter knows it."""
+
+    status: RelationReadStatus
+    role: str | None = None
+
+
+@dataclass(frozen=True)
 class TableFreshnessMetadata:
-    """Adapter-observed freshness metadata for one physical table source."""
+    """Adapter freshness outcome for one physical table: observed or unavailable."""
 
     data_version: object
     value_kind: str
     observed_at: datetime | None = None
+    status: TableFreshnessStatus = TableFreshnessStatus.OBSERVED
+    message: str | None = None
+
+    @classmethod
+    def unavailable(cls, *, message: str) -> TableFreshnessMetadata:
+        """Return the outcome for a table whose freshness metadata cannot be compared."""
+
+        return cls(
+            data_version=None,
+            value_kind="timestamp",
+            status=TableFreshnessStatus.UNAVAILABLE,
+            message=message,
+        )
 
 
 @dataclass(frozen=True)

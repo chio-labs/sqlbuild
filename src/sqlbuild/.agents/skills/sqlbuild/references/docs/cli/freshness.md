@@ -74,6 +74,12 @@ Summary: observed=3 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0
 
 Sources without explicit `freshness:` config are auto-observed using the `adapter` strategy if the adapter supports table metadata. Sources that can't be observed (expression sources, managed sources without freshness config on unsupported adapters) show as `unknown`.
 
+Each source is reported on its own. Adapter metadata is fetched in one batched lookup, but a
+source the metadata can't describe affects only that source: it shows as `unknown` with the
+reason (for example a view, an external table, a table with no last-modified time, or a table the
+metadata lookup did not find). A column or SQL freshness query that fails shows as `error`. The
+other sources are still observed.
+
 ## Comparing against state
 
 Use `--state` to compare current observations against the freshness state stored from the last successful build:
@@ -105,7 +111,7 @@ Summary: observed=0 changed=1 unchanged=1 tolerated=1 unknown=0 errors=0
 | `changed` | Data version differs from the stored state |
 | `unchanged` | Data version matches the stored state exactly |
 | `tolerated` | Data version differs but is within the `lag_tolerance` threshold |
-| `unknown` | No freshness config and adapter metadata unavailable, or no previous state to compare against |
+| `unknown` | No freshness config and adapter metadata unavailable, metadata unavailable for an existing table, or no previous state to compare against |
 | `error` | Observation failed (e.g. source table does not exist, query error) |
 
 ## CI integration
