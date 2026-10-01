@@ -1,5 +1,7 @@
 //! Token positions that decide which authored words may change letter case.
 
+use polyglot_sql::tokens::TokenType;
+
 /// Column aliases after `AS` may be any keyword in DuckDB and PostgreSQL.
 pub(crate) const ALIAS_KEYWORD: &str = "AS";
 /// The token that turns a preceding name into a function call.
@@ -14,4 +16,20 @@ pub(crate) const CALL_SYNTAX_FUNCTIONS: [&str; 6] = [
     "EXTRACT",
     "CONVERT",
     "TRY_CONVERT",
+];
+
+pub(crate) const PROJECTION_ENDS: [TokenType; 13] = [
+    TokenType::From,
+    TokenType::Where,
+    TokenType::Group,
+    TokenType::GroupBy,
+    TokenType::Having,
+    TokenType::Qualify,
+    TokenType::Order,
+    TokenType::OrderBy,
+    TokenType::Limit,
+    TokenType::Window,
+    TokenType::Union,
+    TokenType::Except,
+    TokenType::Intersect,
 ];

@@ -418,3 +418,11 @@ class ResourceSqlHelpCase:
     description: str
     files: tuple[tuple[str, str], ...]
     expected_diagnostics: tuple[tuple[str, str, str | None], ...]
+
+
+@dataclass(frozen=True)
+class TypeFindingLocationCase:
+    description: str
+    adapter: str
+    query_sql: str
+    expected_diagnostics: tuple[tuple[str, str, int, int], ...]

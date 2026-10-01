@@ -204,3 +204,6 @@ for example `order_id = CAST(customer_code AS INTEGER)`, or an explicit comparis
 
 B002–B005 predate these changes and overlap the executor's separately phased build codes. New
 semantic codes use distinct ranges. Authored model diagnostics retain source paths and positions.
+Cast, coercible-literal and set-operation findings point at the offending cast, literal or branch
+projection, and every finding is reported: two failing casts in one query are two diagnostics at
+their own locations, never one merged diagnostic at the statement start.

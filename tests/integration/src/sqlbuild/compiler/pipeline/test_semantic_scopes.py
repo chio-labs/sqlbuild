@@ -187,10 +187,11 @@ def test_given_macro_before_invalid_aggregate_when_compiling_then_reports_author
             "B218",
         ),
         SemanticCompileCase(
-            "identical span-less conversions are reported once",
+            "identical conversions are each reported at their own literal",
             _UPSTREAM,
             "SELECT 1 = 'not-a-number' AS first_result, 2 = 'not-a-number' AS second_result",
             "B218",
+            expected_diagnostic_count=2,
         ),
     ],
     ids=lambda case: case.description,
