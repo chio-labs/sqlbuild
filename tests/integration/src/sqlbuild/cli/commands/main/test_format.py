@@ -259,7 +259,6 @@ def test_given_table_function_argument_when_formatting_then_intrinsic_restores_a
     function.parent.mkdir(parents=True)
     function.write_text(
         """FUNCTION (
-  description "Expand one order",
   arguments (order_id INTEGER),
   returns table (order_id INTEGER)
 );
