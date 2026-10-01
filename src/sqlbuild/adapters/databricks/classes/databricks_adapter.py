@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
     complete_table_freshness_results,
 )
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -115,7 +116,9 @@ from sqlbuild.adapters.databricks.constants import (
     DELTA_DEFAULT_LOG_RETENTION_DAYS,
     DELTA_RELATION_FORMAT,
     NON_ROW_RESULT_COLUMN_NAMES,
+    TABLE_OR_VIEW_NOT_FOUND_ERROR_CLASS,
     TABLE_RELATION_METADATA_TYPES,
+    UNDEFINED_TABLE_SQLSTATE,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
@@ -549,6 +552,21 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_table_freshness_metadata(self) -> bool:
         return True
 
+    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
+        return probe_relation_exists(
+            execute=self.execute,
+            connection=connection,
+            relation=relation,
+            is_not_found=self._is_relation_not_found_error,
+        )
+
+    @staticmethod
+    def _is_relation_not_found_error(error: BaseException) -> bool:
+        return (
+            TABLE_OR_VIEW_NOT_FOUND_ERROR_CLASS in str(error)
+            or getattr(error, "sqlstate", None) == UNDEFINED_TABLE_SQLSTATE
+        )
+
     def get_table_freshness_metadata(
         self,
         *,
@@ -728,10 +746,9 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             if matched_request is None:
                 continue
             if row[3] is None:
-                results[matched_request] = TableFreshnessMetadata.unavailable(
+                raise AdapterUserError(
                     message=f"Databricks Delta history not found for {matched_request.name}"
                 )
-                continue
             results[matched_request] = TableFreshnessMetadata(
                 data_version=row[3],
                 value_kind="timestamp",

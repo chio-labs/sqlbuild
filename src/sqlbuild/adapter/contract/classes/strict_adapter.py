@@ -135,6 +135,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
+        """Probe a rendered relation; False only for the adapter's object-not-found error."""
+        ...
+
+    @abstractmethod
     def get_table_freshness_metadata(
         self,
         *,

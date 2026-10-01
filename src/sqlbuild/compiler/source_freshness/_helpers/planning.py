@@ -78,7 +78,7 @@ def build_direct_source_freshness_planning_result(
         )
     )
     observed_records: list[SourceFreshnessRecord] = []
-    unknown_source_names: list[str] = []
+    unconfigured_sources: dict[str, SourceFreshnessUnknown] = {}
     changed_identities: set[SourceFreshnessIdentity] = set()
     unchanged_identities: set[SourceFreshnessIdentity] = set()
     age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = {}
@@ -94,7 +94,11 @@ def build_direct_source_freshness_planning_result(
             source=source,
         )
         if observation_source is None:
-            unknown_source_names.append(source.name)
+            unconfigured_sources[source.name] = SourceFreshnessUnknown(
+                source_name=source.name,
+                reason=SourceFreshnessUnknownReason.NO_FRESHNESS_CONFIG,
+                message="no freshness config and adapter metadata unavailable",
+            )
             continue
         observation_sources_by_name[source.name] = observation_source
         if observation_source.freshness is not None and (
@@ -108,7 +112,10 @@ def build_direct_source_freshness_planning_result(
         sources=tuple(adapter_observation_sources),
         observed_at=observed_at,
     )
-    unknown_sources: dict[str, SourceFreshnessUnknown] = dict(adapter_batch.unknown)
+    unknown_sources: dict[str, SourceFreshnessUnknown] = {
+        **unconfigured_sources,
+        **adapter_batch.unknown,
+    }
 
     for source_name, observation_source in observation_sources_by_name.items():
         if observation_source.freshness is not None and (
@@ -178,7 +185,7 @@ def build_direct_source_freshness_planning_result(
         ),
         changed_identities=frozenset(changed_identities),
         unchanged_identities=frozenset(unchanged_identities),
-        unknown_source_names=tuple(sorted({*unknown_source_names, *unknown_sources})),
+        unknown_source_names=tuple(sorted(unknown_sources)),
         unknown_sources=dict(sorted(unknown_sources.items())),
         age_statuses=age_statuses,
     )

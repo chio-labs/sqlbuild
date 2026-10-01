@@ -122,7 +122,7 @@ def _resolve_source_reference(
     source_entry: SourceEntry | None = source_map.get(source_name)
     if source_entry is None:
         return unknown_source_sql
-    resolved_source: str = _render_source_relation(adapter=adapter, source_entry=source_entry)
+    resolved_source: str = render_source_read_relation(adapter=adapter, source_entry=source_entry)
     warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
     if source_entry.expression is None and warehouse_cols:
         _validate_declared_columns(
@@ -239,7 +239,9 @@ def _internal_source_alias(source_name: str) -> str:
     return f"__sqb_source_{alias_suffix}"
 
 
-def _render_source_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str:
+def render_source_read_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str:
+    """Render the relation name that planned model SQL reads for one source."""
+
     if source_entry.expression is not None:
         return render_source_relation(entry=source_entry, adapter=adapter)
     table_name: str = source_entry.table if source_entry.table is not None else source_entry.name

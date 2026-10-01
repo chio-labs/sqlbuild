@@ -968,7 +968,7 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last
     "test_case",
     [
         SnowflakeTableFreshnessOutcomeTestCase(
-            description="isolates missing, view, and null metadata per table",
+            description="isolates absent, view, and null metadata per table",
             rows=(
                 ("ANALYTICS", "RAW", "ORDERS", "BASE TABLE", datetime(2026, 1, 2, 3, 4, 5)),
                 ("ANALYTICS", "RAW", "CUSTOMERS_V", "VIEW", datetime(2026, 1, 2, 3, 4, 5)),
@@ -978,7 +978,7 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last
                 "ORDERS": TableFreshnessStatus.OBSERVED,
                 "CUSTOMERS_V": TableFreshnessStatus.UNAVAILABLE,
                 "PAYMENTS": TableFreshnessStatus.UNAVAILABLE,
-                "SHIPMENTS": TableFreshnessStatus.MISSING,
+                "SHIPMENTS": TableFreshnessStatus.UNAVAILABLE,
             },
             expected_message_fragments={
                 "CUSTOMERS_V": "only supports physical tables",

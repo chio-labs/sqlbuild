@@ -11,3 +11,11 @@ class SameViewDefinitionTestCase:
     definition: str
     sql: str
     expected_match: bool
+
+
+@dataclass(frozen=True)
+class RelationProbeClassificationTestCase:
+    description: str
+    adapter_name: str
+    errors: tuple[Exception, ...]
+    expected_exists: bool | None

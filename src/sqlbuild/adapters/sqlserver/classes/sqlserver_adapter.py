@@ -42,6 +42,7 @@ from sqlbuild.adapter.contract.exceptions import (
     UnsupportedTypedSqlRenderingError,
 )
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -149,6 +150,19 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def supports_table_freshness_metadata(self) -> bool:
         return False
+
+    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
+        return probe_relation_exists(
+            execute=self.execute,
+            connection=connection,
+            relation=relation,
+            is_not_found=self._is_relation_not_found_error,
+        )
+
+    @staticmethod
+    def _is_relation_not_found_error(error: BaseException) -> bool:
+        invalid_object_name: int = 208
+        return bool(error.args) and error.args[0] == invalid_object_name
 
     def get_table_freshness_metadata(
         self,

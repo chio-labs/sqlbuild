@@ -138,7 +138,7 @@ class RelationLookup:
 
 @dataclass(frozen=True)
 class TableFreshnessMetadata:
-    """Adapter freshness outcome for one physical table: observed, missing, or unavailable."""
+    """Adapter freshness outcome for one physical table: observed or unavailable."""
 
     data_version: object
     value_kind: str
@@ -147,19 +147,8 @@ class TableFreshnessMetadata:
     message: str | None = None
 
     @classmethod
-    def missing(cls, *, message: str) -> TableFreshnessMetadata:
-        """Return the outcome for a requested table that does not exist."""
-
-        return cls(
-            data_version=None,
-            value_kind="timestamp",
-            status=TableFreshnessStatus.MISSING,
-            message=message,
-        )
-
-    @classmethod
     def unavailable(cls, *, message: str) -> TableFreshnessMetadata:
-        """Return the outcome for an existing table whose metadata cannot be compared."""
+        """Return the outcome for a table whose freshness metadata cannot be compared."""
 
         return cls(
             data_version=None,

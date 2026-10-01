@@ -235,7 +235,7 @@ def _observe_adapter_sources_freshness(
     for source_name, request in requests_by_source_name.items():
         metadata: TableFreshnessMetadata = metadata_by_request.get(
             request,
-            TableFreshnessMetadata.missing(
+            TableFreshnessMetadata.unavailable(
                 message=f"source '{source_name}' freshness metadata was not returned"
             ),
         )
@@ -272,13 +272,6 @@ def _adapter_freshness_unsupported_message(
 def _adapter_metadata_unknown(
     *, source_name: str, metadata: TableFreshnessMetadata
 ) -> SourceFreshnessUnknown | None:
-    if metadata.status == TableFreshnessStatus.MISSING:
-        return SourceFreshnessUnknown(
-            source_name=source_name,
-            reason=SourceFreshnessUnknownReason.MISSING,
-            message=metadata.message
-            or f"source '{source_name}' table was not found in the warehouse",
-        )
     if metadata.status == TableFreshnessStatus.UNAVAILABLE:
         return SourceFreshnessUnknown(
             source_name=source_name,

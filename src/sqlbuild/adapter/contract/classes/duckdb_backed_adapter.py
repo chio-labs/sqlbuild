@@ -32,9 +32,12 @@ from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
+    DUCKDB_CATALOG_ERROR_CLASS_NAME,
+    DUCKDB_MISSING_OBJECT_MARKER,
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -119,6 +122,20 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
 
     def supports_table_freshness_metadata(self) -> bool:
         return False
+
+    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
+        return probe_relation_exists(
+            execute=self.execute,
+            connection=connection,
+            relation=relation,
+            is_not_found=self._is_relation_not_found_error,
+        )
+
+    @staticmethod
+    def _is_relation_not_found_error(error: BaseException) -> bool:
+        return type(
+            error
+        ).__name__ == DUCKDB_CATALOG_ERROR_CLASS_NAME and DUCKDB_MISSING_OBJECT_MARKER in str(error)
 
     def get_table_freshness_metadata(
         self,

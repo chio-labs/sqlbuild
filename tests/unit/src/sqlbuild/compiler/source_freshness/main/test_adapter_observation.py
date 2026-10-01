@@ -41,16 +41,16 @@ _OBSERVED_AT: datetime = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
     "test_case",
     [
         AdapterBatchIsolationTestCase(
-            description="missing table leaves other sources observed",
+            description="absent table metadata leaves other sources observed",
             outcomes={
                 "orders": observed_table_freshness(1),
                 "customers": observed_table_freshness(2),
-                "payments": TableFreshnessMetadata.missing(
+                "payments": TableFreshnessMetadata.unavailable(
                     message="table freshness metadata not found for payments"
                 ),
             },
             expected_observed_names=("customers", "orders"),
-            expected_unknown_reasons={"payments": SourceFreshnessUnknownReason.MISSING},
+            expected_unknown_reasons={"payments": SourceFreshnessUnknownReason.UNAVAILABLE},
         ),
         AdapterBatchIsolationTestCase(
             description="null data version is unknown for that source only",
@@ -71,7 +71,7 @@ _OBSERVED_AT: datetime = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
             expected_observed_names=("customers",),
             expected_unknown_reasons={
                 "orders": SourceFreshnessUnknownReason.UNAVAILABLE,
-                "payments": SourceFreshnessUnknownReason.MISSING,
+                "payments": SourceFreshnessUnknownReason.UNAVAILABLE,
             },
         ),
     ],
@@ -113,21 +113,21 @@ def test_given_batch_with_unobservable_table_when_observing_then_isolates_each_s
     "test_case",
     [
         AdapterBatchIsolationTestCase(
-            description="auto-observed sources keep freshness beside a missing table",
+            description="auto-observed sources keep freshness beside absent table metadata",
             outcomes={
                 "orders": observed_table_freshness(1),
                 "customers": observed_table_freshness(2),
-                "payments": TableFreshnessMetadata.missing(
+                "payments": TableFreshnessMetadata.unavailable(
                     message="table freshness metadata not found for payments"
                 ),
             },
             expected_observed_names=("customers", "orders"),
-            expected_unknown_reasons={"payments": SourceFreshnessUnknownReason.MISSING},
+            expected_unknown_reasons={"payments": SourceFreshnessUnknownReason.UNAVAILABLE},
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_batch_with_missing_table_when_planning_then_records_others_and_reasons(
+def test_given_batch_with_absent_table_metadata_when_planning_then_records_others_and_reasons(
     test_case: AdapterBatchIsolationTestCase,
 ) -> None:
     adapter: PerTableFreshnessDuckDbAdapter = PerTableFreshnessDuckDbAdapter(

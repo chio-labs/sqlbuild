@@ -29,3 +29,5 @@ PYTHON_INIT_FILE_NAME: str = "__init__.py"
 PYTHON_IDENTIFIER_REPLACEMENT: str = "_"
 
 SNAPSHOT_VERSION_START_COLUMN: str = "__version_start"
+DUCKDB_CATALOG_ERROR_CLASS_NAME: str = "CatalogException"
+DUCKDB_MISSING_OBJECT_MARKER: str = "does not exist"

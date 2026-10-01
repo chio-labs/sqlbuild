@@ -7,13 +7,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
-    list_relations_for_inspection,
-)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
+from sqlbuild.compiler.planner._helpers.resolve.sources import render_source_read_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -54,15 +50,14 @@ def check_selected_source_tables_exist(
         candidates.append((source, entry, tuple(sorted(readers))))
     if not candidates:
         return
-    existing: frozenset[tuple[str | None, str, str]] = _existing_relation_keys(
-        adapter=adapter,
-        connection=connection,
-        entries=tuple(entry for _, entry, _ in candidates),
-    )
     missing: tuple[_MissingSourceTable, ...] = tuple(
         _MissingSourceTable(source=source, entry=entry, read_by=read_by)
         for source, entry, read_by in candidates
-        if not _relation_exists(entry=entry, existing=existing)
+        if source.name not in relations.listed_source_names
+        and not adapter.relation_exists_for_read(
+            connection=connection,
+            relation=render_source_read_relation(adapter=adapter, source_entry=entry),
+        )
     )
     if missing:
         raise PlannerInputError(
@@ -97,54 +92,6 @@ def _is_external_table_source(entry: SourceEntry) -> bool:
     )
 
 
-def _existing_relation_keys(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    entries: tuple[SourceEntry, ...],
-) -> frozenset[tuple[str | None, str, str]]:
-    names_by_database: dict[str | None, tuple[set[str], set[str]]] = {}
-    entry: SourceEntry
-    for entry in entries:
-        schemas, names = names_by_database.setdefault(entry.database, (set(), set()))
-        schemas.add(str(entry.schema))
-        names.add(_table_name(entry))
-    existing: set[tuple[str | None, str, str]] = set()
-    database: str | None
-    schemas: set[str]
-    names: set[str]
-    for database, (schemas, names) in names_by_database.items():
-        relations: tuple[RelationInfo, ...] = list_relations_for_inspection(
-            adapter=adapter,
-            connection=connection,
-            database=database,
-            schemas=tuple(sorted(schemas)),
-            names=tuple(sorted(names)) if len(names) <= METADATA_NAME_FILTER_LIMIT else None,
-        )
-        relation: RelationInfo
-        for relation in relations:
-            if relation.schema is None:
-                continue
-            existing.add(
-                (
-                    None if database is None else database.lower(),
-                    relation.schema.lower(),
-                    relation.name.lower(),
-                )
-            )
-    return frozenset(existing)
-
-
-def _relation_exists(
-    *, entry: SourceEntry, existing: frozenset[tuple[str | None, str, str]]
-) -> bool:
-    return (
-        None if entry.database is None else entry.database.lower(),
-        str(entry.schema).lower(),
-        _table_name(entry).lower(),
-    ) in existing
-
-
 def _table_name(entry: SourceEntry) -> str:
     return entry.table if entry.table is not None else entry.name
 
@@ -160,15 +107,7 @@ def _missing_source_tables_message(
     ]
     item: _MissingSourceTable
     for item in missing[:_MESSAGE_ITEM_LIMIT]:
-        relation: str = adapter.render_qualified_name(
-            database=item.entry.database,
-            schema=item.entry.schema,
-            name=_table_name(item.entry),
-        ) or ".".join(
-            part
-            for part in (item.entry.database, item.entry.schema, _table_name(item.entry))
-            if part is not None
-        )
+        relation: str = render_source_read_relation(adapter=adapter, source_entry=item.entry)
         readers: str = ", ".join(item.read_by)
         lines.append(f"  - source '{item.source.name}' ({relation}), read by {readers}")
     if len(missing) > _MESSAGE_ITEM_LIMIT:

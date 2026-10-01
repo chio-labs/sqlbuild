@@ -749,6 +749,7 @@ class PlannerRelationsContext:
     python_source_read_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
+    listed_source_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

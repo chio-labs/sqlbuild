@@ -27,6 +27,6 @@ class SourceFreshnessAgeStatus(StrEnum):
 class SourceFreshnessUnknownReason(StrEnum):
     """Why one source's freshness could not be observed."""
 
-    MISSING = "missing"
     UNAVAILABLE = "unavailable"
     ERROR = "error"
+    NO_FRESHNESS_CONFIG = "no_freshness_config"

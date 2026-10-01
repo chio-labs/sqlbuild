@@ -34,9 +34,6 @@ from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_selectors
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
-from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    gather_source_columns,
-)
 from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_function_locations,
@@ -47,6 +44,7 @@ from sqlbuild.compiler.planner._helpers.resolve.resolve import (
     resolve_function_sql,
     resolve_model_sql,
 )
+from sqlbuild.compiler.planner._helpers.warehouse.source_columns import gather_source_columns
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CloneSourcePlanEntry,

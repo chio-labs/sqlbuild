@@ -8,11 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
-from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
-from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
-    list_relations_for_inspection,
-)
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
@@ -78,12 +74,10 @@ from sqlbuild.compiler.planner._helpers.resolve.resolve import (
 from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
     get_semantic_source_columns,
 )
+from sqlbuild.compiler.planner._helpers.warehouse.source_columns import gather_source_inspection
 from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import (
     build_source_read_map,
     with_declared_source_reads,
-)
-from sqlbuild.compiler.planner.constants import (
-    METADATA_NAME_FILTER_LIMIT,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
@@ -276,6 +270,15 @@ def build_planner_relations_context(
         if effective_deferral.source_deferral_enabled
         else python_source_map
     )
+    source_columns: dict[str, tuple[ColumnInfo, ...]]
+    listed_source_names: frozenset[str]
+    source_columns, listed_source_names = _resolve_source_warehouse_columns(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        source_read_map=source_read_map,
+        known_source_columns=known_source_columns,
+    )
     return PlannerRelationsContext(
         model_locations=model_locations,
         seed_locations=seed_locations,
@@ -289,15 +292,10 @@ def build_planner_relations_context(
             connection=connection,
             source_read_map=source_read_map,
             selected_keys=scope.selected_keys,
-            columns=_resolve_source_warehouse_columns(
-                project=project,
-                adapter=adapter,
-                connection=connection,
-                source_read_map=source_read_map,
-                known_source_columns=known_source_columns,
-            ),
+            columns=source_columns,
         ),
         star_exclude_keyword=adapter.star_exclude_keyword(),
+        listed_source_names=listed_source_names,
     )
 
 
@@ -308,16 +306,17 @@ def _resolve_source_warehouse_columns(
     connection: Any,
     source_read_map: dict[str, SourceEntry],
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None,
-) -> dict[str, tuple[ColumnInfo, ...]]:
+) -> tuple[dict[str, tuple[ColumnInfo, ...]], frozenset[str]]:
     """Reuse already-gathered source columns for the read map or gather them once."""
 
     if known_source_columns is not None:
-        return {
+        known: dict[str, tuple[ColumnInfo, ...]] = {
             name: known_source_columns[name]
             for name in source_read_map
             if name in known_source_columns
         }
-    return gather_source_columns(
+        return known, frozenset(known)
+    return gather_source_inspection(
         project=project,
         adapter=adapter,
         connection=connection,
@@ -1022,102 +1021,6 @@ def resolve_cursor_overrides(
                 f"exclusive cursor_end {cursor_end}"
             )
     return resolved_start, resolved_end
-
-
-def gather_source_columns(
-    *,
-    project: CompiledProject,
-    adapter: BaseAdapter,
-    connection: Any,
-    source_entries: tuple[SourceEntry, ...] | None = None,
-) -> dict[str, tuple[ColumnInfo, ...]]:
-    """Gather warehouse columns for all declared sources."""
-
-    result: dict[str, tuple[ColumnInfo, ...]] = {}
-    source_schemas: dict[str, set[str]] = {}
-    entries: tuple[SourceEntry, ...] = (
-        source_entries
-        if source_entries is not None
-        else tuple(source.source_entry for source in project.sources)
-    )
-    entry: SourceEntry
-    for entry in entries:
-        if entry.expression is not None:
-            if entry.type_enforcement:
-                column_names: tuple[str, ...] = adapter.query_column_names(
-                    connection=connection, sql=entry.expression
-                )
-                result[entry.name] = tuple(ColumnInfo(name=name, type="") for name in column_names)
-            continue
-        schema: str | None = entry.schema
-        if schema is None:
-            continue
-        db: str | None = entry.database
-        db_key: str = db or ""
-        source_schemas.setdefault(db_key, set()).add(schema)
-
-    db_key_iter: str
-    schemas: set[str]
-    for db_key_iter, schemas in source_schemas.items():
-        database: str | None = db_key_iter or None
-        scoped: dict[str, tuple[str | None, str | None, str]] = {
-            entry_iter.name: RelationLookup.key(
-                database=database,
-                schema=entry_iter.schema,
-                name=entry_iter.table if entry_iter.table is not None else entry_iter.name,
-            )
-            for entry_iter in entries
-            if entry_iter.expression is None
-            and (entry_iter.database or None) == database
-            and entry_iter.schema in schemas
-        }
-        relations: tuple[RelationInfo, ...] = list_relations_for_inspection(
-            adapter=adapter,
-            connection=connection,
-            database=database,
-            schemas=tuple(sorted(schemas)),
-            names=_build_source_table_name_filter(
-                project=project, database=database, schemas=schemas, source_entries=entries
-            ),
-        )
-        wanted: frozenset[tuple[str | None, str | None, str]] = frozenset(scoped.values())
-        all_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
-            get_columns_for_inspection(
-                adapter=adapter,
-                connection=connection,
-                relations=tuple(relation for relation in relations if relation.identity in wanted),
-            )
-        )
-        result.update(
-            {name: all_columns[key] for name, key in scoped.items() if key in all_columns}
-        )
-
-    return result
-
-
-def _build_source_table_name_filter(
-    *,
-    project: CompiledProject,
-    database: str | None,
-    schemas: set[str],
-    source_entries: tuple[SourceEntry, ...] | None = None,
-) -> tuple[str, ...] | None:
-    names: set[str] = set()
-    entries: tuple[SourceEntry, ...] = (
-        source_entries
-        if source_entries is not None
-        else tuple(source.source_entry for source in project.sources)
-    )
-    entry: SourceEntry
-    for entry in entries:
-        if entry.expression is not None or entry.schema not in schemas:
-            continue
-        if (entry.database or None) != database:
-            continue
-        names.add(entry.table if entry.table is not None else entry.name)
-    if not names or len(names) > METADATA_NAME_FILTER_LIMIT:
-        return None
-    return tuple(sorted(names))
 
 
 def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:

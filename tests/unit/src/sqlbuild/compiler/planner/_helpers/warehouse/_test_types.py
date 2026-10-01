@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from sqlbuild.spec.contracts.models import SourceEntry
+
 
 @dataclass(frozen=True)
 class SemanticSourceBatchCase:
@@ -41,3 +43,14 @@ class SnowflakeSourceCandidateCase:
     declared_schemas: tuple[str, ...]
     expected_candidates: tuple[tuple[str | None, str | None, str], ...]
     expected_query_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceTableProbeTestCase:
+    description: str
+    adapter_name: str
+    source: SourceEntry
+    listed_source_names: frozenset[str]
+    probe_errors: tuple[Exception, ...]
+    expected_probe_statements: tuple[str, ...]
+    expected_error_fragment: str | None = None

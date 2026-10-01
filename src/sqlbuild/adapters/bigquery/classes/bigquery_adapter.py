@@ -43,6 +43,7 @@ from sqlbuild.adapter.contract.exceptions import (
 from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
     complete_table_freshness_results,
 )
+from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -458,6 +459,18 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def supports_table_freshness_metadata(self) -> bool:
         return True
+
+    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
+        return probe_relation_exists(
+            execute=self.execute,
+            connection=connection,
+            relation=relation,
+            is_not_found=self._is_relation_not_found_error,
+        )
+
+    @classmethod
+    def _is_relation_not_found_error(cls, error: BaseException) -> bool:
+        return isinstance(error, Exception) and cls._is_google_not_found(error)
 
     def get_table_freshness_metadata(
         self,

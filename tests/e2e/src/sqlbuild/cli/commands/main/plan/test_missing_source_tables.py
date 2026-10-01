@@ -113,8 +113,8 @@ def test_given_missing_source_reference_removed_when_building_then_other_sources
         (detail["source_name"], detail["reason"]) for detail in freshness["unknown_source_details"]
     ] == [("raw_payments", "error")]
     assert [warning["message"] for warning in payload["warnings"]] == [
-        "source freshness unknown (error) for raw_payments: source 'raw_payments' freshness "
-        "query failed: Catalog Error: Table with name payments does not exist!"
+        "source freshness unknown (error) for raw_payments: the freshness observation failed; "
+        "run sqb freshness for each source's details"
     ]
     assert text_plan_result.returncode == 0, text_plan_result.stdout + text_plan_result.stderr
     text_output: str = text_plan_result.stdout + text_plan_result.stderr
@@ -142,6 +142,46 @@ def test_given_missing_source_table_when_created_then_plan_succeeds(
         db_path=project_dir / "warehouse.duckdb",
         sql="CREATE TABLE raw.payments AS SELECT 1 AS payment_id, "
         "TIMESTAMP '2026-01-03 00:00:00' AS updated_at",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    output: str = result.stdout + result.stderr
+    assert "error[S405]" not in output
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingSourceTableE2ETestCase(
+            description="source declared with different identifier case plans",
+            expected_output_fragments=("Plan ready  3 selected",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_case_variant_source_declaration_when_planning_then_table_is_found(
+    test_case: MissingSourceTableE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_missing_source_tables_project(tmp_path=tmp_path)
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE TABLE raw.payments AS SELECT 1 AS payment_id, "
+        "TIMESTAMP '2026-01-03 00:00:00' AS updated_at",
+    )
+    sources_path: Path = project_dir / "sources" / "raw.yml"
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8").replace(
+            "schema: raw\n    table: orders", "schema: Raw\n    table: Orders"
+        ),
+        encoding="utf-8",
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

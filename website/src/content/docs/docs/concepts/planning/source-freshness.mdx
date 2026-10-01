@@ -24,10 +24,12 @@ Sources without explicit `freshness:` config are auto-observed using the `adapte
 Adapter metadata for all sources is fetched in one batched lookup, but each source gets its own
 result. When one source can't be observed, only that source is unknown; the others keep their
 freshness. The `Freshness metadata` progress line reports the outcome, for example
-`Freshness metadata  OK (257 sources, 3 unknown)`, and the plan lists a warning for each reason,
-such as `source freshness unknown (unavailable) for raw_events: ... found VIEW for EVENTS`.
-Unknown sources are also listed with their reasons under `unknown_source_details` in the
-`direct_source_freshness` metadata of `sqb plan --json`.
+`Freshness metadata  OK (257 sources, 3 unknown)`. The plan adds one warning per reason, listing up
+to 10 sources, such as `source freshness unknown (unavailable) for raw_events, raw_sessions: ...`.
+Sources without freshness configuration that the adapter can't observe are not warned about.
+Every unknown source is listed with its reason and message under `unknown_source_details` in the
+`direct_source_freshness` metadata of `sqb plan --json`; run `sqb freshness` for the same detail
+in text form.
 
 ## Missing source tables
 
@@ -43,8 +45,20 @@ error[S405]: cannot build selected scope: 1 source table read by selected resour
 
 Create the table, fix the declaration, or leave the reading models out of the selection. Managed
 sources and sources with a loader are exempt, because SQLBuild creates their tables when it loads
-them. Expression sources are also exempt. A missing table that only unselected models read does not
-fail the plan; its freshness is reported as unknown.
+them. Expression sources, sources without a schema, and wildcard tables are also exempt. A missing
+table that only unselected models read does not fail the plan; its freshness is reported as unknown.
+
+The check first looks for each source in the warehouse listing that planning already reads for
+source columns, so it normally issues no extra queries. A source the listing does not find (for
+example because of identifier case, a stream, a materialized view, or a table in another database)
+is then probed directly with `SELECT 1 FROM <relation> WHERE 1=0`, using the same relation name the
+model SQL reads. Only a not-found error from that probe counts as missing; any other error (for
+example a permission or connection error) fails planning with that error. On Snowflake the probe
+may need a running warehouse, but it only runs for sources the listing did not find.
+
+A table that a model's own `pre_hook` creates does not exist yet when the plan is made, so planning
+fails with `S405`. Declare such a table as a managed source or a source with a loader, or create it
+before planning.
 
 ## Lag tolerance
 

@@ -30,7 +30,6 @@ class TableFreshnessStatus(StrEnum):
     """Per-table outcome of an adapter freshness metadata lookup."""
 
     OBSERVED = "observed"
-    MISSING = "missing"
     UNAVAILABLE = "unavailable"
 
 

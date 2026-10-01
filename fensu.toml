@@ -95,6 +95,12 @@ reason = "The SQL Server adapter intentionally keeps overrideable backend behavi
 
 [[targets.python.rule_exceptions]]
 rule = "XSB051"
+path = "src/sqlbuild/compiler/planner/_helpers/warehouse/source_columns.py"
+symbols = ["gather_source_inspection"]
+reason = "Each type-enforced expression source is its own query whose output columns can only be read by running it; table sources are listed in one batch per database."
+
+[[targets.python.rule_exceptions]]
+rule = "XSB051"
 path = "src/sqlbuild/executor/migrations/_helpers/columns.py"
 symbols = ["apply_model_column_renames"]
 reason = "Each in-place column rename must re-read live columns immediately before its ALTER so overlapping builds reconcile instead of failing."
