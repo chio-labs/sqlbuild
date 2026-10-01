@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.128.0](https://github.com/chio-labs/sqlbuild/compare/v0.127.2...v0.128.0) (2026-10-01)
+
+
+### Features
+
+* **cli:** add janitor --target and inspection-only --as preview ([#898](https://github.com/chio-labs/sqlbuild/issues/898)) ([9e7cff5](https://github.com/chio-labs/sqlbuild/commit/9e7cff5a43531b3d36b18f87a67cd908b4122d4c))
+
 ## [0.127.2](https://github.com/chio-labs/sqlbuild/compare/v0.127.1...v0.127.2) (2026-10-01)
 
 
