@@ -5,12 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
-from sqlbuild.lint.types import LintSeverity
+from sqlbuild.lint.types import LintSeverity, RuleFixStatus
 
 
 @dataclass(frozen=True)
@@ -104,7 +103,7 @@ class RuleFixResult:
     file_path: Path
     code: str
     line: int
-    status: Literal["applied", "refused", "unavailable"]
+    status: RuleFixStatus
     reason: str
 
 

@@ -102,6 +102,17 @@ def test_given_unanalysed_model_when_fixing_then_verification_preserves_original
             "SQBRSQL005",
         ),
         SemanticFixTestCase(
+            "constant row count",
+            "SELECT COUNT(1) AS order_count FROM (SELECT 1 AS order_id UNION ALL SELECT 2) AS o",
+            "SQBRSQL017",
+        ),
+        SemanticFixTestCase(
+            "implicit inner join",
+            "SELECT a.order_id, b.customer_id FROM (SELECT 1 AS order_id) AS a "
+            "JOIN (SELECT 1 AS order_id, 2 AS customer_id) AS b ON a.order_id = b.order_id",
+            "SQBRSQL025",
+        ),
+        SemanticFixTestCase(
             "redundant distinct",
             "SELECT DISTINCT order_id FROM (SELECT 1 AS order_id) AS orders GROUP BY order_id",
             "SQBRSQL006",
@@ -154,6 +165,12 @@ def test_given_safe_native_fix_when_formatting_then_compiler_and_query_results_a
             expected_status="refused",
         ),
         SemanticFixTestCase(
+            "unused table alias",
+            "SELECT order_id FROM (SELECT 1 AS order_id) AS o",
+            "SQBRSQL023",
+            expected_status="refused",
+        ),
+        SemanticFixTestCase(
             "boolean CASE",
             "SELECT CASE WHEN 1 = 2 THEN TRUE ELSE FALSE END AS active",
             "SQBRSQL030",
@@ -179,6 +196,47 @@ def test_given_dialect_sensitive_rewrite_when_fixing_then_requires_semantic_proo
         fix["code"] == test_case.expected_code and fix["status"] == test_case.expected_status
         for fix in payload["rule_fixes"]
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FormatCompileIntegrationTestCase("one unverifiable file", "format-fix-verification-failed")],
+    ids=lambda case: case.description,
+)
+def test_given_one_unverifiable_file_when_fixing_then_only_that_file_keeps_its_original(
+    test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    verified: Path = models / "orders.sql"
+    verified.write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id UNION SELECT 2 AS order_id\n'
+    )
+    unverifiable: Path = models / "customers.sql"
+    unverifiable_sql: str = (
+        'MODEL (description "Customers", sql_analysis false);\n'
+        "WITH unused AS (SELECT 2 AS customer_id) SELECT 1 AS customer_id\n"
+    )
+    unverifiable.write_text(unverifiable_sql)
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "format", "--fix", "--json"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert "UNION DISTINCT" in verified.read_text()
+    assert unverifiable.read_text() == unverifiable_sql
+    assert {
+        (Path(fix["file"]).name, fix["code"], fix["status"]) for fix in payload["rule_fixes"]
+    } >= {
+        ("orders.sql", "SQBRSQL008", "applied"),
+        ("customers.sql", "SQBRSQL005", "refused"),
+    }
+    faults: set[tuple[str, str]] = {
+        (Path(violation["file"]).name, violation["code"]) for violation in payload["violations"]
+    }
+    assert ("customers.sql", test_case.expected_literal) in faults
+    assert ("orders.sql", test_case.expected_literal) not in faults
 
 
 if __name__ == "__main__":

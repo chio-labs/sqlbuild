@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 
 class LintSeverity(StrEnum):
@@ -10,3 +11,6 @@ class LintSeverity(StrEnum):
 
     FAULT = "fault"
     WARNING = "warning"
+
+
+type RuleFixStatus = Literal["applied", "refused", "unavailable"]

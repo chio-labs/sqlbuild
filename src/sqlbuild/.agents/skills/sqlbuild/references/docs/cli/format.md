@@ -6,6 +6,13 @@
 
 Online: https://sqlbuild.com/docs/cli/format/
 
+## Contents
+
+- Line width and descriptions
+- What formatting preserves
+- Rule fixes
+- Unsafe bodies
+
 Formats SQL files using SQLBuild's canonical, dialect-aware representation.
 
 ```bash
@@ -16,6 +23,7 @@ sqb format [flags]
 |------|-------------|
 | `--check` | Fail when formatting changes are needed without writing |
 | `--diff` | Print the proposed diff without writing |
+| `--fix` | Also apply compiler-verified, meaning-preserving Rule fixes before layout formatting |
 | `--json` | Print structured results |
 | `--select`, `-s` | Format selected models |
 | `--select-file` | Read selectors from a file |
@@ -64,6 +72,40 @@ lambda parameters, and supported SQL function spellings while applying canonical
 calls keep their authored spelling, including zero-argument cursor and empty-fixture intrinsics.
 CTE-producing macros remain authored calls rather than expanded project SQL, with each call on its
 own CTE-list line and leading comments attached to the node they describe.
+
+## Rule fixes
+
+`sqb format` on its own never changes what SQL means. `sqb format --fix` also applies Rule edits
+that are known to preserve meaning, then formats the layout. `--fix --check` reports the proposed
+changes without writing files, and `--fix --diff` prints their diff.
+
+Edits are planned in memory and repeated until no more apply; overlapping edits wait for the next
+pass. Every pass recompiles the project and compares output columns (including types and
+nullability), dependencies, and column lineage of each edited model and everything downstream of it
+against the original compilation. When a pass cannot be proved, the edits of each file are checked
+on their own: files whose edits cannot be proved keep their original contents and report
+`format-fix-verification-failed`, while the other files are still fixed. A cycle or the 128-pass
+limit fails without writing any edit.
+
+| Rule | Decision | Reason |
+| --- | --- | --- |
+| SQBRSQL001 NULL comparison | Refused | Replacing `= NULL` with `IS NULL` changes three-valued logic. |
+| SQBRSQL002 implicit cartesian join | Applied | A comma-separated product becomes an explicit `CROSS JOIN`; mixed join precedence is excluded. |
+| SQBRSQL003 conditionless join | Applied in Snowflake | Snowflake defines an unqualified `JOIN` without `ON` or `USING` as a cartesian product. Other dialects are refused because the original syntax may be invalid. |
+| SQBRSQL005 unused CTE | Applied | Unreferenced `SELECT` CTEs contribute no rows. Mutation statements and commented CTEs are excluded. |
+| SQBRSQL006 redundant DISTINCT | Applied | The projected and grouping expressions are proved to coincide. |
+| SQBRSQL008 bare UNION | Applied | `UNION DISTINCT` states the existing duplicate elimination, in dialects that support it. |
+| SQBRSQL013 parenthesized DISTINCT | Refused | Removing parentheses can change operator precedence. |
+| SQBRSQL017 constant row count | Applied | `COUNT(1)` and `COUNT(*)` both count every row. |
+| SQBRSQL023 unused table alias | Refused | Not yet reviewed as meaning-preserving. |
+| SQBRSQL025 implicit inner join | Applied | A bare `JOIN ... ON` is an inner join. |
+| SQBRSQL030 boolean CASE simplification | Refused | The `COALESCE` rewrite is not proved portable to every supported dialect. |
+
+Edits that touch macro or intrinsic expansions are refused, and so are edits outside model SQL
+bodies, because recompiling cannot prove their output contract. Findings without a proposed edit
+are reported as unavailable. Human output lists each applied, refused, and unavailable fix with its
+reason; JSON output includes a `rule_fixes` array with `file`, `line`, `code`, `status`, and
+`reason`. Refused and unavailable fixes still need a manual change.
 
 ## Unsafe bodies
 
