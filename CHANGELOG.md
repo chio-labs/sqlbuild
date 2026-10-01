@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.127.1](https://github.com/chio-labs/sqlbuild/compare/v0.127.0...v0.127.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **test:** run model SQL in SQL tests exactly as build sends it ([#893](https://github.com/chio-labs/sqlbuild/issues/893)) ([b6cbd5f](https://github.com/chio-labs/sqlbuild/commit/b6cbd5f537c1d0613b9e6bd40d792b369425bd0e))
+
 ## [0.127.0](https://github.com/chio-labs/sqlbuild/compare/v0.126.6...v0.127.0) (2026-09-30)
 
 
