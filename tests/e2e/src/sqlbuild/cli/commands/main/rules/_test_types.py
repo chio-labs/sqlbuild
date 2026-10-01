@@ -36,6 +36,7 @@ class UnevaluatedResourceCase:
     expected_reason: str = "E_GUARD_FUNCTION_NESTING_DEPTH_EXCEEDED"
     adapter: str = "duckdb"
     extra_files: tuple[tuple[str, str], ...] = ()
+    rule: str = "SQBRSQL035"
 
 
 @dataclass(frozen=True)
