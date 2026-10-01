@@ -87,3 +87,11 @@ class PruneFingerprintHistoryTestCase:
     fingerprints: tuple[Fingerprint, ...]
     expected_run_ids_by_identity: dict[tuple[str, str], tuple[str, ...]]
     expected_latest_run_id: str
+
+
+@dataclass(frozen=True)
+class SelectLatestTestCase:
+    description: str
+    node_names: tuple[str, ...]
+    filtered_node_types: tuple[str, ...]
+    expected_identities: frozenset[tuple[str, str]]

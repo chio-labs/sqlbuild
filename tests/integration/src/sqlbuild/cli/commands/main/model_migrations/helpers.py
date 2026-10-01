@@ -18,6 +18,7 @@ from sqlbuild.adapter.contract.models import MigrationStagePlan
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build._helpers import scheduler as scheduler_module
 
 DATABASE_FILE: str = "orders.duckdb"
@@ -806,3 +807,53 @@ def build_each(
     for models in model_sets:
         write_project(project_dir=project_dir, models=models())
         _ = build_ok(project_dir=project_dir, capsys=capsys)
+
+
+def _is_latest_fingerprint_read(sql: str) -> bool:
+    return FINGERPRINT_TABLE_NAME in sql and "__sqlbuild_latest_rank" in sql
+
+
+def record_fingerprint_state_reads(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record the row count of every latest-fingerprint read the DuckDB adapter executes."""
+
+    rows_read: list[int] = []
+    original: Callable[..., Any] = DuckDbAdapter._execute
+
+    def recording(self: DuckDbAdapter, *, connection: Any, sql: str) -> Any:
+        rows_read.extend(
+            int(connection.execute(f"SELECT count(*) FROM ({read_sql})").fetchone()[0])
+            for read_sql in filter(_is_latest_fingerprint_read, (sql,))
+        )
+        return original(self, connection=connection, sql=sql)
+
+    monkeypatch.setattr(DuckDbAdapter, "_execute", recording)
+    return rows_read
+
+
+def fingerprint_history(*, project_dir: Path) -> tuple[int, int]:
+    """Return (stored rows, distinct node identities) of the fingerprint state table."""
+
+    row: tuple[Any, ...] = query(
+        project_dir=project_dir,
+        sql=(
+            "SELECT count(*), count(DISTINCT (node_type, node_name)) "
+            f"FROM main.{FINGERPRINT_TABLE_NAME}"
+        ),
+    )[0]
+    return int(row[0]), int(row[1])
+
+
+def edited_original_order_models() -> dict[str, str]:
+    """Return the original connected models with a comment edit that rebuilds each one."""
+
+    return {name: f"{sql}-- revised\n" for name, sql in original_order_models().items()}
+
+
+def declared_rename_models() -> dict[str, str]:
+    """Return the original models with the staging model renamed through migrate_from."""
+
+    return {
+        DESTINATION_MODEL: incremental_orders_sql(migrate_from=ORIGIN_MODEL),
+        "orders_enriched": enriched_view_sql(upstream=DESTINATION_MODEL, alias="o"),
+        "daily_order_totals": daily_totals_sql(upstream="orders_enriched", cte="orders_enriched"),
+    }

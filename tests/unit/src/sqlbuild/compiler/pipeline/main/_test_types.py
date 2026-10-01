@@ -40,3 +40,5 @@ class PipelinePhaseTimingTestCase:
     expected_compile_seconds: float
     expected_planning_seconds: float
     expected_total_seconds: float
+    report_progress: bool = False
+    expected_progress_fragments: tuple[str, ...] = ()

@@ -643,6 +643,7 @@ class _TimedSqbRun(NamedTuple):
     minor_page_faults: int
     payload: object
     output_path: Path
+    stderr_path: Path
 
 
 def _run_timed_sqb(
@@ -703,6 +704,7 @@ def _run_timed_sqb(
         minor_page_faults=int(minor_text),
         payload=payload,
         output_path=output_path,
+        stderr_path=stderr_path,
     )
 
 
@@ -712,6 +714,7 @@ class InspectionCommandMeasurement(NamedTuple):
     cpu_seconds: float
     payload: object
     output: str
+    stderr: str = ""
 
 
 def run_fresh_process_inspection_command(
@@ -735,7 +738,32 @@ def run_fresh_process_inspection_command(
         cpu_seconds=run.cpu_seconds,
         payload=run.payload,
         output=run.output_path.read_text(encoding="utf-8"),
+        stderr=run.stderr_path.read_text(encoding="utf-8"),
     )
+
+
+_PLAN_PHASE_LINE: re.Pattern[str] = re.compile(
+    r"^(Inspected warehouse state|Generated plan)\. \((\d+\.\d+)s\)$", re.MULTILINE
+)
+
+
+def fastest_plan_phase_seconds(*, project_dir: Path, label: str, runs: int) -> dict[str, float]:
+    """Plan without the compile cache several times and keep each phase's fastest time."""
+
+    fastest: dict[str, float] = {}
+    index: int
+    for index in range(runs):
+        measurement: InspectionCommandMeasurement = run_fresh_process_inspection_command(
+            project_dir=project_dir,
+            label=f"{label}-{index}",
+            sqb_args=("plan", "--json", "--no-cache"),
+            expected_max_wall_seconds=120.0,
+        )
+        phase: str
+        seconds: str
+        for phase, seconds in _PLAN_PHASE_LINE.findall(measurement.stderr):
+            fastest[phase] = min(float(seconds), fastest.get(phase, float(seconds)))
+    return fastest
 
 
 INSPECTION_DIAMOND_LAYERS: int = 16

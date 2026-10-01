@@ -65,25 +65,42 @@ def validate_schema_version(*, value: object) -> None:
 def freeze_json(*, value: object, path: str) -> JSONValue:
     """Validate and recursively freeze a JSON-compatible value."""
 
+    return _freeze_json(value=value, path=(path,))
+
+
+def _freeze_json(*, value: object, path: tuple[str | int, ...]) -> JSONValue:
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ObservabilityValidationError(f"{path} must not contain NaN or infinity")
+            raise ObservabilityValidationError(
+                f"{_render_path(path)} must not contain NaN or infinity"
+            )
         return value
     if isinstance(value, Mapping):
         frozen: dict[str, JSONValue] = {}
         for key, item in value.items():
             if not isinstance(key, str):
-                raise ObservabilityValidationError(f"{path} keys must be strings")
-            frozen[key] = freeze_json(value=item, path=f"{path}.{key}")
+                raise ObservabilityValidationError(f"{_render_path(path)} keys must be strings")
+            frozen[key] = (
+                item
+                if item is None or isinstance(item, (str, bool, int))
+                else _freeze_json(value=item, path=(*path, key))
+            )
         return MappingProxyType(frozen)
     if isinstance(value, (list, tuple)):
         return tuple(
-            freeze_json(value=item, path=f"{path}[{index}]") for index, item in enumerate(value)
+            _freeze_json(value=item, path=(*path, index)) for index, item in enumerate(value)
         )
     raise ObservabilityValidationError(
-        f"{path} contains non-JSON value of type {type(value).__name__}"
+        f"{_render_path(path)} contains non-JSON value of type {type(value).__name__}"
+    )
+
+
+def _render_path(path: tuple[str | int, ...]) -> str:
+    return "".join(
+        f"[{segment}]" if isinstance(segment, int) else f".{segment}" if index else segment
+        for index, segment in enumerate(path)
     )
 
 

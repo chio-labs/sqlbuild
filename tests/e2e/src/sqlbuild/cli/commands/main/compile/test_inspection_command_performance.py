@@ -18,15 +18,20 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     InspectionCommandPerformanceGuardTestCase,
     PlanComparedToCompileGuardTestCase,
+    PlanPhaseScalingGuardTestCase,
     PlanScalingGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     INSPECTION_BENCHMARK_MODEL_COUNT,
+    INSPECTION_DIAMOND_LAYERS,
+    INSPECTION_DIAMOND_WIDTH,
     SHARED_DIAMOND_HUB,
     SHARED_DIAMOND_ROLLUP,
     InspectionCommandMeasurement,
+    fastest_plan_phase_seconds,
     prepare_small_inspection_project,
     run_fresh_process_inspection_command,
+    write_inspection_benchmark_project,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -285,3 +290,58 @@ def test_given_benchmarks_of_two_sizes_when_planning_then_planning_work_scales_l
         linear_cpu,
     )
     assert planning_cpu["large"] < test_case.expected_max_linear_factor * linear_cpu
+
+
+@pytest.mark.performance
+@pytest.mark.cold_compile_performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanPhaseScalingGuardTestCase(
+            description="models_3000_plan_phases_scale_linearly_from_1000_models",
+            small_model_count=1_000,
+            runs=2,
+            expected_phases=("Inspected warehouse state", "Generated plan"),
+            expected_max_linear_factor=1.5,
+            expected_max_large_phase_seconds=20.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_benchmarks_of_two_sizes_when_planning_then_each_plan_phase_scales_linearly(
+    inspection_benchmark_project: Path,
+    test_case: PlanPhaseScalingGuardTestCase,
+    tmp_path: Path,
+) -> None:
+    small_project: Path = tmp_path / "semantic_small"
+    write_inspection_benchmark_project(
+        project_dir=small_project, model_count=test_case.small_model_count
+    )
+    lattice_models: int = INSPECTION_DIAMOND_LAYERS * INSPECTION_DIAMOND_WIDTH + 2
+    size_ratio: float = _MODEL_COUNT / (test_case.small_model_count + lattice_models)
+    fastest: dict[str, dict[str, float]] = {
+        label: fastest_plan_phase_seconds(
+            project_dir=project_dir,
+            label=f"{test_case.description}-{label}-plan",
+            runs=test_case.runs,
+        )
+        for label, project_dir in (
+            ("small", small_project),
+            ("large", inspection_benchmark_project),
+        )
+    }
+
+    _LOGGER.info(
+        "plan phase scaling %s size_ratio=%.2f small=%s large=%s",
+        test_case.description,
+        size_ratio,
+        fastest["small"],
+        fastest["large"],
+    )
+    ratios: dict[str, float] = {
+        phase: seconds / max(fastest["small"].get(phase, 0.0), 0.01)
+        for phase, seconds in fastest["large"].items()
+    }
+    assert set(fastest["large"]) == set(fastest["small"]) == set(test_case.expected_phases)
+    assert max(ratios.values()) < test_case.expected_max_linear_factor * size_ratio, ratios
+    assert max(fastest["large"].values()) < test_case.expected_max_large_phase_seconds

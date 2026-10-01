@@ -147,6 +147,7 @@ def plan_model_migrations(
         adapter=runtime.adapter,
         connection=runtime.connection,
         database=planning_database(runtime=runtime),
+        known_fingerprints=snapshot.fingerprints,
     )
     declares_migrations: bool = any(
         _declared_request(model) is not None for model in runtime.project.models

@@ -53,6 +53,7 @@ from sqlbuild.compiler.planner.main.selection.selection import resolve_project_s
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
 from sqlbuild.rule_engine.main.load_config import load_rules_config
+from sqlbuild.rule_engine.main.render_rules_progress import format_rules_progress
 from sqlbuild.rule_engine.main.run_rules import run_rules
 from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
@@ -204,6 +205,7 @@ def _analyze_compile_project(
         ):
             prepared_artifacts.start(project=graph.project, adapter=adapter)
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
+        rules_start: float = time.monotonic()
         rules_result = run_rules(
             graph=graph,
             discovered_inputs=discovered_inputs,
@@ -217,9 +219,8 @@ def _analyze_compile_project(
         )
         _ = complete_compile_phase(
             status=status,
-            message=(
-                f"Evaluated rules. (built-in {rules_result.built_in_ms / 1000:.2f}s, "
-                f"custom {rules_result.custom_ms / 1000:.2f}s)"
+            message=format_rules_progress(
+                elapsed_seconds=time.monotonic() - rules_start, result=rules_result
             ),
         )
     rule_diagnostics: tuple[CompilerDiagnostic, ...] = tuple(

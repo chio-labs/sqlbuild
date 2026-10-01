@@ -9,10 +9,10 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.compiler.fingerprints._helpers.latest import build_latest_fingerprint_set
 from sqlbuild.compiler.fingerprints._helpers.sql import (
     build_qualified_table_name,
 )
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 
@@ -75,18 +75,9 @@ def read_latest_fingerprints(
             "fingerprint table to regenerate fingerprints."
         ) from error
     rows: list[tuple[Any, ...]] = result.fetchall()
-    fingerprints: dict[str, Fingerprint] = {}
-    fingerprints_by_identity: dict[tuple[str, str], Fingerprint] = {}
-    row: tuple[Any, ...]
-    for row in rows:
-        fingerprint: Fingerprint = _row_to_fingerprint(row=row, qualified_name=qualified_name)
-        fingerprints_by_identity[(fingerprint.node_type, fingerprint.node_name)] = fingerprint
-        if fingerprint.node_type == NODE_TYPE_MODEL or fingerprint.node_name not in fingerprints:
-            fingerprints[fingerprint.node_name] = fingerprint
-    return FingerprintSet(
+    return build_latest_fingerprint_set(
         schema=schema,
-        fingerprints=fingerprints,
-        fingerprints_by_identity=fingerprints_by_identity,
+        latest=(_row_to_fingerprint(row=row, qualified_name=qualified_name) for row in rows),
     )
 
 

@@ -193,6 +193,30 @@ def build_diamond_ladder_identity_nodes(
     return nodes, tuple(order)
 
 
+def build_wide_layered_identity_nodes(
+    *, layer_count: int, layer_width: int
+) -> tuple[dict[GraphNodeKey, GraphIdentityNode], tuple[GraphNodeKey, ...]]:
+    """Build a wide project graph where each node reads two nodes of the prior layer."""
+
+    nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
+    previous: tuple[GraphNodeKey, ...] = ()
+    layer: int
+    for layer in range(layer_count):
+        current: list[GraphNodeKey] = []
+        column: int
+        for column in range(layer_width):
+            key: GraphNodeKey = GraphNodeKey(node_type="model", node_name=f"L{layer}_{column}")
+            nodes[key] = GraphIdentityNode(
+                key=key,
+                resource_kind=GraphResourceKind.MODEL,
+                upstream_keys=previous[column : column + 2],
+                local_hash=f"local_{key.node_name}",
+            )
+            current.append(key)
+        previous = tuple(current)
+    return nodes, tuple(nodes)
+
+
 def _append_relation_info(listed: list[RelationInfo], relation: RelationInfo) -> None:
     listed.append(relation)
 

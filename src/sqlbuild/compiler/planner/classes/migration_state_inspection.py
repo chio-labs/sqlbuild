@@ -35,15 +35,28 @@ from sqlbuild.compiler.migrations.models import (
     OldNameViewEvent,
     OldNameViewHistory,
 )
+from sqlbuild.compiler.planner.models import WarehouseFingerprints
 
 
 class MigrationStateInspection:
     """Relations, fingerprints, and migration events for one planning database."""
 
-    def __init__(self, *, adapter: BaseAdapter, connection: Any, database: str | None) -> None:
+    def __init__(
+        self,
+        *,
+        adapter: BaseAdapter,
+        connection: Any,
+        database: str | None,
+        known_fingerprints: WarehouseFingerprints | None = None,
+    ) -> None:
         self._adapter: BaseAdapter = adapter
         self._connection: Any = connection
         self._database: str | None = database
+        self._known_fingerprints: dict[str, tuple[Fingerprint, ...]] = (
+            known_fingerprints.unfiltered_schemas
+            if known_fingerprints is not None and known_fingerprints.unfiltered_database == database
+            else {}
+        )
         self._read_schemas: set[str] = set()
         self._fingerprints: dict[str, tuple[Fingerprint, ...]] = {}
         self._events: list[MigrationEvent] = []
@@ -210,19 +223,20 @@ class MigrationStateInspection:
                 self._fingerprints[schema.lower()] = self._read_model_fingerprints(schema=schema)
 
     def _read_model_fingerprints(self, *, schema: str) -> tuple[Fingerprint, ...]:
-        fingerprint_set: FingerprintSet = read_latest_fingerprints(
-            connection=self._connection,
-            execute=self._adapter.execute,
-            table_exists=True,
-            database=self._database,
-            schema=schema,
-            render_qualified_name=self._adapter.render_qualified_name,
-            render_read_latest_sql=self._adapter.render_read_latest_fingerprints_sql,
-        )
+        latest: tuple[Fingerprint, ...] | None = self._known_fingerprints.get(schema.lower())
+        if latest is None:
+            fingerprint_set: FingerprintSet = read_latest_fingerprints(
+                connection=self._connection,
+                execute=self._adapter.execute,
+                table_exists=True,
+                database=self._database,
+                schema=schema,
+                render_qualified_name=self._adapter.render_qualified_name,
+                render_read_latest_sql=self._adapter.render_read_latest_fingerprints_sql,
+            )
+            latest = tuple((fingerprint_set.fingerprints_by_identity or {}).values())
         return tuple(
-            fingerprint
-            for fingerprint in (fingerprint_set.fingerprints_by_identity or {}).values()
-            if fingerprint.node_type == NODE_TYPE_MODEL
+            fingerprint for fingerprint in latest if fingerprint.node_type == NODE_TYPE_MODEL
         )
 
     def inspect_relations(self, *, locations: tuple[CompiledRelationLocation, ...]) -> None:

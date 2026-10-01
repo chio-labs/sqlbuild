@@ -321,3 +321,56 @@ class ErrorCodePrivacyCase:
     code: object
     expected_error_code: str | None
     private_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FastStatementMonitorCase:
+    description: str
+    statement_count: int
+    expected_monitor_threads: int
+
+
+@dataclass(frozen=True)
+class DeferredMonitorCase:
+    description: str
+    threshold_seconds: float
+    query_id: str
+    expected_submissions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FreezeJsonErrorCase:
+    description: str
+    payload: object
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class InvocationSequenceCase:
+    description: str
+    sequence: object
+    expected_error: str = ""
+    expected_sequence: int | None = None
+
+
+@dataclass(frozen=True)
+class FinishedStatementRetentionCase:
+    description: str
+    statement_count: int
+    sql_bytes: int
+    expected_live_lifecycles: int
+
+
+@dataclass(frozen=True)
+class DeferredStartCancellationCase:
+    description: str
+    delay_seconds: float
+    expected_pending: int
+    expected_runs: int
+
+
+@dataclass(frozen=True)
+class FailedMonitorStartCase:
+    description: str
+    threshold_seconds: float
+    expected_event_types: tuple[str, ...]

@@ -332,6 +332,16 @@ class PlanScalingGuardTestCase:
 
 
 @dataclass(frozen=True)
+class PlanPhaseScalingGuardTestCase:
+    description: str
+    small_model_count: int
+    runs: int
+    expected_phases: tuple[str, ...]
+    expected_max_linear_factor: float
+    expected_max_large_phase_seconds: float
+
+
+@dataclass(frozen=True)
 class BuildPerformanceGuardTestCase:
     description: str
     expected_max_wall_seconds: float

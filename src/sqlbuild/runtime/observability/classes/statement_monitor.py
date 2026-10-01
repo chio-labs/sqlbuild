@@ -7,9 +7,13 @@ import time
 from collections.abc import Callable
 from contextvars import Context, copy_context
 
+from sqlbuild.runtime.observability.classes.deferred_thread_starts import DeferredThreadStarts
 from sqlbuild.runtime.observability.constants import STATEMENT_HEARTBEAT_THRESHOLD_SECONDS
 
 _STATEMENT_QUERY_ID_POLL_SECONDS: float = 0.1
+_DEFERRED_MONITOR_STARTS: DeferredThreadStarts = DeferredThreadStarts(
+    name="sqlbuild-statement-monitor-starter"
+)
 
 
 class StatementMonitor:
@@ -38,6 +42,10 @@ class StatementMonitor:
         self._query_id_provider: Callable[[], str | None] | None = None
         self._query_id: str | None = None
         self._thread: threading.Thread | None = None
+        self._thread_lock: threading.Lock = threading.Lock()
+        self._context: Context | None = None
+        self._stopped: bool = False
+        self._deferred_start: int | None = None
 
     @property
     def query_id(self) -> str | None:
@@ -46,22 +54,23 @@ class StatementMonitor:
         return self._query_id
 
     def start(self) -> None:
-        """Start monitoring in a daemon thread with the current execution context."""
+        """Monitor in a daemon thread, deferred to the first heartbeat without a query-ID poll."""
 
-        context: Context = copy_context()
-        self._thread = threading.Thread(
-            target=context.run,
-            args=(self._run,),
-            name="sqlbuild-statement-monitor",
-            daemon=True,
+        self._context = copy_context()
+        if self._has_query_id_provider() or self._threshold_seconds <= 0:
+            self._start_thread()
+            return
+        self._deferred_start = _DEFERRED_MONITOR_STARTS.schedule(
+            delay_seconds=self._threshold_seconds, start=self._start_thread
         )
-        self._thread.start()
 
     def set_query_id_provider(self, provider: Callable[[], str | None]) -> None:
         """Install a non-blocking adapter query-ID reader."""
 
         with self._provider_lock:
             self._query_id_provider = provider
+        if self._context is not None:
+            self._start_thread()
         self._wake_event.set()
 
     def stop(self) -> str | None:
@@ -70,10 +79,40 @@ class StatementMonitor:
         self._capture_query_id()
         self._stop_event.set()
         self._wake_event.set()
-        thread: threading.Thread | None = self._thread
+        with self._thread_lock:
+            self._stopped = True
+            self._context = None
+            thread: threading.Thread | None = self._thread
+            deferred_start: int | None = self._deferred_start
+            self._deferred_start = None
+        if deferred_start is not None:
+            _DEFERRED_MONITOR_STARTS.cancel(deferred_start)
         if thread is not None and thread is not threading.current_thread():
             thread.join()
+        self._release_callbacks()
         return self._query_id
+
+    def _release_callbacks(self) -> None:
+        """Drop references back to the statement so a stopped monitor retains nothing."""
+
+        with self._provider_lock:
+            self._query_id_provider = None
+        self._on_submitted = lambda query_id: None
+        self._on_heartbeat = lambda elapsed_seconds, query_id: None
+
+    def _start_thread(self) -> None:
+        with self._thread_lock:
+            context: Context | None = self._context
+            if self._stopped or self._thread is not None or context is None:
+                return
+            thread: threading.Thread = threading.Thread(
+                target=context.run,
+                args=(self._run,),
+                name="sqlbuild-statement-monitor",
+                daemon=True,
+            )
+            thread.start()
+            self._thread = thread
 
     def _run(self) -> None:
         next_heartbeat: float = self._started_at + self._threshold_seconds

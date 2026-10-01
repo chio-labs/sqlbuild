@@ -239,6 +239,7 @@ class GraphIdentityWritePerfTestCase:
     description: str
     layer_count: int
     expected_max_seconds: float
+    layer_width: int = 2
 
 
 @dataclass(frozen=True)

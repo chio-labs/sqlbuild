@@ -10,6 +10,7 @@ import pytest
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.main._select_latest import select_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.main.write_many import write_fingerprints
@@ -21,8 +22,12 @@ from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types impor
     OldFingerprintSchemaTestCase,
     PruneFingerprintHistoryTestCase,
     ReadNonExistentTableTestCase,
+    SelectLatestTestCase,
     WriteAndReadTestCase,
     WriteCreatesTableTestCase,
+)
+from tests.integration.src.sqlbuild.compiler.fingerprints.main.helpers import (
+    mixed_fingerprint_history,
 )
 
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
@@ -897,3 +902,76 @@ def test_given_invalid_definition_storage_when_reading_then_raises_contextual_er
     fragment: str
     for fragment in test_case.expected_error_fragments:
         assert fragment in message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectLatestTestCase(
+            description="keeps named nodes of every type and unfiltered node types",
+            node_names=("orders",),
+            filtered_node_types=("model", "udf", "seed"),
+            expected_identities=frozenset(
+                {("model", "orders"), ("seed", "orders"), ("python", "export_orders")}
+            ),
+        ),
+        SelectLatestTestCase(
+            description="keeps only unfiltered node types without names",
+            node_names=(),
+            filtered_node_types=("model", "udf", "seed"),
+            expected_identities=frozenset({("python", "export_orders")}),
+        ),
+        SelectLatestTestCase(
+            description="keeps only named nodes without filtered types",
+            node_names=("customers", "is_large_order"),
+            filtered_node_types=(),
+            expected_identities=frozenset({("model", "customers"), ("udf", "is_large_order")}),
+        ),
+        SelectLatestTestCase(
+            description="keeps nothing without names or filtered types",
+            node_names=(),
+            filtered_node_types=(),
+            expected_identities=frozenset(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unfiltered_latest_read_when_selecting_then_matches_filtered_read(
+    test_case: SelectLatestTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    write_fingerprints(
+        connection=connection,
+        execute=execute,
+        database=None,
+        schema="test_schema",
+        fingerprints=mixed_fingerprint_history(),
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
+
+    def read(node_names: tuple[str, ...] | None) -> FingerprintSet:
+        return read_latest_fingerprints(
+            connection=connection,
+            execute=execute,
+            table_exists=True,
+            database=None,
+            schema="test_schema",
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_read_latest_sql=RENDER_READ_LATEST_SQL,
+            node_names=node_names,
+            filtered_node_types=test_case.filtered_node_types,
+        )
+
+    filtered: FingerprintSet = read(test_case.node_names)
+    selected: FingerprintSet = select_latest_fingerprints(
+        fingerprint_set=read(None),
+        node_names=test_case.node_names,
+        filtered_node_types=test_case.filtered_node_types,
+    )
+
+    assert selected.fingerprints_by_identity == filtered.fingerprints_by_identity
+    assert selected.fingerprints == filtered.fingerprints
+    assert frozenset(selected.fingerprints_by_identity or {}) == test_case.expected_identities
+    assert {fingerprint.run_id for fingerprint in selected.fingerprints.values()} <= {"run_003"}

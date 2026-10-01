@@ -81,6 +81,7 @@ class StatementLifecycle:
             None
         )
         self._pending_failure: tuple[BaseException, str | None, str | None] | None = None
+        self._statement_facts: tuple[str, str] | None = None
 
     @staticmethod
     @contextmanager
@@ -268,11 +269,17 @@ class StatementLifecycle:
             notify_statement_finished(sql=self._sql)
 
     def _base_payload(self) -> dict[str, JSONValue]:
+        if self._statement_facts is None:
+            self._statement_facts = (
+                hashlib.sha256(self._sql.encode("utf-8")).hexdigest(),
+                _statement_kind(sql=self._sql),
+            )
+        sql_digest, statement_kind = self._statement_facts
         payload: dict[str, JSONValue] = {
             "adapter": self._adapter,
             "intent": self._intent,
-            "sql_digest": hashlib.sha256(self._sql.encode("utf-8")).hexdigest(),
-            "statement_kind": _statement_kind(sql=self._sql),
+            "sql_digest": sql_digest,
+            "statement_kind": statement_kind,
         }
         if self._batch_size is not None:
             payload["batch_size"] = self._batch_size
