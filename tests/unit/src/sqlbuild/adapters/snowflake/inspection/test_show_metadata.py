@@ -111,7 +111,7 @@ _CREATED_ON: datetime = datetime(2026, 3, 1, 8, 30, tzinfo=UTC)
                 created_on=_CREATED_ON, is_materialized="false", is_secure="false"
             ),
             expected_relation_type="view",
-            expected_is_transient=False,
+            expected_is_transient=None,
             expected_retention_days=None,
         ),
         ShowRelationRowTestCase(
@@ -119,7 +119,7 @@ _CREATED_ON: datetime = datetime(2026, 3, 1, 8, 30, tzinfo=UTC)
             is_view=True,
             row=show_relation_row(created_on=_CREATED_ON, is_materialized="true"),
             expected_relation_type="materialized view",
-            expected_is_transient=False,
+            expected_is_transient=None,
             expected_retention_days=None,
         ),
         ShowRelationRowTestCase(
@@ -127,7 +127,7 @@ _CREATED_ON: datetime = datetime(2026, 3, 1, 8, 30, tzinfo=UTC)
             is_view=True,
             row=show_relation_row(created_on=_CREATED_ON, is_materialized=True),
             expected_relation_type="materialized view",
-            expected_is_transient=False,
+            expected_is_transient=None,
             expected_retention_days=None,
         ),
     ],

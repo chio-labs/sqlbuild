@@ -46,7 +46,8 @@ service, so they don't wait for, or resume, a warehouse. Two reads still use `IN
 and need a running warehouse:
 
 - `LAST_ALTERED` for source freshness, read only for the sources the plan observes.
-- Columns for a schema whose `SHOW COLUMNS` output reaches Snowflake's 10,000-row limit.
+- Columns for a schema whose `SHOW COLUMNS` output is exactly 10,000 rows, the documented
+  limit at which the output may be cut off.
 
 Run `sqb plan -v` to see each metadata query with its elapsed time and row count.
 

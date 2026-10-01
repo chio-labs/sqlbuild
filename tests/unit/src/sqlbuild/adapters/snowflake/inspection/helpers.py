@@ -397,7 +397,7 @@ class RecordingSnowflakeWarehouse:
                 )
                 for column in fake.columns
             )
-        return rows[:SHOW_RESULT_CAP], tuple((f,) for f in _SHOW_SCHEMA_COLUMN_FIELDS)
+        return rows, tuple((f,) for f in _SHOW_SCHEMA_COLUMN_FIELDS)
 
     def _answer_cursor_bounds(
         self, *, sql: str, params: tuple[object, ...]
@@ -517,7 +517,9 @@ def _table_row(relation: FakeRelation) -> dict[str, object]:
         "table_schema": relation.schema,
         "table_name": relation.name,
         "table_type": relation.table_type,
-        "is_transient": ("NO", "YES")[relation.is_transient],
+        "is_transient": (("NO", "YES")[relation.is_transient], None)[
+            relation.table_type in _VIEW_TABLE_TYPES
+        ],
         "created": _FIXED_CREATED_AT,
         "last_altered": _FIXED_CREATED_AT,
         "retention_time": (relation.retention_time, None)[relation.table_type in _VIEW_TABLE_TYPES],

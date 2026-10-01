@@ -90,7 +90,7 @@ class ShowRelationRowTestCase:
     is_view: bool
     row: dict[str, object]
     expected_relation_type: str
-    expected_is_transient: bool
+    expected_is_transient: bool | None
     expected_retention_days: int | None
 
 

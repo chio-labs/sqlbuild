@@ -46,7 +46,7 @@ def listed_relation_from_show_view(
         row=row,
         database=database,
         relation_type="materialized view" if _flag(row.get("is_materialized")) else "view",
-        is_transient=False,
+        is_transient=None,
         retention_days=None,
     )
 
@@ -65,7 +65,7 @@ def _listed_relation(
     row: Mapping[str, object],
     database: str | None,
     relation_type: str,
-    is_transient: bool,
+    is_transient: bool | None,
     retention_days: int | None,
 ) -> ListedRelation:
     stored_name: str = str(row["name"])

@@ -1836,13 +1836,13 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def read_schema_column_listing(
         self, *, connection: _SnowflakeConnection, database: str | None, schema: str
     ) -> SchemaColumnListing:
-        """List one schema's columns with SHOW COLUMNS; reread a truncated result exactly."""
+        """List one schema's columns with SHOW COLUMNS; reread a result of exactly the row cap."""
 
         scope: str = self._show_schema_scope(database=database, schema=schema)
         rows: list[dict[str, object]] = self._fetch_show_rows(
             connection=connection, query=f"SHOW COLUMNS IN SCHEMA {scope}"
         )
-        if len(rows) >= _SHOW_RESULT_LIMIT:
+        if len(rows) == _SHOW_RESULT_LIMIT:
             return self._read_information_schema_column_listing(
                 connection=connection, database=database, schema=schema
             )
