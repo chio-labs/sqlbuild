@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.129.0](https://github.com/chio-labs/sqlbuild/compare/v0.128.0...v0.129.0) (2026-10-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **format:** layout-only token formatter with canonical SQL fingerprints ([#902](https://github.com/chio-labs/sqlbuild/issues/902))
+
+### Features
+
+* **format:** layout-only token formatter with canonical SQL fingerprints ([#902](https://github.com/chio-labs/sqlbuild/issues/902)) ([9d81b0f](https://github.com/chio-labs/sqlbuild/commit/9d81b0f55ac80fc31bae6efa3cb4d337a64845fa))
+
 ## [0.128.0](https://github.com/chio-labs/sqlbuild/compare/v0.127.2...v0.128.0) (2026-10-01)
 
 
