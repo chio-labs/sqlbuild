@@ -42,14 +42,30 @@ line_width = 100
 Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
 are normalized as spaces, while blank lines preserve paragraph boundaries.
 
-SQL lines longer than the width are broken at the outermost structure first: before top-level
-`AND` and `OR` (never inside `BETWEEN ... AND`), then before arithmetic operators, then by putting
-the arguments of a function call, `IN` list, or array one per line. Inside `OVER (...)`,
-`PARTITION BY` and `ORDER BY` go on separate lines. Header `audits [...]` lists put each audit, and
-then each audit argument, on its own line. String literals, comments, and lines that carry a
-comment are never broken, so a line can stay longer than the width when nothing on it can be split.
-Lines within the width keep their layout. `sqb format --check` fails while a long line can still
-be shortened.
+Clause layout follows a few fixed rules:
+
+- A `SELECT` list with exactly one item stays on the `SELECT` line when the item fits (`SELECT *`,
+  `SELECT DISTINCT order_id`). Two or more items go one per line.
+- `WHERE`, `QUALIFY` and `HAVING` with one top-level condition stay on the clause line when it
+  fits (`WHERE amount > 0`). Several `AND`/`OR` conditions go one per line.
+- Each CTE closes with `),` followed by one blank line, and one blank line separates the last CTE
+  from the statement that uses it. Comments above a CTE stay directly above its name.
+- A `VALUES` list that does not fit on its line puts each row on its own line under `VALUES`, and a
+  row is never split, even when it is longer than the width.
+- When an operand of `+`, `-`, `*`, `/`, `%`, `||`, `AND` or `OR` spans several lines, the
+  operator starts the next line.
+- A broken `DECODE` puts its first argument on its own line, then one search/result pair per line,
+  then any default.
+
+SQL lines longer than the width, counting any trailing alias and comma, are broken at the outermost
+structure first: before top-level `AND` and `OR` (never inside `BETWEEN ... AND`), then before
+arithmetic operators, then by putting the arguments of the widest outermost function call, `IN`
+list, or array one per line, or the branches of a `CASE` on their own lines. Inside `OVER (...)`,
+`PARTITION BY` and `ORDER BY` go on separate lines. Type parameters such as `NUMBER(38, 2)` or
+`VARCHAR(MAX)` are never split; the enclosing call breaks instead. Header `audits [...]` lists put
+each audit, and then each audit argument, on its own line. String literals, comments, and lines that
+carry a comment are never broken, so a line can stay longer than the width when nothing on it can be
+split. `sqb format --check` fails while a long line can still be shortened.
 
 ## What formatting preserves
 
