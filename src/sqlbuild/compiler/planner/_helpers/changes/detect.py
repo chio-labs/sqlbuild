@@ -49,7 +49,7 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, SchemaColumnSource
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -297,7 +297,7 @@ def detect_model_changes(
             ),
             dialect=snapshot.column_dialect,
         )
-        if any(finding.source == SchemaColumnSource.YML for finding in schema_findings):
+        if schema_findings and (query_changed or changed_functions or config_changed):
             schema_backfill = resolve_replay_on_change(
                 replay_on_change=get_config_str(values=model.config.values, key="replay_on_change")
             )

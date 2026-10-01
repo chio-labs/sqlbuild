@@ -130,11 +130,12 @@ plan or build is a one-run hard ceiling and explicit authorization for an intent
 ## Replay, full refresh and schema changes
 
 - `replay_on_change` decides how much to reprocess when the model's own query changes, a
-  function it calls directly changes, or its own declared columns change: `forward` (default),
-  `full`, or `bounded-<duration>` such as `bounded-14d`. Upstream changes, first runs and renames
-  never replay a downstream model; it continues forward. Columns inferred from upstream (for
-  example through `SELECT *`) evolve via `on_schema_change`, and `__ref`/`cursor_inputs` names
-  rewritten by a `migrate_from` rename are not a change. Functions have no replay setting.
+  function it calls directly changes, or its own header or contract changes its columns:
+  `forward` (default), `full`, or `bounded-<duration>` such as `bounded-14d`. Upstream changes,
+  first runs and renames never replay a downstream model; it continues forward. Schema
+  differences of an unchanged model come from upstream and evolve via `on_schema_change` (an
+  enforced contract still fails loudly), and `__ref`/`cursor_inputs` names rewritten by a
+  `migrate_from` rename are not a change. Functions have no replay setting.
 - `--full-refresh` rebuilds selected models unless a model sets `full_refresh false`;
   `full_refresh true` always rebuilds. A `full_refresh false` model is only fully rebuilt by its
   own first run or its own query change with `replay_on_change full`; anything else fails the plan

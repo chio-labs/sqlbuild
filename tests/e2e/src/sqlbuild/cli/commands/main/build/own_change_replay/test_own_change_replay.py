@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.own_change_replay._test_type
     RenamePlanBuildTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.own_change_replay.helpers import (
+    ENFORCED_CONTRACT_CONFIG,
     add_upstream_column,
     assert_plan_fails,
     assert_plan_text,
@@ -484,10 +485,10 @@ def test_given_upstream_column_added_when_downstream_selects_star_then_no_replay
     "test_case",
     [
         OwnChangePlanBuildTestCase(
-            description="own declared column type change follows replay_on_change full",
+            description="own contract column type change follows replay_on_change full",
             expected_plan_fragments=("down                 full rebuild",),
             unexpected_plan_fragments=("S203",),
-            expected_reasons={"down": "schema_changed"},
+            expected_reasons={"down": "config_changed"},
             expected_rows={},
         )
     ],
@@ -496,7 +497,9 @@ def test_given_upstream_column_added_when_downstream_selects_star_then_no_replay
 def test_given_own_declared_column_change_when_planning_then_own_replay_policy_applies(
     test_case: OwnChangePlanBuildTestCase, tmp_path: Path
 ) -> None:
-    project_dir: Path = build_star_project(tmp_path=tmp_path, downstream_config="")
+    project_dir: Path = build_star_project(
+        tmp_path=tmp_path, downstream_config=ENFORCED_CONTRACT_CONFIG
+    )
     declare_downstream_column_type(project_dir=project_dir)
 
     assert_plan_text(

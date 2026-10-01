@@ -11,13 +11,13 @@ A model's own change is any of:
 
 - **Query changed**: its compiled SQL differs from the recorded definition.
 - **Function changed**: a UDF or table function that the model calls directly has a new definition. The model's SQL text is unchanged, but its results can differ, so this counts as a query change of the model. Models further downstream do not see it.
-- **Schema changed**: its declared or inferred columns differ from the warehouse. Only a change to the model's own declared columns (its `columns` block, contract, or schema YAML) follows `replay_on_change`. Columns inferred from its unchanged SQL, for example a column an upstream added that `SELECT *` passes through, are applied forward through [`on_schema_change`](/docs/concepts/incremental#on_schema_change) and never replay history.
+- **Schema changed**: its declared or inferred columns differ from the warehouse. A schema difference follows `replay_on_change` only when the model's own definition also changed in this plan: its SQL, its header config, or its contract. When the model itself is unchanged, every schema difference comes from upstream (an added, removed, or retyped column, declared or inferred) and never replays history. It is applied forward through [`on_schema_change`](/docs/concepts/incremental#on_schema_change), and an enforced contract whose declared column disappeared upstream still fails the build.
 - **Config changed**: version-relevant configuration differs. A config change alone does not replay history.
 - **First run**: the model's relation does not exist yet. Only that model is built from scratch.
 
 References rewritten by a rename are not a change of their own. When an upstream model is renamed with `migrate_from` (for example by [`sqb rename`](/docs/cli/rename)), a downstream model whose only difference is the rewritten `__ref` and `cursor_inputs` name keeps its identity: views are recreated as usual, and incremental models continue forward. This also holds when the renamed model was built in an earlier run, for example by a selective build, or when its `migrate_from` was removed afterwards, because recorded renames are read from migration history. A downstream model that also has a real edit is a normal query change.
 
-For a query, function, or own declared schema change, the model's own `replay_on_change` decides the replay:
+For a query, function, or own-definition schema change, the model's own `replay_on_change` decides the replay:
 
 | `replay_on_change` | Effect on an incremental model |
 |--------------------|-------------------------------|

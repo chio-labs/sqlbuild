@@ -172,7 +172,7 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             expected_backfill_action=BackfillAction.BOUNDED,
         ),
         DetectModelChangesTestCase(
-            description="detects schema change when expected column is missing from warehouse",
+            description="schema finding of an unchanged model never replays",
             model_name="orders",
             query_sql=_QUERY_SQL,
             config_values={"replay_on_change": "full"},
@@ -184,7 +184,7 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             query_change_tracking=True,
             full_refresh=False,
             expected_change_kind=ChangeKind.SCHEMA_CHANGED,
-            expected_backfill_action=BackfillAction.FULL,
+            expected_backfill_action=BackfillAction.FORWARD_ONLY,
         ),
         DetectModelChangesTestCase(
             description="returns full backfill when full refresh is requested",
@@ -269,11 +269,15 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             expected_backfill_action=BackfillAction.FORWARD_ONLY,
         ),
         DetectModelChangesTestCase(
-            description="own declared column follows the model's replay policy",
+            description="schema finding with an own header change follows the replay policy",
             model_name="orders",
             query_sql=_QUERY_SQL,
             config_values={"materialized": "incremental", "replay_on_change": "full"},
-            fingerprint_config_values={"materialized": "incremental", "replay_on_change": "full"},
+            fingerprint_config_values={
+                "materialized": "incremental",
+                "replay_on_change": "full",
+                "on_schema_change": "fail",
+            },
             schema_columns=(("id", "INTEGER"), ("channel", "VARCHAR")),
             relation_exists=True,
             fingerprint_query_hash=_MATCHING_HASH,
@@ -302,7 +306,7 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             expected_backfill_action=BackfillAction.FORWARD_ONLY,
         ),
         DetectModelChangesTestCase(
-            description="column removed from an enforced declared contract follows replay policy",
+            description="declared column removed upstream of an unchanged model never replays",
             model_name="orders",
             query_sql=_QUERY_SQL,
             config_values={"materialized": "incremental", "replay_on_change": "full"},
@@ -316,7 +320,7 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             query_change_tracking=True,
             full_refresh=False,
             expected_change_kind=ChangeKind.SCHEMA_CHANGED,
-            expected_backfill_action=BackfillAction.FULL,
+            expected_backfill_action=BackfillAction.FORWARD_ONLY,
         ),
         DetectModelChangesTestCase(
             description="does not report passthrough columns removed for unresolved star",
