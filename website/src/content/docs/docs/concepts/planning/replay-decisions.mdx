@@ -1,0 +1,46 @@
+---
+title: "Replay decisions"
+description: "How much history each model reprocesses: decided by its own change and its own replay_on_change, never inherited from upstream."
+---
+
+Every model decides how much of its history to reprocess from two things only: its own change and its own `replay_on_change` setting. A change, rebuild, rename, or replay of an upstream model never forces a downstream model to replay.
+
+## What a model reacts to
+
+A model's own change is any of:
+
+- **Query changed**: its compiled SQL differs from the recorded definition.
+- **Function changed**: a UDF or table function that the model calls directly has a new definition. The model's SQL text is unchanged, but its results can differ, so this counts as a query change of the model. Models further downstream do not see it.
+- **Schema changed**: its declared or inferred columns differ from the warehouse.
+- **Config changed**: version-relevant configuration differs. A config change alone does not replay history.
+- **First run**: the model's relation does not exist yet. Only that model is built from scratch.
+
+For a query, function, or schema change, the model's own `replay_on_change` decides the replay:
+
+| `replay_on_change` | Effect on an incremental model |
+|--------------------|-------------------------------|
+| `forward` (default) | Continue forward from the cursor; existing history keeps its old results |
+| `bounded-<duration>` | Reprocess that window, for example `bounded-14d` |
+| `full` | Rebuild the whole table |
+
+Functions have no replay setting of their own. Set `replay_on_change` on the models that call the function.
+
+## How materialization types respond
+
+- **Views** are recreated on every build. A view whose upstream was added, renamed, or rebuilt is recreated as usual.
+- **Tables** are rebuilt on every build from their current upstreams.
+- **Incremental models** run their normal incremental step unless their own change asks for more. When an upstream is rebuilt or replayed, a downstream incremental model picks up whatever its cursor and `lookback` reach on its next run; older history is not reprocessed.
+
+For example, adding a new table between an existing table and a view plans the new table as a first run, recreates the view because its query changed, and continues every incremental model downstream of the view forward.
+
+## Replaying downstream history on purpose
+
+When an upstream change should also be applied to the existing history of downstream models, request it explicitly for those models: build them with an explicit cursor interval (`--start-cursor-ts` and `--end-cursor-ts`), or select them with `--full-refresh`.
+
+## Protected models
+
+A model that sets `full_refresh false` is never fully rebuilt by anything but its own explicit configuration: its own first run, or its own query change with `replay_on_change full`. If anything else would fully rebuild it, for example a called function's change with `replay_on_change full`, the plan fails with `S203`, naming the model and the cause. See [Incremental models](/docs/concepts/incremental#full-refresh-overrides).
+
+## Plan output
+
+`sqb plan` lists each model under its own change: `Query changed`, `Function changed`, `Schema changed`, `Config changed`, `First run`, or `Renamed`. A direct caller of a changed function shows `cause: function <name> changed`. In `sqb plan --json`, the same model has `"reason": "function_changed"` and a `changed_functions` list.

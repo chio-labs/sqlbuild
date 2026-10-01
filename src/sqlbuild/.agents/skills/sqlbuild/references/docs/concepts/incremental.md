@@ -114,7 +114,15 @@ MODEL (
 );
 ```
 
-The override is evaluated per model, so one selection can contain incrementally executed opt-outs and full-refreshed models. It controls execution mode rather than acting as a safety rejection: an opted-out model does not abort the rest of the build.
+The override is evaluated per model, so one selection can contain incrementally executed opt-outs and full-refreshed models. With `--full-refresh`, an opted-out model simply runs incrementally; it does not abort the rest of the build.
+
+`full_refresh false` also protects the model from every other full rebuild. Only the model's own explicit configuration can fully rebuild it: its own first run, or its own query change with `replay_on_change full`. If anything else would plan a full rebuild, for example a changed function that the model calls while it sets `replay_on_change full`, the plan fails with `S203`, naming the model and the cause, instead of silently replaying its history:
+
+```
+error[S203]: model 'order_history' sets full_refresh false, but the plan would fully rebuild it (function normalize_status changed with replay_on_change full)
+```
+
+Set `replay_on_change` to `forward` or `bounded-<duration>` to keep the existing history, or remove `full_refresh false` to allow the rebuild. Upstream changes never cause a full rebuild of a downstream model; see [Replay decisions](planning/replay-decisions.md).
 
 This does not skip initial loading. If the destination relation does not exist, an incremental or microbatch model still builds the history required by its cursor policy. Cloning an existing destination before the build can provide a current watermark and avoid a first-run historical replay.
 
@@ -173,7 +181,7 @@ WHERE ordered_at >= __cursor_start()
   AND ordered_at < __cursor_end()
 ```
 
-`__cursor_start()` is the effective inclusive start and `__cursor_end()` is the effective exclusive end after cursor floors, lookback, replay policy, and command-line overrides have been applied. The intrinsics accept no arguments and are only valid in built-in cursor incremental model query SQL. They are rejected in functions, hooks, audits, SQL tests and scenarios, source expressions, non-incremental or cursorless models, custom materializations, and non-microbatch full refreshes.
+`__cursor_start()` is the effective inclusive start and `__cursor_end()` is the effective exclusive end after cursor floors, lookback, replay policy, and command-line overrides have been applied. The intrinsics accept no arguments and are only valid in built-in cursor incremental model query SQL. They are rejected in functions, hooks, audits, SQL tests and scenarios, source expressions, non-incremental or cursorless models, custom materializations, and non-microbatch full refreshes. A non-microbatch model given a FULL backfill by `--full-refresh` fails with a message naming that cause; pass an explicit interval with `--start-cursor-ts` and `--end-cursor-ts` (or the `-int` forms) to rebuild it.
 
 In microbatch mode, the intrinsics resolve to each batch's concrete bounds. A microbatch full refresh discovers its range from current inputs while ignoring the old destination watermark.
 
@@ -324,7 +332,7 @@ The legacy scalar `max_microbatches` model field remains supported as a fail/war
 
 ### Mixed-grain chains
 
-When a downstream microbatch model reads from an upstream model with a coarser time grain, SQLBuild aligns the replay to the coarsest participating grain (the model's own grain and its cursor-input grains). This happens on every run that resolves cursor bounds from upstream models, not only when something changes. It is independent of the `replay_on_change` cascade behavior described below.
+When a downstream microbatch model reads from an upstream model with a coarser time grain, SQLBuild aligns the replay to the coarsest participating grain (the model's own grain and its cursor-input grains). This happens on every run that resolves cursor bounds from upstream models, not only when something changes. It is independent of the `replay_on_change` policy described below.
 
 Alignment does two things: it floors the replay window edges to the coarsest grain, and it coarsens the batch size to that grain. For example, an hourly model downstream of a daily model processes in day-sized batches, so each batch lines up with a unit of upstream data that actually advances instead of producing empty or boundary-straddling windows:
 
@@ -360,7 +368,7 @@ MODEL (
 
 ## Replay on change
 
-When a model's version identity changes (query, config, upstream cascade, or any other change reason), `replay_on_change` is the explicit, per-model policy for how much data to reprocess. Reprocessing is a policy you set, not an automatic forced rebuild, so a definition change does not silently trigger a full rebuild of large downstream tables. You choose the cost per model:
+When a model's own query changes, a function it calls directly changes, or its schema changes, `replay_on_change` is the explicit, per-model policy for how much data to reprocess. Reprocessing is a policy you set, not an automatic forced rebuild, so a definition change does not silently trigger a full rebuild of large tables. Upstream changes never replay a downstream model. You choose the cost per model:
 
 | Value | Effect |
 |-------|--------|
@@ -381,7 +389,7 @@ MODEL (
 );
 ```
 
-See [Cascade propagation](planning/cascade-propagation.md) for how replay policies propagate through the DAG and how downstream models can override inherited replay behavior.
+See [Replay decisions](planning/replay-decisions.md) for what counts as a model's own change and how materialization types respond to upstream changes.
 
 ### on_schema_change
 

@@ -129,10 +129,14 @@ plan or build is a one-run hard ceiling and explicit authorization for an intent
 
 ## Replay, full refresh and schema changes
 
-- `replay_on_change` decides how much to reprocess when the model's identity changes:
-  `forward` (default), `full`, or `bounded-<duration>` such as `bounded-14d`.
+- `replay_on_change` decides how much to reprocess when the model's own query changes, a
+  function it calls directly changes, or its schema changes: `forward` (default), `full`, or
+  `bounded-<duration>` such as `bounded-14d`. Upstream changes, first runs and renames never
+  replay a downstream model; it continues forward. Functions have no replay setting of their own.
 - `--full-refresh` rebuilds selected models unless a model sets `full_refresh false`;
-  `full_refresh true` always rebuilds.
+  `full_refresh true` always rebuilds. A `full_refresh false` model is only fully rebuilt by its
+  own first run or its own query change with `replay_on_change full`; anything else fails the plan
+  with `S203`.
 - `on_schema_change`: `append_new_columns` (default), `sync_all_columns`, `ignore`, `fail`.
 - Cursor overrides for one run: `--start-cursor-ts/--end-cursor-ts` (ISO) or
   `--start-cursor-int/--end-cursor-int`.
@@ -145,5 +149,5 @@ plan or build is a one-run hard ceiling and explicit authorization for an intent
 4. Verify with `sqb diff prod:dev --bounded 14d --select <model>` or a query diff over the window.
 
 Full reference: [docs/concepts/incremental.md](docs/concepts/incremental.md),
-[docs/concepts/planning/cascade-propagation.md](docs/concepts/planning/cascade-propagation.md),
+[docs/concepts/planning/replay-decisions.md](docs/concepts/planning/replay-decisions.md),
 [docs/concepts/snapshots.md](docs/concepts/snapshots.md).

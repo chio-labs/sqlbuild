@@ -16,7 +16,7 @@ Online: https://sqlbuild.com/docs/concepts/functions/
 - Python UDF options
 - Adapter support
 
-Functions are SQL or Python definitions under `functions/` that SQLBuild compiles and deploys to the warehouse alongside your models. They participate in the DAG - if a function definition changes, every model that uses it is rebuilt.
+Functions are SQL or Python definitions under `functions/` that SQLBuild compiles and deploys to the warehouse alongside your models. They participate in the DAG: if a function definition changes, SQLBuild redeploys it, and every model that calls it directly treats the change as a change to its own query.
 
 ## Scalar UDFs
 
@@ -144,7 +144,9 @@ function folder or to that folder and its children.
 
 ## Change propagation
 
-Functions participate in fingerprint-based change detection. Their identity includes dependencies and declared return contracts in addition to the function body and runtime metadata. If a function changes, SQLBuild redeploys it and marks dependent models as changed.
+Functions participate in fingerprint-based change detection. Their identity includes dependencies and declared return contracts in addition to the function body and runtime metadata. If a function changes, SQLBuild redeploys it.
+
+A model that calls a changed function directly plans as `Function changed`, with `cause: function <name> changed`. The function change counts as a change to that model's own query, so the model's own `replay_on_change` decides how much history it reprocesses (forward-only by default). Models further downstream are not affected by the function change and continue forward. Functions have no replay setting of their own; to reprocess history when a function changes, set `replay_on_change` on the models that call it. See [Replay decisions](planning/replay-decisions.md).
 
 ## Project layout
 
