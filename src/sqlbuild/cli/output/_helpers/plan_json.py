@@ -25,7 +25,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     SourceLoadPlanEntry,
 )
-from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType
+from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
@@ -187,6 +187,8 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         "duration": entry.backfill.duration,
     }
 
+    if entry.reason == PlanReason.RENAMED and entry.query_changed:
+        model["query_changed"] = True
     if entry.changed_functions:
         model["changed_functions"] = list(entry.changed_functions)
 

@@ -208,9 +208,7 @@ def plan_model_migrations(
                     request.model.name, ()
                 ),
             )
-    renamed: frozenset[str] = _renamed_models(
-        runtime=runtime, entries=tuple(entries), handovers=handovers
-    )
+    renamed: frozenset[str] = _renamed_models(entries=tuple(entries), handovers=handovers)
     return ModelMigrationPlanning(
         snapshot=replace(
             _overlay_snapshot(
@@ -218,9 +216,7 @@ def plan_model_migrations(
                 scope=scope,
                 snapshot=snapshot,
                 entries=tuple(entries),
-                handovers=_effective_handovers(
-                    entries=tuple(entries), handovers=handovers, renamed=renamed
-                ),
+                handovers=handovers,
                 state=state,
                 overrides=overrides,
                 deferral=deferral,
@@ -237,36 +233,17 @@ def plan_model_migrations(
 
 def _renamed_models(
     *,
-    runtime: PlannerRuntime,
     entries: tuple[ModelMigrationPlanEntry, ...],
     handovers: dict[str, Fingerprint | None],
 ) -> frozenset[str]:
-    """Return renamed tables and views whose handed-over definition matches their own."""
+    """Return renamed tables and views that inherit their predecessor's identity."""
 
-    query_sql: dict[str, str] = {model.name: model.query_sql for model in runtime.project.models}
     return frozenset(
         entry.model_name
         for entry in entries
         if entry.decision == MigrationDecision.RENAMED
-        and (handover := handovers.get(entry.model_name)) is not None
-        and handover.definition == query_sql.get(entry.model_name)
+        and handovers.get(entry.model_name) is not None
     )
-
-
-def _effective_handovers(
-    *,
-    entries: tuple[ModelMigrationPlanEntry, ...],
-    handovers: dict[str, Fingerprint | None],
-    renamed: frozenset[str],
-) -> dict[str, Fingerprint | None]:
-    """Drop the handover of any rename whose definition no longer matches."""
-
-    unmatched: frozenset[str] = frozenset(
-        entry.model_name
-        for entry in entries
-        if entry.decision == MigrationDecision.RENAMED and entry.model_name not in renamed
-    )
-    return {name: None if name in unmatched else handover for name, handover in handovers.items()}
 
 
 def _equivalent_definition(
@@ -448,6 +425,7 @@ def _decide(
             origin_fingerprint=origin_fingerprint,
             origin_exists=origin_relation is not None,
             manual=request.discovery == MigrationDiscovery.MANUAL,
+            snapshot=snapshot,
         )
     if (
         newest is not None
@@ -519,6 +497,7 @@ def _decide_rename(
     origin_fingerprint: Fingerprint | None,
     origin_exists: bool,
     manual: bool,
+    snapshot: WarehouseSnapshot,
 ) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]:
     """Hand a renamed table or view's identity to its successor; no data moves."""
 
@@ -530,13 +509,22 @@ def _decide_rename(
     )
     if manual and not recorded and not origin_exists:
         return replace(base, decision=MigrationDecision.ORIGIN_MISSING), None, False
+    built_since_rename: bool = (
+        recorded
+        and newest is not None
+        and not _done_handover_applies(model=model, event=newest, snapshot=snapshot)
+    )
     return (
         replace(
             base,
             decision=MigrationDecision.RENAMED,
             completed_at=newest.created_at if recorded and newest is not None else None,
         ),
-        _handover_fingerprint(model=model, fingerprint=origin_fingerprint, version_hash=""),
+        (
+            snapshot.fingerprints.models.get(model.name)
+            if built_since_rename
+            else _handover_fingerprint(model=model, fingerprint=origin_fingerprint, version_hash="")
+        ),
         True,
     )
 

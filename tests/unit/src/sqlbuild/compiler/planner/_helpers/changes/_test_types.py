@@ -86,3 +86,11 @@ class ResolveBackfillTestCase:
     raw_value: str | None
     expected_result: BackfillResult
 
+
+@dataclass(frozen=True)
+class DetectRenamedModelTestCase:
+    description: str
+    previous_definition: str
+    config_values: dict[str, object]
+    expected_query_changed: bool
+    expected_backfill: BackfillResult
