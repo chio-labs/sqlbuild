@@ -46,13 +46,6 @@ class InspectionCatalog:
 
         return self._concurrency
 
-    def cached_relation_listing(
-        self, *, database: str | None, schema: str
-    ) -> SchemaRelationListing | None:
-        """Return a schema listing already read in this invocation, without reading."""
-
-        return self._relation_listings.get(self._schema_key(database=database, schema=schema))
-
     def list_relations(
         self,
         *,

@@ -112,6 +112,7 @@ class SnowflakeInspectionBudgetTestCase:
     expected_schema_reads: dict[str, int]
     expected_metadata_budget: int
     expected_in_list_limit: int
+    expected_freshness_reads: int
 
 
 @dataclass(frozen=True)
@@ -128,4 +129,4 @@ class SnowflakeReplanTestCase:
     """Planning the same project twice in separate invocations."""
 
     description: str
-    expected_tables_reads: int
+    expected_listing_reads: int

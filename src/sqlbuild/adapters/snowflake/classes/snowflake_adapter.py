@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
@@ -81,9 +82,11 @@ from sqlbuild.adapter.contract.types import (
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
+from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.relations.main.render_inspection_sql import render_inspection_sql
+from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
 from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
     run_recorded_inspection_query,
 )
@@ -107,19 +110,26 @@ from sqlbuild.adapters.snowflake._helpers.grants import (
     show_grants_object_kind,
     snowflake_relation_grants,
 )
+from sqlbuild.adapters.snowflake._helpers.metadata_types import (
+    information_schema_type,
+    show_columns_type,
+)
+from sqlbuild.adapters.snowflake._helpers.show_metadata import (
+    is_missing_object_error,
+    listed_relation_from_show_table,
+    listed_relation_from_show_view,
+)
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.snowflake.constants import (
     BASE_TABLE_METADATA_TYPE,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
-    NUMBER_TYPE_NAME,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
     SECONDARY_ROLES_ALL,
     SECONDARY_ROLES_NONE,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
-    TEXT_TYPE_NAMES,
     TRUE_METADATA_VALUE,
     VIEW_RELATION_TYPE_TOKEN,
 )
@@ -136,6 +146,9 @@ from sqlbuild.sql_values.models import SqlValue
 
 _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
 _METADATA_INSPECTION_CONCURRENCY: int = 8
+_SHOW_RESULT_LIMIT: int = 10_000
+_SHOW_COLUMN_KIND: str = "COLUMN"
+_SHOW_COLUMN_KINDS: frozenset[str] = frozenset({_SHOW_COLUMN_KIND, "VIRTUAL_COLUMN"})
 _RELATION_LISTING_COLUMNS: str = (
     "table_name, table_schema, table_type, is_transient, created, last_altered, retention_time"
 )
@@ -382,55 +395,61 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str | None,
         scoped_requests: list[TableFreshnessRequest],
     ) -> list[tuple[Any, ...]]:
-        """Reuse the planning catalog's schema listing, or read the requested tables."""
+        """Read LAST_ALTERED for only the requested tables, in bounded IN-list chunks."""
 
+        names: tuple[str, ...] = tuple(
+            dict.fromkeys(
+                self._information_schema_identifier(request.name) for request in scoped_requests
+            )
+        )
+        relation: str = self._information_schema_relation(
+            database=scoped_requests[0].database, name="tables"
+        )
+        scope_clauses: list[str] = []
+        scope_params: list[str] = []
+        if database is not None:
+            scope_clauses.append("table_catalog = %s")
+            scope_params.append(database)
+        if schema is not None:
+            scope_clauses.append("table_schema = %s")
+            scope_params.append(schema)
+        chunks: tuple[tuple[str, ...], ...] = tuple(
+            names[start : start + INSPECTION_IN_LIST_LIMIT]
+            for start in range(0, len(names), INSPECTION_IN_LIST_LIMIT)
+        )
         catalog: InspectionCatalog | None = active_inspection_catalog(
             adapter=self, connection=connection
         )
-        if catalog is not None and schema is not None:
-            catalog.prefetch_relation_listings(
-                database=scoped_requests[0].database, schemas=(schema,)
-            )
-            listing: SchemaRelationListing | None = catalog.cached_relation_listing(
-                database=scoped_requests[0].database, schema=schema
-            )
-            if listing is not None:
-                wanted: frozenset[str] = frozenset(
-                    self._information_schema_identifier(request.name) for request in scoped_requests
+        chunk_rows: list[list[tuple[Any, ...]]] = run_bounded_inspections(
+            tasks=tuple(
+                self._bind_freshness_chunk(
+                    connection=connection,
+                    query=(
+                        "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
+                        f"FROM {relation} WHERE "
+                        + " AND ".join(
+                            (*scope_clauses, f"table_name IN ({', '.join(['%s'] * len(chunk))})")
+                        )
+                    ),
+                    params=(*scope_params, *chunk),
                 )
-                return [
-                    (database, row[1], row[0], row[2], row[5])
-                    for row in listing.rows
-                    if str(row[0]) in wanted
-                ]
-        clauses: list[str] = []
-        params: list[str] = []
-        if database is not None:
-            clauses.append("table_catalog = %s")
-            params.append(database)
-        if schema is not None:
-            clauses.append("table_schema = %s")
-            params.append(schema)
-        placeholders: str = ", ".join(["%s"] * len(scoped_requests))
-        clauses.append(f"table_name IN ({placeholders})")
-        params.extend(
-            self._information_schema_identifier(request.name) for request in scoped_requests
+                for chunk in chunks
+            ),
+            concurrency=1 if catalog is None else catalog.concurrency,
         )
-        cursor: Any = connection.cursor()
-        try:
-            cursor.execute(
-                "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
-                "FROM "
-                + self._information_schema_relation(
-                    database=scoped_requests[0].database, name="tables"
-                )
-                + " WHERE "
-                + " AND ".join(clauses),
-                tuple(params),
-            )
-            return list(cursor.fetchall())
-        finally:
-            cursor.close()
+        rows: list[tuple[Any, ...]] = []
+        chunk_result: list[tuple[Any, ...]]
+        for chunk_result in chunk_rows:
+            rows.extend(chunk_result)
+        return rows
+
+    def _bind_freshness_chunk(
+        self, *, connection: Any, query: str, params: tuple[str, ...]
+    ) -> Callable[[], list[tuple[Any, ...]]]:
+        def read() -> list[tuple[Any, ...]]:
+            return self._fetch_inspection_rows(connection=connection, query=query, params=params)
+
+        return read
 
     @staticmethod
     def _freshness_request_key(
@@ -1793,38 +1812,59 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def read_schema_relation_listing(
         self, *, connection: _SnowflakeConnection, database: str | None, schema: str
     ) -> SchemaRelationListing:
-        """List every relation in one schema with a single unfiltered metadata read."""
+        """List one schema's tables and views with SHOW, which needs no running warehouse."""
 
-        query: str = (
-            f"SELECT {_RELATION_LISTING_COLUMNS} "
-            f"FROM {self._information_schema_relation(database=database, name='tables')} "
-            "WHERE table_schema = %s"
+        scope: str = self._show_schema_scope(database=database, schema=schema)
+        tables: list[dict[str, object]] = self._fetch_paged_show_rows(
+            connection=connection, query=f"SHOW TABLES IN SCHEMA {scope}"
         )
-        params: list[str] = [self._information_schema_identifier(schema)]
-        if database is not None:
-            query += " AND table_catalog = %s"
-            params.append(self._information_schema_identifier(database))
-        rows: list[tuple[Any, ...]] = self._fetch_inspection_rows(
-            connection=connection, query=query, params=tuple(params)
+        views: list[dict[str, object]] = self._fetch_paged_show_rows(
+            connection=connection, query=f"SHOW VIEWS IN SCHEMA {scope}"
         )
+        entries: dict[str, ListedRelation] = {}
+        row: dict[str, object]
+        for row in tables:
+            listed: ListedRelation = listed_relation_from_show_table(row=row, database=database)
+            entries[listed.stored_name] = listed
+        for row in views:
+            listed = listed_relation_from_show_view(row=row, database=database)
+            entries[listed.stored_name] = listed
         return SchemaRelationListing(
-            database=database,
-            schema=schema,
-            entries=tuple(
-                ListedRelation(
-                    stored_name=str(row[0]),
-                    relation=self._relation_info_from_row(row=row, database=database),
-                )
-                for row in rows
-            ),
-            rows=tuple(tuple(row) for row in rows),
+            database=database, schema=schema, entries=tuple(entries.values())
         )
 
     def read_schema_column_listing(
         self, *, connection: _SnowflakeConnection, database: str | None, schema: str
     ) -> SchemaColumnListing:
-        """List every column in one schema with a single unfiltered metadata read."""
+        """List one schema's columns with SHOW COLUMNS; reread a truncated result exactly."""
 
+        scope: str = self._show_schema_scope(database=database, schema=schema)
+        rows: list[dict[str, object]] = self._fetch_show_rows(
+            connection=connection, query=f"SHOW COLUMNS IN SCHEMA {scope}"
+        )
+        if len(rows) >= _SHOW_RESULT_LIMIT:
+            return self._read_information_schema_column_listing(
+                connection=connection, database=database, schema=schema
+            )
+        columns: dict[str, list[ColumnInfo]] = {}
+        for row in rows:
+            if str(row.get("kind") or _SHOW_COLUMN_KIND).upper() not in _SHOW_COLUMN_KINDS:
+                continue
+            columns.setdefault(str(row["table_name"]), []).append(
+                ColumnInfo(
+                    name=str(row["column_name"]).lower(),
+                    type=show_columns_type(row["data_type"]),
+                )
+            )
+        return SchemaColumnListing(
+            database=database,
+            schema=schema,
+            columns_by_stored_name={name: tuple(value) for name, value in columns.items()},
+        )
+
+    def _read_information_schema_column_listing(
+        self, *, connection: _SnowflakeConnection, database: str | None, schema: str
+    ) -> SchemaColumnListing:
         query: str = (
             "SELECT table_name, column_name, data_type, numeric_precision, numeric_scale, "
             "character_maximum_length FROM "
@@ -1845,7 +1885,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             columns.setdefault(str(row[0]), []).append(
                 ColumnInfo(
                     name=str(row[1]).lower(),
-                    type=self._build_information_schema_type(
+                    type=information_schema_type(
                         data_type=str(row[2]),
                         numeric_precision=row[3],
                         numeric_scale=row[4],
@@ -1858,6 +1898,50 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             schema=schema,
             columns_by_stored_name={name: tuple(value) for name, value in columns.items()},
         )
+
+    def _show_schema_scope(self, *, database: str | None, schema: str) -> str:
+        if database is None:
+            return self.render_identifier(schema)
+        return f"{self.render_identifier(database)}.{self.render_identifier(schema)}"
+
+    def _fetch_paged_show_rows(
+        self, *, connection: _SnowflakeConnection, query: str
+    ) -> list[dict[str, object]]:
+        """Page SHOW output past its row cap; SHOW orders rows by name."""
+
+        rows: list[dict[str, object]] = []
+        page_query: str = f"{query} LIMIT {_SHOW_RESULT_LIMIT}"
+        while True:
+            page: list[dict[str, object]] = self._fetch_show_rows(
+                connection=connection, query=page_query
+            )
+            rows.extend(page)
+            if len(page) < _SHOW_RESULT_LIMIT:
+                return rows
+            last_name: str = str(page[-1]["name"]).replace("'", "''")
+            page_query = f"{query} LIMIT {_SHOW_RESULT_LIMIT} FROM '{last_name}'"
+
+    @staticmethod
+    def _fetch_show_rows(
+        *, connection: _SnowflakeConnection, query: str
+    ) -> list[dict[str, object]]:
+        """Run one SHOW command; a missing or unauthorized schema lists nothing."""
+
+        def fetch() -> list[dict[str, object]]:
+            cursor: Any = connection.cursor()
+            try:
+                try:
+                    cursor.execute(query)
+                except Exception as error:
+                    if is_missing_object_error(error):
+                        return []
+                    raise
+                names: list[str] = [str(column[0]).lower() for column in cursor.description or ()]
+                return [dict(zip(names, row, strict=False)) for row in cursor.fetchall()]
+            finally:
+                cursor.close()
+
+        return run_recorded_inspection_query(sql=query, run=fetch)
 
     def read_relation_columns(
         self, *, connection: _SnowflakeConnection, relation: RelationInfo
@@ -2084,7 +2168,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return tuple(
             ColumnInfo(
                 name=str(row[2]).lower(),
-                type=self._build_show_columns_type(raw_data_type=row[3]),
+                type=show_columns_type(row[3]),
             )
             for row in rows
         )
@@ -2161,29 +2245,6 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             return list(cursor.fetchall())
         finally:
             cursor.close()
-
-    def _build_show_columns_type(self, *, raw_data_type: object) -> str:
-        try:
-            decoded_data_type: object = json.loads(str(raw_data_type))
-        except (json.JSONDecodeError, TypeError) as error:
-            raise AdapterUserError(
-                message="Snowflake SHOW COLUMNS returned invalid type metadata"
-            ) from error
-        if not isinstance(decoded_data_type, dict):
-            raise AdapterUserError(message="Snowflake SHOW COLUMNS returned invalid type metadata")
-        data_type: dict[str, object] = decoded_data_type
-        raw_name: str = str(data_type.get("type", ""))
-        normalized_name: str = {
-            "FIXED": NUMBER_TYPE_NAME,
-            "TEXT": "VARCHAR",
-            "REAL": "FLOAT",
-        }.get(raw_name.upper(), raw_name.upper())
-        return self._build_information_schema_type(
-            data_type=normalized_name,
-            numeric_precision=data_type.get("precision"),
-            numeric_scale=data_type.get("scale"),
-            character_maximum_length=data_type.get("length"),
-        )
 
     def close(self, connection: _SnowflakeConnection) -> None:
         """Close a Snowflake connection."""
@@ -3210,16 +3271,12 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         numeric_scale: object,
         character_maximum_length: object,
     ) -> str:
-        normalized_type: str = data_type.upper()
-        if (
-            normalized_type == NUMBER_TYPE_NAME
-            and isinstance(numeric_precision, int)
-            and isinstance(numeric_scale, int)
-        ):
-            return f"{NUMBER_TYPE_NAME}({numeric_precision},{numeric_scale})"
-        if normalized_type in TEXT_TYPE_NAMES and isinstance(character_maximum_length, int):
-            return f"VARCHAR({character_maximum_length})"
-        return normalized_type
+        return information_schema_type(
+            data_type=data_type,
+            numeric_precision=numeric_precision,
+            numeric_scale=numeric_scale,
+            character_maximum_length=character_maximum_length,
+        )
 
     def validate_row_diff_keys(
         self,

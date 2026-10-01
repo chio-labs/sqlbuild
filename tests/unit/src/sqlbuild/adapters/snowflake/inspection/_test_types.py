@@ -61,3 +61,54 @@ class SpeculativePrefetchTestCase:
     failing_schema: str
     expected_error_fragment: str
     expected_failed_reads: int
+
+
+@dataclass(frozen=True)
+class ShowColumnTypeTestCase:
+    """One SHOW COLUMNS data_type and the INFORMATION_SCHEMA fields of the same column."""
+
+    description: str
+    show_data_type: dict[str, object]
+    information_schema_fields: tuple[str, object, object, object]
+    expected_type: str
+
+
+@dataclass(frozen=True)
+class InvalidShowColumnTypeTestCase:
+    """A SHOW COLUMNS data_type value that is not valid type metadata."""
+
+    description: str
+    raw_data_type: object
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ShowRelationRowTestCase:
+    """One SHOW TABLES or SHOW VIEWS row and the relation INFORMATION_SCHEMA would list."""
+
+    description: str
+    is_view: bool
+    row: dict[str, object]
+    expected_relation_type: str
+    expected_is_transient: bool
+    expected_retention_days: int | None
+
+
+@dataclass(frozen=True)
+class MissingObjectErrorTestCase:
+    """A SHOW failure classified as an absent schema or a real error."""
+
+    description: str
+    errno: int | None
+    message: str
+    expected_missing: bool
+
+
+@dataclass(frozen=True)
+class ShowResultCapTestCase:
+    """A schema whose SHOW output reaches Snowflake's 10,000-row cap."""
+
+    description: str
+    relation_count: int
+    columns_per_relation: int
+    expected_query_kinds: tuple[str, ...]

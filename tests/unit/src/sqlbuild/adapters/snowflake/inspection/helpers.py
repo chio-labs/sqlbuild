@@ -12,7 +12,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from itertools import compress
 from pathlib import Path
@@ -35,6 +35,13 @@ _OTHER_INFORMATION_SCHEMA_PATTERN: re.Pattern[str] = re.compile(
 _SHOW_COLUMNS_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*SHOW\s+COLUMNS\s+IN\s+(?:TABLE|VIEW)\s+(?P<relation>\S+)\s*$", re.IGNORECASE
 )
+_SHOW_SCHEMA_RELATIONS_PATTERN: re.Pattern[str] = re.compile(
+    r"^SHOW (?P<kind>TABLES|VIEWS) IN SCHEMA (?P<scope>\S+)"
+    r"(?: LIMIT (?P<limit>\d+)(?: FROM '(?P<after>(?:[^']|'')*)')?)?$"
+)
+_SHOW_SCHEMA_COLUMNS_PATTERN: re.Pattern[str] = re.compile(
+    r"^SHOW COLUMNS IN SCHEMA (?P<scope>\S+)$"
+)
 _SHOW_PATTERN: re.Pattern[str] = re.compile(r"^\s*SHOW\s", re.IGNORECASE)
 _CURSOR_BOUND_PATTERN: re.Pattern[str] = re.compile(
     r"^SELECT\s+CAST\((?:MIN|MAX)\(.*\)\s+AS\s+VARCHAR\).*\s+FROM\s+(?P<relation>\S+)\s*$",
@@ -48,6 +55,9 @@ _QUERY_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
     (_TABLES_PATTERN, "tables"),
     (_COLUMNS_PATTERN, "columns"),
     (_SHOW_COLUMNS_PATTERN, "show_columns"),
+    (re.compile(r"^SHOW TABLES IN SCHEMA "), "show_tables"),
+    (re.compile(r"^SHOW VIEWS IN SCHEMA "), "show_views"),
+    (_SHOW_SCHEMA_COLUMNS_PATTERN, "show_schema_columns"),
     (_CURSOR_BOUND_PATTERN, "cursor_bounds"),
     (_OTHER_INFORMATION_SCHEMA_PATTERN, "other_metadata"),
     (_SHOW_PATTERN, "other_metadata"),
@@ -63,6 +73,52 @@ _SHOW_DESCRIPTION: tuple[tuple[str], ...] = (
     ("data_type",),
 )
 _BOUND_MARKERS: tuple[str, str] = ("MIN(", "MAX(")
+SHOW_RESULT_CAP: int = 10_000
+_SHOW_TABLE_FIELDS: tuple[str, ...] = (
+    "created_on",
+    "name",
+    "database_name",
+    "schema_name",
+    "kind",
+    "comment",
+    "cluster_by",
+    "rows",
+    "bytes",
+    "owner",
+    "retention_time",
+    "is_external",
+    "is_event",
+    "is_dynamic",
+)
+_SHOW_VIEW_FIELDS: tuple[str, ...] = (
+    "created_on",
+    "name",
+    "reserved",
+    "database_name",
+    "schema_name",
+    "owner",
+    "comment",
+    "text",
+    "is_secure",
+    "is_materialized",
+)
+_SHOW_SCHEMA_COLUMN_FIELDS: tuple[str, ...] = (
+    "table_name",
+    "schema_name",
+    "column_name",
+    "data_type",
+    "null?",
+    "default",
+    "kind",
+    "expression",
+    "comment",
+    "database_name",
+    "autoincrement",
+)
+_VIEW_TABLE_TYPES: frozenset[str] = frozenset({"VIEW", "MATERIALIZED VIEW"})
+_TIMESTAMP_TYPES: frozenset[str] = frozenset(
+    {"TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP_TZ", "TIME"}
+)
 
 
 @dataclass(frozen=True)
@@ -124,6 +180,7 @@ class RecordingSnowflakeWarehouse:
     statement_latency_seconds: float = 0.0
     failing_relations: frozenset[str] = frozenset()
     failing_metadata_schemas: frozenset[str] = frozenset()
+    current_database: str = "ANALYTICS"
     cursor_values: tuple[str, str] = ("2026-01-01 00:00:00.000", "2026-01-31 00:00:00.000")
     queries: list[RecordedQuery] = field(default_factory=list)
     attempted_sql: list[str] = field(default_factory=list)
@@ -213,6 +270,9 @@ class RecordingSnowflakeWarehouse:
         return rows, description
 
     def _load(self, *, table: str, rows: list[dict[str, object]]) -> None:
+        _ROW_LOADERS[bool(rows)](self, table, rows)
+
+    def _insert_rows(self, table: str, rows: list[dict[str, object]]) -> None:
         staged: pyarrow.Table = pyarrow.Table.from_pylist(rows)
         self._database.register("staged_rows", staged)
         self._database.execute(f"INSERT INTO {table} BY NAME SELECT * FROM staged_rows")
@@ -223,6 +283,8 @@ class RecordingSnowflakeWarehouse:
             (_METADATA_RELATION_PATTERN, self._answer_information_schema),
             (_OTHER_INFORMATION_SCHEMA_PATTERN, _answer_empty_metadata),
             (_SHOW_COLUMNS_PATTERN, self._answer_show_columns),
+            (_SHOW_SCHEMA_RELATIONS_PATTERN, self._answer_show_schema_relations),
+            (_SHOW_SCHEMA_COLUMNS_PATTERN, self._answer_show_schema_columns),
             (_CURSOR_BOUND_PATTERN, self._answer_cursor_bounds),
             (_ANY_PATTERN, _answer_status),
         )
@@ -237,9 +299,9 @@ class RecordingSnowflakeWarehouse:
         _MISSING_RELATION_ACTIONS[
             not self.failing_metadata_schemas.isdisjoint(str(param) for param in params)
         ](sql)
-        duckdb_sql: str = _METADATA_RELATION_PATTERN.sub(_scope_metadata_relation, sql).replace(
-            "%s", "?"
-        )
+        duckdb_sql: str = _METADATA_RELATION_PATTERN.sub(
+            self._scope_metadata_relation, sql
+        ).replace("%s", "?")
         with self._lock:
             cursor: duckdb.DuckDBPyConnection = self._database.cursor()
         result: duckdb.DuckDBPyConnection = cursor.execute(duckdb_sql, list(params))
@@ -268,6 +330,75 @@ class RecordingSnowflakeWarehouse:
         _MISSING_RELATION_ACTIONS[not rows](relation)
         return rows, _SHOW_DESCRIPTION
 
+    def _scope_metadata_relation(self, match: re.Match[str]) -> str:
+        table: str = f"fake_{match.group('view').lower()}"
+        database: str = (match.group("database") or self.current_database).replace("'", "''")
+        return f"(SELECT * FROM {table} WHERE table_catalog = '{database}') AS {table}"
+
+    def _schema_relations(self, *, scope: str) -> tuple[FakeRelation, ...]:
+        parts: tuple[str, ...] = (
+            self.current_database,
+            *(part.strip('"') for part in scope.split(".")),
+        )[-2:]
+        _FAILED_SCHEMA_ACTIONS[parts[-1] in self.failing_metadata_schemas](scope)
+        matches: tuple[FakeRelation, ...] = tuple(
+            filter(
+                lambda fake: (fake.database, fake.schema)[-len(parts) :] == parts, self.relations
+            )
+        )
+        _MISSING_SCHEMA_ACTIONS[not matches](scope)
+        return matches
+
+    def _answer_show_schema_relations(
+        self, *, sql: str, params: tuple[object, ...]
+    ) -> tuple[list[tuple[Any, ...]], Any]:
+        del params
+        match: re.Match[str] = next(_SHOW_SCHEMA_RELATIONS_PATTERN.finditer(sql))
+        wants_views: bool = match.group("kind") == "VIEWS"
+        after: str = (match.group("after") or "").replace("''", "'")
+        selected: list[FakeRelation] = sorted(
+            filter(
+                lambda fake: (
+                    (fake.table_type in _VIEW_TABLE_TYPES) is wants_views and fake.name > after
+                ),
+                self._schema_relations(scope=match.group("scope")),
+            ),
+            key=lambda fake: fake.name,
+        )
+        limit: int = int(match.group("limit") or SHOW_RESULT_CAP)
+        row_builder: Callable[[FakeRelation], tuple[Any, ...]] = (
+            _show_table_row,
+            _show_view_row,
+        )[wants_views]
+        fields: tuple[str, ...] = (_SHOW_TABLE_FIELDS, _SHOW_VIEW_FIELDS)[wants_views]
+        return [row_builder(fake) for fake in selected[:limit]], tuple((f,) for f in fields)
+
+    def _answer_show_schema_columns(
+        self, *, sql: str, params: tuple[object, ...]
+    ) -> tuple[list[tuple[Any, ...]], Any]:
+        del params
+        scope: str = next(_SHOW_SCHEMA_COLUMNS_PATTERN.finditer(sql)).group("scope")
+        rows: list[tuple[Any, ...]] = []
+        fake: FakeRelation
+        for fake in sorted(self._schema_relations(scope=scope), key=lambda item: item.name):
+            rows.extend(
+                (
+                    fake.name,
+                    fake.schema,
+                    column.name,
+                    json.dumps(_show_columns_type(column)),
+                    "true",
+                    "",
+                    "COLUMN",
+                    "",
+                    "",
+                    fake.database,
+                    "",
+                )
+                for column in fake.columns
+            )
+        return rows[:SHOW_RESULT_CAP], tuple((f,) for f in _SHOW_SCHEMA_COLUMN_FIELDS)
+
     def _answer_cursor_bounds(
         self, *, sql: str, params: tuple[object, ...]
     ) -> tuple[list[tuple[Any, ...]], Any]:
@@ -295,6 +426,79 @@ _MISSING_RELATION_ACTIONS: dict[bool, Callable[[str], None]] = {
 }
 
 
+def _skip_rows(warehouse: RecordingSnowflakeWarehouse, table: str, rows: list[Any]) -> None:
+    del warehouse, table, rows
+
+
+_ROW_LOADERS: dict[bool, Callable[[RecordingSnowflakeWarehouse, str, list[Any]], None]] = {
+    False: _skip_rows,
+    True: RecordingSnowflakeWarehouse._insert_rows,
+}
+
+
+class FakeSnowflakeProgrammingError(RuntimeError):
+    """Driver-style error carrying a Snowflake error number."""
+
+    def __init__(self, message: str, *, errno: int) -> None:
+        super().__init__(message)
+        self.errno: int = errno
+
+
+def _raise_missing_schema(scope: str) -> None:
+    raise FakeSnowflakeProgrammingError(
+        f"SQL compilation error: Schema '{scope}' does not exist or not authorized.", errno=2003
+    )
+
+
+def _raise_failed_schema(scope: str) -> None:
+    raise FakeSnowflakeProgrammingError(f"Metadata service unavailable for {scope}.", errno=390)
+
+
+_MISSING_SCHEMA_ACTIONS: dict[bool, Callable[[str], None]] = {
+    False: _accept_relation,
+    True: _raise_missing_schema,
+}
+_FAILED_SCHEMA_ACTIONS: dict[bool, Callable[[str], None]] = {
+    False: _accept_relation,
+    True: _raise_failed_schema,
+}
+
+
+def _show_table_row(relation: FakeRelation) -> tuple[Any, ...]:
+    external: bool = relation.table_type == "EXTERNAL TABLE"
+    return (
+        _FIXED_CREATED_AT,
+        relation.name,
+        relation.database,
+        relation.schema,
+        ("TABLE", "TRANSIENT")[relation.is_transient],
+        "",
+        "",
+        0,
+        0,
+        "SYSADMIN",
+        str(relation.retention_time),
+        ("N", "Y")[external],
+        "N",
+        "N",
+    )
+
+
+def _show_view_row(relation: FakeRelation) -> tuple[Any, ...]:
+    return (
+        _FIXED_CREATED_AT,
+        relation.name,
+        "",
+        relation.database,
+        relation.schema,
+        "SYSADMIN",
+        "",
+        "",
+        "false",
+        ("false", "true")[relation.table_type == "MATERIALIZED VIEW"],
+    )
+
+
 def _answer_empty_metadata(
     *, sql: str, params: tuple[object, ...]
 ) -> tuple[list[tuple[Any, ...]], Any]:
@@ -307,13 +511,6 @@ def _answer_status(*, sql: str, params: tuple[object, ...]) -> tuple[list[tuple[
     return [], _STATUS_DESCRIPTION
 
 
-def _scope_metadata_relation(match: re.Match[str]) -> str:
-    table: str = f"fake_{match.group('view').lower()}"
-    database: str = (match.group("database") or "").replace("'", "''")
-    scoped: str = f"(SELECT * FROM {table} WHERE table_catalog = '{database}') AS {table}"
-    return (scoped, table)[match.group("database") is None]
-
-
 def _table_row(relation: FakeRelation) -> dict[str, object]:
     return {
         "table_catalog": relation.database,
@@ -323,7 +520,7 @@ def _table_row(relation: FakeRelation) -> dict[str, object]:
         "is_transient": ("NO", "YES")[relation.is_transient],
         "created": _FIXED_CREATED_AT,
         "last_altered": _FIXED_CREATED_AT,
-        "retention_time": relation.retention_time,
+        "retention_time": (relation.retention_time, None)[relation.table_type in _VIEW_TABLE_TYPES],
     }
 
 
@@ -352,8 +549,8 @@ def _show_columns_type(column: FakeColumn) -> dict[str, object]:
     candidates: tuple[tuple[str, object], ...] = (
         ("type", _SHOW_TYPE_NAMES.get(column.data_type, column.data_type)),
         ("nullable", True),
-        ("precision", column.numeric_precision),
-        ("scale", column.numeric_scale),
+        ("precision", (column.numeric_precision, 0)[column.data_type in _TIMESTAMP_TYPES]),
+        ("scale", (column.numeric_scale, 9)[column.data_type in _TIMESTAMP_TYPES]),
         ("length", (None, column.character_maximum_length)[column.data_type == "TEXT"]),
     )
     return dict(filter(lambda item: item[1] is not None, candidates))
@@ -581,7 +778,7 @@ def build_inspection_catalog_relations() -> tuple[FakeRelation, ...]:
         ),
         *(
             FakeRelation(database="ANALYTICS", schema="STAGING", name=f"INVENTORY_{index}")
-            for index in range(40)
+            for index in range(60)
         ),
         FakeRelation(database="ANALYTICS", schema="MARTS", name="REVENUE", columns=_ORDER_COLUMNS),
         FakeRelation(database="ANALYTICS", schema="MARTS", name="revenue_v", table_type="VIEW"),
@@ -603,9 +800,9 @@ def build_offline_snowflake(
 
 
 def sorted_relation_reprs(relations: tuple[RelationInfo, ...]) -> list[str]:
-    """Return an order-independent comparable form of listed relations."""
+    """Return an order-independent form of listed relations without SHOW-absent LAST_ALTERED."""
 
-    return sorted(repr(relation) for relation in relations)
+    return sorted(repr(replace(relation, last_altered_at=None)) for relation in relations)
 
 
 def _project_toml(*, database: str, model_schemas: tuple[str, ...]) -> str:
@@ -646,3 +843,28 @@ def _sources_yml(*, database: str, source_schema: str, sources: int) -> str:
             )
         )
     return "\n".join(lines) + "\n"
+
+
+def build_wide_schema_relations(
+    *, relation_count: int, columns_per_relation: int
+) -> tuple[FakeRelation, ...]:
+    """Return one schema of identical relations sized to exercise SHOW result caps."""
+
+    columns: tuple[FakeColumn, ...] = tuple(
+        FakeColumn(name=f"ATTRIBUTE_{index}") for index in range(columns_per_relation)
+    )
+    return tuple(
+        FakeRelation(
+            database="ANALYTICS",
+            schema="INVENTORY",
+            name=f"STOCK_{index:05d}",
+            columns=columns,
+        )
+        for index in range(relation_count)
+    )
+
+
+def show_relation_row(*, created_on: datetime, **fields: object) -> dict[str, object]:
+    """Return one SHOW TABLES or SHOW VIEWS row for a STAGING.ORDERS relation."""
+
+    return {"created_on": created_on, "name": "ORDERS", "schema_name": "STAGING", **fields}

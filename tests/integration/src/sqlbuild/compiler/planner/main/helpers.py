@@ -463,8 +463,18 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
 
 
 _OFFLINE_METADATA_KINDS: frozenset[str] = frozenset(
-    {"tables", "columns", "show_columns", "other_metadata"}
+    {
+        "tables",
+        "columns",
+        "show_columns",
+        "show_tables",
+        "show_views",
+        "show_schema_columns",
+        "other_metadata",
+    }
 )
+_OFFLINE_INFORMATION_SCHEMA_KINDS: frozenset[str] = frozenset({"tables", "columns"})
+_SHOW_SCHEMA_SCOPE: re.Pattern[str] = re.compile(r' IN SCHEMA (?:"[^"]*"\.)?"([^"]*)"')
 _CURSOR_BOUND_RELATION: re.Pattern[str] = re.compile(r"\sFROM\s+(\S+)\s*$", re.IGNORECASE)
 
 
@@ -498,9 +508,23 @@ def offline_metadata_queries(warehouse: RecordingSnowflakeWarehouse) -> tuple[Re
 def offline_metadata_reads_by_schema(
     *, warehouse: RecordingSnowflakeWarehouse, kind: str
 ) -> dict[str, int]:
-    """Count schema-scoped metadata reads of one kind by their schema parameter."""
+    """Count schema-scoped SHOW reads of one kind by the schema they list."""
 
-    return dict(Counter(str(query.params[0]) for query in warehouse.queries_of_kind(kind)))
+    return dict(
+        Counter(
+            _SHOW_SCHEMA_SCOPE.findall(query.sql)[0] for query in warehouse.queries_of_kind(kind)
+        )
+    )
+
+
+def offline_information_schema_queries(
+    warehouse: RecordingSnowflakeWarehouse,
+) -> tuple[RecordedQuery, ...]:
+    """Return metadata statements that need a running warehouse."""
+
+    return tuple(
+        filter(lambda query: query.kind in _OFFLINE_INFORMATION_SCHEMA_KINDS, warehouse.queries)
+    )
 
 
 def offline_cursor_bound_relations(warehouse: RecordingSnowflakeWarehouse) -> tuple[str, ...]:

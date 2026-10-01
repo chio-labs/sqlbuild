@@ -19,6 +19,7 @@ from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     offline_cursor_bound_relations,
+    offline_information_schema_queries,
     offline_metadata_queries,
     offline_metadata_reads_by_schema,
     plan_offline_snowflake_project,
@@ -32,6 +33,9 @@ from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
 )
 
 _ONE_READ_PER_SCHEMA: dict[str, int] = {"STAGING": 1, "INTERMEDIATE": 1, "MARTS": 1, "RAW": 1}
+_SOURCES: int = 260
+_SHOW_READS_PER_SCHEMA: int = 3
+_FRESHNESS_READS: int = -(-_SOURCES // INSPECTION_IN_LIST_LIMIT)
 
 
 @pytest.mark.parametrize(
@@ -41,15 +45,17 @@ _ONE_READ_PER_SCHEMA: dict[str, int] = {"STAGING": 1, "INTERMEDIATE": 1, "MARTS"
             description="about 2,500 relations",
             unmanaged_relations_per_schema=450,
             expected_schema_reads=_ONE_READ_PER_SCHEMA,
-            expected_metadata_budget=8,
+            expected_metadata_budget=_SHOW_READS_PER_SCHEMA * 4 + _FRESHNESS_READS,
             expected_in_list_limit=INSPECTION_IN_LIST_LIMIT,
+            expected_freshness_reads=_FRESHNESS_READS,
         ),
         SnowflakeInspectionBudgetTestCase(
             description="about 4,300 relations",
             unmanaged_relations_per_schema=900,
             expected_schema_reads=_ONE_READ_PER_SCHEMA,
-            expected_metadata_budget=8,
+            expected_metadata_budget=_SHOW_READS_PER_SCHEMA * 4 + _FRESHNESS_READS,
             expected_in_list_limit=INSPECTION_IN_LIST_LIMIT,
+            expected_freshness_reads=_FRESHNESS_READS,
         ),
     ],
     ids=lambda case: case.description,
@@ -61,7 +67,7 @@ def test_given_large_multi_schema_project_when_planning_then_metadata_reads_stay
         project_dir=tmp_path / "orders_platform",
         models_per_schema=60,
         incremental_every=2,
-        sources=260,
+        sources=_SOURCES,
         unmanaged_relations_per_schema=test_case.unmanaged_relations_per_schema,
     )
     warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(
@@ -74,16 +80,23 @@ def test_given_large_multi_schema_project_when_planning_then_metadata_reads_stay
 
     metadata: tuple[RecordedQuery, ...] = offline_metadata_queries(warehouse)
     assert len(result.plan_output.model_entries) == len(project.model_schemas)
+    warehouse_queries: tuple[RecordedQuery, ...] = offline_information_schema_queries(warehouse)
     assert (
-        offline_metadata_reads_by_schema(warehouse=warehouse, kind="tables")
+        offline_metadata_reads_by_schema(warehouse=warehouse, kind="show_tables")
         == test_case.expected_schema_reads
     )
     assert (
-        offline_metadata_reads_by_schema(warehouse=warehouse, kind="columns")
+        offline_metadata_reads_by_schema(warehouse=warehouse, kind="show_views")
+        == test_case.expected_schema_reads
+    )
+    assert (
+        offline_metadata_reads_by_schema(warehouse=warehouse, kind="show_schema_columns")
         == test_case.expected_schema_reads
     )
     assert warehouse.queries_of_kind("show_columns") == ()
     assert warehouse.queries_of_kind("other_metadata") == ()
+    assert len(warehouse_queries) == test_case.expected_freshness_reads
+    assert all("last_altered" in query.sql for query in warehouse_queries)
     assert max(query.largest_in_list for query in metadata) <= test_case.expected_in_list_limit
     assert len({(query.sql, query.params) for query in metadata}) == len(metadata)
     assert len(metadata) <= test_case.expected_metadata_budget
@@ -127,7 +140,8 @@ def test_given_incremental_models_when_planning_then_cursor_bounds_run_one_per_r
     "test_case",
     [
         SnowflakeReplanTestCase(
-            description="a second invocation re-reads bounds and listings", expected_tables_reads=4
+            description="a second invocation re-reads bounds and listings",
+            expected_listing_reads=4,
         )
     ],
     ids=lambda case: case.description,
@@ -148,7 +162,7 @@ def test_given_planned_project_when_planning_again_then_cursor_bounds_are_read_a
     _ = plan_offline_snowflake_project(project=project, warehouse=warehouse, no_cache=False)
 
     assert len(warehouse.queries_of_kind("cursor_bounds")) == first
-    assert len(warehouse.queries_of_kind("tables")) == test_case.expected_tables_reads
+    assert len(warehouse.queries_of_kind("show_tables")) == test_case.expected_listing_reads
 
 
 if __name__ == "__main__":

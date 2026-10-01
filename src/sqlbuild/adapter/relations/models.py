@@ -22,7 +22,6 @@ class SchemaRelationListing:
     database: str | None
     schema: str
     entries: tuple[ListedRelation, ...]
-    rows: tuple[tuple[object, ...], ...] = ()
 
 
 @dataclass(frozen=True)

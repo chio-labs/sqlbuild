@@ -22,6 +22,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.inspection._test_types import (
     FreshnessReuseTestCase,
     RelationRequestEquivalenceTestCase,
     RepeatedLookupTestCase,
+    ShowResultCapTestCase,
     SpeculativePrefetchTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
@@ -29,6 +30,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
     RecordingSnowflakeWarehouse,
     build_inspection_catalog_relations,
     build_offline_snowflake,
+    build_wide_schema_relations,
     sorted_relation_reprs,
 )
 
@@ -47,7 +49,7 @@ _MANY_NAMES: tuple[str, ...] = (
             database="analytics",
             schemas=("staging",),
             names=None,
-            expected_relation_count=47,
+            expected_relation_count=67,
         ),
         RelationRequestEquivalenceTestCase(
             description="name filter across schemas ignores quoted lowercase twins",
@@ -71,11 +73,11 @@ _MANY_NAMES: tuple[str, ...] = (
             expected_relation_count=0,
         ),
         RelationRequestEquivalenceTestCase(
-            description="session database lists every catalog",
+            description="session database lists only the current catalog",
             database=None,
             schemas=("staging",),
             names=("orders",),
-            expected_relation_count=2,
+            expected_relation_count=1,
         ),
         RelationRequestEquivalenceTestCase(
             description="database-wide name lookup",
@@ -89,7 +91,7 @@ _MANY_NAMES: tuple[str, ...] = (
             database="analytics",
             schemas=None,
             names=_MANY_NAMES,
-            expected_relation_count=42,
+            expected_relation_count=62,
         ),
     ],
     ids=lambda case: case.description,
@@ -130,7 +132,7 @@ def test_given_metadata_request_when_served_by_catalog_then_matches_direct_adapt
             description="broad request reads each schema's columns once without IN lists",
             schemas=("staging",),
             names=None,
-            expected_query_kinds=("columns",),
+            expected_query_kinds=("show_schema_columns",),
         ),
     ],
     ids=lambda case: case.description,
@@ -172,19 +174,20 @@ def test_given_relations_when_reading_columns_through_catalog_then_matches_direc
     "test_case",
     [
         FreshnessReuseTestCase(
-            description="freshness reuses listings without another table read",
+            description="freshness reads LAST_ALTERED only for requested tables in capped chunks",
             requests=(
                 ("analytics", "staging", "orders"),
                 ("analytics", "staging", "transient_events"),
+                *(("analytics", "staging", f"inventory_{index}") for index in range(60)),
                 ("analytics", "marts", "revenue"),
             ),
             listed_schemas=("staging", "marts"),
-            expected_metadata_reads=2,
+            expected_metadata_reads=3,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_open_catalog_when_reading_source_freshness_then_reuses_schema_listing(
+def test_given_open_catalog_when_reading_source_freshness_then_reads_requested_tables_only(
     test_case: FreshnessReuseTestCase,
 ) -> None:
     adapter, connection, warehouse = build_offline_snowflake(
@@ -201,12 +204,15 @@ def test_given_open_catalog_when_reading_source_freshness_then_reuses_schema_lis
 
     with open_inspection_catalog(adapter=adapter, connection=connection) as catalog:
         _ = catalog.list_relations(database="analytics", schemas=test_case.listed_schemas)
+        warehouse.reset()
         served: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
             adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
         )
 
     assert served == direct
+    assert len(warehouse.queries_of_kind("tables")) == test_case.expected_metadata_reads
     assert len(warehouse.queries) == test_case.expected_metadata_reads
+    assert max(query.largest_in_list for query in warehouse.queries) <= INSPECTION_IN_LIST_LIMIT
 
 
 @pytest.mark.parametrize(
@@ -244,8 +250,8 @@ def test_given_open_catalog_when_freshness_targets_a_view_then_raises_like_direc
         RepeatedLookupTestCase(
             description="state table, model, and whole-schema lookups share one listing",
             lookups=(("_sqlbuild_fingerprints",), ("orders",), None),
-            expected_relation_counts=(0, 1, 47),
-            expected_query_kinds=("tables",),
+            expected_relation_counts=(0, 1, 67),
+            expected_query_kinds=("show_tables", "show_views"),
         )
     ],
     ids=lambda case: case.description,
@@ -273,7 +279,7 @@ def test_given_repeated_lookups_when_catalog_is_open_then_lists_schema_once(
         SpeculativePrefetchTestCase(
             description="unreadable speculative schema fails only the request that needs it",
             failing_schema="RESTRICTED",
-            expected_error_fragment="not authorized",
+            expected_error_fragment="unavailable",
             expected_failed_reads=2,
         )
     ],
@@ -302,8 +308,61 @@ def test_given_unreadable_schema_when_prefetching_best_effort_then_only_real_rea
         )
 
     assert len(staging) == 1
-    assert len(warehouse.queries_of_kind("tables")) == 1
+    assert len(warehouse.queries_of_kind("show_tables")) == 1
     assert len(warehouse.attempted_sql) - len(warehouse.queries) == test_case.expected_failed_reads
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ShowResultCapTestCase(
+            description="more than 10,000 tables are paged",
+            relation_count=10_050,
+            columns_per_relation=0,
+            expected_query_kinds=(
+                "show_tables",
+                "show_tables",
+                "show_views",
+                "show_schema_columns",
+            ),
+        ),
+        ShowResultCapTestCase(
+            description="a truncated column listing is reread from INFORMATION_SCHEMA",
+            relation_count=40,
+            columns_per_relation=260,
+            expected_query_kinds=("show_tables", "show_views", "show_schema_columns", "columns"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_schema_beyond_show_cap_when_listing_then_matches_direct_adapter(
+    test_case: ShowResultCapTestCase,
+) -> None:
+    adapter, connection, warehouse = build_offline_snowflake(
+        relations=build_wide_schema_relations(
+            relation_count=test_case.relation_count,
+            columns_per_relation=test_case.columns_per_relation,
+        )
+    )
+    direct: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection, database="analytics", schemas=("inventory",)
+    )
+    direct_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(connection=connection, relations=direct)
+    )
+    warehouse.reset()
+    catalog: InspectionCatalog = InspectionCatalog(adapter=adapter, connection=connection)
+
+    served: tuple[RelationInfo, ...] = catalog.list_relations(
+        database="analytics", schemas=("inventory",)
+    )
+    served_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        catalog.get_columns_for_relations(relations=served)
+    )
+
+    assert sorted_relation_reprs(served) == sorted_relation_reprs(direct)
+    assert served_columns == direct_columns
+    assert tuple(query.kind for query in warehouse.queries) == test_case.expected_query_kinds
 
 
 if __name__ == "__main__":
