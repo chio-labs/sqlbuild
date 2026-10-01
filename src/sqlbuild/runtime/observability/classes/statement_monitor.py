@@ -45,6 +45,7 @@ class StatementMonitor:
         self._thread_lock: threading.Lock = threading.Lock()
         self._context: Context | None = None
         self._stopped: bool = False
+        self._deferred_start: int | None = None
 
     @property
     def query_id(self) -> str | None:
@@ -59,7 +60,7 @@ class StatementMonitor:
         if self._has_query_id_provider() or self._threshold_seconds <= 0:
             self._start_thread()
             return
-        _DEFERRED_MONITOR_STARTS.schedule(
+        self._deferred_start = _DEFERRED_MONITOR_STARTS.schedule(
             delay_seconds=self._threshold_seconds, start=self._start_thread
         )
 
@@ -82,22 +83,36 @@ class StatementMonitor:
             self._stopped = True
             self._context = None
             thread: threading.Thread | None = self._thread
+            deferred_start: int | None = self._deferred_start
+            self._deferred_start = None
+        if deferred_start is not None:
+            _DEFERRED_MONITOR_STARTS.cancel(deferred_start)
         if thread is not None and thread is not threading.current_thread():
             thread.join()
+        self._release_callbacks()
         return self._query_id
+
+    def _release_callbacks(self) -> None:
+        """Drop references back to the statement so a stopped monitor retains nothing."""
+
+        with self._provider_lock:
+            self._query_id_provider = None
+        self._on_submitted = lambda query_id: None
+        self._on_heartbeat = lambda elapsed_seconds, query_id: None
 
     def _start_thread(self) -> None:
         with self._thread_lock:
             context: Context | None = self._context
             if self._stopped or self._thread is not None or context is None:
                 return
-            self._thread = threading.Thread(
+            thread: threading.Thread = threading.Thread(
                 target=context.run,
                 args=(self._run,),
                 name="sqlbuild-statement-monitor",
                 daemon=True,
             )
-            self._thread.start()
+            thread.start()
+            self._thread = thread
 
     def _run(self) -> None:
         next_heartbeat: float = self._started_at + self._threshold_seconds

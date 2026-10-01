@@ -1,8 +1,10 @@
 """Test builders for runtime observability contracts."""
 
 import asyncio
+import gc
 import threading
 import time
+import weakref
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Context, copy_context
@@ -15,6 +17,7 @@ import pytest
 from sqlbuild.runtime.observability._helpers.dispatcher import dispatcher_scope
 from sqlbuild.runtime.observability._helpers.factory import create_lifecycle_event
 from sqlbuild.runtime.observability._helpers.identity import invocation_scope
+from sqlbuild.runtime.observability.classes.deferred_thread_starts import DeferredThreadStarts
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.classes.microbatch_lifecycle import MicrobatchLifecycle
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
@@ -269,4 +272,88 @@ def heartbeats_after_early_stop(*, threshold_seconds: float) -> int:
     monitor.start()
     _ = monitor.stop()
     time.sleep(threshold_seconds * 4)
+    return len(heartbeats)
+
+
+def live_lifecycles_after_large_statements(*, statement_count: int, sql_bytes: int) -> int:
+    """Run statements with large SQL and count lifecycles still reachable after collection."""
+
+    references: list[weakref.ref[StatementLifecycle]] = []
+    dispatcher: EventDispatcher
+    dispatcher, _ = capture_lifecycle_events()
+    with invocation_scope("inv-large-statements"), dispatcher_scope(dispatcher):
+        for index in range(statement_count):
+            lifecycle: StatementLifecycle = StatementLifecycle(
+                adapter="duckdb", sql=f"SELECT {index}, '{'x' * sql_bytes}'", intent="execute"
+            )
+            with lifecycle:
+                pass
+            references.append(weakref.ref(lifecycle))
+        del lifecycle
+    _ = gc.collect()
+    return len(references) - [reference() for reference in references].count(None)
+
+
+def run_cancelled_deferred_start(*, delay_seconds: float) -> tuple[int, int]:
+    """Schedule then cancel one start and return pending starts and runs after its deadline."""
+
+    runs: list[int] = []
+    starts: DeferredThreadStarts = DeferredThreadStarts(name="sqlbuild-test-deferred-starts")
+    token: int = starts.schedule(delay_seconds=delay_seconds, start=lambda: runs.append(1))
+    starts.cancel(token)
+    time.sleep(delay_seconds * 4)
+    return starts.pending_count, len(runs)
+
+
+def statement_events_when_monitor_start_fails(
+    *, monkeypatch: pytest.MonkeyPatch, threshold_seconds: float
+) -> tuple[str, ...]:
+    """Fail every monitor thread start and return the statement's published event types."""
+
+    original_start: Callable[[threading.Thread], None] = threading.Thread.start
+    refusals: dict[str, Callable[[threading.Thread], None]] = {
+        "sqlbuild-statement-monitor": _refuse_thread_start
+    }
+
+    def refusing_start(thread: threading.Thread) -> None:
+        refusals.get(thread.name, original_start)(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", refusing_start)
+    dispatcher: EventDispatcher
+    events: list[LifecycleEvent]
+    dispatcher, events = capture_lifecycle_events()
+    with invocation_scope("inv-refused-monitor"), dispatcher_scope(dispatcher):
+        with StatementLifecycle(
+            adapter="duckdb",
+            sql="CREATE TABLE orders AS SELECT 1",
+            intent="execute",
+            heartbeat_threshold_seconds=threshold_seconds,
+        ):
+            time.sleep(threshold_seconds * 5)
+    return tuple(event.event_type for event in events)
+
+
+def _refuse_thread_start(thread: threading.Thread) -> None:
+    raise RuntimeError(f"cannot start {thread.name}")
+
+
+def heartbeats_past_threshold(*, threshold_seconds: float) -> int:
+    """Run a deferred monitor past its threshold and count heartbeats before stopping it."""
+
+    heartbeat: threading.Event = threading.Event()
+    heartbeats: list[float] = []
+
+    def record_heartbeat(elapsed: float, query_id: str | None) -> None:
+        del query_id
+        heartbeats.append(elapsed)
+        heartbeat.set()
+
+    monitor: StatementMonitor = StatementMonitor(
+        on_submitted=lambda value: None,
+        on_heartbeat=record_heartbeat,
+        threshold_seconds=threshold_seconds,
+    )
+    monitor.start()
+    _ = heartbeat.wait(timeout=5.0)
+    _ = monitor.stop()
     return len(heartbeats)

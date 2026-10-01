@@ -351,3 +351,26 @@ class InvocationSequenceCase:
     sequence: object
     expected_error: str = ""
     expected_sequence: int | None = None
+
+
+@dataclass(frozen=True)
+class FinishedStatementRetentionCase:
+    description: str
+    statement_count: int
+    sql_bytes: int
+    expected_live_lifecycles: int
+
+
+@dataclass(frozen=True)
+class DeferredStartCancellationCase:
+    description: str
+    delay_seconds: float
+    expected_pending: int
+    expected_runs: int
+
+
+@dataclass(frozen=True)
+class FailedMonitorStartCase:
+    description: str
+    threshold_seconds: float
+    expected_event_types: tuple[str, ...]
