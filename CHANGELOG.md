@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.127.2](https://github.com/chio-labs/sqlbuild/compare/v0.127.1...v0.127.2) (2026-10-01)
+
+
+### Performance Improvements
+
+* **snowflake:** plan from SHOW metadata and run inspection reads concurrently ([#896](https://github.com/chio-labs/sqlbuild/issues/896)) ([f7c8faf](https://github.com/chio-labs/sqlbuild/commit/f7c8fafb451491406b4b328922885f03bbfdde59))
+
 ## [0.127.1](https://github.com/chio-labs/sqlbuild/compare/v0.127.0...v0.127.1) (2026-10-01)
 
 
