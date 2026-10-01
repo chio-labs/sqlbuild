@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
 from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
 
 
@@ -22,11 +23,23 @@ from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelineP
     [
         PipelinePhaseTimingTestCase(
             description="slow planning connection is excluded from direct compilation",
-            clock_values=(0.0, 0.0, 2.0, 2.0, 12.0, 12.0),
+            clock_values=(0.0, 0.0, 2.0, 2.0, 3.0, 13.0, 13.0),
             expected_compile_seconds=2.0,
             expected_planning_seconds=10.0,
-            expected_total_seconds=12.0,
-        )
+            expected_total_seconds=13.0,
+        ),
+        PipelinePhaseTimingTestCase(
+            description="rules wall time is reported and excluded from compile and planning",
+            clock_values=(0.0, 0.0, 2.0, 2.0, 3.0, 3.0, 13.0, 13.0),
+            expected_compile_seconds=2.0,
+            expected_planning_seconds=10.0,
+            expected_total_seconds=13.0,
+            report_progress=True,
+            expected_progress_fragments=(
+                "Compiled project. (2.00s)",
+                "Evaluated rules. (1.00s; built-in 0.00s, custom 0.00s)",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -65,18 +78,25 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
         ),
     )
     tracker: BuildPhaseTimingTracker = BuildPhaseTimingTracker(monotonic=monotonic)
+    progress: list[str] = []
+    progress_hooks: dict[bool, ConnectionHooks] = {
+        True: ConnectionHooks(on_progress=progress.append),
+        False: ConnectionHooks(),
+    }
 
     with tracker.scope():
         result: CompilePipelineResult = compile_module.run_compile_pipeline(
             discovered_inputs=Mock(),
             adapter=adapter,
             options=CompilePipelineOptions(connection_config={}),
+            hooks=progress_hooks[test_case.report_progress],
         )
     timings: PartialBuildPhaseTimings = tracker.snapshot()
 
     assert result.compile_seconds == test_case.expected_compile_seconds
     assert result.planning_seconds == test_case.expected_planning_seconds
     assert timings.total_seconds == test_case.expected_total_seconds
-    assert (result.compile_seconds or 0) + (result.planning_seconds or 0) <= (
+    assert (result.compile_seconds or 0) + (result.planning_seconds or 0) < (
         timings.total_seconds or 0
     )
+    assert set(test_case.expected_progress_fragments) <= set(progress)
