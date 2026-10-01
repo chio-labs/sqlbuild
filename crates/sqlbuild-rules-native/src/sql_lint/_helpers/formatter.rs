@@ -64,8 +64,8 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
             ..Default::default()
         }),
     };
-    let formatted = format_layout(&original, &dialect, &parse_options)?;
-    if format_layout(&formatted, &dialect, &parse_options)? != formatted {
+    let (formatted, oracle) = format_layout(&original, &dialect, &parse_options)?;
+    if relayout(&formatted, &oracle, &dialect)? != formatted {
         return Err(NOT_IDEMPOTENT_FAILURE.to_string());
     }
     let changed = formatted != original;
@@ -78,17 +78,17 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     })
 }
 
-/// Lay out `sql` by printing its own tokens with whitespace taken from the parse-tree layout.
+/// Print the tokens of `sql` with parse-tree whitespace; return the output and its oracle.
 fn format_layout(
     sql: &str,
     dialect: &Dialect,
     parse_options: &ParseOptions,
-) -> Result<String, String> {
+) -> Result<(String, String), String> {
     let tokens = dialect
         .tokenize(sql)
         .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
     if tokens.is_empty() {
-        return Ok(sql.to_string());
+        return Ok((sql.to_string(), sql.to_string()));
     }
     let comments = comments_in(sql, &tokens);
     let neutral = neutralize_comments(sql, &comments);
@@ -105,7 +105,24 @@ fn format_layout(
     };
     let printed = print_authored_tokens(&authored, &oracle, dialect)?;
     verify_token_invariant(sql, &printed, dialect)?;
-    Ok(printed)
+    Ok((printed, oracle))
+}
+
+/// Re-print formatted SQL against its oracle; unchanged tokens imply an unchanged layout.
+fn relayout(formatted: &str, oracle: &str, dialect: &Dialect) -> Result<String, String> {
+    let tokens = dialect
+        .tokenize(formatted)
+        .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
+    if tokens.is_empty() {
+        return Ok(formatted.to_string());
+    }
+    let comments = comments_in(formatted, &tokens);
+    let authored = AuthoredSql {
+        sql: formatted,
+        tokens: &tokens,
+        comments: &comments,
+    };
+    print_authored_tokens(&authored, oracle, dialect)
 }
 
 /// Return the parse-tree layout of `neutral_sql`; only its whitespace is ever printed.

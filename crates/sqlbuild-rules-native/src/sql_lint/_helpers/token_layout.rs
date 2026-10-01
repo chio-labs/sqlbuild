@@ -205,10 +205,7 @@ fn comment_positions(sql: &str, dialect: &Dialect) -> Result<Vec<(String, usize)
     let tokens = dialect.tokenize(sql).map_err(|error| error.to_string())?;
     let mut positions: Vec<(String, usize)> = Vec::new();
     for comment in comments_in(sql, &tokens) {
-        let preceding = tokens
-            .iter()
-            .take_while(|token| token.span.end <= comment.start)
-            .count();
+        let preceding = tokens.partition_point(|token| token.span.end <= comment.start);
         positions.push((comment.text, preceding));
     }
     Ok(positions)
@@ -515,15 +512,13 @@ fn printed_text(authored: &Lexeme, generated: Option<&Lexeme>) -> String {
 fn attach_comments<'a>(tokens: &[Token], comments: &'a [Comment]) -> Vec<Attached<'a>> {
     let mut attached: Vec<Attached<'a>> = (0..tokens.len()).map(|_| Attached::default()).collect();
     for comment in comments {
-        let next = tokens
-            .iter()
-            .position(|token| token.span.start >= comment.end);
-        let previous = tokens
-            .iter()
-            .rposition(|token| token.span.end <= comment.start);
+        let next = tokens.partition_point(|token| token.span.start < comment.end);
+        let preceding = tokens.partition_point(|token| token.span.end <= comment.start);
+        let next = (next < tokens.len()).then_some(next);
+        let previous = preceding.checked_sub(1);
         match (comment.leading, next, previous) {
             (true, Some(next), _) | (false, Some(next), None) => {
-                attached[next].leading.push(comment)
+                attached[next].leading.push(comment);
             }
             (_, _, Some(previous)) => attached[previous].trailing.push(comment),
             (_, None, None) => {}
