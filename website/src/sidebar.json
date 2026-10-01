@@ -92,7 +92,7 @@
 				"collapsed": true,
 				"items": [
 					"docs/concepts/planning",
-					"docs/concepts/planning/cascade-propagation",
+					"docs/concepts/planning/replay-decisions",
 					"docs/concepts/planning/source-freshness",
 					"docs/concepts/planning/selection-and-staleness"
 				]
