@@ -91,6 +91,17 @@ _DUCKDB_PROJECT: str = (
             ),
         ),
         FunctionNameCompileTestCase(
+            description="duckdb materialized CTE column lists named like aliases compile",
+            project_toml=_DUCKDB_PROJECT,
+            query_sql=(
+                "WITH day_of_week (d) AS MATERIALIZED (SELECT 1), "
+                "day_of_month (d) AS NOT MATERIALIZED (SELECT 2) "
+                "SELECT day_of_week.d FROM day_of_week CROSS JOIN day_of_month\n"
+            ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        FunctionNameCompileTestCase(
             description="duckdb catalogue spellings compile",
             project_toml=_DUCKDB_PROJECT,
             query_sql=(

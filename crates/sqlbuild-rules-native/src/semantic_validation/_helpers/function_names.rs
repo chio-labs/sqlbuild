@@ -33,6 +33,8 @@ const CLAUSE_KEYWORD_LIST: &str = "CONNECT EXCEPT FETCH GROUP HAVING INTERSECT L
     MATCH_RECOGNIZE MEASURES MINUS OFFSET ON ORDER PATTERN PIVOT QUALIFY SAMPLE START TABLESAMPLE \
     UNION UNPIVOT USING WHERE WINDOW";
 const FROM_KEYWORD: &str = "FROM";
+const NOT_KEYWORD: &str = "NOT";
+const MATERIALIZED_KEYWORD: &str = "MATERIALIZED";
 const DISTINCT_KEYWORD: &str = "DISTINCT";
 
 type SpellingIndex = HashMap<Signature, Vec<String>>;
@@ -383,14 +385,30 @@ fn skip_trivia(sql: &[u8], mut index: usize) -> usize {
     }
 }
 
-/// Return whether `AS (` follows, so the preceding parenthesis was a CTE column list.
+/// Return whether `AS [[NOT] MATERIALIZED] (` follows, so the parenthesis was a CTE column list.
 fn opens_cte_body(sql: &[u8], index: usize) -> bool {
+    let Some(mut index) = keyword_end(sql, index, TYPE_POSITION_KEYWORD) else {
+        return false;
+    };
+    if let Some(end) = keyword_end(sql, index, NOT_KEYWORD) {
+        let Some(end) = keyword_end(sql, end, MATERIALIZED_KEYWORD) else {
+            return false;
+        };
+        index = end;
+    } else if let Some(end) = keyword_end(sql, index, MATERIALIZED_KEYWORD) {
+        index = end;
+    }
+    sql.get(skip_trivia(sql, index)) == Some(&b'(')
+}
+
+/// Return the end of `keyword` when it is the next token after trivia at `index`.
+fn keyword_end(sql: &[u8], index: usize, keyword: &str) -> Option<usize> {
     let start: usize = skip_trivia(sql, index);
-    let end: usize = start + TYPE_POSITION_KEYWORD.len();
-    sql.get(start..end)
-        .is_some_and(|word| word.eq_ignore_ascii_case(TYPE_POSITION_KEYWORD.as_bytes()))
-        && !sql.get(end).copied().is_some_and(is_word_byte)
-        && sql.get(skip_trivia(sql, end)) == Some(&b'(')
+    let end: usize = start + keyword.len();
+    (sql.get(start..end)?
+        .eq_ignore_ascii_case(keyword.as_bytes())
+        && !sql.get(end).copied().is_some_and(is_word_byte))
+    .then_some(end)
 }
 
 fn is_word_byte(byte: u8) -> bool {
