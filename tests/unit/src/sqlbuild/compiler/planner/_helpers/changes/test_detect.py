@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -48,6 +49,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
     DetectFunctionCallerChangeTestCase,
     DetectModelChangesTestCase,
     DetectModelMetadataTestCase,
+    DetectRenamedModelTestCase,
     DroppedRelationPlanActionTestCase,
 )
 
@@ -628,3 +630,69 @@ def test_given_direct_project_function_hash_change_when_detecting_changes_then_m
     )
 
     assert result.models["orders"].change_kind == test_case.expected_change_kind
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DetectRenamedModelTestCase(
+            description="rename with the handed-over definition continues forward",
+            previous_definition="SELECT 1 AS order_id",
+            config_values={"replay_on_change": "full"},
+            expected_query_changed=False,
+            expected_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+        DetectRenamedModelTestCase(
+            description="rename with changed SQL follows the model's own replay policy",
+            previous_definition="SELECT 2 AS order_id",
+            config_values={"replay_on_change": "bounded-3d"},
+            expected_query_changed=True,
+            expected_backfill=BackfillResult(action=BackfillAction.BOUNDED, duration="3d"),
+        ),
+        DetectRenamedModelTestCase(
+            description="rename with changed SQL defaults to forward only",
+            previous_definition="SELECT 2 AS order_id",
+            config_values={},
+            expected_query_changed=True,
+            expected_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_renamed_model_when_detecting_changes_then_reports_rename_and_own_query_change(
+    test_case: DetectRenamedModelTestCase,
+) -> None:
+    metadata_case: DetectModelMetadataTestCase = DetectModelMetadataTestCase(
+        description="renamed model",
+        config_values=test_case.config_values,
+        schema_columns=(),
+        deps=(),
+        function_local_hashes={},
+        previous_metadata_json="{}",
+        expected_change_kind=ChangeKind.RENAMED,
+    )
+    snapshot: WarehouseSnapshot = build_snapshot_for_metadata_test_case(metadata_case)
+    handover: Fingerprint = replace(
+        snapshot.fingerprints.models["orders"],
+        definition=test_case.previous_definition,
+        definition_hash=compute_query_hash(test_case.previous_definition),
+    )
+
+    result: ChangeDetectionResult = detect_model_changes(
+        model=build_model_from_metadata_test_case(metadata_case),
+        snapshot=replace(
+            snapshot,
+            existing_relations={},
+            fingerprints=WarehouseFingerprints(models={"orders": handover}),
+            renamed_models=frozenset({"orders"}),
+        ),
+        sql_analysis_enabled=False,
+        query_change_tracking=True,
+        full_refresh=False,
+    )
+
+    assert (result.change_kind, result.query_changed, result.backfill) == (
+        ChangeKind.RENAMED,
+        test_case.expected_query_changed,
+        test_case.expected_backfill,
+    )

@@ -451,6 +451,21 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
             ),
         ),
         JsonOutputTestCase(
+            description="plan json marks a renamed model whose query changed",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="order_lines",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.RENAMED,
+                        query_changed=True,
+                    ),
+                ),
+            ),
+            expected_keys=("models",),
+            expected_fragments=('"reason": "renamed"', '"query_changed": true'),
+        ),
+        JsonOutputTestCase(
             description="plan json includes seeds and warnings",
             plan_output=build_plan_output(
                 model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
