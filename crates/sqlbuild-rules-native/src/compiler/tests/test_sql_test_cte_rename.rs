@@ -43,6 +43,40 @@ fn given_tsql_cte_when_renaming_by_token_span_then_only_relation_references_chan
             ),
         },
         CteRenameTestCase {
+            description: "a database named like the CTE in a three-part name is kept",
+            sql: "WITH final AS (SELECT 1 AS id) SELECT f.id FROM final f \
+                  JOIN final.dbo.orders o ON o.id = f.id",
+            renamed_index: 0,
+            expected_sql: Some(
+                "WITH __sqb_cte_0 AS (SELECT 1 AS id) SELECT f.id FROM __sqb_cte_0 f \
+                 JOIN final.dbo.orders o ON o.id = f.id",
+            ),
+        },
+        CteRenameTestCase {
+            description: "a schema named like the CTE in a two-part name is kept",
+            sql: "WITH final AS (SELECT 1 AS id) SELECT f.id FROM final.orders o JOIN final f ON f.id = o.id",
+            renamed_index: 0,
+            expected_sql: Some(
+                "WITH __sqb_cte_0 AS (SELECT 1 AS id) SELECT f.id FROM final.orders o \
+                 JOIN __sqb_cte_0 f ON f.id = o.id",
+            ),
+        },
+        CteRenameTestCase {
+            description: "column qualifiers in SELECT and ON are renamed",
+            sql: "WITH final AS (SELECT 1 AS id) SELECT final.id FROM final JOIN orders o ON o.id = final.id",
+            renamed_index: 0,
+            expected_sql: Some(
+                "WITH __sqb_cte_0 AS (SELECT 1 AS id) SELECT __sqb_cte_0.id FROM __sqb_cte_0 \
+                 JOIN orders o ON o.id = __sqb_cte_0.id",
+            ),
+        },
+        CteRenameTestCase {
+            description: "a qualifier beside a multipart object of the same name is ambiguous",
+            sql: "WITH final AS (SELECT 1 AS id) SELECT final.id FROM final.orders",
+            renamed_index: 0,
+            expected_sql: None,
+        },
+        CteRenameTestCase {
             description: "an unqualified column alias named like the CTE is ambiguous",
             sql: "WITH final AS (SELECT 1 AS id) SELECT id AS final FROM final",
             renamed_index: 0,

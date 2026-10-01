@@ -41,6 +41,8 @@ pub(crate) fn rename_ctes(
         let definition = tokens
             .iter()
             .position(|token| token.start == cte.header_start)?;
+        let mut multipart_object = false;
+        let mut qualifier = false;
         for (position, token) in tokens.iter().enumerate() {
             if token.key.as_deref() != Some(cte.key.as_str()) {
                 continue;
@@ -48,9 +50,19 @@ pub(crate) fn rename_ctes(
             if position < definition {
                 return None;
             }
-            if position == definition || renamed_reference(sql, &tokens, position)? {
+            let usage = if position == definition {
+                Usage::Relation
+            } else {
+                usage(sql, &tokens, position)?
+            };
+            multipart_object |= usage == Usage::MultipartObject;
+            qualifier |= usage == Usage::Qualifier;
+            if matches!(usage, Usage::Relation | Usage::Qualifier) {
                 replaced.push((position, rename.name));
             }
+        }
+        if multipart_object && qualifier {
+            return None;
         }
     }
     replaced.sort_unstable();
@@ -70,19 +82,36 @@ pub(crate) fn rename_ctes(
     preserves_tokens((sql, &tokens), (&renamed, &renamed_tokens), &replaced).then_some(renamed)
 }
 
-/// Rename (`Some(true)`), keep a qualified other object (`Some(false)`), or refuse (`None`).
-fn renamed_reference(sql: &str, tokens: &[Token], position: usize) -> Option<bool> {
+/// How one occurrence of a renamed CTE's name is used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Usage {
+    /// A relation reference to the CTE, renamed.
+    Relation,
+    /// A column qualifier naming the CTE, renamed.
+    Qualifier,
+    /// The leading part of a multipart object name such as `final.dbo.orders`, kept.
+    MultipartObject,
+    /// A trailing part of a qualified name such as `t.final`, kept.
+    QualifiedPart,
+}
+
+/// Classify one occurrence, or `None` when its use is ambiguous.
+fn usage(sql: &str, tokens: &[Token], position: usize) -> Option<Usage> {
     let previous = significant(tokens, position, -1);
     let next = significant(tokens, position, 1);
     if previous.is_some_and(|token| is_dot(sql, token)) {
-        return Some(false);
+        return Some(Usage::QualifiedPart);
     }
-    if next.is_some_and(|token| is_dot(sql, token)) {
-        return Some(true);
-    }
-    match previous.and_then(|token| token.key.as_deref()) {
-        Some("from" | "join") => Some(true),
-        _ => None,
+    let relation_position = matches!(
+        previous.and_then(|token| token.key.as_deref()),
+        Some("from" | "join" | "apply")
+    );
+    let dotted = next.is_some_and(|token| is_dot(sql, token));
+    match (relation_position, dotted) {
+        (true, true) => Some(Usage::MultipartObject),
+        (true, false) => Some(Usage::Relation),
+        (false, true) => Some(Usage::Qualifier),
+        (false, false) => None,
     }
 }
 
