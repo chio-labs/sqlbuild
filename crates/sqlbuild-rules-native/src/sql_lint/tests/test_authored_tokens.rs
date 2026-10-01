@@ -59,6 +59,18 @@ fn given_generator_restructuring_when_formatting_then_authored_tokens_are_laid_o
             expected_sql: "SELECT SUBSTRING(code, 1, 2) AS region\nFROM orders",
         },
         test_types::DialectFormatTestCase {
+            description: "DuckDB adjacent string literals after a quoted-in-oracle alias keep comma spacing",
+            dialect: "duckdb",
+            sql: "select sku as replace, 'north' 'east' as region, sku from products",
+            expected_sql: "SELECT\n  sku AS replace,\n  'north' 'east' AS region,\n  sku\nFROM products",
+        },
+        test_types::DialectFormatTestCase {
+            description: "DuckDB adjacent string literals after a plain column keep comma spacing",
+            dialect: "duckdb",
+            sql: "select sku, 'north' 'east' as region from products",
+            expected_sql: "SELECT\n  sku,\n  'north' 'east' AS region\nFROM products",
+        },
+        test_types::DialectFormatTestCase {
             description: "DuckDB SELECT ALL keeps ALL",
             dialect: "duckdb",
             sql: "select all order_id from orders",

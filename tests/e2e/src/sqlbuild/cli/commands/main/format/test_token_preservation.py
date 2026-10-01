@@ -37,6 +37,19 @@ _DUCKDB_PROJECT_TOML: str = (
                 "SELECT\n  product_id, # on-hand units\n  quantity\nFROM inventory.view\n"
             ),
         ),
+        TokenPreservationFormatTestCase(
+            description="DuckDB adjacent string literals keep the space after the comma",
+            project_toml='name = "products"\nadapter = "duckdb"\n',
+            model_name="product_regions",
+            authored_sql=(
+                'MODEL (description "Product regions");\n\n'
+                "select sku as replace, 'north' 'east' as region from products\n"
+            ),
+            expected_sql=(
+                'MODEL (description "Product regions");\n\n'
+                "SELECT\n  sku AS replace,\n  'north' 'east' AS region\nFROM products\n"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
