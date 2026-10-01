@@ -12,7 +12,7 @@ from tempfile import gettempdir
 from types import MappingProxyType
 from typing import Any, cast
 
-from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -582,9 +582,9 @@ class CountingSourceDuckDbAdapter(DuckDbAdapter):
             connection=connection, database=database, schemas=schemas, names=names
         )
 
-    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
         self.probed_relations.append(relation)
-        return super().relation_exists_for_read(connection=connection, relation=relation)
+        return super().probe_relation_read(connection=connection, relation=relation)
 
 
 def plan_source_reading_project(

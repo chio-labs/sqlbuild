@@ -43,7 +43,7 @@ from sqlbuild.adapter.contract.exceptions import (
 from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
     complete_table_freshness_results,
 )
-from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
+from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -55,6 +55,7 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationGrant,
     RelationInfo,
+    RelationReadProbe,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -82,6 +83,7 @@ from sqlbuild.adapter.contract.types import (
     LoaderLogicalType,
     MigrationTransfer,
     PromotionStrategy,
+    RelationReadStatus,
     RetentionChangePhase,
     RetentionScope,
     SnapshotLatestVersionStyle,
@@ -460,17 +462,21 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_table_freshness_metadata(self) -> bool:
         return True
 
-    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
-        return probe_relation_exists(
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        return run_relation_read_probe(
             execute=self.execute,
             connection=connection,
             relation=relation,
-            is_not_found=self._is_relation_not_found_error,
+            classify_not_found=self._classify_relation_not_found,
         )
 
     @classmethod
-    def _is_relation_not_found_error(cls, error: BaseException) -> bool:
-        return isinstance(error, Exception) and cls._is_google_not_found(error)
+    def _classify_relation_not_found(cls, error: BaseException) -> RelationReadStatus | None:
+        return (
+            RelationReadStatus.MISSING
+            if isinstance(error, Exception) and cls._is_google_not_found(error)
+            else None
+        )
 
     def get_table_freshness_metadata(
         self,

@@ -26,6 +26,14 @@ class BuiltinAdapter(StrEnum):
     SQLSERVER = "sqlserver"
 
 
+class RelationReadStatus(StrEnum):
+    """Outcome of probing whether a rendered relation can be read."""
+
+    READABLE = "readable"
+    MISSING = "missing"
+    MISSING_OR_UNREADABLE = "missing_or_unreadable"
+
+
 class TableFreshnessStatus(StrEnum):
     """Per-table outcome of an adapter freshness metadata lookup."""
 

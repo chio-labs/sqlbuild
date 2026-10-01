@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -20,6 +21,13 @@ ADAPTERS_BY_NAME: dict[str, type[BaseAdapter]] = {
     "snowflake": SnowflakeAdapter,
     "sqlserver": SqlServerAdapter,
 }
+
+
+PROBE_SQL_PREFIX: str = "SELECT 1 FROM "
+
+
+class BinderException(Exception):
+    """DuckDB binder error shape."""
 
 
 class ProgrammingError(Exception):
@@ -54,17 +62,33 @@ class CatalogException(Exception):
     """DuckDB catalog error shape."""
 
 
-class RecordingProbeConnection:
-    """Connection double that records SQL and raises one configured driver error."""
+class ProbeRows:
+    """Cursor double returning fixed rows."""
 
-    def __init__(self, *, errors: tuple[Exception, ...] = ()) -> None:
-        self.errors: tuple[Exception, ...] = errors
+    def __init__(self, rows: list[tuple[object, ...]]) -> None:
+        self.rows: list[tuple[object, ...]] = rows
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
+
+
+class RecordingProbeConnection:
+    """Connection double: probes raise configured driver errors; other reads return rows."""
+
+    def __init__(
+        self,
+        *,
+        errors: tuple[Exception, ...] = (),
+        role: str | None = None,
+    ) -> None:
+        self.errors_by_probe: dict[bool, tuple[Exception, ...]] = {True: errors, False: ()}
+        self.raw_connection: SimpleNamespace = SimpleNamespace(role=role)
         self.statements: list[str] = []
 
-    def execute(self, sql: str, *args: Any, **kwargs: Any) -> object:
+    def execute(self, sql: str, *args: Any, **kwargs: Any) -> ProbeRows:
         del args, kwargs
         self.statements.append(sql)
         error: Exception
-        for error in self.errors:
+        for error in self.errors_by_probe[sql.startswith(PROBE_SQL_PREFIX)]:
             raise error
-        return object()
+        return ProbeRows([])

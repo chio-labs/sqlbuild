@@ -18,6 +18,7 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     run_compile_pipeline_for_project,
 )
+from tests.integration.src.sqlbuild.executor.build.helpers import SharedConnectionDuckDbAdapter
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     SqlTestExecutionTestCase,
 )
@@ -113,6 +114,35 @@ def render_project_test_step(
     result: CompilePipelineResult = run_compile_pipeline_for_project(
         project_dir=project_dir, adapter=adapter
     )
+    return _project_test_step(
+        result=result, adapter=adapter, test_name=test_name, model_name=model_name
+    )
+
+
+def render_project_test_step_over_tables(
+    *, project_dir: Path, test_name: str, model_name: str, setup_sql: tuple[str, ...]
+) -> tuple[str, str, str]:
+    """Plan against an in-memory warehouse holding the source tables, then render one step."""
+
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        statement: str
+        for statement in setup_sql:
+            connection.execute(statement)
+        result: CompilePipelineResult = run_compile_pipeline_for_project(
+            project_dir=project_dir, adapter=SharedConnectionDuckDbAdapter(connection=connection)
+        )
+    finally:
+        adapter.close(connection)
+    return _project_test_step(
+        result=result, adapter=adapter, test_name=test_name, model_name=model_name
+    )
+
+
+def _project_test_step(
+    *, result: CompilePipelineResult, adapter: DuckDbAdapter, test_name: str, model_name: str
+) -> tuple[str, str, str]:
     entry: SqlTestPlanEntry = {item.name: item for item in result.plan_output.test_entries}[
         test_name
     ]

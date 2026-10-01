@@ -41,7 +41,7 @@ from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
     complete_table_freshness_results,
 )
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
-from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
+from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -53,6 +53,7 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationGrant,
     RelationInfo,
+    RelationReadProbe,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -80,6 +81,7 @@ from sqlbuild.adapter.contract.types import (
     LoaderLogicalType,
     MigrationTransfer,
     PromotionStrategy,
+    RelationReadStatus,
     RelationType,
     RetentionChangePhase,
     RetentionScope,
@@ -116,7 +118,7 @@ from sqlbuild.adapters.databricks.constants import (
     DELTA_DEFAULT_LOG_RETENTION_DAYS,
     DELTA_RELATION_FORMAT,
     NON_ROW_RESULT_COLUMN_NAMES,
-    TABLE_OR_VIEW_NOT_FOUND_ERROR_CLASS,
+    RELATION_NOT_FOUND_ERROR_CLASSES,
     TABLE_RELATION_METADATA_TYPES,
     UNDEFINED_TABLE_SQLSTATE,
 )
@@ -552,20 +554,22 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_table_freshness_metadata(self) -> bool:
         return True
 
-    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
-        return probe_relation_exists(
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        return run_relation_read_probe(
             execute=self.execute,
             connection=connection,
             relation=relation,
-            is_not_found=self._is_relation_not_found_error,
+            classify_not_found=self._classify_relation_not_found,
         )
 
     @staticmethod
-    def _is_relation_not_found_error(error: BaseException) -> bool:
-        return (
-            TABLE_OR_VIEW_NOT_FOUND_ERROR_CLASS in str(error)
+    def _classify_relation_not_found(error: BaseException) -> RelationReadStatus | None:
+        message: str = str(error)
+        not_found: bool = (
+            any(error_class in message for error_class in RELATION_NOT_FOUND_ERROR_CLASSES)
             or getattr(error, "sqlstate", None) == UNDEFINED_TABLE_SQLSTATE
         )
+        return RelationReadStatus.MISSING if not_found else None
 
     def get_table_freshness_metadata(
         self,

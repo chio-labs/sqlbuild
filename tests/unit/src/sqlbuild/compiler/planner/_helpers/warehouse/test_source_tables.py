@@ -7,6 +7,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.adapter.contract.main.helpers import (
     ADAPTERS_BY_NAME,
+    BinderException,
     CatalogException,
     ProgrammingError,
     RecordingProbeConnection,
@@ -95,10 +96,37 @@ def test_given_source_the_listing_missed_when_probe_succeeds_then_plan_is_not_bl
                 CatalogException("Catalog Error: Table with name payments does not exist!"),
             ),
             expected_probe_statements=("SELECT 1 FROM raw.payments WHERE 1=0",),
-            expected_error_fragment="source 'raw_payments' (raw.payments), read by orders",
+            expected_error_fragments=(
+                "1 source table read by selected resources does not exist in the warehouse:",
+                "source 'raw_payments' (raw.payments), read by orders",
+            ),
+            expected_help_fragment="create or load the table, correct its database",
+            unexpected_output_fragment="not readable",
         ),
         SourceTableProbeTestCase(
-            description="snowflake not authorized or missing fails with S405",
+            description="duckdb missing attached catalog fails with S405",
+            adapter_name="duckdb",
+            source=SourceEntry(name="lake_orders", database="lake", schema="raw", table="orders"),
+            listed_source_names=frozenset(),
+            probe_errors=(BinderException('Binder Error: Catalog "lake" does not exist!'),),
+            expected_probe_statements=("SELECT 1 FROM lake.raw.orders WHERE 1=0",),
+            expected_error_fragments=("source 'lake_orders' (lake.raw.orders), read by orders",),
+            expected_help_fragment="create or load the table",
+        ),
+        SourceTableProbeTestCase(
+            description="databricks missing schema fails with S405",
+            adapter_name="databricks",
+            source=SourceEntry(name="lake_orders", database="lake", schema="raw", table="orders"),
+            listed_source_names=frozenset(),
+            probe_errors=(
+                Exception("[SCHEMA_NOT_FOUND] The schema `lake`.`raw` cannot be found."),
+            ),
+            expected_probe_statements=("SELECT 1 FROM `lake`.`raw`.`orders` WHERE 1=0",),
+            expected_error_fragments=("source 'lake_orders' (`lake`.`raw`.`orders`)",),
+            expected_help_fragment="create or load the table",
+        ),
+        SourceTableProbeTestCase(
+            description="snowflake missing or unreadable names the role",
             adapter_name="snowflake",
             source=SourceEntry(
                 name="raw_payments", database="ANALYTICS", schema="RAW", table="PAYMENTS"
@@ -110,8 +138,14 @@ def test_given_source_the_listing_missed_when_probe_succeeds_then_plan_is_not_bl
                     errno=2003,
                 ),
             ),
+            role="TRANSFORMER",
             expected_probe_statements=("SELECT 1 FROM ANALYTICS.RAW.PAYMENTS WHERE 1=0",),
-            expected_error_fragment="(ANALYTICS.RAW.PAYMENTS), read by orders",
+            expected_error_fragments=(
+                "does not exist in the warehouse or is not readable by the current role:",
+                "(ANALYTICS.RAW.PAYMENTS), read by orders; the warehouse reports it does not "
+                "exist or is not readable by role TRANSFORMER",
+            ),
+            expected_help_fragment="grant SELECT on it to the role in use (TRANSFORMER)",
         ),
     ],
     ids=lambda case: case.description,
@@ -120,7 +154,9 @@ def test_given_source_probe_not_found_when_checking_then_raises_s405(
     test_case: SourceTableProbeTestCase,
 ) -> None:
     adapter: BaseAdapter = ADAPTERS_BY_NAME[test_case.adapter_name]()
-    connection: RecordingProbeConnection = RecordingProbeConnection(errors=test_case.probe_errors)
+    connection: RecordingProbeConnection = RecordingProbeConnection(
+        errors=test_case.probe_errors, role=test_case.role
+    )
 
     with pytest.raises(PlannerInputError) as raised:
         check_one_source_table(
@@ -131,8 +167,10 @@ def test_given_source_probe_not_found_when_checking_then_raises_s405(
         )
 
     assert raised.value.code == "S405"
-    assert str(test_case.expected_error_fragment) in raised.value.message
+    assert all(fragment in raised.value.message for fragment in test_case.expected_error_fragments)
+    assert test_case.expected_help_fragment in str(raised.value.help)
     assert "sources/raw.yml:2" in str(raised.value.help)
+    assert test_case.unexpected_output_fragment not in raised.value.message + str(raised.value.help)
     assert tuple(connection.statements) == test_case.expected_probe_statements
 
 

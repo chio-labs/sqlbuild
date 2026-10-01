@@ -40,7 +40,7 @@ from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
     complete_table_freshness_results,
 )
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
-from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
+from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -51,6 +51,7 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationGrant,
     RelationInfo,
+    RelationReadProbe,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -78,6 +79,7 @@ from sqlbuild.adapter.contract.types import (
     LoaderLogicalType,
     MigrationTransfer,
     PromotionStrategy,
+    RelationReadStatus,
     RetentionChangePhase,
     RetentionScope,
     SnapshotLatestVersionStyle,
@@ -731,17 +733,28 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_table_freshness_metadata(self) -> bool:
         return True
 
-    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
-        return probe_relation_exists(
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        probe: RelationReadProbe = run_relation_read_probe(
             execute=self.execute,
             connection=connection,
             relation=relation,
-            is_not_found=self._is_relation_not_found_error,
+            classify_not_found=self._classify_relation_not_found,
+        )
+        if probe.status != RelationReadStatus.MISSING_OR_UNREADABLE:
+            return probe
+        return RelationReadProbe(
+            status=probe.status, role=self._current_role_name(connection=connection)
         )
 
     @staticmethod
-    def _is_relation_not_found_error(error: BaseException) -> bool:
-        return isinstance(error, Exception) and is_missing_object_error(error)
+    def _classify_relation_not_found(error: BaseException) -> RelationReadStatus | None:
+        ambiguous: bool = isinstance(error, Exception) and is_missing_object_error(error)
+        return RelationReadStatus.MISSING_OR_UNREADABLE if ambiguous else None
+
+    @staticmethod
+    def _current_role_name(*, connection: Any) -> str | None:
+        role: object = getattr(getattr(connection, "raw_connection", None), "role", None)
+        return str(role) if isinstance(role, str) and role else None
 
     def get_table_freshness_metadata(
         self,

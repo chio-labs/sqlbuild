@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.types import RelationReadStatus
+
 
 @dataclass(frozen=True)
 class SameViewDefinitionTestCase:
@@ -18,4 +20,6 @@ class RelationProbeClassificationTestCase:
     description: str
     adapter_name: str
     errors: tuple[Exception, ...]
-    expected_exists: bool | None
+    expected_status: RelationReadStatus | None
+    expected_role: str | None = None
+    role: str | None = None

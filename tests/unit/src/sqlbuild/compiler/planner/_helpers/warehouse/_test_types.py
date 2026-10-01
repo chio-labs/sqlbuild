@@ -53,4 +53,7 @@ class SourceTableProbeTestCase:
     listed_source_names: frozenset[str]
     probe_errors: tuple[Exception, ...]
     expected_probe_statements: tuple[str, ...]
-    expected_error_fragment: str | None = None
+    expected_error_fragments: tuple[str, ...] = ()
+    expected_help_fragment: str = ""
+    unexpected_output_fragment: str = "__not_present__"
+    role: str | None = None

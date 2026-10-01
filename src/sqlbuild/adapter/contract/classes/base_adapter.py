@@ -30,7 +30,7 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
-from sqlbuild.adapter.contract.main.probe_relation_exists import probe_relation_exists
+from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -42,6 +42,7 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationGrant,
     RelationInfo,
+    RelationReadProbe,
     RowDiffCoverage,
     RowDiffPreparedRelations,
     RowDiffResult,
@@ -272,14 +273,14 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         cursor: Any = self.execute(connection=connection, sql=f"DESCRIBE {relation}")
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
-    def relation_exists_for_read(self, *, connection: Any, relation: str) -> bool:
-        """Probe a rendered relation; False only for the adapter's object-not-found error."""
+    def probe_relation_read(self, *, connection: Any, relation: str) -> RelationReadProbe:
+        """Probe a rendered relation; only the adapter's not-found errors become missing."""
 
-        return probe_relation_exists(
+        return run_relation_read_probe(
             execute=self.execute,
             connection=connection,
             relation=relation,
-            is_not_found=lambda error: False,
+            classify_not_found=lambda error: None,
         )
 
     def get_table_freshness_metadata(

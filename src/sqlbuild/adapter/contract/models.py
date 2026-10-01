@@ -16,6 +16,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotInsertStyle,
     LifeCycleEventKind,
     MigrationTransfer,
+    RelationReadStatus,
     RetentionChangePhase,
     RetentionScope,
     SnapshotLatestVersionStyle,
@@ -134,6 +135,14 @@ class RelationLookup:
 
         relation: RelationInfo | None = self.get(database=database, schema=schema, name=name)
         return bool(relation.is_transient) if relation is not None else False
+
+
+@dataclass(frozen=True)
+class RelationReadProbe:
+    """Whether a rendered relation is readable, and the role used when the adapter knows it."""
+
+    status: RelationReadStatus
+    role: str | None = None
 
 
 @dataclass(frozen=True)
