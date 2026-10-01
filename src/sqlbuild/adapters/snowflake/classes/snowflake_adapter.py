@@ -138,6 +138,7 @@ from sqlbuild.adapters.snowflake.constants import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.cost.main.collection import collect_snowflake_cost
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
@@ -164,6 +165,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value
     sql_analysis_dialect_name: ClassVar[str | None] = "snowflake"
+    sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
+        backslash_escape_quotes=frozenset({"'"}), line_comment_prefixes=frozenset({"--", "//"})
+    )
     execution_duration_limit_seconds: ClassVar[int | None] = MAX_STATEMENT_TIMEOUT_SECONDS
     metadata_inspection_concurrency: ClassVar[int] = _METADATA_INSPECTION_CONCURRENCY
     exact_column_inspection_limit: ClassVar[int] = _EXACT_COLUMN_INSPECTION_LIMIT

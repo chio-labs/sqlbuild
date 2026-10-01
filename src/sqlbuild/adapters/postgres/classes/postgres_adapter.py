@@ -98,6 +98,7 @@ from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConn
 from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
@@ -119,6 +120,9 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     adapter_name: ClassVar[str] = BuiltinAdapter.POSTGRES.value
     sql_analysis_dialect_name: ClassVar[str | None] = "postgres"
+    sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
+        escape_string_prefix=True, nested_block_comments=True
+    )
     max_identifier_length: ClassVar[int] = 63
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",

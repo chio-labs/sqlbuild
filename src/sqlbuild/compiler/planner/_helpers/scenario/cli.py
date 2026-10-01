@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind, WarningSeverity
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 def build_cli_scenario_plan(
@@ -37,6 +38,7 @@ def build_cli_scenario_plan(
     pipeline_result: CompilePipelineResult,
     adapter: BaseAdapter,
     project_name: str,
+    source_lexical_syntax: SqlLexicalSyntax,
 ) -> ScenarioExecutionPlan:
     """Build a scenario execution plan for CLI execution."""
 
@@ -77,6 +79,7 @@ def build_cli_scenario_plan(
         adapter=adapter,
         graph_plan=graph_plan,
         relation_plan=relation_plan,
+        source_lexical_syntax=source_lexical_syntax,
     )
     _raise_for_error_warnings(execution_warnings)
     return scenario_plan

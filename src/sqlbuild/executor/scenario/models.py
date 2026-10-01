@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationMap,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
@@ -108,6 +109,15 @@ class ScenarioSnapshotCaptureLimits:
     max_bytes_per_relation: int | None = None
     max_total_bytes: int | None = None
     force: bool = False
+
+
+@dataclass(frozen=True)
+class ScenarioLocalReplaySource:
+    """Project adapter whose dialect locally replayed scenario SQL is authored in."""
+
+    lexical_syntax: SqlLexicalSyntax
+    capture_adapter: str | None = None
+    capture_dialect: str | None = None
 
 
 @dataclass(frozen=True)

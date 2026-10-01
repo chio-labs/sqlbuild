@@ -30,10 +30,6 @@ class CursorInputRole(StrEnum):
     WATERMARK = "watermark"
 
 
-class RelationMarkerTargetResolver(Protocol):
-    def __call__(self, *, function_name: str, referenced_name: str) -> str | None: ...
-
-
 class SelectorKind(StrEnum):
     NAME = "name"
     SEED = "seed"

@@ -35,6 +35,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
     SeedPlanEntry,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID
@@ -195,8 +196,9 @@ class ScenarioPipelinePlanBuilder:
         pipeline_result: CompilePipelineResult,
         adapter: ScenarioPipelineTestAdapter,
         project_name: str,
+        source_lexical_syntax: SqlLexicalSyntax,
     ) -> ScenarioExecutionPlan:
-        del pipeline_result, adapter, project_name
+        del pipeline_result, adapter, project_name, source_lexical_syntax
         strategy: Callable[..., ScenarioExecutionPlan] = {
             self.planning_failure_name: self._raise_planning_error,
         }.get(scenario.name, build_scenario_pipeline_plan)

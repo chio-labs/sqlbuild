@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.scenario.cli import build_cli_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 def build_scenario_plan(
@@ -15,6 +16,7 @@ def build_scenario_plan(
     pipeline_result: CompilePipelineResult,
     adapter: BaseAdapter,
     project_name: str,
+    source_lexical_syntax: SqlLexicalSyntax,
 ) -> ScenarioExecutionPlan:
     """Build a scenario execution plan for an external entrypoint."""
 
@@ -23,4 +25,5 @@ def build_scenario_plan(
         pipeline_result=pipeline_result,
         adapter=adapter,
         project_name=project_name,
+        source_lexical_syntax=source_lexical_syntax,
     )

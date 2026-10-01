@@ -10,6 +10,7 @@ import pytest
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.pipeline._helpers import scenario as scenario_pipeline
 from sqlbuild.executor.scenario._helpers.local import execution as local_scenario
 from sqlbuild.executor.scenario.constants import (
@@ -19,6 +20,7 @@ from sqlbuild.executor.scenario.constants import (
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
+    ScenarioLocalReplaySource,
     ScenarioRunResult,
     ScenarioSnapshotStateResult,
 )
@@ -268,6 +270,7 @@ def test_given_local_scenario_planning_failure_when_running_then_canonical_attem
             adapter=ScenarioLocalPipelineTestAdapter(),
             project_name="waffle_shop",
             strict=False,
+            replay_source=ScenarioLocalReplaySource(lexical_syntax=SqlLexicalSyntax()),
         )
 
     assert results[0].status == ExecutionStatus.FAILED
@@ -392,6 +395,7 @@ def test_given_selected_scenarios_when_running_local_scenario_pipeline_then_load
         adapter=adapter,
         project_name="waffle_shop",
         strict=test_case.strict,
+        replay_source=ScenarioLocalReplaySource(lexical_syntax=SqlLexicalSyntax()),
     )
 
     result: ScenarioRunResult = results[0]

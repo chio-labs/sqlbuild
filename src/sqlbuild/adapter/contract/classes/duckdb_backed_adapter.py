@@ -80,6 +80,7 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
@@ -100,6 +101,9 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         )
 
     sql_analysis_dialect_name: ClassVar[str | None] = "duckdb"
+    sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
+        escape_string_prefix=True, nested_block_comments=True
+    )
     relation_grants_supported: ClassVar[bool] = False
 
     def supports_zero_copy_clone(self) -> bool:

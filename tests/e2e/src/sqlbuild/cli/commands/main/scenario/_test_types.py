@@ -151,3 +151,32 @@ class ScenarioLocalCommittedSnapshotE2ETestCase:
     expected_count: int
     retained_rows_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioAuthoredCheckSqlE2ETestCase:
+    """Scenario whose check SQL uses DuckDB syntax a generic regeneration cannot parse."""
+
+    description: str
+    scenario_sql: str
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioUnresolvableCheckSqlE2ETestCase:
+    """Scenario whose check SQL contains an unclosed string in the target dialect."""
+
+    description: str
+    scenario_sql: str
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioLocalReplayProjectDialectE2ETestCase:
+    """Project-dialect scenario SQL replayed locally from a captured snapshot."""
+
+    description: str
+    scenario_name: str
+    source_fixture_sql: str
+    assertion_sql: str
+    expected_stdout_fragment: str

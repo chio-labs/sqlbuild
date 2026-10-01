@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.scenarios.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
@@ -34,6 +35,7 @@ from sqlbuild.executor.scenario.main._run import execute_scenario_run
 from sqlbuild.executor.scenario.main._snapshots import classify_scenario_snapshot_state
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
+    ScenarioLocalReplaySource,
     ScenarioRunResult,
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotStateResult,
@@ -123,6 +125,7 @@ def run_scenario_test_pipeline(
             scenarios=scenarios,
             adapter=adapter,
             project_name=project_name,
+            source_lexical_syntax=adapter.sql_lexical_syntax,
             execute=execute,
             failed=failed,
             on_scenario_start=on_scenario_start,
@@ -138,8 +141,7 @@ def run_scenario_local_test_pipeline(
     adapter: BaseAdapter,
     project_name: str,
     strict: bool,
-    capture_adapter: str | None = None,
-    capture_dialect: str | None = None,
+    replay_source: ScenarioLocalReplaySource,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
@@ -154,8 +156,8 @@ def run_scenario_local_test_pipeline(
             scenario_plan=scenario_plan,
             adapter=adapter,
             strict=strict,
-            capture_adapter=capture_adapter,
-            capture_dialect=capture_dialect,
+            capture_adapter=replay_source.capture_adapter,
+            capture_dialect=replay_source.capture_dialect,
         )
 
     def failed(*, scenario_name: str, exc: Exception) -> ScenarioRunResult:
@@ -174,6 +176,7 @@ def run_scenario_local_test_pipeline(
         scenarios=scenarios,
         adapter=adapter,
         project_name=project_name,
+        source_lexical_syntax=replay_source.lexical_syntax,
         execute=execute,
         failed=failed,
         on_scenario_start=on_scenario_start,
@@ -234,6 +237,7 @@ def run_scenario_capture_pipeline(
             scenarios=scenarios,
             adapter=adapter,
             project_name=project_name,
+            source_lexical_syntax=adapter.sql_lexical_syntax,
             execute=execute,
             failed=failed,
             on_scenario_start=on_scenario_start,
@@ -275,6 +279,7 @@ def _run_scenarios[ResultT: _ScenarioPipelineResult](
     scenarios: tuple[CompiledSqlScenario, ...],
     adapter: BaseAdapter,
     project_name: str,
+    source_lexical_syntax: SqlLexicalSyntax,
     execute: Callable[[ScenarioExecutionPlan], ResultT],
     failed: _ScenarioFailureResult[ResultT],
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None,
@@ -306,6 +311,7 @@ def _run_scenarios[ResultT: _ScenarioPipelineResult](
                     pipeline_result=pipeline_result,
                     adapter=adapter,
                     project_name=project_name,
+                    source_lexical_syntax=source_lexical_syntax,
                 )
                 result: ResultT = execute(scenario_plan)
             except Exception as exc:
@@ -343,6 +349,7 @@ def select_scenario_snapshot_capture_candidates(
     capture_adapter: str,
     capture_dialect: str,
     refresh: bool,
+    source_lexical_syntax: SqlLexicalSyntax,
 ) -> tuple[str, ...]:
     """Return selected scenario names that need snapshot capture before local replay."""
 
@@ -358,6 +365,7 @@ def select_scenario_snapshot_capture_candidates(
                 pipeline_result=pipeline_result,
                 adapter=adapter,
                 project_name=project_name,
+                source_lexical_syntax=source_lexical_syntax,
             )
             snapshot_state: ScenarioSnapshotStateResult = classify_scenario_snapshot_state(
                 project_dir=project_dir,

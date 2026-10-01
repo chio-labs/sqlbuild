@@ -66,6 +66,7 @@ from sqlbuild.executor.pipeline.main.run import (
     select_scenario_snapshot_capture_candidates,
 )
 from sqlbuild.executor.scenario.models import (
+    ScenarioLocalReplaySource,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
@@ -266,8 +267,11 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         adapter=adapter,
         project_name=discovered_inputs.project_config.name,
         strict=strict,
-        capture_adapter=project_adapter_name,
-        capture_dialect=local_capture_dialect,
+        replay_source=ScenarioLocalReplaySource(
+            lexical_syntax=project_adapter.sql_lexical_syntax,
+            capture_adapter=project_adapter_name,
+            capture_dialect=local_capture_dialect,
+        ),
         target_dir=effective_project_dir / "target",
         output_context=ScenarioRunOutputContext(
             namespace=namespace,
@@ -335,6 +339,7 @@ def _sync_local_snapshots(
         capture_adapter=project_adapter_name,
         capture_dialect=capture_dialect,
         refresh=refresh,
+        source_lexical_syntax=project_adapter.sql_lexical_syntax,
     )
     if not capture_names:
         progress_stream.write("\nSnapshots are fresh.\n")

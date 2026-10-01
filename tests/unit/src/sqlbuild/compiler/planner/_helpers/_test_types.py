@@ -38,6 +38,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase as PlanTestChainTestCase,
@@ -604,8 +605,32 @@ class ScenarioCheckSqlResolutionTestCase:
     description: str
     sql: str
     expected_sql: str
-    sql_analysis_enabled: bool = True
-    sql_analysis_dialect: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioDialectCheckSqlResolutionTestCase:
+    description: str
+    lexical_syntaxes: tuple[SqlLexicalSyntax, ...]
+    sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioCheckSqlResolutionErrorTestCase:
+    description: str
+    lexical_syntaxes: tuple[SqlLexicalSyntax, ...]
+    sql: str
+    expected_error_code: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioFixtureSqlResolutionErrorTestCase:
+    description: str
+    lexical_syntax: SqlLexicalSyntax
+    fixture_sql: str
+    expected_error_code: str
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -622,8 +647,6 @@ class ScenarioFixturePlanTestCase:
     expected_fixture_sql: dict[str, str]
     expected_fixture_targets: dict[str, str]
     fixture_sql_body: str | None = None
-    sql_analysis_enabled: bool = True
-    sql_analysis_dialect: str | None = None
 
 
 @dataclass(frozen=True)

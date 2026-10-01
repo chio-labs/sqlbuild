@@ -19,7 +19,7 @@ from sqlbuild.cli.output.main._write_execution_json_output import write_executio
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_local_test_pipeline
-from sqlbuild.executor.scenario.models import ScenarioRunResult
+from sqlbuild.executor.scenario.models import ScenarioLocalReplaySource, ScenarioRunResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -34,8 +34,7 @@ def run_local_scenarios(
     adapter: BaseAdapter,
     project_name: str,
     strict: bool,
-    capture_adapter: str,
-    capture_dialect: str,
+    replay_source: ScenarioLocalReplaySource,
     target_dir: Path,
     output_context: ScenarioRunOutputContext,
 ) -> int:
@@ -66,8 +65,7 @@ def run_local_scenarios(
         adapter=adapter,
         project_name=project_name,
         strict=strict,
-        capture_adapter=capture_adapter,
-        capture_dialect=capture_dialect,
+        replay_source=replay_source,
         on_scenario_start=lambda _scenario: (
             scenario_status.start(activity) if status_is_tty else None
         ),
