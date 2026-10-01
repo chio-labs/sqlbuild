@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from sqlbuild.compiler.discovery._helpers.sql.header_keys import unsupported_keys_error
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_UDF_DECORATOR_NAME,
     PYTHON_UDF_IMPORT_MODULES,
@@ -66,9 +67,12 @@ def parse_python_function(*, contents: str, file_path: Path) -> tuple[dict[str, 
         keyword for keyword in decorator_call.keywords if keyword.arg not in PYTHON_UDF_KEYS
     )
     if unsupported:
-        raise ModelSqlParseError(
-            f"@udf(...) in '{file_path}:{unsupported[0].lineno}' has unsupported keys: "
-            f"{', '.join(str(keyword.arg) for keyword in unsupported)}"
+        raise unsupported_keys_error(
+            statement="@udf(...)",
+            location=f"{file_path}:{unsupported[0].lineno}",
+            keys=(str(keyword.arg) for keyword in unsupported),
+            supported_keys=PYTHON_UDF_KEYS,
+            error_class=ModelSqlParseError,
         )
 
     entry_point: object | None = values.get("entry_point")

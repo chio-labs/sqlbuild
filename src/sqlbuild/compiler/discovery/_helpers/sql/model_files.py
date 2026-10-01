@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
+from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
+from sqlbuild.compiler.discovery.constants import (
+    REMOVED_SQL_MODEL_HEADER_KEYS,
+    SQL_MODEL_HEADER_KEYS,
+    STATEMENT_HEADER_BODY_PATTERN,
+)
 from sqlbuild.compiler.discovery.exceptions import (
     DiscoveryError,
     ModelHeaderSyntaxError,
@@ -137,6 +142,21 @@ def parse_matched_model_sql(
         header=header_match.group("header"),
         file_path=file_path,
         statement_name="MODEL",
+    )
+    removed: list[str] = sorted(REMOVED_SQL_MODEL_HEADER_KEYS.intersection(header_values))
+    if removed:
+        raise ModelSqlParseError(
+            f"MODEL() option(s) {', '.join(removed)} in '{file_path}' were removed with virtual "
+            "environments; projects run in direct mode"
+        )
+    reject_unsupported_header_keys(
+        header_values=header_values,
+        supported_keys=SQL_MODEL_HEADER_KEYS,
+        statement="MODEL()",
+        header=header_match.group("header"),
+        header_line=header_match.string.count("\n", 0, header_match.start("header")) + 1,
+        file_path=file_path,
+        error_class=ModelSqlParseError,
     )
     query: str = header_match.group("sql").strip()
     if not query:

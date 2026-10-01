@@ -438,6 +438,10 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
             index += 1;
             continue;
         }
+        if starts_comment(&characters, index) {
+            index = comment_end(&characters, index)?;
+            continue;
+        }
         if starts_template(&characters, index) {
             let template_end = find_character(&characters, '}', index + 2)
                 .ok_or_else(|| format!("unterminated template value at position {index}"))?;
@@ -470,7 +474,11 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
                 continue;
             }
             let next = characters[index];
-            if is_python_whitespace(next) || is_symbol(next) || next == ':' {
+            if is_python_whitespace(next)
+                || is_symbol(next)
+                || next == ':'
+                || starts_comment(&characters, index)
+            {
                 break;
             }
             if matches!(next, '\'' | '"') {
@@ -516,6 +524,27 @@ fn read_quoted_string(characters: &[char], start: usize) -> Result<(String, usiz
     Err(format!(
         "unterminated {quote_name}-quoted string at position {start}"
     ))
+}
+
+fn starts_comment(characters: &[char], index: usize) -> bool {
+    matches!(
+        (characters.get(index), characters.get(index + 1)),
+        (Some('-'), Some('-')) | (Some('/'), Some('*'))
+    )
+}
+
+fn comment_end(characters: &[char], start: usize) -> Result<usize, String> {
+    if characters[start] == '-' {
+        return Ok(find_character(characters, '\n', start).map_or(characters.len(), |end| end + 1));
+    }
+    let mut index = start + 2;
+    while index + 1 < characters.len() {
+        if characters[index] == '*' && characters[index + 1] == '/' {
+            return Ok(index + 2);
+        }
+        index += 1;
+    }
+    Err(format!("unterminated block comment at position {start}"))
 }
 
 fn starts_template(characters: &[char], index: usize) -> bool {

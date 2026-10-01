@@ -10,6 +10,7 @@ from typing import cast
 
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,
     prepare_model_header_tokens,
@@ -40,6 +41,16 @@ _TEST_PARAMETERS_HEADER_KEY: str = "parameters"
 _TEST_CASES_HEADER_KEY: str = "cases"
 _TEST_CURSOR_START_HEADER_KEY: str = "cursor_start"
 _TEST_CURSOR_END_HEADER_KEY: str = "cursor_end"
+_TEST_HEADER_KEYS: frozenset[str] = frozenset(
+    {
+        _TEST_NAME_HEADER_KEY,
+        _TEST_MODE_HEADER_KEY,
+        _TEST_PARAMETERS_HEADER_KEY,
+        _TEST_CASES_HEADER_KEY,
+        _TEST_CURSOR_START_HEADER_KEY,
+        _TEST_CURSOR_END_HEADER_KEY,
+    }
+)
 _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
     SqlValueKind.STRING,
     SqlValueKind.INTEGER,
@@ -64,7 +75,7 @@ def prepare_sql_test_file_headers(contents_batch: list[str]) -> None:
 def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
     """Parse one SQL-native test file into one or more raw TEST(...) blocks."""
 
-    raw_test_blocks: tuple[str, ...] = _split_sql_test_blocks(
+    raw_test_blocks: tuple[tuple[str, int], ...] = _split_sql_test_blocks(
         file_path=file_path, contents=contents
     )
     if not raw_test_blocks:
@@ -76,11 +87,13 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
     discovered_blocks: list[DiscoveredSqlTestBlock] = []
     test_index: int
     raw_test_block: str
-    for test_index, raw_test_block in enumerate(raw_test_blocks, start=1):
+    block_line: int
+    for test_index, (raw_test_block, block_line) in enumerate(raw_test_blocks, start=1):
         discovered_blocks.append(
             _parse_single_sql_test_block(
                 file_path=file_path,
                 raw_test_block=raw_test_block,
+                block_line=block_line,
                 test_index=test_index,
             )
         )
@@ -89,7 +102,7 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
     return tuple(discovered_blocks)
 
 
-def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[str, ...]:
+def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[tuple[str, int], ...]:
     matches: tuple[re.Match[str], ...] = tuple(_TEST_HEADER_ONLY_PATTERN.finditer(contents))
     if not matches:
         return ()
@@ -99,14 +112,16 @@ def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[str, ...]
             "non-whitespace content"
         )
 
-    raw_blocks: list[str] = []
+    raw_blocks: list[tuple[str, int]] = []
     match_index: int
     match: re.Match[str]
     for match_index, match in enumerate(matches):
         next_start: int = (
             matches[match_index + 1].start() if match_index + 1 < len(matches) else len(contents)
         )
-        raw_blocks.append(contents[match.start() : next_start].strip())
+        raw_block: str = contents[match.start() : next_start]
+        block_start: int = match.start() + len(raw_block) - len(raw_block.lstrip())
+        raw_blocks.append((raw_block.strip(), contents.count("\n", 0, block_start) + 1))
     return tuple(raw_blocks)
 
 
@@ -114,6 +129,7 @@ def _parse_single_sql_test_block(
     *,
     file_path: Path,
     raw_test_block: str,
+    block_line: int,
     test_index: int,
 ) -> DiscoveredSqlTestBlock:
     header_match: re.Match[str] | None = _TEST_HEADER_PATTERN.match(raw_test_block)
@@ -125,6 +141,7 @@ def _parse_single_sql_test_block(
 
     header_values: dict[str, object] = _parse_test_header(
         header=header_match.group("header"),
+        header_line=block_line + raw_test_block.count("\n", 0, header_match.start("header")),
         file_path=file_path,
     )
     sql_body: str = cleandoc(header_match.group("sql"))
@@ -180,7 +197,7 @@ def _parse_test_cursor_bound(
     )
 
 
-def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
+def _parse_test_header(*, header: str, header_line: int, file_path: Path) -> dict[str, object]:
     parsed_header: dict[str, object] = parse_header_values(
         header=header,
         file_path=file_path,
@@ -188,25 +205,15 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
         error_class=SqlTestParseError,
     )
 
-    supported_keys: frozenset[str] = frozenset(
-        {
-            _TEST_NAME_HEADER_KEY,
-            _TEST_MODE_HEADER_KEY,
-            _TEST_PARAMETERS_HEADER_KEY,
-            _TEST_CASES_HEADER_KEY,
-            _TEST_CURSOR_START_HEADER_KEY,
-            _TEST_CURSOR_END_HEADER_KEY,
-        }
+    reject_unsupported_header_keys(
+        header_values=parsed_header,
+        supported_keys=_TEST_HEADER_KEYS,
+        statement="TEST()",
+        header=header,
+        header_line=header_line,
+        file_path=file_path,
+        error_class=SqlTestParseError,
     )
-    unsupported_keys: tuple[str, ...] = tuple(
-        str(key) for key in parsed_header if key not in supported_keys
-    )
-    if unsupported_keys:
-        raise SqlTestParseError(
-            f"TEST() in '{file_path}' only supports `name`, `mode`, `parameters`, `cases`, "
-            "`cursor_start`, and `cursor_end`; unsupported keys: "
-            f"{', '.join(unsupported_keys)}"
-        )
 
     if _TEST_NAME_HEADER_KEY in parsed_header:
         _validate_test_name(name_value=parsed_header[_TEST_NAME_HEADER_KEY], file_path=file_path)

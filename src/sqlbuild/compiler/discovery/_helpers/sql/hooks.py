@@ -6,6 +6,7 @@ from inspect import cleandoc
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile
@@ -26,8 +27,13 @@ def parse_sql_hook_file(
 
     header: str
     raw_sql_body: str
-    header, raw_sql_body = _split_hook_file(contents=contents, file_path=file_path)
-    header_values: dict[str, object] = _parse_hook_header(header=header, file_path=file_path)
+    header_start: int
+    header, header_start, raw_sql_body = _split_hook_file(contents=contents, file_path=file_path)
+    header_values: dict[str, object] = _parse_hook_header(
+        header=header,
+        header_line=contents.count("\n", 0, header_start) + 1,
+        file_path=file_path,
+    )
     sql_body: str = cleandoc(raw_sql_body)
     if not sql_body:
         raise SqlHookParseError(f"SQL hook '{file_path}' must define SQL after HOOK(...)")
@@ -43,7 +49,7 @@ def parse_sql_hook_file(
     )
 
 
-def _split_hook_file(*, contents: str, file_path: Path) -> tuple[str, str]:
+def _split_hook_file(*, contents: str, file_path: Path) -> tuple[str, int, str]:
     index: int = 0
     while index < len(contents) and contents[index].isspace():
         index += 1
@@ -93,23 +99,25 @@ def _split_hook_file(*, contents: str, file_path: Path) -> tuple[str, str]:
         index += 1
     if index >= len(contents) or contents[index] != _SQL_STATEMENT_TERMINATOR:
         raise SqlHookParseError(f"SQL hook '{file_path}' HOOK(...) header must end with ';'")
-    return contents[header_start:header_end], contents[index + 1 :]
+    return contents[header_start:header_end], header_start, contents[index + 1 :]
 
 
-def _parse_hook_header(*, header: str, file_path: Path) -> dict[str, object]:
+def _parse_hook_header(*, header: str, header_line: int, file_path: Path) -> dict[str, object]:
     parsed_header: dict[str, object] = parse_header_values(
         header=header,
         file_path=file_path,
         statement_name="HOOK",
         error_class=SqlHookParseError,
     )
-    unsupported_keys: tuple[str, ...] = tuple(
-        str(key) for key in parsed_header if key not in _SUPPORTED_HOOK_HEADER_KEYS
+    reject_unsupported_header_keys(
+        header_values=parsed_header,
+        supported_keys=_SUPPORTED_HOOK_HEADER_KEYS,
+        statement="HOOK()",
+        header=header,
+        header_line=header_line,
+        file_path=file_path,
+        error_class=SqlHookParseError,
     )
-    if unsupported_keys:
-        raise SqlHookParseError(
-            f"HOOK() in '{file_path}' has unsupported keys: {', '.join(unsupported_keys)}"
-        )
     description: object | None = parsed_header.get(_HOOK_DESCRIPTION_HEADER_KEY)
     if _HOOK_DESCRIPTION_HEADER_KEY in parsed_header and (
         not isinstance(description, str) or not description.strip()

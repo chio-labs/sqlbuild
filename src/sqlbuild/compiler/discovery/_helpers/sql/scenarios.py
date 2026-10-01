@@ -6,6 +6,7 @@ import re
 from inspect import cleandoc
 from pathlib import Path
 
+from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIOS_OWNERSHIP_ROOT,
@@ -20,6 +21,9 @@ _SCENARIO_HEADER_PATTERN: re.Pattern[str] = re.compile(
 )
 _SCENARIO_DESCRIPTION_HEADER_KEY: str = "description"
 _SCENARIO_TAGS_HEADER_KEY: str = "tags"
+_SCENARIO_HEADER_KEYS: frozenset[str] = frozenset(
+    {_SCENARIO_DESCRIPTION_HEADER_KEY, _SCENARIO_TAGS_HEADER_KEY}
+)
 
 
 def parse_sql_scenario_file(
@@ -36,6 +40,7 @@ def parse_sql_scenario_file(
 
     header_values: dict[str, object] = _parse_scenario_header(
         header=header_match.group("header"),
+        header_line=contents.count("\n", 0, header_match.start("header")) + 1,
         file_path=file_path,
     )
     sql_body: str = cleandoc(header_match.group("sql"))
@@ -55,7 +60,7 @@ def parse_sql_scenario_file(
     )
 
 
-def _parse_scenario_header(*, header: str, file_path: Path) -> dict[str, object]:
+def _parse_scenario_header(*, header: str, header_line: int, file_path: Path) -> dict[str, object]:
     parsed_header: dict[str, object] = parse_header_values(
         header=header,
         file_path=file_path,
@@ -63,18 +68,15 @@ def _parse_scenario_header(*, header: str, file_path: Path) -> dict[str, object]
         error_class=SqlScenarioParseError,
     )
 
-    supported_keys: set[str] = {
-        _SCENARIO_DESCRIPTION_HEADER_KEY,
-        _SCENARIO_TAGS_HEADER_KEY,
-    }
-    unsupported_keys: tuple[str, ...] = tuple(
-        str(key) for key in parsed_header if key not in supported_keys
+    reject_unsupported_header_keys(
+        header_values=parsed_header,
+        supported_keys=_SCENARIO_HEADER_KEYS,
+        statement="SCENARIO()",
+        header=header,
+        header_line=header_line,
+        file_path=file_path,
+        error_class=SqlScenarioParseError,
     )
-    if unsupported_keys:
-        raise SqlScenarioParseError(
-            f"SCENARIO() in '{file_path}' only supports `description` and `tags` right now; "
-            f"unsupported keys: {', '.join(unsupported_keys)}"
-        )
 
     description_value: object | None = parsed_header.get(_SCENARIO_DESCRIPTION_HEADER_KEY)
     if _SCENARIO_DESCRIPTION_HEADER_KEY in parsed_header and not isinstance(description_value, str):

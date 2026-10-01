@@ -307,7 +307,7 @@ to inherit their project values.
 
 ## Defaults
 
-Project-wide model defaults. Any field you can set in a `MODEL()` header can be set here as a default:
+Project-wide defaults for models, seeds, and functions:
 
 ```toml
 [defaults]
@@ -318,6 +318,21 @@ tags = ["managed"]
 ```
 
 These apply to all models unless overridden by path defaults or the model's own `MODEL()` header.
+
+`[defaults]` accepts only the following keys. Any other key, including other `MODEL()` header
+fields, fails compilation with `D001`; set those in `[path_defaults]` or the `MODEL()` header
+instead.
+
+- Placement: `database`, `schema`, `seed_database`, `seed_schema`, `function_database`,
+  `function_schema`
+- Materialization: `materialized`, `contract`, `full_refresh`, `replay_on_change`, `tags`
+- Incremental: `incremental_strategy`, `incremental_mode`, `merge_exclude_columns`,
+  `append_cursor_inclusive`, `lookback`, `unaccounted_partition_policy`
+- Cursors: `cursor_start`, `cursor_end`, `cursor_watermark_mode`, `cursor_future_action`,
+  `cursor_future_max_distance`, `cursor_start_max_action`, `cursor_start_max_ahead`
+- Microbatch: `microbatch_strategy`, `batch_size`, `batch_concurrency`, `max_microbatches`
+- Row diff: `row_diff_exclude_columns`, `row_diff_tolerances`, `row_diff_sample_rows`,
+  `row_diff_sample_seed`
 
 ## Constants
 
@@ -334,7 +349,7 @@ This setting does not make unsupported adapter features portable. In particular,
 
 ## Path defaults
 
-Per-directory model defaults. Useful for applying different config to different parts of your project:
+Per-directory model defaults. Useful for applying different config to different parts of your project. Each path default accepts any `MODEL()` header field; an unknown key fails compilation with `D001`:
 
 ```toml
 [path_defaults."models/staging"]
