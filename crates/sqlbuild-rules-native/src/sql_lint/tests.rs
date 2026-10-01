@@ -8,6 +8,8 @@ mod comment_formatter;
 mod empty_fixture_lint;
 #[path = "tests/test_format_corpus.rs"]
 mod format_corpus;
+#[path = "tests/test_function_call_spacing.rs"]
+mod function_call_spacing;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_layout_rules.rs"]

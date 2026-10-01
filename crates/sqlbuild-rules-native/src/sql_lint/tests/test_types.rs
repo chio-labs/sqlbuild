@@ -87,6 +87,14 @@ pub(crate) struct LineWrapTestCase {
     pub expected_sql: &'static str,
 }
 
+pub(crate) struct FunctionCallSpacingTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub line_width: usize,
+    pub argument: &'static str,
+    pub expected_refused: &'static [&'static str],
+}
+
 pub(crate) struct LayoutRuleTestCase {
     pub description: &'static str,
     pub dialect: &'static str,

@@ -3,8 +3,11 @@ use std::str::FromStr;
 use polyglot_sql::{Dialect, DialectType};
 use serde_json::{Value, json};
 
+use crate::sql_lint::main::batch_formatter::format_batch_json;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
+use crate::sql_tokens::_helpers::builtin_functions::builtin_function_names;
+use crate::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
 use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
 use crate::sql_tokens::main::query_fingerprint::query_fingerprint;
 
@@ -153,4 +156,100 @@ fn format_once(sql: &str, dialect: &str, line_width: Option<usize>) -> Result<Va
     let request = json!({"version": 1, "sql": sql, "dialect": dialect, "line_width": line_width});
     let response = format_json(&request.to_string())?;
     serde_json::from_str(&response).map_err(|error| error.to_string())
+}
+
+/// Call names the formatter treats as built-ins in `dialect`, plus keyword-like call names.
+const KEYWORD_LIKE_CALLS: [&str; 11] = [
+    "if",
+    "iff",
+    "left",
+    "right",
+    "replace",
+    "insert",
+    "format",
+    "filter",
+    "date",
+    "time",
+    "timestamp",
+];
+
+/// Return names no 2/1/0-argument call could format, and calls printed with misplaced spaces.
+pub(crate) fn function_call_spacing(
+    dialect: &str,
+    line_width: usize,
+    argument: &str,
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let dialect_type = DialectType::from_str(dialect).map_err(|error| error.to_string())?;
+    let mut names: Vec<String> = builtin_function_names(dialect_type)
+        .into_iter()
+        .chain(KEYWORD_LIKE_CALLS.iter().map(|name| (*name).to_string()))
+        .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|name| !CALL_SYNTAX_FUNCTIONS.contains(&name.to_ascii_uppercase().as_str()))
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    let mut misplaced: Vec<String> = Vec::new();
+    for arguments in [
+        format!("{argument}, 1"),
+        argument.to_string(),
+        String::new(),
+    ] {
+        let responses = format_calls(&names, &arguments, dialect, line_width)?;
+        misplaced.extend(
+            names
+                .iter()
+                .zip(&responses)
+                .filter(|(_, response)| response["formatted"] == true)
+                .filter(|(name, response)| {
+                    !is_tight_call(
+                        name,
+                        response["sql"].as_str().unwrap_or_default(),
+                        &arguments,
+                    )
+                })
+                .map(|(name, response)| format!("{name}: {}", response["sql"])),
+        );
+        names = names
+            .into_iter()
+            .zip(&responses)
+            .filter(|(_, response)| response["formatted"] != true)
+            .map(|(name, _)| name)
+            .collect();
+    }
+    Ok((names, misplaced))
+}
+
+fn format_calls(
+    names: &[String],
+    arguments: &str,
+    dialect: &str,
+    line_width: usize,
+) -> Result<Vec<Value>, String> {
+    let requests: Vec<Value> = names
+        .iter()
+        .map(|name| {
+            json!({
+                "version": 1,
+                "sql": format!("SELECT {name}({arguments}) AS x FROM t"),
+                "dialect": dialect,
+                "line_width": line_width,
+            })
+        })
+        .collect();
+    serde_json::from_str(&format_batch_json(&Value::from(requests).to_string())?)
+        .map_err(|error| error.to_string())
+}
+
+/// Whether `sql` prints `name(` in authored or upper case with no space inside the call.
+fn is_tight_call(name: &str, sql: &str, arguments: &str) -> bool {
+    [name.to_string(), name.to_ascii_uppercase()]
+        .iter()
+        .any(|printed| {
+            sql.contains(&format!("{printed}({arguments})"))
+                || sql.contains(&format!("{printed}(\n"))
+        })
+        && !sql.contains("( ")
+        && !sql
+            .to_ascii_uppercase()
+            .contains(&format!("{} (", name.to_ascii_uppercase()))
 }

@@ -48,6 +48,29 @@ pub(crate) fn is_builtin_function(dialect: DialectType, upper_name: &str) -> boo
     typed.contains(&lower_name) || catalogued(catalog_key(dialect), &lower_name)
 }
 
+/// Every catalogued or parser-typed built-in function name of `dialect`, lower-cased.
+#[cfg(test)]
+pub(crate) fn builtin_function_names(dialect: DialectType) -> Vec<String> {
+    let typed: &HashSet<String> = match dialect {
+        DialectType::DuckDB => &HashSet::new(),
+        DialectType::Snowflake => &SNOWFLAKE_TYPED,
+        DialectType::BigQuery => &BIGQUERY_TYPED,
+        DialectType::PostgreSQL => &POSTGRES_TYPED,
+        DialectType::Databricks => &DATABRICKS_TYPED,
+        DialectType::TSQL => &TSQL_TYPED,
+        _ => &GENERIC_TYPED,
+    };
+    let key = match dialect {
+        DialectType::DuckDB => DUCKDB_CATALOG,
+        _ => catalog_key(dialect),
+    };
+    let catalogued = CATALOG_FUNCTIONS.get(key).into_iter().flatten();
+    let mut names: Vec<String> = typed.iter().chain(catalogued).cloned().collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
 fn catalog_key(dialect: DialectType) -> &'static str {
     match dialect {
         DialectType::Snowflake => "snowflake",

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use polyglot_sql::Dialect;
 use polyglot_sql::tokens::{Token, TokenType};
 
+use crate::sql_lint::constants::{CLOSE_PARENTHESIS, OPEN_PARENTHESIS};
 use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
 use crate::sql_tokens::main::case_folding::foldable_tokens;
 use crate::sql_tokens::main::is_unquoted_word::is_unquoted_word;
@@ -553,7 +554,13 @@ fn separators(
             " ".to_string()
         };
         separators[next] = if substitution {
-            gap(next_at - 1, next_at)
+            let oracle_gap = gap(next_at - 1, next_at);
+            let unspaced = default_space(&authored[last], &authored[next]).is_empty();
+            if unspaced && !oracle_gap.contains('\n') {
+                String::new()
+            } else {
+                oracle_gap
+            }
         } else if merged.contains('\n') {
             merged
         } else {
@@ -580,7 +587,13 @@ fn separators(
         let structural = [&authored[index - 1], &authored[index]]
             .iter()
             .any(|lexeme| STRUCTURAL_PUNCTUATION.contains(&lexeme.raw.as_str()));
-        if adjacent_in_source && !oracle_pair && !structural {
+        let call =
+            is_unquoted_word(&authored[index - 1].raw) && authored[index].raw == OPEN_PARENTHESIS;
+        let inside_parentheses =
+            authored[index - 1].raw == OPEN_PARENTHESIS || authored[index].raw == CLOSE_PARENTHESIS;
+        if (adjacent_in_source && !oracle_pair && (!structural || call))
+            || (inside_parentheses && !separators[index].contains('\n'))
+        {
             separators[index].clear();
         } else if separators[index].is_empty()
             && !adjacent_in_source

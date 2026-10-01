@@ -808,17 +808,17 @@
  {
   "dialect": "bigquery",
   "sql": "WITH cte(c) AS (SELECT * FROM t) SELECT * FROM cte",
-  "formatted": "WITH cte (c) AS (\n  SELECT *\n  FROM t\n)\n\nSELECT *\nFROM cte"
+  "formatted": "WITH cte(c) AS (\n  SELECT *\n  FROM t\n)\n\nSELECT *\nFROM cte"
  },
  {
   "dialect": "bigquery",
   "sql": "SELECT * FROM t AS t(c1, c2)",
-  "formatted": "SELECT *\nFROM t AS t (c1, c2)"
+  "formatted": "SELECT *\nFROM t AS t(c1, c2)"
  },
  {
   "dialect": "bigquery",
   "sql": "SELECT * FROM t AS t(c1, c2)",
-  "formatted": "SELECT *\nFROM t AS t (c1, c2)"
+  "formatted": "SELECT *\nFROM t AS t(c1, c2)"
  },
  {
   "dialect": "bigquery",
@@ -1293,7 +1293,7 @@
  {
   "dialect": "duckdb",
   "sql": "SELECT SUM(x) FILTER (x = 1)",
-  "formatted": "SELECT SUM(x) FILTER( x = 1)"
+  "formatted": "SELECT SUM(x) FILTER(x = 1)"
  },
  {
   "dialect": "duckdb",
@@ -1738,7 +1738,7 @@
  {
   "dialect": "duckdb",
   "sql": "SELECT CUME_DIST( ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)",
-  "formatted": "SELECT CUME_DIST( ORDER BY foo) OVER (ORDER BY 1)\nFROM (\n  SELECT 1 AS foo\n)"
+  "formatted": "SELECT CUME_DIST(ORDER BY foo) OVER (ORDER BY 1)\nFROM (\n  SELECT 1 AS foo\n)"
  },
  {
   "dialect": "duckdb",
@@ -1748,12 +1748,12 @@
  {
   "dialect": "duckdb",
   "sql": "SELECT RANK( ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)",
-  "formatted": "SELECT RANK( ORDER BY foo) OVER (ORDER BY 1)\nFROM (\n  SELECT 1 AS foo\n)"
+  "formatted": "SELECT RANK(ORDER BY foo) OVER (ORDER BY 1)\nFROM (\n  SELECT 1 AS foo\n)"
  },
  {
   "dialect": "duckdb",
   "sql": "SELECT PERCENT_RANK( ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)",
-  "formatted": "SELECT PERCENT_RANK( ORDER BY foo) OVER (ORDER BY 1)\nFROM (\n  SELECT 1 AS foo\n)"
+  "formatted": "SELECT PERCENT_RANK(ORDER BY foo) OVER (ORDER BY 1)\nFROM (\n  SELECT 1 AS foo\n)"
  },
  {
   "dialect": "duckdb",
@@ -2432,7 +2432,7 @@
  {
   "dialect": "postgres",
   "sql": "select count() OVER(partition by a order by a range offset preceding exclude current row)",
-  "formatted": "SELECT COUNT() OVER (PARTITION BY a ORDER BY a range offset preceding exclude CURRENT ROW )"
+  "formatted": "SELECT COUNT() OVER (PARTITION BY a ORDER BY a range offset preceding exclude CURRENT ROW)"
  },
  {
   "dialect": "postgres",
@@ -2497,7 +2497,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT SUM(x) OVER (PARTITION BY a ORDER BY d ROWS 1 PRECEDING)",
-  "formatted": "SELECT SUM(x) OVER (PARTITION BY a ORDER BY d ROWS 1 PRECEDING )"
+  "formatted": "SELECT SUM(x) OVER (PARTITION BY a ORDER BY d ROWS 1 PRECEDING)"
  },
  {
   "dialect": "postgres",
@@ -2549,12 +2549,12 @@
  {
   "dialect": "postgres",
   "sql": "SELECT TRIM(LEADING ' XXX ' COLLATE \"de_DE\")",
-  "formatted": "SELECT TRIM (LEADING ' XXX ' COLLATE \"de_DE\")"
+  "formatted": "SELECT TRIM(LEADING ' XXX ' COLLATE \"de_DE\")"
  },
  {
   "dialect": "postgres",
   "sql": "SELECT TRIM(TRAILING ' XXX ' COLLATE \"de_DE\")",
-  "formatted": "SELECT TRIM (TRAILING ' XXX ' COLLATE \"de_DE\")"
+  "formatted": "SELECT TRIM(TRAILING ' XXX ' COLLATE \"de_DE\")"
  },
  {
   "dialect": "postgres",
@@ -2639,7 +2639,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT SLOPE(point '(4,4)', point '(0,0)')",
-  "formatted": "SELECT SLOPE(point '(4,4)', point '(0,0)' )"
+  "formatted": "SELECT SLOPE(point '(4,4)', point '(0,0)')"
  },
  {
   "dialect": "postgres",
@@ -4507,7 +4507,7 @@
  {
   "dialect": "snowflake",
   "sql": "SELECT * FROM @foo/bar (PATTERN => 'test', FILE_FORMAT => ds_sandbox.test.my_csv_format) AS bla",
-  "formatted": "SELECT *\nFROM @foo/bar (PATTERN => 'test', FILE_FORMAT => ds_sandbox.test.my_csv_format ) AS bla"
+  "formatted": "SELECT *\nFROM @foo/bar (PATTERN => 'test', FILE_FORMAT => ds_sandbox.test.my_csv_format) AS bla"
  },
  {
   "dialect": "snowflake",
@@ -4909,12 +4909,12 @@
  {
   "dialect": "snowflake",
   "sql": "SELECT 1 FROM TABLE(GENERATOR(10))",
-  "formatted": "SELECT 1\nFROM TABLE(GENERATOR( 10))"
+  "formatted": "SELECT 1\nFROM TABLE(GENERATOR(10))"
  },
  {
   "dialect": "snowflake",
   "sql": "SELECT 1 FROM TABLE(GENERATOR(10, 5))",
-  "formatted": "SELECT 1\nFROM TABLE(GENERATOR( 10, 5))"
+  "formatted": "SELECT 1\nFROM TABLE(GENERATOR(10, 5))"
  },
  {
   "dialect": "snowflake",
