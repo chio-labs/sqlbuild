@@ -215,4 +215,16 @@ jobs:
           # The delivery app merges, so the resulting push to main starts the tag and publish runs.
           GH_TOKEN: ${{ steps.delivery-token.outputs.token }}
           RELEASE_PR: ${{ needs.release-please.outputs.release_pr }}
-        run: gh pr merge "${RELEASE_PR}" --repo "${GITHUB_REPOSITORY}" --auto --squash
+          PROCESSED_SHA: ${{ github.sha }}
+        run: |
+          # A commit merged to main while these checks ran is not in this release pull request yet.
+          # Its own Release Please run is queued behind this one and refreshes and re-checks the
+          # pull request, so merging now would tag a release whose changelog omits that commit.
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          if [[ "${main_sha}" != "${PROCESSED_SHA}" ]]; then
+            gh pr merge "${RELEASE_PR}" --repo "${GITHUB_REPOSITORY}" --disable-auto 2>/dev/null || true
+            echo "main moved from ${PROCESSED_SHA} to ${main_sha}; leaving the merge to the queued run" \
+              >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          gh pr merge "${RELEASE_PR}" --repo "${GITHUB_REPOSITORY}" --auto --squash
