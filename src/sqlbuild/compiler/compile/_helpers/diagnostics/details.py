@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from dataclasses import replace
 from typing import Any
 
@@ -30,6 +31,8 @@ _TYPE_WORDS: str = (
     r"\b(timestamp|integer|varchar|boolean|date|interval|double|float|decimal|numeric|"
     r"bigint|smallint|text|time|string|binary|array|struct)\b"
 )
+type _LineIndex = tuple[tuple[str, ...], tuple[int, ...]]
+type _BinaryIndex = tuple[tuple[int, ...], tuple[re.Match[str], ...]]
 _MISSING: re.Pattern[str] = re.compile(r"Unknown column '([^']+)'(?: in table '([^']+)')?")
 _OPERAND: str = (
     r"(?:TIMESTAMP\s+'[^']*'|DATE\s+'[^']*'|'(?:[^']|'')*'|-?\d+(?:\.\d+)?|"
@@ -140,6 +143,8 @@ def explain_diagnostics(project: CompiledProject) -> CompiledProject:
     shapes: dict[str, dict[str, str]] = semantic_shapes(project=project)
     models: dict[str, CompiledModel] = {model.name: model for model in project.models}
     aliases: dict[str, dict[str, str]] = {}
+    line_indexes: dict[str, _LineIndex] = {}
+    binary_indexes: dict[str, _BinaryIndex] = {}
     diagnostics: list[CompilerDiagnostic] = []
     diagnostic: CompilerDiagnostic
     for diagnostic in project.diagnostics:
@@ -149,12 +154,17 @@ def explain_diagnostics(project: CompiledProject) -> CompiledProject:
                 aliases[model.name] = input_aliases(
                     model=model, dialect=project.sql_analysis_dialect
                 )
+                line_indexes[model.name] = _line_index(model.authored_sql)
+            if diagnostic.code in _TYPE_CODES and model.name not in binary_indexes:
+                binary_indexes[model.name] = _binary_index(model.authored_sql)
             diagnostic = _explain_model(
                 diagnostic=diagnostic,
                 model=model,
                 aliases=aliases[model.name],
                 shapes=shapes,
                 dialect=project.sql_analysis_dialect,
+                lines=line_indexes[model.name],
+                binaries=binary_indexes.get(model.name, ((), ())),
             )
         elif semantic_help(diagnostic.code) is not None:
             diagnostic = replace(
@@ -188,14 +198,31 @@ def update_binding_models(
     return tuple(updated)
 
 
-def _binary_at(*, sql: str, offset: int) -> re.Match[str] | None:
-    """Matches are ordered and disjoint, so none after the offset can contain it."""
-    for match in _BINARY.finditer(sql):
-        if match.start() > offset:
-            return None
-        if offset < match.end():
-            return match
-    return None
+def _line_index(sql: str) -> _LineIndex:
+    """Index authored lines once per model so each diagnostic maps positions in O(log n)."""
+    starts: list[int] = [0]
+    for line in sql.splitlines(keepends=True):
+        starts.append(starts[-1] + len(line))
+    return tuple(sql.splitlines()), tuple(starts)
+
+
+def _binary_index(sql: str) -> _BinaryIndex:
+    matches: tuple[re.Match[str], ...] = tuple(_BINARY.finditer(sql))
+    return tuple(match.start() for match in matches), matches
+
+
+def _line_offset(*, lines: _LineIndex, line: int, column: int) -> int:
+    starts: tuple[int, ...] = lines[1]
+    return starts[min(max(line - 1, 0), len(starts) - 1)] + column - 1
+
+
+def _binary_at(*, binaries: _BinaryIndex, offset: int) -> re.Match[str] | None:
+    """Matches are ordered and disjoint, so only the last one starting at or before can match."""
+    position: int = bisect_right(binaries[0], offset) - 1
+    if position < 0:
+        return None
+    match: re.Match[str] = binaries[1][position]
+    return match if offset < match.end() else None
 
 
 def _explain_model(
@@ -205,6 +232,8 @@ def _explain_model(
     aliases: dict[str, str],
     shapes: dict[str, dict[str, str]],
     dialect: str | None,
+    lines: _LineIndex,
+    binaries: _BinaryIndex,
 ) -> CompilerDiagnostic:
     message: str = sentence_message(diagnostic.message)
     help_text: str | None = semantic_help(diagnostic.code)
@@ -226,8 +255,7 @@ def _explain_model(
         help_text = f"did you mean '{suggestion}'?" if suggestion else None
         message = f"Unknown column '{name}'" + (f" in {table}" if table else "")
         if location is not None:
-            lines: list[str] = model.authored_sql.splitlines()
-            prefix: str = lines[location.line - 1][: location.column - 1]
+            prefix: str = lines[0][location.line - 1][: location.column - 1]
             qualifier: re.Match[str] | None = re.search(
                 r'(?:"((?:[^"]|"")+)"|([A-Za-z_]\w*))\.$', prefix
             )
@@ -245,15 +273,8 @@ def _explain_model(
             )
             notes.insert(0, f"{table} has: {', '.join(available[:10])}{suffix}")
     if diagnostic.code in _TYPE_CODES and location is not None:
-        offset: int = (
-            sum(
-                len(line)
-                for line in model.authored_sql.splitlines(keepends=True)[: location.line - 1]
-            )
-            + location.column
-            - 1
-        )
-        binary: re.Match[str] | None = _binary_at(sql=model.authored_sql, offset=offset)
+        offset: int = _line_offset(lines=lines, line=location.line, column=location.column)
+        binary: re.Match[str] | None = _binary_at(binaries=binaries, offset=offset)
         if binary:
             left: str = binary.group("left")
             right: str = binary.group("right")
@@ -269,15 +290,8 @@ def _explain_model(
                     )
             end: int = binary.end()
             if location.end_line is not None and location.end_column is not None:
-                native_end: int = (
-                    sum(
-                        len(line)
-                        for line in model.authored_sql.splitlines(keepends=True)[
-                            : location.end_line - 1
-                        ]
-                    )
-                    + location.end_column
-                    - 1
+                native_end: int = _line_offset(
+                    lines=lines, line=location.end_line, column=location.end_column
                 )
                 end = max(end, native_end)
             begin: int = min(binary.start(), offset)

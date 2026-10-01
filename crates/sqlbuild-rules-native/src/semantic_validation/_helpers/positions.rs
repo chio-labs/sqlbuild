@@ -8,7 +8,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::{PyResult, pymethods};
 use regex::Regex;
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 
 const POPULAR_TOKEN_THRESHOLD: usize = 200;
 static TOKENS: LazyLock<Result<Regex, String>> =
@@ -42,6 +42,7 @@ impl BindingPositions {
                 authored,
                 offsets,
                 passes,
+                words: OnceLock::new(),
             })
         })
     }
@@ -59,21 +60,8 @@ impl BindingPositions {
                 .captures(message)
             {
                 let identifier = captures[1].rsplit('.').next().unwrap_or(&captures[1]);
-                let mut occurrences =
-                    self.authored
-                        .match_indices(identifier)
-                        .filter(|(offset, _)| {
-                            let before = self.authored[..*offset].chars().next_back();
-                            let after = self.authored[*offset + identifier.len()..].chars().next();
-                            !before.is_some_and(word) && !after.is_some_and(word)
-                        });
-                if let Some((offset, _)) = occurrences.next()
-                    && occurrences.next().is_none()
-                {
-                    return Ok(position(
-                        &self.lines,
-                        self.authored[..offset].chars().count(),
-                    ));
+                if let Some(offset) = self.unique_word_offset(identifier) {
+                    return Ok(position(&self.lines, offset));
                 }
             }
             let Some(query_start) = self.query_start else {
@@ -114,6 +102,53 @@ impl BindingPositions {
             Ok(position(&self.lines, query_start + mapped))
         })
     }
+}
+
+impl BindingPositions {
+    /// Char offset of the only whole-word occurrence of `identifier` in the authored SQL.
+    pub(crate) fn unique_word_offset(&self, identifier: &str) -> Option<usize> {
+        if identifier.is_empty() || !identifier.chars().all(word) {
+            let mut occurrences = self
+                .authored
+                .match_indices(identifier)
+                .filter(|(offset, _)| {
+                    let before = self.authored[..*offset].chars().next_back();
+                    let after = self.authored[*offset + identifier.len()..].chars().next();
+                    !before.is_some_and(word) && !after.is_some_and(word)
+                });
+            let (offset, _) = occurrences.next()?;
+            return occurrences
+                .next()
+                .is_none()
+                .then(|| self.authored[..offset].chars().count());
+        }
+        let (offset, unique) = *self
+            .words
+            .get_or_init(|| word_occurrences(&self.authored))
+            .get(identifier)?;
+        unique.then_some(offset)
+    }
+}
+
+/// Index every maximal word run once so identifier lookups do not rescan the SQL.
+fn word_occurrences(sql: &str) -> HashMap<String, (usize, bool)> {
+    let mut occurrences: HashMap<String, (usize, bool)> = HashMap::new();
+    let mut current = String::new();
+    let mut start = 0;
+    for (index, character) in sql.chars().chain(std::iter::once(' ')).enumerate() {
+        if word(character) {
+            if current.is_empty() {
+                start = index;
+            }
+            current.push(character);
+        } else if !current.is_empty() {
+            occurrences
+                .entry(std::mem::take(&mut current))
+                .and_modify(|entry| entry.1 = false)
+                .or_insert((start, true));
+        }
+    }
+    occurrences
 }
 
 fn word(character: char) -> bool {

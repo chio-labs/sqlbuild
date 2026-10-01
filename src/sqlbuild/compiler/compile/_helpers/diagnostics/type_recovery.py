@@ -1,5 +1,6 @@
 """Propagate unknown output types from located root errors without opening other columns."""
 
+from bisect import bisect_right
 from collections import Counter, deque
 from dataclasses import replace
 from typing import Any
@@ -72,16 +73,17 @@ def recover_output_types(
         columns: tuple[InferredColumn, ...] = model.inferred_columns or ()
         if len(spans) != len(columns):
             continue
+        span_starts: list[int] = [start for start, _ in spans]
         for raw in result.diagnostics:
             if raw.start is None:
                 continue
             root: CompilerDiagnostic | None = roots_by_model[model.name].get(raw)
-            if root is None or not root.is_error:
-                continue
-            for column, (start, end) in zip(columns, spans, strict=True):
-                if start <= raw.start < end:
-                    poisoned[(model.name, column.name)] = root
-                    outputs_by_diagnostic.setdefault(root, set()).add(column.name)
+            column: InferredColumn | None = _column_at(
+                columns=columns, spans=spans, span_starts=span_starts, offset=raw.start
+            )
+            if root is not None and root.is_error and column is not None:
+                poisoned[(model.name, column.name)] = root
+                outputs_by_diagnostic.setdefault(root, set()).add(column.name)
     if not poisoned:
         return project
     for _ in project.models:
@@ -255,6 +257,20 @@ def _request(
             connection=project.effective_connection, dialect=project.sql_analysis_dialect
         ),
     )
+
+
+def _column_at(
+    *,
+    columns: tuple[InferredColumn, ...],
+    spans: list[tuple[int, int]],
+    span_starts: list[int],
+    offset: int,
+) -> InferredColumn | None:
+    """Projection spans are ordered and disjoint, so bisect finds the only candidate."""
+    position: int = bisect_right(span_starts, offset) - 1
+    if position < 0 or offset >= spans[position][1]:
+        return None
+    return columns[position]
 
 
 def _projection_spans(*, sql: str, dialect: str | None) -> list[tuple[int, int]]:

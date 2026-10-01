@@ -98,3 +98,29 @@ def write_function_name_project(*, project_dir: Path, model_count: int, calls: i
             + ",\n".join(projections)
             + "\nFROM (SELECT 'anvil' AS sku) AS products\nWHERE NOT (sku IN ('a', 'b'))\n"
         )
+
+
+def write_single_model_diagnostic_project(*, project_dir: Path, diagnostics: int) -> None:
+    """Generate one wide model whose projections each raise an unknown-column or type error."""
+    project_dir.mkdir(parents=True, exist_ok=True)
+    models: Path = project_dir / "models"
+    models.mkdir(exist_ok=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dense_diagnostic_orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+    )
+    (models / "orders.sql").write_text(
+        "MODEL (materialized view, contract enforced, columns (order_id (type INTEGER), "
+        "status (type VARCHAR)));\nSELECT CAST(1 AS INTEGER) AS order_id, "
+        "CAST('open' AS VARCHAR) AS status"
+    )
+    projections: list[str] = [
+        f"  o.missing_{index:05} AS broken_{index:05}"
+        if index % 2 == 0
+        else f"  o.order_id = 'shipped_{index:05}' AS risky_{index:05}"
+        for index in range(diagnostics)
+    ]
+    (models / "order_diagnostics.sql").write_text(
+        "MODEL (materialized view);\nSELECT\n"
+        + ",\n".join(projections)
+        + '\nFROM __ref("orders") AS o\n'
+    )
