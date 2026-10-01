@@ -78,3 +78,11 @@ class OldNameRowsTestCase:
     grants_copied: int | None
     reason: str | None
     expected_rows: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UnfingerprintableCandidateTestCase:
+    description: str
+    query_sql: str
+    expected_message: str
+    expected_code: str

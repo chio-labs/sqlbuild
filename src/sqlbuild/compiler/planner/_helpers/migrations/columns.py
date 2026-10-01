@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.main._newest_column_event import (
     newest_column_migration_event_mentioning,
@@ -16,6 +15,7 @@ from sqlbuild.compiler.migrations.main._newest_column_event import (
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDiscovery
+from sqlbuild.compiler.planner._helpers.identity.hashing import model_definition_hash
 from sqlbuild.compiler.planner._helpers.migrations.column_renames import (
     identical_renames,
     rename_hints,
@@ -195,8 +195,12 @@ def _candidate(
         if column.migrate_from is not None
     }
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
-    changed: bool = fingerprint is not None and fingerprint.definition_hash != compute_query_hash(
-        query_sql=model.query_sql, dialect=snapshot.column_dialect
+    changed: bool = (
+        fingerprint is not None
+        and fingerprint.definition_hash
+        != model_definition_hash(
+            model_name=model.name, query_sql=model.query_sql, dialect=snapshot.column_dialect
+        )
     )
     if not warehouse or (not declared and not changed):
         return None
@@ -441,8 +445,10 @@ def _overlay_snapshot(
             fingerprints[candidate.model.name] = replace(
                 candidate.fingerprint,
                 definition=candidate.model.query_sql,
-                definition_hash=compute_query_hash(
-                    query_sql=candidate.model.query_sql, dialect=snapshot.column_dialect
+                definition_hash=model_definition_hash(
+                    model_name=candidate.model.name,
+                    query_sql=candidate.model.query_sql,
+                    dialect=snapshot.column_dialect,
                 ),
             )
     return replace(
