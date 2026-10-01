@@ -1,4 +1,4 @@
-//! Whitespace-, comment- and word-case-insensitive SQL change fingerprints.
+//! Whitespace-, comment- and keyword-case-insensitive SQL change fingerprints.
 
 use std::str::FromStr;
 
@@ -13,7 +13,10 @@ pub(crate) fn query_fingerprint(sql: &str, dialect_name: &str) -> Result<String,
         .map_err(|_| format!("unknown SQL fingerprint dialect '{dialect_name}'"))?;
     let dialect = Dialect::get(dialect_type);
     let mut digest = Sha256::new();
-    for token in canonical_tokens(sql, &dialect)? {
+    let tokens = dialect
+        .tokenize(sql)
+        .map_err(|error| format!("SQL tokenization failed: {error}"))?;
+    for token in canonical_tokens(sql, &tokens, &dialect)? {
         digest.update(token.text.len().to_string().as_bytes());
         digest.update(b":");
         digest.update(token.text.as_bytes());

@@ -1,5 +1,6 @@
 """Project writers shared by lint behavior tests."""
 
+import itertools
 from pathlib import Path
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
@@ -40,3 +41,45 @@ def write_fixture_format_project(
         encoding="utf-8",
     )
     return test_file
+
+
+_KEYWORD_NAMED_IDENTIFIERS: tuple[str, ...] = (
+    "Left",
+    "Filter",
+    "Rows",
+    "Index",
+    "View",
+    "Replace",
+    "Any",
+    "Some",
+    "Only",
+    "Semi",
+    "Anti",
+    "Pivot",
+    "Tablesample",
+    "Range",
+    "Row",
+    "Nulls",
+    "Ignore",
+    "Within",
+    "Recursive",
+    "Exclude",
+)
+_SHAPES: tuple[tuple[str, str, int], ...] = (
+    ("projection", "select {name} from orders", 1),
+    ("alias", "select order_id as {name} from orders", 1),
+    ("qualified column", "select o.{name} from orders o", 1),
+    ("qualified table", "select * from inventory.{name}", 1),
+    ("table and qualifier", "select {name}.order_id from {name}", 2),
+)
+
+
+def keyword_name_positions() -> tuple[tuple[str, str, str, str, int], ...]:
+    """Return every (dialect, name, position, query template, occurrences) combination."""
+
+    return tuple(
+        (dialect, name, *shape)
+        for dialect, name, shape in itertools.product(
+            ("duckdb", "bigquery"), _KEYWORD_NAMED_IDENTIFIERS, _SHAPES
+        )
+    )

@@ -411,7 +411,7 @@ default_audit_run_scope = "final"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `sql_analysis` | `true` | Enable SQL syntax analysis, column binding, type inference, output inference, and semantic validation at compile time |
-| `query_change_tracking` | `true` | Track query fingerprints for change detection. A fingerprint covers the SQL tokens of the compiled query and ignores whitespace, comments, and the letter case of unquoted keywords and identifiers, so formatting-only edits do not rebuild. String literals, quoted identifiers, numbers, and optimizer hints count exactly. |
+| `query_change_tracking` | `true` | Track query fingerprints for change detection. A fingerprint covers the SQL tokens of the compiled query and ignores whitespace, comments, and the letter case of unquoted keywords and built-in function names, so formatting-only edits do not rebuild. Identifiers, aliases, JSON path keys, user-defined function names, string literals, quoted identifiers, numbers, and optimizer hints count exactly. |
 | `column_contract_mode` | `implicit` | Controls whether column declarations on models without a `contract` declaration activate static shape/nullability validation. `implicit` preserves that validation; `explicit` treats columns as metadata and audit attachment unless the model declares `contract enforced`. Model-level `contract enforced` and `contract none` override this setting. Explicit type enforcement remains independent. See [Contracts](models/contracts.md). |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
 | `microbatch_concurrency` | `false` | Explicitly permit models with `batch_concurrency > 1`; concurrent batches use immutable coordination facts |

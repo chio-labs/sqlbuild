@@ -118,3 +118,15 @@ def _resource_contract(resource: dict[str, object]) -> tuple[object, ...]:
         resource.get("column_count"),
         compute_query_hash(query_sql=str(resource.get("query_sql", "")), dialect="duckdb"),
     )
+
+
+def run_sqb(*, project_dir: Path, arguments: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+    """Run one `sqb` command against a project and capture its output."""
+
+    return subprocess.run(
+        [str(Path(sys.executable).with_name("sqb")), "--project-dir", str(project_dir), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )

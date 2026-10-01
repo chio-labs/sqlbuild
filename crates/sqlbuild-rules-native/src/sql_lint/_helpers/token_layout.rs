@@ -1,15 +1,21 @@
 //! Print authored SQL tokens with whitespace taken from a parse-tree layout oracle.
 
+use std::collections::BTreeSet;
+
 use polyglot_sql::Dialect;
 use polyglot_sql::tokens::{Token, TokenType};
 
 use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
+use crate::sql_tokens::main::case_folding::foldable_tokens;
 use crate::sql_tokens::main::is_unquoted_word::is_unquoted_word;
+use crate::sql_tokens::main::token_texts::token_texts;
 
 const TOKEN_PRESERVATION_FAILURE: &str =
     "native formatter would change authored SQL tokens, not only layout";
 const COMMENT_ATTACHMENT_FAILURE: &str =
     "native formatter could not preserve comment token attachments";
+const STRING_BREAK_FAILURE: &str =
+    "native formatter would join adjacent string literals across a line break";
 const ALIGNMENT_FAILURE: &str = "native formatter could not align its layout with authored tokens";
 const RESYNC_WINDOW: usize = 48;
 const RESYNC_CONFIRMATION: usize = 1;
@@ -32,7 +38,7 @@ struct Lexeme {
     end: usize,
     raw: String,
     key: String,
-    keyword: bool,
+    foldable: bool,
 }
 
 /// Comments attached to the authored token they precede or follow.
@@ -54,13 +60,12 @@ pub(crate) fn comments_in(sql: &str, tokens: &[Token]) -> Vec<Comment> {
     comments
 }
 
+/// Split the non-whitespace text the tokenizer skipped between two tokens into comments.
 fn comments_in_gap(characters: &[char], start: usize, end: usize) -> Vec<Comment> {
     let mut comments: Vec<Comment> = Vec::new();
     let mut index = start;
     while index < end {
-        let line = characters[index] == '-' && characters.get(index + 1) == Some(&'-');
-        let block = characters[index] == '/' && characters.get(index + 1) == Some(&'*');
-        if !line && !block {
+        if characters[index].is_whitespace() {
             index += 1;
             continue;
         }
@@ -72,26 +77,52 @@ fn comments_in_gap(characters: &[char], start: usize, end: usize) -> Vec<Comment
         let leading = characters[line_start..start]
             .iter()
             .all(|character| character.is_whitespace());
-        index += 2;
-        if line {
-            while index < end && characters[index] != '\n' {
-                index += 1;
-            }
+        let block = characters[index] == '/' && characters.get(index + 1) == Some(&'*');
+        index = if block {
+            block_comment_end(characters, start, end)
         } else {
-            while index + 1 < end && !(characters[index] == '*' && characters[index + 1] == '/') {
-                index += 1;
-            }
-            index = (index + 2).min(end);
-        }
+            (start..end)
+                .find(|&position| characters[position] == '\n')
+                .unwrap_or(end)
+        };
         comments.push(Comment {
             start,
             end: index,
             text: characters[start..index].iter().collect(),
-            line,
+            line: !block,
             leading,
         });
     }
     comments
+}
+
+/// End of a block comment: nested comments when they close inside the gap, else the first `*/`.
+fn block_comment_end(characters: &[char], start: usize, end: usize) -> usize {
+    let closes_at = |position: usize| {
+        position + 1 < end && characters[position] == '*' && characters[position + 1] == '/'
+    };
+    let opens_at = |position: usize| {
+        position + 1 < end && characters[position] == '/' && characters[position + 1] == '*'
+    };
+    let mut depth = 0_usize;
+    let mut position = start;
+    while position < end {
+        if opens_at(position) {
+            depth += 1;
+            position += 2;
+        } else if closes_at(position) {
+            depth -= 1;
+            position += 2;
+            if depth == 0 {
+                return position;
+            }
+        } else {
+            position += 1;
+        }
+    }
+    (start + 2..end)
+        .find(|&position| closes_at(position))
+        .map_or(end, |position| position + 2)
 }
 
 pub(crate) fn neutralize_comments(sql: &str, comments: &[Comment]) -> String {
@@ -113,7 +144,7 @@ pub(crate) struct AuthoredSql<'a> {
     pub(crate) comments: &'a [Comment],
 }
 
-/// Print every authored token in order, taking only whitespace and word case from `oracle`.
+/// Print every authored token in order, taking only whitespace and keyword case from `oracle`.
 pub(crate) fn print_authored_tokens(
     source: &AuthoredSql<'_>,
     oracle: &str,
@@ -124,18 +155,24 @@ pub(crate) fn print_authored_tokens(
         tokens,
         comments,
     } = *source;
-    let authored = lexemes(sql, tokens)?;
+    let authored = lexemes(sql, tokens, Some(dialect))?;
     let oracle_tokens = dialect
         .tokenize(oracle)
         .map_err(|error| error.to_string())?;
-    let generated = lexemes(oracle, &oracle_tokens)?;
+    let generated = lexemes(oracle, &oracle_tokens, None)?;
     let alignment = align(&authored, &generated)?;
     let oracle_characters: Vec<char> = oracle.chars().collect();
     let separators = separators(&authored, &generated, &alignment, &oracle_characters)?;
     let attached = attach_comments(tokens, comments);
     let mut output = String::with_capacity(sql.len() + sql.len() / 4);
+    let string_breaks = string_breaks(sql, tokens);
     for (index, lexeme) in authored.iter().enumerate() {
-        let separator = &separators[index];
+        let forced_break = string_breaks.contains(&index) && !separators[index].contains('\n');
+        let separator = &if forced_break {
+            format!("\n{}", current_indentation(&output))
+        } else {
+            separators[index].clone()
+        };
         let leading = &attached[index].leading;
         if leading.is_empty() {
             output.push_str(separator);
@@ -192,42 +229,52 @@ pub(crate) fn verify_token_invariant(
     after: &str,
     dialect: &Dialect,
 ) -> Result<(), String> {
-    if canonical_tokens(before, dialect)? != canonical_tokens(after, dialect)? {
+    let before_tokens = tokenize(before, dialect)?;
+    let after_tokens = tokenize(after, dialect)?;
+    if canonical_tokens(before, &before_tokens, dialect)?
+        != canonical_tokens(after, &after_tokens, dialect)?
+    {
         return Err(TOKEN_PRESERVATION_FAILURE.to_string());
     }
-    if comment_positions(before, dialect)? != comment_positions(after, dialect)? {
+    if comment_positions(before, &before_tokens) != comment_positions(after, &after_tokens) {
         return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
+    }
+    if !string_breaks(before, &before_tokens).is_subset(&string_breaks(after, &after_tokens)) {
+        return Err(STRING_BREAK_FAILURE.to_string());
     }
     Ok(())
 }
 
-fn comment_positions(sql: &str, dialect: &Dialect) -> Result<Vec<(String, usize)>, String> {
-    let tokens = dialect.tokenize(sql).map_err(|error| error.to_string())?;
+fn tokenize(sql: &str, dialect: &Dialect) -> Result<Vec<Token>, String> {
+    dialect.tokenize(sql).map_err(|error| error.to_string())
+}
+
+fn comment_positions(sql: &str, tokens: &[Token]) -> Vec<(String, usize)> {
     let mut positions: Vec<(String, usize)> = Vec::new();
-    for comment in comments_in(sql, &tokens) {
+    for comment in comments_in(sql, tokens) {
         let preceding = tokens.partition_point(|token| token.span.end <= comment.start);
         positions.push((comment.text, preceding));
     }
-    Ok(positions)
+    positions
 }
 
-fn lexemes(sql: &str, tokens: &[Token]) -> Result<Vec<Lexeme>, String> {
-    let characters: Vec<char> = sql.chars().collect();
-    let mut lexemes: Vec<Lexeme> = Vec::with_capacity(tokens.len());
-    for token in tokens {
-        lexemes.push(lexeme(&characters, token)?);
-    }
-    Ok(lexemes)
+/// Lexemes of `sql`; only authored lexemes carry the recase classification.
+fn lexemes(sql: &str, tokens: &[Token], dialect: Option<&Dialect>) -> Result<Vec<Lexeme>, String> {
+    let raws = token_texts(sql, tokens)?;
+    let foldable = dialect.map_or_else(
+        || vec![false; tokens.len()],
+        |dialect| foldable_tokens(&raws, tokens, dialect),
+    );
+    Ok(raws
+        .into_iter()
+        .zip(tokens)
+        .zip(foldable)
+        .map(|((raw, token), foldable)| lexeme(raw, token, foldable))
+        .collect())
 }
 
-fn lexeme(characters: &[char], token: &Token) -> Result<Lexeme, String> {
-    let raw: String = characters
-        .get(token.span.start..token.span.end)
-        .ok_or_else(|| TOKEN_PRESERVATION_FAILURE.to_string())?
-        .iter()
-        .collect();
-    let word = is_unquoted_word(&raw);
-    let key = if word {
+fn lexeme(raw: String, token: &Token, foldable: bool) -> Lexeme {
+    let key = if is_unquoted_word(&raw) {
         format!("w:{}", raw.to_ascii_uppercase())
     } else if raw
         .chars()
@@ -237,14 +284,42 @@ fn lexeme(characters: &[char], token: &Token) -> Result<Lexeme, String> {
     } else {
         format!("r:{raw}")
     };
-    let keyword = word && !matches!(token.token_type, TokenType::Var | TokenType::Identifier);
-    Ok(Lexeme {
+    Lexeme {
         start: token.span.start,
         end: token.span.end,
         raw,
         key,
-        keyword,
-    })
+        foldable,
+    }
+}
+
+fn is_string_literal(token: &Token) -> bool {
+    matches!(
+        token.token_type,
+        TokenType::String
+            | TokenType::NationalString
+            | TokenType::EscapeString
+            | TokenType::RawString
+            | TokenType::ByteString
+            | TokenType::UnicodeString
+            | TokenType::HexString
+            | TokenType::BitString
+            | TokenType::DollarString
+            | TokenType::TripleSingleQuotedString
+            | TokenType::TripleDoubleQuotedString
+    )
+}
+
+/// Indices of string literals that follow another string literal across a line break.
+fn string_breaks(sql: &str, tokens: &[Token]) -> BTreeSet<usize> {
+    let characters: Vec<char> = sql.chars().collect();
+    (1..tokens.len())
+        .filter(|&index| {
+            is_string_literal(&tokens[index - 1])
+                && is_string_literal(&tokens[index])
+                && characters[tokens[index - 1].span.end..tokens[index].span.start].contains(&'\n')
+        })
+        .collect()
 }
 
 /// Map authored tokens to matching oracle tokens; a closer only matches its opener's partner.
@@ -495,17 +570,17 @@ fn would_fuse(previous: &Lexeme, next: &Lexeme) -> bool {
     (word(left) && word(right)) || (operator(left) && operator(right))
 }
 
+/// The authored text, recased only for keywords and built-in function names.
 fn printed_text(authored: &Lexeme, generated: Option<&Lexeme>) -> String {
+    if !authored.foldable {
+        return authored.raw.clone();
+    }
     match generated {
-        Some(generated)
-            if generated.raw != authored.raw
-                && is_unquoted_word(&authored.raw)
-                && generated.raw.eq_ignore_ascii_case(&authored.raw) =>
-        {
+        Some(generated) if generated.raw.eq_ignore_ascii_case(&authored.raw) => {
             generated.raw.clone()
         }
-        None if authored.keyword => authored.raw.to_ascii_uppercase(),
-        _ => authored.raw.clone(),
+        Some(_) => authored.raw.clone(),
+        None => authored.raw.to_ascii_uppercase(),
     }
 }
 

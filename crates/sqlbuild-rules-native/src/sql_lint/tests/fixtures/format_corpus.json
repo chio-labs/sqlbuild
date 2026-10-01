@@ -383,7 +383,7 @@
  {
   "dialect": "bigquery",
   "sql": "select array_contains([1, 2, 3], 1)",
-  "formatted": "SELECT\n  ARRAY_CONTAINS([1, 2, 3], 1)"
+  "formatted": "SELECT\n  array_contains([1, 2, 3], 1)"
  },
  {
   "dialect": "bigquery",
@@ -1153,7 +1153,7 @@
  {
   "dialect": "databricks",
   "sql": "WITH t AS (SELECT '{\"x-y\": \"z\"}' AS c) SELECT get_json_object(c, '$.x-y') FROM t",
-  "formatted": "WITH t AS (\n  SELECT\n    '{\"x-y\": \"z\"}' AS c\n)\nSELECT\n  GET_JSON_OBJECT(c, '$.x-y')\nFROM t"
+  "formatted": "WITH t AS (\n  SELECT\n    '{\"x-y\": \"z\"}' AS c\n)\nSELECT\n  get_json_object(c, '$.x-y')\nFROM t"
  },
  {
   "dialect": "duckdb",
@@ -1890,17 +1890,17 @@
  {
   "dialect": "duckdb",
   "sql": "SELECT * FROM tbl USING SAMPLE 10 PERCENT (bernoulli)",
-  "formatted": "SELECT\n  *\nFROM tbl\nUSING SAMPLE 10 PERCENT (BERNOULLI)"
+  "formatted": "SELECT\n  *\nFROM tbl\nUSING SAMPLE 10 PERCENT (bernoulli)"
  },
  {
   "dialect": "duckdb",
   "sql": "SELECT * FROM tbl USING SAMPLE reservoir(50 ROWS) REPEATABLE (100)",
-  "formatted": "SELECT\n  *\nFROM tbl\nUSING SAMPLE RESERVOIR (50 ROWS) REPEATABLE (100)"
+  "formatted": "SELECT\n  *\nFROM tbl\nUSING SAMPLE reservoir (50 ROWS) REPEATABLE (100)"
  },
  {
   "dialect": "duckdb",
   "sql": "SELECT * FROM tbl USING SAMPLE 10% (system, 377)",
-  "formatted": "SELECT\n  *\nFROM tbl\nUSING SAMPLE 10% (SYSTEM, 377)"
+  "formatted": "SELECT\n  *\nFROM tbl\nUSING SAMPLE 10% (system, 377)"
  },
  {
   "dialect": "duckdb",
@@ -2022,7 +2022,7 @@
  {
   "dialect": "duckdb",
   "sql": "SELECT * FROM r: range(10), v: (VALUES (42)), s: (FROM range(10))",
-  "formatted": "SELECT\n  *\nFROM r:range(10), v:(VALUES (42)), s:(\n  FROM RANGE(10)\n)"
+  "formatted": "SELECT\n  *\nFROM r:range(10), v:(VALUES (42)), s:(\n  FROM range(10)\n)"
  },
  {
   "dialect": "duckdb",
@@ -2442,7 +2442,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT DATE_PART('isodow'::varchar(6), current_date)",
-  "formatted": "SELECT\n  DATE_PART('isodow'::varchar(6), CURRENT_DATE)"
+  "formatted": "SELECT\n  DATE_PART('isodow'::varchar(6), current_date)"
  },
  {
   "dialect": "postgres",
@@ -2492,7 +2492,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT to_timestamp(123)::time without time zone",
-  "formatted": "SELECT\n  TO_TIMESTAMP(123)::time without time zone"
+  "formatted": "SELECT\n  to_timestamp(123)::time without time zone"
  },
  {
   "dialect": "postgres",
@@ -2604,12 +2604,12 @@
  {
   "dialect": "postgres",
   "sql": "SELECT '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| array['b', 'c']",
-  "formatted": "SELECT\n  '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| ARRAY['b', 'c']"
+  "formatted": "SELECT\n  '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| array['b', 'c']"
  },
  {
   "dialect": "postgres",
   "sql": "SELECT '[\"a\", \"b\"]'::jsonb ?& array['a', 'b']",
-  "formatted": "SELECT\n  '[\"a\", \"b\"]'::jsonb ?& ARRAY['a', 'b']"
+  "formatted": "SELECT\n  '[\"a\", \"b\"]'::jsonb ?& array['a', 'b']"
  },
  {
   "dialect": "postgres",
@@ -2639,7 +2639,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT SLOPE(point '(4,4)', point '(0,0)')",
-  "formatted": "SELECT\n  SLOPE(point '(4,4)', POINT '(0,0)' )"
+  "formatted": "SELECT\n  SLOPE(point '(4,4)', point '(0,0)' )"
  },
  {
   "dialect": "postgres",
@@ -2654,7 +2654,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT * FROM schema_name.table_name st WHERE JSON_EXTRACT_PATH_TEXT((st.data)::json, variadic array['test'::text]) = 'test'::text",
-  "formatted": "SELECT\n  *\nFROM schema_name.table_name st\nWHERE\n  JSON_EXTRACT_PATH_TEXT(\n    (\n      st.data\n    )::json,\n    VARIADIC ARRAY['test'::text]\n  ) = 'test'::text",
+  "formatted": "SELECT\n  *\nFROM schema_name.table_name st\nWHERE\n  JSON_EXTRACT_PATH_TEXT(\n    (\n      st.data\n    )::json,\n    variadic array['test'::text]\n  ) = 'test'::text",
   "previously_formatted": "SELECT\n  *\nFROM schema_name.table_name AS st\nWHERE\n  JSON_EXTRACT_PATH_TEXT(\n    (\n      st.data\n    )::json,\n    VARIADIC ARRAY['test'::text]\n  ) = 'test'::text"
  },
  {
@@ -4496,7 +4496,7 @@
  {
   "dialect": "snowflake",
   "sql": "SELECT parse_json($1):a.b FROM @mystage2/data1.json.gz",
-  "formatted": "SELECT\n  PARSE_JSON($1):a.b\nFROM @mystage2/data1.json.gz"
+  "formatted": "SELECT\n  parse_json($1):a.b\nFROM @mystage2/data1.json.gz"
  },
  {
   "dialect": "snowflake",

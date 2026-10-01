@@ -22,10 +22,80 @@ fn given_sql_pairs_when_canonicalizing_then_only_layout_comments_and_word_case_a
             expected_equal: true,
         },
         CanonicalTokensTestCase {
-            description: "unquoted word case is ignored",
+            description: "keyword and built-in function case is ignored",
+            dialect: DialectType::Snowflake,
+            left: "select count(*) from orders",
+            right: "SELECT COUNT(*) FROM orders",
+            expected_equal: true,
+        },
+        CanonicalTokensTestCase {
+            description: "unquoted identifier case is significant",
             dialect: DialectType::Snowflake,
             left: "select count(*) from orders",
             right: "SELECT COUNT(*) FROM ORDERS",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "Snowflake path key case is significant",
+            dialect: DialectType::Snowflake,
+            left: "select payload:customerId from t",
+            right: "select payload:customerid from t",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "BigQuery qualified table case is significant",
+            dialect: DialectType::BigQuery,
+            left: "select * from ds.Orders",
+            right: "select * from ds.orders",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "DuckDB alias case is significant",
+            dialect: DialectType::DuckDB,
+            left: "select 1 as Foo",
+            right: "select 1 as foo",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "keyword-named qualified name case is significant",
+            dialect: DialectType::BigQuery,
+            left: "select * from inventory.view",
+            right: "select * from inventory.VIEW",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "keyword-named alias case is significant",
+            dialect: DialectType::DuckDB,
+            left: "select pos as index from t",
+            right: "select pos AS INDEX from t",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "user-defined function case is significant",
+            dialect: DialectType::DuckDB,
+            left: "select my_udf(a) from t",
+            right: "select MY_UDF(a) from t",
+            expected_equal: false,
+        },
+        CanonicalTokensTestCase {
+            description: "built-in function case is ignored",
+            dialect: DialectType::DuckDB,
+            left: "select coalesce(a, 0) from t",
+            right: "select COALESCE(a, 0) from t",
+            expected_equal: true,
+        },
+        CanonicalTokensTestCase {
+            description: "Snowflake double-slash comments are ignored",
+            dialect: DialectType::Snowflake,
+            left: "select a // note\nfrom t",
+            right: "select a from t",
+            expected_equal: true,
+        },
+        CanonicalTokensTestCase {
+            description: "BigQuery hash comments are ignored",
+            dialect: DialectType::BigQuery,
+            left: "select a # note\nfrom t",
+            right: "select a from t",
             expected_equal: true,
         },
         CanonicalTokensTestCase {
@@ -80,8 +150,14 @@ fn given_sql_pairs_when_canonicalizing_then_only_layout_comments_and_word_case_a
     ];
     for test_case in test_cases {
         let dialect = Dialect::get(test_case.dialect);
-        let left = canonical_tokens(test_case.left, &dialect)?;
-        let right = canonical_tokens(test_case.right, &dialect)?;
+        let left_tokens = dialect
+            .tokenize(test_case.left)
+            .map_err(|error| error.to_string())?;
+        let right_tokens = dialect
+            .tokenize(test_case.right)
+            .map_err(|error| error.to_string())?;
+        let left = canonical_tokens(test_case.left, &left_tokens, &dialect)?;
+        let right = canonical_tokens(test_case.right, &right_tokens, &dialect)?;
         assert_eq!(
             left == right,
             test_case.expected_equal,

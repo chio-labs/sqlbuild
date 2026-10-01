@@ -85,3 +85,25 @@ class ModelFormatScalingTestCase:
     expected_max_doubling_ratio: float
     hard_ceiling_seconds: float
     expected_returncode: int = 1
+
+
+@dataclass(frozen=True)
+class TokenPreservationFormatTestCase:
+    """One authored model and the exact text formatting must write for it."""
+
+    description: str
+    project_toml: str
+    model_name: str
+    authored_sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class TokenPreservationBuildTestCase:
+    """One authored model whose formatted form must build with exact column names and rows."""
+
+    description: str
+    authored_sql: str
+    expected_sql: str
+    expected_columns: list[str]
+    expected_rows: list[tuple[object, ...]]

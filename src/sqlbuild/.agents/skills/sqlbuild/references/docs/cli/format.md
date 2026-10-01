@@ -63,9 +63,13 @@ be shortened.
 
 Formatting changes layout only: it prints the authored SQL tokens in their original order and
 changes only the whitespace between them and the letter case of unquoted keywords and built-in
-function names. It does not add `AS` to aliases or remove statement terminators or trailing commas.
-Every result is checked against the authored token stream and comment positions, and a body whose
-tokens would change is reported as `format-unsafe` instead of being written.
+function names. Identifiers, aliases, qualified names, JSON path keys, and user-defined function
+names keep their authored case, including names that are also keywords, such as `t.view` or
+`AS index`. Comments in every dialect form are kept, including `//` in Snowflake and `#` in
+BigQuery, and adjacent string literals split across lines stay on separate lines. It does not add
+`AS` to aliases or remove statement terminators or trailing commas. Every result is checked against
+the authored token stream and comment positions, and a body whose tokens would change is reported
+as `format-unsafe` instead of being written.
 
 Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
 lambda parameters, and supported SQL function spellings while applying canonical layout. SQLBuild

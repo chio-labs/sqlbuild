@@ -58,7 +58,7 @@ _LAYOUT_ONLY_BODY: str = 'SELECT ALL\n  order_id id,\n  amount,\nFROM __source("
             "Snowflake TIMESTAMPDIFF synonym is kept",
             "snowflake",
             "TIMESTAMPDIFF(day, ordered_at, shipped_at)",
-            "TIMESTAMPDIFF(DAY, ordered_at, shipped_at)",
+            "TIMESTAMPDIFF(day, ordered_at, shipped_at)",
         ),
         AuthoredSpellingFormatIntegrationTestCase(
             "Snowflake TRY_TO_DECIMAL synonym is kept",
