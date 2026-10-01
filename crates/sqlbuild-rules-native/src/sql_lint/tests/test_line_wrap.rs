@@ -28,14 +28,14 @@ fn given_lines_over_the_width_when_formatting_then_each_wrap_rule_applies_idempo
             sql: "select row_number() over (partition by customer_id, region_code order by ordered_at desc, order_id desc) as rank_in_customer from orders",
             line_width: 60,
             token_widths: &[],
-            expected_sql: "SELECT\n  ROW_NUMBER() over (\n    partition by customer_id, region_code\n    ORDER by ordered_at DESC, order_id DESC\n  ) AS rank_in_customer\nFROM orders",
+            expected_sql: "SELECT\n  ROW_NUMBER() OVER (\n    PARTITION BY customer_id, region_code\n    ORDER BY ordered_at DESC, order_id DESC\n  ) AS rank_in_customer\nFROM orders",
         },
         test_types::LineWrapTestCase {
             description: "join conditions break before AND but not inside BETWEEN",
             sql: "select o.order_id from orders o join customers c on o.customer_id = c.customer_id and o.amount between 1 and 9 and o.store = c.store",
             line_width: 60,
             token_widths: &[],
-            expected_sql: "SELECT\n  o.order_id\nFROM orders o\njoin customers c\n  ON o.customer_id = c.customer_id\n  AND o.amount between 1 AND 9\n  AND o.store = c.store",
+            expected_sql: "SELECT\n  o.order_id\nFROM orders o\nJOIN customers c\n  ON o.customer_id = c.customer_id\n  AND o.amount BETWEEN 1 AND 9\n  AND o.store = c.store",
         },
         test_types::LineWrapTestCase {
             description: "arithmetic chains break before operators",

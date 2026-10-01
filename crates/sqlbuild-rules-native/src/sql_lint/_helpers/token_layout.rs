@@ -1,6 +1,6 @@
 //! Print authored SQL tokens with whitespace taken from a parse-tree layout oracle.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use polyglot_sql::Dialect;
 use polyglot_sql::tokens::{Token, TokenType};
@@ -8,6 +8,7 @@ use polyglot_sql::tokens::{Token, TokenType};
 use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
 use crate::sql_tokens::main::case_folding::foldable_tokens;
 use crate::sql_tokens::main::is_unquoted_word::is_unquoted_word;
+use crate::sql_tokens::main::name_positions::name_positions;
 use crate::sql_tokens::main::token_texts::token_texts;
 
 const TOKEN_PRESERVATION_FAILURE: &str =
@@ -38,7 +39,18 @@ struct Lexeme {
     end: usize,
     raw: String,
     key: String,
+    /// In the reserved-keyword and built-in fold set shared with the change fingerprint.
     foldable: bool,
+    /// An unquoted authored word outside the name positions that keep reserved words exact.
+    recasable: bool,
+    /// An unquoted word the dialect tokenizer types as a keyword.
+    keyword: bool,
+}
+
+/// An authored token the printer recased to the layout guide's keyword spelling.
+pub(crate) struct KeywordRecase {
+    pub(crate) generated: String,
+    pub(crate) keyword: bool,
 }
 
 /// Comments attached to the authored token they precede or follow.
@@ -149,7 +161,7 @@ pub(crate) fn print_authored_tokens(
     source: &AuthoredSql<'_>,
     oracle: &str,
     dialect: &Dialect,
-) -> Result<String, String> {
+) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
     let AuthoredSql {
         sql,
         tokens,
@@ -166,6 +178,7 @@ pub(crate) fn print_authored_tokens(
     let attached = attach_comments(tokens, comments);
     let mut output = String::with_capacity(sql.len() + sql.len() / 4);
     let string_breaks = string_breaks(sql, tokens);
+    let mut recases: BTreeMap<usize, KeywordRecase> = BTreeMap::new();
     for (index, lexeme) in authored.iter().enumerate() {
         let forced_break = string_breaks.contains(&index) && !separators[index].contains('\n');
         let separator = &if forced_break {
@@ -194,10 +207,17 @@ pub(crate) fn print_authored_tokens(
             output.push('\n');
             output.push_str(&indentation);
         }
-        output.push_str(&printed_text(
-            lexeme,
-            alignment[index].map(|at| &generated[at]),
-        ));
+        let guide = alignment[index].map(|at| &generated[at]);
+        if let Some(guide) = guide.filter(|guide| confirms_keyword(lexeme, guide)) {
+            recases.insert(
+                index,
+                KeywordRecase {
+                    generated: guide.raw.clone(),
+                    keyword: guide.keyword,
+                },
+            );
+        }
+        output.push_str(&printed_text(lexeme, guide));
         let trailing = &attached[index].trailing;
         for (position, comment) in trailing.iter().enumerate() {
             output.push(' ');
@@ -220,21 +240,33 @@ pub(crate) fn print_authored_tokens(
             }
         }
     }
-    Ok(output)
+    Ok((output, recases))
 }
 
-/// Refuse any output whose canonical tokens or comment attachments differ from the input.
+/// Refuse output that changes anything but layout, fold-set case, and recorded keyword recases.
 pub(crate) fn verify_token_invariant(
     before: &str,
     after: &str,
     dialect: &Dialect,
+    recases: &BTreeMap<usize, KeywordRecase>,
 ) -> Result<(), String> {
     let before_tokens = tokenize(before, dialect)?;
     let after_tokens = tokenize(after, dialect)?;
-    if canonical_tokens(before, &before_tokens, dialect)?
-        != canonical_tokens(after, &after_tokens, dialect)?
-    {
+    let before_canonical = canonical_tokens(before, &before_tokens, dialect)?;
+    let after_canonical = canonical_tokens(after, &after_tokens, dialect)?;
+    if before_canonical.len() != after_canonical.len() {
         return Err(TOKEN_PRESERVATION_FAILURE.to_string());
+    }
+    let before_texts = token_texts(before, &before_tokens)?;
+    let after_texts = token_texts(after, &after_tokens)?;
+    for (index, (left, right)) in before_canonical.iter().zip(&after_canonical).enumerate() {
+        if left != right
+            && !recases
+                .get(&index)
+                .is_some_and(|recase| recase.allows(&before_texts[index], &after_texts[index]))
+        {
+            return Err(TOKEN_PRESERVATION_FAILURE.to_string());
+        }
     }
     if comment_positions(before, &before_tokens) != comment_positions(after, &after_tokens) {
         return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
@@ -243,6 +275,16 @@ pub(crate) fn verify_token_invariant(
         return Err(STRING_BREAK_FAILURE.to_string());
     }
     Ok(())
+}
+
+impl KeywordRecase {
+    /// Whether `authored` became `printed` only by taking the guide's upper-case keyword spelling.
+    fn allows(&self, authored: &str, printed: &str) -> bool {
+        self.keyword
+            && printed == self.generated
+            && printed == printed.to_ascii_uppercase()
+            && authored.eq_ignore_ascii_case(printed)
+    }
 }
 
 fn tokenize(sql: &str, dialect: &Dialect) -> Result<Vec<Token>, String> {
@@ -261,19 +303,28 @@ fn comment_positions(sql: &str, tokens: &[Token]) -> Vec<(String, usize)> {
 /// Lexemes of `sql`; only authored lexemes carry the recase classification.
 fn lexemes(sql: &str, tokens: &[Token], dialect: Option<&Dialect>) -> Result<Vec<Lexeme>, String> {
     let raws = token_texts(sql, tokens)?;
-    let foldable = dialect.map_or_else(
-        || vec![false; tokens.len()],
-        |dialect| foldable_tokens(&raws, tokens, dialect),
-    );
-    Ok(raws
-        .into_iter()
-        .zip(tokens)
-        .zip(foldable)
-        .map(|((raw, token), foldable)| lexeme(raw, token, foldable))
-        .collect())
+    let (foldable, recasable) = match dialect {
+        Some(dialect) => {
+            let uppers: Vec<String> = raws.iter().map(|raw| raw.to_ascii_uppercase()).collect();
+            let names = name_positions(&uppers);
+            let foldable = foldable_tokens(&raws, tokens, dialect);
+            let recasable: Vec<bool> = raws
+                .iter()
+                .zip(names)
+                .map(|(raw, name)| !name && is_unquoted_word(raw))
+                .collect();
+            (foldable, recasable)
+        }
+        None => (vec![false; tokens.len()], vec![false; tokens.len()]),
+    };
+    let mut lexemes = Vec::with_capacity(tokens.len());
+    for (index, (raw, token)) in raws.into_iter().zip(tokens).enumerate() {
+        lexemes.push(lexeme(raw, token, foldable[index], recasable[index]));
+    }
+    Ok(lexemes)
 }
 
-fn lexeme(raw: String, token: &Token, foldable: bool) -> Lexeme {
+fn lexeme(raw: String, token: &Token, foldable: bool, recasable: bool) -> Lexeme {
     let key = if is_unquoted_word(&raw) {
         format!("w:{}", raw.to_ascii_uppercase())
     } else if raw
@@ -284,12 +335,19 @@ fn lexeme(raw: String, token: &Token, foldable: bool) -> Lexeme {
     } else {
         format!("r:{raw}")
     };
+    let keyword = is_unquoted_word(&raw)
+        && !matches!(
+            token.token_type,
+            TokenType::Var | TokenType::Identifier | TokenType::QuotedIdentifier
+        );
     Lexeme {
         start: token.span.start,
         end: token.span.end,
         raw,
         key,
         foldable,
+        recasable,
+        keyword,
     }
 }
 
@@ -572,6 +630,9 @@ fn would_fuse(previous: &Lexeme, next: &Lexeme) -> bool {
 
 /// The authored text, recased only for keywords and built-in function names.
 fn printed_text(authored: &Lexeme, generated: Option<&Lexeme>) -> String {
+    if let Some(generated) = generated.filter(|generated| confirms_keyword(authored, generated)) {
+        return generated.raw.clone();
+    }
     if !authored.foldable {
         return authored.raw.clone();
     }
@@ -582,6 +643,16 @@ fn printed_text(authored: &Lexeme, generated: Option<&Lexeme>) -> String {
         Some(_) => authored.raw.clone(),
         None => authored.raw.to_ascii_uppercase(),
     }
+}
+
+/// Whether the layout guide prints the aligned authored word as an upper-case keyword.
+fn confirms_keyword(authored: &Lexeme, generated: &Lexeme) -> bool {
+    !authored.foldable
+        && authored.recasable
+        && generated.keyword
+        && generated.raw != authored.raw
+        && generated.raw == generated.raw.to_ascii_uppercase()
+        && generated.raw.eq_ignore_ascii_case(&authored.raw)
 }
 
 fn attach_comments<'a>(tokens: &[Token], comments: &'a [Comment]) -> Vec<Attached<'a>> {

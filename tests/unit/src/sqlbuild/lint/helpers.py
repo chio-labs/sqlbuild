@@ -81,7 +81,6 @@ _KEYWORD_NAMED_IDENTIFIERS: tuple[str, ...] = (
     "First",
     "Value",
     "Order",
-    "Union",
 )
 _NAME_SHAPES: tuple[tuple[str, str], ...] = (
     ("alias", "select order_id as {name} from orders"),

@@ -1854,7 +1854,7 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "explicit null ordering remains explicit",
             sql: "select id from items order by category nulls last, created_at desc nulls first",
-            expected_sql: "SELECT\n  id\nFROM items\nORDER BY\n  category nulls last,\n  created_at desc nulls first",
+            expected_sql: "SELECT\n  id\nFROM items\nORDER BY\n  category NULLS LAST,\n  created_at DESC NULLS FIRST",
             expected_changed: true,
         },
         test_types::FormatTestCase {

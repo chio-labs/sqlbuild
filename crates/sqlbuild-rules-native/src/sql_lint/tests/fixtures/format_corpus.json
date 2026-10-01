@@ -2432,7 +2432,7 @@
  {
   "dialect": "postgres",
   "sql": "select count() OVER(partition by a order by a range offset preceding exclude current row)",
-  "formatted": "SELECT\n  COUNT() OVER (partition by a ORDER by a range offset preceding exclude current row )"
+  "formatted": "SELECT\n  COUNT() OVER (PARTITION BY a ORDER BY a range offset preceding exclude CURRENT ROW )"
  },
  {
   "dialect": "postgres",

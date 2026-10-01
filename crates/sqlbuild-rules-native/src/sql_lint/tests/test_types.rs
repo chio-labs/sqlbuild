@@ -105,6 +105,7 @@ pub(crate) struct TokenInvariantTestCase {
     pub description: &'static str,
     pub before: &'static str,
     pub after: &'static str,
+    pub recases: &'static [(usize, &'static str, bool)],
     pub expected_error: Option<&'static str>,
 }
 

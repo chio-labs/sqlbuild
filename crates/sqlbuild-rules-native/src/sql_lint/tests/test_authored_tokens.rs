@@ -1,6 +1,8 @@
 use serde_json::{Value, json};
 
-use crate::sql_lint::_helpers::token_layout::verify_token_invariant;
+use std::collections::BTreeMap;
+
+use crate::sql_lint::_helpers::token_layout::{KeywordRecase, verify_token_invariant};
 use crate::sql_lint::main::formatter::format_json;
 use crate::sql_lint::tests::test_types;
 
@@ -84,7 +86,7 @@ fn given_generator_restructuring_when_formatting_then_authored_tokens_are_laid_o
             description: "Databricks SELECT ALL keeps ALL",
             dialect: "databricks",
             sql: "select all order_id from orders",
-            expected_sql: "select all\n  order_id\nfrom orders",
+            expected_sql: "SELECT all\n  order_id\nFROM orders",
         },
         test_types::DialectFormatTestCase {
             description: "T-SQL SELECT ALL keeps ALL",
@@ -247,12 +249,14 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "whitespace and word case may change",
             before: "select a,b from orders -- note",
             after: "SELECT\n  a,\n  b\nFROM orders -- note",
+            recases: &[],
             expected_error: None,
         },
         test_types::TokenInvariantTestCase {
             description: "a renamed function is refused",
             before: "select startswith(code, 'EU') from orders",
             after: "SELECT STARTS_WITH(code, 'EU') FROM orders",
+            recases: &[],
             expected_error: Some(
                 "native formatter would change authored SQL tokens, not only layout",
             ),
@@ -261,6 +265,7 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "an added alias keyword is refused",
             before: "select a b from orders",
             after: "SELECT a AS b FROM orders",
+            recases: &[],
             expected_error: Some(
                 "native formatter would change authored SQL tokens, not only layout",
             ),
@@ -269,6 +274,32 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "string literal whitespace is refused",
             before: "select 'a  b' from orders",
             after: "SELECT 'a b' FROM orders",
+            recases: &[],
+            expected_error: Some(
+                "native formatter would change authored SQL tokens, not only layout",
+            ),
+        },
+        test_types::TokenInvariantTestCase {
+            description: "a recorded keyword recase from the layout guide is allowed",
+            before: "select a from orders order by a nulls last",
+            after: "SELECT a FROM orders ORDER BY a NULLS LAST",
+            recases: &[(7, "NULLS", true), (8, "LAST", true)],
+            expected_error: None,
+        },
+        test_types::TokenInvariantTestCase {
+            description: "an unrecorded non-reserved keyword recase is refused",
+            before: "select a from orders order by a nulls last",
+            after: "SELECT a FROM orders ORDER BY a NULLS LAST",
+            recases: &[],
+            expected_error: Some(
+                "native formatter would change authored SQL tokens, not only layout",
+            ),
+        },
+        test_types::TokenInvariantTestCase {
+            description: "a recase whose guide token is not a keyword is refused",
+            before: "select a from orders order by a nulls last",
+            after: "SELECT a FROM orders ORDER BY a NULLS LAST",
+            recases: &[(7, "NULLS", false), (8, "LAST", false)],
             expected_error: Some(
                 "native formatter would change authored SQL tokens, not only layout",
             ),
@@ -277,6 +308,7 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "an identifier case change is refused",
             before: "select a from orders",
             after: "SELECT a FROM Orders",
+            recases: &[],
             expected_error: Some(
                 "native formatter would change authored SQL tokens, not only layout",
             ),
@@ -285,6 +317,7 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "a path key case change is refused",
             before: "select payload:customerId from orders",
             after: "SELECT payload:CUSTOMERID FROM orders",
+            recases: &[],
             expected_error: Some(
                 "native formatter would change authored SQL tokens, not only layout",
             ),
@@ -293,12 +326,14 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "a built-in function may be recased",
             before: "select coalesce(a, 0) from orders",
             after: "SELECT COALESCE(a, 0) FROM orders",
+            recases: &[],
             expected_error: None,
         },
         test_types::TokenInvariantTestCase {
             description: "joining adjacent string literals across a line break is refused",
             before: "select 'a'\n'b' from orders",
             after: "SELECT 'a' 'b' FROM orders",
+            recases: &[],
             expected_error: Some(
                 "native formatter would join adjacent string literals across a line break",
             ),
@@ -307,18 +342,33 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             description: "a dropped double-slash comment is refused",
             before: "select a // note\nfrom orders",
             after: "SELECT a FROM orders",
+            recases: &[],
             expected_error: Some("native formatter could not preserve comment token attachments"),
         },
         test_types::TokenInvariantTestCase {
             description: "a comment moved to another token is refused",
             before: "select a, -- note\n b from orders",
             after: "SELECT a, b -- note\nFROM orders",
+            recases: &[],
             expected_error: Some("native formatter could not preserve comment token attachments"),
         },
     ];
     let dialect = polyglot_sql::Dialect::get(polyglot_sql::DialectType::Snowflake);
     for test_case in test_cases {
-        let actual = verify_token_invariant(test_case.before, test_case.after, &dialect);
+        let recases: BTreeMap<usize, KeywordRecase> = test_case
+            .recases
+            .iter()
+            .map(|(index, generated, keyword)| {
+                (
+                    *index,
+                    KeywordRecase {
+                        generated: (*generated).to_string(),
+                        keyword: *keyword,
+                    },
+                )
+            })
+            .collect();
+        let actual = verify_token_invariant(test_case.before, test_case.after, &dialect, &recases);
         assert_eq!(
             actual.err().as_deref(),
             test_case.expected_error,

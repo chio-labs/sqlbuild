@@ -8,7 +8,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::sql_lint::_helpers::formatter_syntax::{cte_macro_indices, protect_syntax};
 use crate::sql_lint::_helpers::line_wrap::{WrapOptions, wrap_lines};
 use crate::sql_lint::_helpers::token_layout::{
-    AuthoredSql, comments_in, neutralize_comments, print_authored_tokens, verify_token_invariant,
+    AuthoredSql, KeywordRecase, comments_in, neutralize_comments, print_authored_tokens,
+    verify_token_invariant,
 };
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
@@ -113,8 +114,8 @@ fn format_layout(
         tokens: &tokens,
         comments: &comments,
     };
-    let printed = layout.print(&authored, &oracle)?;
-    verify_token_invariant(sql, &printed, dialect)?;
+    let (printed, recases) = layout.print(&authored, &oracle)?;
+    verify_token_invariant(sql, &printed, dialect, &recases)?;
     Ok((printed, oracle))
 }
 
@@ -133,7 +134,7 @@ fn relayout(formatted: &str, oracle: &str, layout: &Layout<'_>) -> Result<String
         tokens: &tokens,
         comments: &comments,
     };
-    layout.print(&authored, oracle)
+    Ok(layout.print(&authored, oracle)?.0)
 }
 
 /// The dialect and optional line wrapping every printed layout uses.
@@ -143,12 +144,17 @@ struct Layout<'a> {
 }
 
 impl Layout<'_> {
-    fn print(&self, authored: &AuthoredSql<'_>, oracle: &str) -> Result<String, String> {
-        let printed = print_authored_tokens(authored, oracle, self.dialect)?;
-        match self.wrap {
-            Some(wrap) => wrap_lines(&printed, self.dialect, wrap),
-            None => Ok(printed),
-        }
+    fn print(
+        &self,
+        authored: &AuthoredSql<'_>,
+        oracle: &str,
+    ) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
+        let (printed, recases) = print_authored_tokens(authored, oracle, self.dialect)?;
+        let laid_out = match self.wrap {
+            Some(wrap) => wrap_lines(&printed, self.dialect, wrap)?,
+            None => printed,
+        };
+        Ok((laid_out, recases))
     }
 }
 

@@ -62,12 +62,17 @@ be shortened.
 ## What formatting preserves
 
 Formatting changes layout only: it prints the authored SQL tokens in their original order and
-changes only the whitespace between them and the letter case of two kinds of words: keywords the
-dialect reserves (such as `SELECT`, `FROM` and `WHERE`, which can never be unquoted names), and
-built-in function names at a call site, such as `coalesce(`. Every other word keeps its authored
-case, including keywords the dialect does not reserve, such as `rows`, `filter`, `by` in DuckDB or
-`view` in BigQuery, and every identifier, alias, qualified name, JSON path key and user-defined
-function name. Databricks reserves no keywords, so only built-in function names change case there.
+changes only the whitespace between them and the letter case of keywords and built-in function
+names. A word is upper-cased only when the parse confirms it is a keyword at that position, such as
+`ORDER BY`, `CASE WHEN`, `NULLS LAST`, `IS NULL` or `JOIN`, or when it names a built-in function at
+a call site, such as `coalesce(`. Identifiers keep their authored case even when they are spelled
+like keywords, such as `t.view`, `AS index` or a table named `view`, and so do aliases, qualified
+names, JSON path keys and user-defined function names.
+
+Query fingerprints ignore the case of reserved keywords and built-in function names only, so
+formatting lowercase SQL may change a model's fingerprint once, when a non-reserved keyword such as
+`by` or `nulls` is upper-cased. Formatting already formatted SQL never changes its fingerprint.
+
 Comments in every dialect form are kept, including `//` in Snowflake and `#` in BigQuery, and
 adjacent string literals split across lines stay on separate lines. It does not add `AS` to aliases
 or remove statement terminators or trailing commas. Every result is checked against the authored

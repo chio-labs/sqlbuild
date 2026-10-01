@@ -1,7 +1,12 @@
+use std::str::FromStr;
+
+use polyglot_sql::{Dialect, DialectType};
 use serde_json::{Value, json};
 
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
+use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
+use crate::sql_tokens::main::query_fingerprint::query_fingerprint;
 
 pub(crate) fn nested_function_sql(depth: usize) -> String {
     format!("SELECT {}1{}", "F(".repeat(depth), ")".repeat(depth))
@@ -66,6 +71,11 @@ pub(crate) fn check_dialect_corpus(
             .unwrap_or(Value::Null);
         let expected = entry["formatted"].as_str().map_or(Value::Null, Value::from);
         assert_eq!(actual, expected, "{dialect}: {sql}");
+        let printed = actual.as_str().unwrap_or(sql);
+        assert!(
+            only_keyword_case_differs(sql, printed, dialect)?,
+            "{dialect} fingerprint changed beyond keyword case: {sql}"
+        );
         let layouts = [&entry["formatted"], &entry["previously_formatted"]];
         for stable in layouts.iter().filter_map(|layout| layout.as_str()) {
             let again = format_once(stable, dialect, None)?;
@@ -73,6 +83,11 @@ pub(crate) fn check_dialect_corpus(
             assert_eq!(
                 again["changed"], false,
                 "{dialect} layout drifted: {stable}"
+            );
+            assert_eq!(
+                query_fingerprint(again["sql"].as_str().unwrap_or_default(), dialect)?,
+                query_fingerprint(stable, dialect)?,
+                "{dialect} formatting changed the fingerprint of formatted SQL: {stable}"
             );
         }
         let wrapped = format_once(sql, dialect, Some(CORPUS_LINE_WIDTH))?;
@@ -87,6 +102,23 @@ pub(crate) fn check_dialect_corpus(
     }
     let formatted = outcomes.iter().filter(|outcome| **outcome).count();
     Ok((formatted, outcomes.len() - formatted))
+}
+
+/// Whether `printed` has the fingerprint tokens of `sql` except for words upper-cased by format.
+fn only_keyword_case_differs(sql: &str, printed: &str, dialect: &str) -> Result<bool, String> {
+    let parser = Dialect::get(DialectType::from_str(dialect).map_err(|error| error.to_string())?);
+    let left_tokens = parser.tokenize(sql).map_err(|error| error.to_string())?;
+    let right_tokens = parser
+        .tokenize(printed)
+        .map_err(|error| error.to_string())?;
+    let left = canonical_tokens(sql, &left_tokens, &parser)?;
+    let right = canonical_tokens(printed, &right_tokens, &parser)?;
+    Ok(left.len() == right.len()
+        && left.iter().zip(&right).all(|(before, after)| {
+            before == after
+                || (before.text.eq_ignore_ascii_case(&after.text)
+                    && after.text == after.text.to_ascii_uppercase())
+        }))
 }
 
 fn format_once(sql: &str, dialect: &str, line_width: Option<usize>) -> Result<Value, String> {

@@ -301,7 +301,7 @@ SELECT order_id
     [
         FormatCompileIntegrationTestCase(
             description="explicit null ordering survives format and compile",
-            expected_literal="order_id nulls last",
+            expected_literal="order_id NULLS LAST",
         )
     ],
     ids=lambda case: case.description,
@@ -1048,7 +1048,7 @@ def test_given_leading_cte_comment_when_formatting_then_comment_rule_still_passe
         BacktickDialectFormatIntegrationTestCase(
             description="databricks apostrophe inside a backtick identifier keeps the macro",
             adapter="databricks",
-            expected_literal='@label("order_id") as order_id',
+            expected_literal='@label("order_id") AS order_id',
         ),
         BacktickDialectFormatIntegrationTestCase(
             description="bigquery apostrophe inside a backtick identifier keeps the macro",
@@ -1150,7 +1150,10 @@ def test_given_dollar_quoted_apostrophe_when_formatting_then_reference_survives_
             ("snowflake", _LAYOUT_ONLY_BODY),
             ("postgres", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
             ("bigquery", _LAYOUT_ONLY_BODY),
-            ("databricks", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n").lower()),
+            (
+                "databricks",
+                _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n").replace("ALL", "all"),
+            ),
             ("sqlserver", _LAYOUT_ONLY_BODY.replace("  amount,\n", "  amount\n")),
         )
     ],
@@ -1215,7 +1218,7 @@ def test_given_select_all_and_implicit_aliases_when_formatting_then_only_layout_
                 "  o.amount > 0\n"
                 "  AND o.order_id > 0\n"
                 "  AND o.tax >= 0\n"
-                "  AND o.fallback_amount is NULL\n"
+                "  AND o.fallback_amount IS NULL\n"
             ),
         ),
     ],
