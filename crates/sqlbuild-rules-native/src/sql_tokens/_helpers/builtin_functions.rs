@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
+use crate::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
 use polyglot_sql::{Dialect, DialectType, Expression};
 use polyglot_sql_function_catalogs::types::{builtin_arity, type_signature};
 use polyglot_sql_function_catalogs::{
@@ -31,6 +32,9 @@ static GENERIC_TYPED: LazyLock<HashSet<String>> =
 
 /// Return whether `upper_name(...)` calls a function the dialect defines.
 pub(crate) fn is_builtin_function(dialect: DialectType, upper_name: &str) -> bool {
+    if CALL_SYNTAX_FUNCTIONS.contains(&upper_name) {
+        return true;
+    }
     let lower_name = upper_name.to_ascii_lowercase();
     let typed = match dialect {
         DialectType::DuckDB => return catalogued(DUCKDB_CATALOG, &lower_name),

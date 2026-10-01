@@ -1,6 +1,7 @@
 """Project writers shared by lint behavior tests."""
 
 import itertools
+import re
 from pathlib import Path
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
@@ -43,6 +44,15 @@ def write_fixture_format_project(
     return test_file
 
 
+_RESERVED_KEYWORDS_DIR: Path = (
+    Path(__file__).resolve().parents[5]
+    / "crates"
+    / "sqlbuild-rules-native"
+    / "src"
+    / "sql_tokens"
+    / "reserved_keywords"
+)
+_DIALECTS: tuple[str, ...] = ("duckdb", "postgres", "bigquery", "snowflake", "tsql", "databricks")
 _KEYWORD_NAMED_IDENTIFIERS: tuple[str, ...] = (
     "Left",
     "Filter",
@@ -64,22 +74,58 @@ _KEYWORD_NAMED_IDENTIFIERS: tuple[str, ...] = (
     "Within",
     "Recursive",
     "Exclude",
+    "Preceding",
+    "Key",
+    "Type",
+    "Date",
+    "First",
+    "Value",
+    "Order",
+    "Union",
 )
-_SHAPES: tuple[tuple[str, str, int], ...] = (
-    ("projection", "select {name} from orders", 1),
-    ("alias", "select order_id as {name} from orders", 1),
-    ("qualified column", "select o.{name} from orders o", 1),
-    ("qualified table", "select * from inventory.{name}", 1),
-    ("table and qualifier", "select {name}.order_id from {name}", 2),
+_NAME_SHAPES: tuple[tuple[str, str], ...] = (
+    ("alias", "select order_id as {name} from orders"),
+    ("qualified column", "select o.{name} from orders o"),
+    ("qualified table", "select * from inventory.{name}"),
 )
+_NON_RESERVED_SHAPES: tuple[tuple[str, str], ...] = (
+    ("projection", "select {name} from orders"),
+    ("table", "select * from {name}"),
+    ("operand", "select order_id, {name} ^ 2 from orders"),
+)
+_DUCKDB_SHAPES: tuple[tuple[str, str], ...] = (("struct key", "select {{{name}: 1}} as s"),)
 
 
-def keyword_name_positions() -> tuple[tuple[str, str, str, str, int], ...]:
-    """Return every (dialect, name, position, query template, occurrences) combination."""
+def reserved_keywords(dialect: str) -> frozenset[str]:
+    """Return the lower-case reserved keywords of one dialect from the native data files."""
 
-    return tuple(
-        (dialect, name, *shape)
-        for dialect, name, shape in itertools.product(
-            ("duckdb", "bigquery"), _KEYWORD_NAMED_IDENTIFIERS, _SHAPES
+    text: str = (_RESERVED_KEYWORDS_DIR / f"{dialect}.txt").read_text(encoding="utf-8")
+    return frozenset(re.findall(r"^[a-z_]+$", text, flags=re.MULTILINE))
+
+
+def keyword_name_positions() -> tuple[tuple[str, str, str, str], ...]:
+    """Return (dialect, name, position, template) for names that must keep their case."""
+
+    positions: list[tuple[str, str, str, str]] = []
+    for dialect, name in itertools.product(_DIALECTS, _KEYWORD_NAMED_IDENTIFIERS):
+        unreserved_shapes: tuple[tuple[str, str], ...] = _NON_RESERVED_SHAPES + {
+            "duckdb": _DUCKDB_SHAPES
+        }.get(dialect, ())
+        shapes: tuple[tuple[str, str], ...] = (
+            _NAME_SHAPES
+            + {
+                False: unreserved_shapes,
+                True: (),
+            }[name.lower() in reserved_keywords(dialect)]
         )
-    )
+        positions.extend((dialect, name, shape, template) for shape, template in shapes)
+    return tuple(positions)
+
+
+def reserved_keyword_pairs() -> tuple[tuple[str, str], ...]:
+    """Return every (dialect, reserved keyword) pair from the native data files."""
+
+    pairs: list[tuple[str, str]] = []
+    for dialect in _DIALECTS:
+        pairs.extend((dialect, keyword) for keyword in sorted(reserved_keywords(dialect)))
+    return tuple(pairs)

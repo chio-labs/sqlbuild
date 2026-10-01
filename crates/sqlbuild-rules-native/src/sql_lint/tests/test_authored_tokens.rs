@@ -84,7 +84,7 @@ fn given_generator_restructuring_when_formatting_then_authored_tokens_are_laid_o
             description: "Databricks SELECT ALL keeps ALL",
             dialect: "databricks",
             sql: "select all order_id from orders",
-            expected_sql: "SELECT ALL\n  order_id\nFROM orders",
+            expected_sql: "select all\n  order_id\nfrom orders",
         },
         test_types::DialectFormatTestCase {
             description: "T-SQL SELECT ALL keeps ALL",
@@ -164,6 +164,18 @@ fn given_case_or_line_sensitive_tokens_when_formatting_then_they_are_kept_exactl
             dialect: "bigquery",
             sql: "select MyFunc(a), ds.MyUdf(b), coalesce(a, b) from orders",
             expected_sql: "SELECT\n  MyFunc(a),\n  ds.MyUdf(b),\n  COALESCE(a, b)\nFROM orders",
+        },
+        test_types::DialectFormatTestCase {
+            description: "DuckDB non-reserved keyword operands keep their case before any operator",
+            dialect: "duckdb",
+            sql: "select a, Rows << 1, Rows == 1, Rows ^ 2 from t",
+            expected_sql: "SELECT\n  a,\n  Rows << 1,\n  Rows == 1,\n  Rows ^ 2\nFROM t",
+        },
+        test_types::DialectFormatTestCase {
+            description: "BigQuery comma-joined keyword-named tables keep their case",
+            dialect: "bigquery",
+            sql: "select * from ds.a, View v",
+            expected_sql: "SELECT\n  *\nFROM ds.a, View v",
         },
         test_types::DialectFormatTestCase {
             description: "DuckDB adjacent string literals keep their line break",

@@ -13,7 +13,6 @@ pub(crate) fn foldable_tokens(raws: &[String], tokens: &[Token], dialect: &Diale
         let context = TokenContext {
             raws,
             uppers: &uppers,
-            tokens,
             index,
         };
         foldable.push(context.is_foldable(dialect.dialect_type()));

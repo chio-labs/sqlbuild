@@ -130,8 +130,8 @@ def test_given_dialect_query_when_computing_hash_then_golden_fingerprint_is_stab
         ComputeQueryHashStabilityTestCase(
             "keyword and built-in function case is ignored",
             "duckdb",
-            "SELECT COUNT(id) FROM orders WHERE id IS NOT NULL",
-            "select count(id) from orders where id is not null",
+            "SELECT COUNT(id) FROM orders WHERE id > 0 LIMIT 1",
+            "select count(id) from orders where id > 0 limit 1",
             True,
         ),
         ComputeQueryHashStabilityTestCase(

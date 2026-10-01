@@ -2022,7 +2022,7 @@
  {
   "dialect": "duckdb",
   "sql": "SELECT * FROM r: range(10), v: (VALUES (42)), s: (FROM range(10))",
-  "formatted": "SELECT\n  *\nFROM r:range(10), v:(VALUES (42)), s:(\n  FROM range(10)\n)"
+  "formatted": "SELECT\n  *\nFROM r:range(10), v:(VALUES (42)), s:(\n  FROM RANGE(10)\n)"
  },
  {
   "dialect": "duckdb",
@@ -2432,7 +2432,7 @@
  {
   "dialect": "postgres",
   "sql": "select count() OVER(partition by a order by a range offset preceding exclude current row)",
-  "formatted": "SELECT\n  COUNT() OVER (PARTITION BY a ORDER BY a range offset preceding EXCLUDE CURRENT ROW )"
+  "formatted": "SELECT\n  COUNT() OVER (partition by a ORDER by a range offset preceding exclude current row )"
  },
  {
   "dialect": "postgres",
@@ -2442,7 +2442,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT DATE_PART('isodow'::varchar(6), current_date)",
-  "formatted": "SELECT\n  DATE_PART('isodow'::varchar(6), current_date)"
+  "formatted": "SELECT\n  DATE_PART('isodow'::varchar(6), CURRENT_DATE)"
  },
  {
   "dialect": "postgres",
@@ -2604,12 +2604,12 @@
  {
   "dialect": "postgres",
   "sql": "SELECT '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| array['b', 'c']",
-  "formatted": "SELECT\n  '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| array['b', 'c']"
+  "formatted": "SELECT\n  '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| ARRAY['b', 'c']"
  },
  {
   "dialect": "postgres",
   "sql": "SELECT '[\"a\", \"b\"]'::jsonb ?& array['a', 'b']",
-  "formatted": "SELECT\n  '[\"a\", \"b\"]'::jsonb ?& array['a', 'b']"
+  "formatted": "SELECT\n  '[\"a\", \"b\"]'::jsonb ?& ARRAY['a', 'b']"
  },
  {
   "dialect": "postgres",
@@ -2654,7 +2654,7 @@
  {
   "dialect": "postgres",
   "sql": "SELECT * FROM schema_name.table_name st WHERE JSON_EXTRACT_PATH_TEXT((st.data)::json, variadic array['test'::text]) = 'test'::text",
-  "formatted": "SELECT\n  *\nFROM schema_name.table_name st\nWHERE\n  JSON_EXTRACT_PATH_TEXT(\n    (\n      st.data\n    )::json,\n    variadic array['test'::text]\n  ) = 'test'::text",
+  "formatted": "SELECT\n  *\nFROM schema_name.table_name st\nWHERE\n  JSON_EXTRACT_PATH_TEXT(\n    (\n      st.data\n    )::json,\n    VARIADIC ARRAY['test'::text]\n  ) = 'test'::text",
   "previously_formatted": "SELECT\n  *\nFROM schema_name.table_name AS st\nWHERE\n  JSON_EXTRACT_PATH_TEXT(\n    (\n      st.data\n    )::json,\n    VARIADIC ARRAY['test'::text]\n  ) = 'test'::text"
  },
  {
