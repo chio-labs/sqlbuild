@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_diamond_ladder_identity_nodes,
+    build_wide_layered_identity_nodes,
     compose_hashed_identity,
     compose_readable_identity,
 )
@@ -177,6 +178,72 @@ def test_given_fully_selected_dense_graph_when_building_write_hashes_then_stays_
     nodes: dict[GraphNodeKey, GraphIdentityNode]
     execution_order: tuple[GraphNodeKey, ...]
     nodes, execution_order = build_diamond_ladder_identity_nodes(layer_count=test_case.layer_count)
+
+    start: float = time.monotonic()
+    result: dict[GraphNodeKey, str] = build_graph_write_identity_hashes(
+        nodes=nodes,
+        execution_order=execution_order,
+        selected_keys=frozenset(nodes.keys()),
+        base_identity_hashes={},
+        compose_identity=compose_hashed_identity,
+    )
+    elapsed: float = time.monotonic() - start
+
+    assert len(result) == len(nodes)
+    assert elapsed < test_case.expected_max_seconds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GraphIdentityWritePerfTestCase(
+            description="twenty thousand node project graph resolves in linear time",
+            layer_count=40,
+            layer_width=500,
+            expected_max_seconds=1.5,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wide_project_graph_when_building_expected_hashes_then_stays_linear(
+    test_case: GraphIdentityWritePerfTestCase,
+) -> None:
+    nodes: dict[GraphNodeKey, GraphIdentityNode]
+    execution_order: tuple[GraphNodeKey, ...]
+    nodes, execution_order = build_wide_layered_identity_nodes(
+        layer_count=test_case.layer_count, layer_width=test_case.layer_width
+    )
+
+    start: float = time.monotonic()
+    result: dict[GraphNodeKey, str | None] = build_expected_graph_identity_hashes(
+        nodes=nodes, execution_order=execution_order, compose_identity=compose_hashed_identity
+    )
+    elapsed: float = time.monotonic() - start
+
+    assert len(result) == len(nodes)
+    assert elapsed < test_case.expected_max_seconds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GraphIdentityWritePerfTestCase(
+            description="twenty thousand node project graph resolves in linear time",
+            layer_count=40,
+            layer_width=500,
+            expected_max_seconds=1.5,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wide_selected_project_graph_when_building_write_hashes_then_stays_linear(
+    test_case: GraphIdentityWritePerfTestCase,
+) -> None:
+    nodes: dict[GraphNodeKey, GraphIdentityNode]
+    execution_order: tuple[GraphNodeKey, ...]
+    nodes, execution_order = build_wide_layered_identity_nodes(
+        layer_count=test_case.layer_count, layer_width=test_case.layer_width
+    )
 
     start: float = time.monotonic()
     result: dict[GraphNodeKey, str] = build_graph_write_identity_hashes(
