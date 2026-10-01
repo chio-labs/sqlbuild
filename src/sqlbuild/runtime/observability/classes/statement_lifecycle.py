@@ -7,8 +7,8 @@ import hashlib
 import re
 import threading
 import time
-from collections.abc import Callable, Mapping
-from contextlib import ExitStack
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar, Token
 from types import TracebackType
 
@@ -22,6 +22,10 @@ from sqlbuild.runtime.observability._helpers.identity import (
     invocation_scope,
     statement_scope,
 )
+from sqlbuild.runtime.observability._helpers.statement_listeners import (
+    notify_statement_finished,
+    statement_listener_scope,
+)
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.classes.statement_monitor import (
     StatementMonitor,
@@ -29,7 +33,7 @@ from sqlbuild.runtime.observability.classes.statement_monitor import (
 from sqlbuild.runtime.observability.constants import STATEMENT_HEARTBEAT_THRESHOLD_SECONDS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
-from sqlbuild.runtime.observability.types import JSONValue
+from sqlbuild.runtime.observability.types import JSONValue, StatementListener
 
 _MAX_ERROR_VALUE_LENGTH: int = 128
 _STATEMENT_KIND_PATTERN: re.Pattern[str] = re.compile(r"^([A-Za-z]{1,64})(?![A-Za-z0-9_])")
@@ -77,6 +81,14 @@ class StatementLifecycle:
             None
         )
         self._pending_failure: tuple[BaseException, str | None, str | None] | None = None
+
+    @staticmethod
+    @contextmanager
+    def listener_scope(listener: StatementListener) -> Iterator[None]:
+        """Deliver each finished outermost statement's SQL text to an in-process listener."""
+
+        with statement_listener_scope(listener):
+            yield
 
     def __enter__(self) -> StatementLifecycle:
         execution_owner_key: _ExecutionOwnerKey = _current_execution_owner_key()
@@ -253,6 +265,7 @@ class StatementLifecycle:
                 _STATEMENT_LIFECYCLE_OWNER.reset(self._owner_token)
                 self._owner_token = None
             self._stack.close()
+            notify_statement_finished(sql=self._sql)
 
     def _base_payload(self) -> dict[str, JSONValue]:
         payload: dict[str, JSONValue] = {

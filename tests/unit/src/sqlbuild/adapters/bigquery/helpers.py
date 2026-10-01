@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 
 
 def build_retention_request(*, desired_days: int) -> RetentionRequest:
@@ -201,3 +204,53 @@ class FakeBigQueryBadRequest(Exception):
     def __init__(self, message: str, *, errors: list[dict[str, object]]) -> None:
         super().__init__(message)
         self.errors: list[dict[str, object]] = errors
+
+
+class FakeBigQueryJobClient(FakeBigQueryClient):
+    """Client double accepting copy and load jobs."""
+
+    def copy_table(self, origin: str, destination: str, **kwargs: Any) -> FakeBigQueryJob:
+        del origin, destination, kwargs
+        return FakeBigQueryJob(self.rows)
+
+    def load_table_from_file(self, file: Any, destination: str, **kwargs: Any) -> FakeBigQueryJob:
+        del file, destination, kwargs
+        return FakeBigQueryJob(self.rows)
+
+
+class CountingColumnsBigQueryAdapter(BigQueryAdapter):
+    """BigQuery adapter whose column reads are counted instead of sent."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.column_reads: dict[str, int] = {}
+
+    def get_columns(
+        self, *, connection: Any, database: str | None, schema: str | None, name: str
+    ) -> tuple[ColumnInfo, ...]:
+        del connection, database, schema
+        self.column_reads[name] = self.column_reads.get(name, 0) + 1
+        return (ColumnInfo(name="order_id", type="INT64"),)
+
+
+def run_bigquery_job(
+    *, operation: str, adapter: BigQueryAdapter, connection: Any, seed_path: Path
+) -> None:
+    """Run one BigQuery copy or load job between the orders relations."""
+
+    jobs: dict[str, Callable[[], None]] = {
+        "copy": lambda: adapter.replace_table_from_relation(
+            connection=connection,
+            destination="example-project.marts.orders",
+            origin="example-project.marts.orders__stage",
+            statement_recorder=StatementRecorder(),
+        ),
+        "load": lambda: adapter.load_seed(
+            connection=connection,
+            destination="example-project.marts.orders",
+            file_path=seed_path,
+            columns=(ColumnInfo(name="order_id", type="INT64"),),
+            statement_recorder=StatementRecorder(),
+        ),
+    }
+    jobs[operation]()

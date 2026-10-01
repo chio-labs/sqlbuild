@@ -411,39 +411,6 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
     "test_case",
     [
         SnowflakeInformationSchemaFilterTestCase(
-            description="uppercases relation existence filter bind values",
-            database="analytics",
-            schemas=("staging",),
-            names=("commerce__stg_order",),
-            expected_params=("COMMERCE__STG_ORDER", "STAGING", "ANALYTICS"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_lowercase_schema_when_checking_relation_exists_then_uses_sargable_filters(
-    test_case: SnowflakeInformationSchemaFilterTestCase,
-) -> None:
-    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(row=(1,))
-    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
-    adapter: SnowflakeAdapter = SnowflakeAdapter()
-
-    exists: bool = adapter.relation_exists(
-        connection=cast(Any, connection),
-        database=test_case.database,
-        schema=test_case.schemas[0],
-        name=test_case.names[0],
-    )
-
-    assert exists is True
-    assert cursor.executed_sql is not None
-    assert "UPPER(table_" not in cursor.executed_sql
-    assert cursor.executed_params == test_case.expected_params
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SnowflakeInformationSchemaFilterTestCase(
             description="uppercases column schema filter bind values",
             database="ANALYTICS",
             schemas=("staging",),

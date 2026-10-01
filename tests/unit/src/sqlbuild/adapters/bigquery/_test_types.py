@@ -210,3 +210,12 @@ class BigQueryCloneRefusalTestCase:
     description: str
     driver_error: Exception
     expected_refusal: bool
+
+
+@dataclass(frozen=True)
+class BigQueryJobInvalidationTestCase:
+    """A BigQuery job that changes relations without a SQL statement."""
+
+    description: str
+    operation: str
+    expected_reads: dict[str, int]

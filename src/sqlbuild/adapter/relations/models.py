@@ -42,3 +42,12 @@ class InspectionQueryRecord:
     elapsed_seconds: float
     row_count: int | None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class StatementMetadataEffect:
+    """What one executed statement may have changed in cached relation metadata."""
+
+    relation_names: frozenset[str] = frozenset()
+    invalidates_all: bool = False
+    ends_transaction: bool = False

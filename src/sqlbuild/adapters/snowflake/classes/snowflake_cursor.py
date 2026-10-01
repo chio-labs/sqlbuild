@@ -25,12 +25,15 @@ from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )
 from sqlbuild.runtime.observability.models import ExecutionIdentity
+from sqlbuild.runtime.observability.types import StatementListener
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cost")
 _QUERY_TAG_PARAMETER: str = "QUERY_TAG"
 _STATEMENT_TIMEOUT_PARAMETER: str = "STATEMENT_TIMEOUT_IN_SECONDS"
 _STATEMENT_PARAMETER_ERROR_FRAGMENT: str = "STATEMENT PARAMETER"
 _RAW_CURSOR_ATTRIBUTE: str = "raw_cursor"
+_ON_EXECUTED_ATTRIBUTE: str = "on_executed"
+_OWN_ATTRIBUTES: frozenset[str] = frozenset({_RAW_CURSOR_ATTRIBUTE, _ON_EXECUTED_ATTRIBUTE})
 _EXECUTEMANY_INTENT: str = "executemany"
 
 
@@ -44,11 +47,12 @@ def _statement_id() -> str:
 class _SnowflakeCursor:
     """Delegate cursor operations while tagging and recording executed statements."""
 
-    def __init__(self, raw_cursor: Any) -> None:
+    def __init__(self, raw_cursor: Any, *, on_executed: StatementListener | None = None) -> None:
         object.__setattr__(self, _RAW_CURSOR_ATTRIBUTE, raw_cursor)
+        object.__setattr__(self, _ON_EXECUTED_ATTRIBUTE, on_executed)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name == _RAW_CURSOR_ATTRIBUTE:
+        if name in _OWN_ATTRIBUTES:
             object.__setattr__(self, name, value)
             return
         setattr(self.raw_cursor, name, value)
@@ -60,16 +64,19 @@ class _SnowflakeCursor:
         tagged_kwargs, query_tag_injected = _with_query_tag(
             kwargs=deadline_kwargs, context=context, statement_id=statement_id
         )
-        return self._execute_with_telemetry(
-            operation=self.raw_cursor.execute,
-            sql=sql,
-            args=args,
-            kwargs=tagged_kwargs,
-            context=context,
-            statement_id=statement_id,
-            query_tag_injected=query_tag_injected,
-            intent="execute",
-        )
+        try:
+            return self._execute_with_telemetry(
+                operation=self.raw_cursor.execute,
+                sql=sql,
+                args=args,
+                kwargs=tagged_kwargs,
+                context=context,
+                statement_id=statement_id,
+                query_tag_injected=query_tag_injected,
+                intent="execute",
+            )
+        finally:
+            self._notify_executed(sql=sql)
 
     def executemany(self, sql: str, *args: Any, **kwargs: Any) -> Any:
         context: CostResourceContext | None = CostContext.current()
@@ -78,16 +85,24 @@ class _SnowflakeCursor:
         tagged_kwargs, query_tag_injected = _with_query_tag(
             kwargs=deadline_kwargs, context=context, statement_id=statement_id
         )
-        return self._execute_with_telemetry(
-            operation=self.raw_cursor.executemany,
-            sql=sql,
-            args=args,
-            kwargs=tagged_kwargs,
-            context=context,
-            statement_id=statement_id,
-            query_tag_injected=query_tag_injected,
-            intent=_EXECUTEMANY_INTENT,
-        )
+        try:
+            return self._execute_with_telemetry(
+                operation=self.raw_cursor.executemany,
+                sql=sql,
+                args=args,
+                kwargs=tagged_kwargs,
+                context=context,
+                statement_id=statement_id,
+                query_tag_injected=query_tag_injected,
+                intent=_EXECUTEMANY_INTENT,
+            )
+        finally:
+            self._notify_executed(sql=sql)
+
+    def _notify_executed(self, *, sql: str) -> None:
+        listener: StatementListener | None = object.__getattribute__(self, _ON_EXECUTED_ATTRIBUTE)
+        if listener is not None:
+            listener(sql=sql)
 
     def _execute_with_telemetry(
         self,

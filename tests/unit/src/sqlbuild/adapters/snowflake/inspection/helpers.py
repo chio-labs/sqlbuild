@@ -36,7 +36,8 @@ _SHOW_COLUMNS_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*SHOW\s+COLUMNS\s+IN\s+(?:TABLE|VIEW)\s+(?P<relation>\S+)\s*$", re.IGNORECASE
 )
 _SHOW_SCHEMA_RELATIONS_PATTERN: re.Pattern[str] = re.compile(
-    r"^SHOW (?P<kind>TABLES|VIEWS) IN SCHEMA (?P<scope>\S+)"
+    r"^SHOW (?P<terse>TERSE )?(?P<kind>TABLES|VIEWS)(?: LIKE '(?P<like>(?:[^']|'')*)')? "
+    r"IN SCHEMA (?P<scope>\S+)"
     r"(?: LIMIT (?P<limit>\d+)(?: FROM '(?P<after>(?:[^']|'')*)')?)?$"
 )
 _SHOW_SCHEMA_COLUMNS_PATTERN: re.Pattern[str] = re.compile(
@@ -49,6 +50,9 @@ _CURSOR_BOUND_PATTERN: re.Pattern[str] = re.compile(
 )
 _ANY_PATTERN: re.Pattern[str] = re.compile(r"")
 _CURRENT_DATABASE_PATTERN: re.Pattern[str] = re.compile(r"^SELECT CURRENT_DATABASE\(\)$")
+_USE_DATABASE_PATTERN: re.Pattern[str] = re.compile(
+    r'^(?s:.*?)USE DATABASE "?(?P<database>[^";]+)"?(?s:.*)$'
+)
 _SHOW_SCHEMAS_PATTERN: re.Pattern[str] = re.compile(
     r"^SHOW SCHEMAS LIKE '(?P<pattern>(?:[^']|'')*)' IN DATABASE \"(?P<database>[^\"]*)\"$"
 )
@@ -59,6 +63,7 @@ _QUERY_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
     (_TABLES_PATTERN, "tables"),
     (_COLUMNS_PATTERN, "columns"),
     (_SHOW_COLUMNS_PATTERN, "show_columns"),
+    (re.compile(r"^SHOW TERSE (?:TABLES|VIEWS) LIKE "), "show_relation_lookup"),
     (re.compile(r"^SHOW TABLES IN SCHEMA "), "show_tables"),
     (re.compile(r"^SHOW VIEWS IN SCHEMA "), "show_views"),
     (_SHOW_SCHEMA_COLUMNS_PATTERN, "show_schema_columns"),
@@ -107,6 +112,13 @@ _SHOW_VIEW_FIELDS: tuple[str, ...] = (
     "text",
     "is_secure",
     "is_materialized",
+)
+_SHOW_TERSE_FIELDS: tuple[str, ...] = (
+    "created_on",
+    "name",
+    "kind",
+    "database_name",
+    "schema_name",
 )
 _SHOW_SCHEMA_COLUMN_FIELDS: tuple[str, ...] = (
     "table_name",
@@ -239,6 +251,19 @@ class RecordingSnowflakeWarehouse:
         with self._lock:
             return tuple(filter(lambda query: query.kind == kind, self.queries))
 
+    def replace_relations(self, *, relations: tuple[FakeRelation, ...]) -> None:
+        """Replace the catalog that SHOW and INFORMATION_SCHEMA reads answer from."""
+
+        self.relations = relations
+        self._database.execute("DELETE FROM fake_tables")
+        self._database.execute("DELETE FROM fake_columns")
+        self._load(table="fake_tables", rows=[_table_row(relation) for relation in relations])
+        column_rows: list[dict[str, object]] = []
+        relation: FakeRelation
+        for relation in relations:
+            column_rows.extend(_column_rows(relation))
+        self._load(table="fake_columns", rows=column_rows)
+
     def reset(self) -> None:
         """Forget recorded statements and concurrency peaks."""
 
@@ -295,6 +320,7 @@ class RecordingSnowflakeWarehouse:
             (_SHOW_SCHEMA_COLUMNS_PATTERN, self._answer_show_schema_columns),
             (_CURSOR_BOUND_PATTERN, self._answer_cursor_bounds),
             (_CURRENT_DATABASE_PATTERN, self._answer_current_database),
+            (_USE_DATABASE_PATTERN, self._answer_use_database),
             (_SHOW_SCHEMAS_PATTERN, self._answer_show_schemas),
             (_ANY_PATTERN, _answer_status),
         )
@@ -351,6 +377,14 @@ class RecordingSnowflakeWarehouse:
         del sql, params
         return [(self.current_database,)], (("CURRENT_DATABASE()",),)
 
+    def _answer_use_database(
+        self, *, sql: str, params: tuple[object, ...]
+    ) -> tuple[list[tuple[Any, ...]], Any]:
+        del params
+        with self._lock:
+            self.current_database = next(_USE_DATABASE_PATTERN.finditer(sql)).group("database")
+        return [], _STATUS_DESCRIPTION
+
     def _existing_schemas(self) -> frozenset[tuple[str, str]]:
         return self.extra_schemas | {(fake.database, fake.schema) for fake in self.relations}
 
@@ -378,12 +412,7 @@ class RecordingSnowflakeWarehouse:
         database: str = match.group("database")
         existing: frozenset[tuple[str, str]] = self._existing_schemas()
         _MISSING_DATABASE_ACTIONS[database not in {name for name, _ in existing}](database)
-        pattern: re.Pattern[str] = re.compile(
-            re.escape(match.group("pattern").replace("''", "'"))
-            .replace("%", ".*")
-            .replace("_", "."),
-            re.IGNORECASE,
-        )
+        pattern: re.Pattern[str] = _like_pattern(match.group("pattern"))
         names: list[str] = sorted(
             schema
             for name, schema in filter(
@@ -404,21 +433,28 @@ class RecordingSnowflakeWarehouse:
         match: re.Match[str] = next(_SHOW_SCHEMA_RELATIONS_PATTERN.finditer(sql))
         wants_views: bool = match.group("kind") == "VIEWS"
         after: str = (match.group("after") or "").replace("''", "'")
+        like: re.Pattern[str] = _like_pattern(match.group("like") or "%")
         selected: list[FakeRelation] = sorted(
             filter(
                 lambda fake: (
-                    (fake.table_type in _VIEW_TABLE_TYPES) is wants_views and fake.name > after
+                    (fake.table_type in _VIEW_TABLE_TYPES) is wants_views
+                    and fake.name > after
+                    and like.fullmatch(fake.name) is not None
                 ),
                 self._schema_relations(scope=match.group("scope"), reports_missing_database=False),
             ),
             key=lambda fake: fake.name,
         )
         limit: int = int(match.group("limit") or SHOW_RESULT_CAP)
+        terse: bool = match.group("terse") is not None
         row_builder: Callable[[FakeRelation], tuple[Any, ...]] = (
-            _show_table_row,
-            _show_view_row,
-        )[wants_views]
-        fields: tuple[str, ...] = (_SHOW_TABLE_FIELDS, _SHOW_VIEW_FIELDS)[wants_views]
+            (_show_table_row, _show_view_row)[wants_views],
+            _show_terse_row,
+        )[terse]
+        fields: tuple[str, ...] = (
+            (_SHOW_TABLE_FIELDS, _SHOW_VIEW_FIELDS)[wants_views],
+            _SHOW_TERSE_FIELDS,
+        )[terse]
         return [row_builder(fake) for fake in selected[:limit]], tuple((f,) for f in fields)
 
     def _answer_show_schema_columns(
@@ -461,6 +497,13 @@ class RecordingSnowflakeWarehouse:
             compress(self.cursor_values, (marker in select_list for marker in _BOUND_MARKERS))
         )
         return [values], tuple((f"_{index}",) for index in range(len(values)))
+
+
+def _like_pattern(pattern: str) -> re.Pattern[str]:
+    return re.compile(
+        re.escape(pattern.replace("''", "'")).replace("%", ".*").replace("_", "."),
+        re.IGNORECASE,
+    )
 
 
 def _accept_relation(relation: str) -> None:
@@ -547,6 +590,16 @@ def _show_table_row(relation: FakeRelation) -> tuple[Any, ...]:
         ("N", "Y")[external],
         "N",
         "N",
+    )
+
+
+def _show_terse_row(relation: FakeRelation) -> tuple[Any, ...]:
+    return (
+        _FIXED_CREATED_AT,
+        relation.name,
+        relation.table_type,
+        relation.database,
+        relation.schema,
     )
 
 
@@ -953,3 +1006,14 @@ def show_relation_row(*, created_on: datetime, **fields: object) -> dict[str, ob
     """Return one SHOW TABLES or SHOW VIEWS row for a STAGING.ORDERS relation."""
 
     return {"created_on": created_on, "name": "ORDERS", "schema_name": "STAGING", **fields}
+
+
+def attempted_query_kinds(warehouse: RecordingSnowflakeWarehouse) -> tuple[str, ...]:
+    """Classify every statement sent to the warehouse, including ones that failed."""
+
+    return tuple(
+        RecordedQuery(
+            sql=sql, params=(), thread_id=0, started_at=0.0, finished_at=0.0, row_count=0
+        ).kind
+        for sql in warehouse.attempted_sql
+    )

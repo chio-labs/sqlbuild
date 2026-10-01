@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.relations.main.cached_relation_columns import cached_relation_columns
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
     OperationLifecycle,
@@ -34,8 +35,8 @@ def inspect_runtime_relation_schema(
             target_kind="relation",
         ),
     ) as lifecycle:
-        columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-            connection=connection, database=database, schema=schema, name=name
+        columns: tuple[ColumnInfo, ...] = cached_relation_columns(
+            adapter=adapter, connection=connection, database=database, schema=schema, name=name
         )
         lifecycle.completed(metadata={"item_count": len(columns)})
         return columns

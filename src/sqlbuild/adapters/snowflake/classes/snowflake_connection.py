@@ -2,7 +2,9 @@
 
 from typing import Any
 
+from sqlbuild.adapters.snowflake._helpers.session_context import may_switch_session_database
 from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCursor
+from sqlbuild.adapters.snowflake.constants import CURRENT_DATABASE_ATTRIBUTE
 
 
 class _SnowflakeConnection:
@@ -21,4 +23,12 @@ class _SnowflakeConnection:
         self.raw_connection.close()
 
     def cursor(self) -> _SnowflakeCursor:
-        return _SnowflakeCursor(self.raw_connection.cursor())
+        return _SnowflakeCursor(
+            self.raw_connection.cursor(), on_executed=self._forget_changed_session_context
+        )
+
+    def _forget_changed_session_context(self, *, sql: str) -> None:
+        """Drop the remembered session database once a statement may have switched it."""
+
+        if may_switch_session_database(sql):
+            _ = self.__dict__.pop(CURRENT_DATABASE_ATTRIBUTE, None)

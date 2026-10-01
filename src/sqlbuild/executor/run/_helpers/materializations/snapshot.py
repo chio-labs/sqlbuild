@@ -12,6 +12,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotChangeTarget,
 )
 from sqlbuild.adapter.contract.types import TypeFamily
+from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -443,7 +444,8 @@ def _apply_snapshot_phase(
                 check_columns=check_columns,
                 statement_recorder=statement_recorder,
             )
-        target_exists: bool = context.adapter.relation_exists(
+        target_exists: bool = cached_relation_exists(
+            adapter=context.adapter,
             connection=context.connection,
             database=entry.destination.database,
             schema=entry.destination.schema,

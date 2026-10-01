@@ -118,16 +118,19 @@ from sqlbuild.adapters.snowflake._helpers.show_metadata import (
     is_missing_object_error,
     listed_relation_from_show_table,
     listed_relation_from_show_view,
+    show_like_pattern,
 )
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.snowflake.constants import (
     BASE_TABLE_METADATA_TYPE,
+    CURRENT_DATABASE_ATTRIBUTE,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
     SECONDARY_ROLES_ALL,
     SECONDARY_ROLES_NONE,
+    SHOW_LIKE_ESCAPE_CHARACTER,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
     TRUE_METADATA_VALUE,
@@ -149,7 +152,6 @@ _METADATA_INSPECTION_CONCURRENCY: int = 8
 _SHOW_RESULT_LIMIT: int = 10_000
 _SHOW_COLUMN_KIND: str = "COLUMN"
 _SHOW_COLUMN_KINDS: frozenset[str] = frozenset({_SHOW_COLUMN_KIND, "VIRTUAL_COLUMN"})
-_CURRENT_DATABASE_ATTRIBUTE: str = "_sqlbuild_current_database"
 _UNRESOLVED: object = object()
 _RELATION_LISTING_COLUMNS: str = (
     "table_name, table_schema, table_type, is_transient, created, last_altered, retention_time"
@@ -1745,6 +1747,40 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
+        """Look one relation up with SHOW, which needs no running warehouse."""
+
+        if schema is None or SHOW_LIKE_ESCAPE_CHARACTER in name:
+            return self._information_schema_relation_exists(
+                connection=connection, database=database, schema=schema, name=name
+            )
+        show_database: str = self._show_database(
+            connection=connection, database=database, schema=schema
+        )
+        scope: str = self._show_schema_scope(
+            connection=connection, database=database, schema=schema
+        )
+        stored_name: str = self._information_schema_identifier(name)
+        pattern: str = show_like_pattern(stored_name)
+        kind: str
+        for kind in ("TABLES", "VIEWS"):
+            rows: list[dict[str, object]] = self._fetch_schema_show_rows(
+                connection=connection,
+                query=f"SHOW TERSE {kind} LIKE '{pattern}' IN SCHEMA {scope}",
+                show_database=show_database,
+                schema=schema,
+            )
+            if any(str(row.get("name")) == stored_name for row in rows):
+                return True
+        return False
+
+    def _information_schema_relation_exists(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
         clauses: list[str] = ["table_name = %s"]
         params: list[str] = [self._information_schema_identifier(name)]
         if schema is not None:
@@ -1985,7 +2021,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     @staticmethod
     def _current_database(*, connection: _SnowflakeConnection) -> str | None:
-        cached: object = getattr(connection, _CURRENT_DATABASE_ATTRIBUTE, _UNRESOLVED)
+        cached: object = getattr(connection, CURRENT_DATABASE_ATTRIBUTE, _UNRESOLVED)
         if cached is not _UNRESOLVED:
             return cast(str | None, cached)
         cursor: Any = connection.cursor()
@@ -1995,7 +2031,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         finally:
             cursor.close()
         current: str | None = None if row is None or row[0] is None else str(row[0])
-        setattr(connection, _CURRENT_DATABASE_ATTRIBUTE, current)
+        setattr(connection, CURRENT_DATABASE_ATTRIBUTE, current)
         return current
 
     def _fetch_paged_show_rows(
@@ -2177,6 +2213,47 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def get_columns(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> tuple[ColumnInfo, ...]:
+        """Read one relation's columns with SHOW COLUMNS, which needs no running warehouse."""
+
+        if schema is None:
+            return self._information_schema_columns(
+                connection=connection, database=database, schema=schema, name=name
+            )
+        show_database: str = self._show_database(
+            connection=connection, database=database, schema=schema
+        )
+        relation: str = ".".join(
+            self.render_identifier(part) for part in (show_database, schema, name)
+        )
+        kind: str
+        for kind in ("TABLE", "VIEW"):
+            try:
+                rows: list[dict[str, object]] = self._fetch_show_rows(
+                    connection=connection, query=f"SHOW COLUMNS IN {kind} {relation}"
+                )
+            except Exception as error:
+                if not is_missing_object_error(error):
+                    raise
+                continue
+            return tuple(
+                ColumnInfo(
+                    name=str(row["column_name"]).lower(),
+                    type=show_columns_type(row["data_type"]),
+                )
+                for row in rows
+                if str(row.get("kind") or _SHOW_COLUMN_KIND).upper() in _SHOW_COLUMN_KINDS
+            )
+        _ = self._schema_exists(connection=connection, show_database=show_database, schema=schema)
+        return ()
+
+    def _information_schema_columns(
         self,
         *,
         connection: _SnowflakeConnection,
