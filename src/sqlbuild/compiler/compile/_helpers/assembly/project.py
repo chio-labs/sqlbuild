@@ -97,7 +97,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
-from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_target_model_names
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
     build_sql_test_case_fingerprint,
 )
@@ -375,6 +374,7 @@ def assemble_compiled_project(
         effective_target_database=_str_or_none(effective_target_values.get("database")),
         effective_target_schema=_str_or_none(effective_target_values.get("schema")),
         sql_analysis_dialect=profile.sql_analysis_dialect,
+        sql_lexical_syntax=inputs.sql_lexical_syntax,
         compile_cache_dir=inputs.compile_cache_dir,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
@@ -1737,6 +1737,7 @@ def _assemble_compiled_sql_test(
     test_name: str = _resolve_test_name(test_input)
     compiled_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload
     scope_deps: tuple[CompiledObjectKey, ...]
+    target_model_names: tuple[str, ...] = ()
     if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload):
         if test_input.payload.mode == SqlTestMode.MACRO:
             scope_deps = _macro_sql_test_scope_deps(
@@ -1761,14 +1762,12 @@ def _assemble_compiled_sql_test(
         )
     else:
         model_payload: CompileModelSqlTestInputPayload = test_input.payload
-        assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
-            assertion_sql=tuple(cte.sql_body for cte in model_payload.assertion_ctes)
-        )
-        scope_deps = sql_test_scope_deps(
-            expected_model_names=tuple(
-                dict.fromkeys((*model_payload.expected_model_names, *assertion_target_model_names))
+        target_model_names = tuple(
+            dict.fromkeys(
+                (*model_payload.expected_model_names, *model_payload.assertion_target_model_names)
             )
         )
+        scope_deps = sql_test_scope_deps(expected_model_names=target_model_names)
         compiled_payload = CompiledModelSqlTestPayload(
             authored_ctes=model_payload.authored_ctes,
             macro_mocks=model_payload.macro_mocks,
@@ -1839,19 +1838,11 @@ def _assemble_compiled_sql_test(
             else ()
         ),
         assertion_target_model_names=(
-            assertion_target_model_names
+            test_input.payload.assertion_target_model_names
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
             else ()
         ),
-        target_model_names=(
-            tuple(
-                dict.fromkeys(
-                    (*test_input.payload.expected_model_names, *assertion_target_model_names)
-                )
-            )
-            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
-            else ()
-        ),
+        target_model_names=target_model_names,
         tested_resources=tested_resources,
     )
 

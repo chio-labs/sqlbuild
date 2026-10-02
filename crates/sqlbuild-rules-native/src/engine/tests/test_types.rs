@@ -106,6 +106,12 @@ pub(crate) struct ThresholdEvaluationTestCase {
     pub(crate) expected_codes: &'static [&'static str],
 }
 
+pub(crate) struct BuildIdentityTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_prefix: &'static str,
+    pub(crate) expected_hash_length: usize,
+}
+
 pub(crate) struct ThresholdFingerprintTestCase {
     pub(crate) description: &'static str,
     pub(crate) base_config: Value,

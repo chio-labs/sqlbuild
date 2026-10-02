@@ -110,6 +110,15 @@ class MainTestCase:
 
 
 @dataclass(frozen=True)
+class CompileJsonErrorRenderingTestCase:
+    description: str
+    argv: list[str]
+    error_factory: Callable[[], Exception]
+    expected_stdout_diagnostics: tuple[dict[str, object], ...]
+    expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
 class MainErrorRenderingTestCase:
     description: str
     argv: list[str]

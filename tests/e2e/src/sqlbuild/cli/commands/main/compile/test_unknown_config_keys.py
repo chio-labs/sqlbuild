@@ -1,4 +1,4 @@
-"""E2E coverage for rejecting unknown MODEL header, model config layer, and source keys."""
+"""E2E coverage for rejecting unknown MODEL header, model config layer, and source keys and values."""
 
 from __future__ import annotations
 
@@ -64,6 +64,58 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
                 "error[D006]",
                 "source column has unknown keys: tpye",
                 "did you mean 'type'?",
+            ),
+        ),
+        ModelHeaderKeyCompileCase(
+            description="unknown on_schema_change in MODEL header",
+            repo_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/fct_orders.sql": (
+                    "MODEL (\n  materialized incremental,\n  incremental_strategy append,\n"
+                    "  on_schema_change append_columns,\n);\n\nSELECT 1 AS order_id\n"
+                ),
+            },
+            expected_fragments=(
+                "error[P001]",
+                "unknown on_schema_change 'append_columns'; valid values: append_new_columns, "
+                "fail, ignore, sync_all_columns",
+                "on_schema_change append_new_columns,",
+            ),
+        ),
+        ModelHeaderKeyCompileCase(
+            description="unknown replay_on_change in project defaults",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    _PROJECT_TOML + '\n[defaults]\nreplay_on_change = "everything"\n'
+                ),
+                "models/fct_orders.sql": (
+                    "MODEL (materialized incremental, incremental_strategy append);\n\n"
+                    "SELECT 1 AS order_id\n"
+                ),
+            },
+            expected_fragments=(
+                "error[D001]",
+                "[defaults] unknown replay_on_change 'everything'; valid values: forward, full, "
+                "bounded-<duration>",
+                'replay_on_change = "bounded-14d"',
+            ),
+        ),
+        ModelHeaderKeyCompileCase(
+            description="misspelled dlt resource key",
+            repo_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "sources/raw.yml": (
+                    "dlt_sources:\n  - type: sql_database\n    config:\n"
+                    "      credentials: duckdb:///inputs.duckdb\n    resources:\n"
+                    "      - name: raw_orders\n        table: orders\n"
+                    "        primary_keys: order_id\n"
+                ),
+                "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+            },
+            expected_fragments=(
+                "error[D006]",
+                "dlt sql_database resource 'raw_orders' has unknown keys: primary_keys",
+                "did you mean 'primary_key'?",
             ),
         ),
     ],

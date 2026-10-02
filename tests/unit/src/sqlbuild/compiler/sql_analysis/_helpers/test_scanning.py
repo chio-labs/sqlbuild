@@ -6,16 +6,19 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.sql_analysis._helpers.scanning import (
     dialect_non_code_end_impl,
     dialect_quoted_text_end_impl,
+    find_matching_paren_impl,
     iter_code_positions_impl,
     skip_quoted_text_impl,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers._test_types import (
+    DialectMatchingParenTestCase,
     DialectNonCodeErrorTestCase,
     DialectNonCodeSuccessTestCase,
     DialectQuotedTextErrorTestCase,
     DialectQuotedTextSuccessTestCase,
     IterCodePositionsTestCase,
+    RequiresDialectScanTestCase,
     SkipQuotedTextErrorTestCase,
     SkipQuotedTextSuccessTestCase,
 )
@@ -359,3 +362,98 @@ def test_given_sql_when_iterating_code_positions_then_yields_code_offsets_with_d
     test_case: IterCodePositionsTestCase,
 ) -> None:
     assert tuple(iter_code_positions_impl(sql=test_case.sql)) == test_case.expected_positions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RequiresDialectScanTestCase(
+            description="backslash under backslash escapes",
+            syntax=SINGLE_QUOTE_BACKSLASH_SYNTAX,
+            sql="SELECT 'O\\'Brien'",
+            expected_reads_differently=True,
+        ),
+        RequiresDialectScanTestCase(
+            description="backslash under escape-string prefixes",
+            syntax=ESCAPE_PREFIX_SYNTAX,
+            sql="SELECT E'O\\'Brien'",
+            expected_reads_differently=True,
+        ),
+        RequiresDialectScanTestCase(
+            description="backslash under generic sql",
+            syntax=ANSI_SYNTAX,
+            sql="SELECT 'C:\\'",
+            expected_reads_differently=False,
+        ),
+        RequiresDialectScanTestCase(
+            description="triple quotes",
+            syntax=TRIPLE_QUOTE_SYNTAX,
+            sql='SELECT """note"""',
+            expected_reads_differently=True,
+        ),
+        RequiresDialectScanTestCase(
+            description="second block comment opener under nested comments",
+            syntax=NESTED_COMMENT_SYNTAX,
+            sql="/* a /* b */ */ SELECT 1",
+            expected_reads_differently=True,
+        ),
+        RequiresDialectScanTestCase(
+            description="single block comment under nested comments",
+            syntax=NESTED_COMMENT_SYNTAX,
+            sql="/* a */ SELECT 1",
+            expected_reads_differently=False,
+        ),
+        RequiresDialectScanTestCase(
+            description="dialect line comment prefix",
+            syntax=HASH_COMMENT_SYNTAX,
+            sql="SELECT 1 # note",
+            expected_reads_differently=True,
+        ),
+        RequiresDialectScanTestCase(
+            description="plain sql under a dialect",
+            syntax=SINGLE_QUOTE_BACKSLASH_SYNTAX,
+            sql="SELECT 'customer''s order' -- note",
+            expected_reads_differently=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sql_when_checking_dialect_sensitivity_then_reports_differences(
+    test_case: RequiresDialectScanTestCase,
+) -> None:
+    reads_differently: bool = test_case.syntax.reads_differently_from_generic(test_case.sql)
+
+    assert reads_differently is test_case.expected_reads_differently
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DialectMatchingParenTestCase(
+            description="backslash-escaped quote hides a parenthesis",
+            syntax=SINGLE_QUOTE_BACKSLASH_SYNTAX,
+            sql="('O\\') ' AS name) tail",
+            expected_index=len("('O\\') ' AS name"),
+        ),
+        DialectMatchingParenTestCase(
+            description="hash comment hides a parenthesis",
+            syntax=HASH_COMMENT_SYNTAX,
+            sql="(1 # )\n) tail",
+            expected_index=len("(1 # )\n"),
+        ),
+        DialectMatchingParenTestCase(
+            description="generic scanning keeps the backslash literal",
+            syntax=None,
+            sql="('C:\\') tail",
+            expected_index=len("('C:\\'"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dialect_sql_when_matching_parenthesis_then_follows_dialect_rules(
+    test_case: DialectMatchingParenTestCase,
+) -> None:
+    assert (
+        find_matching_paren_impl(sql=test_case.sql, open_paren_index=0, syntax=test_case.syntax)
+        == test_case.expected_index
+    )

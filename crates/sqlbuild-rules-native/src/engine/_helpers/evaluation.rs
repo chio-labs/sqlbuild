@@ -1,7 +1,7 @@
 use crate::configuration::main::validate as config;
 use crate::constants::{
-    API_VERSION, CUSTOM_HOST_REQUIRED_ERROR, GIT_DIRECTORY, LOGS_DIRECTORY, PYTHON_EXTENSION,
-    RULES_DIRECTORY, TARGET_DIRECTORY,
+    API_VERSION, CUSTOM_HOST_REQUIRED_ERROR, GIT_DIRECTORY, LOGS_DIRECTORY, NATIVE_BUILD_IDENTITY,
+    PYTHON_EXTENSION, RULES_DIRECTORY, TARGET_DIRECTORY,
 };
 use crate::engine::_helpers::cache::{Cache, RuleCacheBucket, RuleCacheEntry};
 use crate::models::{
@@ -552,7 +552,7 @@ fn custom_model_fact_identities(
         let mut digest = Sha256::new();
         digest.update(b"custom-rule-model-facts-v1");
         digest.update(ANALYSIS_BATCH_SCHEMA_VERSION.to_le_bytes());
-        digest.update(env!("CARGO_PKG_VERSION").as_bytes());
+        digest.update(NATIVE_BUILD_IDENTITY.as_bytes());
         digest.update(serde_json::to_vec(model).map_err(|error| error.to_string())?);
         Ok((
             model.relative_path.clone(),
@@ -575,6 +575,7 @@ fn custom_model_fact_identities(
 fn custom_rule_identity(rule: &RuleMetadata, request: &EvaluateRequest) -> Result<String, String> {
     let mut digest = Sha256::new();
     digest.update(b"custom-rule-identity-v1");
+    digest.update(NATIVE_BUILD_IDENTITY.as_bytes());
     digest.update(serde_json::to_vec(rule).map_err(|error| error.to_string())?);
     digest.update(
         serde_json::to_vec(&request.config.rule_options.get(&rule.code))
@@ -623,7 +624,7 @@ fn model_cache_identity(
         identity: RuntimeIdentity {
             producer: "sqlbuild-rules".to_owned(),
             fact_schema: "sqlbuild-rules-model-v1".to_owned(),
-            runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            runtime: NATIVE_BUILD_IDENTITY.to_owned(),
             rule_pack: ruleset.to_owned(),
             configuration: project.unwrap_or("model-local").to_owned(),
         },

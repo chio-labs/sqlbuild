@@ -58,6 +58,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     SettingsConfig,
@@ -87,15 +88,16 @@ def build_sql_function_inputs(
     effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     target_config: TargetConfig | None,
-    adapter_name: str,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
     declaration_expansion: DeclarationExpansionContext,
+    sql_lexical_syntax: SqlLexicalSyntax,
     no_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
 ) -> tuple[CompileSqlFunctionInput, ...]:
     """Attach and validate SQL function metadata."""
 
+    adapter_name: str = macro_context.adapter_name
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -226,7 +228,7 @@ def build_sql_function_inputs(
                     function_file=function_file,
                 )
         references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-            references=extract_sql_references(expanded_body_sql),
+            references=extract_sql_references(sql=expanded_body_sql, syntax=sql_lexical_syntax),
             argument_references=expansion.argument_references,
         )
         validate_function_references(

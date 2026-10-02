@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_refer
 from sqlbuild.compiler.compile.exceptions import AnalysisCacheEntryError
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _REFERENCE_CACHE_VERSION: int = 2
 _CACHE_DATABASE_NAME: str = "sql-references.sqlite3"
@@ -33,8 +34,10 @@ CREATE TABLE IF NOT EXISTS sql_reference (
 class _SqlReferenceCache:
     """Reuse exact SQL reference facts while preserving safe scanner fallback."""
 
-    def __init__(self, *, root: Path | None) -> None:
+    def __init__(self, *, root: Path | None, syntax: SqlLexicalSyntax) -> None:
         self._root: Path | None = root
+        self._syntax: SqlLexicalSyntax = syntax
+        self._syntax_key: str = syntax.cache_key
         self._database_path: Path | None = None
         self._connection: sqlite3.Connection | None = None
         self._pending_contents_by_key: dict[str, str] = {}
@@ -83,7 +86,7 @@ class _SqlReferenceCache:
     def references(self, sql: str) -> tuple[CompileSqlReference, ...]:
         """Return cached references or scan and record this exact expanded SQL."""
 
-        cache_key: str = _reference_cache_key(sql)
+        cache_key: str = _reference_cache_key(sql=sql, syntax_key=self._syntax_key)
         pending_contents: str | None = self._pending_contents_by_key.get(cache_key)
         if pending_contents is not None:
             pending_references: tuple[CompileSqlReference, ...] | None = _references_from_contents(
@@ -109,7 +112,9 @@ class _SqlReferenceCache:
                 self._disable()
                 connection = None
 
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(sql)
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(
+            sql=sql, syntax=self._syntax
+        )
         if self._database_path is not None:
             try:
                 contents: str = _reference_contents(
@@ -150,8 +155,11 @@ class _SqlReferenceCache:
             pass
 
 
-def _reference_cache_key(sql: str) -> str:
-    return hashlib.sha256(sql.encode()).hexdigest()
+def _reference_cache_key(*, sql: str, syntax_key: str) -> str:
+    digest: Any = hashlib.sha256(syntax_key.encode())
+    digest.update(b"\0")
+    digest.update(sql.encode())
+    return digest.hexdigest()
 
 
 def _reference_contents(*, cache_key: str, references: tuple[CompileSqlReference, ...]) -> str:
@@ -247,9 +255,9 @@ def _cache_entry_digest(*, cache_key: str, serialized_payload: str) -> str:
 
 @contextmanager
 def cached_sql_reference_extractor(
-    *, root: Path | None
+    *, root: Path | None, syntax: SqlLexicalSyntax
 ) -> Iterator[Callable[[str], tuple[CompileSqlReference, ...]]]:
-    """Yield an exact cached reference extractor for one compile invocation."""
+    """Yield an exact cached reference extractor for one compile invocation and dialect."""
 
-    with _SqlReferenceCache(root=root) as cache:
+    with _SqlReferenceCache(root=root, syntax=syntax) as cache:
         yield cache.references

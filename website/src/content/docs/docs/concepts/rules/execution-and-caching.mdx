@@ -25,7 +25,9 @@ normal compiler before treating the complete project as valid.
 
 Rules cache under `target/rules-cache`. A cache identity includes the Rule code, implementation and
 imported helpers, options, invocation subject, accessed compiler facts, dialect, tracked project
-observations, and compatibility versions.
+observations, and compatibility versions. The SQLBuild version in that identity also carries a hash of
+the native engine's source, so a local development build never reuses results from a different build
+of the same version.
 
 Model-subject Rules support fine-grained reuse. Editing one model invalidates affected model
 subjects rather than every Rule invocation. Project-subject Rules run once and are appropriate for

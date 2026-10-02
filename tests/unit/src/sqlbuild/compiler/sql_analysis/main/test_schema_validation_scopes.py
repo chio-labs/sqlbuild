@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
+    ExactColumnCatalogValidationTestCase,
     SchemaValidationScopeTestCase,
 )
 
@@ -200,3 +202,70 @@ def test_given_nested_query_scopes_when_validating_complete_schema_then_resolves
 
     assert len(results) == len(test_case.dialects)
     assert sum(len(result.diagnostics) for result in results) == test_case.expected_diagnostic_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExactColumnCatalogValidationTestCase(
+            description="join using a column that both exact-name relations hold",
+            query_sql=(
+                "SELECT orders.order_id FROM orders JOIN raw_orders AS raw_orders USING (order_id)"
+            ),
+            schema={
+                "orders": {"order_id": "INTEGER"},
+                "raw_orders": {'"order_id"': "INTEGER", '"ordered_at"': "TIMESTAMP"},
+            },
+            expected_messages=(),
+        ),
+        ExactColumnCatalogValidationTestCase(
+            description="unqualified join using across two exact-name relations",
+            query_sql="SELECT order_id FROM orders JOIN raw_orders USING (order_id)",
+            schema={
+                "orders": {'"order_id"': "INTEGER"},
+                "raw_orders": {'"order_id"': "INTEGER"},
+            },
+            expected_messages=(),
+        ),
+        ExactColumnCatalogValidationTestCase(
+            description="join using a column one exact-name relation lacks",
+            query_sql="SELECT orders.order_id FROM orders JOIN raw_orders USING (customer_id)",
+            schema={
+                "orders": {"order_id": "INTEGER", "customer_id": "INTEGER"},
+                "raw_orders": {'"order_id"': "INTEGER"},
+            },
+            expected_messages=(
+                "JOIN USING column 'customer_id' must exist on both sides (context: JOIN USING)",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_exact_name_relations_when_validating_join_using_then_matches_authored_columns(
+    test_case: ExactColumnCatalogValidationTestCase,
+) -> None:
+    known_types: tuple[str, ...] = ("INTEGER", "TIMESTAMP")
+    catalog: BindingCatalog = BindingCatalog(
+        dialect="duckdb",
+        quoted_ignore_case=False,
+        known_functions=(),
+        known_types=known_types,
+        relations={},
+    )
+
+    results: tuple[SqlBindingResult, ...] = get_schema_validations(
+        requests=(
+            SqlSchemaValidationRequest(
+                sql=test_case.query_sql,
+                dialect="duckdb",
+                schema=test_case.schema,
+                known_types=known_types,
+                catalog=catalog,
+            ),
+        )
+    )
+
+    assert (
+        tuple(diagnostic.message for diagnostic in results[0].diagnostics)
+        == test_case.expected_messages
+    )

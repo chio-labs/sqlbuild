@@ -45,6 +45,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, GrantKind, ResourceKind, ScopeKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 type _SharedDeclarations = dict[tuple[str, str], tuple[DeclarationRecord, ...]]
 
@@ -53,6 +54,7 @@ def build_scope_relationship_grants(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     index: ScopeIndex,
+    sql_lexical_syntax: SqlLexicalSyntax,
     compile_cache_dir: Path | None = None,
 ) -> ScopeRelationshipBuild:
     """Return expected-model grants while retaining independent extraction faults."""
@@ -69,11 +71,13 @@ def build_scope_relationship_grants(
             lookup=lookup,
             shared_declarations=shared_declarations,
             fact_cache=fact_cache,
+            syntax=sql_lexical_syntax,
         )
     scenario_grants, scenario_faults = _scenario_relationship_grants(
         discovered_inputs=discovered_inputs,
         lookup=lookup,
         shared_declarations=shared_declarations,
+        syntax=sql_lexical_syntax,
     )
     return ScopeRelationshipBuild(
         grants=tuple(dict.fromkeys((*test_grants, *scenario_grants))),
@@ -87,12 +91,15 @@ def _test_relationship_grants(
     lookup: ScopeLookup,
     shared_declarations: _SharedDeclarations,
     fact_cache: FactCacheStore,
+    syntax: SqlLexicalSyntax,
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
     cache_keys: dict[int, str] = (
         {
-            file_index: _expected_models_fact_key(test_file=test_file, fact_cache=fact_cache)
+            file_index: _expected_models_fact_key(
+                test_file=test_file, fact_cache=fact_cache, syntax=syntax
+            )
             for file_index, test_file in enumerate(discovered_inputs.test_files)
         }
         if fact_cache.enabled
@@ -119,6 +126,7 @@ def _test_relationship_grants(
                     else extract_sql_test_expected_model_names(
                         sql=block.sql_body,
                         file_label=str(test_file.relative_path),
+                        syntax=syntax,
                         mode=block.mode,
                     )
                 )
@@ -143,6 +151,7 @@ def _test_relationship_grants(
                             ),
                             sql=block.sql_body,
                             file_label=str(test_file.relative_path),
+                            syntax=syntax,
                         )
                     )
             except Exception as error:
@@ -161,9 +170,9 @@ def _test_relationship_grants(
 
 
 def _expected_models_fact_key(
-    *, test_file: DiscoveredSqlTestFile, fact_cache: FactCacheStore
+    *, test_file: DiscoveredSqlTestFile, fact_cache: FactCacheStore, syntax: SqlLexicalSyntax
 ) -> str:
-    parts: list[str] = [str(test_file.relative_path)]
+    parts: list[str] = [str(test_file.relative_path), syntax.cache_key]
     for block in test_file.blocks:
         parts.extend((block.sql_body, block.mode.value))
     return fact_cache.key(*parts)
@@ -189,13 +198,14 @@ def _scenario_relationship_grants(
     discovered_inputs: DiscoveredProjectInputs,
     lookup: ScopeLookup,
     shared_declarations: _SharedDeclarations,
+    syntax: SqlLexicalSyntax,
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
     for scenario in discovered_inputs.scenario_files:
         try:
             expected_names: tuple[str, ...] = extract_sql_scenario_expected_model_names(
-                sql=scenario.sql_body, file_label=str(scenario.relative_path)
+                sql=scenario.sql_body, file_label=str(scenario.relative_path), syntax=syntax
             )
             grants.extend(
                 _expected_model_grants(
@@ -288,10 +298,15 @@ def _resolve_shared_declarations(
 
 
 def _tested_macro_grants(
-    *, lookup: ScopeLookup, resource: ResourceIdentity, sql: str, file_label: str
+    *,
+    lookup: ScopeLookup,
+    resource: ResourceIdentity,
+    sql: str,
+    file_label: str,
+    syntax: SqlLexicalSyntax,
 ) -> list[GrantRecord]:
     test_ctes: tuple[CompileSqlTestCte, ...] = extract_unclassified_sql_test_ctes(
-        sql=sql, file_label=file_label
+        sql=sql, file_label=file_label, syntax=syntax
     )
     actual_cte: CompileSqlTestCte | None = next(
         (cte for cte in test_ctes if cte.name == MACRO_ACTUAL_TEST_CTE_NAME), None

@@ -61,6 +61,7 @@ from sqlbuild.compiler.scopes.types import (
     ScopeKind,
     UsageKind,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.sql_values.types import SqlValueKind
 
 _ROOTS: dict[ResourceKind, str] = {
@@ -254,7 +255,9 @@ def _macro_dependency_usages(*, declarations: list[DeclarationRecord]) -> tuple[
     return tuple(dict.fromkeys(usages))
 
 
-def build_tolerant_scope_index(*, project_dir: Path) -> ScopeIndex:
+def build_tolerant_scope_index(
+    *, project_dir: Path, sql_lexical_syntax: SqlLexicalSyntax
+) -> ScopeIndex:
     """Build a partial static index from published tolerant compiler facts."""
 
     snapshot: TolerantScopeDiscovery = discover_scope_snapshot(project_dir=project_dir)
@@ -269,6 +272,7 @@ def build_tolerant_scope_index(*, project_dir: Path) -> ScopeIndex:
     relationships: ScopeRelationshipBuild = build_scope_relationship_grants(
         discovered_inputs=snapshot.discovered_inputs,
         index=index,
+        sql_lexical_syntax=sql_lexical_syntax,
     )
     diagnostics: tuple[ScopeDiagnostic, ...] = _tolerant_diagnostics(
         snapshot=snapshot,

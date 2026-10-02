@@ -72,6 +72,7 @@ from sqlbuild.compiler.planner.types import (
     GraphResourceKind,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SchemaModelEntry,
@@ -93,6 +94,8 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ResolveModelPlanActionTestCase,
     SourceCursorInputColumnsTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 def microbatch_model_with_cursor_end(
@@ -586,7 +589,7 @@ def build_scenario_from_test_case(
         for model_name in test_case.expected_model_names
     )
     assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
-        assertion_sql=test_case.assertion_sql_bodies
+        assertion_sql=test_case.assertion_sql_bodies, syntax=_GENERIC_SQL_SYNTAX
     )
     return CompiledSqlScenario(
         key=scenario_key,

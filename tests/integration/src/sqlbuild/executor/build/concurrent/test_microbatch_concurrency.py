@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -22,10 +21,16 @@ from tests.integration.src.sqlbuild.executor.build.concurrent.helpers import (
     run_concurrent_build,
 )
 
+_OVERLAP_TIMEOUT_SECONDS: float = 30.0
+
 
 class _TrackingDuckDbAdapter(DuckDbAdapter):
-    def __init__(self) -> None:
+    def __init__(self, *, overlap_target: int) -> None:
         self.track_delta_staging = False
+        self.overlap_target = overlap_target
+        self.overlap_wait_timed_out = False
+        self._overlap_reached = threading.Event()
+        self._serial_first_batch_models: set[str] = set()
         self.active_delta_staging = 0
         self.max_active_delta_staging = 0
         self.active_delta_models: dict[str, int] = {}
@@ -53,7 +58,15 @@ class _TrackingDuckDbAdapter(DuckDbAdapter):
                     self.max_active_delta_models,
                     len(self.active_delta_models),
                 )
-            time.sleep(0.05)
+                if self.active_delta_staging >= self.overlap_target:
+                    self._overlap_reached.set()
+                # Each model stages its first batch serially before fanning out.
+                gated: bool = model_name in self._serial_first_batch_models
+                self._serial_first_batch_models.add(model_name)
+            if gated and not self._overlap_reached.wait(timeout=_OVERLAP_TIMEOUT_SECONDS):
+                with self._tracking_lock:
+                    self.overlap_wait_timed_out = True
+                self._overlap_reached.set()
         try:
             return super()._execute(connection=connection, sql=sql)
         finally:
@@ -167,7 +180,9 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(contents, encoding="utf-8")
 
-    adapter: _TrackingDuckDbAdapter = _TrackingDuckDbAdapter()
+    adapter: _TrackingDuckDbAdapter = _TrackingDuckDbAdapter(
+        overlap_target=test_case.expected_max_active_batches
+    )
     db_path: Path = tmp_path / "test.duckdb"
     initial_project_files: dict[str, str] = {
         path: contents.replace("batch_concurrency 3", "batch_concurrency 1")
@@ -232,6 +247,10 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
         adapter=adapter,
     )
 
+    assert not adapter.overlap_wait_timed_out, (
+        f"only {adapter.max_active_delta_staging} delta stagings were ever active together; "
+        f"expected {test_case.expected_max_active_batches} within {_OVERLAP_TIMEOUT_SECONDS}s"
+    )
     assert incremental_result.status == test_case.expected_status
     assert adapter.max_active_delta_staging == test_case.expected_max_active_batches
     assert adapter.max_active_delta_models == test_case.expected_max_active_models

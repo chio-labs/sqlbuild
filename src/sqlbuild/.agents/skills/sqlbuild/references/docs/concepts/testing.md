@@ -101,6 +101,13 @@ The trailing `SELECT 1` is required as a ceremonial closing statement.
 Any CTE without one of these prefixes is treated as a helper CTE, available to mock, model,
 `__expected__`, and `__assert__` SQL in the test.
 
+SQLBuild splits test files into CTEs and finds `__ref`, `__source`, `__seed`, `__dbt_ref`,
+`__udf` and `__table_fn` calls outside comments and quoted text, in tests, scenarios, models,
+functions, audits and hooks alike. Quoted text and comments follow the project adapter's rules:
+backslash escapes on Snowflake, BigQuery and Databricks, `E'...'` strings on DuckDB and Postgres,
+nested block comments on DuckDB, Postgres, Databricks and SQL Server, `#` line comments on BigQuery,
+and `//` line comments on Snowflake.
+
 An `__expected__<model>` CTE compares only the columns it lists, matched by name, so column order
 does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
 column the model does not output is a test error. When the expected CTE's columns are not explicit

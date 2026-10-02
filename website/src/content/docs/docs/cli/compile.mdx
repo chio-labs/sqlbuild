@@ -140,6 +140,11 @@ Returns a structured report including:
 - `lineage_mode` - which lineage mode was used
 - `artifacts` - paths to written files
 
+If compile stops on an error before it can build the report, such as a model header that does not
+parse, `--json` still prints one JSON document. It has `command`, `has_errors: true`,
+`stopped: true`, and a `diagnostics` list with that error's `code`, `message`, and `help`, the same
+text the error shows on stderr. The exit code is still 1, and progress stays on stderr.
+
 ## Column lineage modes
 
 The `--lineage-mode` flag controls how column lineage is computed during compile:

@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner.models import (
     FixtureRelationMetadata,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy, FixtureKey
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SourceEntry
 
 _TYPED_NULL_LINE_PATTERN: re.Pattern[str] = re.compile(
@@ -72,6 +73,7 @@ def format_redundant_fixture_nulls(
     files: dict[Path, str],
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
+    sql_lexical_syntax: SqlLexicalSyntax,
 ) -> dict[Path, str]:
     """Remove typed-null fixture projections that planner completion can reproduce."""
 
@@ -100,6 +102,7 @@ def format_redundant_fixture_nulls(
                 block=block,
                 file_label=str(test_file.relative_path),
                 relations=relations,
+                syntax=sql_lexical_syntax,
             )
             if fixed_block == block.sql_body:
                 continue
@@ -117,6 +120,7 @@ def _format_test_block(
     block: DiscoveredSqlTestBlock,
     file_label: str,
     relations: dict[FixtureKey, FixtureRelationMetadata],
+    syntax: SqlLexicalSyntax,
 ) -> str:
     if (
         block.mode is not SqlTestMode.MODEL
@@ -128,6 +132,7 @@ def _format_test_block(
         authored_ctes: tuple[CompileSqlTestCte, ...] = SqlTestCteExtractor.extract(
             sql=block.sql_body,
             file_label=file_label,
+            syntax=syntax,
         )
     except CompileInputError:
         return block.sql_body

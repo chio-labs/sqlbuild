@@ -13,11 +13,14 @@ from sqlbuild.compiler.compile.models import (
     CompileModelSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CteScannerMessageTestCase,
     ExtractSqlTestCtesErrorTestCase,
     ExtractSqlTestCtesTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 @pytest.mark.parametrize(
@@ -336,6 +339,7 @@ def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expec
     test_case: ExtractSqlTestCtesTestCase,
 ) -> None:
     extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
+        syntax=_GENERIC_SQL_SYNTAX,
         sql=test_case.sql,
         file_label="tests/unit/orders.sql",
         mode=test_case.mode,
@@ -422,6 +426,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
     test_case: ExtractSqlTestCtesTestCase,
 ) -> None:
     extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
+        syntax=_GENERIC_SQL_SYNTAX,
         sql=test_case.sql,
         file_label="tests/unit/orders.sql",
         mode=test_case.mode,
@@ -832,6 +837,7 @@ def test_given_invalid_sql_test_cte_variants_when_extracting_then_it_raises_clea
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         extract_sql_test_ctes(
+            syntax=_GENERIC_SQL_SYNTAX,
             sql=test_case.sql,
             file_label="tests/unit/orders.sql",
             mode=test_case.mode,
@@ -873,7 +879,9 @@ def test_given_malformed_sql_test_ctes_when_extracting_then_messages_name_the_sq
     test_case: CteScannerMessageTestCase,
 ) -> None:
     with pytest.raises(CompileInputError) as error_info:
-        _ = extract_sql_test_ctes(sql=test_case.sql, file_label="tests/unit/orders.sql")
+        _ = extract_sql_test_ctes(
+            sql=test_case.sql, file_label="tests/unit/orders.sql", syntax=_GENERIC_SQL_SYNTAX
+        )
 
     assert str(error_info.value) == test_case.expected_message
 
@@ -904,7 +912,7 @@ def test_given_malformed_sql_test_ctes_when_scanning_expected_models_then_names_
 ) -> None:
     with pytest.raises(CompileInputError) as error_info:
         _ = extract_sql_test_expected_model_names(
-            sql=test_case.sql, file_label="tests/unit/orders.sql"
+            sql=test_case.sql, file_label="tests/unit/orders.sql", syntax=_GENERIC_SQL_SYNTAX
         )
 
     assert str(error_info.value) == test_case.expected_message

@@ -172,11 +172,6 @@ pub(super) fn transform_statements(
                             if let Some(with) = &mut select.with {
                                 with.ctes = fold_ctes(std::mem::take(&mut with.ctes), &authored);
                             }
-                            for join in &mut select.joins {
-                                for identifier in &mut join.using {
-                                    *identifier = fold(identifier.clone(), &authored);
-                                }
-                            }
                             if let Some(windows) = &mut select.windows {
                                 for window in windows {
                                     window.name = fold(window.name.clone(), &authored);

@@ -2,6 +2,8 @@
 
 from typing import TypedDict
 
+BUILD_IDENTITY: str
+
 class LintPreparationRequest(TypedDict):
     expanded: str
     before_expansion: str

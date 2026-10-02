@@ -17,12 +17,15 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.compiler.scopes.types import DeclarationKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     RebindDeclarationScopeTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     write_scoped_macro_orders_project,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 @pytest.mark.parametrize(
@@ -44,6 +47,7 @@ def test_given_same_discovery_when_rebinding_private_macros_then_index_matches_a
     write_scoped_macro_orders_project(tmp_path)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     shared: DeclarationScopeBuild = build_declaration_scope(
+        sql_lexical_syntax=_GENERIC_SQL_SYNTAX,
         discovered_inputs=discovered,
         loaded_macros=load_project_macros(discovered.macro_files),
     )
@@ -56,7 +60,9 @@ def test_given_same_discovery_when_rebinding_private_macros_then_index_matches_a
     assert (rebound is not None) is test_case.expected_rebound
     assert rebound is not None
     fresh: DeclarationScopeBuild = build_declaration_scope(
-        discovered_inputs=discovered, loaded_macros=private_macros
+        sql_lexical_syntax=_GENERIC_SQL_SYNTAX,
+        discovered_inputs=discovered,
+        loaded_macros=private_macros,
     )
     identity: DeclarationIdentity = DeclarationIdentity(DeclarationKind.MACRO, test_case.macro_name)
     private_value: object = rebound.resolver.projection.declarations[identity]
@@ -88,6 +94,7 @@ def test_given_different_private_macro_metadata_when_rebinding_then_full_build_i
     write_scoped_macro_orders_project(tmp_path)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     shared: DeclarationScopeBuild = build_declaration_scope(
+        sql_lexical_syntax=_GENERIC_SQL_SYNTAX,
         discovered_inputs=discovered,
         loaded_macros=load_project_macros(discovered.macro_files),
     )

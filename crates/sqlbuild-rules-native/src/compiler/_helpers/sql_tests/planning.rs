@@ -27,6 +27,7 @@ use crate::compiler::_helpers::sql_tests::rendering::{
     rendered_chain_steps,
 };
 use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
+use crate::sql_scan::models::LexicalSyntax;
 
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;
@@ -73,6 +74,7 @@ struct PlanBatchRequest {
     render_sql: bool,
     #[serde(default = "default_true")]
     include_plan: bool,
+    lexical_syntax: LexicalSyntax,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,6 +82,7 @@ struct PlanBatchRequest {
 struct ChainBatchRequest {
     models: Vec<ChainModelInput>,
     tests: Vec<TestInput>,
+    lexical_syntax: LexicalSyntax,
 }
 
 /// Chain ordering reads only declared dependencies, so chain requests omit model SQL.
@@ -219,12 +222,12 @@ pub(crate) struct SqlTestPatterns {
     table_function: Regex,
     dbt_reference: Regex,
     test_reference: Regex,
-    pub(crate) protected: Regex,
+    pub(crate) lexical: LexicalSyntax,
     pub(crate) identifier: Regex,
 }
 
 impl SqlTestPatterns {
-    fn new() -> Result<Self, String> {
+    fn new(lexical: LexicalSyntax) -> Result<Self, String> {
         Ok(Self {
             reference: compile_pattern(r#"(?i)__ref\(\"([^\"]+)\"\)"#)?,
             source: compile_pattern(r#"(?i)__source\(\"([^\"]+)\"\)"#)?,
@@ -235,9 +238,7 @@ impl SqlTestPatterns {
                 r#"(?i)__dbt_ref\(\s*\"([^\"]+)\"\s*(?:,\s*\"([^\"]+)\"\s*)?\)"#,
             )?,
             test_reference: compile_pattern(r#"(?i)__(?:ref|source|seed|dbt_ref|table_fn)\("#)?,
-            protected: compile_pattern(
-                r#"(?s)'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\$\$.*?\$\$|--[^\n]*|/\*.*?\*/"#,
-            )?,
+            lexical,
             identifier: compile_pattern(r"[A-Za-z_][A-Za-z0-9_$]*")?,
         })
     }
@@ -532,7 +533,7 @@ impl GeneratedCteState {
 pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> {
     let request: ChainBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
-    let patterns = SqlTestPatterns::new()?;
+    let patterns = SqlTestPatterns::new(request.lexical_syntax)?;
     let models: HashMap<String, ModelInputOwned> = request
         .models
         .into_iter()
@@ -616,7 +617,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
         set_difference_operator: request.set_difference_operator,
         requires_derived_table_aliases: request.requires_derived_table_aliases,
         analysis_templates: Arc::new(Mutex::new(HashMap::new())),
-        patterns: SqlTestPatterns::new()?,
+        patterns: SqlTestPatterns::new(request.lexical_syntax)?,
         render_dialect,
         rejects_nested_with,
     };
@@ -1053,7 +1054,7 @@ fn resolve_assertion_textual_sql(
     let mut seen: HashSet<String> = HashSet::new();
     for name in marker_names(
         &request.patterns.reference,
-        &request.patterns.protected,
+        &request.patterns.lexical,
         request.assertion_sql,
     ) {
         if !seen.insert(name.clone()) {
@@ -1165,7 +1166,7 @@ fn topo_sort_model_chain(request: TopoSortRequest<'_>) -> Vec<String> {
         }
         if let Some(model) = models.get(name) {
             let mut dependencies = if let Some(override_sql) = overrides.get(name) {
-                marker_names(&patterns.reference, &patterns.protected, override_sql)
+                marker_names(&patterns.reference, &patterns.lexical, override_sql)
             } else {
                 model.model_dependencies.clone()
             };
@@ -1348,7 +1349,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     let mut result = replace_named_markers(
         request.query_sql,
         &request.patterns.reference,
-        &request.patterns.protected,
+        &request.patterns.lexical,
         |name| {
             if let Some(sql) = request.resolved_chain.get(name) {
                 if let Some(references) = chain_references.as_deref_mut()
@@ -1369,7 +1370,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     result = replace_named_markers(
         &result,
         &request.patterns.source,
-        &request.patterns.protected,
+        &request.patterns.lexical,
         |name| {
             request.fixtures.mock_sources.get(name)?;
             let generated_name = format!("{SOURCE_PREFIX}{name}");
@@ -1382,7 +1383,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     result = replace_named_markers(
         &result,
         &request.patterns.seed,
-        &request.patterns.protected,
+        &request.patterns.lexical,
         |name| {
             request.fixtures.mock_seeds.get(name)?;
             let generated_name = format!("{SEED_PREFIX}{name}");
@@ -1395,7 +1396,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     result = replace_dbt_ref_markers(
         &result,
         &request.patterns.dbt_reference,
-        &request.patterns.protected,
+        &request.patterns.lexical,
         |name| {
             request.fixtures.mock_dbt_refs.get(name)?;
             let generated_name = format!("{DBT_REF_PREFIX}{name}");
@@ -1444,7 +1445,7 @@ fn resolve_table_function_fixtures(
     replace_callable_markers(
         sql,
         &patterns.table_function,
-        &patterns.protected,
+        &patterns.lexical,
         |name, _call_suffix| {
             fixtures
                 .get(name)
@@ -1465,7 +1466,7 @@ fn resolve_function_calls(
         &patterns.udf
     };
     let (result, _) =
-        replace_callable_markers(sql, pattern, &patterns.protected, |name, call_suffix| {
+        replace_callable_markers(sql, pattern, &patterns.lexical, |name, call_suffix| {
             let function = functions.get(name)?;
             let (prefix, suffix) = if table_function {
                 (
@@ -1571,7 +1572,7 @@ fn replace_relation_markers(
         (SOURCE_FUNCTION, &patterns.source),
         (SEED_FUNCTION, &patterns.seed),
     ] {
-        result = replace_named_markers(&result, pattern, &patterns.protected, |name| {
+        result = replace_named_markers(&result, pattern, &patterns.lexical, |name| {
             replacements
                 .get(&(function_name.to_string(), name.to_string()))
                 .cloned()
@@ -1580,7 +1581,7 @@ fn replace_relation_markers(
     replace_dbt_ref_markers(
         &result,
         &patterns.dbt_reference,
-        &patterns.protected,
+        &patterns.lexical,
         |name| {
             replacements
                 .get(&(DBT_REF_FUNCTION.to_string(), name.to_string()))
@@ -1619,7 +1620,7 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
             });
         }
     };
-    for name in marker_names(&patterns.reference, &patterns.protected, sql) {
+    for name in marker_names(&patterns.reference, &patterns.lexical, sql) {
         let message = format!(
             "test '{test_name}': model '{model_name}' references __ref('{name}') which has no mock and is not in the expected chain"
         );
@@ -1629,14 +1630,14 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
         (&patterns.source, SOURCE_FUNCTION),
         (&patterns.seed, SEED_FUNCTION),
     ] {
-        for name in marker_names(pattern, &patterns.protected, sql) {
+        for name in marker_names(pattern, &patterns.lexical, sql) {
             let message = format!(
                 "test '{test_name}': model '{model_name}' references {function_name}('{name}') which has no mock"
             );
             warn(function_name, name, message);
         }
     }
-    let protected = protected_ranges(&patterns.protected, sql);
+    let protected = protected_ranges(&patterns.lexical, sql);
     for captures in patterns.dbt_reference.captures_iter(sql) {
         let Some(full) = captures.get(0) else {
             continue;
@@ -1698,7 +1699,7 @@ fn assertion_ref_targets(
 ) -> Vec<String> {
     let mut targets: Vec<String> = Vec::new();
     for (_, sql) in assertions {
-        targets.extend(marker_names(&patterns.reference, &patterns.protected, sql));
+        targets.extend(marker_names(&patterns.reference, &patterns.lexical, sql));
     }
     dedupe(targets)
 }
@@ -1707,9 +1708,9 @@ fn has_unresolved_test_reference(sql: &str, patterns: &SqlTestPatterns) -> bool 
     if !patterns.test_reference.is_match(sql) {
         return false;
     }
-    !marker_names(&patterns.reference, &patterns.protected, sql).is_empty()
-        || !marker_names(&patterns.source, &patterns.protected, sql).is_empty()
-        || !marker_names(&patterns.seed, &patterns.protected, sql).is_empty()
+    !marker_names(&patterns.reference, &patterns.lexical, sql).is_empty()
+        || !marker_names(&patterns.source, &patterns.lexical, sql).is_empty()
+        || !marker_names(&patterns.seed, &patterns.lexical, sql).is_empty()
         || patterns.dbt_reference.is_match(sql)
         || patterns.table_function.is_match(sql)
 }

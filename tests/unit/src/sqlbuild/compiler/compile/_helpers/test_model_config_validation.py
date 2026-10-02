@@ -21,6 +21,7 @@ from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    ChangePolicyHelpTestCase,
     ContractConfigErrorTestCase,
     ContractConfigValidTestCase,
     CustomMaterializationConfigErrorTestCase,
@@ -36,6 +37,8 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SnapshotConfigErrorTestCase,
     SnapshotConfigValidTestCase,
 )
+
+_SNIPPET_INDENT: str = " " * 12
 
 
 @pytest.mark.parametrize(
@@ -354,7 +357,43 @@ def test_given_valid_config_when_validating_then_passes(
                 "replay_on_change": {"add_column": "bounded-30d"},
             },
             ref_count=1,
-            expected_error_fragment="replay_on_change must be a string",
+            expected_error_fragment="replay_on_change must be a string; valid values: forward",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="unknown replay_on_change raises with valid values",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "replay_on_change": "bounded",
+            },
+            ref_count=1,
+            expected_error_fragment=(
+                "unknown replay_on_change 'bounded'; valid values: forward, full, "
+                "bounded-<duration>"
+            ),
+        ),
+        IncrementalConfigErrorTestCase(
+            description="bounded replay_on_change without valid duration raises",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "replay_on_change": "bounded-two-weeks",
+            },
+            ref_count=1,
+            expected_error_fragment="has an invalid duration 'two-weeks'",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="unknown on_schema_change raises with valid values",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "on_schema_change": "append_columns",
+            },
+            ref_count=1,
+            expected_error_fragment=(
+                "unknown on_schema_change 'append_columns'; valid values: append_new_columns, "
+                "fail, ignore, sync_all_columns"
+            ),
         ),
         IncrementalConfigErrorTestCase(
             description="cursor without cursor_type raises",
@@ -778,6 +817,59 @@ def test_given_invalid_config_when_validating_then_raises(
             ref_count=test_case.ref_count,
             known_input_names=frozenset({"orders", "shipments"}),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ChangePolicyHelpTestCase(
+            description="on_schema_change",
+            key="on_schema_change",
+            value="append",
+            expected_help=(
+                "use a valid on_schema_change, add this to the MODEL header:\n"
+                f"{_SNIPPET_INDENT}MODEL (\n"
+                f"{_SNIPPET_INDENT}  on_schema_change append_new_columns,\n"
+                f"{_SNIPPET_INDENT}  ...\n"
+                f"{_SNIPPET_INDENT});"
+            ),
+        ),
+        ChangePolicyHelpTestCase(
+            description="replay_on_change",
+            key="replay_on_change",
+            value="everything",
+            expected_help=(
+                "use a valid replay_on_change, add this to the MODEL header:\n"
+                f"{_SNIPPET_INDENT}MODEL (\n"
+                f"{_SNIPPET_INDENT}  replay_on_change bounded-14d,\n"
+                f"{_SNIPPET_INDENT}  ...\n"
+                f"{_SNIPPET_INDENT});"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_change_policy_when_validating_then_help_shows_valid_header_line(
+    test_case: ChangePolicyHelpTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(
+        values={
+            "materialized": "incremental",
+            "incremental_strategy": "append",
+            test_case.key: test_case.value,
+        }
+    )
+
+    with pytest.raises(CompileInputError) as error_info:
+        validate_incremental_config(
+            config=config,
+            model_name="test_model",
+            ref_count=1,
+            known_input_names=frozenset({"orders"}),
+        )
+
+    assert f"unknown {test_case.key} '{test_case.value}'" in str(error_info.value)
+    assert error_info.value.help == test_case.expected_help
 
 
 @pytest.mark.parametrize(

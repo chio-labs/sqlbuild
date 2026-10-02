@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -43,6 +44,7 @@ from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     AuditAggregateRenderingTestCase,
+    CompileJsonErrorRenderingTestCase,
     MainErrorRenderingTestCase,
     MainTestCase,
     SkillFreshnessNoticeTestCase,
@@ -2334,6 +2336,68 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stderr_fragment in rendered_stderr
     assert rendered_stderr.endswith("\n\n")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileJsonErrorRenderingTestCase(
+            description="compile input error with help",
+            argv=["--project-dir", "/tmp/demo", "compile", "--json"],
+            error_factory=lambda: CompileInputError(
+                "model 'orders': unknown on_schema_change 'append_columns'",
+                help="use a valid on_schema_change",
+            ),
+            expected_stdout_diagnostics=(
+                {
+                    "phase": "compile",
+                    "severity": "error",
+                    "code": "P001",
+                    "message": "model 'orders': unknown on_schema_change 'append_columns'",
+                    "help": "use a valid on_schema_change",
+                },
+            ),
+            expected_stderr_fragment=(
+                "error[P001]: model 'orders': unknown on_schema_change 'append_columns'"
+            ),
+        ),
+        CompileJsonErrorRenderingTestCase(
+            description="plain value error uses the fallback code",
+            argv=["--project-dir", "/tmp/demo", "compile", "--json"],
+            error_factory=lambda: ValueError("invalid compile request"),
+            expected_stdout_diagnostics=(
+                {
+                    "phase": "compile",
+                    "severity": "error",
+                    "code": "E001",
+                    "message": "invalid compile request",
+                },
+            ),
+            expected_stderr_fragment="error[E001]: invalid compile request",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_raised_compile_error_when_running_main_then_json_mode_reports_one_diagnostic_document(
+    test_case: CompileJsonErrorRenderingTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def run_compile(request: CompileCommandRequest) -> int:
+        del request
+        raise test_case.error_factory()
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv, handlers=build_handlers(run_compile=run_compile)
+    )
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert test_case.expected_stderr_fragment in captured.err
+    assert payload["command"] == "compile"
+    assert payload["has_errors"] is True
+    assert payload["stopped"] is True
+    assert tuple(payload["diagnostics"]) == test_case.expected_stdout_diagnostics
 
 
 @pytest.mark.parametrize(

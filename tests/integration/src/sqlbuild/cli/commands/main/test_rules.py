@@ -19,6 +19,7 @@ import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.models import CompiledProject, DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.rule_engine.models import Rule
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
@@ -647,6 +648,52 @@ def test_given_selected_sql_rule_when_compiling_then_authored_diagnostic_blocks_
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("SQL rule cache follows the native build", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_sql_rule_cache_from_another_native_build_when_compiling_then_rules_rerun(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Orders");\nSELECT order_id FROM orders LIMIT 1\n',
+        encoding="utf-8",
+    )
+    command: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
+
+    cold_exit: int = main(command)
+    cold: dict[str, object] = json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(
+        rules_module,
+        "_RULES_BUILD_IDENTITY",
+        f"{rules_module._RULES_BUILD_IDENTITY}-rebuilt",
+    )
+    rebuilt_exit: int = main(command)
+    rebuilt: dict[str, object] = json.loads(capsys.readouterr().out)
+    warm_exit: int = main(command)
+    warm: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert cold_exit == rebuilt_exit == warm_exit == test_case.expected_exit_code
+    rebuilt_timings: dict[str, int] = cast(dict[str, int], rebuilt["compile_timings"])
+    warm_timings: dict[str, int] = cast(dict[str, int], warm["compile_timings"])
+    assert (rebuilt_timings["rule_cache_hits"], rebuilt_timings["rule_cache_misses"]) == (0, 1)
+    assert (warm_timings["rule_cache_hits"], warm_timings["rule_cache_misses"]) == (1, 0)
+    assert [item["code"] for item in cast(list[dict[str, object]], rebuilt["diagnostics"])] == [
+        test_case.expected_code
+    ]
+    assert rebuilt["diagnostics"] == cold["diagnostics"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("warm SQL rules track non-model file edits", 1, "SQBRSQL004")],
     ids=lambda case: case.description,
 )
@@ -735,12 +782,14 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
         *,
         discovered_inputs: DiscoveredProjectInputs,
         loaded_macros: dict[str, LoadedMacro],
+        sql_lexical_syntax: SqlLexicalSyntax,
         compile_cache_dir: Path | None = None,
     ) -> DeclarationScopeBuild:
         scope_builds.append(tmp_path)
         return original_build(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,
+            sql_lexical_syntax=sql_lexical_syntax,
             compile_cache_dir=compile_cache_dir,
         )
 
@@ -795,12 +844,14 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
         *,
         discovered_inputs: DiscoveredProjectInputs,
         loaded_macros: dict[str, LoadedMacro],
+        sql_lexical_syntax: SqlLexicalSyntax,
         compile_cache_dir: Path | None = None,
     ) -> DeclarationScopeBuild:
         scope_builds.append(tmp_path)
         return original_build(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,
+            sql_lexical_syntax=sql_lexical_syntax,
             compile_cache_dir=compile_cache_dir,
         )
 
@@ -1461,7 +1512,10 @@ SELECT 1
 
     assert exit_code == test_case.expected_exit_code
     captured: CaptureResult[str] = capsys.readouterr()
-    assert captured.out == ""
+    payload: dict[str, object] = json.loads(captured.out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], payload["diagnostics"])
+    assert len(diagnostics) == 1
+    assert test_case.expected_code in str(diagnostics[0]["message"])
     assert test_case.expected_code in captured.err
 
 

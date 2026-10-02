@@ -443,5 +443,5 @@ class RequireSqlAnalysisCase:
     repo_files: tuple[tuple[str, str], ...]
     command: tuple[str, ...]
     expected_returncode: int
-    expected_diagnostics: tuple[tuple[str, str, int], ...]
+    expected_diagnostics: tuple[tuple[str, str | None, int | None], ...]
     expected_text_fragments: tuple[str, ...]

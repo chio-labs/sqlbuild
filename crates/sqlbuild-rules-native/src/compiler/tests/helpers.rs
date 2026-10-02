@@ -393,6 +393,7 @@ pub(crate) fn model_test_batch_returns_ordered_artifact() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": [
                     {
                         "name": "stg_orders",
@@ -455,6 +456,7 @@ pub(crate) fn unicode_cte_after_leading_with_preserves_identifier() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": [{
                     "name": "orders",
                     "querySql": "WITH \"订单行\" AS (SELECT order_id FROM __source(\"raw_orders\")) SELECT order_id FROM \"订单行\"",
@@ -499,6 +501,7 @@ pub(crate) fn unresolved_reference_fast_rejection_preserves_warning() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": [{
                     "name": "orders",
                     "querySql": "SELECT * FROM __SOURCE(\"missing_orders\")",
@@ -588,6 +591,7 @@ pub(crate) fn shared_textual_chain_renders_each_model_once() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": models,
                 "functions": [],
                 "tests": [{
@@ -670,6 +674,7 @@ fn plan_deep_diamond_with_missing_mock(sql_analysis_enabled: bool) -> Value {
     serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": deep_diamond_models(LAYERS),
                 "tests": [{
                     "name": "orders_totals",
@@ -718,6 +723,7 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": [
                     {
                         "name": "stg_orders",
@@ -797,6 +803,7 @@ pub(crate) fn textual_assertion_with_clause_merges_lifted_ctes() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": [
                     {
                         "name": "stg_orders",
@@ -859,6 +866,7 @@ pub(crate) fn textual_assertion_with_clause_merges_lifted_ctes() -> bool {
 
 pub(crate) fn upstream_fallback_resolves() -> bool {
     let request = json!({
+        "lexicalSyntax": generic_lexical_syntax(),
         "models": [
             {"name": "stg_orders", "querySql": "SELECT __udf(\"identity_value\")(order_id) AS order_id FROM __source(\"raw_orders\")"},
             {"name": "orders", "querySql": "SELECT * FROM __ref(\"stg_orders\")", "modelDependencies": ["stg_orders"]}
@@ -911,6 +919,7 @@ pub(crate) fn chain_resolution_orders_unmocked_models() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": deep_diamond_models(2),
                 "tests": [
                     {
@@ -1034,6 +1043,7 @@ pub(crate) fn long_chain_plan_output_stays_linear() -> bool {
         let response: Value = serde_json::from_str(
             &crate::compiler::main::sql_test_planning::plan_and_render_json(
                 &json!({
+                    "lexicalSyntax": generic_lexical_syntax(),
                     "models": models,
                     "tests": [{
                         "name": "orders_tip",
@@ -1193,6 +1203,7 @@ pub(crate) fn snowflake_plan_keeps_quoted_expected_columns() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_planning::plan_and_render_json(
             &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
                 "models": [{
                     "name": "orders",
                     "querySql": "SELECT order_id AS \"Order Id\", status, amount FROM __source(\"raw_orders\")",
@@ -1240,6 +1251,7 @@ fn plan_helper_scope_request(
 ) -> Result<String, String> {
     crate::compiler::main::sql_test_planning::plan_and_render_json(
         &json!({
+            "lexicalSyntax": generic_lexical_syntax(),
             "models": [
                 {
                     "name": "orders",
@@ -1368,6 +1380,7 @@ pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope()
         let response: Value = serde_json::from_str(
             &crate::compiler::main::sql_test_planning::plan_and_render_json(
                 &json!({
+                    "lexicalSyntax": generic_lexical_syntax(),
                     "models": [
                         {"name": "raw_orders", "querySql": "SELECT 1 AS order_id", "modelDependencies": []},
                         {"name": "stg_orders", "querySql": "SELECT order_id FROM __ref(\"raw_orders\")", "modelDependencies": ["raw_orders"]},
@@ -1632,4 +1645,15 @@ pub(super) fn snowflake_function_synonyms_stay_as_authored() -> bool {
         && sql.contains(&format!("__actual__items AS (SELECT{body})"))
         && !sql.contains("STARTS_WITH")
         && !sql.contains("SUBSTRING")
+}
+
+fn generic_lexical_syntax() -> Value {
+    json!({
+        "backslashEscapeQuotes": [],
+        "escapeStringPrefix": false,
+        "rawStringPrefix": false,
+        "tripleQuotedStrings": false,
+        "nestedBlockComments": false,
+        "lineCommentPrefixes": ["--"]
+    })
 }

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Protocol, cast
 
 import orjson
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_ctes
 from sqlbuild.compiler.compile.constants import (
     SQL_TEST_FACT_CACHE_ALGORITHM,
     SQL_TEST_FACT_CACHE_NAMESPACE,
@@ -21,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 class _NativeSqlTestModule(Protocol):
@@ -36,6 +39,7 @@ def extract_expanded_sql_tests_cached(
     *,
     tests: tuple[tuple[str, str, SqlTestMode], ...],
     cache_root: Path | None,
+    syntax: SqlLexicalSyntax,
 ) -> tuple[CompileSqlTestCtes, ...]:
     """Reuse exact per-file extraction facts and extract only tests of changed files natively."""
 
@@ -45,13 +49,15 @@ def extract_expanded_sql_tests_cached(
         algorithm=SQL_TEST_FACT_CACHE_ALGORITHM,
     ) as fact_cache:
         if not fact_cache.enabled:
-            return extract_expanded_sql_tests(tests)
+            return extract_expanded_sql_tests(tests=tests, syntax=syntax)
         indexes_by_file: dict[str, list[int]] = {}
         for index, (_sql, file_label, _mode) in enumerate(tests):
             indexes_by_file.setdefault(file_label, []).append(index)
         keys_by_file: dict[str, str] = {
             file_label: fact_cache.key(
-                file_label, *_file_test_key_parts(tests=tests, indexes=indexes)
+                file_label,
+                syntax.cache_key,
+                *_file_test_key_parts(tests=tests, indexes=indexes),
             )
             for file_label, indexes in indexes_by_file.items()
         }
@@ -73,7 +79,7 @@ def extract_expanded_sql_tests_cached(
             missing_indexes.extend(indexes_by_file[file_label])
         if missing_indexes:
             extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
-                tuple(tests[index] for index in missing_indexes)
+                tests=tuple(tests[index] for index in missing_indexes), syntax=syntax
             )
             for index, test_ctes in zip(missing_indexes, extracted, strict=True):
                 results[index] = test_ctes
@@ -108,10 +114,37 @@ def _cached_file_tests(
 
 
 def extract_expanded_sql_tests(
+    *,
+    tests: tuple[tuple[str, str, SqlTestMode], ...],
+    syntax: SqlLexicalSyntax,
+) -> tuple[CompileSqlTestCtes, ...]:
+    """Extract and classify expanded tests, natively unless the dialect reads a test differently."""
+
+    dialect_indexes: frozenset[int] = frozenset(
+        index
+        for index, (sql, _file_label, _mode) in enumerate(tests)
+        if syntax.reads_differently_from_generic(sql)
+    )
+    if not dialect_indexes:
+        return _extract_expanded_sql_tests_natively(tests)
+    native_results: Iterator[CompileSqlTestCtes] = iter(
+        _extract_expanded_sql_tests_natively(
+            tuple(test for index, test in enumerate(tests) if index not in dialect_indexes)
+        )
+    )
+    return tuple(
+        extract_sql_test_ctes(sql=sql, file_label=file_label, syntax=syntax, mode=mode)
+        if index in dialect_indexes
+        else next(native_results)
+        for index, (sql, file_label, mode) in enumerate(tests)
+    )
+
+
+def _extract_expanded_sql_tests_natively(
     tests: tuple[tuple[str, str, SqlTestMode], ...],
 ) -> tuple[CompileSqlTestCtes, ...]:
-    """Extract and classify expanded tests in one authoritative native call."""
-
+    if not tests:
+        return ()
     request_json: str = orjson.dumps(
         {
             "tests": [

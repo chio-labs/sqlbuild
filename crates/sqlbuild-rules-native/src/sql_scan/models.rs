@@ -64,3 +64,30 @@ impl QuotePolicy {
         }
     }
 }
+
+/// One adapter's rules for where quoted text and comments end, mirroring Python `SqlLexicalSyntax`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LexicalSyntax {
+    /// Quote characters inside which a backslash escapes the next byte.
+    pub(crate) backslash_escape_quotes: Vec<String>,
+    /// `E'...'` strings honour backslash escapes.
+    pub(crate) escape_string_prefix: bool,
+    /// `r'...'` strings disable backslash escapes.
+    pub(crate) raw_string_prefix: bool,
+    /// `'''...'''` and `"""..."""` delimit strings.
+    pub(crate) triple_quoted_strings: bool,
+    /// Block comments nest.
+    pub(crate) nested_block_comments: bool,
+    /// Prefixes that start a line comment, such as `--`, `#` or `//`.
+    pub(crate) line_comment_prefixes: Vec<String>,
+}
+
+impl LexicalSyntax {
+    /// Return whether a backslash escapes the next byte inside text opened by `quote`.
+    pub(crate) fn backslash_escapes(&self, quote: u8) -> bool {
+        self.backslash_escape_quotes
+            .iter()
+            .any(|value| value.as_bytes() == [quote])
+    }
+}

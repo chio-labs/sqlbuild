@@ -153,6 +153,7 @@ from sqlbuild.compiler.scopes.types import (
     UsageKind,
     VisibilityReason,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
@@ -261,6 +262,7 @@ class _HookExpansionContext:
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
     consumer: ResourceIdentity | DeclarationIdentity
     facts: _HookExpansionFacts
+    sql_lexical_syntax: SqlLexicalSyntax
 
 
 @dataclass
@@ -398,7 +400,9 @@ def build_model_inputs(
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = tuple(
         schema_file for schema_file in discovered_inputs.schema_files if schema_file.model_entries
     )
-    with cached_sql_reference_extractor(root=reference_cache_dir) as extract_references:
+    with cached_sql_reference_extractor(
+        root=reference_cache_dir, syntax=context.sql_lexical_syntax
+    ) as extract_references:
         return _build_model_inputs(
             discovered_inputs=discovered_inputs,
             context=context,
@@ -629,6 +633,7 @@ def _build_model_inputs(
                 collection_rendering=context.collection_rendering,
                 resolver=context.declaration_resolver,
             ),
+            sql_lexical_syntax=context.sql_lexical_syntax,
             sql_hook_definitions=sql_hook_definitions,
             consumer=model_identity,
         )
@@ -1233,6 +1238,7 @@ def expand_model_hook_macros_result(
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
     declaration_expansion: DeclarationExpansionContext,
+    sql_lexical_syntax: SqlLexicalSyntax,
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
     consumer: ResourceIdentity | None = None,
 ) -> HookExpansionResult:
@@ -1257,6 +1263,7 @@ def expand_model_hook_macros_result(
                 sql_hook_definitions=sql_hook_definitions or {},
                 consumer=consumer or ResourceIdentity(ResourceKind.MODEL, file_path.stem),
                 facts=facts,
+                sql_lexical_syntax=sql_lexical_syntax,
             ),
             hook_key=hook_key,
         )
@@ -1494,7 +1501,9 @@ def expand_sql_macros_in_value(
         facts.add(expansion.usages)
         facts.add_references(
             merge_call_site_references(
-                references=extract_sql_references(expansion.sql),
+                references=extract_sql_references(
+                    sql=expansion.sql, syntax=context.sql_lexical_syntax
+                ),
                 argument_references=expansion.argument_references,
             )
         )

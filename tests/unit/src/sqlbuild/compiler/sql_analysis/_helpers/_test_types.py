@@ -72,3 +72,23 @@ class DialectNonCodeErrorTestCase:
     syntax: SqlLexicalSyntax
     sql: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class RequiresDialectScanTestCase:
+    """Detection of SQL a dialect lexes differently from generic SQL."""
+
+    description: str
+    syntax: SqlLexicalSyntax
+    sql: str
+    expected_reads_differently: bool
+
+
+@dataclass(frozen=True)
+class DialectMatchingParenTestCase:
+    """Dialect-aware parenthesis matching case."""
+
+    description: str
+    syntax: SqlLexicalSyntax | None
+    sql: str
+    expected_index: int

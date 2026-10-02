@@ -19,6 +19,14 @@ class SchemaValidationScopeTestCase:
 
 
 @dataclass(frozen=True)
+class ExactColumnCatalogValidationTestCase:
+    description: str
+    query_sql: str
+    schema: dict[str, dict[str, str]]
+    expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PolyglotSqlNormalizationTestCase:
     description: str
     sql: str

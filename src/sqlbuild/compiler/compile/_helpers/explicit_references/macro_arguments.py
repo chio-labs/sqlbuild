@@ -22,6 +22,7 @@ from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_r
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 
@@ -48,6 +49,8 @@ _RELATION_PLACEHOLDER_PREFIX: str = "__sqlbuild_relation_"
 _RELATION_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(
     rf"{_RELATION_PLACEHOLDER_PREFIX}(\d+)__"
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 def relation_placeholder_text(index: int) -> str:
@@ -80,7 +83,9 @@ def call_site_sql_references(
 
     if not refs:
         return ()
-    return extract_sql_references(" ".join(reference_call_text(ref) for ref in refs))
+    return extract_sql_references(
+        sql=" ".join(reference_call_text(ref) for ref in refs), syntax=_GENERIC_SQL_SYNTAX
+    )
 
 
 def resource_references(
@@ -165,7 +170,9 @@ def reject_macro_generated_references(
 
 def _generated_references(sql: str) -> tuple[SqlResourceRef, ...]:
     try:
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(sql)
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(
+            sql=sql, syntax=_GENERIC_SQL_SYNTAX
+        )
     except CompileInputError:
         return ()
     generated: dict[SqlResourceRef, None] = {}

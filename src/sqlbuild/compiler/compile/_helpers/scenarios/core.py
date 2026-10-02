@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL scenario"
 _WITH_REQUIREMENT: str = (
@@ -34,7 +35,9 @@ _WITH_REQUIREMENT: str = (
 )
 
 
-def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenarioCtes:
+def extract_sql_scenario_ctes(
+    *, sql: str, file_label: str, syntax: SqlLexicalSyntax
+) -> CompileSqlScenarioCtes:
     """Extract top-level SQL-native scenario fixture, expected, and assertion CTEs."""
 
     try:
@@ -44,6 +47,7 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
             context_label=_CONTEXT,
             with_requirement=_WITH_REQUIREMENT,
             cte_type=CompileSqlScenarioCte,
+            syntax=syntax,
         )
     except CompileInputError as scanner_error:
         cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
@@ -54,13 +58,15 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
         if cte_values is None:
             raise scanner_error from None
         ctes = tuple(CompileSqlScenarioCte(name=name, sql_body=body) for name, body in cte_values)
-    return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label)
+    return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label, syntax=syntax)
 
 
-def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> tuple[str, ...]:
+def extract_sql_scenario_expected_model_names(
+    *, sql: str, file_label: str, syntax: SqlLexicalSyntax
+) -> tuple[str, ...]:
     """Extract explicit expected-model relationships without inspecting CTE bodies."""
 
-    start: int = _skip_ignorable(sql=sql, start=0, context_label=_CONTEXT)
+    start: int = _skip_ignorable(sql=sql, start=0, context_label=_CONTEXT, syntax=syntax)
     if _try_consume_keyword(sql=sql, start=start, keyword=SQL_WITH_KEYWORD) is None:
         return ()
     ctes: tuple[CompileSqlScenarioCte, ...] = extract_top_level_ctes_with_scanner(
@@ -69,6 +75,7 @@ def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> t
         context_label=_CONTEXT,
         with_requirement=_WITH_REQUIREMENT,
         cte_type=CompileSqlScenarioCte,
+        syntax=syntax,
     )
     return tuple(
         _require_prefixed_name(
@@ -84,7 +91,7 @@ def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> t
 
 
 def _classify_sql_scenario_ctes(
-    *, ctes: tuple[CompileSqlScenarioCte, ...], file_label: str
+    *, ctes: tuple[CompileSqlScenarioCte, ...], file_label: str, syntax: SqlLexicalSyntax
 ) -> CompileSqlScenarioCtes:
     validate_independent_expected_and_assertion_ctes(
         ctes=ctes,
@@ -92,6 +99,7 @@ def _classify_sql_scenario_ctes(
         assertion_prefix=ASSERT_SCENARIO_CTE_PREFIX,
         file_label=file_label,
         context_label="SQL scenario",
+        syntax=syntax,
     )
     authored_ctes: list[CompileSqlScenarioCte] = []
     expected_ctes: list[CompileSqlScenarioCte] = []

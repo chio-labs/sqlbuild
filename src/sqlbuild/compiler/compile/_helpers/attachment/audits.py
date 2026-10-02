@@ -50,6 +50,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationExpansionContext,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -69,6 +70,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
@@ -101,6 +103,7 @@ class _AuditAttachmentContext:
     effective_vars: dict[str, object]
     macro_context: MacroContext
     declaration_expansion: DeclarationExpansionContext
+    sql_lexical_syntax: SqlLexicalSyntax
     scoped_declarations: dict[tuple[Path, DeclarationIdentity], DeclarationExpansionContext] = (
         field(default_factory=dict, compare=False, repr=False)
     )
@@ -119,19 +122,21 @@ class _AuditAttachmentContext:
 def build_audit_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
-    effective_settings: SettingsConfig,
+    context: ModelInputBuildContext,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
-    effective_vars: dict[str, object],
-    macro_context: MacroContext,
-    loaded_macros: dict[str, LoadedMacro],
-    declaration_expansion: DeclarationExpansionContext,
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
     seed_inputs: tuple[CompileSeedInput, ...] = (),
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
+    effective_settings: SettingsConfig = context.effective_settings
+    effective_vars: dict[str, object] = context.effective_vars
+    macro_context: MacroContext = context.macro_context
+    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
+    declaration_expansion: DeclarationExpansionContext = context.declaration_expansion
+    sql_lexical_syntax: SqlLexicalSyntax = context.sql_lexical_syntax
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -150,6 +155,7 @@ def build_audit_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         declaration_expansion=declaration_expansion,
+        sql_lexical_syntax=sql_lexical_syntax,
     )
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
@@ -204,7 +210,9 @@ def build_audit_inputs(
                     context=f"Audit '{audit_block.name or audit_file.file_path.stem}' evidence",
                 )
             references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-                references=_combined_references(expanded_sql_body, expanded_evidence_sql),
+                references=_combined_references(
+                    expanded_sql_body, expanded_evidence_sql, syntax=sql_lexical_syntax
+                ),
                 argument_references=_argument_references(expansion, evidence_expansion),
             )
             validate_audit_references(
@@ -629,7 +637,9 @@ def build_attached_audit_input(
             context=f"Audit '{audit_instance.definition_name}' evidence",
         )
     references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-        references=_combined_references(expanded_sql_body, expanded_evidence_sql),
+        references=_combined_references(
+            expanded_sql_body, expanded_evidence_sql, syntax=context.sql_lexical_syntax
+        ),
         argument_references=_argument_references(expansion, evidence_expansion),
     )
     validate_audit_references(
@@ -951,11 +961,13 @@ def _argument_references(
     return tuple(references)
 
 
-def _combined_references(*sql_values: str | None) -> tuple[CompileSqlReference, ...]:
+def _combined_references(
+    *sql_values: str | None, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, ...]:
     """Extract references from independently compiled measurement/evidence queries."""
 
     references: list[CompileSqlReference] = []
     for sql in sql_values:
         if sql is not None:
-            references.extend(extract_sql_references(sql))
+            references.extend(extract_sql_references(sql=sql, syntax=syntax))
     return tuple(dict.fromkeys(references))

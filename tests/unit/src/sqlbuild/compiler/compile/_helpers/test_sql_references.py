@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    DialectSqlScanTestCase,
     SqlReferenceExtractionErrorTestCase,
     SqlReferenceExtractionTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 @pytest.mark.parametrize(
@@ -51,7 +60,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 def test_given_simple_references_when_extracting_then_returns_authored_order(
     test_case: SqlReferenceExtractionTestCase,
 ) -> None:
-    references: tuple[CompileSqlReference, ...] = extract_sql_references(test_case.sql)
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(
+        sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX
+    )
 
     assert (
         tuple(
@@ -97,4 +108,90 @@ def test_given_unsupported_reference_sql_when_extracting_then_preserves_python_d
     test_case: SqlReferenceExtractionErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error):
-        extract_sql_references(test_case.sql)
+        extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DialectSqlScanTestCase(
+            description="snowflake backslash-escaped quote before a reference",
+            syntax=SnowflakeAdapter.sql_lexical_syntax,
+            sql="SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="bigquery backslash-escaped quote before a reference",
+            syntax=BigQueryAdapter.sql_lexical_syntax,
+            sql="SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="databricks backslash-escaped quote before a reference",
+            syntax=DatabricksAdapter.sql_lexical_syntax,
+            sql="SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="duckdb escape string before a reference",
+            syntax=DuckDbAdapter.sql_lexical_syntax,
+            sql="SELECT E'O\\'Brien' AS customer_name, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="postgres escape string before a reference",
+            syntax=PostgresAdapter.sql_lexical_syntax,
+            sql="SELECT E'O\\'Brien' AS customer_name, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="duckdb plain string keeps a literal backslash",
+            syntax=DuckDbAdapter.sql_lexical_syntax,
+            sql="SELECT 'C:\\' AS folder, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="databricks raw string keeps a literal backslash",
+            syntax=DatabricksAdapter.sql_lexical_syntax,
+            sql="SELECT r'C:\\' AS folder, * FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="bigquery triple-quoted string hides a reference",
+            syntax=BigQueryAdapter.sql_lexical_syntax,
+            sql="SELECT '''it's __ref(\"ignored\")''' AS note FROM __ref(\"orders\")",
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="bigquery hash comment hides a reference",
+            syntax=BigQueryAdapter.sql_lexical_syntax,
+            sql='SELECT 1 # __ref("ignored")\nFROM __ref("orders")',
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="snowflake slash comment hides a reference",
+            syntax=SnowflakeAdapter.sql_lexical_syntax,
+            sql='SELECT 1 // __ref("ignored")\nFROM __ref("orders")',
+            expected_names=("orders",),
+        ),
+        DialectSqlScanTestCase(
+            description="duckdb nested block comment hides a reference",
+            syntax=DuckDbAdapter.sql_lexical_syntax,
+            sql='SELECT 1 /* outer /* inner */ __ref("ignored") */ FROM __ref("orders")',
+            expected_names=("orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dialect_sql_when_extracting_references_then_follows_dialect_lexical_rules(
+    test_case: DialectSqlScanTestCase,
+) -> None:
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(
+        sql=test_case.sql, syntax=test_case.syntax
+    )
+
+    assert tuple(reference.ref_name for reference in references) == test_case.expected_names
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

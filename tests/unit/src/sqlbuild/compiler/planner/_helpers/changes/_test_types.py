@@ -90,6 +90,13 @@ class ResolveBackfillTestCase:
 
 
 @dataclass(frozen=True)
+class ResolveBackfillErrorTestCase:
+    description: str
+    raw_value: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DetectRenamedModelTestCase:
     description: str
     previous_definition: str

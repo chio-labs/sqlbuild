@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
 use crate::configuration::main::load;
-use crate::constants::API_VERSION;
+use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::engine::main::evaluate;
 use crate::models::CatalogueResponse;
 use crate::rules::main::{catalogue, selected_codes};
@@ -469,5 +469,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(render_owned_skill, module)?)?;
     module.add_function(wrap_pyfunction!(skill_freshness, module)?)?;
     module.add("API_VERSION", API_VERSION)?;
+    module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())
 }

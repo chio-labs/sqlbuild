@@ -8,11 +8,13 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     CalendarGrainCursorBoundaryE2ETestCase,
+    CappedFilterJoinE2ETestCase,
     CappedMicrobatchBuildE2ETestCase,
     CappedMicrobatchScenarioE2ETestCase,
     CappedWatermarkRejectionE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    capped_filter_join_consumer_project_files,
     capped_microbatch_project_files,
     capped_watermark_consumer_project_files,
 )
@@ -529,6 +531,52 @@ def test_given_capped_producer_as_watermark_when_building_then_plan_rejects_befo
     finally:
         connection.close()
     assert target_names.isdisjoint(test_case.expected_absent_relations)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CappedFilterJoinE2ETestCase(
+            description="join using the shared id column of a real source table",
+            limit_action="cap_from_end",
+            expected_ids=(3, 4, 5),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_capped_filter_consumer_joining_source_table_using_id_when_building_then_join_binds(
+    tmp_path: Path, test_case: CappedFilterJoinE2ETestCase
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="capped_filter_join",
+        repo_files=capped_filter_join_consumer_project_files(limit_action=test_case.limit_action),
+    )
+    db_path: Path = project_dir / "regression.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute("CREATE TABLE raw_events (id INTEGER, event_time TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO raw_events VALUES "
+        "(1, '2026-01-01 12:00:00'), (2, '2026-01-02 12:00:00'), "
+        "(3, '2026-01-03 12:00:00'), (4, '2026-01-04 12:00:00'), "
+        "(5, '2026-01-05 12:00:00')"
+    )
+    connection.close()
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "B002" not in result.stdout + result.stderr
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT id FROM main.downstream_events ORDER BY id",
+    )
+    assert tuple(row[0] for row in rows) == test_case.expected_ids
 
 
 if __name__ == "__main__":

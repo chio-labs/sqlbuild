@@ -99,6 +99,15 @@ class CappedMicrobatchScenarioE2ETestCase:
 
 
 @dataclass(frozen=True)
+class CappedFilterJoinE2ETestCase:
+    """Expected rows from a consumer that filters a capped producer and joins its source table."""
+
+    description: str
+    limit_action: str
+    expected_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class CappedWatermarkRejectionE2ETestCase:
     """Expected static rejection for a capped watermark producer."""
 
@@ -765,6 +774,17 @@ class AuditFailureBuildE2ETestCase:
     expected_exit_code: int
     expected_failure_fragment: str
     expected_retained_relation_fragment: str
+
+
+@dataclass(frozen=True)
+class CompileJsonRaisedErrorE2ETestCase:
+    """Expected JSON report for a compile that stops on a raised error."""
+
+    description: str
+    repo_files: dict[str, str]
+    expected_code: str
+    expected_message_fragment: str
+    expected_help_fragment: str | None
 
 
 @dataclass(frozen=True)

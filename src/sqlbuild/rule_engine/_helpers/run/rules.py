@@ -8,10 +8,10 @@ import os
 import time
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
-from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -71,7 +71,7 @@ from sqlbuild.rule_engine.models import (
 )
 
 _SQL_RULE_CACHE_VERSION: str = "sql-rules-v5"
-_SQLBUILD_VERSION: str = version("sqlbuild")
+_RULES_BUILD_IDENTITY: str = _native.BUILD_IDENTITY
 _SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
 
 
@@ -697,7 +697,7 @@ def _sql_model_rule_identities(
 def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:
     digest: Any = hashlib.sha256()
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
-    digest.update(_SQLBUILD_VERSION.encode())
+    digest.update(_RULES_BUILD_IDENTITY.encode())
     digest.update(dialect.encode())
     digest.update("\0".join(codes).encode())
     digest.update(model.authored_sql.encode())
@@ -735,7 +735,7 @@ def _sql_file_rule_identity(
     for value in (
         _SQL_RULE_CACHE_VERSION,
         "file",
-        _SQLBUILD_VERSION,
+        _RULES_BUILD_IDENTITY,
         dialect,
         "\0".join(codes),
         relative_path,

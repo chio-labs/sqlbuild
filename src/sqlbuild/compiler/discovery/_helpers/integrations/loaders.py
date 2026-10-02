@@ -46,6 +46,17 @@ _INGESTR_SOURCE_KEYS: frozenset[str] = frozenset(
         "unique_key",
     }
 )
+_DLT_SOURCE_GROUP_KEYS: frozenset[str] = frozenset(
+    {"config", "destination", "resources", "schema", "type"}
+)
+_DLT_RESOURCE_COMMON_KEYS: frozenset[str] = frozenset(
+    {"incremental", "merge_key", "name", "primary_key", "schema", "write_disposition"}
+)
+_DLT_RESOURCE_TYPE_KEYS: dict[str, frozenset[str]] = {
+    DLT_SOURCE_TYPE_FILESYSTEM: frozenset({"reader"}),
+    DLT_SOURCE_TYPE_REST_API: frozenset({"endpoint"}),
+    DLT_SOURCE_TYPE_SQL_DATABASE: frozenset({"table"}),
+}
 
 
 def integration_loader_name(*, kind: str, source_name: str) -> str:
@@ -201,6 +212,13 @@ def _optional_ingestr_string_tuple(
 def _parse_dlt_source_group(
     *, group: dict[str, object], file_path: Path, group_index: int
 ) -> tuple[SourceEntry, ...]:
+    reject_unknown_mapping_keys(
+        mapping=group,
+        allowed=_DLT_SOURCE_GROUP_KEYS,
+        file_path=file_path,
+        label="dlt source",
+        error_class=SourceParseError,
+    )
     source_type: str = require_non_empty_string(
         entry=group,
         key="type",
@@ -275,6 +293,13 @@ def _parse_dlt_resource_entry(
         raise SourceParseError(
             f"{file_path} dlt resource '{name}' must use dlt write_disposition, not write_strategy"
         )
+    reject_unknown_mapping_keys(
+        mapping=resource,
+        allowed=_DLT_RESOURCE_COMMON_KEYS | _DLT_RESOURCE_TYPE_KEYS[source_type],
+        file_path=file_path,
+        label=f"dlt {source_type} resource '{name}'",
+        error_class=SourceParseError,
+    )
     dlt_name: str = _dlt_resource_name(
         source_type=source_type, resource=resource, file_path=file_path
     )

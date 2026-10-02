@@ -77,6 +77,7 @@ def build_compiled_project(
                 python_functions_inherit_default_namespace=(
                     adapter.python_functions_inherit_default_namespace()
                 ),
+                sql_lexical_syntax=adapter.sql_lexical_syntax,
             ),
             selected_target=selected_target,
             no_sql_validation=no_sql_validation,

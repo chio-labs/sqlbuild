@@ -8,9 +8,12 @@ from sqlbuild.compiler.compile._helpers.sql_tests import core as sql_test_core
 from sqlbuild.compiler.sql_analysis.main._split_set_operation_branches import (
     split_set_operation_branches,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedProjectionScanTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 @pytest.mark.parametrize(
@@ -112,11 +115,17 @@ def test_given_expected_cte_sql_when_scanning_top_level_then_results_are_charact
         == test_case.expected_branches
     )
     assert (
-        sql_test_core._find_select_list_end(sql=test_case.sql, start=0)
+        sql_test_core._find_select_list_end(sql=test_case.sql, start=0, syntax=_GENERIC_SQL_SYNTAX)
         == test_case.expected_select_list_end
     )
-    assert sql_test_core._split_top_level_commas(test_case.sql) == test_case.expected_commas
-    assert sql_test_core._extract_as_alias(test_case.sql) == test_case.expected_alias
-    assert sql_test_core._contains_select_star(test_case.sql) is (
+    assert (
+        sql_test_core._split_top_level_commas(raw_value=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+        == test_case.expected_commas
+    )
+    assert (
+        sql_test_core._extract_as_alias(expression=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+        == test_case.expected_alias
+    )
+    assert sql_test_core._contains_select_star(sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX) is (
         test_case.expected_contains_select_star
     )

@@ -2,14 +2,26 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_ctes
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    extract_assertion_target_model_names,
+    extract_sql_test_ctes,
+)
 from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_expanded_sql_tests
-from sqlbuild.compiler.compile.models import CompileSqlTestCtes
+from sqlbuild.compiler.compile.models import CompileModelSqlTestCtes, CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    DialectCteScanTestCase,
     ExpectedBooleanTestCase,
     NativeSqlTestExtractionParityTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 @pytest.mark.parametrize(
@@ -89,13 +101,15 @@ def test_given_expanded_sql_tests_when_native_batch_extracting_then_matches_refe
     test_case: NativeSqlTestExtractionParityTestCase,
 ) -> None:
     expected: CompileSqlTestCtes = extract_sql_test_ctes(
+        syntax=_GENERIC_SQL_SYNTAX,
         sql=test_case.sql,
         file_label="tests/unit/example.sql",
         mode=test_case.mode,
     )
 
     actual: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
-        ((test_case.sql, "tests/unit/example.sql", test_case.mode),)
+        tests=((test_case.sql, "tests/unit/example.sql", test_case.mode),),
+        syntax=_GENERIC_SQL_SYNTAX,
     )
 
     assert (actual == (expected,)) is test_case.expected_matches
@@ -117,13 +131,17 @@ def test_given_cross_check_dependency_when_native_batch_extracting_then_matches_
     )
     with pytest.raises(ValueError) as reference_error:
         extract_sql_test_ctes(
+            syntax=_GENERIC_SQL_SYNTAX,
             sql=sql,
             file_label="tests/unit/example.sql",
             mode=SqlTestMode.MODEL,
         )
 
     with pytest.raises(ValueError) as native_error:
-        extract_expanded_sql_tests(((sql, "tests/unit/example.sql", SqlTestMode.MODEL),))
+        extract_expanded_sql_tests(
+            tests=((sql, "tests/unit/example.sql", SqlTestMode.MODEL),),
+            syntax=_GENERIC_SQL_SYNTAX,
+        )
 
     assert (str(native_error.value) == str(reference_error.value)) is test_case.expected_result
 
@@ -150,12 +168,129 @@ def test_given_comma_separated_cross_check_dependency_when_extracting_then_nativ
     )
     with pytest.raises(ValueError) as reference_error:
         extract_sql_test_ctes(
+            syntax=_GENERIC_SQL_SYNTAX,
             sql=sql,
             file_label="tests/unit/example.sql",
             mode=SqlTestMode.MODEL,
         )
 
     with pytest.raises(ValueError) as native_error:
-        extract_expanded_sql_tests(((sql, "tests/unit/example.sql", SqlTestMode.MODEL),))
+        extract_expanded_sql_tests(
+            tests=((sql, "tests/unit/example.sql", SqlTestMode.MODEL),),
+            syntax=_GENERIC_SQL_SYNTAX,
+        )
 
     assert (str(native_error.value) == str(reference_error.value)) is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DialectCteScanTestCase(
+            description="snowflake backslash-escaped quote before a marker",
+            syntax=SnowflakeAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__ref__stg_orders AS (SELECT 'O\\'Brien), (' AS customer_name),\n"
+                "__assert__named AS (\n"
+                "  SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__ref__stg_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="bigquery hash comment and triple quotes around markers",
+            syntax=BigQueryAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__ref__stg_orders AS (SELECT '''it's ), (''' AS note), # ), (\n"
+                "__assert__named AS (\n"
+                '  SELECT * FROM __ref("order_totals") # __ref("ignored")\n'
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__ref__stg_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="databricks backslash-escaped quote before a marker",
+            syntax=DatabricksAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__ref__stg_orders AS (SELECT 'O\\'Brien), (' AS customer_name),\n"
+                "__assert__named AS (\n"
+                "  SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__ref__stg_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="duckdb escape string and nested comment before a marker",
+            syntax=DuckDbAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__ref__stg_orders AS (SELECT E'O\\'Brien), (' AS customer_name),\n"
+                "/* outer /* inner */ ), ( */\n"
+                "__assert__named AS (\n"
+                "  SELECT E'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__ref__stg_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="postgres escape string before a marker",
+            syntax=PostgresAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__ref__stg_orders AS (SELECT E'O\\'Brien), (' AS customer_name),\n"
+                "__assert__named AS (\n"
+                "  SELECT E'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__ref__stg_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dialect_sql_test_when_batch_extracting_then_follows_dialect_lexical_rules(
+    test_case: DialectCteScanTestCase,
+) -> None:
+    extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
+        tests=(
+            (test_case.sql, "tests/unit/orders.sql", SqlTestMode.MODEL),
+            (
+                "WITH __ref__a AS (SELECT 1 AS id), __expected__b AS (SELECT 1 AS id) SELECT 1",
+                "tests/unit/plain.sql",
+                SqlTestMode.MODEL,
+            ),
+        ),
+        syntax=test_case.syntax,
+    )
+
+    payload: object = extracted[0].payload
+    assert isinstance(payload, CompileModelSqlTestCtes)
+    assert (
+        tuple(cte.name for cte in (*payload.authored_ctes, *payload.assertion_ctes))
+        == test_case.expected_cte_names
+    )
+    assert (
+        extract_assertion_target_model_names(
+            assertion_sql=tuple(cte.sql_body for cte in payload.assertion_ctes),
+            syntax=test_case.syntax,
+        )
+        == test_case.expected_assertion_targets
+    )
+    assert isinstance(extracted[1].payload, CompileModelSqlTestCtes)
+    assert extracted[1].payload.expected_model_names == ("b",)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])
