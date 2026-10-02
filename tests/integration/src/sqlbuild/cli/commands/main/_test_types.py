@@ -853,3 +853,13 @@ class NativeAllocatorEntryTestCase:
     description: str
     inherited_environment: tuple[tuple[str, str], ...]
     expected_purge_delay: str
+
+
+@dataclass(frozen=True)
+class UnusedOutputDifferentialCase:
+    """One SQBRSQL042 CTE whose rows must survive `format --fix` unchanged."""
+
+    description: str
+    cte_sql: str
+    reader_sql: str
+    expected_statuses: tuple[str, ...]

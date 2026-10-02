@@ -13,6 +13,21 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatCompileIntegrationTestCase,
     SemanticFixTestCase,
+    UnusedOutputDifferentialCase,
+)
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    built_model_rows,
+    rule_fix_statuses,
+)
+
+_DIFFERENTIAL_TOML: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
+)
+_DIFFERENTIAL_RAW_SQL: str = (
+    'MODEL (description "Raw orders");\n'
+    "SELECT * FROM (VALUES (1, 7, 'open', 3, [1, 2]), (2, 7, 'done', 5, [3]),"
+    " (3, 8, 'done', 3, [4, 5, 6]), (4, 9, 'done', 2, [7])) AS v"
+    " (order_id, customer_id, status, amount, tags)\n"
 )
 
 
@@ -237,6 +252,176 @@ def test_given_one_unverifiable_file_when_fixing_then_only_that_file_keeps_its_o
     }
     assert ("customers.sql", test_case.expected_literal) in faults
     assert ("orders.sql", test_case.expected_literal) not in faults
+    listed: list[tuple[str, str, int, str]] = [
+        (fix["file"], fix["code"], fix["line"], fix["reason"]) for fix in payload["rule_fixes"]
+    ]
+    assert len(listed) == len(set(listed))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FormatCompileIntegrationTestCase("existing errors elsewhere", "UNION DISTINCT")],
+    ids=lambda case: case.description,
+)
+def test_given_existing_errors_and_unexpandable_file_when_fixing_then_other_files_are_fixed(
+    test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (tmp_path / "macros").mkdir()
+    (tmp_path / "macros" / "relations.py").write_text(
+        "def orders_relation() -> str:\n    return '__ref(\"orders\")'\n"
+    )
+    fixable: Path = models / "orders.sql"
+    fixable.write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id UNION SELECT 2 AS order_id\n'
+    )
+    unexpandable: Path = models / "customers.sql"
+    unexpandable_sql: str = (
+        'MODEL (description "Customers");\n'
+        "SELECT o.order_id AS customer_id FROM @orders_relation() AS o\n"
+    )
+    unexpandable.write_text(unexpandable_sql)
+    (models / "payments.sql").write_text(
+        "MODEL (description \"Payments\");\nSELECT 1 AS payment_id WHERE 'open' > 1\n"
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "format", "--fix", "--json"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert test_case.expected_literal in fixable.read_text()
+    assert unexpandable.read_text() == unexpandable_sql
+    assert {
+        (Path(fix["file"]).name, fix["code"], fix["status"]) for fix in payload["rule_fixes"]
+    } >= {("orders.sql", "SQBRSQL008", "applied")}
+    assert {
+        (
+            Path(violation["file"]).name,
+            violation["code"],
+            violation["severity"],
+            "could not be expanded" in violation["message"],
+        )
+        for violation in payload["violations"]
+    } >= {("customers.sql", "format-fix-skipped", "warning", True)}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatCompileIntegrationTestCase(
+            "only an unverifiable fix", "Output columns could not be inferred"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_only_unverifiable_fixes_when_fixing_then_every_refusal_is_listed_with_its_reason(
+    test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id WHERE 1 = NULL\n'
+    )
+    (models / "customers.sql").write_text(
+        'MODEL (description "Customers", sql_analysis false);\n'
+        "WITH unused AS (SELECT 2 AS customer_id) SELECT 1 AS customer_id\n"
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "format", "--fix", "--json"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert {
+        (Path(fix["file"]).name, fix["code"], fix["status"]) for fix in payload["rule_fixes"]
+    } >= {("orders.sql", "SQBRSQL001", "refused"), ("customers.sql", "SQBRSQL005", "refused")}
+    assert {
+        (Path(violation["file"]).name, violation["message"]) for violation in payload["violations"]
+    } >= {("customers.sql", test_case.expected_literal + ", so the fix cannot be verified")}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnusedOutputDifferentialCase(
+            description="a plain column is removed",
+            cte_sql='SELECT r.order_id, r.status FROM __ref("raw_orders") AS r',
+            reader_sql="SELECT g.order_id FROM g",
+            expected_statuses=("applied",),
+        ),
+        UnusedOutputDifferentialCase(
+            description="GROUP BY ALL keeps its grouping column",
+            cte_sql=(
+                "SELECT r.customer_id, r.status, SUM(r.amount) AS total"
+                ' FROM __ref("raw_orders") AS r GROUP BY ALL'
+            ),
+            reader_sql="SELECT g.customer_id, g.total FROM g",
+            expected_statuses=("refused",),
+        ),
+        UnusedOutputDifferentialCase(
+            description="an ungrouped aggregate keeps the select at one row",
+            cte_sql="SELECT 'all' AS label, COUNT(*) AS n FROM __ref(\"raw_orders\") AS r",
+            reader_sql="SELECT g.label FROM g",
+            expected_statuses=("refused",),
+        ),
+        UnusedOutputDifferentialCase(
+            description="a set-returning projection keeps its row expansion",
+            cte_sql='SELECT r.order_id, UNNEST(r.tags) AS tag FROM __ref("raw_orders") AS r',
+            reader_sql="SELECT g.order_id FROM g",
+            expected_statuses=("refused",),
+        ),
+        UnusedOutputDifferentialCase(
+            description="ORDER BY ALL with LIMIT keeps its sort columns",
+            cte_sql=(
+                'SELECT r.order_id, r.amount FROM __ref("raw_orders") AS r ORDER BY ALL LIMIT 2'
+            ),
+            reader_sql="SELECT g.amount FROM g",
+            expected_statuses=("refused",),
+        ),
+        UnusedOutputDifferentialCase(
+            description="a COLUMNS pattern reads every column",
+            cte_sql='SELECT r.order_id, r.status FROM __ref("raw_orders") AS r',
+            reader_sql="SELECT MAX(COLUMNS('^s')) FROM g",
+            expected_statuses=(),
+        ),
+        UnusedOutputDifferentialCase(
+            description="COLUMNS(*) reads every column",
+            cte_sql='SELECT r.order_id, r.amount FROM __ref("raw_orders") AS r',
+            reader_sql="SELECT MAX(COLUMNS(*)) FROM g",
+            expected_statuses=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unused_cte_output_when_fixing_then_model_rows_are_unchanged(
+    test_case: UnusedOutputDifferentialCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(_DIFFERENTIAL_TOML)
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "raw_orders.sql").write_text(_DIFFERENTIAL_RAW_SQL)
+    (models / "summary.sql").write_text(
+        'MODEL (description "Summary");\n'
+        f"WITH g AS ({test_case.cte_sql}),\nfinal AS ({test_case.reader_sql})\n"
+        "SELECT * FROM final\n"
+    )
+
+    before: list[tuple[Any, ...]] = built_model_rows(
+        project_dir=tmp_path, model="summary", capsys=capsys
+    )
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) in {0, 1}
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    after: list[tuple[Any, ...]] = built_model_rows(
+        project_dir=tmp_path, model="summary", capsys=capsys
+    )
+
+    assert after == before
+    assert (
+        rule_fix_statuses(payload=payload, code="SQBRSQL042", file_name="summary.sql")
+        == test_case.expected_statuses
+    )
 
 
 if __name__ == "__main__":

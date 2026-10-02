@@ -21,6 +21,7 @@ from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.constants import HEADER_KIND_SCENARIO, HEADER_KIND_TEST
+from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.models import (
     HeaderSpan,
     LintBody,
@@ -42,14 +43,16 @@ def run_lint(
     compiled_expansions: dict[Path, CompiledSqlExpansion] | None = None,
     expansion_context: SqlExpansionContext | None = None,
     source_files: dict[Path, str] | None = None,
+    skip_unexpandable: bool = False,
 ) -> LintRunResult:
-    """Lint all DSL files in the project without modifying anything."""
+    """Lint all DSL files without modifying anything; optionally skip unexpandable SQL."""
 
     files: dict[Path, str] = collect_project_files(
         project_dir=project_dir, selected_paths=selected_paths, source_files=source_files
     )
     violations: list[LintViolation] = []
     bodies: list[LintBody] = []
+    unexpandable: dict[Path, str] = {}
     context: SqlExpansionContext | None = expansion_context or _expansion_context(
         project_dir=project_dir,
         native_enabled=config.native_enabled,
@@ -82,20 +85,24 @@ def run_lint(
                     config=config,
                 )
             )
-        if context is not None:
-            bodies.extend(
-                _prepared_bodies(
-                    file_path=file_path,
-                    contents=contents,
-                    headers=headers,
-                    context=context,
-                    dialect=config.dialect,
-                    project_dir=project_dir,
-                    relative_path=relative_path,
-                    dynamic_output_paths=dynamic_output_paths,
-                    compiled_expansions=compiled_expansions,
-                )
-            )
+        if context is None:
+            continue
+        prepared: tuple[LintBody, ...] | str = _prepared_bodies(
+            file_path=file_path,
+            contents=contents,
+            headers=headers,
+            context=context,
+            dialect=config.dialect,
+            project_dir=project_dir,
+            relative_path=relative_path,
+            dynamic_output_paths=dynamic_output_paths,
+            compiled_expansions=compiled_expansions,
+            skip_unexpandable=skip_unexpandable,
+        )
+        if isinstance(prepared, str):
+            unexpandable[file_path] = prepared
+        else:
+            bodies.extend(prepared)
 
     if bodies and config.native_enabled:
         native_violations: dict[Path, tuple[LintViolation, ...]] = run_native_sql_lint(
@@ -112,6 +119,7 @@ def run_lint(
         ),
         formatted_files=(),
         source_texts=files,
+        unexpandable=unexpandable,
     )
 
 
@@ -142,7 +150,10 @@ def _prepared_bodies(
     relative_path: Path,
     dynamic_output_paths: frozenset[Path],
     compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
-) -> tuple[LintBody, ...]:
+    skip_unexpandable: bool,
+) -> tuple[LintBody, ...] | str:
+    """Prepared bodies of one file, or the reason its SQL cannot be expanded when skipping."""
+
     bodies: list[LintBody] = []
     role: LintFileRole = lint_file_role(
         file_path=file_path, project_dir=project_dir, relative_path=relative_path
@@ -160,28 +171,33 @@ def _prepared_bodies(
     allows_empty_fixture_star: bool = any(header.kind == HEADER_KIND_TEST for header in headers)
     body_start: int
     body_end: int
-    for body_start, body_end in lint_body_ranges(
-        contents=contents,
-        headers=headers,
-        file_path=file_path,
-        project_dir=project_dir,
-        role=role,
-    ):
-        bodies.append(
-            replace(
-                prepare_lint_body(
-                    role=role,
-                    file_path=file_path,
-                    contents=contents,
-                    body_range=(body_start, body_end),
-                    context=context,
-                    dialect=dialect,
-                    external_identifiers=external_identifiers,
-                    allows_ceremonial_select=allows_ceremonial_select,
-                    allows_dynamic_output_star=allows_dynamic_output_star,
-                    compiled_expansion=compiled_expansion,
-                ),
-                allows_empty_fixture_star=allows_empty_fixture_star,
+    try:
+        for body_start, body_end in lint_body_ranges(
+            contents=contents,
+            headers=headers,
+            file_path=file_path,
+            project_dir=project_dir,
+            role=role,
+        ):
+            bodies.append(
+                replace(
+                    prepare_lint_body(
+                        role=role,
+                        file_path=file_path,
+                        contents=contents,
+                        body_range=(body_start, body_end),
+                        context=context,
+                        dialect=dialect,
+                        external_identifiers=external_identifiers,
+                        allows_ceremonial_select=allows_ceremonial_select,
+                        allows_dynamic_output_star=allows_dynamic_output_star,
+                        compiled_expansion=compiled_expansion,
+                    ),
+                    allows_empty_fixture_star=allows_empty_fixture_star,
+                )
             )
-        )
+    except ProjectCompileError as error:
+        if not skip_unexpandable:
+            raise
+        return str(error).removeprefix(f"{file_path} ")
     return tuple(bodies)

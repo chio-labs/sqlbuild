@@ -131,3 +131,8 @@ RELATION_KIND_REF: str = "ref"
 RELATION_KIND_SOURCE: str = "source"
 RELATION_KIND_SEED: str = "seed"
 
+FIX_COLUMNS_UNKNOWN: str = "Output columns could not be inferred, so the fix cannot be verified"
+FIX_COLUMNS_CHANGED: str = "The fix would change output columns, types or nullability"
+FIX_DEPENDENCIES_CHANGED: str = "The fix would change model dependencies"
+FIX_LINEAGE_CHANGED: str = "The fix would change column lineage"
+FIX_NEW_DIAGNOSTICS: str = "The fix would add compile diagnostics: "

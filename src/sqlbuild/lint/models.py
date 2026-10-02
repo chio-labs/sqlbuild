@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import ExpansionSpan
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, ExpansionSpan
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.constants import (
     DEFAULT_MAX_LITERAL_LENGTH,
@@ -14,7 +15,7 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_FAULT,
     VIOLATION_SEVERITY_WARNING,
 )
-from sqlbuild.lint.types import LintSeverity, RuleFixStatus
+from sqlbuild.lint.types import DiagnosticIdentity, LintSeverity, RuleFixStatus
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,7 @@ class LintRunResult:
     format_changes: tuple[FormatChange, ...] = ()
     rule_fixes: tuple[RuleFixResult, ...] = ()
     source_texts: Mapping[Path, str] = field(default_factory=dict, repr=False, compare=False)
+    unexpandable: Mapping[Path, str] = field(default_factory=dict)
 
     @property
     def faults(self) -> tuple[LintViolation, ...]:
@@ -170,3 +172,24 @@ class LintRunResult:
             for violation in self.violations
             if violation.severity == VIOLATION_SEVERITY_WARNING
         )
+
+
+@dataclass(frozen=True)
+class CompileFacts:
+    """Per-model outputs and per-owner diagnostics of one compilation."""
+
+    models: dict[CompiledObjectKey, CompiledModel]
+    model_paths: dict[CompiledObjectKey, Path]
+    diagnostics: dict[Path, Counter[DiagnosticIdentity]]
+
+
+@dataclass(frozen=True)
+class FixVerdict:
+    """Edited files that fail verification, and whether any change is unattributable."""
+
+    failing: dict[Path, str]
+    unattributed: bool
+
+    @property
+    def verified(self) -> bool:
+        return not self.failing and not self.unattributed

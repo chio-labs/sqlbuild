@@ -16,3 +16,5 @@ class LintSeverity(StrEnum):
 type RuleFixStatus = Literal["applied", "refused", "unavailable"]
 
 type RelationKeys = dict[str, tuple[tuple[str, ...], ...]]
+
+type DiagnosticIdentity = tuple[str, str, str, str]
