@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.132.0](https://github.com/chio-labs/sqlbuild/compare/v0.131.0...v0.132.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **compiler:** unknown on_schema_change or replay_on_change values and unknown dlt_sources keys now fail compilation.
+
+### Bug Fixes
+
+* **compiler:** reject unknown schema-change values and follow dialect quoting in compile scanners ([#912](https://github.com/chio-labs/sqlbuild/issues/912)) ([db5cd56](https://github.com/chio-labs/sqlbuild/commit/db5cd56ab3c173c37e860b0a33db6fe468c489ec))
+
 ## [0.131.0](https://github.com/chio-labs/sqlbuild/compare/v0.130.1...v0.131.0) (2026-10-02)
 
 
