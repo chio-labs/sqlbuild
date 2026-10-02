@@ -35,6 +35,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.compiler.profiling.classes.context import CompileTimingContext
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
 _CALL_SUFFIX_SENTINEL: str = "__SQLBUILD_CALL_SUFFIX__"
@@ -103,6 +104,7 @@ def plan_sql_tests_natively(
         "sqlAnalysisDialect": adapter.sql_analysis_dialect(),
         "setDifferenceOperator": adapter.render_set_difference_operator(),
         "requiresDerivedTableAliases": adapter.requires_derived_table_aliases(),
+        "lexicalSyntax": _lexical_syntax_request(project.sql_lexical_syntax),
         "workers": _NATIVE_WORKERS,
         "renderSql": render_sql,
         "includePlan": include_plan,
@@ -159,6 +161,7 @@ def resolve_sql_test_model_chains(
     request: dict[str, object] = {
         "models": _chain_model_requests(project=project),
         "tests": [_test_request(test=test) for test in tests],
+        "lexicalSyntax": _lexical_syntax_request(project.sql_lexical_syntax),
     }
     try:
         native_response: str = cast(
@@ -457,3 +460,14 @@ def _render_call_template(*, rendered: str) -> tuple[str, str]:
     if not separator or _CALL_SUFFIX_SENTINEL in suffix:
         raise NativeSqlTestPlanningError("adapter SQL function call template is not deterministic")
     return prefix, suffix
+
+
+def _lexical_syntax_request(syntax: SqlLexicalSyntax) -> dict[str, object]:
+    return {
+        "backslashEscapeQuotes": sorted(syntax.backslash_escape_quotes),
+        "escapeStringPrefix": syntax.escape_string_prefix,
+        "rawStringPrefix": syntax.raw_string_prefix,
+        "tripleQuotedStrings": syntax.triple_quoted_strings,
+        "nestedBlockComments": syntax.nested_block_comments,
+        "lineCommentPrefixes": sorted(syntax.line_comment_prefixes),
+    }

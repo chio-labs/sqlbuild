@@ -61,7 +61,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityRecord,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -439,6 +439,7 @@ class CompileAdapterContext:
     value_renderer: TypedSqlValueRenderer
     collection_rendering: CollectionRendering
     python_functions_inherit_default_namespace: bool
+    sql_lexical_syntax: SqlLexicalSyntax
 
 
 @dataclass(frozen=True)
@@ -454,6 +455,7 @@ class ModelInputBuildContext:
     loaded_macros: dict[str, LoadedMacro]
     value_renderer: TypedSqlValueRenderer
     collection_rendering: CollectionRendering
+    sql_lexical_syntax: SqlLexicalSyntax
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     public_model_schemas: dict[str, ModelSchemaDeclaration] = field(default_factory=dict)
@@ -846,6 +848,7 @@ class CompileProjectInputs:
     project_config: ProjectConfig
     local_config: LocalConfig
     discovered_inputs: DiscoveredProjectInputs
+    sql_lexical_syntax: SqlLexicalSyntax
     run_id: str = ""
     effective_target_name: str | None = None
     effective_target: TargetConfig | None = None
@@ -1048,6 +1051,7 @@ class CompiledProject:
     effective_target_database: str | None = None
     effective_target_schema: str | None = None
     sql_analysis_dialect: str | None = None
+    sql_lexical_syntax: SqlLexicalSyntax = field(default_factory=SqlLexicalSyntax)
     compile_cache_dir: Path | None = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
@@ -1133,6 +1137,7 @@ class CompileModelSqlTestInputPayload:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

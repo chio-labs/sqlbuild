@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+
 
 @dataclass(frozen=True)
 class LintBehaviorTestCase:
@@ -116,3 +118,11 @@ class ReservedKeywordFoldTestCase:
     dialect: str
     keyword: str
     expected_same_fingerprint: bool
+
+
+@dataclass(frozen=True)
+class PassedAdapterSyntaxTestCase:
+    """A caller-held lexical syntax that SQL scanning must use without rediscovery."""
+
+    description: str
+    expected_syntax: SqlLexicalSyntax

@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAutofix
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, plan_rule_fixes
 from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import (
@@ -20,6 +21,7 @@ from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_WARNING
+from sqlbuild.lint.exceptions import LintError
 from sqlbuild.lint.models import (
     FormatChange,
     HeaderSpan,
@@ -42,6 +44,8 @@ def run_format(
 ) -> LintRunResult:
     """Format all DSL files in place and report the violations that remain."""
 
+    if discovered_inputs is not None and value_renderer is None:
+        raise LintError("fixture-null formatting requires the project adapter")
     files: dict[Path, str] = collect_project_files(
         project_dir=project_dir, selected_paths=selected_paths
     )
@@ -58,7 +62,11 @@ def run_format(
         files=safe_files,
         config=config,
         project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
+        fixture_inputs=(
+            None
+            if discovered_inputs is None or value_renderer is None
+            else (discovered_inputs, value_renderer.sql_lexical_syntax)
+        ),
         fixtures_only=fixtures_only,
     )
     format_faults.extend(rule_faults)
@@ -105,7 +113,7 @@ def _apply_fixes(
     files: dict[Path, str],
     config: LintConfig,
     project_dir: Path,
-    discovered_inputs: DiscoveredProjectInputs | None,
+    fixture_inputs: tuple[DiscoveredProjectInputs, SqlLexicalSyntax] | None,
     fixtures_only: bool,
 ) -> tuple[dict[Path, str], list[LintViolation]]:
     """Return contents after native header and supported SQL body fixes."""
@@ -114,9 +122,10 @@ def _apply_fixes(
         FixtureNullAutofix.apply(
             files=files,
             project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
+            discovered_inputs=fixture_inputs[0],
+            sql_lexical_syntax=fixture_inputs[1],
         )
-        if discovered_inputs is not None
+        if fixture_inputs is not None
         else {}
     )
     if fixtures_only:
@@ -160,9 +169,10 @@ def _apply_fixes(
         FixtureNullAutofix.apply(
             files=post_native_files,
             project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
+            discovered_inputs=fixture_inputs[0],
+            sql_lexical_syntax=fixture_inputs[1],
         )
-        if discovered_inputs is not None
+        if fixture_inputs is not None
         else {}
     )
     if fixture_formatted:

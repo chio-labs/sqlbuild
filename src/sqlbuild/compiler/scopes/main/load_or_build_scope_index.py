@@ -20,6 +20,7 @@ from sqlbuild.compiler.scopes._helpers.cache import (
     write_cached_scope_index,
 )
 from sqlbuild.compiler.scopes.models import ScopeIndex
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -44,6 +45,7 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
         if cached is not None:
             return cached
 
+    sql_lexical_syntax: SqlLexicalSyntax = SqlLexicalSyntax()
     try:
         discovered: DiscoveredProjectInputs = discover_project_inputs(
             project_dir=resolved_project_dir,
@@ -54,6 +56,7 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
             local_config=discovered.local_config,
         )
         adapter: BaseAdapter = resolve_adapter(adapter_name=adapter_name)
+        sql_lexical_syntax = adapter.sql_lexical_syntax
         compile_inputs: CompileProjectInputs = build_compile_inputs(
             discovered_inputs=discovered,
             adapter_context=CompileAdapterContext(
@@ -65,6 +68,7 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
                 python_functions_inherit_default_namespace=(
                     adapter.python_functions_inherit_default_namespace()
                 ),
+                sql_lexical_syntax=adapter.sql_lexical_syntax,
             ),
             resolved_connection={},
             no_sql_validation=True,
@@ -73,7 +77,9 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
         )
         index: ScopeIndex = scope_index_with_compile_usages(inputs=compile_inputs)
     except (OSError, UnicodeError, ValueError, ImportError):
-        index = build_tolerant_scope_index(project_dir=resolved_project_dir)
+        index = build_tolerant_scope_index(
+            project_dir=resolved_project_dir, sql_lexical_syntax=sql_lexical_syntax
+        )
 
     if not no_cache and fingerprint is not None:
         write_cached_scope_index(

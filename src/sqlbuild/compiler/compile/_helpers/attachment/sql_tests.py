@@ -76,6 +76,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind, UsageKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ def build_test_inputs_with_cache(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
     compile_cache_dir: Path | None,
+    sql_lexical_syntax: SqlLexicalSyntax,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build SQL test inputs inside the compile timing boundary."""
 
@@ -113,6 +115,7 @@ def build_test_inputs_with_cache(
             external_sql_reference_resolver=external_sql_reference_resolver,
             sql_function_inputs=sql_function_inputs,
             compile_cache_dir=compile_cache_dir,
+            sql_lexical_syntax=sql_lexical_syntax,
         )
 
 
@@ -123,6 +126,7 @@ def build_test_inputs(
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
     declaration_expansion: DeclarationExpansionContext,
+    sql_lexical_syntax: SqlLexicalSyntax,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
     compile_cache_dir: Path | None = None,
@@ -230,6 +234,7 @@ def build_test_inputs(
                         test_block=expanded_test_block,
                         test_file=test_file,
                         test_mode=test_mode,
+                        syntax=sql_lexical_syntax,
                     )
                     tested_resource_names = _infer_tested_direct_logic_resource_names(
                         raw_test_ctes=raw_test_ctes,
@@ -238,6 +243,7 @@ def build_test_inputs(
                         known_function_names=known_function_names,
                         known_table_function_names=known_table_function_names,
                         table_function_argument_counts=table_function_argument_counts,
+                        syntax=sql_lexical_syntax,
                     )
                 expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
                     sql=parameter_sql,
@@ -284,8 +290,17 @@ def build_test_inputs(
             (test.sql_body, str(test.test_file.relative_path), test.mode) for test in expanded_tests
         ),
         cache_root=compile_cache_dir,
+        syntax=sql_lexical_syntax,
     )
     for test, test_ctes in zip(expanded_tests, test_ctes_batch, strict=True):
+        assertion_target_model_names: tuple[str, ...] = (
+            extract_assertion_target_model_names(
+                assertion_sql=tuple(cte.sql_body for cte in test_ctes.payload.assertion_ctes),
+                syntax=sql_lexical_syntax,
+            )
+            if isinstance(test_ctes.payload, CompileModelSqlTestCtes)
+            else ()
+        )
         validate_test_ctes(
             test_ctes=test_ctes,
             test_file=test.test_file,
@@ -294,6 +309,7 @@ def build_test_inputs(
             known_source_names=known_source_names,
             known_table_function_names=known_table_function_names,
             loaded_macros=loaded_macros,
+            assertion_target_model_names=assertion_target_model_names,
         )
         test_inputs.append(
             CompileSqlTestInput(
@@ -304,6 +320,7 @@ def build_test_inputs(
                 payload=_build_test_input_payload(
                     test_ctes=test_ctes,
                     tested_resource_names=test.tested_resource_names,
+                    assertion_target_model_names=assertion_target_model_names,
                 ),
                 declaration_usages=test.declaration_usages,
                 parent_name=test.parent_name,
@@ -361,7 +378,10 @@ def _macro_test_declaration_usages(
 
 
 def _build_test_input_payload(
-    *, test_ctes: CompileSqlTestCtes, tested_resource_names: tuple[str, ...]
+    *,
+    test_ctes: CompileSqlTestCtes,
+    tested_resource_names: tuple[str, ...],
+    assertion_target_model_names: tuple[str, ...],
 ) -> CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload:
     match test_ctes.payload:
         case CompileModelSqlTestCtes() as model_payload:
@@ -377,6 +397,7 @@ def _build_test_input_payload(
                 expected_model_names=model_payload.expected_model_names,
                 assertion_ctes=model_payload.assertion_ctes,
                 assertion_names=model_payload.assertion_names,
+                assertion_target_model_names=assertion_target_model_names,
             )
         case CompileDirectLogicSqlTestCtes() as direct_logic_payload:
             return CompileDirectLogicSqlTestInputPayload(
@@ -393,10 +414,12 @@ def _validate_raw_direct_logic_test_ctes(
     test_block: DiscoveredSqlTestBlock,
     test_file: DiscoveredSqlTestFile,
     test_mode: SqlTestMode,
+    syntax: SqlLexicalSyntax,
 ) -> CompileSqlTestCtes:
     return extract_sql_test_ctes(
         sql=test_block.sql_body,
         file_label=str(test_file.relative_path),
+        syntax=syntax,
         mode=test_mode,
     )
 
@@ -411,6 +434,7 @@ def _infer_tested_direct_logic_resource_names(
     known_function_names: set[str],
     known_table_function_names: set[str],
     table_function_argument_counts: dict[str, int],
+    syntax: SqlLexicalSyntax,
 ) -> tuple[str, ...]:
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
@@ -423,6 +447,7 @@ def _infer_tested_direct_logic_resource_names(
             test_file=test_file,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
+            syntax=syntax,
         )
     if raw_test_ctes.mode == SqlTestMode.TABLE_FN:
         return _infer_tested_table_function_names(
@@ -431,6 +456,7 @@ def _infer_tested_direct_logic_resource_names(
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
             table_function_argument_counts=table_function_argument_counts,
+            syntax=syntax,
         )
     tested_macro_names: tuple[str, ...] = find_macro_call_names(
         raw_test_ctes.payload.actual_cte.sql_body
@@ -456,6 +482,7 @@ def _infer_tested_udf_names(
     test_file: DiscoveredSqlTestFile,
     known_function_names: set[str],
     known_table_function_names: set[str],
+    syntax: SqlLexicalSyntax,
 ) -> tuple[str, ...]:
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
@@ -463,7 +490,7 @@ def _infer_tested_udf_names(
             "__udf_actual__ CTE and exactly one __udf_expected__ CTE"
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
-        raw_test_ctes.payload.actual_cte.sql_body
+        sql=raw_test_ctes.payload.actual_cte.sql_body, syntax=syntax
     )
     tested_udf_names: tuple[str, ...] = tuple(
         dict.fromkeys(
@@ -500,6 +527,7 @@ def _infer_tested_table_function_names(
     known_function_names: set[str],
     known_table_function_names: set[str],
     table_function_argument_counts: dict[str, int],
+    syntax: SqlLexicalSyntax,
 ) -> tuple[str, ...]:
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
@@ -507,7 +535,7 @@ def _infer_tested_table_function_names(
             "__table_fn_actual__ CTE and exactly one __table_fn_expected__ CTE"
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
-        raw_test_ctes.payload.actual_cte.sql_body
+        sql=raw_test_ctes.payload.actual_cte.sql_body, syntax=syntax
     )
     validate_table_function_reference_arities(
         references=references,
@@ -550,6 +578,7 @@ def build_scenario_inputs(
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
     declaration_expansion: DeclarationExpansionContext,
+    sql_lexical_syntax: SqlLexicalSyntax,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlScenarioInput, ...]:
     """Build compile-time scenario inputs from discovered SQL-native scenario files."""
@@ -590,14 +619,17 @@ def build_scenario_inputs(
         scenario_ctes: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
             sql=expanded_sql_body,
             file_label=str(scenario_file.relative_path),
+            syntax=sql_lexical_syntax,
         )
         _validate_scenario_source_references(
             scenario_ctes=scenario_ctes,
             scenario_file=scenario_file,
             known_source_names=known_source_names,
+            syntax=sql_lexical_syntax,
         )
         assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
-            assertion_sql=tuple(cte.sql_body for cte in scenario_ctes.assertion_ctes)
+            assertion_sql=tuple(cte.sql_body for cte in scenario_ctes.assertion_ctes),
+            syntax=sql_lexical_syntax,
         )
         scenario_inputs.append(
             CompileSqlScenarioInput(
@@ -629,10 +661,13 @@ def _validate_scenario_source_references(
     scenario_ctes: CompileSqlScenarioCtes,
     scenario_file: DiscoveredSqlScenarioFile,
     known_source_names: set[str],
+    syntax: SqlLexicalSyntax,
 ) -> None:
     cte: CompileSqlScenarioCte
     for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(cte.sql_body)
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(
+            sql=cte.sql_body, syntax=syntax
+        )
         reference: CompileSqlReference
         for reference in references:
             if reference.ref_kind != SqlReferenceKind.SOURCE:
@@ -645,7 +680,7 @@ def _validate_scenario_source_references(
             )
 
     for cte in scenario_ctes.authored_ctes:
-        references = extract_sql_references(cte.sql_body)
+        references = extract_sql_references(sql=cte.sql_body, syntax=syntax)
         for reference in references:
             if reference.ref_kind != SqlReferenceKind.SOURCE:
                 continue
@@ -666,6 +701,7 @@ def validate_test_ctes(
     known_source_names: set[str],
     known_table_function_names: set[str],
     loaded_macros: dict[str, LoadedMacro],
+    assertion_target_model_names: tuple[str, ...],
 ) -> None:
     """Validate SQL-native test CTE targets against discovered inputs."""
 
@@ -714,9 +750,7 @@ def validate_test_ctes(
             )
 
     assertion_target_name: str
-    for assertion_target_name in extract_assertion_target_model_names(
-        assertion_sql=tuple(cte.sql_body for cte in model_payload.assertion_ctes)
-    ):
+    for assertion_target_name in assertion_target_model_names:
         if assertion_target_name not in known_model_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} assertion references unknown model "

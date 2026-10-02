@@ -14,6 +14,7 @@ DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),
     collection_rendering=CollectionRendering.VALUE_LIST,
     python_functions_inherit_default_namespace=True,
+    sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
 )
 
 

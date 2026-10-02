@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_model_graph_key,
@@ -47,6 +48,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 def _build_present_field(name: str, value: object) -> dict[str, object]:
@@ -435,13 +438,14 @@ def build_compiled_project_with_model_specs(
                     )
                 ),
                 query_sql=sql,
-                references=extract_sql_references(sql),
+                references=extract_sql_references(sql=sql, syntax=_GENERIC_SQL_SYNTAX),
             )
         )
     return assemble_compiled_project(
         inputs=CompileProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),
+            sql_lexical_syntax=_GENERIC_SQL_SYNTAX,
             discovered_inputs=DiscoveredProjectInputs(
                 project_config=ProjectConfig(name="demo", adapter="duckdb"),
                 local_config=LocalConfig(),

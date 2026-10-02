@@ -63,6 +63,24 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             ),
             expected_stdout_fragment="PASS=1  FAIL=0",
         ),
+        ScenarioAuthoredCheckSqlE2ETestCase(
+            description="DuckDB escape string before the first relation marker",
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "  UNION ALL\n"
+                "  SELECT 2 AS id, 5 AS amount\n"
+                "),\n"
+                "__assert__no_named_totals AS (\n"
+                "  SELECT E'O\\'Brien' AS customer_name, total_amount\n"
+                '  FROM __ref("order_totals") WHERE total_amount <> 15\n'
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragment="PASS=1  FAIL=0",
+        ),
     ],
     ids=lambda case: case.description,
 )

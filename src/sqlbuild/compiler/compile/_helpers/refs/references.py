@@ -16,9 +16,8 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL reference"
 _DOUBLE_QUOTE_TOKEN: str = '"'
@@ -34,12 +33,16 @@ _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
 _REFERENCE_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
     ref_kind: prefix[:-1] for prefix, ref_kind in _REFERENCE_PREFIXES
 }
-_REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|'|\"|`|\$")
+_REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|//|#|'|\"|`|\$")
 
 
-def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
-    """Return logical SQL refs found outside comments and quoted text."""
+def extract_sql_references(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, ...]:
+    """Return logical SQL refs found outside comments and quoted text under the dialect's rules."""
 
+    if syntax.reads_differently_from_generic(sql):
+        return _extract_sql_references_with_python(sql=sql, syntax=syntax)
     native_references: list[tuple[str, str, str | None, int | None]] | None = (
         _native.extract_static_sql_references(sql)
     )
@@ -53,10 +56,12 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
             )
             for kind, name, package, call_argument_count in native_references
         )
-    return _extract_sql_references_with_python(sql)
+    return _extract_sql_references_with_python(sql=sql, syntax=syntax)
 
 
-def _extract_sql_references_with_python(sql: str) -> tuple[CompileSqlReference, ...]:
+def _extract_sql_references_with_python(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, ...]:
     """Return logical SQL refs through the authoritative general scanner."""
 
     references: list[CompileSqlReference] = []
@@ -66,19 +71,17 @@ def _extract_sql_references_with_python(sql: str) -> tuple[CompileSqlReference, 
         index = _next_reference_scan_position(sql=sql, start=index)
         if index >= length:
             break
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
+        non_code_end: int | None = dialect_non_code_end(
+            sql=sql, start=index, syntax=syntax, context=_CONTEXT
+        )
+        if non_code_end is not None:
+            index = non_code_end
             continue
 
         parsed_reference: tuple[CompileSqlReference, int] | None = _parse_reference_at(
             sql=sql,
             start=index,
+            syntax=syntax,
         )
         if parsed_reference is None:
             index += 1
@@ -93,7 +96,9 @@ def _next_reference_scan_position(*, sql: str, start: int) -> int:
     return match.start() if match is not None else len(sql)
 
 
-def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, int] | None:
+def _parse_reference_at(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, int] | None:
     ref_kind: SqlReferenceKind | None = None
     prefix: str
     for prefix, candidate_kind in _REFERENCE_PREFIXES:
@@ -105,10 +110,12 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
 
     open_paren_index: int = start + len(_REFERENCE_PREFIX_BY_KIND[ref_kind])
     closing_paren_index: int = find_matching_paren(
-        sql=sql, open_paren_index=open_paren_index, context=_CONTEXT
+        sql=sql, open_paren_index=open_paren_index, context=_CONTEXT, syntax=syntax
     )
     raw_arguments: str = sql[open_paren_index + 1 : closing_paren_index]
-    argument_values: tuple[str, ...] = _split_top_level_arguments(raw_arguments)
+    argument_values: tuple[str, ...] = _split_top_level_arguments(
+        raw_arguments=raw_arguments, syntax=syntax
+    )
     two_argument_count: int = 2
     if ref_kind == SqlReferenceKind.DBT_REF:
         if len(argument_values) not in {1, two_argument_count}:
@@ -137,9 +144,12 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
             sql=sql,
             open_paren_index=call_suffix_start,
             context="SQL table function call",
+            syntax=syntax,
         )
         call_argument_count = len(
-            _split_top_level_arguments(sql[call_suffix_start + 1 : call_suffix_end])
+            _split_top_level_arguments(
+                raw_arguments=sql[call_suffix_start + 1 : call_suffix_end], syntax=syntax
+            )
         )
     return (
         CompileSqlReference(
@@ -163,27 +173,25 @@ def _skip_whitespace(*, sql: str, start: int) -> int:
     return index
 
 
-def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
+def _split_top_level_arguments(*, raw_arguments: str, syntax: SqlLexicalSyntax) -> tuple[str, ...]:
     arguments: list[str] = []
     current: list[str] = []
     depth: int = 0
     index: int = 0
     saw_separator: bool = False
     while index < len(raw_arguments):
-        if raw_arguments.startswith("--", index):
-            index = skip_line_comment(sql=raw_arguments, start=index)
-            current.append(" ")
-            continue
-        if raw_arguments.startswith("/*", index):
-            index = skip_block_comment(sql=raw_arguments, start=index, context=_CONTEXT)
-            current.append(" ")
+        non_code_end: int | None = dialect_non_code_end(
+            sql=raw_arguments, start=index, syntax=syntax, context=_CONTEXT
+        )
+        if non_code_end is not None:
+            current.append(
+                raw_arguments[index:non_code_end]
+                if raw_arguments[index] in SQL_QUOTE_TOKENS
+                else " "
+            )
+            index = non_code_end
             continue
         character: str = raw_arguments[index]
-        if character in SQL_QUOTE_TOKENS:
-            quoted_end: int = skip_quoted_text(sql=raw_arguments, start=index, context=_CONTEXT)
-            current.append(raw_arguments[index:quoted_end])
-            index = quoted_end
-            continue
         if character == SQL_OPEN_PAREN_TOKEN:
             depth += 1
         elif character == SQL_CLOSE_PAREN_TOKEN:

@@ -8,9 +8,12 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import classify_sql_test_
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ClassifyDirectLogicSqlTestCtesErrorTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 _FILE: str = "tests/unit/orders.sql"
 
@@ -281,6 +284,8 @@ def test_given_invalid_direct_logic_ctes_when_classifying_then_raises_mode_speci
     )
 
     with pytest.raises(CompileInputError) as error_info:
-        _ = classify_sql_test_ctes(ctes=ctes, file_label=_FILE, mode=test_case.mode)
+        _ = classify_sql_test_ctes(
+            ctes=ctes, file_label=_FILE, mode=test_case.mode, syntax=_GENERIC_SQL_SYNTAX
+        )
 
     assert str(error_info.value) == test_case.expected_message

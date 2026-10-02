@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -57,7 +58,9 @@ def build_sql_expansion_context(
         cli_vars={} if cli_vars is None else cli_vars,
     )
     scope: DeclarationScopeBuild = declaration_scope or _build_declaration_scope(
-        discovered_inputs=effective_discovered_inputs, static_scope=static_declaration_scope
+        discovered_inputs=effective_discovered_inputs,
+        static_scope=static_declaration_scope,
+        sql_lexical_syntax=value_renderer.sql_lexical_syntax,
     )
     loaded_macros: dict[str, LoadedMacro] = scope.loaded_macros
     enums: dict[str, EnumDeclaration]
@@ -107,7 +110,10 @@ def build_sql_expansion_context(
 
 
 def _build_declaration_scope(
-    *, discovered_inputs: DiscoveredProjectInputs, static_scope: DeclarationScopeBuild | None
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    static_scope: DeclarationScopeBuild | None,
+    sql_lexical_syntax: SqlLexicalSyntax,
 ) -> DeclarationScopeBuild:
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     rebound: DeclarationScopeBuild | None = (
@@ -118,5 +124,7 @@ def _build_declaration_scope(
         )
     )
     return rebound or build_declaration_scope(
-        discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
+        discovered_inputs=discovered_inputs,
+        loaded_macros=loaded_macros,
+        sql_lexical_syntax=sql_lexical_syntax,
     )

@@ -31,6 +31,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CEREMONIAL_SELECT_VALUE,
     SQL_OPEN_PAREN_TOKEN,
+    SQL_QUOTE_TOKENS,
     SQL_SINGLE_QUOTE_TOKEN,
     SQL_STATEMENT_TERMINATOR_TOKEN,
     SQL_WILDCARD_TOKEN,
@@ -58,21 +59,17 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
 )
 from sqlbuild.compiler.sql_analysis.main._is_identifier_start import is_identifier_start
 from sqlbuild.compiler.sql_analysis.main._iter_code_positions import iter_code_positions
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
-    skip_quoted_text,
-)
+from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
 from sqlbuild.compiler.sql_analysis.main._split_set_operation_branches import (
     split_set_operation_branches,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL test"
 _SQL_TEST_WITH_REQUIREMENT: str = "mock CTEs and one __expected__<model> CTE"
 _DIRECT_DEPENDENCY_PATH_LENGTH: int = 2
 _SQL_IDENTIFIER_QUOTE_TOKENS: frozenset[str] = frozenset({'"', "`"})
-_SQL_STRING_QUOTE_TOKENS: frozenset[str] = frozenset({SQL_SINGLE_QUOTE_TOKEN, "$"})
 
 
 @dataclass(frozen=True)
@@ -121,19 +118,22 @@ _DIRECT_LOGIC_MODE_SPECS: dict[SqlTestMode, _DirectLogicModeSpec] = {
 
 
 def extract_sql_test_ctes(
-    *, sql: str, file_label: str, mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+    *,
+    sql: str,
+    file_label: str,
+    syntax: SqlLexicalSyntax,
+    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE,
 ) -> CompileSqlTestCtes:
     """Extract top-level SQL-native test mock and expected CTEs."""
 
     ctes: tuple[CompileSqlTestCte, ...] = extract_unclassified_sql_test_ctes(
-        sql=sql,
-        file_label=file_label,
+        sql=sql, file_label=file_label, syntax=syntax
     )
-    return classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode)
+    return classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode, syntax=syntax)
 
 
 def extract_unclassified_sql_test_ctes(
-    *, sql: str, file_label: str
+    *, sql: str, file_label: str, syntax: SqlLexicalSyntax
 ) -> tuple[CompileSqlTestCte, ...]:
     """Extract raw top-level CTEs before mode-specific classification."""
 
@@ -144,6 +144,7 @@ def extract_unclassified_sql_test_ctes(
             context_label=_CONTEXT,
             with_requirement=_SQL_TEST_WITH_REQUIREMENT,
             cte_type=CompileSqlTestCte,
+            syntax=syntax,
         )
     except CompileInputError as scanner_error:
         cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
@@ -158,21 +159,29 @@ def extract_unclassified_sql_test_ctes(
 
 
 def classify_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, mode: SqlTestMode
+    *,
+    ctes: tuple[CompileSqlTestCte, ...],
+    file_label: str,
+    mode: SqlTestMode,
+    syntax: SqlLexicalSyntax,
 ) -> CompileSqlTestCtes:
     """Apply mode-specific validation to extracted SQL test CTEs."""
 
-    return _classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode)
+    return _classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode, syntax=syntax)
 
 
 def extract_sql_test_expected_model_names(
-    *, sql: str, file_label: str, mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+    *,
+    sql: str,
+    file_label: str,
+    syntax: SqlLexicalSyntax,
+    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE,
 ) -> tuple[str, ...]:
     """Extract explicit expected-model relationships without inspecting CTE bodies."""
 
     if mode is not SqlTestMode.MODEL:
         return ()
-    start: int = _skip_ignorable(sql=sql, start=0)
+    start: int = _skip_ignorable(sql=sql, start=0, syntax=syntax)
     if _try_consume_keyword(sql=sql, start=start, keyword=SQL_WITH_KEYWORD) is None:
         return ()
     ctes: tuple[CompileSqlTestCte, ...] = extract_top_level_ctes_with_scanner(
@@ -181,6 +190,7 @@ def extract_sql_test_expected_model_names(
         context_label=_CONTEXT,
         with_requirement=_SQL_TEST_WITH_REQUIREMENT,
         cte_type=CompileSqlTestCte,
+        syntax=syntax,
     )
     return tuple(
         _require_prefixed_name(
@@ -194,14 +204,16 @@ def extract_sql_test_expected_model_names(
     )
 
 
-def extract_assertion_target_model_names(*, assertion_sql: tuple[str, ...]) -> tuple[str, ...]:
+def extract_assertion_target_model_names(
+    *, assertion_sql: tuple[str, ...], syntax: SqlLexicalSyntax
+) -> tuple[str, ...]:
     """Extract assertion model targets in authored order using canonical references."""
 
     targets: list[str] = []
     for sql in assertion_sql:
         targets.extend(
             reference.ref_name
-            for reference in extract_sql_references(sql)
+            for reference in extract_sql_references(sql=sql, syntax=syntax)
             if reference.ref_kind == SqlReferenceKind.REF
         )
     return tuple(dict.fromkeys(targets))
@@ -215,22 +227,27 @@ def extract_top_level_ctes_with_scanner[CteT](
     context_label: str,
     with_requirement: str,
     cte_type: Callable[..., CteT],
+    syntax: SqlLexicalSyntax,
 ) -> tuple[CteT, ...]:
     """Scan top-level `WITH` CTEs followed by the ceremonial `SELECT 1` of a test file."""
 
     with_end: int | None = _try_consume_keyword(
         sql=sql,
-        start=_skip_ignorable(sql=sql, start=0, context_label=context_label),
+        start=_skip_ignorable(sql=sql, start=0, context_label=context_label, syntax=syntax),
         keyword=SQL_WITH_KEYWORD,
     )
     if with_end is None:
         raise CompileInputError(
             f"{context_label} '{file_label}' must declare {with_requirement} before `SELECT 1`"
         )
-    index: int = _skip_ignorable(sql=sql, start=with_end, context_label=context_label)
+    index: int = _skip_ignorable(
+        sql=sql, start=with_end, context_label=context_label, syntax=syntax
+    )
     recursive_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="RECURSIVE")
     if recursive_end is not None:
-        index = _skip_ignorable(sql=sql, start=recursive_end, context_label=context_label)
+        index = _skip_ignorable(
+            sql=sql, start=recursive_end, context_label=context_label, syntax=syntax
+        )
 
     ctes: list[CteT] = []
     seen_cte_names: set[str] = set()
@@ -244,10 +261,17 @@ def extract_top_level_ctes_with_scanner[CteT](
             )
         seen_cte_names.add(cte_name)
 
-        index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
+        index = _skip_ignorable(sql=sql, start=index, context_label=context_label, syntax=syntax)
         if index < len(sql) and sql[index] == SQL_OPEN_PAREN_TOKEN:
-            index = find_matching_paren(sql=sql, open_paren_index=index, context=context_label) + 1
-            index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
+            index = (
+                find_matching_paren(
+                    sql=sql, open_paren_index=index, context=context_label, syntax=syntax
+                )
+                + 1
+            )
+            index = _skip_ignorable(
+                sql=sql, start=index, context_label=context_label, syntax=syntax
+            )
         index = _consume_keyword(
             sql=sql,
             start=index,
@@ -255,19 +279,23 @@ def extract_top_level_ctes_with_scanner[CteT](
             file_label=file_label,
             context_label=context_label,
         )
-        index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
+        index = _skip_ignorable(sql=sql, start=index, context_label=context_label, syntax=syntax)
         if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
             raise CompileInputError(
                 f"{context_label} '{file_label}' CTE '{cte_name}' must use AS (...)"
             )
         cte_body_start: int = index + 1
         cte_body_end: int = find_matching_paren(
-            sql=sql, open_paren_index=index, context=context_label
+            sql=sql, open_paren_index=index, context=context_label, syntax=syntax
         )
         ctes.append(cte_type(name=cte_name, sql_body=sql[cte_body_start:cte_body_end].strip()))
-        index = _skip_ignorable(sql=sql, start=cte_body_end + 1, context_label=context_label)
+        index = _skip_ignorable(
+            sql=sql, start=cte_body_end + 1, context_label=context_label, syntax=syntax
+        )
         if index < len(sql) and sql[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
-            index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
+            index = _skip_ignorable(
+                sql=sql, start=index + 1, context_label=context_label, syntax=syntax
+            )
             continue
         break
 
@@ -276,26 +304,38 @@ def extract_top_level_ctes_with_scanner[CteT](
         start=index,
         file_label=file_label,
         context_label=context_label,
+        syntax=syntax,
     )
     return tuple(ctes)
 
 
 def _classify_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, mode: SqlTestMode
+    *,
+    ctes: tuple[CompileSqlTestCte, ...],
+    file_label: str,
+    mode: SqlTestMode,
+    syntax: SqlLexicalSyntax,
 ) -> CompileSqlTestCtes:
     match mode:
         case SqlTestMode.MODEL:
-            return _classify_model_sql_test_ctes(ctes=ctes, file_label=file_label)
+            return _classify_model_sql_test_ctes(ctes=ctes, file_label=file_label, syntax=syntax)
         case SqlTestMode.MACRO | SqlTestMode.UDF | SqlTestMode.TABLE_FN:
             return _classify_direct_logic_sql_test_ctes(
-                ctes=ctes, file_label=file_label, spec=_DIRECT_LOGIC_MODE_SPECS[mode]
+                ctes=ctes,
+                file_label=file_label,
+                spec=_DIRECT_LOGIC_MODE_SPECS[mode],
+                syntax=syntax,
             )
         case _:
             raise CompileInputError(f"SQL test '{file_label}' has unsupported mode '{mode}'")
 
 
 def _classify_direct_logic_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, spec: _DirectLogicModeSpec
+    *,
+    ctes: tuple[CompileSqlTestCte, ...],
+    file_label: str,
+    spec: _DirectLogicModeSpec,
+    syntax: SqlLexicalSyntax,
 ) -> CompileSqlTestCtes:
     mode: str = spec.mode.value
     authored_ctes: list[CompileSqlTestCte] = []
@@ -318,7 +358,9 @@ def _classify_direct_logic_sql_test_ctes(
                     f"SQL test '{file_label}' mode '{mode}' must define exactly one "
                     f"{spec.expected_cte_name} CTE"
                 )
-            _validate_expected_cte_query(cte=cte, file_label=file_label, label=cte.name)
+            _validate_expected_cte_query(
+                cte=cte, file_label=file_label, label=cte.name, syntax=syntax
+            )
             expected_cte = cte
             continue
         if _is_model_mode_cte(cte.name):
@@ -356,6 +398,7 @@ def _classify_direct_logic_sql_test_ctes(
             file_label=file_label,
             mode=spec.mode,
             actual_cte_name=spec.actual_cte_name,
+            syntax=syntax,
         )
     return CompileSqlTestCtes(
         mode=spec.mode,
@@ -369,7 +412,7 @@ def _classify_direct_logic_sql_test_ctes(
 
 
 def _classify_model_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
+    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, syntax: SqlLexicalSyntax
 ) -> CompileSqlTestCtes:
     validate_independent_expected_and_assertion_ctes(
         ctes=ctes,
@@ -377,6 +420,7 @@ def _classify_model_sql_test_ctes(
         assertion_prefix=ASSERT_TEST_CTE_PREFIX,
         file_label=file_label,
         context_label="SQL test",
+        syntax=syntax,
     )
     authored_ctes: list[CompileSqlTestCte] = []
     macro_mocks: dict[str, str] = {}
@@ -414,7 +458,9 @@ def _classify_model_sql_test_ctes(
                 label="__macro__<macro>",
                 file_label=file_label,
             )
-            macro_mocks[macro_name] = _extract_macro_mock_value(cte=cte, file_label=file_label)
+            macro_mocks[macro_name] = _extract_macro_mock_value(
+                cte=cte, file_label=file_label, syntax=syntax
+            )
             continue
         if cte.name.startswith(REF_TEST_CTE_PREFIX):
             mock_model_names.append(
@@ -484,6 +530,7 @@ def _classify_model_sql_test_ctes(
                 cte=cte,
                 file_label=file_label,
                 label=cte.name,
+                syntax=syntax,
                 allow_empty_fixture=True,
             )
             expected_ctes.append(cte)
@@ -583,6 +630,7 @@ def _validate_call_free_direct_logic_bodies(
     file_label: str,
     mode: SqlTestMode,
     actual_cte_name: str,
+    syntax: SqlLexicalSyntax,
 ) -> None:
     helper_cte: CompileSqlTestCte
     for helper_cte in helper_ctes:
@@ -592,6 +640,7 @@ def _validate_call_free_direct_logic_bodies(
             mode=mode,
             cte_label=f"helper CTE '{helper_cte.name}'",
             allowed_location=actual_cte_name,
+            syntax=syntax,
         )
     _validate_no_direct_logic_calls(
         sql=expected_cte.sql_body,
@@ -599,18 +648,25 @@ def _validate_call_free_direct_logic_bodies(
         mode=mode,
         cte_label=f"CTE {expected_cte.name}",
         allowed_location=actual_cte_name,
+        syntax=syntax,
     )
 
 
 def _validate_no_direct_logic_calls(
-    *, sql: str, file_label: str, mode: SqlTestMode, cte_label: str, allowed_location: str
+    *,
+    sql: str,
+    file_label: str,
+    mode: SqlTestMode,
+    cte_label: str,
+    allowed_location: str,
+    syntax: SqlLexicalSyntax,
 ) -> None:
     macro_names: tuple[str, ...] = find_macro_call_names(sql)
     if macro_names:
         raise CompileInputError(
             f"SQL test '{file_label}' mode '{mode.value}' {cte_label} must not call macros"
         )
-    references: tuple[CompileSqlReference, ...] = extract_sql_references(sql)
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(sql=sql, syntax=syntax)
     reference: CompileSqlReference | None = next(
         (
             item
@@ -627,13 +683,15 @@ def _validate_no_direct_logic_calls(
         )
 
 
-def _extract_macro_mock_value(*, cte: CompileSqlTestCte, file_label: str) -> str:
+def _extract_macro_mock_value(
+    *, cte: CompileSqlTestCte, file_label: str, syntax: SqlLexicalSyntax
+) -> str:
     """Extract the single SQL string literal value from a __macro__ CTE."""
 
     body: str = cte.sql_body.strip()
-    index: int = _skip_ignorable(sql=body, start=0)
+    index: int = _skip_ignorable(sql=body, start=0, syntax=syntax)
     index = _consume_keyword(sql=body, start=index, keyword="SELECT", file_label=file_label)
-    index = _skip_ignorable(sql=body, start=index)
+    index = _skip_ignorable(sql=body, start=index, syntax=syntax)
     if index >= len(body) or body[index] != SQL_SINGLE_QUOTE_TOKEN:
         raise CompileInputError(
             f"SQL test '{file_label}' macro mock '{cte.name}' must be a single SELECT string "
@@ -641,9 +699,9 @@ def _extract_macro_mock_value(*, cte: CompileSqlTestCte, file_label: str) -> str
         )
     value: str
     value, index = _read_sql_string_literal(sql=body, start=index)
-    index = _skip_ignorable(sql=body, start=index)
+    index = _skip_ignorable(sql=body, start=index, syntax=syntax)
     if index < len(body) and body[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
-        index = _skip_ignorable(sql=body, start=index + 1)
+        index = _skip_ignorable(sql=body, start=index + 1, syntax=syntax)
     if index != len(body):
         raise CompileInputError(
             f"SQL test '{file_label}' macro mock '{cte.name}' must be a single SELECT string "
@@ -674,17 +732,19 @@ def _validate_expected_cte_query(
     *,
     cte: CompileSqlTestCte,
     file_label: str,
+    syntax: SqlLexicalSyntax,
     label: str = "__expected__<model>",
     allow_empty_fixture: bool = False,
 ) -> None:
     if allow_empty_fixture and is_empty_fixture_query(cte.sql_body):
         return
-    if _contains_select_star(cte.sql_body):
+    if _contains_select_star(sql=cte.sql_body, syntax=syntax):
         raise CompileInputError(f"SQL test '{file_label}' must not use SELECT * in {label} CTEs")
     branch_column_names: tuple[tuple[str, ...], ...] = _extract_expected_branch_column_names(
         sql=cte.sql_body,
         file_label=file_label,
         label=label,
+        syntax=syntax,
     )
     first_branch_column_names: tuple[str, ...] = branch_column_names[0]
     branch_index: int
@@ -698,7 +758,7 @@ def _validate_expected_cte_query(
 
 
 def _extract_expected_branch_column_names(
-    *, sql: str, file_label: str, label: str
+    *, sql: str, file_label: str, label: str, syntax: SqlLexicalSyntax
 ) -> tuple[tuple[str, ...], ...]:
     sql_analysis_column_names: tuple[tuple[str, ...], ...] | None = (
         extract_expected_branch_column_names_with_sql_analysis(
@@ -709,38 +769,42 @@ def _extract_expected_branch_column_names(
         return sql_analysis_column_names
     branches: tuple[str, ...] = split_set_operation_branches(sql=sql, context=_CONTEXT)
     return tuple(
-        _extract_expected_select_column_names(branch_sql=branch, file_label=file_label, label=label)
+        _extract_expected_select_column_names(
+            branch_sql=branch, file_label=file_label, label=label, syntax=syntax
+        )
         for branch in branches
     )
 
 
 def _extract_expected_select_column_names(
-    *, branch_sql: str, file_label: str, label: str
+    *, branch_sql: str, file_label: str, label: str, syntax: SqlLexicalSyntax
 ) -> tuple[str, ...]:
-    index: int = _skip_ignorable(sql=branch_sql, start=0)
+    index: int = _skip_ignorable(sql=branch_sql, start=0, syntax=syntax)
     select_end: int | None = _try_consume_keyword(sql=branch_sql, start=index, keyword="SELECT")
     if select_end is None:
         raise CompileInputError(
             f"SQL test '{file_label}' must define each {label} set-operation "
             "branch as a SELECT query"
         )
-    select_list_end: int = _find_select_list_end(sql=branch_sql, start=select_end)
+    select_list_end: int = _find_select_list_end(sql=branch_sql, start=select_end, syntax=syntax)
     raw_select_list: str = branch_sql[select_end:select_list_end]
-    expressions: tuple[str, ...] = _split_top_level_commas(raw_select_list)
+    expressions: tuple[str, ...] = _split_top_level_commas(raw_value=raw_select_list, syntax=syntax)
     if not expressions:
         raise CompileInputError(
             f"SQL test '{file_label}' must project at least one column in {label}"
         )
     return tuple(
-        _extract_expected_projection_name(expression=expression, file_label=file_label, label=label)
+        _extract_expected_projection_name(
+            expression=expression, file_label=file_label, label=label, syntax=syntax
+        )
         for expression in expressions
     )
 
 
-def _find_select_list_end(*, sql: str, start: int) -> int:
+def _find_select_list_end(*, sql: str, start: int, syntax: SqlLexicalSyntax) -> int:
     index: int
     depth: int
-    for index, depth in iter_code_positions(sql=sql[start:], context=_CONTEXT):
+    for index, depth in iter_code_positions(sql=sql[start:], context=_CONTEXT, syntax=syntax):
         if (
             depth == 0
             and _try_consume_keyword(sql=sql, start=start + index, keyword="FROM") is not None
@@ -749,12 +813,12 @@ def _find_select_list_end(*, sql: str, start: int) -> int:
     return len(sql)
 
 
-def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
+def _split_top_level_commas(*, raw_value: str, syntax: SqlLexicalSyntax) -> tuple[str, ...]:
     values: list[str] = []
     value_start: int = 0
     index: int
     depth: int
-    for index, depth in iter_code_positions(sql=raw_value, context=_CONTEXT):
+    for index, depth in iter_code_positions(sql=raw_value, context=_CONTEXT, syntax=syntax):
         if depth == 0 and raw_value[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
             item: str = raw_value[value_start:index].strip()
             if item:
@@ -767,8 +831,10 @@ def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _extract_expected_projection_name(*, expression: str, file_label: str, label: str) -> str:
-    alias_name: str | None = _extract_as_alias(expression)
+def _extract_expected_projection_name(
+    *, expression: str, file_label: str, label: str, syntax: SqlLexicalSyntax
+) -> str:
+    alias_name: str | None = _extract_as_alias(expression=expression, syntax=syntax)
     if alias_name is not None:
         return alias_name
     stripped_expression: str = expression.strip()
@@ -779,17 +845,17 @@ def _extract_expected_projection_name(*, expression: str, file_label: str, label
     )
 
 
-def _extract_as_alias(expression: str) -> str | None:
+def _extract_as_alias(*, expression: str, syntax: SqlLexicalSyntax) -> str | None:
     last_alias_name: str | None = None
     index: int
     depth: int
-    for index, depth in iter_code_positions(sql=expression, context=_CONTEXT):
+    for index, depth in iter_code_positions(sql=expression, context=_CONTEXT, syntax=syntax):
         if depth != 0:
             continue
         as_end: int | None = _try_consume_keyword(sql=expression, start=index, keyword="AS")
         if as_end is None:
             continue
-        alias_index: int = _skip_ignorable(sql=expression, start=as_end)
+        alias_index: int = _skip_ignorable(sql=expression, start=as_end, syntax=syntax)
         if alias_index < len(expression) and is_identifier_start(expression[alias_index]):
             alias_name, alias_end = _read_identifier(
                 sql=expression,
@@ -807,13 +873,13 @@ def _is_simple_identifier(value: str) -> bool:
     return all(is_identifier_character(character) for character in value[1:])
 
 
-def _contains_select_star(sql: str) -> bool:
+def _contains_select_star(*, sql: str, syntax: SqlLexicalSyntax) -> bool:
     index: int
-    for index, _depth in iter_code_positions(sql=sql, context=_CONTEXT):
+    for index, _depth in iter_code_positions(sql=sql, context=_CONTEXT, syntax=syntax):
         select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
         if select_end is None:
             continue
-        value_index: int = _skip_ignorable(sql=sql, start=select_end)
+        value_index: int = _skip_ignorable(sql=sql, start=select_end, syntax=syntax)
         if value_index < len(sql) and sql[value_index] == SQL_WILDCARD_TOKEN:
             return True
     return False
@@ -833,9 +899,12 @@ def _validate_ceremonial_select(
     sql: str,
     start: int,
     file_label: str,
+    syntax: SqlLexicalSyntax,
     context_label: str = _CONTEXT,
 ) -> None:
-    if _is_ceremonial_select_statement(sql=sql, start=start, context_label=context_label):
+    if _is_ceremonial_select_statement(
+        sql=sql, start=start, context_label=context_label, syntax=syntax
+    ):
         return
     raise CompileInputError(
         f"{context_label} '{file_label}' must end with a ceremonial top-level `SELECT 1` "
@@ -843,22 +912,28 @@ def _validate_ceremonial_select(
     )
 
 
-def _is_ceremonial_select_statement(*, sql: str, start: int, context_label: str = _CONTEXT) -> bool:
-    index: int = _skip_ignorable(sql=sql, start=start, context_label=context_label)
+def _is_ceremonial_select_statement(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax, context_label: str = _CONTEXT
+) -> bool:
+    index: int = _skip_ignorable(sql=sql, start=start, context_label=context_label, syntax=syntax)
     select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
     if select_end is None:
         return False
-    index = _skip_ignorable(sql=sql, start=select_end, context_label=context_label)
+    index = _skip_ignorable(sql=sql, start=select_end, context_label=context_label, syntax=syntax)
     if index >= len(sql) or sql[index] != SQL_CEREMONIAL_SELECT_VALUE:
         return False
-    index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
-    return _is_statement_end(sql=sql, start=index, context_label=context_label)
+    index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label, syntax=syntax)
+    return _is_statement_end(sql=sql, start=index, context_label=context_label, syntax=syntax)
 
 
-def _is_statement_end(*, sql: str, start: int, context_label: str = _CONTEXT) -> bool:
+def _is_statement_end(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax, context_label: str = _CONTEXT
+) -> bool:
     index: int = start
     if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
-        index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
+        index = _skip_ignorable(
+            sql=sql, start=index + 1, context_label=context_label, syntax=syntax
+        )
     return index == len(sql)
 
 
@@ -869,6 +944,7 @@ def validate_independent_expected_and_assertion_ctes(
     assertion_prefix: str,
     file_label: str,
     context_label: str,
+    syntax: SqlLexicalSyntax,
 ) -> None:
     """Reject direct and transitive dependencies between expected and assertion checks."""
 
@@ -915,6 +991,7 @@ def validate_independent_expected_and_assertion_ctes(
         cte.name.casefold(): _known_cte_references(
             sql=cte.sql_body,
             names_by_key=names_by_key,
+            syntax=syntax,
         )
         for cte in ctes
     }
@@ -974,7 +1051,9 @@ def _defined_cte_names(*, sql: str) -> tuple[str, ...]:
     return collect(parsed.to_dict())
 
 
-def _known_cte_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[str, ...]:
+def _known_cte_references(
+    *, sql: str, names_by_key: dict[str, str], syntax: SqlLexicalSyntax
+) -> tuple[str, ...]:
     folded_sql: str = sql.casefold()
     if not any(name in folded_sql for name in names_by_key):
         return ()
@@ -982,7 +1061,7 @@ def _known_cte_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[st
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
     except polyglot_module.PolyglotError:
-        return _known_cte_identifier_references(sql=sql, names_by_key=names_by_key)
+        return _known_cte_identifier_references(sql=sql, names_by_key=names_by_key, syntax=syntax)
     references: list[str] = []
     for table in parsed.find_all("table"):
         key: str = str(getattr(table, "name", "") or "").casefold()
@@ -991,22 +1070,21 @@ def _known_cte_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[st
     return tuple(references)
 
 
-def _known_cte_identifier_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[str, ...]:
+def _known_cte_identifier_references(
+    *, sql: str, names_by_key: dict[str, str], syntax: SqlLexicalSyntax
+) -> tuple[str, ...]:
     references: list[str] = []
     index: int = 0
     while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
+        non_code_end: int | None = dialect_non_code_end(
+            sql=sql, start=index, syntax=syntax, context=_CONTEXT
+        )
+        if non_code_end is not None and sql[index] not in _SQL_IDENTIFIER_QUOTE_TOKENS:
+            index = non_code_end
             continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in _SQL_STRING_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in _SQL_IDENTIFIER_QUOTE_TOKENS:
+        if non_code_end is not None:
             quote: str = sql[index]
-            end: int = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
+            end: int = non_code_end
             name: str = sql[index + 1 : end - 1].replace(quote * 2, quote)
             key: str = name.casefold()
             if key in names_by_key and key not in references:
@@ -1075,17 +1153,20 @@ def _read_identifier(
     return sql[start:index], index
 
 
-def _skip_ignorable(*, sql: str, start: int, context_label: str = _CONTEXT) -> int:
+def _skip_ignorable(
+    *, sql: str, start: int, syntax: SqlLexicalSyntax, context_label: str = _CONTEXT
+) -> int:
     index: int = start
     while index < len(sql):
         if sql[index].isspace():
             index += 1
             continue
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=context_label)
-            continue
+        if sql[index] not in SQL_QUOTE_TOKENS:
+            comment_end: int | None = dialect_non_code_end(
+                sql=sql, start=index, syntax=syntax, context=context_label
+            )
+            if comment_end is not None:
+                index = comment_end
+                continue
         return index
     return index

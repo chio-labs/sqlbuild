@@ -242,7 +242,7 @@ fn is_generated_cte_name(name: &str) -> bool {
 
 /// Distinct lowercase identifiers outside strings and comments, in first-appearance order.
 fn identifier_tokens(sql: &str, patterns: &SqlTestPatterns) -> Vec<String> {
-    let protected = protected_ranges(&patterns.protected, sql);
+    let protected = protected_ranges(&patterns.lexical, sql);
     let mut seen: HashSet<String> = HashSet::new();
     let mut tokens: Vec<String> = Vec::new();
     let mut push = |token: &str| {

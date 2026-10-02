@@ -19,6 +19,7 @@ import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.models import CompiledProject, DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.rule_engine.models import Rule
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
@@ -735,12 +736,14 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
         *,
         discovered_inputs: DiscoveredProjectInputs,
         loaded_macros: dict[str, LoadedMacro],
+        sql_lexical_syntax: SqlLexicalSyntax,
         compile_cache_dir: Path | None = None,
     ) -> DeclarationScopeBuild:
         scope_builds.append(tmp_path)
         return original_build(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,
+            sql_lexical_syntax=sql_lexical_syntax,
             compile_cache_dir=compile_cache_dir,
         )
 
@@ -795,12 +798,14 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
         *,
         discovered_inputs: DiscoveredProjectInputs,
         loaded_macros: dict[str, LoadedMacro],
+        sql_lexical_syntax: SqlLexicalSyntax,
         compile_cache_dir: Path | None = None,
     ) -> DeclarationScopeBuild:
         scope_builds.append(tmp_path)
         return original_build(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,
+            sql_lexical_syntax=sql_lexical_syntax,
             compile_cache_dir=compile_cache_dir,
         )
 

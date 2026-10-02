@@ -10,10 +10,13 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import classify_sql_test_
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SetOperationExpectedKind,
     SetOperationExpectedTestCase,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 _FILE: str = "tests/unit/orders.sql"
 _MISMATCH: str = (
@@ -99,7 +102,7 @@ def test_given_set_operation_expected_cte_when_classifying_then_it_is_accepted(
     )
 
     classified: CompileSqlTestCtes = classify_sql_test_ctes(
-        ctes=ctes, file_label=_FILE, mode=test_case.kind.mode
+        ctes=ctes, file_label=_FILE, mode=test_case.kind.mode, syntax=_GENERIC_SQL_SYNTAX
     )
 
     assert type(classified.payload).__name__ == test_case.expected_payload_type
@@ -130,7 +133,9 @@ def test_given_invalid_set_operation_branch_when_classifying_then_it_names_the_e
     )
 
     with pytest.raises(CompileInputError) as error_info:
-        _ = classify_sql_test_ctes(ctes=ctes, file_label=_FILE, mode=test_case.kind.mode)
+        _ = classify_sql_test_ctes(
+            ctes=ctes, file_label=_FILE, mode=test_case.kind.mode, syntax=_GENERIC_SQL_SYNTAX
+        )
 
     assert str(error_info.value) == test_case.expected_error_template.format(
         file=_FILE, cte=test_case.kind.expected_cte_name

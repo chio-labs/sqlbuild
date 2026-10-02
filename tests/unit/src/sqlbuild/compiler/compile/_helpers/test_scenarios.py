@@ -4,11 +4,17 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import build_scenario_inputs
 from sqlbuild.compiler.compile._helpers.scenarios.core import (
     extract_sql_scenario_ctes,
     extract_sql_scenario_expected_model_names,
 )
+from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_target_model_names
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCtes,
@@ -20,17 +26,21 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     BuildScenarioInputsErrorTestCase,
     BuildScenarioInputsTestCase,
     CteScannerMessageTestCase,
+    DialectCteScanTestCase,
     ExtractSqlScenarioCtesErrorTestCase,
     ExtractSqlScenarioCtesTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_DECLARATION_EXPANSION_CONTEXT,
 )
+
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 
 @pytest.mark.parametrize(
@@ -145,6 +155,7 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
     test_case: ExtractSqlScenarioCtesTestCase,
 ) -> None:
     extracted_ctes: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
+        syntax=_GENERIC_SQL_SYNTAX,
         sql=test_case.sql,
         file_label="tests/scenarios/revenue__customer_refund.sql",
     )
@@ -275,6 +286,7 @@ def test_given_invalid_sql_scenario_ctes_when_extracting_then_it_raises_clear_er
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         extract_sql_scenario_ctes(
+            syntax=_GENERIC_SQL_SYNTAX,
             sql=test_case.sql,
             file_label="tests/scenarios/revenue__customer_refund.sql",
         )
@@ -362,6 +374,7 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
     )
 
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
+        sql_lexical_syntax=_GENERIC_SQL_SYNTAX,
         discovered_inputs=discovered_inputs,
         effective_vars=test_case.effective_vars,
         macro_context=MacroContext(
@@ -436,6 +449,7 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         build_scenario_inputs(
+            sql_lexical_syntax=_GENERIC_SQL_SYNTAX,
             discovered_inputs=discovered_inputs,
             effective_vars={},
             macro_context=MacroContext(
@@ -502,7 +516,9 @@ def test_given_malformed_scenario_ctes_when_extracting_then_messages_name_the_sc
     test_case: CteScannerMessageTestCase,
 ) -> None:
     with pytest.raises(CompileInputError) as error_info:
-        _ = extract_sql_scenario_ctes(sql=test_case.sql, file_label="tests/scenarios/orders.sql")
+        _ = extract_sql_scenario_ctes(
+            sql=test_case.sql, file_label="tests/scenarios/orders.sql", syntax=_GENERIC_SQL_SYNTAX
+        )
 
     assert str(error_info.value) == test_case.expected_message
 
@@ -544,7 +560,110 @@ def test_given_malformed_scenario_ctes_when_scanning_expected_models_then_names_
 ) -> None:
     with pytest.raises(CompileInputError) as error_info:
         _ = extract_sql_scenario_expected_model_names(
-            sql=test_case.sql, file_label="tests/scenarios/orders.sql"
+            sql=test_case.sql,
+            file_label="tests/scenarios/orders.sql",
+            syntax=_GENERIC_SQL_SYNTAX,
         )
 
     assert str(error_info.value) == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DialectCteScanTestCase(
+            description="snowflake backslash-escaped quote before a marker",
+            syntax=SnowflakeAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__source__raw_orders AS (SELECT 'O\\'Brien), (' AS customer_name),\n"
+                "__assert__named AS (\n"
+                "  SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__source__raw_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="bigquery hash comment and triple quotes around markers",
+            syntax=BigQueryAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__source__raw_orders AS (SELECT '''it's ), (''' AS note), # ), (\n"
+                "__assert__named AS (\n"
+                '  SELECT * FROM __ref("order_totals") # __ref("ignored")\n'
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__source__raw_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="databricks backslash-escaped quote before a marker",
+            syntax=DatabricksAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__source__raw_orders AS (SELECT 'O\\'Brien), (' AS customer_name),\n"
+                "__assert__named AS (\n"
+                "  SELECT 'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__source__raw_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="duckdb escape string and nested comment before a marker",
+            syntax=DuckDbAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__source__raw_orders AS (SELECT E'O\\'Brien), (' AS customer_name),\n"
+                "/* outer /* inner */ ), ( */\n"
+                "__assert__named AS (\n"
+                "  SELECT E'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__source__raw_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+        DialectCteScanTestCase(
+            description="postgres escape string before a marker",
+            syntax=PostgresAdapter.sql_lexical_syntax,
+            sql=(
+                "WITH\n"
+                "__source__raw_orders AS (SELECT E'O\\'Brien), (' AS customer_name),\n"
+                "__assert__named AS (\n"
+                "  SELECT E'O\\'Brien' AS customer_name, * FROM __ref(\"order_totals\")\n"
+                ")\n"
+                "SELECT 1"
+            ),
+            expected_cte_names=("__source__raw_orders", "__assert__named"),
+            expected_assertion_targets=("order_totals",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dialect_scenario_sql_when_extracting_ctes_then_follows_dialect_lexical_rules(
+    test_case: DialectCteScanTestCase,
+) -> None:
+    extracted: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
+        sql=test_case.sql, file_label="tests/scenarios/orders.sql", syntax=test_case.syntax
+    )
+
+    assert (
+        tuple(cte.name for cte in (*extracted.authored_ctes, *extracted.assertion_ctes))
+        == test_case.expected_cte_names
+    )
+    assert (
+        extract_assertion_target_model_names(
+            assertion_sql=tuple(cte.sql_body for cte in extracted.assertion_ctes),
+            syntax=test_case.syntax,
+        )
+        == test_case.expected_assertion_targets
+    )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

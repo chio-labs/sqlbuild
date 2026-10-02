@@ -26,12 +26,14 @@ from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 def build_declaration_scope(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: dict[str, LoadedMacro],
+    sql_lexical_syntax: SqlLexicalSyntax,
     compile_cache_dir: Path | None = None,
 ) -> DeclarationScopeBuild:
     """Build one canonical index and validate it before SQL expansion."""
@@ -53,6 +55,7 @@ def build_declaration_scope(
         build_scope_relationship_grants(
             discovered_inputs=discovered_inputs,
             index=index,
+            sql_lexical_syntax=sql_lexical_syntax,
             compile_cache_dir=compile_cache_dir,
         )
         if has_scoped_relationship_declarations

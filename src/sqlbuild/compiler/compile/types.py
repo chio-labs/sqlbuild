@@ -9,12 +9,14 @@ from sqlbuild.sql_values.models import SqlValue
 
 if TYPE_CHECKING:
     from sqlbuild.compiler.compile.models import CompactBatchPreparation, CompileProjectInputs
+    from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 class TypedSqlValueRenderer(Protocol):
     """Adapter rendering operations consumed by authored SQL expansion."""
 
     adapter_name: str
+    sql_lexical_syntax: SqlLexicalSyntax
 
     def render_typed_scalar(self, *, value: SqlValue) -> str: ...
 

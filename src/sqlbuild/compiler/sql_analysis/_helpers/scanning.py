@@ -25,7 +25,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
-_PAREN_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"[-/'\"`$()]")
+_PAREN_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"[-/#'\"`$()]")
 _DOLLAR_QUOTE_DELIMITER: re.Pattern[str] = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
 
 
@@ -175,7 +175,13 @@ def skip_block_comment_impl(*, sql: str, start: int, context: str = "SQL") -> in
     return closing_index + 2
 
 
-def find_matching_paren_impl(*, sql: str, open_paren_index: int, context: str = "SQL") -> int:
+def find_matching_paren_impl(
+    *,
+    sql: str,
+    open_paren_index: int,
+    context: str = "SQL",
+    syntax: SqlLexicalSyntax | None = None,
+) -> int:
     """Find the closing parenthesis matching an opening parenthesis."""
 
     depth: int = 1
@@ -185,7 +191,9 @@ def find_matching_paren_impl(*, sql: str, open_paren_index: int, context: str = 
         if special is None:
             break
         index = special.start()
-        non_code_end: int | None = _non_code_end(sql=sql, index=index, context=context)
+        non_code_end: int | None = _non_code_end(
+            sql=sql, index=index, context=context, syntax=syntax
+        )
         if non_code_end is not None:
             index = non_code_end
             continue
@@ -199,13 +207,17 @@ def find_matching_paren_impl(*, sql: str, open_paren_index: int, context: str = 
     raise CompileInputError(f"{context} contains an unclosed parenthesis")
 
 
-def iter_code_positions_impl(*, sql: str, context: str = "SQL") -> Iterator[tuple[int, int]]:
+def iter_code_positions_impl(
+    *, sql: str, context: str = "SQL", syntax: SqlLexicalSyntax | None = None
+) -> Iterator[tuple[int, int]]:
     """Yield code offsets outside comments, quotes, and parentheses with their nesting depth."""
 
     depth: int = 0
     index: int = 0
     while index < len(sql):
-        non_code_end: int | None = _non_code_end(sql=sql, index=index, context=context)
+        non_code_end: int | None = _non_code_end(
+            sql=sql, index=index, context=context, syntax=syntax
+        )
         if non_code_end is not None:
             index = non_code_end
             continue
@@ -219,7 +231,11 @@ def iter_code_positions_impl(*, sql: str, context: str = "SQL") -> Iterator[tupl
         index += 1
 
 
-def _non_code_end(*, sql: str, index: int, context: str) -> int | None:
+def _non_code_end(
+    *, sql: str, index: int, context: str, syntax: SqlLexicalSyntax | None
+) -> int | None:
+    if syntax is not None:
+        return dialect_non_code_end_impl(sql=sql, start=index, syntax=syntax, context=context)
     if sql.startswith("--", index):
         return skip_line_comment_impl(sql=sql, start=index)
     if sql.startswith("/*", index):

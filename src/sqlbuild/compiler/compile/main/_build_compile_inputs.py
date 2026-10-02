@@ -127,6 +127,7 @@ def build_compile_inputs(
         discovered_inputs=discovered_inputs,
         loaded_macros=loaded_macros,
         compile_cache_dir=compile_cache_dir,
+        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
     )
     model_context: ModelInputBuildContext = ModelInputBuildContext(
         effective_vars=effective_vars,
@@ -138,6 +139,7 @@ def build_compile_inputs(
         loaded_macros=declaration_scope.loaded_macros,
         value_renderer=adapter_context.value_renderer,
         collection_rendering=adapter_context.collection_rendering,
+        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
         declaration_resolver=declaration_scope.resolver,
     )
     model_build: ModelInputScopeBuild = _build_models_with_declarations(
@@ -178,6 +180,7 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_function_inputs=sql_function_inputs,
         compile_cache_dir=compile_cache_dir,
+        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs=discovered_inputs,
@@ -186,6 +189,7 @@ def build_compile_inputs(
         loaded_macros=declaration_scope.loaded_macros,
         declaration_expansion=model_context.declaration_expansion,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
     )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)
@@ -198,13 +202,9 @@ def build_compile_inputs(
     diagnostics = (*diagnostics, *model_build.diagnostics)
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
         discovered_inputs=discovered_inputs,
-        effective_settings=effective_settings,
+        context=model_context,
         model_inputs=model_build.inputs,
         source_inputs=source_inputs,
-        effective_vars=effective_vars,
-        macro_context=macro_context,
-        loaded_macros=declaration_scope.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
         generic_audit_definitions=generic_audit_definitions,
         seed_inputs=seed_inputs,
     )
@@ -212,6 +212,7 @@ def build_compile_inputs(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         discovered_inputs=discovered_inputs,
+        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
         run_id=resolved_run_id,
         effective_target_name=effective_target_name,
         effective_target=effective_target,
@@ -261,12 +262,12 @@ def _build_sql_functions(
         effective_vars=context.effective_vars,
         effective_settings=context.effective_settings,
         target_config=context.target_config,
-        adapter_name=context.macro_context.adapter_name,
         macro_context=context.macro_context,
         loaded_macros=context.loaded_macros,
         declaration_expansion=declaration_expansion,
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=python_functions_inherit_default_namespace,
+        sql_lexical_syntax=context.sql_lexical_syntax,
     )
     validate_table_function_call_arities(
         model_inputs=model_inputs,

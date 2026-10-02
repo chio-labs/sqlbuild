@@ -18,6 +18,7 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import UsageRecord
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.sql_values.models import SqlValue
 
@@ -33,6 +34,23 @@ class SqlReferenceExtractionTestCase:
     description: str
     sql: str
     expected_references: tuple[tuple[SqlReferenceKind, str, str | None], ...]
+
+
+@dataclass(frozen=True)
+class DialectCteScanTestCase:
+    description: str
+    syntax: SqlLexicalSyntax
+    sql: str
+    expected_cte_names: tuple[str, ...]
+    expected_assertion_targets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DialectSqlScanTestCase:
+    description: str
+    syntax: SqlLexicalSyntax
+    sql: str
+    expected_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

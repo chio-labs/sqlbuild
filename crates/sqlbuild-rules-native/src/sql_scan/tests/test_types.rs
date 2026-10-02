@@ -14,3 +14,17 @@ pub(crate) struct NonCodeEndTestCase {
     pub(crate) policy: QuotePolicy,
     pub(crate) expected_end: Result<Option<usize>, Unclosed>,
 }
+
+pub(crate) struct DialectFirstNonCodeRangeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) syntax: crate::sql_scan::models::LexicalSyntax,
+    pub(crate) expected_first_range: Option<(usize, usize)>,
+}
+
+pub(crate) struct DialectNonCodeRangesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) syntax: crate::sql_scan::models::LexicalSyntax,
+    pub(crate) expected_marker_protected: bool,
+}
