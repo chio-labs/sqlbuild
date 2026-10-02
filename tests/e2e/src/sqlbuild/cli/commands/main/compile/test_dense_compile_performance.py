@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from scripts.cold_compile_performance._helpers.dense_project import (
+    dense_model_name,
     write_dense_compile_project,
 )
 from scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit import (
@@ -18,11 +19,14 @@ from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     DenseCompileGuardTestCase,
+    DenseWarmEditCompileGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     FreshProcessCompileBenchmarkResult,
     _run_fresh_process_compile_benchmark,
+    fresh_process_compile_cache_metrics,
     measure_model_sql_bytes,
+    run_dense_warm_edit_benchmark,
 )
 
 _GIB: int = 1024 * 1024 * 1024
@@ -123,6 +127,92 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
     assert result.semantic_fingerprint == test_case.expected_fingerprint
     assert result.elapsed_seconds < test_case.expected_max_wall_seconds
     assert result.peak_rss_bytes < test_case.expected_max_rss_bytes
+
+
+@pytest.mark.performance
+@pytest.mark.cold_compile_performance
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DenseWarmEditCompileGuardTestCase(
+            "dense_models_3000_warm_and_one_edit",
+            3000,
+            1521,
+            22.0,
+            24.0,
+            11 * _GIB // 4,
+            "c35ea7ec71e6e81059146bc1cd72f10e6493248dc6274aba7737d616d434585b",
+            "255c19bb188491b53d44c2e5d41472137f763806c699f5acb3899c6b47c5360b",
+            3,
+        ),
+        DenseWarmEditCompileGuardTestCase(
+            "dense_models_5000_warm_and_one_edit",
+            5000,
+            2521,
+            36.0,
+            38.0,
+            13 * _GIB // 4,
+            "b07422282a6800de7830b9c4950f76bdc6fd555ebd3f21152b8649f976be74dc",
+            "c239f53fb5fa787d250f5f7bf404b3731b480b77d2690dd31fb41ba727475fc0",
+            3,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dense_project_when_compiling_warm_and_after_one_edit_then_matches_oracle_in_budget(
+    test_case: DenseWarmEditCompileGuardTestCase,
+    tmp_path: Path,
+) -> None:
+    assert_required_cgroup_memory_limit()
+    project_dir: Path = tmp_path / "dense_orders"
+    write_dense_compile_project(project_dir=project_dir, model_count=test_case.model_count)
+    index: int = test_case.edited_model_index
+    edited_model_path: Path = (
+        project_dir
+        / "models"
+        / f"sales{index // 1000:03d}"
+        / "intermediate"
+        / "clean"
+        / f"batch{index // 5:05d}"
+        / f"{dense_model_name(index)}.sql"
+    )
+    measurements: dict[str, FreshProcessCompileBenchmarkResult] = run_dense_warm_edit_benchmark(
+        project_dir=project_dir,
+        edited_model_path=edited_model_path,
+        expected_warm_max_seconds=test_case.expected_warm_max_seconds,
+        expected_edit_max_seconds=test_case.expected_edit_max_seconds,
+    )
+    for label, result in measurements.items():
+        print(
+            f"dense {label} models={test_case.model_count} wall={result.elapsed_seconds:.2f}s "
+            f"cpu={result.cpu_seconds:.2f}s fingerprint={result.semantic_fingerprint}",
+            flush=True,
+        )
+        assert result.payload["diagnostics"] == []
+        assert result.payload["has_errors"] is False
+        assert result.peak_rss_bytes < test_case.expected_max_rss_bytes
+    cold: FreshProcessCompileBenchmarkResult = measurements["cold"]
+    warm: FreshProcessCompileBenchmarkResult = measurements["warm"]
+    edit: FreshProcessCompileBenchmarkResult = measurements["edit"]
+    assert cold.semantic_fingerprint == test_case.expected_cold_fingerprint
+    assert warm.semantic_fingerprint == test_case.expected_cold_fingerprint
+    assert edit.semantic_fingerprint == test_case.expected_edit_fingerprint
+    assert measurements["oracle"].semantic_fingerprint == test_case.expected_edit_fingerprint
+    warm_timings: dict[str, int] = cast(dict[str, int], warm.payload["compile_timings"])
+    edit_timings: dict[str, int] = cast(dict[str, int], edit.payload["compile_timings"])
+    batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(warm)
+    assert (batch_hits + entry_hits, misses, bypasses) == (test_case.model_count, 0, 0)
+    assert warm_timings["rule_cache_misses"] == 0
+    batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(edit)
+    assert 0 < misses < test_case.model_count
+    assert batch_hits + entry_hits + misses == test_case.model_count
+    assert edit_timings["rule_cache_misses"] == test_case.expected_edit_rule_cache_misses
+    oracle_timings: dict[str, int] = cast(
+        dict[str, int], measurements["oracle"].payload["compile_timings"]
+    )
+    assert oracle_timings["rule_cache_hits"] == 0
+    assert warm.elapsed_seconds < test_case.expected_warm_max_seconds
+    assert edit.elapsed_seconds < test_case.expected_edit_max_seconds
 
 
 if __name__ == "__main__":
