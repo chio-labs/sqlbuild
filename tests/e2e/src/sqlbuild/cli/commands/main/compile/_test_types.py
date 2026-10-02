@@ -445,3 +445,29 @@ class RequireSqlAnalysisCase:
     expected_returncode: int
     expected_diagnostics: tuple[tuple[str, str | None, int | None], ...]
     expected_text_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SetOperationModel:
+    description: str
+    name: str
+    query_sql: str
+    expected_row_count: int | None = None
+
+
+@dataclass(frozen=True)
+class SetOperationLifecycleTestCase:
+    description: str
+    models: tuple[SetOperationModel, ...]
+    expected_column_count: int
+    expected_diagnostics: tuple[tuple[str, str], ...]
+    expected_rule_summary: str
+    expected_indented_set_operation_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SetOperationArityMismatchTestCase:
+    description: str
+    models: tuple[SetOperationModel, ...]
+    expected_exit_code: int
+    expected_diagnostics: tuple[tuple[str, str], ...]
