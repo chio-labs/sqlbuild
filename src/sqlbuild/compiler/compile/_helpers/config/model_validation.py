@@ -7,6 +7,10 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import cast
 
+from sqlbuild.compiler.authored_values.main._change_policy_header_help import (
+    change_policy_header_help,
+)
+from sqlbuild.compiler.authored_values.main._change_policy_problem import change_policy_problem
 from sqlbuild.compiler.compile.constants import (
     MICROBATCH_LIMIT_ACTION_KEY,
     MICROBATCH_LIMIT_MAX_BATCHES_KEY,
@@ -160,7 +164,6 @@ class _IncrementalConfigValues:
     max_microbatches: object | None
     microbatch_limit: object | None
     cursor_grain: str | None
-    replay_on_change: object | None
     merge_exclude_columns: object | None
     full_refresh: object | None
 
@@ -198,7 +201,7 @@ def validate_incremental_config(
         return
 
     values: _IncrementalConfigValues = _resolve_incremental_config_values(config=config)
-    _validate_incremental_core(model_name=model_name, values=values)
+    _validate_incremental_core(config=config, model_name=model_name, values=values)
     _validate_incremental_batching(
         model_name=model_name,
         ref_count=ref_count,
@@ -218,9 +221,18 @@ def validate_incremental_config(
         )
 
 
-def _validate_incremental_core(*, model_name: str, values: _IncrementalConfigValues) -> None:
-    if values.replay_on_change is not None and not isinstance(values.replay_on_change, str):
-        raise CompileInputError(f"model '{model_name}': replay_on_change must be a string")
+def _validate_incremental_core(
+    *, config: CompileModelConfig, model_name: str, values: _IncrementalConfigValues
+) -> None:
+    key: str
+    for key in ("on_schema_change", "replay_on_change"):
+        value: object | None = config.values.get(key)
+        problem: str | None = None if value is None else change_policy_problem(key=key, value=value)
+        if problem is not None:
+            raise CompileInputError(
+                f"model '{model_name}': {problem}",
+                help=change_policy_header_help(key=key),
+            )
     if values.strategy is None:
         raise CompileInputError(
             f"model '{model_name}': incremental materialization requires incremental_strategy"
@@ -405,7 +417,6 @@ def _resolve_incremental_config_values(*, config: CompileModelConfig) -> _Increm
         max_microbatches=config.values.get("max_microbatches"),
         microbatch_limit=config.values.get("microbatch_limit"),
         cursor_grain=get_config_str(values=config.values, key="cursor_grain"),
-        replay_on_change=config.values.get("replay_on_change"),
         merge_exclude_columns=config.values.get("merge_exclude_columns"),
         full_refresh=config.values.get("full_refresh"),
     )

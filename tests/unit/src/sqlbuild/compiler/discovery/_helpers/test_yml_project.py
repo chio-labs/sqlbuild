@@ -31,6 +31,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadLocalConfigTestCase,
     LoadNamedConnectionsTestCase,
     LoadProjectConfigErrorTestCase,
+    LoadProjectConfigHelpTestCase,
     LoadProjectConfigTestCase,
     LoadProjectConstantsConfigErrorTestCase,
     LoadProjectConstantsConfigTestCase,
@@ -1767,6 +1768,34 @@ replay_on_change = "full"
             expected_error_fragment=r"option\(s\) were removed: replay_on_change",
         ),
         LoadProjectConfigErrorTestCase(
+            description="raises for unknown replay_on_change in defaults",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+replay_on_change = "always"
+""".strip(),
+            expected_error_fragment=(
+                r"\[defaults\] unknown replay_on_change 'always'; valid values: forward, full, "
+                r"bounded-<duration>"
+            ),
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises for unknown on_schema_change in path defaults",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults.marts]
+on_schema_change = "sync"
+""".strip(),
+            expected_error_fragment=(
+                r"\[path_defaults.\"marts\"\] unknown on_schema_change 'sync'; valid values: "
+                r"append_new_columns, fail, ignore, sync_all_columns"
+            ),
+        ),
+        LoadProjectConfigErrorTestCase(
             description="raises targeted error for removed dbt production_ref reuse config",
             project_file_contents="""
 name = "demo"
@@ -1800,6 +1829,37 @@ def test_given_invalid_project_config_file_when_loading_project_config_then_it_r
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectConfigHelpTestCase(
+            description="bounded replay without a valid duration in defaults",
+            project_file_contents=(
+                'name = "demo"\nadapter = "duckdb"\n\n[defaults]\nreplay_on_change = "bounded-x"\n'
+            ),
+            expected_error_fragment="replay_on_change 'bounded-x' has an invalid duration 'x'",
+            expected_help=(
+                "use a valid replay_on_change, set this in sqlbuild_project.toml:\n"
+                "            [defaults]\n"
+                '            replay_on_change = "bounded-14d"'
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_change_policy_in_defaults_when_loading_then_help_shows_toml_line(
+    test_case: LoadProjectConfigHelpTestCase, tmp_path: Path
+) -> None:
+    project_file: Path = tmp_path / "sqlbuild_project.toml"
+    project_file.write_text(test_case.project_file_contents, encoding="utf-8")
+
+    with pytest.raises(ProjectConfigError) as error_info:
+        load_project_config(project_dir=tmp_path)
+
+    assert test_case.expected_error_fragment in str(error_info.value)
+    assert error_info.value.help == test_case.expected_help
 
 
 @pytest.mark.parametrize(

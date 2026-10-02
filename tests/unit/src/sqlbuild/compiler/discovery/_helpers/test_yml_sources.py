@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
+from sqlbuild.compiler.discovery.exceptions import SourceParseError
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -13,6 +14,7 @@ from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSourcesYamlDltTestCase,
     ParseSourcesYamlErrorTestCase,
+    ParseSourcesYamlHelpTestCase,
     ParseSourcesYamlIngestrTestCase,
     ParseSourcesYamlTestCase,
 )
@@ -788,6 +790,50 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
             expected_error_fragment="dlt source destination cannot define 'credentials'",
         ),
         ParseSourcesYamlErrorTestCase(
+            description="raises when dlt source group has an unknown key",
+            contents="""
+        dlt_sources:
+          - type: sql_database
+            confg:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+        """,
+            expected_error_fragment="dlt source has unknown keys: confg",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when dlt resource has an unknown key",
+            contents="""
+        dlt_sources:
+          - type: sql_database
+            config:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+                primary_keys: id
+        """,
+            expected_error_fragment=(
+                "dlt sql_database resource 'raw_orders' has unknown keys: primary_keys"
+            ),
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when dlt resource uses a key of another source type",
+            contents="""
+        dlt_sources:
+          - type: sql_database
+            config:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+                endpoint:
+                  path: orders
+        """,
+            expected_error_fragment="dlt sql_database resource 'raw_orders' has unknown keys: endpoint",
+        ),
+        ParseSourcesYamlErrorTestCase(
             description="raises when write strategy is unknown",
             contents="""
         sources:
@@ -1290,3 +1336,38 @@ def test_given_invalid_sources_yaml_when_parsing_then_it_raises_clear_errors(
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         parse_sources_yml(contents=test_case.contents, file_path=Path("sources/raw.yml"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSourcesYamlHelpTestCase(
+            description="misspelled rest_api resource key",
+            contents="""
+dlt_sources:
+  - type: rest_api
+    config:
+      client:
+        base_url: https://api.example.com/
+    resources:
+      - name: raw_orders
+        write_dispositon: append
+        endpoint:
+          path: orders
+""",
+            expected_error_fragment=(
+                "dlt rest_api resource 'raw_orders' has unknown keys: write_dispositon"
+            ),
+            expected_help="did you mean 'write_disposition'?",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_misspelled_dlt_resource_key_when_parsing_then_help_names_nearest_key(
+    test_case: ParseSourcesYamlHelpTestCase,
+) -> None:
+    with pytest.raises(SourceParseError) as error_info:
+        parse_sources_yml(contents=test_case.contents, file_path=Path("sources/raw.yml"))
+
+    assert test_case.expected_error_fragment in str(error_info.value)
+    assert error_info.value.help == test_case.expected_help

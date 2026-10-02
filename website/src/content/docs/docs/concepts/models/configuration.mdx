@@ -137,7 +137,7 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 
 See [Incremental](/docs/concepts/incremental) for full semantics.
 
-Current compatibility behavior treats an unrecognized `on_schema_change` value as the default `append_new_columns` policy and an unrecognized `replay_on_change` value as `forward`. Use the documented values exactly; future validation may reject unknown values instead of applying these fallbacks.
+Unknown `on_schema_change` or `replay_on_change` values fail compilation, in `MODEL()` headers, `[defaults]` and `[path_defaults]`. The error names the value and lists the valid ones. `bounded-<duration>` needs a positive duration such as `bounded-14d`.
 
 ## Snapshot fields
 

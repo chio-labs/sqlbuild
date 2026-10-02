@@ -330,6 +330,14 @@ class LoadProjectConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class LoadProjectConfigHelpTestCase:
+    description: str
+    project_file_contents: str
+    expected_error_fragment: str
+    expected_help: str
+
+
+@dataclass(frozen=True)
 class LoadProjectCostConfigTestCase:
     description: str
     project_file_contents: str
@@ -720,6 +728,14 @@ class ParseSourcesYamlErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSourcesYamlHelpTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
+    expected_help: str
 
 
 @dataclass(frozen=True)

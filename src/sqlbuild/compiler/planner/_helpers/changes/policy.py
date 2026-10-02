@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import BackfillResult
 from sqlbuild.compiler.planner.types import BackfillAction
 
@@ -44,4 +45,4 @@ def _resolve_replay_value(raw: str | None) -> BackfillResult:
     if match is not None:
         duration: str = match.group(1).strip()
         return BackfillResult(action=BackfillAction.BOUNDED, duration=duration)
-    return BackfillResult(action=BackfillAction.FORWARD_ONLY)
+    raise PlannerInputError(f"unknown replay_on_change '{raw}'")

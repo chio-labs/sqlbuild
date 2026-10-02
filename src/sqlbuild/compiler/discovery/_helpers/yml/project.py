@@ -14,7 +14,11 @@ import yaml
 from yaml import YAMLError
 
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY
+from sqlbuild.compiler.authored_values.main._change_policy_problem import change_policy_problem
+from sqlbuild.compiler.authored_values.main._change_policy_toml_help import (
+    change_policy_toml_help,
+)
+from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY, TEMPLATE_OPEN_TOKEN
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import unsupported_keys_help
 from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
@@ -932,6 +936,20 @@ def _validate_allowed_keys(
     )
 
 
+def _validate_change_policies(*, mapping: dict[str, object], section: str, file_path: Path) -> None:
+    key: str
+    for key in ("on_schema_change", "replay_on_change"):
+        value: object | None = mapping.get(key)
+        if value is None or (isinstance(value, str) and TEMPLATE_OPEN_TOKEN in value):
+            continue
+        problem: str | None = change_policy_problem(key=key, value=value)
+        if problem is not None:
+            raise ProjectConfigError(
+                f"{file_path} [{section}] {problem}",
+                help=change_policy_toml_help(key=key, file_name=file_path.name, section=section),
+            )
+
+
 def _normalize_path_default_key(*, path_key: str, file_path: Path) -> str:
     normalized_key: str = path_key.strip()
     if not normalized_key:
@@ -986,6 +1004,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
     _validate_allowed_keys(
         mapping=mapping, allowed_keys=_DEFAULTS_KEYS, label="[defaults]", file_path=file_path
     )
+    _validate_change_policies(mapping=mapping, section="defaults", file_path=file_path)
     row_diff_exclude_columns: tuple[str, ...] = tuple(
         _load_string_sequence(
             payload=mapping.get("row_diff_exclude_columns"),
@@ -1083,6 +1102,11 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
             mapping=path_dict,
             allowed_keys=SQL_MODEL_HEADER_KEYS,
             label=f"path_defaults['{path_key}']",
+            file_path=file_path,
+        )
+        _validate_change_policies(
+            mapping=path_dict,
+            section=f'path_defaults."{path_key}"',
             file_path=file_path,
         )
         _validate_path_default_tags(path_dict=path_dict, path_key=path_key, file_path=file_path)

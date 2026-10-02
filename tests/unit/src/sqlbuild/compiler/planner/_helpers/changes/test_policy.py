@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.planner._helpers.changes.policy import resolve_replay_on_change
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import BackfillResult
 from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
+    ResolveBackfillErrorTestCase,
     ResolveBackfillTestCase,
 )
 
@@ -28,11 +30,6 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
             raw_value=None,
             expected_result=BackfillResult(action=BackfillAction.FORWARD_ONLY),
         ),
-        ResolveBackfillTestCase(
-            description="returns forward only for unrecognized policy value",
-            raw_value="unknown",
-            expected_result=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -44,3 +41,21 @@ def test_given_policy_when_resolving_replay_on_change_then_returns_expected(
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveBackfillErrorTestCase(
+            description="raises for an unvalidated policy value",
+            raw_value="unknown",
+            expected_error_fragment="unknown replay_on_change 'unknown'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unvalidated_policy_when_resolving_replay_on_change_then_raises(
+    test_case: ResolveBackfillErrorTestCase,
+) -> None:
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        resolve_replay_on_change(replay_on_change=test_case.raw_value)

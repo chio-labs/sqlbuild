@@ -1027,12 +1027,11 @@ def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:
     """Extract on_schema_change from model config."""
 
     raw: object | None = model.config.values.get("on_schema_change")
-    if isinstance(raw, str):
-        try:
-            return OnSchemaChange(raw)
-        except ValueError:
-            pass
-    return None
+    if raw is None:
+        return None
+    if isinstance(raw, str) and raw in set(OnSchemaChange):
+        return OnSchemaChange(raw)
+    raise PlannerInputError(f"model '{model.name}': unknown on_schema_change '{raw}'")
 
 
 def extract_seed_columns(seed: CompiledSeed) -> tuple[ColumnInfo, ...]:

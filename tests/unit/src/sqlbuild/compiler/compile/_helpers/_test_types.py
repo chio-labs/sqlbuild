@@ -609,6 +609,14 @@ class IncrementalConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ChangePolicyHelpTestCase:
+    description: str
+    key: str
+    value: str
+    expected_help: str
+
+
+@dataclass(frozen=True)
 class ContractConfigValidTestCase:
     description: str
     config_values: dict[str, object]
