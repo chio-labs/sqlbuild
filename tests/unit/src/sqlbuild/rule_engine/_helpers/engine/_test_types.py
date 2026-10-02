@@ -161,3 +161,14 @@ class CustomRuleReadTrackingTestCase:
     module_prelude: str = ""
     edited_customers_sql: str = "SELECT 2 AS customer_id"
     edited_customers_config: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class NativeMemoTestCase:
+    """One warm built-in evaluation followed by an edit that must invalidate the memo."""
+
+    description: str
+    original_config: dict[str, object]
+    edited_config: dict[str, object]
+    expected_original_codes: tuple[str, ...]
+    expected_edited_codes: tuple[str, ...]

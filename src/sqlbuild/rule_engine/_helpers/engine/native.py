@@ -33,6 +33,11 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_test_evidence,
 )
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
+from sqlbuild.rule_engine._helpers.run.native_memo import (
+    native_request_identity,
+    read_native_response,
+    write_native_response,
+)
 from sqlbuild.rule_engine.constants import (
     RULES_NATIVE_API_VERSION,
     TYPE_PROOF_RULE_CODES,
@@ -108,7 +113,12 @@ def evaluate_native(
             else None
         )
         try:
-            response: object = orjson.loads(_evaluate_request(request))
+            response_json: str
+            reused: bool
+            response_json, reused = _evaluate_request(
+                request=request, project_dir=project_dir, cache_enabled=config.cache.enabled
+            )
+            response: object = orjson.loads(response_json)
         except (ValueError, TypeError) as error:
             raise RulesError(str(error)) from error
         custom: CustomRulesOutcome = (
@@ -135,12 +145,14 @@ def evaluate_native(
             evaluated_codes=tuple(str(code) for code in selected_codes),
             findings=findings,
         )
+    native_hits: int = int(payload.get("cache_hits", 0))
+    native_misses: int = int(payload.get("cache_misses", 0))
     return RulesResult(
         findings=findings,
         evaluated_models=int(payload.get("evaluated_models", 0)),
-        cache_hits=int(payload.get("cache_hits", 0)) + custom.cache_hits,
-        cache_misses=int(payload.get("cache_misses", 0)) + custom.cache_misses,
-        built_in_ms=int(payload.get("built_in_ms", 0)),
+        cache_hits=(native_hits + native_misses if reused else native_hits) + custom.cache_hits,
+        cache_misses=(0 if reused else native_misses) + custom.cache_misses,
+        built_in_ms=0 if reused else int(payload.get("built_in_ms", 0)),
         custom_ms=custom.custom_ms,
     )
 
@@ -159,10 +171,19 @@ def _selected_custom_rules(
     return tuple(rule for rule in catalogue if rule.custom and rule.code in selected)
 
 
-def _evaluate_request(request: dict[str, object]) -> str:
-    return _native.evaluate_json(
-        orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str).decode()
-    )
+def _evaluate_request(
+    *, request: dict[str, object], project_dir: Path, cache_enabled: bool
+) -> tuple[str, bool]:
+    request_json: bytes = orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str)
+    if not cache_enabled:
+        return _native.evaluate_json(request_json.decode()), False
+    identity: str = native_request_identity(request_json)
+    reused: str | None = read_native_response(project_dir=project_dir, identity=identity)
+    if reused is not None:
+        return reused, True
+    response: str = _native.evaluate_json(request_json.decode())
+    write_native_response(project_dir=project_dir, identity=identity, response=response)
+    return response, False
 
 
 def finalize_native_findings(

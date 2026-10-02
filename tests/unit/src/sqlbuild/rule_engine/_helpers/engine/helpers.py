@@ -24,7 +24,14 @@ from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
-from sqlbuild.rule_engine.models import CustomRulesOutcome, Rule, RulesCacheConfig, RulesConfig
+from sqlbuild.rule_engine.main._evaluate import evaluate
+from sqlbuild.rule_engine.models import (
+    CustomRulesOutcome,
+    Rule,
+    RulesCacheConfig,
+    RulesConfig,
+    RulesResult,
+)
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -66,7 +73,7 @@ def captured_native_request(
     monkeypatch.setattr(native._native, "evaluate_json", evaluate_json)
     native.evaluate_native(
         project=project,
-        config=RulesConfig(),
+        config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
         project_dir=project_dir,
         catalogue=(),
     )
@@ -264,3 +271,20 @@ def evaluate_cached_custom_rules(
     return evaluate_custom_rules_cached(
         project=project, config=config, project_dir=project_dir, rules=rules, dialect="duckdb"
     )
+
+
+def evaluate_contract_rule(
+    *, config_values: dict[str, object], project_dir: Path, cache_enabled: bool
+) -> RulesResult:
+    """Evaluate one built-in contract rule over a single mart model."""
+
+    config: RulesConfig = RulesConfig(
+        select=("SQBRCONTRACT101",), cache=RulesCacheConfig(enabled=cache_enabled)
+    )
+    project: CompiledProject = build_project(
+        name="commerce__mart__orders",
+        relative_path="models/mart/commerce__mart__orders.sql",
+        sql="WITH orders AS (SELECT id FROM source_orders) SELECT id FROM orders",
+        config_values=config_values,
+    )
+    return evaluate(project=project, config=config, project_dir=project_dir)
