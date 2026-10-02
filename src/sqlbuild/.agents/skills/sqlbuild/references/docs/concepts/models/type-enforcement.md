@@ -14,6 +14,7 @@ For a SQL model, declaring a type on any inline or reusable-schema column enable
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   columns (
     order_id (type INTEGER),

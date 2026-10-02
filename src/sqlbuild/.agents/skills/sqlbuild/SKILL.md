@@ -17,6 +17,9 @@ plan, and ships tools for proving a change is correct. Use those tools; do not s
 - Macros are plain Python functions called as `@macro_name("arg")`. Constants and enums are
   `@const("name")` and `@enum("name").MEMBER`.
 - Config, column schemas, contracts and audits live in the `MODEL()` header, not YAML.
+- Every model, scenario, seed, source, function, named hook, Python node and provider needs a
+  non-empty description (`MODEL (description "...")`, `description:` in YAML, a docstring or
+  `description=` in Python). A missing one is a `P010` compile error that shows the exact line to add.
 - `sqb compile` is offline: syntax, per-input binding, grouping semantics, contracts, metadata,
   column lineage and Rules run before warehouse execution. Explicit projections close output names
   even over open inputs. DuckDB/MotherDuck, PostgreSQL, Snowflake, and BigQuery enable expression
@@ -36,6 +39,7 @@ plan, and ships tools for proving a change is correct. Use those tools; do not s
 ```sql
 -- models/marts/fact_orders.sql
 MODEL (
+  description "One row per order with its payment total",
   materialized table,
   columns (
     order_id (audits [not_null, unique]),

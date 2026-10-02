@@ -38,6 +38,7 @@ Replicate a table from PostgreSQL into your local DuckDB project:
 # sources/raw.yml
 sources:
   - name: raw_orders
+    description: Orders
     table: orders
     ingestr:
       source_uri: "postgresql://user:pass@host:5432/mydb"
@@ -53,6 +54,7 @@ Load Stripe charges with incremental merge on a primary key:
 ```yaml
 sources:
   - name: raw_stripe_charges
+    description: Stripe charges
     table: charges
     ingestr:
       source_uri: "stripe://${stripe_api_key}"
@@ -95,6 +97,7 @@ All string fields in the `ingestr` block support SQLBuild project variable subst
 ```yaml
 sources:
   - name: raw_orders
+    description: Orders
     ingestr:
       source_uri: "postgresql://${pg_user}:${pg_password}@${pg_host}:5432/${pg_database}"
       source_table: "public.orders"

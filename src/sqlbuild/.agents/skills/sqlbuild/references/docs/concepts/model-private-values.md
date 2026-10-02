@@ -11,6 +11,7 @@ project-wide namespace.
 
 ```sql
 MODEL (
+  description "One row per order",
   enums (
     _state [OPEN, CLOSED],
   ),
@@ -51,6 +52,7 @@ Use `constant(...)` when a private constant needs an exact type or rendering cho
 
 ```sql
 MODEL (
+  description "Example model",
   constants (
     _usd_rate constant(
       type decimal,

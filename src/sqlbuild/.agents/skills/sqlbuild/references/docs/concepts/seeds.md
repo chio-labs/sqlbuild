@@ -55,7 +55,7 @@ Seed YAML accepts only these keys; any other key is a compile error:
 | Seed | `name`, `description`, `database`, `schema`, `meta`, `tags`, `csv_settings`, `columns`, `audits` |
 | Column | `name`, `type`, `nullable`, `description`, `meta`, `audits` |
 
-Every seed must have a YAML declaration with at least one typed column. CSV filenames must be unique across the entire `seeds/` directory (including subdirectories). The seed name in the YAML must match the CSV filename (without the `.csv` extension).
+Every seed must have a YAML declaration with a non-empty `description` ([Descriptions](models/configuration.md#descriptions)) and at least one typed column. CSV filenames must be unique across the entire `seeds/` directory (including subdirectories). The seed name in the YAML must match the CSV filename (without the `.csv` extension).
 
 ## Referencing seeds
 
@@ -89,6 +89,7 @@ Attach audits to a seed or its columns with the same syntax as source audits:
 ```yaml
 seeds:
   - name: waffle_types
+    description: Waffle types
     columns:
       - name: waffle_type_id
         type: INTEGER
@@ -111,6 +112,7 @@ Seeds inherit the project's default database and schema. You can override these 
 ```yaml
 seeds:
   - name: waffle_types
+    description: Waffle types
     database: analytics
     schema: lookups
     columns:
@@ -127,6 +129,7 @@ For non-standard CSV formats, configure parsing behavior with `csv_settings`:
 ```yaml
 seeds:
   - name: european_prices
+    description: European prices
     csv_settings:
       delimiter: ";"
       encoding: utf-8

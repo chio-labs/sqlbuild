@@ -31,6 +31,7 @@ from python.tasks.orders import export_orders
 
 @check(depends_on=export_orders)
 def check_orders_exported(ctx: CheckContext):
+    """Check orders exported."""
     result = ctx.result_of(export_orders)
     if result.metadata.get("rows", 0) == 0:
         return ctx.fail("no orders exported")
@@ -47,6 +48,7 @@ from sqlbuild.refs import model
 
 @check(depends_on=model("fact_orders"))
 def orders_present(ctx):
+    """Orders present."""
     orders = ctx.relation(model("fact_orders"))
     count = ctx.query(f"SELECT count(*) FROM {orders}").fetchone()[0]
     return ctx.pass_() if count else ctx.fail("no orders")
@@ -61,6 +63,7 @@ Return a result through the context helpers, or a bool shorthand:
 ```python
 @check(depends_on=orders_asset)
 def rows_present(ctx):
+    """Rows present."""
     return ctx.result_of(orders_asset).payload["rows"] > 0   # True -> pass, False -> fail
 ```
 
@@ -81,6 +84,7 @@ Returning `None` is not allowed - checks must be explicit.
 ```python
 @check(depends_on=export_orders, severity="warn")
 def orders_freshness(ctx):
+    """Orders freshness."""
     if stale():
         return ctx.fail("export is stale")   # recorded as a warning, does not fail the build
     return ctx.pass_()

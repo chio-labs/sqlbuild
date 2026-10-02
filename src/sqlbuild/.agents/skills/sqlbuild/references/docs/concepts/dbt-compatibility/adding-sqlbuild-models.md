@@ -31,6 +31,7 @@ SQLBuild models reference dbt model outputs with `__dbt_ref("package", "model")`
 
 ```sql
 MODEL (
+  description "Finance orders built on the dbt fact table",
   tags [finance],
   columns (order_id (audits [not_null])),
 );
@@ -43,7 +44,7 @@ This resolves to the qualified warehouse table name from the dbt manifest (e.g. 
 SQLBuild models can also reference other SQLBuild models with `__ref()` as usual:
 
 ```sql
-MODEL (tags [marts]);
+MODEL (description "Mart view of downstream orders", tags [marts]);
 
 SELECT order_id FROM __ref("downstream_orders")
 ```

@@ -47,6 +47,14 @@ Configure the maximum physical line width in `sqlbuild_project.toml` (the defaul
 line_width = 100
 ```
 
+`MODEL`, `SCENARIO`, `FUNCTION` and `HOOK` headers must carry a non-empty `description`;
+`sqb format --check` fails with `description-present` when one is missing, so pre-commit catches it
+before compile does (see [Descriptions](../concepts/models/configuration.md#descriptions)). A model
+described by `[defaults]`, `[path_defaults]` or its `model_schema` passes, exactly as it compiles.
+Format does not render templates, so a templated description that renders empty passes format and
+is reported by `sqb compile`.
+Plain `sqb format` still formats the file and exits non-zero, like any other remaining fault.
+
 Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
 are normalized as spaces, while blank lines preserve paragraph boundaries.
 

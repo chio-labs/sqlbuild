@@ -32,6 +32,11 @@ XSQBR001      → XSQBR
 Exact codes select one Rule. Prefixes select every matching Rule. `ignore` uses the same matching
 semantics and takes precedence over `select`.
 
+A selector that matches no Rule fails with `C000`. `SQBRTEST105` (scenario description) was retired
+when descriptions became the compile error `P010`
+([Descriptions](/docs/concepts/models/configuration#descriptions)); remove it from `select` and
+`ignore`.
+
 Use the catalogue to inspect available codes and metadata:
 
 ```bash

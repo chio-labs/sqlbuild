@@ -143,6 +143,7 @@ A model is a SQL file with a `MODEL()` header and a `SELECT`:
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   columns (
     order_id (audits [not_null, unique]),

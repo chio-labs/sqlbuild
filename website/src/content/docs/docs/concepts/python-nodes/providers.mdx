@@ -14,6 +14,7 @@ Create a Python file under `providers/` in your project. A provider is a class t
 from sqlbuild.providers import Provider
 
 class WarehouseClient(Provider):
+    """Client for the reporting warehouse."""
     api_key: str
     endpoint: str = "https://api.example.com"
 
@@ -23,6 +24,8 @@ class WarehouseClient(Provider):
     def teardown(self):
         self.session.close()
 ```
+
+The class docstring is the provider's description and is required; a provider without one fails compilation with `P010` ([Descriptions](/docs/concepts/models/configuration#descriptions)).
 
 `Provider` extends [pydantic-settings `BaseSettings`](https://docs.pydantic.dev/latest/concepts/pydantic_settings/), so provider fields are validated and can be populated from environment variables automatically.
 
@@ -37,6 +40,7 @@ Override the name explicitly with `provider_name`:
 
 ```python
 class WarehouseClient(Provider):
+    """Client for the reporting warehouse."""
     provider_name = "warehouse"
     api_key: str
 ```
@@ -52,6 +56,7 @@ from sqlbuild.tasks import task
 
 @task
 def export_orders(ctx, warehouse_client):
+    """Export orders."""
     warehouse_client.session.upload(ctx.query("SELECT * FROM orders"))
 ```
 
@@ -65,6 +70,7 @@ from providers.warehouse_client import WarehouseClient
 
 @task
 def export_orders(ctx, warehouse_client: WarehouseClient):
+    """Export orders."""
     warehouse_client.session.upload(ctx.query("SELECT * FROM orders"))
 ```
 
@@ -87,11 +93,13 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify_complete(ctx, slack_notifier):
+    """Notify complete."""
     slack_notifier.send(f"Model {ctx.model_name} built successfully")
 ```
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   post_hooks [python("notify_complete")],
 );
@@ -102,6 +110,7 @@ Providers are also available on the `HookContext` via `ctx.providers`:
 ```python
 @hook
 def notify_complete(ctx):
+    """Notify complete."""
     notifier = ctx.providers.slack_notifier
     notifier.send(f"Model {ctx.model_name} built successfully")
 ```
@@ -113,6 +122,7 @@ All Python node contexts (`TaskContext`, `AssetContext`, `CheckContext`, `Loader
 ```python
 @task
 def export_orders(ctx):
+    """Export orders."""
     client = ctx.providers.warehouse_client
     client.session.upload(ctx.query("SELECT * FROM orders"))
 ```
@@ -129,6 +139,7 @@ Providers follow a lazy setup, reverse-teardown lifecycle scoped to the command 
 
 ```python
 class WarehouseClient(Provider):
+    """Client for the reporting warehouse."""
     api_key: str
 
     def setup(self, ctx):
@@ -148,6 +159,7 @@ Because `Provider` extends `pydantic-settings BaseSettings`, fields without defa
 
 ```python
 class SlackNotifier(Provider):
+    """Posts build notifications to a chat channel."""
     slack_token: str          # reads SLACK_TOKEN from environment
     channel: str = "#builds"  # has a default, environment variable is optional
 ```

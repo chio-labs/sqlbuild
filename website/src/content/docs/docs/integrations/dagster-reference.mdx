@@ -207,6 +207,7 @@ A source can provide a stable Dagster-native key without replacing the translato
 ```yaml
 sources:
   - name: raw__orders
+    description: Orders
     meta:
       dagster:
         asset_key: [warehouse, raw, orders]

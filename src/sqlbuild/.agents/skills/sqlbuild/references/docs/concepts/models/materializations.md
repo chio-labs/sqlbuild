@@ -13,7 +13,7 @@ The `materialized` field selects how a model becomes a warehouse relation.
 Creates or replaces a database view on each build:
 
 ```sql
-MODEL (materialized view);
+MODEL (description "One row per order", materialized view);
 
 SELECT id AS order_id, customer_id, status
 FROM __source("raw__orders")
@@ -26,7 +26,7 @@ View audits run after the view has been replaced. A failing audit marks the buil
 By default, creates a staging table, applies supported type and contract enforcement, runs blocking audits, and only then promotes it to the destination. A pre-promotion failure leaves the previous destination unchanged.
 
 ```sql
-MODEL (materialized table);
+MODEL (description "One row per order", materialized table);
 
 SELECT customer_id, COUNT(*) AS total_orders
 FROM __ref("stg_orders")
@@ -41,6 +41,7 @@ On a normal incremental run, applies append, delete/insert, or merge DML from a 
 
 ```sql
 MODEL (
+  description "Example model",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_hour,
@@ -60,6 +61,7 @@ Maintains historical row versions with SCD Type 2 semantics:
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy timestamp,
@@ -78,6 +80,7 @@ A project-local Python materialization can manage specialized persistence with a
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized partition_tracked,
   placeholders (
     partition_start "'2026-04-01'",

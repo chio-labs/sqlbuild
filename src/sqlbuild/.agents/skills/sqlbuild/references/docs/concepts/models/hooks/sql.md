@@ -38,7 +38,7 @@ GRANT SELECT ON @relation TO @role
 
 The hook name is always the filename stem, so this resource is invoked as `sql("grant_access", ...)`. Nested directories organize files but do not namespace names: `hooks/sql/admin/grant_access.sql` is still named `grant_access`.
 
-`HOOK()` accepts only an optional, non-empty `description`. It does not accept a `name`; rename the file to rename the hook. The content after the header must be non-empty and becomes the SQL payload for each invocation.
+`HOOK()` accepts only a required, non-empty `description` ([Descriptions](../configuration.md#descriptions)). It does not accept a `name`; rename the file to rename the hook. The content after the header must be non-empty and becomes the SQL payload for each invocation.
 
 Files beginning with `_` are skipped. All other `.sql` files under `hooks/sql/` are parsed as hook resources and must have a valid `HOOK()` header.
 
@@ -50,6 +50,7 @@ Pass the hook name and its arguments from a model's `pre_hooks` or `post_hooks` 
 
 ```sql
 MODEL (
+  description "Orders",
   materialized table,
   post_hooks [
     sql(
@@ -87,6 +88,7 @@ VALUES (@'relation', @'role')
 
 ```sql
 MODEL (
+  description "Record access",
   post_hooks [
     sql(
       "record_access",
@@ -109,6 +111,7 @@ Use `inline_sql("...")` for SQL that is specific to one model:
 
 ```sql
 MODEL (
+  description "Example model",
   materialized table,
   post_hooks [
     inline_sql("GRANT SELECT ON @@CTX:destination.qualified TO analyst_role"),
@@ -156,7 +159,7 @@ Context components can be combined into qualified identifiers without whitespace
 wrapper:
 
 ```sql
-HOOK ();
+HOOK (description "Create the reconstruct_book helper function");
 
 CREATE FUNCTION @@CTX:destination.database.@@CTX:destination.schema.reconstruct_book()
 RETURNS INTEGER
@@ -171,6 +174,7 @@ SQL hooks reference other resources the same way model SQL does, with `__ref("..
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   pre_hooks [
     inline_sql('DELETE FROM @@CTX:destination.qualified WHERE order_id IN (SELECT order_id FROM __ref("cancelled_orders"))'),
@@ -184,7 +188,7 @@ SELECT order_id FROM __ref("stg_orders")
 **`models/marts/_sqlbuild/_hooks/sql/record_counts.sql`**
 
 ```sql
-HOOK ();
+HOOK (description "Record counts");
 
 @count_rows(__ref("stg_orders"))
 ```

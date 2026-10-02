@@ -28,6 +28,7 @@ Inserts new rows without modifying existing data. Optionally uses a cursor (read
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized incremental,
   incremental_strategy append,
   cursor created_at,
@@ -50,6 +51,7 @@ Deletes rows in the cursor range, then inserts the new delta. Requires either `c
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy delete_insert,
   unique_key [order_id],
@@ -69,6 +71,7 @@ Upserts rows using a unique key. Matched rows are updated; unmatched rows are in
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy merge,
   unique_key [customer_id],
@@ -105,6 +108,7 @@ Use `full_refresh false` for models that must retain their normal cursor or micr
 
 ```sql
 MODEL (
+  description "One row per event",
   materialized incremental,
   incremental_strategy delete_insert,
   full_refresh false,
@@ -144,6 +148,7 @@ When a model references multiple upstream inputs, `cursor_inputs` is required to
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_hour,
@@ -165,6 +170,7 @@ Cursor-based incremental models can read their effective interval with zero-argu
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_hour,
@@ -202,6 +208,7 @@ Lookback extends the start of the replay window backwards to re-process recent d
 
 ```sql
 MODEL (
+  description "One row per event",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor event_date,
@@ -227,6 +234,7 @@ Each batch has its own audit cycle: create delta, run delta audits, apply DML, a
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_hour,
@@ -265,6 +273,7 @@ microbatch_concurrency = true
 
 ```sql
 MODEL (
+  description "Example model",
   materialized incremental,
   incremental_strategy delete_insert,
   incremental_mode microbatch,
@@ -284,6 +293,7 @@ Watermark microbatch models can declare what to do when their resolved range con
 
 ```sql
 MODEL (
+  description "One row per event",
   materialized incremental,
   incremental_strategy delete_insert,
   incremental_mode microbatch,
@@ -339,6 +349,7 @@ Alignment does two things: it floors the replay window edges to the coarsest gra
 ```sql
 -- Upstream: daily grain, 2d batches
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_day,
@@ -353,6 +364,7 @@ MODEL (
 
 -- Downstream: hourly grain, but aligns to day automatically
 MODEL (
+  description "Example model",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_hour,
@@ -380,6 +392,7 @@ The bounded duration supports `d` (days), `h` (hours), `m` (minutes), and `s` (s
 
 ```sql
 MODEL (
+  description "Example model",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor activity_hour,

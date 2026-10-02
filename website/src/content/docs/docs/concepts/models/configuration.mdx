@@ -22,7 +22,7 @@ which accepts any keys.
 |-------|-------------|
 | `materialized` | `view`, `table`, `incremental`, `snapshot`, or a custom materialization name |
 | `tags` | Tags used by selectors |
-| `description` | Human-readable model description |
+| `description` | Required human-readable model description; see [Descriptions](#descriptions) |
 | `columns` | Model-local column declarations, inherited-column audit augmentation, or column renames with `migrate_from` (incremental and snapshot models; see [Column migrations](/docs/concepts/models/column-migrations)). On a table or view model that declares its own `migrate_from`, a column `migrate_from` only names the old column in the [compatibility view](/docs/concepts/models/migrations#old-names) |
 | `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
@@ -38,6 +38,43 @@ which accepts any keys.
 | `sql_analysis` | Per-model SQL-analysis override |
 | `dynamic_columns` | Named pivot column families with `pivot_column`, `value_column`, `aggregate`, `type`, and `name_pattern` |
 | `audit_factories` | Audit factories that generate audit cases for this model; see [Audits](/docs/concepts/audits) |
+
+## Descriptions
+
+Every named resource must have a non-empty description. A missing description is a `P010` compile
+error, so `sqb plan` and `sqb build` stop too. There is no setting to turn the check off. One
+compile reports every missing description, each at the resource's declaration with the exact text
+to add:
+
+```text
+error[P010]: model 'orders_summary' has no description
+  --> models/marts/orders_summary.sql:1:1
+  = help: to describe model 'orders_summary', add this to the MODEL header in models/marts/orders_summary.sql:
+            MODEL (
+              description "What one row of orders_summary represents",
+              ...
+            );
+```
+
+| Resource | Where the description goes |
+|----------|----------------------------|
+| Model | `MODEL (description "...")`, or the `description` of its `model_schema` |
+| Scenario | `SCENARIO (description "...")` |
+| Seed | `description:` on its entry in `seeds/*.yml` |
+| Source | `description:` on its entry in `sources/*.yml` (or on the dlt resource) |
+| SQL function or table function | `FUNCTION (description "...")` |
+| Python UDF | `@udf(description="...")` or the function docstring |
+| Named SQL hook | `HOOK (description "...")` |
+| Python hook, task, asset, check | `description="..."` on the decorator or the function docstring |
+| Loader | `@loader(description="...")` or the function docstring; a loader that feeds a declared source may instead rely on the source's YAML description |
+| Provider | The provider class docstring |
+
+SQL tests, audits, macros, enums, constants, materializations and event or output sinks do not need a
+description. Descriptions do not change fingerprints, so adding or editing one does not rebuild a
+model or redeploy a function (a Python UDF docstring is part of the deployed body, so editing it
+does). `sqb format --check` also fails when a `MODEL`, `SCENARIO`, `FUNCTION` or `HOOK`
+header has no description (a `MODEL` header that uses `model_schema` is left to compile), and
+`sqb format` still moves a leading comment into an empty model description.
 
 ## SQL analysis
 

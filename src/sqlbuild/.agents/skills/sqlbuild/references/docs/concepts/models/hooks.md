@@ -89,6 +89,7 @@ Models may mix SQL and Python entries in one ordered hook list:
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   pre_hooks [
     inline_sql("INSERT INTO audit.build_log VALUES ('starting')"),

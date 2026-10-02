@@ -34,13 +34,14 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify_complete(ctx, channel="#data-builds"):
+    """Notify complete."""
     ctx.log(
         f"Notify {channel}: "
         f"{ctx.model_name} completed during {ctx.phase}"
     )
 ```
 
-By default, the hook name is the function name. The decorator accepts optional `name`, `description`, and `reads` arguments. A Python file may define multiple decorated hooks.
+By default, the hook name is the function name. The decorator accepts optional `name`, `description`, and `reads` arguments. A hook needs a description: pass `description=` or give the function a docstring ([Descriptions](../configuration.md#descriptions)). A Python file may define multiple decorated hooks.
 
 ## Declared reads
 
@@ -53,6 +54,7 @@ from sqlbuild.refs import model
 
 @hook(reads=model("dim_customers"))
 def refresh_lookup(ctx):
+    """Refresh lookup."""
     customers = ctx.relation(model("dim_customers"))
     ctx.execute_sql(f"CREATE OR REPLACE TABLE customer_lookup AS SELECT * FROM {customers}")
 ```
@@ -90,6 +92,7 @@ Reference the hook by name and optionally pass keyword arguments:
 
 ```sql
 MODEL (
+  description "Example model",
   materialized table,
   post_hooks [
     python(
@@ -143,6 +146,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify_complete(ctx, slack_notifier):
+    """Notify complete."""
     slack_notifier.send(
         f"Model {ctx.model_name} built successfully"
     )

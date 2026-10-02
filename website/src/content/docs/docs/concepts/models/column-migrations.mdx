@@ -15,6 +15,7 @@ Add `migrate_from` to the renamed column in the model header, naming the old col
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   incremental_strategy delete_insert,
   unique_key order_id,
