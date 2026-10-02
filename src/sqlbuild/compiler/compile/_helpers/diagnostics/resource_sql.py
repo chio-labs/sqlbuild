@@ -37,6 +37,7 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_CONFIG_KEY
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
+from sqlbuild.compiler.sql_analysis.main._resolve_binding_column import resolve_binding_column
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
@@ -59,6 +60,8 @@ _EMPTY_FIXTURE_CALL_PATTERN: re.Pattern[str] = re.compile(
     r"\b__empty_fixture\s*\(\s*\)", flags=re.IGNORECASE
 )
 _OPEN_EMPTY_FIXTURE_RELATION: str = "__sqlbuild_empty_fixture"
+_BUILT_IN_AUDIT_ROOT: str = "<built-in>"
+_COLUMN_ONLY_BUILT_IN_AUDITS: frozenset[str] = frozenset({"not_null", "unique"})
 _UNKNOWN_TABLE_MESSAGE_PREFIX: str = "Unknown table "
 _SYNTAX_ERROR_CODE: str = "P001"
 _RESOURCE_KIND_LABELS: dict[CompiledResourceType, str] = {
@@ -102,7 +105,7 @@ def get_resource_sql_diagnostics(
         resource
         for resource in dict.fromkeys(
             (
-                *_audit_resources(project=project),
+                *_audit_resources(project=project, shapes=shapes, profile=profile),
                 *_sql_test_resources(project=project),
                 *_hook_resources(project=project),
             )
@@ -112,19 +115,22 @@ def get_resource_sql_diagnostics(
     if not resources:
         return ()
     dialect: str | None = profile.sql_analysis_dialect
-    cleaned: tuple[str, ...] = tuple(
-        normalize_analysis_sql(
-            sql=cursor_intrinsics_analysis_sql(sql=resource.sql, cursor_type=None),
-            dialect=dialect,
-        )
-        for resource in resources
-    )
+    normalized: dict[str, str] = {}
+    for resource in resources:
+        if resource.sql not in normalized:
+            normalized[resource.sql] = normalize_analysis_sql(
+                sql=cursor_intrinsics_analysis_sql(sql=resource.sql, cursor_type=None),
+                dialect=dialect,
+            )
+    cleaned: tuple[str, ...] = tuple(normalized[resource.sql] for resource in resources)
     known_functions: tuple[str, ...] = known_function_names(project.functions)
     known_types: tuple[str, ...] = known_declared_types(
         functions=project.functions, column_types=shapes
     )
-    results: tuple[SqlBindingResult, ...] = get_schema_validations(
-        requests=tuple(
+    requests: dict[tuple[str, frozenset[str]], SqlSchemaValidationRequest] = {}
+    for resource, cleaned_sql in zip(resources, cleaned, strict=True):
+        _ = requests.setdefault(
+            (cleaned_sql, resource.relations),
             SqlSchemaValidationRequest(
                 sql=cleaned_sql,
                 dialect=dialect,
@@ -133,9 +139,14 @@ def get_resource_sql_diagnostics(
                 known_types=known_types,
                 quoted_identifiers_ignore_case=profile.quoted_identifiers_ignore_case,
                 catalog=project.binding_catalog,
-            )
-            for resource, cleaned_sql in zip(resources, cleaned, strict=True)
+            ),
         )
+    unique_results: dict[tuple[str, frozenset[str]], SqlBindingResult] = dict(
+        zip(requests, get_schema_validations(requests=tuple(requests.values())), strict=True)
+    )
+    results: tuple[SqlBindingResult, ...] = tuple(
+        unique_results[(cleaned_sql, resource.relations)]
+        for resource, cleaned_sql in zip(resources, cleaned, strict=True)
     )
     diagnostics: dict[tuple[object, ...], CompilerDiagnostic] = {}
     for resource, cleaned_sql, result in zip(resources, cleaned, results, strict=True):
@@ -246,11 +257,18 @@ def _reported_diagnostic(
     )
 
 
-def _audit_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
+def _audit_resources(
+    *,
+    project: CompiledProject,
+    shapes: dict[str, dict[str, str]],
+    profile: ExpressionInferenceProfile,
+) -> tuple[_ResourceSql, ...]:
     analysis_disabled: frozenset[str] = _analysis_disabled_models(project)
     resources: list[_ResourceSql] = []
     for audit in project.audits:
-        if audit.attached_target_name in analysis_disabled:
+        if audit.attached_target_name in analysis_disabled or _binds_cleanly(
+            audit=audit, shapes=shapes, profile=profile
+        ):
             continue
         relations: frozenset[str] = _relations(audit.references)
         authored_bodies: tuple[str | None, ...] = (
@@ -286,6 +304,30 @@ def _audit_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
     return tuple(resources)
 
 
+def _binds_cleanly(
+    *, audit: CompiledAudit, shapes: dict[str, dict[str, str]], profile: ExpressionInferenceProfile
+) -> bool:
+    """A built-in single-column audit on a column its closed target shape contains."""
+
+    if (
+        audit.definition_name not in _COLUMN_ONLY_BUILT_IN_AUDITS
+        or audit.audit_file.file_path.parts[:1] != (_BUILT_IN_AUDIT_ROOT,)
+        or audit.attached_target_name is None
+        or audit.attached_column_name is None
+    ):
+        return False
+    shape: dict[str, str] = shapes.get(audit.attached_target_name) or {}
+    return bool(shape) and (
+        resolve_binding_column(
+            name=audit.attached_column_name,
+            columns=shape,
+            dialect=profile.sql_analysis_dialect,
+            ignore_quoted_case=profile.quoted_identifiers_ignore_case,
+        )
+        is not None
+    )
+
+
 def _audit_label(audit: CompiledAudit) -> str:
     label: str = f"audit '{audit.definition_name}'"
     if audit.attached_target_name is not None:
@@ -298,13 +340,13 @@ def _audit_label(audit: CompiledAudit) -> str:
 def _sql_test_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
     analysis_disabled: frozenset[str] = _analysis_disabled_models(project)
     resources: list[_ResourceSql] = []
+    prepared: dict[str, tuple[str, frozenset[str]]] = {}
     for test in project.sql_tests:
         if not test.sql_body.strip() or analysis_disabled.intersection(test.expected_model_names):
             continue
-        sql: str = _EMPTY_FIXTURE_CTE_PATTERN.sub(
-            lambda match: match.group("prefix") + match.group("name"), test.sql_body
-        )
-        sql = _EMPTY_FIXTURE_CALL_PATTERN.sub(_OPEN_EMPTY_FIXTURE_RELATION, sql)
+        if test.sql_body not in prepared:
+            prepared[test.sql_body] = _prepared_test_sql(test.sql_body)
+        sql, relations = prepared[test.sql_body]
         resources.append(
             _ResourceSql(
                 resource_type=CompiledResourceType.SQL_TEST,
@@ -320,18 +362,24 @@ def _sql_test_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]
                     contents=test.test_file.contents,
                     body=test.test_block.sql_body,
                 ),
-                relations=frozenset(
-                    (
-                        *_REFERENCE_CALL_PATTERN.findall(test.sql_body),
-                        *(
-                            match.group("name")
-                            for match in _EMPTY_FIXTURE_CTE_PATTERN.finditer(test.sql_body)
-                        ),
-                    )
-                ),
+                relations=relations,
             )
         )
     return tuple(resources)
+
+
+def _prepared_test_sql(sql_body: str) -> tuple[str, frozenset[str]]:
+    """Test SQL with empty fixtures opened, and the relations it reads."""
+
+    sql: str = _EMPTY_FIXTURE_CTE_PATTERN.sub(
+        lambda match: match.group("prefix") + match.group("name"), sql_body
+    )
+    return _EMPTY_FIXTURE_CALL_PATTERN.sub(_OPEN_EMPTY_FIXTURE_RELATION, sql), frozenset(
+        (
+            *_REFERENCE_CALL_PATTERN.findall(sql_body),
+            *(match.group("name") for match in _EMPTY_FIXTURE_CTE_PATTERN.finditer(sql_body)),
+        )
+    )
 
 
 def _hook_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:

@@ -190,6 +190,33 @@ _FINDING_TEST_BODY: str = (
             ),
         ),
         ResourceSqlValidationCase(
+            description="built-in column audit on a column the model does not output",
+            files=(resource_sql_orders_model(", columns (shipped_at (audits [not_null]))"),),
+            expected_diagnostics=(
+                (
+                    "B002",
+                    "audit 'not_null' on model 'orders' column 'shipped_at': "
+                    "Unknown column 'shipped_at' in table 'orders' (context: SELECT)",
+                    "audits/generic/not_null.sql",
+                    3,
+                ),
+                (
+                    "B002",
+                    "audit 'not_null' on model 'orders' column 'shipped_at': "
+                    "Unknown column 'shipped_at' in table 'orders' (context: SELECT)",
+                    "audits/generic/not_null.sql",
+                    5,
+                ),
+                (
+                    "K001",
+                    "declared column 'shipped_at' was not found in statically inferred output "
+                    "for model 'orders'",
+                    RESOURCE_SQL_ORDERS,
+                    1,
+                ),
+            ),
+        ),
+        ResourceSqlValidationCase(
             description="unparseable SQL test fixture is a syntax error",
             files=(
                 resource_sql_orders_model(),
