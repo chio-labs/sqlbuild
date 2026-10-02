@@ -19,6 +19,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any, NamedTuple, cast
 
+import duckdb
 import pytest
 
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
@@ -29,8 +30,9 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     SemanticCorpusCase,
+    SetOperationModel,
 )
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
@@ -2646,3 +2648,178 @@ def require_sql_analysis_output(
         tuple((item["code"], item.get("path"), item.get("line")) for item in diagnostics),
         text,
     )
+
+
+_INDENTED_SET_OPERATION_PATTERN: re.Pattern[str] = re.compile(
+    r"^[ \t]+(?:UNION|EXCEPT|INTERSECT)\b.*$", re.MULTILINE
+)
+
+
+class SetOperationCompileResult(NamedTuple):
+    exit_code: int
+    diagnostics: tuple[tuple[str, str], ...]
+    column_counts: dict[str, int]
+    output: str
+
+
+class SetOperationLifecycleResult(NamedTuple):
+    compiled: SetOperationCompileResult
+    build: subprocess.CompletedProcess[str]
+    relation_shapes: dict[str, tuple[int, int]]
+    rules: subprocess.CompletedProcess[str]
+    format: subprocess.CompletedProcess[str]
+    indented_set_operation_lines: tuple[str, ...]
+    recompiled: SetOperationCompileResult
+
+
+def write_set_operation_project(
+    *, project_dir: Path, models: tuple[SetOperationModel, ...]
+) -> Path:
+    """Write a DuckDB project with one view per model and return its database path."""
+
+    database: Path = project_dir / "orders.duckdb"
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            f'name = "orders"\nadapter = "duckdb"\n[connection]\ndatabase = "{database}"\n'
+            '[rules]\nselect = ["SQBRSQL020"]\n'
+        ),
+    }
+    for model in models:
+        files[f"models/{model.name}.sql"] = (
+            f"MODEL (materialized view, schema analytics);\n\n{model.query_sql}\n"
+        )
+    prepare_inline_project(
+        tmp_path=project_dir.parent, project_name=project_dir.name, repo_files=files
+    )
+    return database
+
+
+def compile_set_operation_project(*, project_dir: Path) -> SetOperationCompileResult:
+    """Compile without cache and return diagnostics and per-model output column counts."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("compile", "--no-cache", "--json")
+    )
+    payload: dict[str, Any] = json.loads(result.stdout)
+    return SetOperationCompileResult(
+        exit_code=result.returncode,
+        diagnostics=tuple((item["code"], item["message"]) for item in payload["diagnostics"]),
+        column_counts={
+            model["name"]: model["column_count"] for model in payload["resources"]["models"]
+        },
+        output=result.stdout + result.stderr,
+    )
+
+
+def _indented_set_operation_lines(path: Path) -> list[str]:
+    lines: list[str] = _INDENTED_SET_OPERATION_PATTERN.findall(path.read_text(encoding="utf-8"))
+    return [f"{path.name}: {line}" for line in lines]
+
+
+def run_set_operation_lifecycle(
+    *, project_dir: Path, models: tuple[SetOperationModel, ...]
+) -> SetOperationLifecycleResult:
+    """Compile, build, run Rules, format, and recompile a set-operation project."""
+
+    database: Path = write_set_operation_project(project_dir=project_dir, models=models)
+    compiled: SetOperationCompileResult = compile_set_operation_project(project_dir=project_dir)
+    build: subprocess.CompletedProcess[str] = run_sqb(project_dir=project_dir, command=("build",))
+    relation_shapes: dict[str, tuple[int, int]] = {}
+    with duckdb.connect(str(database), read_only=True) as connection:
+        for model in models:
+            relation: duckdb.DuckDBPyRelation = connection.sql(
+                f"SELECT * FROM analytics.{model.name}"
+            )
+            relation_shapes[model.name] = (len(relation.columns), len(relation.fetchall()))
+    rules: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("rules", "run", "SQBRSQL020")
+    )
+    models_dir: Path = project_dir / "models"
+    formatted: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("format", str(models_dir))
+    )
+    indented_set_operation_lines: list[str] = []
+    for path in sorted(models_dir.glob("*.sql")):
+        indented_set_operation_lines.extend(_indented_set_operation_lines(path))
+    return SetOperationLifecycleResult(
+        compiled=compiled,
+        build=build,
+        relation_shapes=relation_shapes,
+        rules=rules,
+        format=formatted,
+        indented_set_operation_lines=tuple(indented_set_operation_lines),
+        recompiled=compile_set_operation_project(project_dir=project_dir),
+    )
+
+
+class UnionFixtureCompileMeasurement(NamedTuple):
+    analysis_native_ms: int
+    sql_tests: int
+    errors: int
+
+
+def _union_all_fixture_rows(*, row_count: int, status: str) -> str:
+    return " UNION ALL\n".join(
+        f"  SELECT {row} AS order_id, CAST({row} AS DOUBLE) AS amount, '{status}' AS status"
+        for row in range(row_count)
+    )
+
+
+def write_union_fixture_test_project(
+    *, project_dir: Path, sql_test_count: int, fixture_row_count: int
+) -> None:
+    """Write a DuckDB project whose SQL tests use long UNION ALL fixture chains."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            f'name = "orders"\nadapter = "duckdb"\n[connection]\n'
+            f'database = "{project_dir / "orders.duckdb"}"\n[rules]\nselect = []\n'
+        ),
+        "models/base_orders.sql": (
+            "MODEL (materialized view);\n\n"
+            "SELECT 1 AS order_id, CAST(1 AS DOUBLE) AS amount, 'open' AS status\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized view);\n\n"
+            'SELECT b.order_id, b.amount, b.status FROM __ref("base_orders") AS b\n'
+        ),
+    }
+    for index in range(sql_test_count):
+        fixture_rows: str = _union_all_fixture_rows(
+            row_count=fixture_row_count, status=f"status_{index:02d}"
+        )
+        files[f"tests/unit/orders_case_{index:02d}.sql"] = (
+            f'TEST (name "orders_case_{index:02d}");\n\n'
+            f"WITH\n__ref__base_orders AS (\n{fixture_rows}\n),\n"
+            f"__expected__orders AS (\n{fixture_rows}\n)\nSELECT 1\n"
+        )
+    prepare_inline_project(
+        tmp_path=project_dir.parent, project_name=project_dir.name, repo_files=files
+    )
+
+
+def measure_union_fixture_compile(
+    *, project_dir: Path, runs: int
+) -> UnionFixtureCompileMeasurement:
+    """Return the fastest native analysis time of fresh uncached compiles."""
+
+    skip_actions: dict[bool, Callable[[], None]] = {
+        False: _continue_compile_benchmark,
+        True: _skip_compile_benchmark,
+    }
+    skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
+    measurements: list[UnionFixtureCompileMeasurement] = []
+    for _ in range(runs):
+        result: subprocess.CompletedProcess[str] = run_installed_sqb(
+            project_dir=project_dir, args=("compile", "--no-cache", "--json"), env={}
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        payload: dict[str, Any] = json.loads(result.stdout)
+        measurements.append(
+            UnionFixtureCompileMeasurement(
+                analysis_native_ms=payload["compile_timings"]["analysis_native_ms"],
+                sql_tests=payload["summary"]["tests"],
+                errors=payload["summary"]["errors"],
+            )
+        )
+    return min(measurements)

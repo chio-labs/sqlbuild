@@ -16,6 +16,8 @@ mod helpers;
 mod layout_rules;
 #[path = "tests/test_line_wrap.rs"]
 mod line_wrap;
+#[path = "tests/test_set_operation_formatter.rs"]
+mod set_operation_formatter;
 #[path = "tests/test_sql_lint.rs"]
 mod sql_lint;
 #[path = "tests/test_types.rs"]
