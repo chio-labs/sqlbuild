@@ -2602,6 +2602,7 @@ def require_sql_analysis_output(
     return (
         tuple((item["code"], item.get("path"), item.get("line")) for item in diagnostics),
         text,
+    )
 
 
 _INDENTED_SET_OPERATION_PATTERN: re.Pattern[str] = re.compile(
