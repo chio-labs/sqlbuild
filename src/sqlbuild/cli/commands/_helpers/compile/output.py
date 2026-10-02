@@ -31,7 +31,11 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     RelatedLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticSeverity
+from sqlbuild.compiler.compile.types import (
+    CompiledResourceType,
+    DiagnosticPhase,
+    DiagnosticSeverity,
+)
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
@@ -212,6 +216,27 @@ def format_compile_json(
         return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
     except TypeError:
         return json.dumps(result, indent=2)
+
+
+def format_compile_error_json(*, code: str, message: str, help_text: str | None) -> str:
+    """Serialize a compile that stopped on a raised error as one JSON diagnostic report."""
+
+    diagnostic: CompilerDiagnostic = CompilerDiagnostic(
+        phase=DiagnosticPhase.COMPILE,
+        severity=DiagnosticSeverity.ERROR,
+        code=code,
+        message=message,
+        help=help_text,
+    )
+    result: dict[str, object] = {
+        "version": _sqlbuild_version(),
+        "command": "compile",
+        "offline": True,
+        "has_errors": True,
+        "stopped": True,
+        "diagnostics": [_diagnostic_to_json(diagnostic)],
+    }
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 def _summary(

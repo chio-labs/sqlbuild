@@ -104,7 +104,7 @@ _COMPILE: tuple[str, ...] = ("--no-color", "compile", "--json", "--no-cache")
             ),
             command=_COMPILE,
             expected_returncode=1,
-            expected_diagnostics=(),
+            expected_diagnostics=(("D001", None, None),),
             expected_text_fragments=(
                 "error[D001]:",
                 "turns SQL analysis off with [settings] sql_analysis = false, which this project "
@@ -123,7 +123,7 @@ _COMPILE: tuple[str, ...] = ("--no-color", "compile", "--json", "--no-cache")
             ),
             command=_COMPILE,
             expected_returncode=1,
-            expected_diagnostics=(),
+            expected_diagnostics=(("D001", None, None),),
             expected_text_fragments=(
                 "cannot set [settings] require_sql_analysis; it is a shared project policy that "
                 "only sqlbuild_project.toml can set",
@@ -141,7 +141,7 @@ _COMPILE: tuple[str, ...] = ("--no-color", "compile", "--json", "--no-cache")
             ),
             command=_COMPILE,
             expected_returncode=1,
-            expected_diagnostics=(),
+            expected_diagnostics=(("P001", None, None),),
             expected_text_fragments=(
                 "error[P001]: SQL syntax error in model 'order_lookup'",
                 "= help: if this SQL is valid for your warehouse, skip SQL analysis for this "

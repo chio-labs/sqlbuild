@@ -2584,8 +2584,11 @@ OPT_OUT_HELP: str = (
 
 def require_sql_analysis_output(
     result: subprocess.CompletedProcess[str],
-) -> tuple[tuple[tuple[str, str, int], ...], str]:
-    """Return `(code, path, line)` per JSON diagnostic and all JSON help, note and stderr text."""
+) -> tuple[tuple[tuple[str, str | None, int | None], ...], str]:
+    """Return `(code, path, line)` per JSON diagnostic and all JSON help, note and stderr text.
+
+    A compile that stops on a raised error reports it without a path or line.
+    """
 
     payload: dict[str, Any] = json.loads(result.stdout or '{"diagnostics": []}')
     diagnostics: list[dict[str, Any]] = payload["diagnostics"]
@@ -2595,6 +2598,6 @@ def require_sql_analysis_output(
         parts.extend(item.get("notes", ()))
     text: str = "\n".join(parts)
     return (
-        tuple((item["code"], item["path"], item["line"]) for item in diagnostics),
+        tuple((item["code"], item.get("path"), item.get("line")) for item in diagnostics),
         text,
     )

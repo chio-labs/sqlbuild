@@ -4,7 +4,10 @@ import logging
 import sys
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.entry.errors import format_expected_error
+from sqlbuild.cli.commands._helpers.entry.errors import (
+    expected_error_parts,
+    format_expected_error,
+)
 from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffExecutionError
@@ -46,6 +49,7 @@ def dispatch_and_handle_errors(
             )
             if output_error is not None:
                 effective_error = output_error
+        _write_compile_machine_error(args=args, error=effective_error, fallback_code="C000")
         outcome_status: object | None = getattr(effective_error, "status", None)
         if outcome_status is not None:
             print(f"Query diff outcome  {outcome_status}", file=sys.stderr)
@@ -58,6 +62,7 @@ def dispatch_and_handle_errors(
         return 1
     except LintError as error:
         logging.getLogger("sqlbuild.cli").exception("lint failed")
+        _write_compile_machine_error(args=args, error=error, fallback_code="L001")
         print(
             format_expected_error(error=error, fallback_code="L001", use_color=use_color),
             file=sys.stderr,
@@ -67,6 +72,7 @@ def dispatch_and_handle_errors(
         if not isinstance(error, _expected_command_failure_types()):
             raise
         logging.getLogger("sqlbuild.cli").exception("command failed")
+        _write_compile_machine_error(args=args, error=error, fallback_code="E001")
         print(
             format_expected_error(error=error, fallback_code="E001", use_color=use_color),
             file=sys.stderr,
@@ -116,6 +122,17 @@ def _report_skill_freshness(*, invocation: ParsedCliInvocation) -> None:
         return
     if result.message:
         print(result.message, file=sys.stderr, end="")
+
+
+def _write_compile_machine_error(
+    *, args: CliNamespace, error: Exception, fallback_code: str
+) -> None:
+    if args.command != CliCommand.COMPILE or not getattr(args, "json", False):
+        return
+    from sqlbuild.cli.commands._helpers.compile.output import format_compile_error_json
+
+    code, message, help_text = expected_error_parts(error=error, fallback_code=fallback_code)
+    print(format_compile_error_json(code=code, message=message, help_text=help_text))
 
 
 def _write_diff_machine_error(

@@ -11,6 +11,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     CompileJsonBuildE2ETestCase,
+    CompileJsonRaisedErrorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
@@ -221,3 +222,63 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
     assert hooks_by_name["notify"]["relative_path"] == "hooks/python/notify.py"
     assert hooks_by_name["notify"]["definition_hash"]
     assert hooks_by_name["notify"]["version_hash"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileJsonRaisedErrorE2ETestCase(
+            description="unknown materialization stops compile",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+                "models/orders.sql": "MODEL (materialized tablex);\n\nSELECT 1 AS order_id\n",
+            },
+            expected_code="P001",
+            expected_message_fragment="unknown materialization 'tablex'",
+            expected_help_fragment=None,
+        ),
+        CompileJsonRaisedErrorE2ETestCase(
+            description="unknown on_schema_change stops compile with help",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+                "models/orders.sql": (
+                    "MODEL (\n  materialized incremental,\n  incremental_strategy append,\n"
+                    "  on_schema_change append_columns,\n);\n\nSELECT 1 AS order_id\n"
+                ),
+            },
+            expected_code="P001",
+            expected_message_fragment="unknown on_schema_change 'append_columns'",
+            expected_help_fragment="on_schema_change append_new_columns,",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_raised_compile_error_when_running_compile_json_then_stdout_holds_one_diagnostic_report(
+    test_case: CompileJsonRaisedErrorE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="orders", repo_files=test_case.repo_files
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("compile", "--json"), project_dir=project_dir
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    payload: dict[str, object] = json.loads(result.stdout)
+    assert payload["command"] == "compile"
+    assert payload["has_errors"] is True
+    assert payload["stopped"] is True
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], payload["diagnostics"])
+    assert len(diagnostics) == 1
+    diagnostic: dict[str, object] = diagnostics[0]
+    assert diagnostic["severity"] == "error"
+    assert diagnostic["code"] == test_case.expected_code
+    message: str = cast(str, diagnostic["message"])
+    assert test_case.expected_message_fragment in message
+    assert f"error[{test_case.expected_code}]: {message}" in result.stderr
+    help_text: str = cast(str, diagnostic.get("help", ""))
+    assert ("help" in diagnostic) is (test_case.expected_help_fragment is not None)
+    assert (test_case.expected_help_fragment or "") in help_text
+    assert all(line.strip() in result.stderr for line in help_text.splitlines())

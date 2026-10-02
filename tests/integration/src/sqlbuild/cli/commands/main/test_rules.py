@@ -1466,7 +1466,10 @@ SELECT 1
 
     assert exit_code == test_case.expected_exit_code
     captured: CaptureResult[str] = capsys.readouterr()
-    assert captured.out == ""
+    payload: dict[str, object] = json.loads(captured.out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], payload["diagnostics"])
+    assert len(diagnostics) == 1
+    assert test_case.expected_code in str(diagnostics[0]["message"])
     assert test_case.expected_code in captured.err
 
 

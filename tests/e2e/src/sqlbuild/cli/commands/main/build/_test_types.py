@@ -777,6 +777,17 @@ class AuditFailureBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class CompileJsonRaisedErrorE2ETestCase:
+    """Expected JSON report for a compile that stops on a raised error."""
+
+    description: str
+    repo_files: dict[str, str]
+    expected_code: str
+    expected_message_fragment: str
+    expected_help_fragment: str | None
+
+
+@dataclass(frozen=True)
 class CompileJsonBuildE2ETestCase:
     """Test case for compile JSON behavior."""
 

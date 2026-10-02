@@ -19,10 +19,15 @@ def build_argument_parser_class(*, use_color: bool) -> type[SqlbuildArgumentPars
     return ColorAwareSqlbuildArgumentParser
 
 
-def format_expected_error(*, error: Exception, fallback_code: str, use_color: bool) -> str:
+def expected_error_parts(*, error: Exception, fallback_code: str) -> tuple[str, str, str | None]:
     code: str = str(getattr(error, "code", fallback_code))
     message: str = str(getattr(error, "message", str(error)))
     help_text: str | None = getattr(error, "help", None)
+    return code, message, help_text
+
+
+def format_expected_error(*, error: Exception, fallback_code: str, use_color: bool) -> str:
+    code, message, help_text = expected_error_parts(error=error, fallback_code=fallback_code)
     return (
         format_coded_error(code=code, message=message, help=help_text, use_color=use_color) + "\n"
     )
