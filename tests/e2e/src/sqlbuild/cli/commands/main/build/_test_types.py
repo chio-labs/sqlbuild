@@ -99,6 +99,15 @@ class CappedMicrobatchScenarioE2ETestCase:
 
 
 @dataclass(frozen=True)
+class CappedFilterJoinE2ETestCase:
+    """Expected rows from a consumer that filters a capped producer and joins its source table."""
+
+    description: str
+    limit_action: str
+    expected_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class CappedWatermarkRejectionE2ETestCase:
     """Expected static rejection for a capped watermark producer."""
 

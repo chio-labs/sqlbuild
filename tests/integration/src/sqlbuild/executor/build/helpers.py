@@ -197,6 +197,29 @@ def capped_microbatch_intermediary_sql(*, input_role: str) -> str:
     )
 
 
+def capped_dependency_warehouse_files(*, project_dir: Path) -> dict[str, str]:
+    """Create the capped graph's raw source table and return project files that read it."""
+
+    database_path: Path = project_dir / "warehouse.duckdb"
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(database_path))
+    try:
+        connection.execute(
+            "CREATE TABLE main.raw_events AS "
+            "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time"
+        )
+    finally:
+        connection.close()
+    return {
+        "sqlbuild_project.toml": (
+            'name = "capped_dependency"\nadapter = "duckdb"\n\n'
+            f"[connection]\ndatabase = {json.dumps(str(database_path))}\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+        ),
+    }
+
+
 def compile_capped_microbatch_intermediary_project(
     *, project_dir: Path, adapter: DuckDbAdapter, input_role: str
 ) -> CompilePipelineResult:
@@ -205,11 +228,7 @@ def compile_capped_microbatch_intermediary_project(
     write_build_project_files(
         project_dir=project_dir,
         project_files={
-            "sqlbuild_project.toml": 'name = "capped_dependency"\nadapter = "duckdb"\n',
-            "sources/raw.yml": (
-                "sources:\n  - name: raw_events\n    expression: "
-                "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time\n"
-            ),
+            **capped_dependency_warehouse_files(project_dir=project_dir),
             "models/capped_events.sql": capped_dependency_producer_sql(
                 action=MicrobatchLimitAction.CAP_FROM_END
             ),
@@ -239,11 +258,7 @@ def compile_capped_dependency_project(
     """Compile a capped-producer project with optional intermediary views."""
 
     project_files: dict[str, str] = {
-        "sqlbuild_project.toml": 'name = "capped_dependency"\nadapter = "duckdb"\n',
-        "sources/raw.yml": (
-            "sources:\n  - name: raw_events\n    expression: "
-            "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time\n"
-        ),
+        **capped_dependency_warehouse_files(project_dir=project_dir),
         "models/capped_events.sql": capped_dependency_producer_sql(action=action),
         "models/downstream_events.sql": consumer_sql,
     }

@@ -131,6 +131,39 @@ def capped_watermark_consumer_project_files(*, limit_action: str) -> dict[str, s
     return repo_files
 
 
+def capped_filter_join_consumer_project_files(*, limit_action: str) -> dict[str, str]:
+    """Build a project whose microbatch consumer filters a capped producer and joins its source."""
+
+    repo_files: dict[str, str] = capped_microbatch_project_files(limit_action=limit_action)
+    repo_files["models/downstream_events.sql"] = (
+        dedent(
+            """
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain day,
+              cursor_start '2026-01-01',
+              cursor_watermark_mode all,
+              cursor_inputs (
+                capped_events (column event_time, roles [filter]),
+                raw_events (column event_time, roles [watermark]),
+              ),
+              batch_size 1d,
+            );
+            SELECT capped.id, capped.event_time
+            FROM __ref("capped_events") AS capped
+            JOIN __source("raw_events") AS raw_events USING (id)
+            """
+        ).strip()
+        + "\n"
+    )
+    return repo_files
+
+
 def prepare_defer_clone_project(
     *,
     tmp_path: Path,
