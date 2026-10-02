@@ -36,6 +36,7 @@ class UnevaluatedResourceCase:
     expected_reason: str = "E_GUARD_FUNCTION_NESTING_DEPTH_EXCEEDED"
     adapter: str = "duckdb"
     extra_files: tuple[tuple[str, str], ...] = ()
+    rule: str = "SQBRSQL035"
 
 
 @dataclass(frozen=True)
@@ -138,3 +139,53 @@ class SqlRulePathParityCase:
     files: dict[str, str]
     expected_findings: tuple[tuple[str, int, int, str], ...]
     expected_exit: int = 1
+
+
+@dataclass(frozen=True)
+class SqlQualityRuleCase:
+    description: str
+    upstream_header: str
+    query_sql: str
+    expected_findings: tuple[tuple[str, int], ...]
+    expected_after_fix: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class RankingKeyProofCase:
+    description: str
+    upstream_header: str
+    upstream_sql: str
+    query_sql: str
+    expected_codes: tuple[str, ...]
+    extra_files: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class RankingSortDefaultCase:
+    description: str
+    order_by: str
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FixableReportingCase:
+    description: str
+    summary_sql: str
+    expected_fixability: tuple[tuple[str, bool], ...]
+    expected_notes: tuple[tuple[str, tuple[str, ...]], ...]
+    expected_help_fragments: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ConstantLiteralCase:
+    description: str
+    summary_sql: str
+    expected_exit: int
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuplicateLiteralCase:
+    description: str
+    literals: tuple[tuple[str, str], ...]
+    expected_hints: tuple[tuple[str, str | None], ...]

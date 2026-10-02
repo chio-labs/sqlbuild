@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.discovery.main.microbatch_guidance import microbatch_guidance
 from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_CONFIG_KEY
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
@@ -796,9 +797,10 @@ def validate_microbatch_project_capability(
         and batch_concurrency > 1
         and not settings.microbatch_concurrency
     ):
+        note, help_text = microbatch_guidance()
         raise CompileInputError(
-            f"model '{model_name}': batch_concurrency > 1 requires "
-            "settings.microbatch_concurrency = true"
+            f"model '{model_name}': batch_concurrency > 1 requires concurrent microbatches; {note}",
+            help=help_text,
         )
 
 

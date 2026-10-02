@@ -118,6 +118,7 @@ def _decode_inputs(payload: dict[str, Any]) -> tuple[CompiledProject, RulesConfi
 def _finding_payload(finding: Finding) -> dict[str, object]:
     payload: dict[str, object] = asdict(finding)
     payload.pop("affected_rules", None)
+    payload.pop("fixable", None)
     payload["path"] = finding.path.as_posix()
     return payload
 

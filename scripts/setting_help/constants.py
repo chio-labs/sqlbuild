@@ -1,0 +1,25 @@
+"""Patterns for diagnostic text that names a setting without its exact TOML snippet."""
+
+from __future__ import annotations
+
+import re
+
+SNIPPET_PATTERN: re.Pattern[str] = re.compile(
+    r"^ +\[([a-z_.]+)\]\n +([a-z_]+) = (.+)$", re.MULTILINE
+)
+YAML_STYLE_SETTING_PATTERN: re.Pattern[str] = re.compile(
+    r"`?\b(?:settings\.)?[a-z_]+:\s*(?:true|false|staged)\b|`[a-z_]+: [a-z_]+`"
+    r"|\[(?:dbt|settings|references|rules|janitor|defaults)\]\.[a-z_]+"
+)
+DOTTED_SETTING_INSTRUCTION_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(?:[Ss]et|[Ee]nable|[Dd]isable|[Aa]dd|requires|allow)\b[^.;\n\"]{0,60}?"
+    r"\b(?:settings|references|janitor|dbt|rules|connection|defaults)\.[a-z_]+"
+)
+YAML_FILE_TEXT_MODULES: frozenset[str] = frozenset(
+    {
+        "src/sqlbuild/cli/commands/_helpers/playground/copy.py",
+        "src/sqlbuild/compiler/discovery/_helpers/yml/sources.py",
+    }
+)
+RUST_TEST_PATH_MARKER: str = "/tests/"
+RUST_STRING_DELIMITER: str = '"'

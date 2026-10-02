@@ -18,6 +18,9 @@ from sqlbuild.compiler.compile._helpers.diagnostics.details import (
     unaliased_output_columns,
     update_binding_models,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.sql_analysis_opt_outs import (
+    reject_unneeded_sql_analysis_opt_outs,
+)
 from sqlbuild.compiler.compile._helpers.diagnostics.type_recovery import recover_output_types
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -35,6 +38,7 @@ def complete_semantic_diagnostics(
     project: CompiledProject,
     profile: ExpressionInferenceProfile,
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
+    resource_sql_analysis: bool = True,
 ) -> CompiledProject:
     """Recover type facts before metadata checks, then explain retained root diagnostics."""
     project = recover_output_types(project=project, binding_results=binding_results)
@@ -42,10 +46,12 @@ def complete_semantic_diagnostics(
         project,
         diagnostics=(
             *project.diagnostics,
-            *get_semantic_metadata_diagnostics(project=project, profile=profile),
+            *get_semantic_metadata_diagnostics(
+                project=project, profile=profile, resource_sql_analysis=resource_sql_analysis
+            ),
         ),
     )
-    return explain_diagnostics(recover_diagnostics(project))
+    return reject_unneeded_sql_analysis_opt_outs(explain_diagnostics(recover_diagnostics(project)))
 
 
 def recover_diagnostics(project: CompiledProject) -> CompiledProject:

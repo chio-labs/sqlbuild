@@ -734,6 +734,7 @@ class CompileModelInput:
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
     sql_validation_enabled: bool = False
+    rejected_sql_analysis_opt_out: SourceLocation | None = None
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
     enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
@@ -851,6 +852,7 @@ class CompileProjectInputs:
     compile_cache_dir: Path | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
     effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
+    no_sql_validation: bool = False
     effective_vars: dict[str, object] = field(default_factory=dict)
     macro_context: MacroContext | None = field(default=None, repr=False, compare=False)
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
@@ -910,6 +912,7 @@ class CompiledModel:
     binding_validated: bool = False
     dynamic_column_contract: DynamicColumnContractProof | None = None
     unchecked_output_columns: frozenset[str] = frozenset()
+    rejected_sql_analysis_opt_out: SourceLocation | None = None
 
 
 @dataclass(frozen=True)
@@ -1540,3 +1543,16 @@ class ModelHeaderColumnCache:
 
     def put(self, cached: CachedModelHeaderColumns) -> None:
         self._values[id(cached.raw_columns)] = cached
+
+
+@dataclass(frozen=True)
+class SqlAnalysisOptOutRequest:
+    """One model's opt-out, with what is needed to prove its SQL parses."""
+
+    model_file: DiscoveredSqlModelFile
+    config: CompileModelConfig
+    settings: SettingsConfig
+    no_sql_validation: bool
+    query_sql: str
+    placeholders: dict[str, str] | None
+    project_config_path: Path

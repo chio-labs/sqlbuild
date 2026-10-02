@@ -155,7 +155,7 @@ def test_given_dbt_vars_sources_when_resolving_then_vars_are_merged(
             cli_project_dir=None,
             expected_error_fragment="dbt project directory is not configured",
             expected_code="C240",
-            expected_help_fragment="Add [dbt].project_dir",
+            expected_help_fragment='[dbt]\n            project_dir = "path/to/dbt_project"',
         )
     ],
     ids=lambda case: case.description,

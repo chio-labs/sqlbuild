@@ -83,9 +83,11 @@ def test_given_project_capability_disabled_when_batch_concurrency_exceeds_one_th
     )
 
     assert result.returncode == test_case.expected_exit_code
-    assert "batch_concurrency > 1 requires settings.microbatch_concurrency = true" in (
-        result.stdout + result.stderr
-    )
+    assert (
+        "= help: to run microbatches concurrently, set this in sqlbuild_project.toml:\n"
+        "            [settings]\n"
+        "            microbatch_concurrency = true"
+    ) in (result.stdout + result.stderr)
 
 
 @pytest.mark.parametrize(

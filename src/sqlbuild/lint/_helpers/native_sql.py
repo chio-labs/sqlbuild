@@ -41,6 +41,7 @@ from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 _NATIVE_LINT_API_VERSION: int = 1
 _NEWLINE_CHARACTER: str = "\n"
 _UNUSED_CTE_CODE: str = "SQBRSQL005"
+_LONG_LITERAL_CODE: str = "SQBRSQL044"
 _PARSE_ERROR_POSITION_PATTERN: re.Pattern[str] = re.compile(
     r"^Parse error at line (?P<line>\d+), column (?P<column>\d+):"
 )
@@ -70,6 +71,9 @@ type _NativeCacheKey = tuple[
     bool,
     bool,
     bool,
+    int,
+    int,
+    tuple[tuple[str, tuple[tuple[str, ...], ...]], ...],
 ]
 type _NativeResult = dict[str, Any] | NativeLintError
 
@@ -109,6 +113,10 @@ def run_native_sql_lint(
             payload["allows_dynamic_output_star"] = True
         if body.allows_empty_fixture_star:
             payload["allows_empty_fixture_star"] = True
+        payload["max_literal_length"] = config.max_literal_length
+        payload["max_ranking_order_by"] = config.max_ranking_order_by
+        if cache_key[-1]:
+            payload["relation_keys"] = dict(cache_key[-1])
         requests[cache_key] = payload
     response_cache: dict[_NativeCacheKey, _NativeResult] = _native_responses(requests=requests)
 
@@ -156,6 +164,21 @@ def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
         body.allows_ceremonial_select,
         body.allows_dynamic_output_star,
         body.allows_empty_fixture_star,
+        config.max_literal_length,
+        config.max_ranking_order_by,
+        _body_relation_keys(body=body, config=config),
+    )
+
+
+def _body_relation_keys(
+    *, body: LintBody, config: LintConfig
+) -> tuple[tuple[str, tuple[tuple[str, ...], ...]], ...]:
+    """Declared keys of the relations one body reads, by their neutralized sentinel."""
+
+    return tuple(
+        (sentinel, config.relation_keys[name])
+        for sentinel, name in body.dependency_relations
+        if config.relation_keys.get(name)
     )
 
 
@@ -257,6 +280,8 @@ def _authored_violation(
         raise NativeLintError("native lint diagnostic has an invalid fix refusal reason")
     mapped: MappedOffset = map_expanded_offset(offset=start, passes=body.passes)
     absolute_offset: int = body.body_start + mapped.offset
+    if code == _LONG_LITERAL_CODE and mapped.generated:
+        return None
     if code == _UNUSED_CTE_CODE and contents.startswith(
         _SQLBUILD_HARNESS_CTE_PREFIXES, absolute_offset
     ):

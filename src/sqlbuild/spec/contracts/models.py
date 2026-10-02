@@ -157,6 +157,7 @@ class SettingsConfig:
     """Global feature toggles."""
 
     sql_analysis: bool = True
+    require_sql_analysis: bool = False
     query_change_tracking: bool = True
     column_contract_mode: ColumnContractMode = ColumnContractMode.IMPLICIT
     concurrency: int = 1

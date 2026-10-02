@@ -170,7 +170,7 @@ def explain_diagnostics(project: CompiledProject) -> CompiledProject:
             diagnostic = replace(
                 diagnostic,
                 message=sentence_message(diagnostic.message),
-                help=semantic_help(diagnostic.code) or diagnostic.help,
+                help=diagnostic.help or semantic_help(diagnostic.code),
             )
         diagnostics.append(diagnostic)
     return replace(

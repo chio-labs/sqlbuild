@@ -36,7 +36,6 @@ from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
-    SQL_ANALYSIS_CONFIG_KEY,
     SUCCESS_STATUS,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
@@ -55,6 +54,7 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.main.sql_analysis_off_guidance import sql_analysis_off_guidance
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile_only import run_compile_only_pipeline
 from sqlbuild.compiler.pipeline.models import (
@@ -286,29 +286,23 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
 def _validate_local_scenario_sql_analysis_enabled(
     *, discovered_inputs: DiscoveredProjectInputs, no_sql_validation: bool
 ) -> None:
-    if no_sql_validation or not _effective_sql_analysis_and_validation_enabled(
-        discovered_inputs=discovered_inputs
-    ):
+    if no_sql_validation:
         raise CliUserError(
-            "scenario test --local requires SQL analysis",
+            "scenario test --local requires SQL analysis, but `--no-sql-analysis` turns it off",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
-            help=(
-                "Enable settings.sql_analysis when running local scenario replay, "
-                "snapshot sync, or snapshot refresh."
-            ),
+            help="run the command without `--no-sql-analysis`",
         )
-
-
-def _effective_sql_analysis_and_validation_enabled(
-    *, discovered_inputs: DiscoveredProjectInputs
-) -> bool:
-    setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
-    sql_analysis_enabled: bool = (
-        discovered_inputs.local_config.settings.sql_analysis
-        if SQL_ANALYSIS_CONFIG_KEY in setting_overrides
-        else discovered_inputs.project_config.settings.sql_analysis
+    guidance: tuple[str, str] | None = sql_analysis_off_guidance(
+        discovered_inputs=discovered_inputs,
+        purpose="to run local scenario replay, snapshot sync, or snapshot refresh",
     )
-    return sql_analysis_enabled
+    if guidance is not None:
+        note, help_text = guidance
+        raise CliUserError(
+            f"scenario test --local requires SQL analysis; {note}",
+            code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+            help=help_text,
+        )
 
 
 def _sync_local_snapshots(

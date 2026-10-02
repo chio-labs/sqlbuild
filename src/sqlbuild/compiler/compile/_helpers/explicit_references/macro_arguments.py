@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
+from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
@@ -156,8 +157,7 @@ def reject_macro_generated_references(
                 help=(
                     f"write the reference in {location}, or pass it in: "
                     f"@{loaded_macro.name}({reference_call_text(generated)})\n"
-                    "  = help: while migrating a project, allow macro-generated references with "
-                    "[references] enforce_explicit = false in sqlbuild_project.toml"
+                    "  = help: " + explicit_references_help(allowed="macro-generated references")
                 ),
             ),
         )

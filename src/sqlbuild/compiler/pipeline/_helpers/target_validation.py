@@ -14,8 +14,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.discovery.constants import DEFAULTS_SECTION, PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import SourceEntry, TargetConfig
@@ -280,6 +282,13 @@ def _validate_required_target_parts(
             f"{adapter_name} execution requires explicit target {missing_text}. "
             f"{resource_kind} '{resource_name}' resolved to "
             f"database={target.database!r} schema={target.schema!r}. "
-            "Set them in sqlbuild_project.toml defaults, environment config, or model config.",
+            "Set them in the model config, the environment config, or the project defaults.",
             code="S101",
+            help=setting_help(
+                purpose="to set project-wide defaults",
+                file_name=PROJECT_CONFIG_FILENAME,
+                section=DEFAULTS_SECTION,
+                key=missing_parts[0],
+                value=f"my_{missing_parts[0]}",
+            ),
         )

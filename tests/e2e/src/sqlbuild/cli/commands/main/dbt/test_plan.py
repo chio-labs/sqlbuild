@@ -208,7 +208,7 @@ def test_given_dbt_interop_project_when_running_human_plan_then_outputs_grouped_
             command=("dbt", "plan", "--json", "--select", "anything"),
             expected_stderr_fragments=(
                 "error[C240]: dbt project directory is not configured",
-                "= help: Add [dbt].project_dir",
+                '= help: to point SQLBuild at the dbt project, set this in sqlbuild_project.toml:\n            [dbt]\n            project_dir = "path/to/dbt_project"',
             ),
         )
     ],

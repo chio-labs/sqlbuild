@@ -404,3 +404,44 @@ class ModelHeaderKeyCompileCase:
     description: str
     repo_files: dict[str, str]
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ResourceSqlValidationCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    expected_diagnostics: tuple[tuple[str, str, str, int], ...]
+
+
+@dataclass(frozen=True)
+class ResourceSqlOptOutCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    flags: tuple[str, ...]
+    expected_diagnostics: tuple[tuple[str, str, int], ...]
+    expected_returncode: int = 0
+
+
+@dataclass(frozen=True)
+class ResourceSqlHelpCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    expected_diagnostics: tuple[tuple[str, str, str | None], ...]
+
+
+@dataclass(frozen=True)
+class TypeFindingLocationCase:
+    description: str
+    adapter: str
+    query_sql: str
+    expected_diagnostics: tuple[tuple[str, str, int, int], ...]
+
+
+@dataclass(frozen=True)
+class RequireSqlAnalysisCase:
+    description: str
+    repo_files: tuple[tuple[str, str], ...]
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_diagnostics: tuple[tuple[str, str, int], ...]
+    expected_text_fragments: tuple[str, ...]

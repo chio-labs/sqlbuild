@@ -11,6 +11,7 @@ from sqlbuild.compiler.auditing.models import MeasurementContract
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_CONFIG_KEY
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
 
@@ -42,6 +43,7 @@ _SUPPORTED_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
         _AUDIT_SAMPLE_UNIT_HEADER_KEY,
         _AUDIT_THRESHOLDS_HEADER_KEY,
         _AUDIT_MINIMUM_SAMPLES_HEADER_KEY,
+        SQL_ANALYSIS_CONFIG_KEY,
     }
 )
 
@@ -165,6 +167,9 @@ def _parse_audit_header(*, header: str, header_line: int, file_path: Path) -> di
     always_run: object | None = parsed_header.get(_AUDIT_ALWAYS_RUN_HEADER_KEY)
     if _AUDIT_ALWAYS_RUN_HEADER_KEY in parsed_header and not isinstance(always_run, bool):
         raise SqlAuditParseError(f"AUDIT() always_run in '{file_path}' must be a boolean")
+    sql_analysis: object | None = parsed_header.get(SQL_ANALYSIS_CONFIG_KEY)
+    if SQL_ANALYSIS_CONFIG_KEY in parsed_header and not isinstance(sql_analysis, bool):
+        raise SqlAuditParseError(f"AUDIT() sql_analysis in '{file_path}' must be a boolean")
     return parsed_header
 
 

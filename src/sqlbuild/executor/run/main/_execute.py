@@ -9,10 +9,17 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.compiler.discovery.constants import (
+    PROJECT_CONFIG_FILENAME,
+    SETTINGS_SECTION,
+    STAGED_PROMOTION_MODE,
+    TABLE_PROMOTION_MODE_SETTING_KEY,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run._helpers.execution.hook_phases import (
@@ -382,8 +389,15 @@ def _immediate_lifecycle(
             phase=ExecutionPhase.TYPE_ENFORCEMENT,
             error=(
                 f"model '{entry.name}': type enforcement requires staged promotion mode "
-                f"for runtime column inspection; set table_promotion_mode: staged in "
-                f"sqlbuild_project.toml settings"
+                "for runtime column inspection, and [settings] table_promotion_mode is not "
+                '"staged"; '
+                + setting_help(
+                    purpose="to inspect columns before promotion",
+                    file_name=PROJECT_CONFIG_FILENAME,
+                    section=SETTINGS_SECTION,
+                    key=TABLE_PROMOTION_MODE_SETTING_KEY,
+                    value=STAGED_PROMOTION_MODE,
+                )
             ),
             warnings=warnings,
             audit_results=audit_results,

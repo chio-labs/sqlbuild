@@ -29,6 +29,9 @@ from sqlbuild.compiler.discovery.constants import (
     LOCAL_CONFIG_FILENAME,
     MODELS_DIRECTORY_NAME,
     PROJECT_CONFIG_FILENAME,
+    QUERY_CHANGE_TRACKING_SETTING_KEY,
+    REQUIRE_SQL_ANALYSIS_SETTING_KEY,
+    SETTINGS_SECTION,
     SQL_ANALYSIS_CONFIG_KEY,
     SQL_MODEL_HEADER_KEYS,
     TOML_FILE_SUFFIX,
@@ -39,6 +42,9 @@ from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
 from sqlbuild.cursor_algebra.constants import DURATION_DAY_UNIT
 from sqlbuild.cursor_algebra.models import Duration
+from sqlbuild.errors.setting_help.main.join_helps import join_helps
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
+from sqlbuild.errors.setting_help.main.setting_note import setting_note
 from sqlbuild.spec.contracts.constants import (
     SCENARIO_RUN_NAMESPACE_CONFIG_KEY,
     TIME_TRAVEL_RETENTION_MATERIALIZATIONS,
@@ -209,8 +215,20 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     sinks: SinksConfig = _load_sinks(payload=payload.get("sinks"), file_path=file_path)
     if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
         raise ProjectConfigError(
-            f"{file_path} janitor.delete_tracked_only requires "
-            "settings.query_change_tracking to be true"
+            f"{file_path} [janitor] delete_tracked_only = true requires query change tracking; "
+            + setting_note(
+                file_name=PROJECT_CONFIG_FILENAME,
+                section=SETTINGS_SECTION,
+                key=QUERY_CHANGE_TRACKING_SETTING_KEY,
+                value=False,
+            ),
+            help=setting_help(
+                purpose="to track which relations SQLBuild created",
+                file_name=PROJECT_CONFIG_FILENAME,
+                section=SETTINGS_SECTION,
+                key=QUERY_CHANGE_TRACKING_SETTING_KEY,
+                value=True,
+            ),
         )
 
     return ProjectConfig(
@@ -426,6 +444,40 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     )
 
 
+def validate_local_sql_analysis_policy(
+    *, project_dir: Path, project_config: ProjectConfig, local_config: LocalConfig
+) -> None:
+    """Reject a local project-wide SQL analysis opt-out when the project requires analysis."""
+
+    if (
+        not project_config.settings.require_sql_analysis
+        or SQL_ANALYSIS_CONFIG_KEY not in local_config.setting_overrides
+        or local_config.settings.sql_analysis
+    ):
+        return
+    raise ProjectConfigError(
+        f"{_resolve_local_config_path(project_dir=project_dir)} turns SQL analysis off with "
+        f"[settings] {SQL_ANALYSIS_CONFIG_KEY} = false, which this project does not allow; "
+        + setting_note(
+            file_name=PROJECT_CONFIG_FILENAME,
+            section=SETTINGS_SECTION,
+            key=REQUIRE_SQL_ANALYSIS_SETTING_KEY,
+            value=True,
+        ),
+        help=join_helps(
+            f"remove {SQL_ANALYSIS_CONFIG_KEY} from [settings] in {LOCAL_CONFIG_FILENAME}; "
+            "to skip SQL analysis for one run, use `--no-sql-analysis`",
+            setting_help(
+                purpose="to allow turning SQL analysis off locally",
+                file_name=PROJECT_CONFIG_FILENAME,
+                section=SETTINGS_SECTION,
+                key=REQUIRE_SQL_ANALYSIS_SETTING_KEY,
+                value=False,
+            ),
+        ),
+    )
+
+
 def _resolve_project_config_path(*, project_dir: Path) -> Path:
     toml_path: Path = project_dir / PROJECT_CONFIG_FILENAME
     if toml_path.exists():
@@ -555,6 +607,9 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         else LEGACY_SQL_VALIDATION_CONFIG_KEY
     )
     sql_analysis: bool = _optional_bool(mapping=mapping, key=analysis_key, default=True)
+    require_sql_analysis: bool = _optional_bool(
+        mapping=mapping, key=REQUIRE_SQL_ANALYSIS_SETTING_KEY, default=False
+    )
     query_change_tracking: bool = _optional_bool(
         mapping=mapping,
         key="query_change_tracking",
@@ -611,6 +666,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     )
     return SettingsConfig(
         sql_analysis=sql_analysis,
+        require_sql_analysis=require_sql_analysis,
         query_change_tracking=query_change_tracking,
         column_contract_mode=column_contract_mode,
         concurrency=concurrency,
@@ -827,6 +883,21 @@ def _load_local_settings(
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="settings", file_path=file_path
     )
+    if REQUIRE_SQL_ANALYSIS_SETTING_KEY in mapping:
+        raise ProjectConfigError(
+            f"{file_path} cannot set [settings] {REQUIRE_SQL_ANALYSIS_SETTING_KEY}; "
+            f"it is a shared project policy that only {PROJECT_CONFIG_FILENAME} can set",
+            help=join_helps(
+                f"remove {REQUIRE_SQL_ANALYSIS_SETTING_KEY} from {LOCAL_CONFIG_FILENAME}",
+                setting_help(
+                    purpose="to change the policy for everyone",
+                    file_name=PROJECT_CONFIG_FILENAME,
+                    section=SETTINGS_SECTION,
+                    key=REQUIRE_SQL_ANALYSIS_SETTING_KEY,
+                    value=not bool(mapping[REQUIRE_SQL_ANALYSIS_SETTING_KEY]),
+                ),
+            ),
+        )
     setting_names: frozenset[str] = frozenset(field.name for field in fields(SettingsConfig))
     normalized_overrides: set[str] = set()
     key: str
@@ -1631,7 +1702,8 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
     if DBT_DEFER_CLONE_CONFIG_KEY in mapping:
         raise ProjectConfigError(
-            f"{file_path} [dbt].defer_clone_from was removed; use dbt-native --state/--defer"
+            f"{file_path} [dbt] defer_clone_from was removed; "
+            "remove it and use dbt-native --state/--defer"
         )
     _validate_allowed_keys(
         mapping=mapping,

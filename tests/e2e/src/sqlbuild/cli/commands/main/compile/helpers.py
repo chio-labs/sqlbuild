@@ -2515,3 +2515,86 @@ def prepare_compile_cache_invalidation_project(*, project_dir: Path) -> None:
         "[settings]",
         '[vars]\nquantity_multiplier = "2"\n\n[settings]',
     )
+
+
+RESOURCE_SQL_MODELS: str = "models/staging"
+RESOURCE_SQL_ORDERS: str = f"{RESOURCE_SQL_MODELS}/orders.sql"
+RESOURCE_SQL_SINGULAR_AUDIT: str = (
+    f"{RESOURCE_SQL_MODELS}/_sqlbuild/audits/singular/orders_have_customers.sql"
+)
+RESOURCE_SQL_GENERIC_AUDIT: str = (
+    f"{RESOURCE_SQL_MODELS}/_sqlbuild/_audits/generic/status_is_known.sql"
+)
+RESOURCE_SQL_RECENT_ROWS_AUDIT: str = (
+    f"{RESOURCE_SQL_MODELS}/_sqlbuild/_audits/generic/recent_rows.sql"
+)
+RESOURCE_SQL_TEST: str = "tests/unit/test_orders.sql"
+RESOURCE_SQL_NAMED_HOOK: str = f"{RESOURCE_SQL_MODELS}/_sqlbuild/_hooks/sql/record_orders.sql"
+_RESOURCE_SQL_BASE_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "warehouse.duckdb"\n'
+    ),
+    f"{RESOURCE_SQL_MODELS}/customers.sql": (
+        'MODEL (description "Customers per order");\n'
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST(7 AS INTEGER) AS customer_id\n"
+    ),
+}
+
+
+def resource_sql_orders_model(options: str = "") -> tuple[str, str]:
+    """Return the orders model file whose header carries the given extra options."""
+
+    return (
+        RESOURCE_SQL_ORDERS,
+        f'MODEL (description "Orders with their status"{options});\n'
+        'WITH customers AS (SELECT * FROM __ref("customers"))\n'
+        "SELECT CAST(c.order_id AS INTEGER) AS order_id, CAST('open' AS VARCHAR) AS status\n"
+        "FROM customers AS c\n",
+    )
+
+
+def resource_sql_project_files(files: tuple[tuple[str, str], ...]) -> dict[str, str]:
+    """Return the shared orders project plus case-specific files."""
+
+    return {**_RESOURCE_SQL_BASE_FILES, **dict(files)}
+
+
+REQUIRE_SQL_ANALYSIS_PROJECT: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[settings]\nrequire_sql_analysis = true\n'
+)
+OPTIONAL_SQL_ANALYSIS_PROJECT: str = 'name = "orders"\nadapter = "duckdb"\n'
+PARSEABLE_OPT_OUT_MODEL: str = (
+    'MODEL (\n  description "Order flags",\n  sql_analysis false\n);\n'
+    "SELECT 1 = 'pending' AS is_pending, 2 = 'shipped' AS is_shipped\n"
+)
+UNPARSEABLE_OPT_OUT_MODEL: str = (
+    'MODEL (description "Order lookup", sql_analysis false);\nSELECT order_id FROM orders WHERE\n'
+)
+PATH_DEFAULT_MODEL: str = (
+    'MODEL (description "Order epochs");\n'
+    "SELECT CAST(TIMESTAMP '2026-04-01' AS INTEGER) AS ordered_epoch\n"
+)
+OPT_OUT_HELP: str = (
+    "= help: to allow `sql_analysis false` on any model, SQL test or audit, set this in "
+    "sqlbuild_project.toml:\n"
+    "            [settings]\n"
+    "            require_sql_analysis = false"
+)
+
+
+def require_sql_analysis_output(
+    result: subprocess.CompletedProcess[str],
+) -> tuple[tuple[tuple[str, str, int], ...], str]:
+    """Return `(code, path, line)` per JSON diagnostic and all JSON help, note and stderr text."""
+
+    payload: dict[str, Any] = json.loads(result.stdout or '{"diagnostics": []}')
+    diagnostics: list[dict[str, Any]] = payload["diagnostics"]
+    parts: list[str] = [result.stderr]
+    for item in diagnostics:
+        parts.append(str(item.get("help")))
+        parts.extend(item.get("notes", ()))
+    text: str = "\n".join(parts)
+    return (
+        tuple((item["code"], item["path"], item["line"]) for item in diagnostics),
+        text,
+    )

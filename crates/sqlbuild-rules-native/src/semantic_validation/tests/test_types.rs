@@ -37,3 +37,11 @@ pub(crate) struct UniqueWordScalingTestCase {
     pub(crate) identifiers: usize,
     pub(crate) expected_max_duration: std::time::Duration,
 }
+
+pub(crate) struct TypeLocationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) findings: &'static [(&'static str, &'static str)],
+    pub(crate) expected_starts: &'static [&'static str],
+}

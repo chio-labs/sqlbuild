@@ -5,6 +5,11 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
 )
+from sqlbuild.compiler.discovery.constants import (
+    PROJECT_CONFIG_FILENAME,
+    QUERY_CHANGE_TRACKING_SETTING_KEY,
+    SETTINGS_SECTION,
+)
 from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -26,6 +31,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaColumnSource,
     WarningSeverity,
 )
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _OWN_CHANGE_REASONS: dict[ChangeKind, PlanReason] = {
@@ -229,9 +235,14 @@ def build_model_warnings(
                     "replay_on_change bounded-<duration> e.g. bounded-14d (reprocess just "
                     "that window), or leave it forward-only (existing dates as-is, new "
                     "dates use the new query - the default). If this model's output does "
-                    "not depend on the SQL that changed, this is safe to ignore. Silence "
-                    "these with settings.query_change_tracking = false in "
-                    "sqlbuild_project.toml."
+                    "not depend on the SQL that changed, this is safe to ignore. "
+                    + setting_help(
+                        purpose="To silence these warnings",
+                        file_name=PROJECT_CONFIG_FILENAME,
+                        section=SETTINGS_SECTION,
+                        key=QUERY_CHANGE_TRACKING_SETTING_KEY,
+                        value=False,
+                    )
                 ),
             )
         )

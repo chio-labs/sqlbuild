@@ -256,6 +256,27 @@ def run_build(
     return exit_code, "".join(capsys.readouterr())
 
 
+def built_model_rows(
+    *, project_dir: Path, model: str, capsys: pytest.CaptureFixture[str]
+) -> list[tuple[Any, ...]]:
+    """Build the project into its `orders.duckdb` and return one model's rows in a stable order."""
+
+    exit_code, output = run_build(project_dir=project_dir, flags=(), capsys=capsys)
+    assert exit_code == 0, output
+    with duckdb.connect(str(project_dir / "orders.duckdb"), read_only=True) as connection:
+        return sorted(connection.execute(f"SELECT * FROM {model}").fetchall(), key=repr)
+
+
+def rule_fix_statuses(*, payload: dict[str, Any], code: str, file_name: str) -> tuple[str, ...]:
+    """Statuses of one Rule's fixes in one file, from `format --fix --json` output."""
+
+    key: tuple[str, str] = (code, file_name)
+    statuses: dict[tuple[str, str], list[str]] = {key: []}
+    for fix in payload["rule_fixes"]:
+        statuses.setdefault((fix["code"], Path(fix["file"]).name), []).append(fix["status"])
+    return tuple(statuses[key])
+
+
 def write_dropped_relation_project(
     *, project_dir: Path, model_name: str, model_sql: str, settings_toml: str = ""
 ) -> Path:

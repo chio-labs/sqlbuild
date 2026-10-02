@@ -79,7 +79,7 @@ _RAW_SOURCES: dict[str, str] = {
                 'depends_on=model("customers")',
                 "if 'customers' is an external table that shares the name, qualify it with its "
                 "schema",
-                "[references] enforce_explicit = false",
+                "[references]\n            enforce_explicit = false",
             ),
         ),
         PythonSqlReferenceErrorTestCase(

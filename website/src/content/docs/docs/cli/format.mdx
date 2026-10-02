@@ -100,12 +100,21 @@ that are known to preserve meaning, then formats the layout. `--fix --check` rep
 changes without writing files, and `--fix --diff` prints their diff.
 
 Edits are planned in memory and repeated until no more apply; overlapping edits wait for the next
-pass. Every pass recompiles the project and compares output columns (including types and
-nullability), dependencies, and column lineage of each edited model and everything downstream of it
-against the original compilation. When a pass cannot be proved, the edits of each file are checked
-on their own: files whose edits cannot be proved keep their original contents and report
-`format-fix-verification-failed`, while the other files are still fixed. A cycle or the 128-pass
-limit fails without writing any edit.
+pass. Every pass recompiles the project and compares it with the original compilation, so a
+project that already has compile errors can still be fixed:
+
+- An edited file may lose diagnostics but must not gain any. Diagnostics are compared by code,
+  resource and message, not by line.
+- Each edited model must keep its output columns, types and nullability, dependencies, and column
+  lineage. Lineage that is unavailable both before and after counts as unchanged when the columns
+  match.
+- No other file's diagnostics or model outputs may change.
+
+A failure is attributed to the edited file that caused it, and that file keeps its original
+contents and reports `format-fix-verification-failed` with the reason, while the other files are
+still fixed. When a difference cannot be attributed, each file's edits are checked on their own. A
+file whose SQL cannot be expanded is skipped with a `format-fix-skipped` warning that gives the
+reason, and the run continues. A cycle or the 128-pass limit fails without writing any edit.
 
 | Rule | Decision | Reason |
 | --- | --- | --- |
@@ -120,6 +129,7 @@ limit fails without writing any edit.
 | SQBRSQL023 unused table alias | Refused | Not yet reviewed as meaning-preserving. |
 | SQBRSQL025 implicit inner join | Applied | A bare `JOIN ... ON` is an inner join. |
 | SQBRSQL030 boolean CASE simplification | Refused | The `COALESCE` rewrite is not proved portable to every supported dialect. |
+| SQBRSQL042 unused CTE output | Applied when row-neutral | Only a column reference or deterministic scalar expression is removed, from a CTE without `DISTINCT`, `DISTINCT ON`, `GROUP BY ALL`, `ORDER BY ALL`, an ungrouped aggregate, or positional `GROUP BY`/`ORDER BY`. Other removals could change the rows and are refused with the reason. |
 
 Edits that touch macro or intrinsic expansions are refused, and so are edits outside model SQL
 bodies, because recompiling cannot prove their output contract. Findings without a proposed edit

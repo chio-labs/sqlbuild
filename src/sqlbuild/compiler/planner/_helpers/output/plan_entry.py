@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
     CursorInputRoles,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.discovery.main.microbatch_guidance import microbatch_guidance
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
@@ -79,6 +80,7 @@ from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import (
     build_source_read_map,
     with_declared_source_reads,
 )
+from sqlbuild.compiler.planner.constants import MICROBATCH_CONCURRENCY_MESSAGE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.main.changes.relation_replacement import (
@@ -498,10 +500,8 @@ def build_plan_entries(
     )
     if configured_concurrent_entries and not project.settings.microbatch_concurrency:
         names: str = ", ".join(entry.name for entry in configured_concurrent_entries)
-        raise CompileInputError(
-            "batch_concurrency > 1 requires settings.microbatch_concurrency = true; "
-            f"selected model(s): {names}"
-        )
+        note, guidance = microbatch_guidance()
+        raise CompileInputError(f"{MICROBATCH_CONCURRENCY_MESSAGE}{names}; {note}", help=guidance)
     if configured_concurrent_entries and not adapter.supports_concurrent_microbatch_dml():
         raise CompileInputError(
             f"adapter '{adapter.adapter_name}' does not support concurrent microbatch "

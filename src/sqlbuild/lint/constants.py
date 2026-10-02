@@ -41,6 +41,22 @@ DESCRIPTION_REQUIRED_HEADER_KINDS: frozenset[str] = frozenset({HEADER_KIND_MODEL
 
 DEFAULT_MAX_DESCRIPTION_LINES: int = 10
 DEFAULT_LINE_WIDTH: int = 100
+DEFAULT_MAX_LITERAL_LENGTH: int = 100
+DEFAULT_MAX_RANKING_ORDER_BY: int = 5
+MAX_LITERAL_LENGTH_THRESHOLD: str = "max_literal_length"
+MAX_RANKING_ORDER_BY_THRESHOLD: str = "max_ranking_order_by"
+SAFE_RULE_FIX_CODES: frozenset[str] = frozenset(
+    {
+        "SQBRSQL002",
+        "SQBRSQL003",
+        "SQBRSQL005",
+        "SQBRSQL006",
+        "SQBRSQL008",
+        "SQBRSQL017",
+        "SQBRSQL025",
+        "SQBRSQL042",
+    }
+)
 
 LINT_DIRECTORY_NAMES: tuple[str, ...] = (
     "models",
@@ -98,3 +114,25 @@ GENERATED_SQL_MESSAGE_SUFFIX: str = "(in generated SQL)"
 LINE_FEED: str = "\n"
 CARRIAGE_RETURN_LINE_FEED: str = "\r\n"
 TAB_CHARACTER: str = "\t"
+UNIQUE_AUDIT_NAME: str = "unique"
+UNIQUE_AUDIT_COLUMN_ARGUMENT: str = "column"
+UNIQUE_KEY_CONFIG: str = "unique_key"
+NOT_NULL_AUDIT_NAME: str = "not_null"
+MATERIALIZED_CONFIG: str = "materialized"
+INCREMENTAL_MATERIALIZATION: str = "incremental"
+INCREMENTAL_MODE_CONFIG: str = "incremental_mode"
+MICROBATCH_MODE: str = "microbatch"
+INCREMENTAL_STRATEGY_CONFIG: str = "incremental_strategy"
+CURSOR_CONFIG: str = "cursor"
+KEYED_DELETE_INSERT_STRATEGY: str = "delete_insert"
+KEY_PRESERVING_STRATEGIES: frozenset[str] = frozenset({"merge", KEYED_DELETE_INSERT_STRATEGY})
+RELATION_IDENTITY_TEMPLATE: str = "{kind}:{name}"
+RELATION_KIND_REF: str = "ref"
+RELATION_KIND_SOURCE: str = "source"
+RELATION_KIND_SEED: str = "seed"
+
+FIX_COLUMNS_UNKNOWN: str = "Output columns could not be inferred, so the fix cannot be verified"
+FIX_COLUMNS_CHANGED: str = "The fix would change output columns, types or nullability"
+FIX_DEPENDENCIES_CHANGED: str = "The fix would change model dependencies"
+FIX_LINEAGE_CHANGED: str = "The fix would change column lineage"
+FIX_NEW_DIAGNOSTICS: str = "The fix would add compile diagnostics: "

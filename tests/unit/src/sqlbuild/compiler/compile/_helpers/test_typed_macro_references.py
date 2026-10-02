@@ -125,7 +125,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
                 "model:order_summary depends on model:stg_orders through macro orders_base()",
                 "--> macros/common.py",
                 'pass it in: @orders_base(__ref("stg_orders"))',
-                "[references] enforce_explicit = false",
+                "[references]\n            enforce_explicit = false",
             ),
         ),
         MacroGeneratedReferenceErrorTestCase(
@@ -134,7 +134,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
             sql="@wrap('__ref(\"stg_orders\")')",
             expected_error_fragments=(
                 "model:order_summary depends on model:stg_orders through macro wrap()",
-                "[references] enforce_explicit = false",
+                "[references]\n            enforce_explicit = false",
             ),
         ),
         MacroGeneratedReferenceErrorTestCase(

@@ -3,7 +3,7 @@
 pub(crate) mod _helpers;
 mod constants;
 pub(crate) mod main;
-mod models;
+pub(crate) mod models;
 pub(crate) mod types;
 
 #[cfg(test)]

@@ -99,7 +99,9 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
 }
 
 pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
-    const THRESHOLDS: [&str; 10] = [
+    const THRESHOLDS: [&str; 12] = [
+        "max_literal_length",
+        "max_ranking_order_by",
         "min_audits_per_model",
         "min_tests_per_model",
         "min_custom_rule_test_cases",
@@ -159,6 +161,14 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
         .find(|key| !THRESHOLDS.contains(&key.as_str()))
     {
         return Err(format!("unknown rule thresholds: {name}"));
+    }
+    if let Some(name) = ["max_literal_length", "max_ranking_order_by"]
+        .into_iter()
+        .find(|name| config.thresholds.get(*name) == Some(&0))
+    {
+        return Err(format!(
+            "rules.thresholds.{name} must be a positive integer"
+        ));
     }
     for entry in &config.threshold_overrides {
         if entry.paths.is_empty() || entry.thresholds.is_empty() || entry.reason.trim().is_empty() {

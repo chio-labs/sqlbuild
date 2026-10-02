@@ -2,6 +2,7 @@
 
 use crate::semantic_validation::_helpers::catalog::diagnostic_row;
 use crate::semantic_validation::_helpers::function_names;
+use crate::semantic_validation::_helpers::type_locations::locate_type_findings;
 use crate::semantic_validation::models::FunctionProbes;
 use crate::semantic_validation::types::DiagnosticRow;
 use polyglot_sql::expressions::Select;
@@ -153,8 +154,10 @@ pub(crate) fn map_diagnostics(
         dialect,
         statements: None,
     };
-    let mut errors: Vec<ValidationError> = Vec::with_capacity(result.errors.len());
-    for error in result.errors {
+    let mut native = result.errors;
+    locate_type_findings(sql, dialect, &mut native)?;
+    let mut errors: Vec<ValidationError> = Vec::with_capacity(native.len());
+    for error in native {
         if let Some(error) = context.map(error)? {
             errors.push(error);
         }

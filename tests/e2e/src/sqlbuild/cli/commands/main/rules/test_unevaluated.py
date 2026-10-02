@@ -37,6 +37,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             extra_files=(("models/staging/customers.sql", "MODEL ();\nSELECT 1 AS order_id\n"),),
         ),
         UnevaluatedResourceCase(
+            "model the compiler accepts but the Rules parser rejects",
+            "models/staging/orders.sql",
+            "MODEL ();\nWITH items AS (SELECT [1, 2] AS quantities)\n"
+            "SELECT 1 AS order_id, list_transform(i.quantities, lambda q: q + 1) AS shipped\n"
+            "FROM items AS i",
+            expected_evaluated_models=0,
+            expected_reason="could not parse models/staging/orders.sql for rules",
+            rule="SQBRMODEL101",
+        ),
+        UnevaluatedResourceCase(
             "SQL-test guard",
             "tests/unit/test_orders.sql",
             "TEST ();\nWITH __ref__orders AS (SELECT {expression} AS order_id), __expected__orders AS (SELECT 1 AS order_id) SELECT 1",
@@ -54,10 +64,11 @@ def test_given_guarded_resource_when_running_rules_then_reports_failure_and_cove
         resource_template=test_case.template,
         adapter=test_case.adapter,
         extra_files=test_case.extra_files,
+        selected_rules=(test_case.rule,),
     )
     for _ in range(2):
         result: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
-            tmp_path, "rules", "--json", "run", "SQBRSQL035"
+            tmp_path, "rules", "--json", "run", test_case.rule
         )
         assert result.returncode == 1, result.stdout + result.stderr
         payload: dict[str, Any] = json.loads(result.stdout)
@@ -66,10 +77,10 @@ def test_given_guarded_resource_when_running_rules_then_reports_failure_and_cove
         (finding,) = payload["findings"]
         assert finding["code"] == "rules-unevaluated"
         assert finding["path"] == test_case.path
-        assert finding["affected_rules"] == ["SQBRSQL035"]
+        assert finding["affected_rules"] == [test_case.rule]
         assert test_case.expected_reason in finding["message"]
     human: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
-        tmp_path, "rules", "run", "SQBRSQL035"
+        tmp_path, "rules", "run", test_case.rule
     )
     assert human.returncode == 1
     assert (
@@ -190,7 +201,7 @@ def test_given_explicit_escape_hatch_when_running_rules_then_honors_policy(
             "Rules CLI groups selected family",
             ("rules", "--json", "run", "SQBRSQL"),
             "findings",
-            tuple(f"SQBRSQL{number:03}" for number in range(1, 42)),
+            tuple(f"SQBRSQL{number:03}" for number in range(1, 45)),
         ),
         GroupedRulesCase(
             "suppression precedes grouping",

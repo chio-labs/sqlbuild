@@ -19,6 +19,7 @@ Online: https://sqlbuild.com/docs/concepts/audits/
 - Seed audits
 - Severity
 - Run scope
+- Skipping SQL analysis
 - Running audits standalone
 
 Audits are SQL queries that verify data quality. Violation audits return invalid rows. Measurement
@@ -424,6 +425,15 @@ Delta-phase audits with `error` severity block DML before the target is updated.
 The `4/4` indicates the audit passed for all 4 microbatch batches.
 
 If a model is not incremental, `delta_and_final` degrades to `final` automatically.
+
+## Skipping SQL analysis
+
+Compile checks audit SQL like model SQL: unknown columns and functions, type mismatches and syntax
+errors are compile errors. For SQL the parser cannot read, add `sql_analysis false` to the `AUDIT`
+header of a singular or generic audit; the audit still runs. Audits attached to a model with
+`sql_analysis false`, and every audit in a `--no-sql-analysis` run, are not analysed. With
+`[settings] require_sql_analysis = true`, the opt-out is accepted only on audit SQL that cannot be
+parsed (see [Requiring SQL analysis](models/configuration.md#requiring-sql-analysis)).
 
 ## Running audits standalone
 

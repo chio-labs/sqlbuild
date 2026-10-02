@@ -220,6 +220,7 @@ class Finding:
     remediation: str
     unevaluated: bool = False
     affected_rules: tuple[str, ...] = ()
+    fixable: bool = False
 
 
 @dataclass(frozen=True)

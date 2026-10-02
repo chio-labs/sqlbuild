@@ -165,3 +165,64 @@ def custom_rule_messages(result: subprocess.CompletedProcess[str]) -> tuple[str,
     """Return custom-rule diagnostic messages from one JSON compile result."""
 
     return tuple(str(item["message"]) for item in custom_rule_diagnostics(result))
+
+
+def write_quality_project(*, project_dir: Path, toml: str, upstream: str, summary: str) -> None:
+    """Write a two-model project: `raw_orders` and the `order_summary` model under test."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(toml, encoding="utf-8")
+    models: Path = project_dir / "models"
+    models.mkdir()
+    (models / "raw_orders.sql").write_text(upstream, encoding="utf-8")
+    (models / "order_summary.sql").write_text(summary, encoding="utf-8")
+
+
+def diagnostic_codes(result: subprocess.CompletedProcess[str]) -> tuple[str, ...]:
+    """Return diagnostic codes from one JSON compile result, in report order."""
+
+    return tuple(str(item["code"]) for item in json.loads(result.stdout)["diagnostics"])
+
+
+def finding_fixability(result: subprocess.CompletedProcess[str]) -> dict[str, bool]:
+    """Map each code in a `rules --json run` result to whether its finding reports a fix."""
+
+    return {
+        str(item["code"]): item.get("fixable") is True
+        for item in json.loads(result.stdout)["findings"]
+    }
+
+
+def fixable_finding_count(result: subprocess.CompletedProcess[str]) -> int:
+    """Count findings that report an available fix in a `rules --json run` result."""
+
+    return sum(item.get("fixable") is True for item in json.loads(result.stdout)["findings"])
+
+
+def diagnostic_notes(result: subprocess.CompletedProcess[str]) -> dict[str, tuple[str, ...]]:
+    """Map each code in a JSON compile result to its diagnostic notes."""
+
+    return {
+        str(item["code"]): tuple(item.get("notes", ()))
+        for item in json.loads(result.stdout)["diagnostics"]
+    }
+
+
+def help_fragment_presence(
+    result: subprocess.CompletedProcess[str], fragments: tuple[tuple[str, str], ...]
+) -> tuple[bool, ...]:
+    """Return, per `(code, fragment)`, whether that code's diagnostic help contains it."""
+
+    helps: dict[str, str] = {
+        str(item["code"]): str(item.get("help", ""))
+        for item in json.loads(result.stdout)["diagnostics"]
+    }
+    return tuple(fragment in helps.get(code, "") for code, fragment in fragments)
+
+
+def long_literal_hints(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    """Map each finding path of a SQBRSQL044-only run to the help before the generic guidance."""
+
+    return {
+        str(item["path"]): str(item["remediation"]).partition("Define the value once")[0].strip()
+        for item in json.loads(result.stdout)["findings"]
+    }
