@@ -2704,3 +2704,76 @@ def run_set_operation_lifecycle(
         indented_set_operation_lines=tuple(indented_set_operation_lines),
         recompiled=compile_set_operation_project(project_dir=project_dir),
     )
+
+
+class UnionFixtureCompileMeasurement(NamedTuple):
+    analysis_native_ms: int
+    sql_tests: int
+    errors: int
+
+
+def _union_all_fixture_rows(*, row_count: int, status: str) -> str:
+    return " UNION ALL\n".join(
+        f"  SELECT {row} AS order_id, CAST({row} AS DOUBLE) AS amount, '{status}' AS status"
+        for row in range(row_count)
+    )
+
+
+def write_union_fixture_test_project(
+    *, project_dir: Path, sql_test_count: int, fixture_row_count: int
+) -> None:
+    """Write a DuckDB project whose SQL tests use long UNION ALL fixture chains."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            f'name = "orders"\nadapter = "duckdb"\n[connection]\n'
+            f'database = "{project_dir / "orders.duckdb"}"\n[rules]\nselect = []\n'
+        ),
+        "models/base_orders.sql": (
+            "MODEL (materialized view);\n\n"
+            "SELECT 1 AS order_id, CAST(1 AS DOUBLE) AS amount, 'open' AS status\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized view);\n\n"
+            'SELECT b.order_id, b.amount, b.status FROM __ref("base_orders") AS b\n'
+        ),
+    }
+    for index in range(sql_test_count):
+        fixture_rows: str = _union_all_fixture_rows(
+            row_count=fixture_row_count, status=f"status_{index:02d}"
+        )
+        files[f"tests/unit/orders_case_{index:02d}.sql"] = (
+            f'TEST (name "orders_case_{index:02d}");\n\n'
+            f"WITH\n__ref__base_orders AS (\n{fixture_rows}\n),\n"
+            f"__expected__orders AS (\n{fixture_rows}\n)\nSELECT 1\n"
+        )
+    prepare_inline_project(
+        tmp_path=project_dir.parent, project_name=project_dir.name, repo_files=files
+    )
+
+
+def measure_union_fixture_compile(
+    *, project_dir: Path, runs: int
+) -> UnionFixtureCompileMeasurement:
+    """Return the fastest native analysis time of fresh uncached compiles."""
+
+    skip_actions: dict[bool, Callable[[], None]] = {
+        False: _continue_compile_benchmark,
+        True: _skip_compile_benchmark,
+    }
+    skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
+    measurements: list[UnionFixtureCompileMeasurement] = []
+    for _ in range(runs):
+        result: subprocess.CompletedProcess[str] = run_installed_sqb(
+            project_dir=project_dir, args=("compile", "--no-cache", "--json"), env={}
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        payload: dict[str, Any] = json.loads(result.stdout)
+        measurements.append(
+            UnionFixtureCompileMeasurement(
+                analysis_native_ms=payload["compile_timings"]["analysis_native_ms"],
+                sql_tests=payload["summary"]["tests"],
+                errors=payload["summary"]["errors"],
+            )
+        )
+    return min(measurements)

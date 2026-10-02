@@ -14,20 +14,24 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     LayeredProductionCompilePerformanceGuardTestCase,
     SemanticCompilePerformanceGuardTestCase,
     SqlTestHeavyCompilePerformanceGuardTestCase,
+    UnionFixtureCompileScalingTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileBenchmarkMeasurement,
     DbtShapedCompileBenchmarkResult,
     LayeredProductionCompileBenchmarkResult,
     SemanticCompileBenchmarkResult,
+    UnionFixtureCompileMeasurement,
     measure_compiled_test_sql_bytes,
     measure_declared_model_columns,
     measure_model_sql_bytes,
+    measure_union_fixture_compile,
     run_advanced_compile_benchmark,
     run_dbt_shaped_compile_benchmark,
     run_layered_production_compile_benchmark,
     run_semantic_compile_benchmark,
     run_test_heavy_compile_benchmark,
+    write_union_fixture_test_project,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -120,6 +124,60 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
         test_case.model_count * test_case.large_scan_event_lines_per_model
         == test_case.expected_large_scan_events
     )
+    assert scaling_ratio < test_case.expected_max_scaling_ratio
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnionFixtureCompileScalingTestCase(
+            description="quadrupling UNION ALL fixture rows keeps SQL test analysis linear",
+            sql_test_count=4,
+            small_fixture_rows=50,
+            large_fixture_rows=200,
+            measured_runs=3,
+            expected_sql_tests=4,
+            expected_errors=0,
+            expected_max_scaling_ratio=6.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_tests_with_union_all_fixtures_when_quadrupling_rows_then_analysis_scales_linearly(
+    tmp_path: Path,
+    test_case: UnionFixtureCompileScalingTestCase,
+) -> None:
+    small_project_dir: Path = tmp_path / "union_fixtures_small"
+    large_project_dir: Path = tmp_path / "union_fixtures_large"
+    write_union_fixture_test_project(
+        project_dir=small_project_dir,
+        sql_test_count=test_case.sql_test_count,
+        fixture_row_count=test_case.small_fixture_rows,
+    )
+    write_union_fixture_test_project(
+        project_dir=large_project_dir,
+        sql_test_count=test_case.sql_test_count,
+        fixture_row_count=test_case.large_fixture_rows,
+    )
+    small: UnionFixtureCompileMeasurement = measure_union_fixture_compile(
+        project_dir=small_project_dir, runs=test_case.measured_runs
+    )
+    large: UnionFixtureCompileMeasurement = measure_union_fixture_compile(
+        project_dir=large_project_dir, runs=test_case.measured_runs
+    )
+    scaling_ratio: float = large.analysis_native_ms / max(small.analysis_native_ms, 1)
+    _LOGGER.info(
+        f"union fixture compile small={small.analysis_native_ms}ms "
+        f"large={large.analysis_native_ms}ms ratio={scaling_ratio:.2f} "
+        f"budget={test_case.expected_max_scaling_ratio:.1f}"
+    )
+
+    assert (small.sql_tests, large.sql_tests) == (
+        test_case.expected_sql_tests,
+        test_case.expected_sql_tests,
+    )
+    assert (small.errors, large.errors) == (test_case.expected_errors, test_case.expected_errors)
     assert scaling_ratio < test_case.expected_max_scaling_ratio
 
 

@@ -329,7 +329,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "polyglot-sql"
 version = "0.13.8"
-source = "git+https://github.com/chio-labs/polyglot.git?rev=7f9c029f53053e802710f740a6a47acae415375c#7f9c029f53053e802710f740a6a47acae415375c"
+source = "git+https://github.com/chio-labs/polyglot.git?rev=9ba2a98e1a9df2be7b33d105a0e5e4e15294632a#9ba2a98e1a9df2be7b33d105a0e5e4e15294632a"
 dependencies = [
  "polyglot-sql-ast-derive",
  "polyglot-sql-function-catalogs",
@@ -344,7 +344,7 @@ dependencies = [
 [[package]]
 name = "polyglot-sql-ast-derive"
 version = "0.13.8"
-source = "git+https://github.com/chio-labs/polyglot.git?rev=7f9c029f53053e802710f740a6a47acae415375c#7f9c029f53053e802710f740a6a47acae415375c"
+source = "git+https://github.com/chio-labs/polyglot.git?rev=9ba2a98e1a9df2be7b33d105a0e5e4e15294632a#9ba2a98e1a9df2be7b33d105a0e5e4e15294632a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -354,7 +354,7 @@ dependencies = [
 [[package]]
 name = "polyglot-sql-function-catalogs"
 version = "0.13.8"
-source = "git+https://github.com/chio-labs/polyglot.git?rev=7f9c029f53053e802710f740a6a47acae415375c#7f9c029f53053e802710f740a6a47acae415375c"
+source = "git+https://github.com/chio-labs/polyglot.git?rev=9ba2a98e1a9df2be7b33d105a0e5e4e15294632a#9ba2a98e1a9df2be7b33d105a0e5e4e15294632a"
 
 [[package]]
 name = "portable-atomic"
