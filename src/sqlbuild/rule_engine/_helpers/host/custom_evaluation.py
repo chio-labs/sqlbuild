@@ -114,7 +114,10 @@ def evaluate_custom_rules(
             repeated=list(chain.from_iterable(item.findings for item in repeated)),
         )
     return CustomRuleRun(
-        evaluations=tuple(evaluations), untracked_codes=frozenset(tracker.untracked_codes)
+        evaluations=tuple(evaluations),
+        untracked_codes=frozenset(tracker.untracked_codes),
+        uncacheable_codes=frozenset(tracker.uncacheable_codes),
+        observed=() if reads is None else tuple(reads.observed.items()),
     )
 
 
@@ -126,6 +129,7 @@ class _ReadTracker:
     ) -> None:
         self.reads: FactReads | None = reads
         self.untracked_codes: set[str] = set()
+        self.uncacheable_codes: set[str] = set()
         self._rules_root: Path = rules_root
         self._namespaces: dict[str, tuple[dict[str, object], ...]] = (
             {rule.code: rule_namespaces((rule.check,)) for rule in rules}
@@ -140,6 +144,7 @@ class _ReadTracker:
         if self.reads is not None:
             self.reads.current = set()
             self.reads.untracked = False
+            self.reads.uncacheable = False
 
     def finish(self, *, code: str) -> frozenset[tuple[object, ...]] | None:
         reads: FactReads | None = self.reads
@@ -149,6 +154,8 @@ class _ReadTracker:
         reads.current = None
         if reads.untracked:
             self.untracked_codes.add(code)
+        if reads.uncacheable:
+            self.uncacheable_codes.add(code)
         for rule_code, namespaces in self._namespaces.items():
             if rule_code in self.untracked_codes:
                 continue

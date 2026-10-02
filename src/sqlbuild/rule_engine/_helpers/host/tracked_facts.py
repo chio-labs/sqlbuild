@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledAudit, CompiledSqlTest, InferredColumn
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_error_digest, fact_value_digest
 from sqlbuild.rule_engine.classes.fact_reads import FactReads
 from sqlbuild.rule_engine.constants import (
     FACT_AUDITS_ALL,
@@ -39,11 +41,12 @@ from sqlbuild.rule_engine.constants import (
     FACT_TREE_RELATIVE_PARTS,
     FACT_TREE_RESOURCES_UNDER,
 )
+from sqlbuild.rule_engine.exceptions import FactDigestError
 from sqlbuild.rule_engine.models import Model, ModelSql, ProjectPath, RuleFactViews
 
 
 class _TrackedView:
-    """Delegate unknown attribute access to the wrapped view and mark the evaluation untracked."""
+    """Delegate unknown attribute access to the wrapped view and mark the evaluation uncacheable."""
 
     __slots__ = ("_tracked_reads", "_tracked_view")
 
@@ -55,50 +58,81 @@ class _TrackedView:
         object.__setattr__(self, "_tracked_reads", reads)
 
     def __getattr__(self, name: str) -> object:
-        self._tracked_reads.untracked = True
+        self._tracked_reads.uncacheable = True
         return getattr(self._tracked_view, name)
 
     def __setattr__(self, name: str, value: object) -> None:
-        self._tracked_reads.untracked = True
+        self._tracked_reads.uncacheable = True
         setattr(self._tracked_view, name, value)
 
 
 class _TrackedProjectTree(_TrackedView):
+    """Record live filesystem reads with the digest of the value each read returned."""
+
     __slots__ = ()
 
     def paths(self) -> tuple[ProjectPath, ...]:
-        self._tracked_reads.record(key=(FACT_TREE_PATHS,))
-        return self._tracked_view.paths()
+        key: tuple[str, ...] = (FACT_TREE_PATHS,)
+        self._tracked_reads.record(key=key)
+        observed: tuple[str, ...] | None = key if self._tracked_reads.current is not None else None
+        return self._observed(key=observed, read=self._tracked_view.paths)
 
     def children(self, path: str = "") -> tuple[ProjectPath, ...]:
-        self._tracked_reads.record_text(fact=FACT_TREE_CHILDREN, values=(path,))
-        return self._tracked_view.children(path)
+        key: tuple[str, ...] | None = self._tracked_reads.record_text(
+            fact=FACT_TREE_CHILDREN, values=(path,)
+        )
+        return self._observed(key=key, read=lambda: self._tracked_view.children(path))
 
     def descendants(self, path: str = "") -> tuple[ProjectPath, ...]:
-        self._tracked_reads.record_text(fact=FACT_TREE_DESCENDANTS, values=(path,))
-        return self._tracked_view.descendants(path)
+        key: tuple[str, ...] | None = self._tracked_reads.record_text(
+            fact=FACT_TREE_DESCENDANTS, values=(path,)
+        )
+        return self._observed(key=key, read=lambda: self._tracked_view.descendants(path))
 
     def glob(self, pattern: str) -> tuple[ProjectPath, ...]:
-        self._tracked_reads.record_text(fact=FACT_TREE_GLOB, values=(pattern,))
-        return self._tracked_view.glob(pattern)
+        key: tuple[str, ...] | None = self._tracked_reads.record_text(
+            fact=FACT_TREE_GLOB, values=(pattern,)
+        )
+        return self._observed(key=key, read=lambda: self._tracked_view.glob(pattern))
 
     def relative_parts(self, *, path: Path | str, under: str = "") -> tuple[str, ...]:
-        self._tracked_reads.record_text(
-            fact=FACT_TREE_RELATIVE_PARTS,
-            values=(
-                path,
-                under,
-            ),
+        key: tuple[str, ...] | None = self._tracked_reads.record_text(
+            fact=FACT_TREE_RELATIVE_PARTS, values=(path, under)
         )
-        return self._tracked_view.relative_parts(path=path, under=under)
+        return self._observed(
+            key=key, read=lambda: self._tracked_view.relative_parts(path=path, under=under)
+        )
 
     def resources_under(self, path: str) -> tuple[Model, ...]:
-        self._tracked_reads.record_text(fact=FACT_TREE_RESOURCES_UNDER, values=(path,))
-        return self._tracked_view.resources_under(path)
+        key: tuple[str, ...] | None = self._tracked_reads.record_text(
+            fact=FACT_TREE_RESOURCES_UNDER, values=(path,)
+        )
+        return self._observed(key=key, read=lambda: self._tracked_view.resources_under(path))
 
     def read_text(self, path: str) -> str:
-        self._tracked_reads.record_text(fact=FACT_TREE_READ_TEXT, values=(path,))
-        return self._tracked_view.read_text(path)
+        key: tuple[str, ...] | None = self._tracked_reads.record_text(
+            fact=FACT_TREE_READ_TEXT, values=(path,)
+        )
+        return self._observed(key=key, read=lambda: self._tracked_view.read_text(path))
+
+    def _observed[T](self, *, key: tuple[str, ...] | None, read: Callable[[], T]) -> T:
+        reads: FactReads = self._tracked_reads
+        if key is None or (key[0] != FACT_TREE_READ_TEXT and key in reads.observed):
+            return read()
+        try:
+            value: T = read()
+        except Exception as error:
+            reads.observe(key=key, digest=_digest_or_none(error=error))
+            raise
+        reads.observe(key=key, digest=_digest_or_none(value=value))
+        return value
+
+
+def _digest_or_none(*, value: object = None, error: Exception | None = None) -> str | None:
+    try:
+        return fact_value_digest(value) if error is None else fact_error_digest(error)
+    except FactDigestError:
+        return None
 
 
 class _TrackedProjectFacts(_TrackedView):

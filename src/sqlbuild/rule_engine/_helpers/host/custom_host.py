@@ -132,9 +132,10 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
 
     readsets: dict[frozenset[tuple[object, ...]], int] = {}
     evaluations: list[dict[str, object]] = []
+    untracked: set[str] = set(run.untracked_codes)
     for evaluation in run.evaluations:
         index: int | None = None
-        if evaluation.reads is not None and evaluation.code not in run.untracked_codes:
+        if evaluation.reads is not None and evaluation.code not in untracked:
             index = readsets.setdefault(evaluation.reads, len(readsets))
         evaluations.append(
             {
@@ -144,16 +145,23 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
                 "reads": index,
             }
         )
-    untracked: set[str] = set(run.untracked_codes)
     if sum(map(len, readsets)) > CUSTOM_HOST_MAX_TRACKED_READS:
         untracked.update(str(item["code"]) for item in evaluations if item["reads"] is not None)
         readsets = {}
         for item in evaluations:
             item["reads"] = None
+    untracked_reads: dict[str, set[tuple[object, ...]]] = {code: set() for code in untracked}
+    for evaluation in run.evaluations:
+        if evaluation.code in untracked_reads and evaluation.reads is not None:
+            untracked_reads[evaluation.code].update(evaluation.reads)
     return {
         "evaluations": evaluations,
         "readsets": [sorted(map(fact_key_payload, readset)) for readset in readsets],
-        "untracked": sorted(untracked),
+        "untracked": {
+            code: sorted(map(fact_key_payload, reads)) for code, reads in untracked_reads.items()
+        },
+        "uncacheable": sorted(run.uncacheable_codes),
+        "observed": sorted([list(key), digest] for key, digest in run.observed),
     }
 
 

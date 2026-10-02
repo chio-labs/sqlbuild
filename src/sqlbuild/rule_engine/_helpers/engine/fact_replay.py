@@ -97,6 +97,7 @@ _TEXT_FACT_ARITY: dict[str, int] = {
     FACT_TREE_RESOURCES_UNDER: 1,
     FACT_TREE_READ_TEXT: 1,
 }
+_TREE_FACTS: frozenset[str] = frozenset({FACT_TREE_PATHS, *_TEXT_FACTS})
 
 
 def fact_key_payload(key: tuple[object, ...]) -> list[str]:
@@ -130,8 +131,26 @@ def fact_outcome_digest(*, views: RuleFactViews, key: FactKey) -> str:
     except FactDigestError:
         raise
     except Exception as error:
-        return _encoded_digest(("error", type(error).__name__, str(error)))
+        return fact_error_digest(error)
+    return fact_value_digest(value)
+
+
+def fact_value_digest(value: object) -> str:
+    """Digest one fact value exactly as a recomputed fact would digest it."""
+
     return _encoded_digest(("value", value))
+
+
+def fact_error_digest(error: Exception) -> str:
+    """Digest one raised fact error exactly as a recomputed fact would digest it."""
+
+    return _encoded_digest(("error", type(error).__name__, str(error)))
+
+
+def is_tree_fact(key: FactKey) -> bool:
+    """Return whether a fact is read from the live project filesystem."""
+
+    return bool(key) and key[0] in _TREE_FACTS
 
 
 def _fact_value(*, views: RuleFactViews, key: FactKey) -> object:

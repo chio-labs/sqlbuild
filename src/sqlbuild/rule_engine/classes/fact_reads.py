@@ -10,11 +10,13 @@ from sqlbuild.rule_engine.models import Model
 class FactReads:
     """Collect the fact keys one custom-rule evaluation observes."""
 
-    __slots__ = ("current", "untracked")
+    __slots__ = ("current", "observed", "uncacheable", "untracked")
 
     def __init__(self) -> None:
         self.current: set[tuple[object, ...]] | None = None
         self.untracked: bool = False
+        self.uncacheable: bool = False
+        self.observed: dict[tuple[str, ...], str | None] = {}
 
     def record(self, *, key: tuple[object, ...]) -> None:
         current: set[tuple[object, ...]] | None = self.current
@@ -36,15 +38,25 @@ class FactReads:
         else:
             self.untracked = True
 
-    def record_text(self, *, fact: str, values: tuple[object, ...]) -> None:
+    def record_text(self, *, fact: str, values: tuple[object, ...]) -> tuple[str, ...] | None:
         current: set[tuple[object, ...]] | None = self.current
         if current is None:
-            return
+            return None
         texts: list[str] = []
         for value in values:
             if isinstance(value, (str, os.PathLike)):
                 texts.append(os.fspath(value))
             else:
                 self.untracked = True
-                return
-        current.add((fact, *texts))
+                return None
+        key: tuple[str, ...] = (fact, *texts)
+        current.add(key)
+        return key
+
+    def observe(self, *, key: tuple[str, ...], digest: str | None) -> None:
+        """Remember the digest a live filesystem fact had when the rule read it."""
+
+        if key in self.observed and self.observed[key] != digest:
+            self.observed[key] = None
+        else:
+            self.observed.setdefault(key, digest)

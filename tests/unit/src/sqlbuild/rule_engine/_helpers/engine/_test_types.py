@@ -164,6 +164,27 @@ class CustomRuleReadTrackingTestCase:
 
 
 @dataclass(frozen=True)
+class CustomRuleUncacheableTestCase:
+    """One model-subject rule whose fact access cannot be attributed to recorded reads."""
+
+    description: str
+    body: str
+    expected_warm_hits: int = 0
+
+
+@dataclass(frozen=True)
+class CustomRuleProjectFileTestCase:
+    """One rule reading a project file whose contents change from customers to orders."""
+
+    description: str
+    file_path: str
+    body: str
+    expected_rerun_hits: int
+    expected_finding_paths: tuple[str, ...]
+    module_prelude: str = ""
+
+
+@dataclass(frozen=True)
 class NativeMemoTestCase:
     """One warm built-in evaluation followed by an edit that must invalidate the memo."""
 
@@ -172,3 +193,12 @@ class NativeMemoTestCase:
     edited_config: dict[str, object]
     expected_original_codes: tuple[str, ...]
     expected_edited_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeBuildIdentityTestCase:
+    """One cached evaluation repeated after the native extension reports another build."""
+
+    description: str
+    expected_rebuilt_evaluations: int
+    expected_warm_evaluations: int

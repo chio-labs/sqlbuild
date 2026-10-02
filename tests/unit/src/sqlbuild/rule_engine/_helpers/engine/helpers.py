@@ -1,6 +1,7 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from operator import attrgetter
 from pathlib import Path
@@ -187,6 +188,18 @@ def write_rule(
     return path.relative_to(root)
 
 
+def write_project_file_rule(
+    *, root: Path, file_path: str, contents: str, body: str, module_import: str
+) -> Path:
+    """Write one project file plus a custom rule and return the absolute file path."""
+
+    path: Path = root / file_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+    _ = write_rule(root=root, body=body, module_import=module_import)
+    return path
+
+
 def load_custom_rule(*, root: Path, configured_path: Path) -> Rule:
     del configured_path
     config: RulesConfig = RulesConfig()
@@ -288,3 +301,17 @@ def evaluate_contract_rule(
         config_values=config_values,
     )
     return evaluate(project=project, config=config, project_dir=project_dir)
+
+
+def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Count every request that reaches the native built-in rules engine."""
+
+    requests: list[str] = []
+    evaluate_json: Callable[[str], str] = native._native.evaluate_json
+
+    def recording(request_json: str) -> str:
+        requests.append(request_json)
+        return evaluate_json(request_json)
+
+    monkeypatch.setattr(native._native, "evaluate_json", recording)
+    return requests

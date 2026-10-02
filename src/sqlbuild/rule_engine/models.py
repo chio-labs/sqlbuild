@@ -399,6 +399,8 @@ class CustomRuleRun:
 
     evaluations: tuple[CustomRuleEvaluation, ...]
     untracked_codes: frozenset[str]
+    uncacheable_codes: frozenset[str] = frozenset()
+    observed: tuple[tuple[tuple[str, ...], str | None], ...] = ()
 
 
 @dataclass(frozen=True)

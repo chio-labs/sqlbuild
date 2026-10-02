@@ -7,6 +7,7 @@ import os
 import pickle
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
@@ -22,7 +23,7 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
     custom_rule_import_closure,
 )
-from sqlbuild.rule_engine._helpers.engine.fact_replay import full_fact_keys
+from sqlbuild.rule_engine._helpers.engine.fact_replay import full_fact_keys, is_tree_fact
 from sqlbuild.rule_engine.classes.fact_digests import FactDigests
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
 from sqlbuild.rule_engine.constants import (
@@ -49,6 +50,14 @@ class _Subject:
 class _Evaluated:
     findings: tuple[dict[str, object], ...]
     reads: tuple[FactKey, ...] | None
+
+
+@dataclass(frozen=True)
+class _HostRun:
+    evaluated: dict[tuple[str, str], _Evaluated]
+    untracked_reads: dict[str, tuple[FactKey, ...]]
+    uncacheable: frozenset[str]
+    observed: dict[FactKey, str | None]
 
 
 @dataclass(frozen=True)
@@ -82,7 +91,7 @@ def evaluate_custom_rules_cached(
     if not custom:
         return CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
     if not config.cache.enabled:
-        evaluated: dict[tuple[str, str], _Evaluated] = _run_host(
+        uncached: _HostRun = _run_host(
             project=project,
             config=config,
             project_dir=project_dir,
@@ -95,7 +104,7 @@ def evaluate_custom_rules_cached(
             findings=_ordered_findings(
                 rules=custom,
                 subjects=_subjects(project=project, rules=custom),
-                results={key: value.findings for key, value in evaluated.items()},
+                results={key: value.findings for key, value in uncached.evaluated.items()},
             ),
             cache_hits=0,
             cache_misses=len(custom),
@@ -143,7 +152,7 @@ def evaluate_custom_rules_cached(
         len(subjects[code]) if planned is None else len(planned) for code, planned in plan.items()
     )
     if plan:
-        evaluated = _run_host(
+        run: _HostRun = _run_host(
             project=project,
             config=config,
             project_dir=project_dir,
@@ -152,15 +161,15 @@ def evaluate_custom_rules_cached(
             track_reads=True,
             verify_determinism=verify_determinism,
         )
-        _validate_paths(project=project, rules=custom, evaluated=evaluated)
+        _validate_paths(project=project, rules=custom, evaluated=run.evaluated)
         stored = _store(
             stored=stored,
             identities=identities,
             subjects=subjects,
-            evaluated=evaluated,
+            run=run,
             digests=digests,
         )
-        for key, value in evaluated.items():
+        for key, value in run.evaluated.items():
             results[key] = value.findings
         _write_cache(path=cache_path, stored=stored, subjects=subjects)
     return CustomRulesOutcome(
@@ -260,7 +269,7 @@ def _run_host(
     plan: dict[str, list[str] | None],
     track_reads: bool,
     verify_determinism: bool,
-) -> dict[tuple[str, str], _Evaluated]:
+) -> _HostRun:
     input_dir: Path = project_dir / "target" / "rules-cache" / "host-inputs"
     input_dir.mkdir(parents=True, exist_ok=True)
     input_path: Path | None = None
@@ -309,21 +318,28 @@ def _host_project(project: CompiledProject) -> CompiledProject:
     )
 
 
-def _decode_host_response(response: object) -> dict[tuple[str, str], _Evaluated]:
+def _decode_host_response(response: object) -> _HostRun:
     if not isinstance(response, dict):
         raise RulesError("custom rule host returned an invalid payload")
     payload: dict[str, Any] = cast(dict[str, Any], response)
     raw_readsets: Any = payload.get("readsets")
     raw_evaluations: Any = payload.get("evaluations")
     raw_untracked: Any = payload.get("untracked")
+    raw_uncacheable: Any = payload.get("uncacheable")
+    raw_observed: Any = payload.get("observed")
     if (
         not isinstance(raw_readsets, list)
         or not isinstance(raw_evaluations, list)
-        or not isinstance(raw_untracked, list)
+        or not isinstance(raw_untracked, dict)
+        or not isinstance(raw_uncacheable, list)
+        or not isinstance(raw_observed, list)
     ):
         raise RulesError("custom rule host returned an invalid payload")
     readsets: list[tuple[FactKey, ...]] = list(map(_decode_readset, raw_readsets))
-    untracked: frozenset[str] = frozenset(str(code) for code in raw_untracked)
+    untracked: dict[str, tuple[FactKey, ...]] = {
+        str(code): _decode_readset(reads) for code, reads in raw_untracked.items()
+    }
+    uncacheable: frozenset[str] = frozenset(str(code) for code in raw_uncacheable)
     evaluated: dict[tuple[str, str], _Evaluated] = {}
     for raw_item in raw_evaluations:
         if not isinstance(raw_item, dict):
@@ -339,7 +355,15 @@ def _decode_host_response(response: object) -> dict[tuple[str, str], _Evaluated]
             findings=tuple(map(_finding_payload, findings)),
             reads=(readsets[reads] if isinstance(reads, int) and code not in untracked else None),
         )
-    return evaluated
+    return _HostRun(
+        evaluated=evaluated,
+        untracked_reads=untracked,
+        uncacheable=uncacheable,
+        observed={
+            tuple(map(str, key)): None if digest is None else str(digest)
+            for key, digest in raw_observed
+        },
+    )
 
 
 def _validate_paths(
@@ -373,7 +397,7 @@ def _store(
     stored: dict[str, _RuleCache],
     identities: dict[str, str],
     subjects: dict[str, tuple[_Subject, ...]],
-    evaluated: dict[tuple[str, str], _Evaluated],
+    run: _HostRun,
     digests: FactDigests,
 ) -> dict[str, _RuleCache]:
     updated: dict[str, _RuleCache] = {}
@@ -395,20 +419,22 @@ def _store(
             readset: index for index, readset in enumerate(current.readsets)
         }
         combined_by_readset: dict[tuple[FactKey, ...], str | None] = {}
-        for (evaluated_code, subject_key), result in evaluated.items():
+        for (evaluated_code, subject_key), result in run.evaluated.items():
             if evaluated_code != code:
+                continue
+            if code in run.uncacheable:
+                current.entries.pop(subject_key, None)
                 continue
             reads: tuple[FactKey, ...] | None = result.reads
             if reads is None:
                 if full_keys is None:
                     full_keys = full_fact_keys(digests.views)
-                reads = full_keys
+                reads = (*run.untracked_reads.get(code, ()), *full_keys)
             readset: tuple[FactKey, ...] = tuple(sorted(set(reads)))
             if readset not in combined_by_readset:
-                try:
-                    combined_by_readset[readset] = digests.combined(readset)
-                except FactDigestError:
-                    combined_by_readset[readset] = None
+                combined_by_readset[readset] = _observed_digest(
+                    readset=readset, observed=run.observed, digests=digests
+                )
             combined: str | None = combined_by_readset[readset]
             if combined is None:
                 current.entries.pop(subject_key, None)
@@ -425,6 +451,20 @@ def _store(
                 findings=result.findings,
             )
     return updated
+
+
+def _observed_digest(
+    *, readset: tuple[FactKey, ...], observed: dict[FactKey, str | None], digests: FactDigests
+) -> str | None:
+    """Digest a read set only when its filesystem facts still match what the rule observed."""
+
+    try:
+        for key in readset:
+            if is_tree_fact(key) and key in observed and observed[key] != digests.digest(key):
+                return None
+        return digests.combined(readset)
+    except FactDigestError:
+        return None
 
 
 def _ordered_findings(
@@ -493,7 +533,7 @@ def _write_cache(
             },
         }
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary: Path = path.with_suffix(f".tmp-{os.getpid()}")
+    temporary: Path = path.with_suffix(f".tmp-{os.getpid()}-{threading.get_ident()}")
     temporary.write_bytes(orjson.dumps({"version": CUSTOM_RULES_CACHE_VERSION, "rules": rules}))
     temporary.replace(path)
 
