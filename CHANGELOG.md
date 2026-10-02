@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.131.0](https://github.com/chio-labs/sqlbuild/compare/v0.130.1...v0.131.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **rules:** check audit, test and hook SQL and enforce SQL quality rules ([#910](https://github.com/chio-labs/sqlbuild/issues/910))
+
+### Features
+
+* **rules:** check audit, test and hook SQL and enforce SQL quality rules ([#910](https://github.com/chio-labs/sqlbuild/issues/910)) ([723a25a](https://github.com/chio-labs/sqlbuild/commit/723a25a7fcc8690e9ffb0d8812ea4b31c58e0216))
+
 ## [0.130.1](https://github.com/chio-labs/sqlbuild/compare/v0.130.0...v0.130.1) (2026-10-01)
 
 
