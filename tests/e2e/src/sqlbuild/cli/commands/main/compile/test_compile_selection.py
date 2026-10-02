@@ -68,12 +68,12 @@ def test_given_model_selection_when_compiling_then_limits_offline_analysis_and_r
                 "[targets.dev]\n"
                 'schema = "dev"\n'
             ),
-            "models/order_record.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+            "models/order_record.sql": "MODEL (description 'Test model order_record.');\n\nSELECT 1 AS order_id\n",
             "models/result.sql": (
-                'MODEL (columns (order_id ()));\n\nSELECT order_id FROM __ref("order_record")\n'
+                'MODEL (description "Test model result.", columns (order_id ()));\n\nSELECT order_id FROM __ref("order_record")\n'
             ),
             "models/unrelated.sql": (
-                "MODEL (columns (missing_column ()));\n\nSELECT 1 AS present_column\n"
+                "MODEL (description 'Test model unrelated.', columns (missing_column ()));\n\nSELECT 1 AS present_column\n"
             ),
             "selectors.txt": "result\n",
         },

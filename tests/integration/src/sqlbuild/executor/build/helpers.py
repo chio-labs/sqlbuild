@@ -50,7 +50,7 @@ def capped_dependency_producer_sql(*, action: MicrobatchLimitAction | None) -> s
     limit_sql: str = limit_blocks[action]
     return dedent(
         f"""
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           incremental_mode microbatch,
@@ -81,7 +81,7 @@ def capped_dependency_consumer_sql(
 
     return dedent(
         f"""
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           incremental_mode microbatch,
@@ -108,7 +108,7 @@ def capped_filter_consumer_sql(*, input_name: str = "capped_events") -> str:
 
     return dedent(
         f"""
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           incremental_mode microbatch,
@@ -136,7 +136,7 @@ def plain_capped_consumer_sql(*, materialized: str) -> str:
 
     return dedent(
         f"""
-        MODEL (materialized {materialized});
+        MODEL (description "Test model.", materialized {materialized});
         SELECT id, event_time FROM __ref("capped_events")
         """
     )
@@ -147,7 +147,7 @@ def dependency_view_sql(*, upstream_name: str) -> str:
 
     return dedent(
         f"""
-        MODEL (materialized view);
+        MODEL (description "Test model.", materialized view);
         SELECT id, event_time FROM __ref("{upstream_name}")
         """
     )
@@ -177,7 +177,7 @@ def capped_microbatch_intermediary_sql(*, input_role: str) -> str:
     }
     return dedent(
         f"""
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           incremental_mode microbatch,
@@ -215,7 +215,8 @@ def capped_dependency_warehouse_files(*, project_dir: Path) -> dict[str, str]:
             f"[connection]\ndatabase = {json.dumps(str(database_path))}\n"
         ),
         "sources/raw.yml": (
-            "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+            "sources:\n  - name: raw_events\n    description: Test source raw_events.\n"
+            "    schema: main\n    table: raw_events\n"
         ),
     }
 

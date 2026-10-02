@@ -103,6 +103,7 @@ _REAPPEARING_KEY_OBSERVATIONS_SQL: str = (
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -110,7 +111,7 @@ _REAPPEARING_KEY_OBSERVATIONS_SQL: str = (
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -124,7 +125,7 @@ _REAPPEARING_KEY_OBSERVATIONS_SQL: str = (
                 + "\n",
                 "models/current_customer_plans.sql": dedent(
                     """
-                    MODEL (materialized table);
+                    MODEL (description "Test model current_customer_plans.", materialized table);
 
                     SELECT customer_id, plan
                     FROM __ref("customer_snapshot")
@@ -289,6 +290,7 @@ def test_given_snapshot_selector_when_excluding_downstream_then_only_snapshot_bu
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -296,7 +298,7 @@ def test_given_snapshot_selector_when_excluding_downstream_then_only_snapshot_bu
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -389,15 +391,19 @@ def test_given_snapshot_hooks_when_building_then_hooks_execute_and_history_is_va
                     """
                     sources:
                       - name: raw_current_customers
+                        description: Test source raw_current_customers.
                         schema: main
                         table: raw_current_customers
                       - name: raw_historical_customers
+                        description: Test source raw_historical_customers.
                         schema: main
                         table: raw_historical_customers
                       - name: raw_initial_customers
+                        description: Test source raw_initial_customers.
                         schema: main
                         table: raw_initial_customers
                       - name: raw_audit_customers
+                        description: Test source raw_audit_customers.
                         schema: main
                         table: raw_audit_customers
                     """
@@ -405,7 +411,7 @@ def test_given_snapshot_hooks_when_building_then_hooks_execute_and_history_is_va
                 + "\n",
                 "models/current_hard_delete_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model current_hard_delete_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -420,7 +426,7 @@ def test_given_snapshot_hooks_when_building_then_hooks_execute_and_history_is_va
                 + "\n",
                 "models/historical_out_of_order_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model historical_out_of_order_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -436,7 +442,7 @@ def test_given_snapshot_hooks_when_building_then_hooks_execute_and_history_is_va
                 + "\n",
                 "models/initial_updated_at_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model initial_updated_at_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -451,7 +457,7 @@ def test_given_snapshot_hooks_when_building_then_hooks_execute_and_history_is_va
                 + "\n",
                 "models/audited_customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model audited_customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -672,6 +678,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -679,7 +686,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -745,6 +752,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -752,7 +760,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -824,6 +832,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -831,7 +840,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -918,6 +927,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -925,7 +935,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -1092,15 +1102,19 @@ def test_given_snapshot_failure_when_building_then_history_remains_consistent(
                     """
                 sources:
                   - name: raw_current_timestamp_customers
+                    description: Test source raw_current_timestamp_customers.
                     schema: main
                     table: raw_current_timestamp_customers
                   - name: raw_current_check_customers
+                    description: Test source raw_current_check_customers.
                     schema: main
                     table: raw_current_check_customers
                   - name: raw_historical_snapshot_customers
+                    description: Test source raw_historical_snapshot_customers.
                     schema: main
                     table: raw_historical_snapshot_customers
                   - name: raw_historical_change_customers
+                    description: Test source raw_historical_change_customers.
                     schema: main
                     table: raw_historical_change_customers
                 """
@@ -1108,7 +1122,7 @@ def test_given_snapshot_failure_when_building_then_history_remains_consistent(
                 + "\n",
                 "models/customer_plan_timestamp_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_plan_timestamp_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -1122,7 +1136,7 @@ def test_given_snapshot_failure_when_building_then_history_remains_consistent(
                 + "\n",
                 "models/customer_status_check_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_status_check_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy check,
@@ -1136,7 +1150,7 @@ def test_given_snapshot_failure_when_building_then_history_remains_consistent(
                 + "\n",
                 "models/customer_plan_historical_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_plan_historical_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -1152,7 +1166,7 @@ def test_given_snapshot_failure_when_building_then_history_remains_consistent(
                 + "\n",
                 "models/customer_plan_change_records_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_plan_change_records_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -1560,15 +1574,19 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
                     """
                     sources:
                       - name: raw_customer_regions
+                        description: Test source raw_customer_regions.
                         schema: main
                         table: raw_customer_regions
                       - name: raw_customer_deletes
+                        description: Test source raw_customer_deletes.
                         schema: main
                         table: raw_customer_deletes
                       - name: raw_customer_status_history
+                        description: Test source raw_customer_status_history.
                         schema: main
                         table: raw_customer_status_history
                       - name: raw_customer_status_hard_delete_history
+                        description: Test source raw_customer_status_hard_delete_history.
                         schema: main
                         table: raw_customer_status_hard_delete_history
                     """
@@ -1576,7 +1594,7 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
                 + "\n",
                 "models/customer_region_custom_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_region_custom_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id, region],
                       snapshot_strategy timestamp,
@@ -1592,7 +1610,7 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
                 + "\n",
                 "models/customer_hard_delete_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_hard_delete_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -1607,7 +1625,7 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
                 + "\n",
                 "models/customer_status_historical_check_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_status_historical_check_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -1622,7 +1640,7 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
                 + "\n",
                 "models/customer_status_historical_check_hard_delete_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_status_historical_check_hard_delete_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -2000,9 +2018,11 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                     """
                     sources:
                       - name: raw_membership_observations
+                        description: Test source raw_membership_observations.
                         schema: main
                         table: raw_membership_observations
                       - name: raw_membership_full_history
+                        description: Test source raw_membership_full_history.
                         schema: main
                         table: raw_membership_full_history
                     """
@@ -2010,7 +2030,7 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                 + "\n",
                 "models/membership_incremental_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model membership_incremental_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -2026,7 +2046,7 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                 + "\n",
                 "models/membership_full_history_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model membership_full_history_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -2111,9 +2131,11 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                     """
                     sources:
                       - name: raw_membership_observations
+                        description: Test source raw_membership_observations.
                         schema: main
                         table: raw_membership_observations
                       - name: raw_membership_full_history
+                        description: Test source raw_membership_full_history.
                         schema: main
                         table: raw_membership_full_history
                     """
@@ -2121,7 +2143,7 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                 + "\n",
                 "models/membership_incremental_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model membership_incremental_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2138,7 +2160,7 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                 + "\n",
                 "models/membership_full_history_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model membership_full_history_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2289,6 +2311,7 @@ def test_given_hard_deleted_key_when_it_reappears_unchanged_then_snapshot_opens_
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2296,7 +2319,7 @@ def test_given_hard_deleted_key_when_it_reappears_unchanged_then_snapshot_opens_
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2366,6 +2389,7 @@ def test_given_hard_deleted_key_when_it_reappears_unchanged_then_snapshot_opens_
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2373,7 +2397,7 @@ def test_given_hard_deleted_key_when_it_reappears_unchanged_then_snapshot_opens_
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2490,6 +2514,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2497,7 +2522,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2544,6 +2569,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2551,7 +2577,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2603,6 +2629,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2610,7 +2637,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2662,6 +2689,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2669,7 +2697,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2712,6 +2740,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2719,7 +2748,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2765,6 +2794,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2772,7 +2802,7 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2847,6 +2877,7 @@ def test_given_duplicate_timestamp_snapshot_source_when_building_then_cli_report
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -2854,7 +2885,7 @@ def test_given_duplicate_timestamp_snapshot_source_when_building_then_cli_report
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -2965,6 +2996,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -2972,7 +3004,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy check,
@@ -3039,6 +3071,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -3046,7 +3079,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy check,
@@ -3102,6 +3135,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -3109,7 +3143,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy check,
@@ -3165,6 +3199,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                     """
                 sources:
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -3172,7 +3207,7 @@ def test_given_snapshot_dml_failure_when_building_then_target_history_is_unchang
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy check,
@@ -3288,6 +3323,7 @@ def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_c
                     """
                     sources:
                       - name: raw_customer_daily
+                        description: Test source raw_customer_daily.
                         schema: main
                         table: raw_customer_daily
                     """
@@ -3295,7 +3331,7 @@ def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_c
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -3366,6 +3402,7 @@ def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_c
                     """
                     sources:
                       - name: raw_customer_daily
+                        description: Test source raw_customer_daily.
                         schema: main
                         table: raw_customer_daily
                     """
@@ -3373,7 +3410,7 @@ def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_c
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -3443,6 +3480,7 @@ def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_c
                     """
                     sources:
                       - name: raw_customer_daily
+                        description: Test source raw_customer_daily.
                         schema: main
                         table: raw_customer_daily
                     """
@@ -3450,7 +3488,7 @@ def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_c
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -3568,6 +3606,7 @@ def test_given_historical_check_snapshot_project_when_rerunning_build_then_track
                     """
                     sources:
                       - name: raw_customer_extracts
+                        description: Test source raw_customer_extracts.
                         schema: main
                         table: raw_customer_extracts
                     """
@@ -3575,7 +3614,7 @@ def test_given_historical_check_snapshot_project_when_rerunning_build_then_track
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -3647,6 +3686,7 @@ def test_given_historical_check_snapshot_project_when_rerunning_build_then_track
                     """
                     sources:
                       - name: raw_customer_extracts
+                        description: Test source raw_customer_extracts.
                         schema: main
                         table: raw_customer_extracts
                     """
@@ -3654,7 +3694,7 @@ def test_given_historical_check_snapshot_project_when_rerunning_build_then_track
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -3778,6 +3818,7 @@ def test_given_historical_timestamp_snapshot_project_when_rerunning_build_then_t
                     """
                     sources:
                       - name: raw_customer_changes
+                        description: Test source raw_customer_changes.
                         schema: main
                         table: raw_customer_changes
                     """
@@ -3785,7 +3826,7 @@ def test_given_historical_timestamp_snapshot_project_when_rerunning_build_then_t
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -3904,6 +3945,7 @@ def test_given_historical_timestamp_changes_project_when_rerunning_build_then_tr
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -3911,7 +3953,7 @@ def test_given_historical_timestamp_changes_project_when_rerunning_build_then_tr
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -3954,6 +3996,7 @@ def test_given_historical_timestamp_changes_project_when_rerunning_build_then_tr
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -3961,7 +4004,7 @@ def test_given_historical_timestamp_changes_project_when_rerunning_build_then_tr
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -4036,6 +4079,7 @@ def test_given_missing_check_snapshot_output_column_when_building_then_cli_repor
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -4043,7 +4087,7 @@ def test_given_missing_check_snapshot_output_column_when_building_then_cli_repor
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4088,6 +4132,7 @@ def test_given_missing_check_snapshot_output_column_when_building_then_cli_repor
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -4095,7 +4140,7 @@ def test_given_missing_check_snapshot_output_column_when_building_then_cli_repor
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4184,6 +4229,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -4191,7 +4237,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4249,6 +4295,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         schema: main
                         table: raw_customers
                     """
@@ -4256,7 +4303,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -4310,6 +4357,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_daily
+                        description: Test source raw_customer_daily.
                         schema: main
                         table: raw_customer_daily
                     """
@@ -4317,7 +4365,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -4388,6 +4436,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_daily
+                        description: Test source raw_customer_daily.
                         schema: main
                         table: raw_customer_daily
                     """
@@ -4395,7 +4444,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -4466,6 +4515,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_extracts
+                        description: Test source raw_customer_extracts.
                         schema: main
                         table: raw_customer_extracts
                     """
@@ -4473,7 +4523,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4550,6 +4600,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_extracts
+                        description: Test source raw_customer_extracts.
                         schema: main
                         table: raw_customer_extracts
                     """
@@ -4557,7 +4608,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4633,6 +4684,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_changes
+                        description: Test source raw_customer_changes.
                         schema: main
                         table: raw_customer_changes
                     """
@@ -4640,7 +4692,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4717,6 +4769,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_changes
+                        description: Test source raw_customer_changes.
                         schema: main
                         table: raw_customer_changes
                     """
@@ -4724,7 +4777,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
@@ -4800,6 +4853,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_daily
+                        description: Test source raw_customer_daily.
                         schema: main
                         table: raw_customer_daily
                     """
@@ -4807,7 +4861,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
@@ -4884,6 +4938,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                     """
                     sources:
                       - name: raw_customer_extracts
+                        description: Test source raw_customer_extracts.
                         schema: main
                         table: raw_customer_extracts
                     """
@@ -4891,7 +4946,7 @@ def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports
                 + "\n",
                 "models/customer_snapshot.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model customer_snapshot.",
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,

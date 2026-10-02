@@ -55,7 +55,7 @@ def test_given_postgres_source_when_loading_with_ingestr_then_duckdb_target_has_
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_pg_orders\n"
+                "  - name: raw_pg_orders\n    description: Test source raw_pg_orders.\n"
                 "    ingestr:\n"
                 f'      source_uri: "{postgres_uri(postgres_config)}"\n'
                 f"      source_table: public.{source_table}\n"
@@ -113,7 +113,7 @@ def test_given_duckdb_source_when_loading_with_ingestr_to_duckdb_then_target_has
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_duckdb_orders\n"
+                "  - name: raw_duckdb_orders\n    description: Test source raw_duckdb_orders.\n"
                 "    ingestr:\n"
                 f'      source_uri: "duckdb:///{source_duckdb_path}"\n'
                 "      source_table: orders\n"
@@ -175,7 +175,7 @@ def test_given_ingestr_duckdb_source_when_building_with_load_then_model_reads_lo
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_duckdb_orders\n"
+                "  - name: raw_duckdb_orders\n    description: Test source raw_duckdb_orders.\n"
                 "    columns:\n"
                 "      - name: order_id\n"
                 "        type: INTEGER\n"
@@ -186,7 +186,7 @@ def test_given_ingestr_duckdb_source_when_building_with_load_then_model_reads_lo
                 "      source_table: orders\n"
             ),
             "models/stg_duckdb_orders.sql": """
-MODEL (materialized table);
+MODEL (description "Test model stg_duckdb_orders.", materialized table);
 
 SELECT order_id, status FROM __source("raw_duckdb_orders")
 """.strip()
@@ -250,7 +250,7 @@ def test_given_ingestr_source_when_building_with_load_then_model_reads_loaded_so
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_pg_orders\n"
+                "  - name: raw_pg_orders\n    description: Test source raw_pg_orders.\n"
                 "    columns:\n"
                 "      - name: order_id\n"
                 "        type: INTEGER\n"
@@ -261,7 +261,7 @@ def test_given_ingestr_source_when_building_with_load_then_model_reads_loaded_so
                 f"      source_table: public.{source_table}\n"
             ),
             "models/stg_pg_orders.sql": """
-MODEL (materialized table);
+MODEL (description "Test model stg_pg_orders.", materialized table);
 
 SELECT order_id, status FROM __source("raw_pg_orders")
 """.strip()
@@ -327,7 +327,7 @@ def test_given_duckdb_source_when_loading_with_ingestr_then_postgres_target_has_
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_duckdb_orders\n"
+                "  - name: raw_duckdb_orders\n    description: Test source raw_duckdb_orders.\n"
                 f"    schema: {target_schema}\n"
                 "    ingestr:\n"
                 f'      source_uri: "duckdb:///{source_duckdb_path}"\n'

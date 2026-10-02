@@ -103,7 +103,7 @@ def test_given_model_level_column_audits_when_loading_dagster_assets_then_checks
                 'database = "column_audit_checks.duckdb"\n'
             ),
             "models/orders.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model orders.',\n"
                 "  columns (\n"
                 "    order_id (),\n"
                 "    customer_id (),\n"
@@ -543,14 +543,14 @@ def test_given_chained_source_loader_when_dagster_selects_source_then_reuses_int
                 "    {'name': 'event_id', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    return [{'event_id': 1}]\n\n"
+                "    '''Test loader fetch_events.'''\n    return [{'event_id': 1}]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
                 "SELECT event_id FROM {events.destination}')\n"
             ),
-            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+            "sources/raw.yml": "sources:\n  - name: raw_events\n    description: Test source raw_events.\n    managed: true\n",
         },
     )
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -634,14 +634,14 @@ def test_given_chained_source_loader_when_dagster_selects_source_without_interme
                 "    {'name': 'event_id', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    return [{'event_id': 1}]\n\n"
+                "    '''Test loader fetch_events.'''\n    return [{'event_id': 1}]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
                 "SELECT event_id FROM {events.destination}')\n"
             ),
-            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+            "sources/raw.yml": "sources:\n  - name: raw_events\n    description: Test source raw_events.\n    managed: true\n",
         },
     )
     command_log_path: Path = tmp_path / "sqb_command_log.txt"

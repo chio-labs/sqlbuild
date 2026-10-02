@@ -34,7 +34,7 @@ def project_toml(*, target_settings: str = "") -> str:
 _PROJECT_TOML: str = project_toml()
 _SOURCES_YML: str = (
     "sources:\n"
-    "  - name: raw_orders\n"
+    "  - name: raw_orders\n    description: Test source raw_orders.\n"
     "    schema: main\n"
     "    table: raw_orders\n"
     "    columns:\n"
@@ -44,17 +44,17 @@ _SOURCES_YML: str = (
     "      - name: order_date\n"
 )
 STG_ORDERS: str = (
-    "MODEL (\n  materialized view,\n);\n\n"
+    "MODEL (description 'Test model.',\n  materialized view,\n);\n\n"
     "SELECT\n  order_id,\n  customer_id,\n  amount,\n  order_date\n"
     'FROM __source("raw_orders")\n'
 )
 FACT_ORDERS: str = (
-    "MODEL (\n  materialized table,\n);\n\n"
+    "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
     "SELECT\n  o.order_id,\n  o.customer_id,\n  o.amount,\n  o.order_date\n"
     'FROM __ref("stg_orders") AS o\n'
 )
 CUSTOMER_TOTALS: str = (
-    "MODEL (\n  materialized table,\n);\n\n"
+    "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
     "SELECT\n  customer_id,\n  SUM(amount) AS total_amount\n"
     'FROM __ref("fact_orders")\nGROUP BY customer_id\n'
 )
@@ -81,20 +81,21 @@ BASE_FILES: dict[str, str] = {
 }
 UDF_FILE: tuple[str, str] = (
     "functions/sql/udf__is_large_order.sql",
-    "FUNCTION (\n  arguments (amount INTEGER),\n  returns BOOLEAN,\n);\n\namount >= 100\n",
+    "FUNCTION (description 'Test function udf__is_large_order.',"
+    "\n  arguments (amount INTEGER),\n  returns BOOLEAN,\n);\n\namount >= 100\n",
 )
 CENTS_MACRO: dict[str, str] = {
     "models/staging/_sqlbuild/_macros/cents.py": (
         'def to_cents(expression: str) -> str:\n    return f"({expression}) * 100"\n'
     ),
     "models/staging/stg_order_cents.sql": (
-        "MODEL (\n  materialized view,\n);\n\n"
+        "MODEL (description 'Test model stg_order_cents.',\n  materialized view,\n);\n\n"
         'SELECT\n  order_id,\n  @to_cents("amount") AS amount_cents\nFROM __ref("stg_orders")\n'
     ),
 }
 ORDER_REFUNDS: dict[str, str] = {
     "models/staging/stg_order_refunds.sql": (
-        "MODEL (\n  materialized view,\n);\n\n"
+        "MODEL (description 'Test model stg_order_refunds.',\n  materialized view,\n);\n\n"
         'SELECT\n  order_id,\n  @to_cents("amount") AS refund_cents\nFROM __ref("stg_orders")\n'
     ),
 }
@@ -115,26 +116,28 @@ def order_amount_union(*, first: str, second: str) -> dict[str, str]:
 
     return {
         "models/marts/order_amounts.sql": (
-            "MODEL (\n  materialized view,\n);\n\n"
+            "MODEL (description 'Test model order_amounts.',\n  materialized view,\n);\n\n"
             f'SELECT amount FROM __ref("{first}")\nUNION ALL\n'
             f'SELECT amount FROM __ref("{second}")\n'
         ),
         "models/marts/order_amount_reads.sql": (
-            'MODEL (\n  materialized view,\n);\n\nSELECT amount FROM __ref("order_amounts")\n'
+            'MODEL (description "Test model order_amount_reads.",'
+            '\n  materialized view,\n);\n\nSELECT amount FROM __ref("order_amounts")\n'
         ),
     }
 
 
 ORDER_EXPORT: dict[str, str] = {
     "models/marts/order_export.sql": (
-        'MODEL (\n  materialized view,\n);\n\nSELECT *\nFROM __ref("fact_orders")\n'
+        'MODEL (description "Test model order_export.",'
+        '\n  materialized view,\n);\n\nSELECT *\nFROM __ref("fact_orders")\n'
     ),
 }
 CUSTOMER_DECLARATIONS: dict[str, str] = {
     "seeds/customers.csv": "customer_id,customer_name\n10,Ada\n11,Bo\n",
     "seeds/customers.yml": (
         "seeds:\n"
-        "  - name: customers\n"
+        "  - name: customers\n    description: Test seed customers.\n"
         "    columns:\n"
         "      - name: customer_id\n"
         "        type: INTEGER\n"
@@ -147,7 +150,7 @@ CUSTOMER_DECLARATIONS: dict[str, str] = {
     ),
     "sources/customers.yml": (
         "sources:\n"
-        "  - name: raw_customers\n"
+        "  - name: raw_customers\n    description: Test source raw_customers.\n"
         '    expression: "SELECT 10 AS customer_id UNION ALL SELECT 11"\n'
         "    columns:\n"
         "      - name: customer_id\n"
@@ -157,7 +160,8 @@ CUSTOMER_DECLARATIONS: dict[str, str] = {
 }
 ORDER_SHAPE: dict[str, str] = {
     "models/marts/_sqlbuild/_schemas/order_shape.sql": (
-        "SCHEMA (\n  name order_shape,\n  columns (\n    customer_id (audits [relationships "
+        "SCHEMA (description 'Test schema.',"
+        "\n  name order_shape,\n  columns (\n    customer_id (audits [relationships "
         '(to __ref("stg_orders"), field customer_id)]),\n  ),\n);\n'
     ),
     "models/marts/fact_orders.sql": FACT_ORDERS.replace(
@@ -170,7 +174,7 @@ ORDERS_MACRO: dict[str, str] = {
         "def staged_orders() -> str:\n    return '__ref(\"stg_orders\")'\n"
     ),
     "models/staging/stg_order_count.sql": (
-        "MODEL (\n  materialized view,\n);\n\n"
+        "MODEL (description 'Test model stg_order_count.',\n  materialized view,\n);\n\n"
         "SELECT COUNT(*) AS order_count\nFROM @staged_orders()\n"
     ),
 }
@@ -203,7 +207,8 @@ def order_history_files(*, materialized: str, udf: bool) -> dict[str, str]:
 
     return {
         "models/marts/order_history.sql": (
-            f"MODEL (\n{_HISTORY_HEADERS[materialized]});\n\n"
+            "MODEL (description 'Test model order_history.',"
+            f"\n{_HISTORY_HEADERS[materialized]});\n\n"
             f"SELECT\n  order_id,\n  amount,\n  order_date{_UDF_COLUMN[udf]}\n"
             'FROM __ref("stg_orders")\n'
         ),
@@ -278,7 +283,7 @@ def declare_missing_column_origin(*, project_dir: Path) -> None:
     contents: str = path.read_text(encoding="utf-8")
     _ = path.write_text(
         contents.replace(
-            "MODEL (\n", "MODEL (\n  columns (revenue (migrate_from gross_amount)),\n", 1
+            "MODEL (", "MODEL (\n  columns (revenue (migrate_from gross_amount)),\n  ", 1
         ).replace("  order_date\n", "  order_date,\n  amount AS revenue\n", 1),
         encoding="utf-8",
     )

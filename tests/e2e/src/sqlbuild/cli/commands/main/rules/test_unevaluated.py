@@ -25,7 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
         UnevaluatedResourceCase(
             "model guard",
             "models/staging/orders.sql",
-            "MODEL ();\nSELECT {expression} AS order_id",
+            "MODEL (description 'Test model orders.');\nSELECT {expression} AS order_id",
             0,
         ),
         UnevaluatedResourceCase(
@@ -34,12 +34,17 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             "AUDIT ();\nSELECT {expression} AS order_id "
             'FROM __ref("orders") JOIN __ref("customers") USING (order_id)',
             expected_evaluated_models=2,
-            extra_files=(("models/staging/customers.sql", "MODEL ();\nSELECT 1 AS order_id\n"),),
+            extra_files=(
+                (
+                    "models/staging/customers.sql",
+                    "MODEL (description 'Test model customers.');\nSELECT 1 AS order_id\n",
+                ),
+            ),
         ),
         UnevaluatedResourceCase(
             "model the compiler accepts but the Rules parser rejects",
             "models/staging/orders.sql",
-            "MODEL ();\nWITH items AS (SELECT [1, 2] AS quantities)\n"
+            "MODEL (description 'Test model orders.');\nWITH items AS (SELECT [1, 2] AS quantities)\n"
             "SELECT 1 AS order_id, list_transform(i.quantities, lambda q: q + 1) AS shipped\n"
             "FROM items AS i",
             expected_evaluated_models=0,
@@ -120,7 +125,8 @@ def test_given_prefix_not_like_when_running_rules_then_evaluates_the_complete_mo
     write_unevaluated_rules_project(
         project_dir=tmp_path,
         resource_path="models/staging/orders.sql",
-        resource_template="MODEL (database warehouse, schema analytics);\n" + test_case.sql,
+        resource_template="MODEL (description 'Test model orders.', database warehouse, schema analytics);\n"
+        + test_case.sql,
         adapter="snowflake",
     )
     for _ in range(2):

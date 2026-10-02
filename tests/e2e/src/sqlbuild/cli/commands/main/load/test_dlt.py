@@ -58,11 +58,12 @@ def test_given_dlt_sql_database_source_when_loading_then_table_is_materialized_a
                 f'      credentials: "sqlite:///{source_db_path}"\n'
                 "    resources:\n"
                 "      - name: raw_orders\n"
+                "        description: Test source raw_orders.\n"
                 "        table: orders\n"
                 "        write_disposition: replace\n"
             ),
             "models/order_totals.sql": (
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model order_totals.', materialized table);\n\n"
                 'SELECT order_id, amount FROM __source("raw_orders") WHERE amount >= 20\n'
             ),
         },
@@ -132,6 +133,7 @@ def test_given_dlt_filesystem_source_when_loading_then_table_is_materialized_and
                 '      file_glob: "orders.jsonl"\n'
                 "    resources:\n"
                 "      - name: raw_orders\n"
+                "        description: Test source raw_orders.\n"
                 "        reader: jsonl\n"
                 "        write_disposition: replace\n"
             ),
@@ -141,7 +143,7 @@ def test_given_dlt_filesystem_source_when_loading_then_table_is_materialized_and
                 '{"order_id": 3, "amount": 30}\n'
             ),
             "models/order_totals.sql": (
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model order_totals.', materialized table);\n\n"
                 'SELECT order_id, amount FROM __source("raw_orders") WHERE amount >= 20\n'
             ),
         },
@@ -210,13 +212,14 @@ def test_given_dlt_rest_api_source_when_loading_then_table_is_materialized_and_q
                     f'        base_url: "{base_url}"\n'
                     "    resources:\n"
                     "      - name: raw_orders\n"
+                    "        description: Test source raw_orders.\n"
                     "        endpoint:\n"
                     '          path: "orders"\n'
                     '          data_selector: "$"\n'
                     "        write_disposition: replace\n"
                 ),
                 "models/order_totals.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model order_totals.', materialized table);\n\n"
                     'SELECT order_id, amount FROM __source("raw_orders") WHERE amount >= 20\n'
                 ),
             },

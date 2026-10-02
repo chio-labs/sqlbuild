@@ -167,7 +167,7 @@ def test_given_parameterized_physical_type_when_generating_then_writes_valid_mod
     database: Path = prepare_contract_project(tmp_path)
     model_path: Path = tmp_path / "models" / "orders.sql"
     _ = model_path.write_text(
-        "MODEL (materialized table);\n"
+        "MODEL (description 'Test model orders.', materialized table);\n"
         "SELECT CAST(1 AS INTEGER) AS id, CAST(1 AS DECIMAL(10,2)) AS amount\n",
         encoding="utf-8",
     )
@@ -289,7 +289,7 @@ def test_given_conflicting_contract_when_overwriting_then_physical_shape_replace
     _ = prepare_contract_project(tmp_path)
     model_path: Path = tmp_path / "models" / "orders.sql"
     _ = model_path.write_text(
-        """MODEL (
+        """MODEL (description "Test model orders.",
   materialized table
   columns (
     id (type BIGINT, description "identifier")
@@ -603,7 +603,7 @@ def test_given_cli_vars_when_writing_then_validation_recompile_uses_same_values(
     _ = prepare_contract_project(tmp_path)
     model_path: Path = tmp_path / "models" / "orders.sql"
     _ = model_path.write_text(
-        "MODEL (materialized table);\n"
+        "MODEL (description 'Test model orders.', materialized table);\n"
         "SELECT CAST(@@identifier AS INTEGER) AS id, CAST('a' AS VARCHAR) AS name\n",
         encoding="utf-8",
     )
@@ -647,7 +647,7 @@ def test_given_unresolved_additive_type_conflict_when_writing_then_file_is_not_r
     _ = prepare_contract_project(tmp_path)
     model_path: Path = tmp_path / "models" / "orders.sql"
     _ = model_path.write_text(
-        "MODEL (materialized table, columns (id (type BIGINT), name (type VARCHAR)));\n"
+        "MODEL (description 'Test model orders.', materialized table, columns (id (type BIGINT), name (type VARCHAR)));\n"
         "SELECT CAST(1 AS INTEGER) AS id, CAST('a' AS VARCHAR) AS name\n",
         encoding="utf-8",
     )
@@ -698,7 +698,7 @@ def test_given_relative_project_directory_when_diffing_contract_then_private_mac
     model_path: Path = project_dir / "models" / "orders" / "orders.sql"
     model_path.parent.mkdir()
     _ = model_path.write_text(
-        "MODEL (materialized table);\nSELECT @order_id() AS id, CAST('a' AS VARCHAR) AS name\n",
+        "MODEL (description 'Test model orders.', materialized table);\nSELECT @order_id() AS id, CAST('a' AS VARCHAR) AS name\n",
         encoding="utf-8",
     )
     macro_path: Path = model_path.parent / "_sqlbuild" / "_macros" / "order_id.py"

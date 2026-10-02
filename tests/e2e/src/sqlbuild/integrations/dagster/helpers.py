@@ -51,7 +51,7 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
         encoding="utf-8",
     )
     (models_dir / "orders.sql").write_text(
-        "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        "MODEL (description 'Test model orders.', materialized view);\n\nSELECT 1 AS order_id\n",
         encoding="utf-8",
     )
     (factories_dir / "generated_nodes.py").write_text(
@@ -68,10 +68,12 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
                 "def generated_nodes():",
                 "    @task(depends_on=model('orders'), tags=['daily'], group='python')",
                 "    def prepare_orders(ctx):",
+                "        '''Test task prepare_orders.'''",
                 "        return ctx.result(payload={'rows': 1})",
                 "",
                 "    @loader(name='warehouse_export', depends_on=(prepare_orders,))",
                 "    def warehouse_export(ctx):",
+                "        '''Test loader warehouse_export.'''",
                 "        return [{'order_id': 1}]",
                 "",
                 "    @asset(",
@@ -81,10 +83,12 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
                 "        columns=[{'name': 'order_id', 'type': 'integer'}],",
                 "    )",
                 "    def orders_export(ctx):",
+                "        '''Test asset orders_export.'''",
                 "        return ctx.result(materialized=True)",
                 "",
                 "    @check(depends_on=orders_export, tags=['quality'], group='exports')",
                 "    def check_orders_export(ctx):",
+                "        '''Test check check_orders_export.'''",
                 "        return True",
                 "",
                 "    return [prepare_orders, warehouse_export, orders_export, check_orders_export]",

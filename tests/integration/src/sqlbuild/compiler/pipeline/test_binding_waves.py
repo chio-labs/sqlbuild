@@ -28,12 +28,16 @@ def test_given_inferred_producer_when_binding_consumers_then_avoids_deferred_req
     )
     (tmp_path / "sources").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
-        "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS id, 2 AS quantity\n"
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: SELECT 1 AS id, 2 AS quantity\n"
     )
     (tmp_path / "models").mkdir()
     producer: Path = tmp_path / "models/orders.sql"
-    producer.write_text('MODEL (materialized view); SELECT id FROM __source("raw_orders")')
-    (tmp_path / "models/report.sql").write_text("MODEL (materialized view); " + test_case.sql)
+    producer.write_text(
+        'MODEL (description "Test model orders.", materialized view); SELECT id FROM __source("raw_orders")'
+    )
+    (tmp_path / "models/report.sql").write_text(
+        "MODEL (description 'Test model report.', materialized view); " + test_case.sql
+    )
     original: Callable[..., Any] = project.get_schema_validations
     requests: list[Any] = []
 

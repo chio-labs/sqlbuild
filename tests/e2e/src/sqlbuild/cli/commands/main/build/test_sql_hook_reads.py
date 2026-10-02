@@ -30,15 +30,15 @@ _PROJECT_FILES: dict[str, str] = {
         '[targets.prod]\nschema = "prod"\nloader_schema = "raw_prod"\n'
     ),
     "sources/raw.yml": (
-        "sources:\n  - name: raw_orders\n    managed: true\n    write_strategy: table\n"
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    managed: true\n    write_strategy: table\n"
         "    columns:\n      - name: order_id\n        type: INTEGER\n"
     ),
     "python/loaders/raw.py": (
         "from sqlbuild.loaders import loader\n\n\n"
-        "@loader\ndef raw_orders(ctx):\n    return [{'order_id': 9}]\n"
+        "@loader\ndef raw_orders(ctx):\n    '''Test loader raw_orders.'''\n    return [{'order_id': 9}]\n"
     ),
     f"{_MODELS}/z_orders.sql": (
-        "MODEL (materialized table);\nSELECT 1 AS order_id UNION ALL SELECT 2\n"
+        "MODEL (description 'Test model z_orders.', materialized table);\nSELECT 1 AS order_id UNION ALL SELECT 2\n"
     ),
     f"{_MODELS}/_sqlbuild/_macros/counts.py": (
         "def count_orders(relation):\n"
@@ -46,16 +46,16 @@ _PROJECT_FILES: dict[str, str] = {
         'SELECT count(*) AS n FROM {relation}"\n'
     ),
     f"{_MODELS}/_sqlbuild/_hooks/sql/record_counts.sql": (
-        'HOOK ();\n@count_orders(__ref("z_orders"))\n'
+        'HOOK (description "Test hook record_counts.");\n@count_orders(__ref("z_orders"))\n'
     ),
     f"{_MODELS}/a_report.sql": (
-        "MODEL (\n  materialized table,\n"
+        "MODEL (description 'Test model a_report.',\n  materialized table,\n"
         "  pre_hooks [inline_sql('CREATE OR REPLACE TABLE main.inline_counts AS "
         'SELECT count(*) AS n FROM __ref("z_orders")\')],\n'
         '  post_hooks [sql("record_counts")],\n);\nSELECT 1 AS n\n'
     ),
     f"{_MODELS}/raw_marker.sql": (
-        "MODEL (\n  materialized table,\n"
+        "MODEL (description 'Test model raw_marker.',\n  materialized table,\n"
         "  post_hooks [inline_sql('CREATE OR REPLACE TABLE main.raw_counts AS "
         'SELECT count(*) AS n FROM __source("raw_orders")\')],\n);\nSELECT 1 AS n\n'
     ),
@@ -126,10 +126,10 @@ def test_given_sql_hook_references_when_building_then_they_resolve_and_order_lik
             description="inline hook reading a model built from its own model",
             overrides={
                 f"{_MODELS}/report_rollup.sql": (
-                    'MODEL (materialized table);\nSELECT * FROM __ref("a_report")\n'
+                    'MODEL (description "Test model report_rollup.", materialized table);\nSELECT * FROM __ref("a_report")\n'
                 ),
                 f"{_MODELS}/a_report.sql": (
-                    "MODEL (\n  materialized table,\n"
+                    "MODEL (description 'Test model a_report.',\n  materialized table,\n"
                     "  post_hooks [inline_sql('SELECT * FROM __ref(\"report_rollup\")')],\n"
                     ");\nSELECT 1 AS n\n"
                 ),

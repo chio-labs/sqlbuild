@@ -20,7 +20,10 @@ _PROJECT_TOML: str = (
     f'name = "orders_project"\nadapter = "duckdb"\n\n[connection]\ndatabase = "{DATABASE_FILE}"\n'
     "\n[migrations]\nold_name_views = false\n"
 )
-_SOURCES_YML: str = "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+_SOURCES_YML: str = (
+    "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+    "    schema: main\n    table: raw_orders\n"
+)
 
 
 def orders_sql(*, migrate_from: str) -> str:
@@ -28,7 +31,7 @@ def orders_sql(*, migrate_from: str) -> str:
 
     migration: str = {"": ""}.get(migrate_from, f'  migrate_from "{migrate_from}",\n')
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  unique_key order_id,\n"
@@ -136,7 +139,7 @@ def fct_orders_sql(*, columns: str, extra_config: str = "", replay: bool = True)
     """Return an incremental orders fact model projecting the given value columns."""
 
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  unique_key order_id,\n"
@@ -293,7 +296,7 @@ def old_name_model_sql(
     """Return a model of the given materialization over raw orders."""
 
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         f"{_OLD_NAME_HEADERS[materialized]}"
         f"{extra_config}"
         ");\n\n"

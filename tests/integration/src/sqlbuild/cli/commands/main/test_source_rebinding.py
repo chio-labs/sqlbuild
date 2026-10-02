@@ -22,7 +22,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
             description="names already known at compile time add no rebinding",
             source_expression="(SELECT 1 AS order_id, 'open' AS status)",
             model_sql=(
-                "MODEL (materialized table);\n"
+                "MODEL (description 'Test model.', materialized table);\n"
                 'SELECT o.order_id, o.status FROM __source("typed_orders") AS o\n'
             ),
             expected_exit_code=0,
@@ -32,7 +32,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
             description="names hidden from compile rebind and reject a missing column",
             source_expression="(SELECT * FROM main.raw_orders)",
             model_sql=(
-                'MODEL (materialized table);\nSELECT o.missing FROM __source("typed_orders") AS o\n'
+                'MODEL (description "Test model.", materialized table);\nSELECT o.missing FROM __source("typed_orders") AS o\n'
             ),
             expected_exit_code=1,
             expected_rebinding=True,

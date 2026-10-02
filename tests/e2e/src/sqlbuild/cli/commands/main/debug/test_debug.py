@@ -287,6 +287,7 @@ def test_given_debug_command_with_providers_when_running_then_outputs_provider_s
 
 
                 class MarkerProvider(Provider):
+                    '''Test provider MarkerProvider.'''
                     label: str = "debug"
                 """
             ).strip()
@@ -346,6 +347,7 @@ def test_given_debug_json_with_providers_when_running_then_outputs_provider_summ
 
 
                 class MarkerProvider(Provider):
+                    '''Test provider MarkerProvider.'''
                     label: str = "debug"
                 """
             ).strip()

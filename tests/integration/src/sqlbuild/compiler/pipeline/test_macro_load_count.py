@@ -44,7 +44,7 @@ _COUNTING_MACRO_MODULE: str = (
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/_macros/counting.py": _COUNTING_MACRO_MODULE,
                 "models/orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS order_id, @order_tag() AS tag"
+                    "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id, @order_tag() AS tag"
                 ),
             },
             expected_macro_import_count=1,
@@ -91,7 +91,7 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
                     "def _helper() -> str:\n    return shared()\n\n"
                     "def order_column() -> str:\n    return _helper()\n"
                 ),
-                "models/orders.sql": "MODEL (materialized table);\n\nSELECT @order_column()",
+                "models/orders.sql": "MODEL (description 'Test model orders.', materialized table);\n\nSELECT @order_column()",
             },
             macro_name="order_column",
             expected_dependencies=("shared",),

@@ -423,7 +423,7 @@ def build_compiled_project_with_model_specs(
         model_file: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
             file_path=Path("/repo") / relative_path,
             relative_path=relative_path,
-            contents=f"MODEL ();\n\n{sql}\n",
+            contents=f"MODEL (description 'Test model.');\n\n{sql}\n",
             header_values={},
             header_column_locations={},
             output_column_locations={},

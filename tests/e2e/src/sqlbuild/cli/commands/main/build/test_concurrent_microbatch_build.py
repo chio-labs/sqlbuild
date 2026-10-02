@@ -51,7 +51,7 @@ def test_given_project_capability_disabled_when_batch_concurrency_exceeds_one_th
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -73,7 +73,7 @@ def test_given_project_capability_disabled_when_batch_concurrency_exceeds_one_th
             ).strip()
             + "\n",
             "sources/raw.yml": (
-                "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+                "sources:\n  - name: raw_events\n    description: Test source raw_events.\n    schema: main\n    table: raw_events\n"
             ),
         },
     )
@@ -120,6 +120,7 @@ def test_given_opt_in_concurrent_microbatch_when_building_twice_then_records_all
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -127,7 +128,7 @@ def test_given_opt_in_concurrent_microbatch_when_building_twice_then_records_all
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -245,6 +246,7 @@ def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_preserve
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -252,7 +254,7 @@ def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_preserve
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -402,6 +404,7 @@ def test_given_microbatch_history_is_lost_when_reconciling_then_policy_is_applie
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -409,7 +412,7 @@ def test_given_microbatch_history_is_lost_when_reconciling_then_policy_is_applie
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -511,6 +514,7 @@ def test_given_bounded_replay_on_change_when_model_changes_then_requirement_is_d
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -610,6 +614,7 @@ def test_given_full_replay_fails_when_retried_then_original_requirement_is_reuse
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -700,6 +705,7 @@ def test_given_version_hash_returns_when_replaying_then_new_transition_gets_new_
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -790,6 +796,7 @@ def test_given_historical_backfill_when_normal_run_resumes_then_gap_to_normal_fl
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -797,7 +804,7 @@ def test_given_historical_backfill_when_normal_run_resumes_then_gap_to_normal_fl
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -898,6 +905,7 @@ def test_given_no_new_cursor_work_when_history_is_lost_then_reconciliation_still
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -905,7 +913,7 @@ def test_given_no_new_cursor_work_when_history_is_lost_then_reconciliation_still
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,

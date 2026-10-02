@@ -41,14 +41,15 @@ _BASE_FILES: dict[str, str] = {
         """
         sources:
           - name: raw_orders
+            description: Test source raw_orders.
             schema: main
             table: raw_orders
         """
     ).lstrip(),
-    "models/order_regions.sql": "MODEL (materialized table);\n\nSELECT 1 AS region_id\n",
+    "models/order_regions.sql": "MODEL (description 'Test model order_regions.', materialized table);\n\nSELECT 1 AS region_id\n",
     "models/stg_orders.sql": dedent(
         """
-        MODEL (
+        MODEL (description "Test model stg_orders.",
           materialized incremental,
           incremental_strategy delete_insert,
           cursor order_date,
@@ -66,7 +67,7 @@ _BASE_FILES: dict[str, str] = {
 
 _DAILY_ORDERS_CONFIG: str = dedent(
     """
-    MODEL (
+    MODEL (description "Test model.",
       materialized incremental,
       incremental_strategy delete_insert,
       cursor order_date,
@@ -99,7 +100,7 @@ _DAILY_ORDERS_WITH_UNLISTED_REF_SQL: str = (
 
 _SOURCE_ORDERS_SQL: str = dedent(
     """
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           cursor order_date,
@@ -118,7 +119,7 @@ _SOURCE_ORDERS_SQL: str = dedent(
 
 _MICROBATCH_ORDERS_SQL: str = dedent(
     """
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           incremental_mode microbatch,
@@ -145,7 +146,7 @@ _MICROBATCH_ORDERS_SQL: str = dedent(
 
 _WINDOWED_ORDERS_SQL: str = dedent(
     """
-        MODEL (
+        MODEL (description "Test model.",
           materialized incremental,
           incremental_strategy delete_insert,
           cursor order_date,

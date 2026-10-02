@@ -169,7 +169,7 @@ def test_given_python_under_unsupported_root_when_compiling_then_command_fails_w
             description="custom Rule harness test path",
             repo_files={
                 "sqlbuild_project.toml": 'name = "rule_harness_layout"\nadapter = "duckdb"\n',
-                "models/orders.sql": "MODEL ();\nSELECT 1 AS order_id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n",
                 "tests/rules/test_order_policy.py": "def test_order_policy(): pass\n",
             },
             expected_exit_code=0,
@@ -215,7 +215,7 @@ def test_given_rule_harness_test_when_compiling_then_python_test_path_is_accepte
                 ),
                 "sources/raw.yml": (
                     "sources:\n"
-                    "  - name: raw_orders\n"
+                    "  - name: raw_orders\n    description: Test source raw_orders.\n"
                     "    managed: true\n"
                     "    write_strategy: table\n"
                     "    columns:\n"
@@ -225,7 +225,7 @@ def test_given_rule_harness_test_when_compiling_then_python_test_path_is_accepte
                     "        type: VARCHAR\n"
                 ),
                 "models/fact_orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model fact_orders.', materialized table);\n\n"
                     'SELECT order_id, status FROM __source("raw_orders")\n'
                 ),
                 "python/_helpers.py": (
@@ -245,14 +245,14 @@ def test_given_rule_harness_test_when_compiling_then_python_test_path_is_accepte
                     "from sqlbuild.loaders import loader\n\n\n"
                     "@loader\n"
                     "def raw_orders(ctx):\n"
-                    "    return order_rows()\n"
+                    "    '''Test loader raw_orders.'''\n    return order_rows()\n"
                 ),
                 "python/orders/exports/assets.py": (
                     "from sqlbuild.assets import asset\n"
                     "from sqlbuild.refs import model\n\n\n"
                     "@asset(depends_on=model('fact_orders'))\n"
                     "def orders_export(ctx):\n"
-                    "    relation = ctx.relation(model('fact_orders'))\n"
+                    "    '''Test asset orders_export.'''\n    relation = ctx.relation(model('fact_orders'))\n"
                     "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()\n"
                     "    return ctx.result(payload={'order_count': int(rows[0][0])})\n"
                 ),
@@ -261,7 +261,7 @@ def test_given_rule_harness_test_when_compiling_then_python_test_path_is_accepte
                     "from sqlbuild.checks import check\n\n\n"
                     "@check(depends_on=orders_export)\n"
                     "def orders_export_not_empty(ctx):\n"
-                    "    payload = ctx.result_of(node_function=orders_export).payload\n"
+                    "    '''Test check orders_export_not_empty.'''\n    payload = ctx.result_of(node_function=orders_export).payload\n"
                     "    if payload['order_count'] <= 0:\n"
                     "        return ctx.fail(message='orders export is empty')\n"
                     "    return ctx.pass_(message='orders export is ready')\n"
@@ -322,7 +322,7 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
                     "from sqlbuild.tasks import task\n\n\n"
                     "@task\n"
                     "def orders(ctx):\n"
-                    "    return None\n\n\n"
+                    "    '''Test task orders.'''\n    return None\n\n\n"
                     "@factory\n"
                     "def order_nodes():\n"
                     "    return orders\n"
@@ -342,7 +342,7 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
                     "    global orders\n\n"
                     "    @task\n"
                     "    def orders(ctx):\n"
-                    "        return None\n\n"
+                    "        '''Test task orders.'''\n        return None\n\n"
                     "    return orders\n"
                 ),
             },
@@ -386,12 +386,12 @@ def test_given_factory_returning_module_node_when_planning_then_node_registers_o
                     "from sqlbuild.tasks import task\n\n\n"
                     "@task\n"
                     "def orders(ctx):\n"
-                    "    return None\n\n\n"
+                    "    '''Test task orders.'''\n    return None\n\n\n"
                     "@factory\n"
                     "def order_nodes():\n"
                     "    @task(name='orders')\n"
                     "    def generated_orders(ctx):\n"
-                    "        return None\n"
+                    "        '''Test task generated_orders.'''\n        return None\n"
                     "    return generated_orders\n"
                 ),
             },
@@ -441,7 +441,7 @@ def test_given_factory_returning_distinct_same_name_node_when_planning_then_conf
                     "from sqlbuild.tasks import task\n\n\n"
                     "@task\n"
                     "def orders(ctx):\n"
-                    "    return ctx.result(payload={'status': python.helpers.clean.label()})\n"
+                    "    '''Test task orders.'''\n    return ctx.result(payload={'status': python.helpers.clean.label()})\n"
                 ),
             },
             expected_build_fragments=("orders", "\u2713 Completed successfully"),

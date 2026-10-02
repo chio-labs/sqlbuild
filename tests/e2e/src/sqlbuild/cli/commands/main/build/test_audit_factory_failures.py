@@ -41,7 +41,7 @@ database = "audit_factory_failures.duckdb"
 materialized = "table"
 """,
             "models/orders.sql": """
-MODEL (audit_factories [order_quality]);
+MODEL (description "Test model orders.", audit_factories [order_quality]);
 SELECT 2 AS id, -10 AS amount
 """,
             "audits/generic/expression_is_true.sql": """

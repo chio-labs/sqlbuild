@@ -68,7 +68,7 @@ def test_given_referenced_environment_change_when_fingerprinting_then_invalidate
             description="SQL output context preserves structural cache availability",
             relative_path="models/orders.sql",
             config=(
-                "MODEL (materialized view);\n\n"
+                "MODEL (description 'Test model orders.', materialized view);\n\n"
                 "SELECT '${CTX:run_id}' AS invocation_id, 1 AS order_id\n"
             ),
             expected_available=True,

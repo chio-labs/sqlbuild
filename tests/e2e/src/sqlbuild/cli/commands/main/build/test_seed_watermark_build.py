@@ -54,7 +54,7 @@ def test_given_seed_watermark_when_seed_changes_then_incremental_consumes_new_hi
             + "\n",
             "seeds/schema.yml": (
                 "seeds:\n"
-                "  - name: order_events\n"
+                "  - name: order_events\n    description: Test seed order_events.\n"
                 "    columns:\n"
                 "      - name: id\n"
                 "        type: INTEGER\n"
@@ -64,7 +64,7 @@ def test_given_seed_watermark_when_seed_changes_then_incremental_consumes_new_hi
             "seeds/order_events.csv": test_case.initial_seed,
             "models/order_events_incremental.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model order_events_incremental.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor id,

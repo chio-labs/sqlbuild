@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _STARTS_WITH_FUNCTION: str = (
-    "FUNCTION (\n"
+    "FUNCTION (description 'Test function.',\n"
     "  arguments (value STRING, prefix STRING),\n"
     "  returns BOOLEAN,\n"
     "  database warehouse,\n"
@@ -125,7 +125,7 @@ def test_given_builtin_spelling_when_compiling_then_dialect_support_is_enforced(
             "sqlbuild_project.toml": test_case.project_toml,
             "functions/sql/starts_with.sql": _STARTS_WITH_FUNCTION,
             "models/products.sql": (
-                f"MODEL (database warehouse, schema analytics);\n\n{test_case.query_sql}"
+                f"MODEL (description 'Test model products.', database warehouse, schema analytics);\n\n{test_case.query_sql}"
             ),
         },
     )

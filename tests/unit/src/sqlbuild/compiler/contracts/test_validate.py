@@ -353,7 +353,7 @@ def test_given_deferred_output_locations_when_contract_fails_then_locates_author
             type_enforcement=True,
             contract="enforced",
             authored_sql=(
-                "MODEL (columns (order_id (type INTEGER)));\n"
+                "MODEL (description 'Test model.', columns (order_id (type INTEGER)));\n"
                 "SELECT\n"
                 "  1 AS order_id,\n"
                 "  2 AS amount\n"

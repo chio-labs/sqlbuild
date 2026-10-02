@@ -26,7 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
         ScenarioAuthoredCheckSqlE2ETestCase(
             description="DuckDB integer division in fixture, expected and assertion SQL",
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 21 // 2 AS amount -- integer division\n"
@@ -46,7 +46,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
         ScenarioAuthoredCheckSqlE2ETestCase(
             description="DuckDB escape strings between relation markers in assertion SQL",
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
@@ -66,7 +66,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
         ScenarioAuthoredCheckSqlE2ETestCase(
             description="DuckDB escape string before the first relation marker",
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
@@ -110,7 +110,7 @@ def test_given_dialect_specific_scenario_sql_when_testing_then_runs_authored_sql
         ScenarioUnresolvableCheckSqlE2ETestCase(
             description="DuckDB backslash before a quote leaves the assertion string unclosed",
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
@@ -175,7 +175,7 @@ def test_given_project_dialect_scenario_sql_when_replaying_locally_then_resolves
     del repo_files["tests/scenarios/order_totals_fail.sql"]
     del repo_files["tests/scenarios/nested/orders_assert_pass.sql"]
     repo_files[f"tests/scenarios/{test_case.scenario_name}.sql"] = (
-        "SCENARIO ();\n\n"
+        "SCENARIO (description 'Test scenario orders_assert_pass.');\n\n"
         "WITH\n"
         f"__source__raw_orders AS (\n  {test_case.source_fixture_sql}\n),\n"
         f"__assert__no_named_totals AS (\n  {test_case.assertion_sql}\n)\n"

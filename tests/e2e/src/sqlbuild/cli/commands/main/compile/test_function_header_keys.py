@@ -21,11 +21,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             repo_files={
                 "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
                 "functions/sql/normalize_status.sql": (
-                    "FUNCTION (\n  arguments (status VARCHAR),\n  returns VARCHAR,\n"
+                    "FUNCTION (description 'Test function normalize_status.',\n  arguments (status VARCHAR),\n  returns VARCHAR,\n"
                     "  replay_on_change full,\n);\n\nlower(status)\n"
                 ),
                 "models/order_statuses.sql": (
-                    "MODEL (materialized table);\n\nSELECT __udf(\"normalize_status\")('OPEN') "
+                    "MODEL (description 'Test model order_statuses.', materialized table);\n\nSELECT __udf(\"normalize_status\")('OPEN') "
                     "AS status\n"
                 ),
             },

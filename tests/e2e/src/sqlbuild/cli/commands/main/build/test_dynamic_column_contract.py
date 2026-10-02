@@ -48,7 +48,7 @@ def test_given_dynamic_pivot_contract_when_building_then_generated_columns_are_t
                 '"SQBRCONTRACT106"]\n'
             ),
             "models/stg_order_amounts.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model stg_order_amounts.',\n"
                 "  materialized table,\n"
                 "  columns (\n"
                 "    customer_id (type INTEGER),\n"
@@ -67,7 +67,7 @@ def test_given_dynamic_pivot_contract_when_building_then_generated_columns_are_t
                 "CAST(7.00 AS DECIMAL(12,2))\n"
             ),
             "models/customer_category_amounts.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model customer_category_amounts.',\n"
                 "  materialized table,\n"
                 "  columns (customer_id (type INTEGER)),\n"
                 "  dynamic_columns (\n"

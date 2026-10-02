@@ -60,6 +60,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         expression: |
                           SELECT *
                           FROM (VALUES (1, 100), (2, 200))
@@ -69,7 +70,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/fact_orders.sql": dedent(
                     """
-                    MODEL (materialized table);
+                    MODEL (description "Test model fact_orders.", materialized table);
 
                     SELECT order_id, amount_cents FROM __source("raw_orders")
                     """
@@ -77,7 +78,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/orders_enriched.sql": dedent(
                     """
-                    MODEL (materialized view);
+                    MODEL (description "Test model orders_enriched.", materialized view);
 
                     SELECT order_id, amount_cents, amount_cents * 2 AS doubled_cents
                     FROM __ref("fact_orders")
@@ -86,7 +87,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/missing_snapshot.sql": dedent(
                     """
-                    MODEL (materialized table);
+                    MODEL (description "Test model missing_snapshot.", materialized table);
 
                     SELECT 1 AS id
                     """
@@ -202,7 +203,7 @@ def test_given_clone_command_when_running_then_managed_relations_sync_as_expecte
                 ).strip()
                 + "\n",
                 "models/fact_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS order_id, 100 AS amount_cents\n"
+                    "MODEL (description 'Test model fact_orders.', materialized table);\n\nSELECT 1 AS order_id, 100 AS amount_cents\n"
                 ),
             },
             clone_command=(
@@ -304,6 +305,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
 
                     @loader
                     def raw_customers(ctx):
+                        '''Test loader raw_customers.'''
                         return []
                     """
                 ).strip()
@@ -312,6 +314,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         managed: true
                         write_strategy: table
                         columns:
@@ -324,7 +327,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
                 + "\n",
                 "models/stg_customers.sql": dedent(
                     """
-                    MODEL (materialized view);
+                    MODEL (description "Test model stg_customers.", materialized view);
 
                     SELECT customer_id, first_name FROM __source("raw_customers")
                     """
@@ -384,6 +387,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
 
                     @loader
                     def raw_customers(ctx):
+                        '''Test loader raw_customers.'''
                         return []
                     """
                 ).strip()
@@ -392,6 +396,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
                     """
                     sources:
                       - name: raw_customers
+                        description: Test source raw_customers.
                         managed: true
                         write_strategy: table
                         columns:
@@ -404,7 +409,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
                 + "\n",
                 "models/stg_customers.sql": dedent(
                     """
-                    MODEL (materialized view);
+                    MODEL (description "Test model stg_customers.", materialized view);
 
                     SELECT customer_id, first_name FROM __source("raw_customers")
                     """
@@ -545,6 +550,7 @@ def test_given_multi_schema_functions_when_cloning_then_destination_graph_is_que
                 """
                 seeds:
                   - name: bonuses
+                    description: Test seed bonuses.
                     schema: seed_origin
                     columns:
                       - name: bonus
@@ -554,7 +560,7 @@ def test_given_multi_schema_functions_when_cloning_then_destination_graph_is_que
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (materialized table, schema model_origin);
+                MODEL (description "Test model orders.", materialized table, schema model_origin);
 
                 SELECT * FROM (VALUES (1, 10), (2, 20)) AS orders(order_id, amount)
                 """
@@ -562,7 +568,7 @@ def test_given_multi_schema_functions_when_cloning_then_destination_graph_is_que
             + "\n",
             "functions/sql/add_bonus.sql": dedent(
                 """
-                FUNCTION (
+                FUNCTION (description "Test function add_bonus.",
                   schema scalar_origin,
                   arguments (amount INTEGER),
                   returns INTEGER
@@ -574,7 +580,7 @@ def test_given_multi_schema_functions_when_cloning_then_destination_graph_is_que
             + "\n",
             "functions/sql/order_rows.sql": dedent(
                 """
-                FUNCTION (
+                FUNCTION (description "Test function order_rows.",
                   schema table_function_origin,
                   arguments (minimum_id INTEGER),
                   returns table (
@@ -591,7 +597,7 @@ def test_given_multi_schema_functions_when_cloning_then_destination_graph_is_que
             + "\n",
             "models/enriched_orders.sql": dedent(
                 """
-                MODEL (materialized view, schema view_origin);
+                MODEL (description "Test model enriched_orders.", materialized view, schema view_origin);
 
                 SELECT order_id, __udf("add_bonus")(amount) AS amount_with_bonus
                 FROM __table_fn("order_rows")(1)
@@ -678,6 +684,7 @@ def test_given_python_udf_when_cloning_then_recreates_for_clone_connection_scope
                     runtime_version="3.11",
                 )
                 def main(value):
+                    '''Test function main.'''
                     return value + 1
                 """
             ).strip()
@@ -759,6 +766,7 @@ def test_given_destination_source_deferral_when_cloning_then_function_reads_defe
 
                 @loader
                 def raw_bonus(ctx):
+                    '''Test loader raw_bonus.'''
                     return []
                 """
             ).strip()
@@ -767,6 +775,7 @@ def test_given_destination_source_deferral_when_cloning_then_function_reads_defe
                 """
                 sources:
                   - name: raw_bonus
+                    description: Test source raw_bonus.
                     managed: true
                     write_strategy: table
                     columns:
@@ -777,7 +786,7 @@ def test_given_destination_source_deferral_when_cloning_then_function_reads_defe
             + "\n",
             "functions/sql/add_deferred_bonus.sql": dedent(
                 """
-                FUNCTION (arguments (amount INTEGER), returns INTEGER);
+                FUNCTION (description "Test function add_deferred_bonus.", arguments (amount INTEGER), returns INTEGER);
 
                 amount + (SELECT bonus FROM __source("raw_bonus"))
                 """

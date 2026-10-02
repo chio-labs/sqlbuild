@@ -53,7 +53,7 @@ def test_given_project_when_running_command_then_discovery_skips_eager_column_lo
         project_dir=tmp_path,
         source_expression="(SELECT 1 AS order_id, 'open' AS status)",
         model_sql=(
-            "MODEL (materialized table);\n"
+            "MODEL (description 'Test model.', materialized table);\n"
             'SELECT o.order_id, o.status FROM __source("typed_orders") AS o\n'
         ),
     )

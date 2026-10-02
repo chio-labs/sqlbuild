@@ -68,11 +68,12 @@ def test_given_dlt_source_when_loading_to_postgres_then_table_is_materialized_an
                     f'      credentials: "sqlite:///{source_db_path}"\n'
                     "    resources:\n"
                     "      - name: raw_orders\n"
+                    "        description: Test source raw_orders.\n"
                     "        table: orders\n"
                     "        write_disposition: replace\n"
                 ),
                 "models/order_totals.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model order_totals.', materialized table);\n\n"
                     'SELECT order_id, amount FROM __source("raw_orders") WHERE amount >= 20\n'
                 ),
             },

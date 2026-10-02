@@ -70,7 +70,7 @@ def test_given_empty_project_directory_when_running_init_then_typed_resource_dir
             description="initialized project builds Python nodes and helpers under python",
             project_files={
                 "models/marts/fact_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS order_id\n"
+                    "MODEL (description 'Test model fact_orders.', materialized table);\n\nSELECT 1 AS order_id\n"
                 ),
                 "python/_helpers.py": "def order_count(rows):\n    return len(rows)\n",
                 "python/tasks/orders.py": (
@@ -78,7 +78,7 @@ def test_given_empty_project_directory_when_running_init_then_typed_resource_dir
                     "from sqlbuild.tasks import task\n\n\n"
                     "@task\n"
                     "def count_orders(ctx):\n"
-                    "    return ctx.result(payload={'order_count': order_count([1, 2])})\n"
+                    "    '''Test task count_orders.'''\n    return ctx.result(payload={'order_count': order_count([1, 2])})\n"
                 ),
                 "python/assets/orders_export.py": (
                     "from python.tasks.orders import count_orders\n"
@@ -86,7 +86,7 @@ def test_given_empty_project_directory_when_running_init_then_typed_resource_dir
                     "from sqlbuild.refs import model\n\n\n"
                     "@asset(depends_on=(model('fact_orders'), count_orders))\n"
                     "def orders_export(ctx):\n"
-                    "    return ctx.result(payload={'ready': True})\n"
+                    "    '''Test asset orders_export.'''\n    return ctx.result(payload={'ready': True})\n"
                 ),
             },
             unexpected_paths=("tasks", "assets", "checks", "loaders", "factories", "libs"),

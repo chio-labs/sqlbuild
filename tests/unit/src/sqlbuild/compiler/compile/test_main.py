@@ -128,7 +128,7 @@ local_only = "present"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   columns (
     order_id (type VARCHAR),
   ),
@@ -138,7 +138,7 @@ select 1
 """.strip()
                 + "\n",
                 "models/staging/nested/orders_enriched.sql": """
-MODEL (
+MODEL (description "Test model orders_enriched.",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor event_time,
@@ -156,6 +156,7 @@ select __cursor_start  ( ) as batch_start, __cursor_end() as batch_end
                 "seeds/schema.yml": """
 seeds:
   - name: country_codes
+    description: Test seed country_codes.
     columns:
       - name: country_code
         type: VARCHAR
@@ -167,6 +168,7 @@ seeds:
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     schema: public
     table: orders
 """.strip()
@@ -175,7 +177,7 @@ sources:
             selected_target=None,
             cli_vars={"shared": "cli", "cli_only": "present"},
             run_id=None,
-            expected_model_schema_names=(None, "orders"),
+            expected_model_schema_names=("orders_enriched", "orders"),
             expected_model_config_values=(
                 {
                     "materialized": "incremental",
@@ -220,11 +222,14 @@ sources:
         ),
         BuildCompileInputsTestCase(
             description="allows models with no matching schema metadata",
-            repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n"
+            },
             selected_target=None,
             cli_vars={},
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -241,7 +246,7 @@ sources:
             repo_files=base_repo_files()
             | {
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   materialized incremental,
   contract enforced,
   columns (
@@ -295,7 +300,7 @@ SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
             repo_files=base_repo_files()
             | {
                 "models/customer_snapshot.sql": """
-MODEL (
+MODEL (description "Test model customer_snapshot.",
   materialized snapshot,
   contract enforced,
   columns (
@@ -388,12 +393,12 @@ target = "dev"
 shared = "local"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target="prod",
             cli_vars={},
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -444,12 +449,12 @@ active = "prod"
 target = "dev"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -481,12 +486,12 @@ project_only = "present"
 local_only = "present"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars={"cli_only": "present"},
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -523,12 +528,12 @@ warehouse = "default_wh"
 active = "dev"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -565,12 +570,12 @@ warehouse = "dev_wh"
 local_only = "present"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars={"cli_only": "present"},
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -604,12 +609,12 @@ path = "env.db"
 warehouse = "dev_wh"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -645,12 +650,12 @@ shared = "local"
 local_only = "present"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars={"shared": "cli", "cli_only": "present"},
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -672,14 +677,14 @@ local_only = "present"
             repo_files=base_repo_files()
             | {
                 "models/orders.sql": (
-                    "MODEL (materialized incremental, incremental_strategy append, "
+                    "MODEL (description 'Test model orders.', materialized incremental, incremental_strategy append, "
                     "full_refresh false);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "materialized": "incremental",
@@ -704,16 +709,16 @@ local_only = "present"
                     'name = "demo"\nadapter = "duckdb"\n\n[defaults]\nfull_refresh = false\n'
                 ),
                 "models/a_incremental.sql": (
-                    "MODEL (materialized incremental, incremental_strategy append);"
+                    "MODEL (description 'Test model a_incremental.', materialized incremental, incremental_strategy append);"
                     "\n\nSELECT 1 AS id\n"
                 ),
-                "models/b_view.sql": "MODEL (materialized view);\n\nSELECT 1 AS id\n",
-                "models/c_table.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                "models/b_view.sql": "MODEL (description 'Test model b_view.', materialized view);\n\nSELECT 1 AS id\n",
+                "models/c_table.sql": "MODEL (description 'Test model c_table.', materialized table);\n\nSELECT 1 AS id\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None, None, None),
+            expected_model_schema_names=("a_incremental", "b_view", "c_table"),
             expected_model_config_values=(
                 {
                     "full_refresh": False,
@@ -746,12 +751,12 @@ local_only = "present"
                     '[defaults]\nmaterialized = "${model_kind}"\nfull_refresh = false\n'
                     'incremental_strategy = "append"\n'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "materialized": "incremental",
@@ -800,7 +805,7 @@ absolute = 0.01
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": (
-                    "MODEL (\n  unique_key [order_id],"
+                    "MODEL (description 'Test model orders.',\n  unique_key [order_id],"
                     "\n  cursor event_time,"
                     "\n  cursor_type timestamp,"
                     "\n  cursor_grain second,"
@@ -810,7 +815,7 @@ absolute = 0.01
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "materialized": "incremental",
@@ -859,7 +864,7 @@ append_cursor_inclusive = false
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": (
-                    "MODEL (\n  cursor event_time,"
+                    "MODEL (description 'Test model orders.',\n  cursor event_time,"
                     "\n  cursor_type timestamp,"
                     "\n  cursor_grain second,"
                     "\n);\n\nselect 1\n"
@@ -868,7 +873,7 @@ append_cursor_inclusive = false
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "materialized": "incremental",
@@ -917,7 +922,7 @@ absolute = 0.01
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   row_diff_exclude_columns [run_id, loaded_at],
   row_diff_tolerances (
     by_type (
@@ -941,7 +946,7 @@ select 1
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "row_diff_exclude_columns": ("loaded_at", "run_id"),
@@ -1001,7 +1006,7 @@ schema = "dev_${ENV:USER}_${CTX:model.schema}"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   materialized incremental,
   incremental_strategy append,
   alias '${CTX:model.name}_${CTX:run.target}',
@@ -1023,7 +1028,7 @@ select 1
             selected_target=None,
             cli_vars=None,
             run_id="run_123",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "database": "dev_analytics_kevin",
@@ -1078,7 +1083,7 @@ schema = "schema_${CTX:run.id}"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   alias 'orders_${CTX:run.target}',
   config (
     run_label '${CTX:run.id}',
@@ -1093,7 +1098,7 @@ select 1
             selected_target=None,
             cli_vars=None,
             run_id="run_123",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "database": "db_ci",
@@ -1127,13 +1132,13 @@ adapter = "duckdb"
 schema = "${CTX:model.name}_schema"
 """.strip()
                 + "\n",
-                "models/orders.sql": "MODEL ();\n\nselect 1\n",
-                "models/customers.sql": "MODEL ();\n\nselect 2\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
+                "models/customers.sql": "MODEL (description 'Test model customers.');\n\nselect 2\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None, None),
+            expected_model_schema_names=("customers", "orders"),
             expected_model_config_values=(
                 {"schema": "customers_schema"},
                 {"schema": "orders_schema"},
@@ -1165,7 +1170,7 @@ append_cursor_inclusive = "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   cursor event_time,
   cursor_type timestamp,
   cursor_grain second,
@@ -1179,7 +1184,7 @@ select 1
             selected_target=None,
             cli_vars=None,
             run_id="run_123",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "materialized": "incremental",
@@ -1316,12 +1321,12 @@ database = "preserve"
 schema = "preserve"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "database": "analytics_team_prod",
@@ -1381,7 +1386,7 @@ database = "analytics"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   alias orders_dev,
   post_hooks [inline_sql('@grant_select("@@CTX:destination.qualified")')],
 );
@@ -1412,6 +1417,7 @@ SELECT @project_columns() FROM __source("raw_orders") JOIN __ref("orders") USING
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     table: orders
 """.strip()
                 + "\n",
@@ -1423,7 +1429,7 @@ sources:
                 "optional_suffix": None,
             },
             run_id="run_123",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "schema": "marts",
@@ -1504,7 +1510,7 @@ SELECT 1
 }
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "tests/unit/orders.sql": """
 TEST ();
 
@@ -1525,7 +1531,7 @@ SELECT 1
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_path_defaults=(None,),
             expected_seed_names=(),
@@ -1583,7 +1589,7 @@ min_amount = "100"
 """.strip()
                 + "\n",
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   pre_hooks [inline_sql("insert into @@audit_schema.load_log select '@@ENV:USER_NAME'")],
   columns (order_id (audits [source_filter])),
 );
@@ -1595,7 +1601,7 @@ WHERE email LIKE '%@@domain'
 """.strip()
                 + "\n",
                 "functions/sql/is_large_order.sql": """
-FUNCTION (
+FUNCTION (description "Test function is_large_order.",
   arguments (amount INTEGER),
   returns BOOLEAN,
 );
@@ -1635,10 +1641,12 @@ WHERE @column IS NOT NULL
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     expression: |
       SELECT @source_columns(), '@@ENV:USER_NAME' AS loaded_by
       FROM @@raw_schema.raw_orders
   - name: raw_table
+    description: Test source raw_table.
     database: ${raw_database}
     schema: ${raw_schema}
     table: orders_${ENV:USER_NAME}
@@ -1747,7 +1755,7 @@ database = "analytics"
 """.strip()
                 + "\n",
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   alias orders_dev,
   post_hooks [
     inline_sql("select '@@CTX:destination.qualified' as target"),
@@ -1765,6 +1773,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify(ctx, message):
+    '''Test hook notify.'''
     return None
 """.strip()
                 + "\n",
@@ -1772,7 +1781,7 @@ def notify(ctx, message):
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "schema": "marts",
@@ -1816,7 +1825,7 @@ schema = "marts"
 """.strip()
                 + "\n",
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   post_hooks [sql("record_access", role: "O'Brien")],
 );
 
@@ -1834,7 +1843,7 @@ FROM @@CTX:destination.database.@@CTX:destination.schema.access_log
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "database": "analytics",
@@ -1873,7 +1882,7 @@ FROM @@CTX:destination.database.@@CTX:destination.schema.access_log
             repo_files=base_repo_files()
             | {
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   pre_hooks [
     python("defaulted", channel: "alerts"),
     python("flexible", extra: "value"),
@@ -1891,21 +1900,25 @@ from sqlbuild.hooks import hook
 
 @hook
 def defaulted(context, channel, message="ready"):
+    '''Test hook defaulted.'''
     return None
 
 
 @hook
 def flexible(ctx, **kwargs):
+    '''Test hook flexible.'''
     return None
 
 
 @hook
 def context_named(hook_context, message):
+    '''Test hook context_named.'''
     return None
 
 
 @hook
 def optional_positional_only(ctx, channel="alerts", /):
+    '''Test hook optional_positional_only.'''
     return None
 """.strip()
                 + "\n",
@@ -1913,7 +1926,7 @@ def optional_positional_only(ctx, channel="alerts", /):
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "pre_hooks": [
@@ -1938,7 +1951,7 @@ def optional_positional_only(ctx, channel="alerts", /):
             repo_files=base_repo_files()
             | {
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   post_hooks [
     python("notify", message: "@@CTX:destination.qualified", macro_text: "@format_message()"),
   ],
@@ -1953,6 +1966,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify(ctx, message, macro_text):
+    '''Test hook notify.'''
     return None
 """.strip()
                 + "\n",
@@ -1960,7 +1974,7 @@ def notify(ctx, message, macro_text):
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=(
                 {
                     "post_hooks": [
@@ -2013,7 +2027,7 @@ schema = "default_schema"
 """.strip()
                 + "\n",
                 "functions/sql/is_completed_order.sql": """
-FUNCTION (
+FUNCTION (description "Test function is_completed_order.",
   database ${udf_database},
   schema ${udf_schema},
   arguments (order_status ${status_type}),
@@ -2074,10 +2088,10 @@ sql_validation = false
 """.strip()
                 + "\n",
                 "models/fact_orders.sql": (
-                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")(7)\n'
+                    'MODEL (description "Test model fact_orders.");\n\nSELECT * FROM __table_fn("customer_orders")(7)\n'
                 ),
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   arguments (p_customer_id INTEGER),
   returns table (
     order_id INTEGER,
@@ -2094,7 +2108,7 @@ WHERE customer_id = p_customer_id
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("fact_orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=('SELECT * FROM __table_fn("customer_orders")(7)',),
             expected_model_path_defaults=(None,),
@@ -2131,7 +2145,7 @@ WHERE customer_id = p_customer_id
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   returns table (
     order_id INTEGER,
     status VARCHAR
@@ -2188,7 +2202,7 @@ def project_columns() -> str:
     return "order_id"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "tests/unit/orders.sql": """
 TEST (name "first");
 
@@ -2226,8 +2240,10 @@ SELECT @project_columns() FROM __ref("orders") JOIN __source("raw_customers") US
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     table: orders
   - name: raw_customers
+    description: Test source raw_customers.
     table: customers
 """.strip()
                 + "\n",
@@ -2235,7 +2251,7 @@ sources:
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -2316,6 +2332,7 @@ from sqlbuild.functions import udf
     packages=["faker"],
 )
 def main(order_status):
+    '''Test function main.'''
     return order_status == "completed"
 """.strip()
                 + "\n",
@@ -2336,6 +2353,7 @@ def main(order_status):
             expected_sql_function_body_sqls=(
                 """
 def main(order_status):
+    \"\"\"Test function main.\"\"\"
     return order_status == 'completed'
 """.strip(),
             ),
@@ -2362,7 +2380,7 @@ def main(order_status):
             repo_files=base_repo_files()
             | {
                 "models/marts/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   audits [model_not_null],
   columns (
     order_id (audits [column_not_null]),
@@ -2375,6 +2393,7 @@ select 1
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     audits:
       - source_not_null
     columns:
@@ -2440,7 +2459,7 @@ SELECT @column FROM __source("@source") WHERE @column IS NULL
             repo_files=base_repo_files()
             | {
                 "models/marts/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   columns (
     order_id (nullable false, audits [not_null, unique]),
     status (audits [accepted_values (values ["placed", "completed"])]),
@@ -2454,10 +2473,11 @@ MODEL (
 select 1 as order_id, 'placed' as status, null as customer_id
 """.strip()
                 + "\n",
-                "models/marts/customers.sql": "MODEL ();\n\nselect 1 as customer_id\n",
+                "models/marts/customers.sql": "MODEL (description 'Test model customers.');\n\nselect 1 as customer_id\n",
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     columns:
       - name: order_id
         audits:
@@ -2468,7 +2488,7 @@ sources:
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None, "orders"),
+            expected_model_schema_names=("customers", "orders"),
             expected_model_config_values=({}, {}),
             expected_model_query_sqls=(
                 "select 1 as customer_id",
@@ -2509,7 +2529,7 @@ sources:
             description="skips generic audit definitions as direct executable audits",
             repo_files=base_repo_files()
             | {
-                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/marts/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "audits/generic/custom_check.sql": """
 AUDIT ();
 
@@ -2520,7 +2540,7 @@ SELECT 1
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -2538,13 +2558,13 @@ SELECT 1
             description="warns when project generic audit shadows built-in audit",
             repo_files=base_repo_files()
             | {
-                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/marts/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "audits/generic/not_null.sql": "AUDIT ();\n\nSELECT 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -2564,11 +2584,14 @@ SELECT 1
         ),
         BuildCompileInputsTestCase(
             description="generates clickstate style run ids when none are provided",
-            repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n"
+            },
             selected_target=None,
             cli_vars=None,
             run_id=None,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
@@ -2592,12 +2615,12 @@ adapter = "duckdb"
 sql_validation = false
 """.strip()
                 + "\n",
-                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+                "models/staging/broken.sql": "MODEL (description 'Test model broken.');\n\nSELEC id FROM (SELECT 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id="test_run",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("broken",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
             expected_model_path_defaults=(None,),
@@ -2623,12 +2646,12 @@ adapter = "duckdb"
 sql_analysis = false
 """.strip()
                 + "\n",
-                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+                "models/staging/broken.sql": "MODEL (description 'Test model broken.');\n\nSELEC id FROM (SELECT 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id="test_run",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("broken",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
             expected_model_path_defaults=(None,),
@@ -2646,13 +2669,13 @@ sql_analysis = false
             description="allows invalid sql when no_sql_validation flag is set",
             repo_files=base_repo_files()
             | {
-                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+                "models/staging/broken.sql": "MODEL (description 'Test model broken.');\n\nSELEC id FROM (SELECT 1\n",
             },
             selected_target=None,
             cli_vars=None,
             run_id="test_run",
             no_sql_validation=True,
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("broken",),
             expected_model_config_values=({},),
             expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
             expected_model_path_defaults=(None,),
@@ -2690,14 +2713,14 @@ sql_analysis = false
 """.strip()
                 + "\n",
                 "models/fact_orders.sql": (
-                    'MODEL ();\n\nselect * from __dbt_ref("stg_orders") '
+                    'MODEL (description "Test model fact_orders.");\n\nselect * from __dbt_ref("stg_orders") '
                     'union all select * from __dbt_ref("stripe", "orders")\n'
                 ),
             },
             selected_target=None,
             cli_vars=None,
             run_id="test_run",
-            expected_model_schema_names=(None,),
+            expected_model_schema_names=("fact_orders",),
             expected_model_config_values=({},),
             expected_model_query_sqls=(
                 'select * from __dbt_ref("stg_orders") '
@@ -3056,9 +3079,9 @@ schema = "physical_schema"
 """.strip()
             + "\n",
             "functions/sql/defaulted.sql": (
-                "FUNCTION (returns INTEGER, tags [reference, daily]);\n\n1\n"
+                "FUNCTION (description 'Test function defaulted.', returns INTEGER, tags [reference, daily]);\n\n1\n"
             ),
-            "models/model_defaulted.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            "models/model_defaulted.sql": "MODEL (description 'Test model model_defaulted.');\n\nSELECT 1 AS id\n",
             "functions/python/explicit.py": """
 from sqlbuild.functions import udf
 
@@ -3070,6 +3093,7 @@ from sqlbuild.functions import udf
     schema="function_schema",
 )
 def main():
+    '''Test function main.'''
     return 1
 """.strip()
             + "\n",
@@ -3078,6 +3102,7 @@ from sqlbuild.functions import udf
 
 @udf(arguments={}, returns="INTEGER", runtime_version="3.11")
 def main():
+    '''Test function main.'''
     return 1
 """.strip()
             + "\n",
@@ -3219,7 +3244,7 @@ sql_validation = false
 """.strip()
                 + "\n",
                 "models/orders.sql": """
-MODEL ();
+MODEL (description "Test model orders.");
 
 SELECT * FROM __table_fn("missing_orders")(1)
 """.strip()
@@ -3235,7 +3260,7 @@ SELECT * FROM __table_fn("missing_orders")(1)
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   arguments (customer_id INTEGER),
   returns table (order_id INTEGER, customer_id INTEGER)
 );
@@ -3253,9 +3278,11 @@ SELECT customer_id AS order_id
             repo_files=base_repo_files()
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-                "models/orders.sql": ('MODEL ();\n\nSELECT * FROM __table_fn("order_total")(1)\n'),
+                "models/orders.sql": (
+                    'MODEL (description "Test model orders.");\n\nSELECT * FROM __table_fn("order_total")(1)\n'
+                ),
                 "functions/sql/order_total.sql": """
-FUNCTION (
+FUNCTION (description "Test function order_total.",
   arguments (order_id INTEGER),
   returns INTEGER
 );
@@ -3275,9 +3302,11 @@ order_id
                 "sqlbuild_project.toml": (
                     'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
                 ),
-                "models/orders.sql": ('MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")\n'),
+                "models/orders.sql": (
+                    'MODEL (description "Test model orders.");\n\nSELECT * FROM __table_fn("customer_orders")\n'
+                ),
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   arguments (customer_id INTEGER),
   returns table (order_id INTEGER)
 );
@@ -3298,7 +3327,7 @@ SELECT customer_id AS order_id
                     'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
                 ),
                 "models/orders.sql": (
-                    "MODEL ();\n\nSELECT * FROM __table_fn('customer_orders')(1)\n"
+                    "MODEL (description 'Test model orders.');\n\nSELECT * FROM __table_fn('customer_orders')(1)\n"
                 ),
             },
             selected_target=None,
@@ -3313,10 +3342,10 @@ SELECT customer_id AS order_id
                     'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
                 ),
                 "models/orders.sql": (
-                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")(1, 2)\n'
+                    'MODEL (description "Test model orders.");\n\nSELECT * FROM __table_fn("customer_orders")(1, 2)\n'
                 ),
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   arguments (customer_id INTEGER),
   returns table (order_id INTEGER)
 );
@@ -3337,7 +3366,7 @@ SELECT customer_id AS order_id
                     'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
                 ),
                 "models/orders.sql": (
-                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")(1,)\n'
+                    'MODEL (description "Test model orders.");\n\nSELECT * FROM __table_fn("customer_orders")(1,)\n'
                 ),
             },
             selected_target=None,
@@ -3350,7 +3379,7 @@ SELECT customer_id AS order_id
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   arguments (customer_id INTEGER),
   returns table (order_id INTEGER)
 );
@@ -3379,7 +3408,7 @@ SELECT 1
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": """
-MODEL ();
+MODEL (description "Test model orders.");
 
 SELECT * FROM __source("missing_source")
 """.strip()
@@ -3394,7 +3423,7 @@ SELECT * FROM __source("missing_source")
             repo_files=base_repo_files()
             | {
                 "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   materialized incremental,
   contract enforced,
   columns (
@@ -3419,7 +3448,7 @@ SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
             repo_files=base_repo_files()
             | {
                 "models/customer_snapshot.sql": """
-MODEL (
+MODEL (description "Test model customer_snapshot.",
   materialized snapshot,
   contract enforced,
   columns (
@@ -3444,7 +3473,7 @@ SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status
             repo_files=base_repo_files()
             | {
                 "models/customer_snapshot.sql": """
-MODEL (
+MODEL (description "Test model customer_snapshot.",
   materialized snapshot,
   contract enforced,
   columns (
@@ -3485,7 +3514,7 @@ SELECT * FROM __source("missing_source")
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": """
-MODEL ();
+MODEL (description "Test model orders.");
 
 SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
@@ -3503,7 +3532,7 @@ SELECT * FROM __dbt_ref("stg_orders")
             repo_files=base_repo_files()
             | {
                 "functions/sql/orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function orders.",
   returns table (order_id INTEGER)
 );
 
@@ -3543,6 +3572,7 @@ SELECT * FROM __dbt_ref("stg_orders")
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     audits:
       - source_not_null:
           source: other_source
@@ -3564,7 +3594,7 @@ SELECT 1 FROM __source("@source")
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   columns (
     order_id (nullable true, audits [not_null]),
   ),
@@ -3587,6 +3617,7 @@ SELECT 1 AS order_id
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     audits:
       - missing_definition
 """.strip()
@@ -3615,7 +3646,7 @@ SELECT @missing_macro()
             description="raises when a compiled test body lacks top level test ctes",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "tests/unit/orders.sql": """
 TEST ();
 
@@ -3631,10 +3662,11 @@ SELECT 1
             description="raises when a compiled test body lacks ceremonial select one",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": """
@@ -3659,7 +3691,7 @@ SELECT order_id FROM __expected__orders
             description="raises when a compiled test body references an unknown source mock",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "tests/unit/orders.sql": """
 TEST ();
 
@@ -3682,7 +3714,7 @@ SELECT 1
             description="raises when a compiled test body references an unknown seed mock",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "tests/unit/orders.sql": """
 TEST ();
 
@@ -3722,10 +3754,11 @@ SELECT 1
 }
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "sources/raw.yml": """
 sources:
   - name: raw__orders
+    description: Test source raw__orders.
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": """
@@ -3766,11 +3799,12 @@ SELECT 1
 }
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "seeds/countries.csv": "country_code,country_name\nUS,United States\n",
                 "seeds/schema.yml": """
 seeds:
   - name: countries
+    description: Test seed countries.
     columns:
       - name: country_code
         type: VARCHAR
@@ -3800,10 +3834,11 @@ SELECT 1
             description="raises when a compiled test body references an unknown macro mock",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": """
@@ -3834,6 +3869,7 @@ SELECT 1
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": """
@@ -3858,10 +3894,11 @@ SELECT 1
             description="raises when a compiled test body uses a reserved helper cte name",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": """
@@ -3914,7 +3951,7 @@ def project_columns() -> str:
     return "customer_id"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -3925,7 +3962,7 @@ def project_columns() -> str:
             repo_files=base_repo_files()
             | {
                 "macros/orders.py": "def DailyOrders():\n    return 'order_id'\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect @DailyOrders()\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect @DailyOrders()\n",
             },
             selected_target=None,
             run_id=None,
@@ -3944,7 +3981,7 @@ def dynamic_schema() -> str:
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   schema '@dynamic_schema()',
 );
 
@@ -3958,7 +3995,10 @@ select 1
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when the selected target does not exist",
-            repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n"
+            },
             selected_target="missing",
             run_id=None,
             expected_error_fragment="Unknown target 'missing'",
@@ -3972,7 +4012,7 @@ select 1
 target = "missing"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -3989,7 +4029,7 @@ adapter = "duckdb"
 default_target = "missing"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4008,7 +4048,7 @@ adapter = "duckdb"
 user = "${missing}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4026,7 +4066,7 @@ adapter = "duckdb"
 path = "${ENV:SQLBUILD_DB_PATH}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4044,7 +4084,7 @@ adapter = "duckdb"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   schema '${CTX:this}',
 );
 
@@ -4074,7 +4114,7 @@ schema = "marts"
 schema = "dev_${CTX:destination.missing}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4097,7 +4137,7 @@ default_target = "dev"
 database = "dev_${CTX:model.database}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4118,7 +4158,7 @@ first = "${second}"
 second = "${first}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4141,7 +4181,7 @@ user = "kevin"
 schema = "${SQLBUILD:user}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4159,7 +4199,7 @@ adapter = "duckdb"
 path = "${CTX:schema}"
 """.strip()
                 + "\n",
-                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4169,7 +4209,7 @@ path = "${CTX:schema}"
             description="raises when model query sql has invalid syntax",
             repo_files=base_repo_files()
             | {
-                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+                "models/staging/broken.sql": "MODEL (description 'Test model broken.');\n\nSELEC id FROM (SELECT 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4180,7 +4220,7 @@ path = "${CTX:schema}"
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (post_hooks ['SELECT 1']);\n\nSELECT 1 AS id\n"
+                    "MODEL (description 'Test model broken.', post_hooks ['SELECT 1']);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
@@ -4192,7 +4232,7 @@ path = "${CTX:schema}"
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (post_hooks [inline_sql('')]);\n\nSELECT 1 AS id\n"
+                    "MODEL (description 'Test model broken.', post_hooks [inline_sql('')]);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
@@ -4209,9 +4249,9 @@ path = "${CTX:schema}"
                     'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
                 ),
                 "models/staging/broken.sql": (
-                    'MODEL (post_hooks [sql("dynamic", statement: "")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model broken.", post_hooks [sql("dynamic", statement: "")]);\n\nSELECT 1 AS id\n'
                 ),
-                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
+                "hooks/sql/dynamic.sql": "HOOK (description 'Test hook dynamic.');\n\n@statement\n",
             },
             selected_target=None,
             run_id=None,
@@ -4224,7 +4264,7 @@ path = "${CTX:schema}"
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (post_hooks ["
+                    "MODEL (description 'Test model broken.', post_hooks ["
                     "inline_sql('GRANT SELECT ON ${CTX:destination.qualified} TO analyst')"
                     "]);\n\n"
                     "SELECT 1 AS id\n"
@@ -4242,7 +4282,7 @@ path = "${CTX:schema}"
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model broken.", post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
                 ),
             },
             selected_target=None,
@@ -4256,7 +4296,7 @@ path = "${CTX:schema}"
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    'MODEL (post_hooks [python("known"), python("missing")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model broken.", post_hooks [python("known"), python("missing")]);\n\nSELECT 1 AS id\n'
                 ),
                 "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
@@ -4264,6 +4304,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def known(ctx):
+    '''Test hook known.'''
     return None
 """.strip()
                 + "\n",
@@ -4279,7 +4320,7 @@ def known(ctx):
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    'MODEL (pre_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model broken.", pre_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
                 ),
                 "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
@@ -4287,6 +4328,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify(ctx, channel):
+    '''Test hook notify.'''
     return None
 """.strip()
                 + "\n",
@@ -4302,7 +4344,7 @@ def notify(ctx, channel):
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    'MODEL (post_hooks [python("notify", unknown: "value")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model broken.", post_hooks [python("notify", unknown: "value")]);\n\nSELECT 1 AS id\n'
                 ),
                 "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
@@ -4310,6 +4352,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify(ctx):
+    '''Test hook notify.'''
     return None
 """.strip()
                 + "\n",
@@ -4325,7 +4368,7 @@ def notify(ctx):
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model broken.", post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
                 ),
                 "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
@@ -4333,6 +4376,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify(ctx, channel, /):
+    '''Test hook notify.'''
     return None
 """.strip()
                 + "\n",
@@ -4348,7 +4392,7 @@ def notify(ctx, channel, /):
             description="raises when model header tags is a string instead of list",
             repo_files=base_repo_files()
             | {
-                "models/staging/orders.sql": "MODEL (tags nightly);\n\nSELECT 1\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.', tags nightly);\n\nSELECT 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4358,7 +4402,7 @@ def notify(ctx, channel, /):
             description="raises when dbt ref has no discovered manifest",
             repo_files=base_repo_files()
             | {
-                "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
+                "models/fact_orders.sql": 'MODEL (description "Test model fact_orders.");\n\nselect * from __dbt_ref("orders")\n',
             },
             selected_target=None,
             run_id=None,
@@ -4389,7 +4433,7 @@ def notify(ctx, channel, /):
 }
 """.strip()
                 + "\n",
-                "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
+                "models/fact_orders.sql": 'MODEL (description "Test model fact_orders.");\n\nselect * from __dbt_ref("orders")\n',
             },
             selected_target=None,
             run_id=None,
@@ -4413,7 +4457,7 @@ def notify(ctx, channel, /):
 }
 """.strip()
                 + "\n",
-                "models/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
             },
             selected_target=None,
             run_id=None,
@@ -4457,7 +4501,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": (
-                    'MODEL (post_hooks [python("notify", channel: "alerts")]);\n\nSELECT 1 AS id\n'
+                    'MODEL (description "Test model orders.", post_hooks [python("notify", channel: "alerts")]);\n\nSELECT 1 AS id\n'
                 ),
                 "hooks/python/notifications.py": """
 from pathlib import Path
@@ -4466,6 +4510,7 @@ from sqlbuild.hooks import hook
 
 @hook
 def notify(ctx, channel):
+    '''Test hook notify.'''
     Path(__file__).with_name("executed.marker").write_text("executed", encoding="utf-8")
 """.strip()
                 + "\n",
@@ -4648,7 +4693,7 @@ def test_given_retention_layers_when_building_model_config_then_precedence_is_re
                     )
                 ),
                 "models/orders.sql": (
-                    "MODEL (materialized table, time_travel_retention 30d);\n\nSELECT 1 AS id\n"
+                    "MODEL (description 'Test model orders.', materialized table, time_travel_retention 30d);\n\nSELECT 1 AS id\n"
                 ),
             },
             expected_desired_days=30,
@@ -4685,7 +4730,7 @@ def test_given_authored_retention_header_when_building_inputs_then_typed_policy_
             repo_files=base_repo_files()
             | {
                 "models/customer_snapshot.sql": """
-MODEL (
+MODEL (description "Test model customer_snapshot.",
   materialized snapshot,
   contract enforced,
   columns (
@@ -4741,7 +4786,7 @@ def test_given_snapshot_contract_schema_change_conflict_when_building_then_error
                 "seeds/waffle_types.csv": "waffle_type_id,waffle_name\n1,Classic\n",
                 "seeds/schema.yml": (
                     "seeds:\n"
-                    "  - name: waffle_types\n"
+                    "  - name: waffle_types\n    description: Test seed waffle_types.\n"
                     "    columns:\n"
                     "      - name: waffle_type_id\n"
                     "        type: INTEGER\n"
@@ -4749,7 +4794,7 @@ def test_given_snapshot_contract_schema_change_conflict_when_building_then_error
                     "        type: VARCHAR\n"
                 ),
                 "models/orders.sql": (
-                    'MODEL ();\n\nSELECT waffle_type_id FROM __seed("waffle_types")'
+                    'MODEL (description "Test model orders.");\n\nSELECT waffle_type_id FROM __seed("waffle_types")'
                 ),
             },
             expected_model_count=1,

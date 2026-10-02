@@ -22,7 +22,9 @@ def write_unevaluated_rules_project(
     adapter: str = "duckdb",
     selected_rules: tuple[str, ...] = ("SQBRSQL035",),
     resource_path: str = "models/staging/orders.sql",
-    resource_template: str = "MODEL ({options});\nSELECT {expression} AS order_id",
+    resource_template: str = (
+        "MODEL (description 'Test model orders.', {options});\nSELECT {expression} AS order_id"
+    ),
     extra_files: tuple[tuple[str, str], ...] = (),
 ) -> None:
     (project_dir / "sqlbuild_project.toml").write_text(
@@ -31,7 +33,9 @@ def write_unevaluated_rules_project(
     )
     models: Path = project_dir / "models/staging"
     models.mkdir(parents=True)
-    (models / "orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id\n")
+    (models / "orders.sql").write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n"
+    )
     relative_path: str
     contents: str
     for relative_path, contents in extra_files:
@@ -240,13 +244,14 @@ INCREMENTAL_RULES_PROJECT: dict[str, str] = {
         "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
     ),
     "models/staging/stg_orders.sql": (
-        "MODEL (\n  materialized view,\n  contract enforced,\n  columns (\n"
+        "MODEL (description 'Test model stg_orders.',\n  materialized view,\n"
+        "  contract enforced,\n  columns (\n"
         "    order_id (type INTEGER, nullable false, audits [not_null]),\n"
         "    amount (type DOUBLE),\n  ),\n);\n\n"
         "SELECT CAST(1 AS INTEGER) AS order_id, CAST(10.5 AS DOUBLE) AS amount\n"
     ),
     "models/marts/order_totals.sql": (
-        "MODEL (\n  columns (\n"
+        "MODEL (description 'Test model order_totals.',\n  columns (\n"
         "    order_id (type INTEGER, nullable false, audits [not_null]),\n"
         "    net_amount (type DOUBLE),\n  ),\n);\n\n"
         "SELECT\n  o.order_id,\n"

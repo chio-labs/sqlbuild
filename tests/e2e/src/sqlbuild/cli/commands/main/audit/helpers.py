@@ -34,7 +34,7 @@ def delivery_model_files() -> dict[str, str]:
     return {
         "models/customers.sql": dedent(
             """
-            MODEL (
+            MODEL (description "Test model customers.",
               materialized table,
               columns (
                 customer_id (audits [not_null]),
@@ -45,7 +45,7 @@ def delivery_model_files() -> dict[str, str]:
             """
         ).lstrip(),
         "models/orders.sql": (
-            "MODEL (\n  materialized table,\n  columns (\n"
+            "MODEL (description 'Test model orders.',\n  materialized table,\n  columns (\n"
             f"{columns}\n"
             "  ),\n);\n\n"
             f"SELECT\n  customer_id,\n  {selected}\n"

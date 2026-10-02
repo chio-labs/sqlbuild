@@ -306,7 +306,7 @@ def singular_audit_files(*, base: dict[str, str], sql: str) -> dict[str, str]:
 def model_header(*, key: str, value: str) -> str:
     """Return a one-column model whose header sets one key."""
 
-    return f"MODEL ({key} {value});\nSELECT 1 AS order_id"
+    return f"MODEL (description 'Test model check.', {key} {value});\nSELECT 1 AS order_id"
 
 
 def compile_and_assemble(*, project_dir: Path) -> CompiledProject:
@@ -323,7 +323,7 @@ def gate_audit(*, read: str) -> str:
     return f"AUDIT ();\nSELECT s.* FROM @relation s LEFT JOIN {read} a USING (code)"
 
 
-def gate_model(*, sql: str, header: str = "MODEL ();") -> str:
+def gate_model(*, sql: str, header: str = "MODEL (description 'Test model.');") -> str:
     """Return a model with the given header."""
 
     return f"{header}\n{sql}"
@@ -343,7 +343,7 @@ def execution_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, st
 def inline_sql_hook_header(sql: str) -> str:
     """Return a MODEL header running one inline SQL pre-hook."""
 
-    return f"MODEL (pre_hooks [inline_sql('{sql}')]);"
+    return f"MODEL (description 'Test model.', pre_hooks [inline_sql('{sql}')]);"
 
 
 def lineage_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]]:
@@ -447,7 +447,7 @@ def python_loader_source(*, depends_on: str, body: str) -> str:
         "from sqlbuild.loaders import loader\n\n\n"
         "@loader\n"
         "def raw_regions(ctx):\n"
-        "    return [{'id': 1}]\n\n\n"
+        "    '''Test loader raw_regions.'''\n    return [{'id': 1}]\n\n\n"
         f"@loader(depends_on=[{depends_on}])\n"
         "def raw_customers(ctx):\n"
         f"{body}"

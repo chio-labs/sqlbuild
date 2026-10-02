@@ -24,19 +24,19 @@ _PROJECT_FILES: dict[str, str] = {
         '[targets.dev]\nschema = "dev_schema"\n'
     ),
     "models/staging/stg_orders.sql": (
-        "MODEL (materialized table\ntags [staging]);\n\nSELECT 1 AS order_id"
+        "MODEL (description 'Test model stg_orders.', materialized table\ntags [staging]);\n\nSELECT 1 AS order_id"
     ),
     "models/staging/stg_customers.sql": (
-        "MODEL (materialized table\ntags [staging]);\n\nSELECT 1 AS customer_id"
+        "MODEL (description 'Test model stg_customers.', materialized table\ntags [staging]);\n\nSELECT 1 AS customer_id"
     ),
     "models/intermediate/int_orders.sql": (
-        'MODEL (materialized table\ntags [core]);\n\nSELECT order_id FROM __ref("stg_orders")'
+        'MODEL (description "Test model int_orders.", materialized table\ntags [core]);\n\nSELECT order_id FROM __ref("stg_orders")'
     ),
     "models/marts/fact_orders.sql": (
-        'MODEL (materialized table\ntags [core, mart]);\n\nSELECT order_id FROM __ref("int_orders")'
+        'MODEL (description "Test model fact_orders.", materialized table\ntags [core, mart]);\n\nSELECT order_id FROM __ref("int_orders")'
     ),
     "models/marts/dim_customers.sql": (
-        'MODEL (materialized table\ntags [mart]);\n\nSELECT customer_id FROM __ref("stg_customers")'
+        'MODEL (description "Test model dim_customers.", materialized table\ntags [mart]);\n\nSELECT customer_id FROM __ref("stg_customers")'
     ),
 }
 

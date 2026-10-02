@@ -41,7 +41,7 @@ from sqlbuild.compiler.scopes.types import (
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 SCOPE_CACHE_PROJECT: str = 'name = "demo"\nadapter = "duckdb"\n'
-SCOPE_CACHE_MODEL: str = "MODEL();\nSELECT 1 AS id\n"
+SCOPE_CACHE_MODEL: str = "MODEL(description 'Test model.');\nSELECT 1 AS id\n"
 
 
 def unused_declaration_index(*, enforce_placement: bool) -> ScopeIndex:
@@ -145,7 +145,7 @@ def discovered_model(
     return DiscoveredSqlModelFile(
         file_path=relative,
         relative_path=relative,
-        contents="MODEL(); SELECT 1",
+        contents="MODEL(description 'Test model.'); SELECT 1",
         header_values={"name": name},
         header_column_locations={},
         output_column_locations={},

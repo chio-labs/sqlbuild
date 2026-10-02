@@ -18,14 +18,15 @@ _DIAMOND_PROJECT_TOML: str = (
     f'[connection]\ndatabase = "{DIAMOND_DATABASE_FILE}"\n'
 )
 _DIAMOND_SOURCES_YML: str = (
-    "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+    "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+    "    schema: main\n    table: raw_orders\n"
 )
 _DIAMOND_ROOT_PATH: str = "models/orders_0.sql"
 
 
 def _incremental_header(*, extra_config: str) -> str:
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model orders_0.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  unique_key order_id,\n"
@@ -107,6 +108,7 @@ def prepare_changed_incremental_diamond_project(*, tmp_path: Path) -> Path:
 
 _MISSING_SOURCE_TABLES_SOURCES_YML: str = """sources:
   - name: raw_orders
+    description: Test source raw_orders.
     schema: raw
     table: orders
     freshness:
@@ -114,6 +116,7 @@ _MISSING_SOURCE_TABLES_SOURCES_YML: str = """sources:
       column: updated_at
       type: timestamp
   - name: raw_customers
+    description: Test source raw_customers.
     schema: raw
     table: customers
     freshness:
@@ -121,6 +124,7 @@ _MISSING_SOURCE_TABLES_SOURCES_YML: str = """sources:
       column: updated_at
       type: timestamp
   - name: raw_payments
+    description: Test source raw_payments.
     schema: raw
     table: payments
     freshness:
@@ -145,13 +149,16 @@ def prepare_missing_source_tables_project(*, tmp_path: Path) -> Path:
             ),
             "sources/raw.yml": _MISSING_SOURCE_TABLES_SOURCES_YML,
             "models/orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                'MODEL (description "Test model orders.", '
+                'materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
             "models/customers.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_customers")\n'
+                'MODEL (description "Test model customers.", '
+                'materialized table);\n\nSELECT * FROM __source("raw_customers")\n'
             ),
             "models/payments.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_payments")\n'
+                'MODEL (description "Test model payments.", '
+                'materialized table);\n\nSELECT * FROM __source("raw_payments")\n'
             ),
         },
     )

@@ -1,4 +1,5 @@
 MODEL (
+  description "Test model downstream_orders.",
   tags [nightly, finance],
   columns (order_id (audits [not_null])),
 );

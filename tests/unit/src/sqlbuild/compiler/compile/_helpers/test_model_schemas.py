@@ -60,7 +60,7 @@ def test_given_identical_contract_headers_when_attaching_then_each_model_keeps_i
     test_case: ExpectedCountTestCase,
 ) -> None:
     model_sql: str = """
-MODEL (
+MODEL (description "Test model.",
   columns (order_id (type INTEGER, audits [not_null])),
 );
 SELECT 1::INTEGER AS order_id
@@ -405,7 +405,7 @@ def test_given_dynamic_pivot_family_when_compiling_then_preserves_closed_contrac
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
             "models/stg_order_amounts.sql": """
-MODEL (
+MODEL (description "Test model stg_order_amounts.",
   contract enforced,
   columns (
     customer_id (type INTEGER),
@@ -419,7 +419,7 @@ SELECT
   CAST(10.25 AS DECIMAL(12,2)) AS amount
 """,
             "models/customer_category_amounts.sql": """
-MODEL (
+MODEL (description "Test model customer_category_amounts.",
   contract enforced,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
@@ -437,7 +437,7 @@ USING MAX(amount)
 GROUP BY customer_id
 """,
             "models/customer_category_amounts_copy.sql": """
-MODEL (
+MODEL (description "Test model customer_category_amounts_copy.",
   contract enforced,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
@@ -522,7 +522,7 @@ def test_given_partial_upstream_schema_when_compiling_dynamic_pivot_then_closure
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
             "models/order_amounts.sql": """
-MODEL (
+MODEL (description "Test model order_amounts.",
   contract none,
   columns (
     customer_id (type INTEGER),
@@ -537,7 +537,7 @@ SELECT
   CAST(99 AS INTEGER) AS unrelated
 """,
             "models/customer_category_amounts.sql": """
-MODEL (
+MODEL (description "Test model customer_category_amounts.",
   contract enforced,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
@@ -594,7 +594,7 @@ def test_given_unenforced_dynamic_upstream_when_compiling_passthrough_then_closu
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
             "models/order_amounts.sql": """
-MODEL (
+MODEL (description "Test model order_amounts.",
   contract enforced,
   columns (
     customer_id (type INTEGER),
@@ -610,7 +610,7 @@ SELECT
   CAST(99 AS INTEGER) AS unrelated
 """,
             "models/open_category_amounts.sql": """
-MODEL (
+MODEL (description "Test model open_category_amounts.",
   contract none,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
@@ -628,7 +628,7 @@ USING MAX(amount)
 GROUP BY customer_id
 """,
             "models/closed_category_amounts.sql": """
-MODEL (
+MODEL (description "Test model closed_category_amounts.",
   contract enforced,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
@@ -826,7 +826,7 @@ SELECT 1 AS id
                 "schemas/order.sql": """
 SCHEMA (name order, extends missing, columns (id (type INTEGER)));
 """,
-                "models/orders.sql": "MODEL (); SELECT 1 AS id",
+                "models/orders.sql": "MODEL (description 'Test model orders.'); SELECT 1 AS id",
             },
             expected_error_fragment="extends unknown schema 'missing'",
         ),
@@ -838,7 +838,7 @@ SCHEMA (name first, extends second, columns (first_id (type INTEGER)));
 SCHEMA (name second, extends third, columns (second_id (type INTEGER)));
 SCHEMA (name third, extends first, columns (third_id (type INTEGER)));
 """,
-                "models/orders.sql": "MODEL (); SELECT 1 AS id",
+                "models/orders.sql": "MODEL (description 'Test model orders.'); SELECT 1 AS id",
             },
             expected_error_fragment="first -> second -> third -> first",
         ),
@@ -849,7 +849,7 @@ SCHEMA (name third, extends first, columns (third_id (type INTEGER)));
 SCHEMA (name base, columns (order_id (type INTEGER)));
 SCHEMA (name child, extends base, columns (ORDER_ID (type INTEGER)));
 """,
-                "models/orders.sql": "MODEL (); SELECT 1 AS id",
+                "models/orders.sql": "MODEL (description 'Test model orders.'); SELECT 1 AS id",
             },
             expected_error_fragment="redeclares inherited column 'ORDER_ID'",
         ),

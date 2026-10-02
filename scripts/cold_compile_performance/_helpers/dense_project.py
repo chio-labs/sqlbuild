@@ -156,6 +156,7 @@ def _write_sources(*, project_dir: Path, source_count: int) -> None:
         entries.extend(
             (
                 f"  - name: orders_{index:05d}",
+                f"    description: Generated source orders_{index:05d}.",
                 "    contract: enforced",
                 f'    expression: "(SELECT 1 AS id, CAST(1 AS DOUBLE) AS amount{extra})"',
                 "    columns:",
@@ -248,9 +249,8 @@ def _model_sql(*, index: int, source_count: int, function_count: int, macro_coun
             f'description "Order quantity measure"{audit})'
         )
     header: str = (
-        "MODEL (materialized table, contract enforced, columns (\n"
-        + ",\n".join(declarations)
-        + "\n));\n"
+        'MODEL (description "Generated dense model.", materialized table, contract enforced, '
+        "columns (\n" + ",\n".join(declarations) + "\n));\n"
     )
     source_index: int = _source_index(index=index, source_count=source_count)
     relation: str = (

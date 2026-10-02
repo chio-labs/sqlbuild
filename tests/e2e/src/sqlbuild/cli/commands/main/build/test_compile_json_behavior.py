@@ -148,6 +148,7 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
                     "relative_path": "hooks/sql/select_value.sql",
                     "definition_sql": "SELECT @value",
                     "kwargs": {"value": 1},
+                    "description": "Test hook select_value.",
                 },
                 {"type": "python", "name": "notify", "kwargs": {"message": "starting"}},
             ),
@@ -176,11 +177,11 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
                 "from sqlbuild.hooks import hook\n\n"
                 "@hook\n"
                 "def notify(ctx, message):\n"
-                "    ctx.log(message)\n"
+                "    '''Test hook notify.'''\n    ctx.log(message)\n"
             ),
-            "hooks/sql/select_value.sql": "HOOK ();\n\nSELECT @value\n",
+            "hooks/sql/select_value.sql": "HOOK (description 'Test hook select_value.');\n\nSELECT @value\n",
             "models/orders.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model orders.',\n"
                 "  materialized table,\n"
                 '  pre_hooks [sql("select_value", value: 1), '
                 'python("notify", message: "starting")],\n'
@@ -216,7 +217,7 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
         "type": "sql",
         "name": "select_value",
         "relative_path": "hooks/sql/select_value.sql",
-        "description": None,
+        "description": "Test hook select_value.",
         "sql": "SELECT @value",
     }
     assert hooks_by_name["notify"]["relative_path"] == "hooks/python/notify.py"
@@ -231,7 +232,7 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
             description="unknown materialization stops compile",
             repo_files={
                 "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
-                "models/orders.sql": "MODEL (materialized tablex);\n\nSELECT 1 AS order_id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.', materialized tablex);\n\nSELECT 1 AS order_id\n",
             },
             expected_code="P001",
             expected_message_fragment="unknown materialization 'tablex'",
@@ -242,7 +243,7 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
             repo_files={
                 "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
                 "models/orders.sql": (
-                    "MODEL (\n  materialized incremental,\n  incremental_strategy append,\n"
+                    "MODEL (description 'Test model orders.',\n  materialized incremental,\n  incremental_strategy append,\n"
                     "  on_schema_change append_columns,\n);\n\nSELECT 1 AS order_id\n"
                 ),
             },

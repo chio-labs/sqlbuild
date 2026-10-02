@@ -77,7 +77,7 @@ def test_given_built_model_with_sql_hook_when_editing_hook_then_plans_expected_r
             _HOOK_PATH: _HOOK_CONTENTS,
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   post_hooks [sql("record_order_access", label: 1)]
                 );

@@ -1,5 +1,6 @@
 sources:
   - name: raw_countries
+    description: Test source raw_countries.
     managed: true
     write_strategy: table
     columns:
@@ -11,6 +12,7 @@ sources:
         type: VARCHAR
 
   - name: raw_webhook_events
+    description: Test source raw_webhook_events.
     managed: true
     write_strategy: append
     columns:
@@ -20,6 +22,7 @@ sources:
         type: VARCHAR
 
   - name: raw_order_events
+    description: Test source raw_order_events.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_at
@@ -32,6 +35,7 @@ sources:
         type: INTEGER
 
   - name: raw_customers
+    description: Test source raw_customers.
     managed: true
     write_strategy: merge
     unique_key: customer_id
@@ -45,6 +49,7 @@ sources:
         type: TIMESTAMP
 
   - name: raw_loader_status
+    description: Test source raw_loader_status.
     managed: true
     columns:
       - name: status_id

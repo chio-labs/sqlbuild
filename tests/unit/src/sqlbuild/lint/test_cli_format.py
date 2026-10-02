@@ -514,12 +514,12 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     model_dir: Path = tmp_path / "models"
     model_dir.mkdir()
     model_dir.joinpath("stg_orders.sql").write_text(
-        "MODEL (columns (order_id (type INTEGER), status (type VARCHAR)));\n"
+        'MODEL (description "Test model stg_orders.", columns (order_id (type INTEGER), status (type VARCHAR)));\n'
         "SELECT 1 AS order_id, 'open' AS status\n",
         encoding="utf-8",
     )
     model_dir.joinpath("orders.sql").write_text(
-        "MODEL (columns (order_id (type INTEGER), status (type VARCHAR)));\n"
+        'MODEL (description "Test model orders.", columns (order_id (type INTEGER), status (type VARCHAR)));\n'
         'SELECT order_id, status FROM __ref("stg_orders")\n',
         encoding="utf-8",
     )

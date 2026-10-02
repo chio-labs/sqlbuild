@@ -958,7 +958,7 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
             DiscoveredSqlHookFile(
                 file_path=Path("/project/hooks/sql/record_access.sql"),
                 relative_path=Path("hooks/sql/record_access.sql"),
-                contents="HOOK ();\n\nSELECT @'role'\n",
+                contents="HOOK (description 'Test hook record_access.');\n\nSELECT @'role'\n",
                 header_values={"description": "Record access"},
                 sql_body="SELECT @'role'",
                 name="record_access",

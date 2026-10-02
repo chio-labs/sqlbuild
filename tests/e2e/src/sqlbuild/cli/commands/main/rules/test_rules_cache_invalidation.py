@@ -65,7 +65,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             lambda root: write_project_file(
                 root,
                 "models/marts/order_counts.sql",
-                'MODEL ();\n\nSELECT order_id FROM __ref("stg_orders")\n',
+                'MODEL (description "Test model order_counts.");\n\nSELECT order_id FROM __ref("stg_orders")\n',
             ),
         ),
         RulesCacheEditCase(

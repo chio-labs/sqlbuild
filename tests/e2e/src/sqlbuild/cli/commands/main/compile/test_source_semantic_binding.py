@@ -37,8 +37,8 @@ def test_given_open_source_when_planning_then_live_columns_reject_missing_refere
         project_name="source_binding",
         repo_files={
             "sqlbuild_project.toml": 'name = "source_binding"\nadapter = "duckdb"\n[connection]\ndatabase = "orders.duckdb"\n',
-            "sources/orders.yml": "sources:\n  - name: raw_orders\n    table: raw_orders\n",
-            "models/orders.sql": 'MODEL (materialized table);\nSELECT missing FROM __source("raw_orders")\n',
+            "sources/orders.yml": "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    table: raw_orders\n",
+            "models/orders.sql": 'MODEL (description "Test model orders.", materialized table);\nSELECT missing FROM __source("raw_orders")\n',
         },
     )
     database: Path = project / "orders.duckdb"
@@ -77,7 +77,7 @@ def test_given_invalid_metadata_when_planning_then_no_warehouse_connection_is_op
         project_name="metadata_binding",
         repo_files={
             "sqlbuild_project.toml": 'name = "metadata_binding"\nadapter = "duckdb"\n[connection]\ndatabase = "orders.duckdb"\n',
-            "models/orders.sql": "MODEL (materialized table, unique_key [missing]);\nSELECT 1 AS id\n",
+            "models/orders.sql": "MODEL (description 'Test model orders.', materialized table, unique_key [missing]);\nSELECT 1 AS id\n",
         },
     )
     result: subprocess.CompletedProcess[str] = run_sqb(

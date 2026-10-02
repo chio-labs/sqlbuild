@@ -137,7 +137,7 @@ def test_given_unsafe_declared_rename_when_building_then_build_stops_before_chan
         ColumnMigrationCompileErrorTestCase(
             description="table materialization",
             model_sql=(
-                "MODEL (materialized table, columns (revenue (migrate_from amount)));\n"
+                "MODEL (description 'Test model.', materialized table, columns (revenue (migrate_from amount)));\n"
                 'SELECT amount AS revenue FROM __source("raw_orders")\n'
             ),
             expected_fragment="only valid for incremental and snapshot models",

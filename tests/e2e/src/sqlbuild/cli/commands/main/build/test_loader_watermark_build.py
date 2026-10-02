@@ -57,13 +57,13 @@ def test_given_managed_loader_watermark_when_reloaded_then_incremental_consumes_
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"
-                "    maximum = int(Path(__file__).parents[2].joinpath('maximum.txt').read_text())\n"
+                "    '''Test loader raw_orders.'''\n    maximum = int(Path(__file__).parents[2].joinpath('maximum.txt').read_text())\n"
                 "    return [{'id': value, 'amount': value * 100} "
                 "for value in range(1, maximum + 1)]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
@@ -74,7 +74,7 @@ def test_given_managed_loader_watermark_when_reloaded_then_incremental_consumes_
             ),
             "models/raw_orders_incremental.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model raw_orders_incremental.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor id,

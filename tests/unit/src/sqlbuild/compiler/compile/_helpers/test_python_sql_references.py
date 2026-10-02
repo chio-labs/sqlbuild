@@ -33,14 +33,16 @@ sql_validation = false
 _DISABLED_PROJECT_FILE: str = _PROJECT_FILE + "\n[references]\nenforce_explicit = false\n"
 _HOOK_PATH: str = "models/marts/_sqlbuild/_hooks/python/lookups.py"
 _TASK_PATH: str = "python/tasks/export.py"
-_HOOKED_HEADER: str = 'MODEL (post_hooks [python("refresh_lookup")]);'
+_HOOKED_HEADER: str = (
+    'MODEL (description "Test model export.", post_hooks [python("refresh_lookup")]);'
+)
 _MODELS: dict[str, str] = {
     "models/marts/customers.sql": gate_model(sql="SELECT 1 AS customer_id"),
     "models/marts/orders.sql": gate_model(sql="SELECT 1 AS order_id", header=_HOOKED_HEADER),
 }
 _COUNTRY_SEED: dict[str, str] = {
     "seeds/country_codes.yml": (
-        "seeds:\n  - name: country_codes\n    columns:\n      - name: code\n        type: VARCHAR\n"
+        "seeds:\n  - name: country_codes\n    description: Test seed country_codes.\n    columns:\n      - name: code\n        type: VARCHAR\n"
     ),
     "seeds/country_codes.csv": "code\nGB\n",
 }
@@ -51,9 +53,9 @@ _LOADER_PATH: str = "python/loaders/raw.py"
 _RAW_SOURCES: dict[str, str] = {
     "sources/raw.yml": (
         "sources:\n"
-        "  - name: raw_regions\n    managed: true\n    write_strategy: table\n"
+        "  - name: raw_regions\n    description: Test source raw_regions.\n    managed: true\n    write_strategy: table\n"
         "    columns:\n      - name: id\n        type: INTEGER\n"
-        "  - name: raw_customers\n    managed: true\n    write_strategy: table\n"
+        "  - name: raw_customers\n    description: Test source raw_customers.\n    managed: true\n    write_strategy: table\n"
         "    columns:\n      - name: id\n        type: INTEGER\n"
     ),
 }

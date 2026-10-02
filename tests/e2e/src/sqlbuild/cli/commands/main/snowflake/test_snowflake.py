@@ -181,14 +181,14 @@ def test_given_python_result_when_running_check_on_snowflake_then_persists_node_
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def produce_result(ctx):\n"
-                "    return ctx.result(payload={'value': 42}, metadata={'source': 'snowflake'})\n"
+                "    '''Test task produce_result.'''\n    return ctx.result(payload={'value': 42}, metadata={'source': 'snowflake'})\n"
             ),
             "python/checks/results.py": (
                 "from sqlbuild.checks import check\n"
                 "from python.tasks.results import produce_result\n\n"
                 "@check(depends_on=produce_result)\n"
                 "def check_produce_result(ctx):\n"
-                "    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
+                "    '''Test check check_produce_result.'''\n    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
             ),
         },
     )
@@ -262,12 +262,12 @@ def test_given_physical_source_without_freshness_when_running_on_snowflake_then_
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 f"    schema: {schema_name}\n"
                 "    table: raw_orders\n"
             ),
             "models/orders.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
             ),
         },
     )
@@ -393,7 +393,7 @@ def test_given_source_deferral_env_when_building_on_snowflake_then_reads_prod_an
             "sqlbuild_local.toml": build_snowflake_local_config(schema_name=dev_schema_name),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
@@ -406,10 +406,10 @@ def test_given_source_deferral_env_when_building_on_snowflake_then_reads_prod_an
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"
-                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+                "    '''Test loader raw_orders.'''\n    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
             ),
             "models/stg_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+                'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
             ),
         },
     )
@@ -544,7 +544,7 @@ def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_s
         SnowflakeScenarioLocalReplayE2ETestCase(
             description="captures snowflake fixtures and replays transpilable SQL locally",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT\n"
                 "  customer_id,\n"
                 "  DATE_TRUNC('DAY', event_ts) AS event_day,\n"
@@ -554,7 +554,7 @@ def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_s
                 "GROUP BY customer_id, DATE_TRUNC('DAY', event_ts)\n"
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 08:15:00') "
@@ -585,12 +585,12 @@ def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_s
             description="reports snowflake local transpilation failures as X607",
             scenario_name="local_transpile_error",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT customer_id, amount_cents\n"
                 'FROM __source("raw_events")\n'
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
@@ -613,14 +613,14 @@ def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_s
             description="reports snowflake local DuckDB execution failures as X608",
             scenario_name="local_execution_error",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT\n"
                 "  customer_id,\n"
                 "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
                 'FROM __source("raw_events")\n'
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
@@ -1177,7 +1177,7 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_t
         repo_files=build_schema_behavior_project_files(
             source_yaml=(
                 "sources:\n"
-                "  - name: raw_events\n"
+                "  - name: raw_events\n    description: Test source raw_events.\n"
                 "    managed: true\n"
                 "    write_strategy: append\n"
                 "    cursor_column: load_seq\n"
@@ -1191,7 +1191,7 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_t
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader raw_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [{'event_id': 1, 'load_seq': 1}]\n"
                 "    return [{'event_id': 2, 'load_seq': 2, 'note': 'late-note'}]\n"
             ),
@@ -1256,7 +1256,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
         repo_files=build_schema_behavior_project_files(
             source_yaml=(
                 "sources:\n"
-                "  - name: raw_events\n"
+                "  - name: raw_events\n    description: Test source raw_events.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
@@ -1271,10 +1271,10 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    {'name': 'event_id', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    return [{'event_id': 1}, {'event_id': 2}]\n\n"
+                "    '''Test loader fetch_events.'''\n    return [{'event_id': 1}, {'event_id': 2}]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id FROM {events.destination} ORDER BY event_id'\n"
                 "    )\n"
@@ -1329,7 +1329,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        next_seq = 1\n"
                 "    else:\n"
                 "        next_seq = ctx.current_cursor_value + 1\n"
@@ -1338,7 +1338,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -1364,7 +1364,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    ],\n"
                 ")\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [\n"
                 "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
                 "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
@@ -1375,7 +1375,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -1396,7 +1396,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [\n"
                 "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
                 "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
@@ -1407,7 +1407,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -1432,7 +1432,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_snowflake_the
         repo_files=build_schema_behavior_project_files(
             source_yaml=(
                 "sources:\n"
-                "  - name: raw_events\n"
+                "  - name: raw_events\n    description: Test source raw_events.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"

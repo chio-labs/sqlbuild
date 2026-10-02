@@ -24,7 +24,7 @@ MODEL_NAME: str = "fct_orders"
 REPLAY_FULL: str = "  replay_on_change full,\n"
 RELATION: str = f"main.{MODEL_NAME}"
 _INCREMENTAL_HEADER: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized incremental,\n"
     "  incremental_strategy {strategy},\n"
     "  unique_key order_id,\n"
@@ -36,7 +36,7 @@ _INCREMENTAL_HEADER: str = (
     ");\n\n"
 )
 _SNAPSHOT_HEADER: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized snapshot,\n"
     "  unique_key [order_id],\n"
     "  snapshot_strategy timestamp,\n"

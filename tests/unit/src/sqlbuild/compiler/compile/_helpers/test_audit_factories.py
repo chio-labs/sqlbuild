@@ -45,7 +45,7 @@ def test_given_factory_attachment_when_building_inputs_then_cases_append_with_pr
         tmp_path,
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
-            "models/orders.sql": f"MODEL ({test_case.model_header}); SELECT 1 AS amount",
+            "models/orders.sql": f"MODEL (description 'Test model orders.', {test_case.model_header}); SELECT 1 AS amount",
             "audits/generic/expression_is_true.sql": _AUDIT_FILE,
             "python/factories/quality.py": """
 from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
@@ -113,7 +113,7 @@ def test_given_invalid_factory_attachment_when_building_inputs_then_compile_erro
         tmp_path,
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
-            "models/orders.sql": f"MODEL ({test_case.model_header}); SELECT 1 AS amount",
+            "models/orders.sql": f"MODEL (description 'Test model orders.', {test_case.model_header}); SELECT 1 AS amount",
             "python/factories/quality.py": f"""
 from sqlbuild.audits import AuditCase, audit_factory
 

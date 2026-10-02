@@ -57,12 +57,14 @@ ORDERS: list[tuple[int, int, int, int, datetime, str]] = [
 
 @loader
 def raw_customers(ctx: object) -> list[dict[str, object]]:
+    """Test loader raw_customers."""
     _ = ctx
     return CUSTOMERS
 
 
 @loader
 def raw_orders(ctx: object) -> Iterator[dict[str, object]]:
+    """Test loader raw_orders."""
     _ = ctx
     for order_id, customer_id, waffle_type_id, quantity, ordered_at, status in ORDERS:
         yield {

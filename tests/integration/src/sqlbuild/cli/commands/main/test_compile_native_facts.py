@@ -68,7 +68,7 @@ def test_given_derived_native_facts_when_compiling_then_contract_and_execution_a
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "orders.sql").write_text(
-        "MODEL (contract enforced, columns (order_id (type BIGINT, nullable false)));\n"
+        "MODEL (description 'Test model orders.', contract enforced, columns (order_id (type BIGINT, nullable false)));\n"
         + test_case.query_sql
     )
 
@@ -115,9 +115,15 @@ def test_given_star_over_inferred_upstream_when_compiling_then_downstream_bindin
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
     models: Path = tmp_path / "models"
     models.mkdir()
-    (models / "staged_orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id")
-    (models / "wide_orders.sql").write_text(f"MODEL ();\n{test_case.star_model_sql}")
-    (models / "order_readers.sql").write_text(f"MODEL ();\n{test_case.downstream_sql}")
+    (models / "staged_orders.sql").write_text(
+        "MODEL (description 'Test model staged_orders.');\nSELECT 1 AS order_id"
+    )
+    (models / "wide_orders.sql").write_text(
+        f"MODEL (description 'Test model wide_orders.');\n{test_case.star_model_sql}"
+    )
+    (models / "order_readers.sql").write_text(
+        f"MODEL (description 'Test model order_readers.');\n{test_case.downstream_sql}"
+    )
 
     for _ in ("cold", "warm"):
         exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
@@ -154,16 +160,18 @@ def test_given_star_over_derived_table_when_compiling_then_lineage_matches_proje
     seeds.mkdir()
     (seeds / "order_labels.csv").write_text("order_id,label\n1,first\n")
     (seeds / "order_labels.yml").write_text(
-        "seeds:\n  - name: order_labels\n    columns:\n"
+        "seeds:\n  - name: order_labels\n    description: Test seed order_labels.\n    columns:\n"
         "      - name: order_id\n        type: INTEGER\n"
         "      - name: label\n        type: VARCHAR\n"
     )
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "staged_orders.sql").write_text(
-        "MODEL ();\nSELECT 1 AS order_id, CAST(10 AS DOUBLE) AS amount"
+        "MODEL (description 'Test model staged_orders.');\nSELECT 1 AS order_id, CAST(10 AS DOUBLE) AS amount"
     )
-    (models / "wide_orders.sql").write_text(f"MODEL ();\n{test_case.star_model_sql}")
+    (models / "wide_orders.sql").write_text(
+        f"MODEL (description 'Test model wide_orders.');\n{test_case.star_model_sql}"
+    )
 
     for _ in ("cold", "warm"):
         exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
@@ -226,11 +234,13 @@ def test_given_snapshot_reader_when_compiling_then_validity_columns_are_known(
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "customer_snapshot.sql").write_text(
-        "MODEL (materialized snapshot, unique_key [customer_id], snapshot_strategy timestamp, "
+        "MODEL (description 'Test model customer_snapshot.', materialized snapshot, unique_key [customer_id], snapshot_strategy timestamp, "
         f"updated_at updated_at{test_case.snapshot_config});\n"
         "SELECT 1 AS customer_id, 'pro' AS plan, TIMESTAMP '2026-01-01' AS updated_at"
     )
-    (models / "current_customers.sql").write_text(f"MODEL ();\n{test_case.downstream_sql}")
+    (models / "current_customers.sql").write_text(
+        f"MODEL (description 'Test model current_customers.');\n{test_case.downstream_sql}"
+    )
 
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
@@ -334,14 +344,14 @@ def test_given_input_and_output_share_name_when_compiling_then_lineage_keeps_inp
     sources: Path = tmp_path / "sources"
     sources.mkdir()
     (sources / "orders.yml").write_text(
-        "sources:\n  - name: orders\n    contract: enforced\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    contract: enforced\n"
         "    expression: orders_input\n    columns:\n"
         "      - name: order_id\n        type: INTEGER\n"
         "      - name: amount\n        type: DOUBLE\n"
         "      - name: status\n        type: VARCHAR\n"
     )
     (models / "order_totals.sql").write_text(
-        "MODEL (contract enforced, columns (order_id (type INTEGER), "
+        "MODEL (description 'Test model order_totals.', contract enforced, columns (order_id (type INTEGER), "
         "status (type VARCHAR), total (type DOUBLE)));\n"
         f"{test_case.query_prefix}"
         "SELECT order_id, "
@@ -438,7 +448,7 @@ def test_given_bound_wildcard_or_using_join_when_compiling_then_facts_match_exec
     sources: Path = tmp_path / "sources"
     sources.mkdir()
     (sources / "orders.yml").write_text(
-        "sources:\n  - name: orders\n    contract: enforced\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    contract: enforced\n"
         "    expression: orders_input\n    columns:\n"
         "      - name: order_id\n        type: BIGINT\n        nullable: false\n"
         "      - name: category\n        type: VARCHAR\n"
@@ -447,7 +457,8 @@ def test_given_bound_wildcard_or_using_join_when_compiling_then_facts_match_exec
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "selected_orders.sql").write_text(
-        f"MODEL (contract enforced, columns ({test_case.output_contract}));\n" + test_case.query_sql
+        f"MODEL (description 'Test model selected_orders.', contract enforced, columns ({test_case.output_contract}));\n"
+        + test_case.query_sql
     )
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
@@ -490,7 +501,7 @@ def test_given_object_wildcard_when_compiling_then_lineage_preserves_payload_inp
     sources: Path = tmp_path / "sources"
     sources.mkdir()
     (sources / "orders.yml").write_text(
-        "sources:\n  - name: orders\n    contract: enforced\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    contract: enforced\n"
         "    expression: orders_input\n    columns:\n"
         "      - name: order_id\n        type: BIGINT\n"
         "      - name: amount\n        type: DOUBLE\n"
@@ -498,7 +509,7 @@ def test_given_object_wildcard_when_compiling_then_lineage_preserves_payload_inp
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "selected_orders.sql").write_text(
-        "MODEL (contract enforced, columns (order_id (type BIGINT, nullable true)));\n"
+        "MODEL (description 'Test model selected_orders.', contract enforced, columns (order_id (type BIGINT, nullable true)));\n"
         + test_case.query_sql
     )
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])

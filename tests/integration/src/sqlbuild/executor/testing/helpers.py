@@ -169,10 +169,11 @@ def build_authored_cte_project_files() -> dict[str, str]:
             "sql_analysis = true\n"
         ),
         "sources/raw.yml": (
-            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
         ),
         "models/stg_orders.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model stg_orders.', materialized table);\n\n"
             "WITH base AS (\n"
             "  -- a comment with an unmatched ) parenthesis\n"
             "  SELECT id AS order_id, amount, 'it''s (fine)' AS note /* ( */\n"
@@ -182,7 +183,7 @@ def build_authored_cte_project_files() -> dict[str, str]:
             "SELECT order_id, amount, note, tag FROM tagged\n"
         ),
         "models/orders.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model orders.', materialized table);\n\n"
             "WITH totals AS (\n"
             '  WITH ranked AS (SELECT order_id, amount, tag FROM __ref("stg_orders"))\n'
             "  SELECT order_id, amount * 2 AS doubled, tag FROM ranked\n"
@@ -253,10 +254,11 @@ def build_terminated_model_project_files() -> dict[str, str]:
             'database = "terminated.duckdb"\n\n[settings]\nsql_analysis = true\n'
         ),
         "sources/raw.yml": (
-            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
         ),
         "models/m.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model m.', materialized table);\n\n"
             'WITH a AS (SELECT id FROM __source("raw_orders"))\n'
             "SELECT id FROM a;\n"
         ),

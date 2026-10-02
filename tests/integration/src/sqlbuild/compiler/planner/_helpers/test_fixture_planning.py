@@ -42,11 +42,11 @@ def test_given_partial_fixture_when_compiling_and_planning_then_completes_requir
                 'database = ":memory:"\n'
             ),
             "models/orders.sql": (
-                'MODEL ();\n\nSELECT order_id, status FROM __source("raw_orders")\n'
+                'MODEL (description "Test model orders.");\n\nSELECT order_id, status FROM __source("raw_orders")\n'
             ),
             "sources/raw_orders.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 "    expression: SELECT 1 AS order_id, 'open' AS status\n"
                 "    columns:\n"
                 "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
@@ -109,12 +109,12 @@ def test_given_untyped_null_fixture_when_planning_then_applies_authoritative_typ
                 'database = ":memory:"\n'
             ),
             "models/orders.sql": (
-                "MODEL ();\n\nSELECT TRY_CAST(status AS DOUBLE) AS parsed_status "
+                "MODEL (description 'Test model orders.');\n\nSELECT TRY_CAST(status AS DOUBLE) AS parsed_status "
                 'FROM __source("raw_orders")\n'
             ),
             "sources/raw_orders.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 "    expression: SELECT '1.5' AS status\n"
                 "    contract: enforced\n"
                 "    columns:\n"

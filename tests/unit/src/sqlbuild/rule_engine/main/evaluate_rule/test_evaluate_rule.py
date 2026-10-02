@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule.helpers import (
             rule_case=RuleCase(
                 description="wrong configured domain faults",
                 source=(
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model.', materialized table);\n\n"
                     "WITH final AS (SELECT 1 AS id)\n"
                     "SELECT id FROM final\n"
                 ),
@@ -65,7 +65,7 @@ def test_given_rule_case_when_evaluating_then_runs_real_pipeline(
             rule_case=RuleCase(
                 description="wrong configured domain faults",
                 source=(
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model.', materialized table);\n\n"
                     "WITH final AS (SELECT 1 AS id)\n"
                     "SELECT id FROM final\n"
                 ),
@@ -129,7 +129,7 @@ def test_given_same_custom_rule_when_using_public_and_native_paths_then_faults_h
             description="module-level state leaking between evaluations fails the harness",
             rule_case=RuleCase(
                 description="first evaluation reports nothing",
-                source="MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                source="MODEL (description 'Test model.', materialized table);\n\nSELECT 1 AS id\n",
                 path="models/mart/commerce__mart__orders.sql",
                 expected_finding_count=0,
             ),

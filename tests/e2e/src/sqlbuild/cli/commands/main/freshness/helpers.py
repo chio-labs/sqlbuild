@@ -26,7 +26,8 @@ def prepare_freshness_project(
             include_managed_source=include_managed_source,
         ),
         "models/orders.sql": (
-            'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            'MODEL (description "Test model orders.", '
+            'materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
         ),
     }
     repo_files.update(
@@ -37,7 +38,7 @@ def prepare_freshness_project(
                     "from sqlbuild.loaders import loader\n\n"
                     "@loader\n"
                     "def raw_managed(ctx):\n"
-                    "    return [{'event_id': 5}]\n"
+                    "    '''Test loader raw_managed.'''\n    return [{'event_id': 5}]\n"
                 )
             },
         }[include_managed_source]
@@ -62,10 +63,12 @@ def prepare_multi_schema_freshness_project(*, tmp_path: Path) -> Path:
             ),
             "sources/raw.yml": freshness_sources_yml(include_error_source=False),
             "models/dev_orders.sql": (
-                'MODEL (materialized table, schema dev);\n\nSELECT * FROM __source("raw_orders")\n'
+                'MODEL (description "Test model dev_orders.", '
+                'materialized table, schema dev);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
             "models/mart_orders.sql": (
-                'MODEL (materialized table, schema mart);\n\nSELECT * FROM __source("raw_orders")\n'
+                'MODEL (description "Test model mart_orders.", '
+                'materialized table, schema mart);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
         },
     )
@@ -88,6 +91,7 @@ def freshness_sources_yml(
         False: "",
         True: (
             "  - name: raw_error\n"
+            "    description: Test source raw_error.\n"
             "    expression: SELECT 3 AS order_id\n"
             "    freshness:\n"
             "      strategy: sql\n"
@@ -99,6 +103,7 @@ def freshness_sources_yml(
         False: "",
         True: (
             "  - name: raw_managed\n"
+            "    description: Test source raw_managed.\n"
             "    managed: true\n"
             "    expression: SELECT 5 AS event_id\n"
             "    freshness:\n"
@@ -109,12 +114,13 @@ def freshness_sources_yml(
     }[include_managed_source]
     return (
         "sources:\n"
-        "  - name: raw_orders\n"
+        "  - name: raw_orders\n    description: Test source raw_orders.\n"
         "    expression: SELECT 1 AS order_id\n"
         f"{freshness}"
         f"{error_source}"
         f"{managed_source}"
         "  - name: raw_unknown\n"
+        "    description: Test source raw_unknown.\n"
         "    expression: SELECT 2 AS order_id\n"
     )
 

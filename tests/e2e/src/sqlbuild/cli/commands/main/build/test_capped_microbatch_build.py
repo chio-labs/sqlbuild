@@ -55,11 +55,11 @@ def test_given_monthly_producer_with_midmonth_max_when_building_capped_daily_con
             ).strip()
             + "\n",
             "sources/raw.yml": (
-                "sources:\n  - name: raw_meetings\n    schema: main\n    table: raw_meetings\n"
+                "sources:\n  - name: raw_meetings\n    description: Test source raw_meetings.\n    schema: main\n    table: raw_meetings\n"
             ),
             "models/monthly_meetings.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model monthly_meetings.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -80,7 +80,7 @@ def test_given_monthly_producer_with_midmonth_max_when_building_capped_daily_con
             + "\n",
             "models/daily_suffix.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model daily_suffix.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -380,9 +380,11 @@ def test_given_any_watermarks_and_consumer_end_when_capped_winner_is_later_then_
                 """
                 sources:
                   - name: raw_late
+                    description: Test source raw_late.
                     schema: main
                     table: raw_late
                   - name: raw_early
+                    description: Test source raw_early.
                     schema: main
                     table: raw_early
                 """
@@ -390,7 +392,7 @@ def test_given_any_watermarks_and_consumer_end_when_capped_winner_is_later_then_
             + "\n",
             "models/capped_late.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model capped_late.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
@@ -417,14 +419,14 @@ def test_given_any_watermarks_and_consumer_end_when_capped_winner_is_later_then_
             + "\n",
             "models/uncapped_early.sql": dedent(
                 """
-                MODEL (materialized table);
+                MODEL (description "Test model uncapped_early.", materialized table);
                 SELECT id, event_time FROM __source("raw_early")
                 """
             ).strip()
             + "\n",
             "models/any_consumer.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model any_consumer.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,

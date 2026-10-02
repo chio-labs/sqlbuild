@@ -22,7 +22,7 @@ _PROJECT_TOML: str = (
 )
 _EVENTS_SEED_YML: str = (
     "seeds:\n"
-    "- name: events\n"
+    "- name: events\n  description: Test seed events.\n"
     "  columns:\n"
     "  - name: id\n"
     "    type: INTEGER\n"
@@ -31,12 +31,12 @@ _EVENTS_SEED_YML: str = (
 )
 _EVENTS_CSV: str = "id,event_date\n1,2026-09-01\n2,2026-09-02\n3,2026-09-03\n"
 _UPSTREAM_SQL: str = (
-    "MODEL (\n  materialized table,\n);\n\n"
+    "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
     "SELECT\n  id,\n  CAST(event_date AS DATE) AS event_date\n"
     'FROM __seed("events")\n'
 )
 _DOWNSTREAM_MB_SQL: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized incremental,\n"
     "  incremental_strategy delete_insert,\n"
     "  cursor event_date,\n"
@@ -59,7 +59,7 @@ _DOWNSTREAM_MB_SQL: str = (
     'SELECT\n  id,\n  event_date\nFROM __ref("upstream_v")\n'
 )
 _DOWNSTREAM_MERGE_SQL: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized incremental,\n"
     "  incremental_strategy merge,\n"
     "  unique_key [id],\n"
@@ -80,7 +80,7 @@ _ADJUST_FUNCTION_PATH: str = "functions/sql/udf__adjust_amount.sql"
 
 def _upstream_view_sql(*, upstream: str) -> str:
     return (
-        "MODEL (\n  materialized view,\n);\n\n"
+        "MODEL (description 'Test model udf__adjust_amount.',\n  materialized view,\n);\n\n"
         f'SELECT\n  id,\n  event_date\nFROM __ref("{upstream}")\n'
     )
 
@@ -125,7 +125,7 @@ def insert_table_between_upstream_and_view(*, project_dir: Path) -> None:
     """Add a new table between the upstream table and its view."""
 
     (project_dir / "models/upstream_new.sql").write_text(
-        "MODEL (\n  materialized table,\n);\n\n"
+        "MODEL (description 'Test model upstream_new.',\n  materialized table,\n);\n\n"
         'SELECT\n  id,\n  event_date\nFROM __ref("upstream")\n',
         encoding="utf-8",
     )
@@ -171,7 +171,7 @@ def build_function_project(*, tmp_path: Path, caller_config: str) -> Path:
         "sqlbuild_project.toml": _PROJECT_TOML,
         "seeds/seeds.yml": (
             "seeds:\n"
-            "- name: orders\n"
+            "- name: orders\n  description: Test seed orders.\n"
             "  columns:\n"
             "  - name: id\n"
             "    type: INTEGER\n"
@@ -184,10 +184,11 @@ def build_function_project(*, tmp_path: Path, caller_config: str) -> Path:
             "id,ordered_at,amount\n1,2026-09-01,10\n2,2026-09-02,20\n3,2026-09-03,30\n"
         ),
         _ADJUST_FUNCTION_PATH: (
-            "FUNCTION (\n  arguments (amount INTEGER),\n  returns INTEGER,\n);\n\namount + 1\n"
+            "FUNCTION (description 'Test function.',"
+            "\n  arguments (amount INTEGER),\n  returns INTEGER,\n);\n\namount + 1\n"
         ),
         "models/order_amounts.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model order_amounts.',\n"
             "  materialized incremental,\n"
             "  incremental_strategy merge,\n"
             "  unique_key [id],\n"
@@ -202,7 +203,7 @@ def build_function_project(*, tmp_path: Path, caller_config: str) -> Path:
             'FROM __seed("orders")\n'
         ),
         "models/order_totals.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model order_totals.',\n"
             "  materialized incremental,\n"
             "  incremental_strategy merge,\n"
             "  unique_key [id],\n"
@@ -233,7 +234,7 @@ def direct_reference_merge_files() -> dict[str, str]:
 
     return {
         "models/down_merge.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model down_merge.',\n"
             "  materialized incremental,\n"
             "  incremental_strategy merge,\n"
             "  unique_key [id],\n"
@@ -270,11 +271,11 @@ def build_star_project(*, tmp_path: Path, downstream_config: str) -> Path:
         repo_files={
             "sqlbuild_project.toml": _PROJECT_TOML,
             "models/up.sql": (
-                "MODEL (\n  materialized table,\n);\n\n"
+                "MODEL (description 'Test model up.',\n  materialized table,\n);\n\n"
                 "SELECT 1 AS id, DATE '2026-09-01' AS event_date\n"
             ),
             "models/down.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model down.',\n"
                 "  materialized incremental,\n"
                 "  incremental_strategy append,\n"
                 "  replay_on_change full,\n"
@@ -332,10 +333,11 @@ def udf_reference_merge_files() -> dict[str, str]:
 
     return {
         "functions/sql/udf__plus_one.sql": (
-            "FUNCTION (\n  arguments (value INTEGER),\n  returns INTEGER,\n);\n\nvalue + 1\n"
+            "FUNCTION (description 'Test function udf__plus_one.',"
+            "\n  arguments (value INTEGER),\n  returns INTEGER,\n);\n\nvalue + 1\n"
         ),
         "models/down_merge.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model down_merge.',\n"
             "  materialized incremental,\n"
             "  incremental_strategy merge,\n"
             "  unique_key [id],\n"
@@ -359,7 +361,7 @@ def incremental_upstream_files() -> dict[str, str]:
 
     return {
         "models/upstream.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model upstream.',\n"
             "  materialized incremental,\n"
             "  incremental_strategy merge,\n"
             "  unique_key [id],\n"
@@ -397,7 +399,8 @@ def drop_upstream_column(*, project_dir: Path) -> None:
     """Drop the event_date column from the star project's upstream table."""
 
     (project_dir / "models/up.sql").write_text(
-        "MODEL (\n  materialized table,\n);\n\nSELECT 1 AS id\n", encoding="utf-8"
+        "MODEL (description 'Test model up.',\n  materialized table,\n);\n\nSELECT 1 AS id\n",
+        encoding="utf-8",
     )
 
 

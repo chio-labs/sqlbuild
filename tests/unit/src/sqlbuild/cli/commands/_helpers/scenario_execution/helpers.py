@@ -55,7 +55,7 @@ def build_project_with_scenarios(project_dir: Path) -> CompiledProject:
             scenario_file=DiscoveredSqlScenarioFile(
                 file_path=project_dir / relative_path,
                 relative_path=Path(relative_path),
-                contents="SCENARIO();\n\nSELECT 1\n",
+                contents="SCENARIO(description 'Test scenario.');\n\nSELECT 1\n",
                 header_values={},
                 sql_body="SELECT 1",
                 name=scenario_name,

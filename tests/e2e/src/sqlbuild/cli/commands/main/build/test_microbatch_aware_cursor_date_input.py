@@ -31,6 +31,7 @@ _PROJECT_FILES: dict[str, str] = {
         """
         sources:
           - name: raw_events
+            description: Test source raw_events.
             schema: main
             table: raw_events
             columns:

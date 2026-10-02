@@ -471,7 +471,7 @@ def orders_sql(*, migrate_from: str = "", where: str = "") -> str:
         migrate_from, f'  migrate_from "{migrate_from}",\n  migrate_force true,\n'
     )
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  unique_key order_id,\n"
@@ -488,7 +488,10 @@ def orders_sql(*, migrate_from: str = "", where: str = "") -> str:
 def report_view_sql() -> str:
     """Return a project view that reads the destination by name."""
 
-    return f'MODEL (materialized view);\n\nSELECT order_id FROM __ref("{DESTINATION_MODEL}")\n'
+    return (
+        'MODEL (description "Test model.", '
+        f'materialized view);\n\nSELECT order_id FROM __ref("{DESTINATION_MODEL}")\n'
+    )
 
 
 def write_migration_project(
@@ -507,7 +510,8 @@ def write_migration_project(
         )
         + _JANITOR_CONFIG,
         "sources/raw.yml": (
-            f"sources:\n  - name: raw_orders\n    schema: {raw_schema_name}\n"
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            f"    schema: {raw_schema_name}\n"
             "    table: raw_orders\n"
         ),
     }
@@ -636,7 +640,7 @@ def fact_orders_sql(*, amount: str = "amount_cents", columns: str = "") -> str:
 
     declarations: str = {"": ""}.get(columns, f"  columns ({columns}),\n")
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  unique_key order_id,\n"
@@ -717,7 +721,7 @@ def old_name_model_sql(
 
     migration: str = {"": ""}.get(migrate_from, f"  migrate_from {migrate_from},\n")
     return (
-        f"MODEL (\n{_OLD_NAME_HEADERS[materialized]}{migration});\n\n"
+        f"MODEL (description 'Test model.',\n{_OLD_NAME_HEADERS[materialized]}{migration});\n\n"
         f'SELECT {columns} FROM __source("raw_orders")\n'
     )
 

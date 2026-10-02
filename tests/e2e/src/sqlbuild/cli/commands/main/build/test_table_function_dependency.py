@@ -49,7 +49,7 @@ def test_given_model_table_function_dependency_when_building_then_creates_and_co
             + "\n",
             "functions/sql/customer_orders.sql": dedent(
                 """
-                FUNCTION (
+                FUNCTION (description "Test function customer_orders.",
                   arguments (customer_id INTEGER),
                   returns table (
                     customer_id INTEGER,
@@ -63,7 +63,7 @@ def test_given_model_table_function_dependency_when_building_then_creates_and_co
             + "\n",
             "models/customer_order_summary.sql": dedent(
                 f"""
-                MODEL (
+                MODEL (description "Test model customer_order_summary.",
                   materialized table
                 );
 

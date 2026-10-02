@@ -48,7 +48,7 @@ def prepare_static_dag_project(root: Path) -> Path:
         encoding="utf-8",
     )
     (models_dir / "orders.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id\n",
         encoding="utf-8",
     )
     return project_dir
@@ -67,7 +67,8 @@ def prepare_advisory_placement_dag_project(root: Path) -> Path:
     constants_dir.mkdir()
     (constants_dir / "value.sql").write_text("CONSTANT (name value, value 1);\n", encoding="utf-8")
     (project_dir / "models" / "orders.sql").write_text(
-        'MODEL (materialized table);\n\nSELECT @const("value") AS order_id\n',
+        'MODEL (description "Test model orders.", '
+        'materialized table);\n\nSELECT @const("value") AS order_id\n',
         encoding="utf-8",
     )
     return project_dir
@@ -98,6 +99,7 @@ def prepare_python_dag_project(root: Path) -> Path:
                 "    meta={'owner': 'data'},",
                 ")",
                 "def prepare_orders(ctx):",
+                "    '''Test task prepare_orders.'''",
                 "    return ctx.result(payload={'rows': 1}, metadata={'source': 'fixture'})",
             )
         )
@@ -115,6 +117,7 @@ def prepare_python_dag_project(root: Path) -> Path:
                 "    columns=[{'name': 'order_id', 'type': 'integer'}],",
                 ")",
                 "def warehouse_export(ctx):",
+                "    '''Test loader warehouse_export.'''",
                 "    return [{'order_id': 1}]",
             )
         )
@@ -176,6 +179,7 @@ def prepare_python_dag_project(root: Path) -> Path:
                 "",
                 "@check(depends_on=warehouse_export, tags=['loader'])",
                 "def check_loader_export(ctx):",
+                "    '''Test check check_loader_export.'''",
                 "    return ctx.pass_(message='loader rows available')",
             )
         )

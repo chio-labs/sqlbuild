@@ -159,7 +159,11 @@ def test_given_no_cache_when_loading_twice_then_cache_is_bypassed(
     "test_case",
     (
         FingerprintMutationCase(
-            "model content", "models/orders.sql", _MODEL, "MODEL();\nSELECT 2 AS id\n", True
+            "model content",
+            "models/orders.sql",
+            _MODEL,
+            "MODEL(description 'Test model orders.');\nSELECT 2 AS id\n",
+            True,
         ),
         FingerprintMutationCase(
             "declaration rendering",
@@ -314,7 +318,7 @@ def test_given_target_aware_python_composition_when_switching_target_then_depend
                 _PROJECT + '\ndefault_target = "dev"\n[targets.dev]\n[targets.prod]\n'
             ),
             "sqlbuild_local.toml": 'target = "dev"\n',
-            "models/orders.sql": "MODEL();\nSELECT @choose() AS value\n",
+            "models/orders.sql": "MODEL(description 'Test model orders.');\nSELECT @choose() AS value\n",
             "macros/choose.py": (
                 "from macros.dev import dev_macro\n"
                 "from macros.prod import prod_macro\n\n"
@@ -535,7 +539,7 @@ def test_given_placement_invalid_project_when_loading_then_complete_diagnostics_
         {
             "sqlbuild_project.toml": _PROJECT,
             "models/domain/constants/value.sql": "CONSTANT (name value, value 1);",
-            "models/domain/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            "models/domain/orders.sql": 'MODEL (description "Test model orders.");\nSELECT @const("value") AS value',
         },
     )
 
@@ -563,7 +567,7 @@ def test_given_cached_placement_error_when_disabling_enforcement_then_cache_retu
         {
             "sqlbuild_project.toml": _PROJECT + "\n[scopes]\nenforce_placement = true\n",
             "constants/value.sql": "CONSTANT (name value, value 1);",
-            "models/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            "models/orders.sql": 'MODEL (description "Test model orders.");\nSELECT @const("value") AS value',
         },
     )
     enforced: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
@@ -626,7 +630,7 @@ def test_given_one_broken_model_when_loading_then_valid_and_broken_paths_remain_
         TolerantCategoryCase(
             description="SQL functions retain valid siblings",
             files={
-                "functions/sql/valid.sql": "FUNCTION (returns INTEGER);\n1",
+                "functions/sql/valid.sql": "FUNCTION (description 'Test function valid.', returns INTEGER);\n1",
                 "functions/sql/broken.sql": "FUNCTION (\nSELECT 1",
             },
             expected_kind=ResourceKind.FUNCTION,
@@ -635,7 +639,7 @@ def test_given_one_broken_model_when_loading_then_valid_and_broken_paths_remain_
         TolerantCategoryCase(
             description="SQL hooks retain valid siblings",
             files={
-                "hooks/sql/valid.sql": "HOOK ();\nSELECT 1",
+                "hooks/sql/valid.sql": "HOOK (description 'Test hook valid.');\nSELECT 1",
                 "hooks/sql/broken.sql": "HOOK (\nSELECT 1",
             },
             expected_kind=DeclarationKind.SQL_HOOK,
@@ -653,7 +657,7 @@ def test_given_one_broken_model_when_loading_then_valid_and_broken_paths_remain_
         TolerantCategoryCase(
             description="sources retain valid siblings",
             files={
-                "sources/valid.yml": "sources:\n  - name: raw_orders\n    table: orders\n",
+                "sources/valid.yml": "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    table: orders\n",
                 "sources/broken.yml": "sources: [\n",
             },
             expected_kind=ResourceKind.SOURCE,

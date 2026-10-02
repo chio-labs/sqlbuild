@@ -59,7 +59,7 @@ def prepare_janitor_project(
             "sqlbuild_project.toml": project_config,
             "models/orders.sql": dedent(
                 """
-                MODEL ();
+                MODEL (description "Test model orders.");
 
                 SELECT 1 AS order_id
                 """
@@ -285,7 +285,8 @@ def prepare_archive_janitor_project(
             'materialized = "table"\n'
         ),
         **{
-            f"models/{model_name}.sql": f"MODEL ();\n\nSELECT 1 AS {model_name}_id\n"
+            f"models/{model_name}.sql": f"MODEL (description 'Test model.');\n\n"
+            f"SELECT 1 AS {model_name}_id\n"
             for model_name in model_names
         },
         f"adapters/{AGED_JANITOR_ADAPTER_NAME}.py": AGED_JANITOR_ADAPTER_SOURCE,
@@ -393,7 +394,8 @@ def prepare_two_target_janitor_project(
                 'materialized = "table"\n'
             ),
             **{
-                f"models/{model_name}.sql": f"MODEL ();\n\nSELECT 1 AS {model_name}_id\n"
+                f"models/{model_name}.sql": f"MODEL (description 'Test model.');\n\n"
+                f"SELECT 1 AS {model_name}_id\n"
                 for model_name in model_names
             },
         },

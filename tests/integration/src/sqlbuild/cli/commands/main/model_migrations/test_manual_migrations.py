@@ -461,7 +461,7 @@ def test_given_replay_on_change_full_when_migrating_then_destination_is_not_repl
         MigrationCompileErrorTestCase(
             description="force on a table",
             model_sql=(
-                'MODEL (materialized table, migrate_from "stg_orders", migrate_force true);\n'
+                'MODEL (description "Test model.", materialized table, migrate_from "stg_orders", migrate_force true);\n'
                 "SELECT 1 AS id\n"
             ),
             expected_fragment="migrate_force is only valid for incremental and snapshot models",
@@ -469,7 +469,7 @@ def test_given_replay_on_change_full_when_migrating_then_destination_is_not_repl
         MigrationCompileErrorTestCase(
             description="force on a view",
             model_sql=(
-                'MODEL (materialized view, migrate_from "stg_orders", migrate_force true);\n'
+                'MODEL (description "Test model.", materialized view, migrate_from "stg_orders", migrate_force true);\n'
                 "SELECT 1 AS id\n"
             ),
             expected_fragment="migrate_force is only valid for incremental and snapshot models",
@@ -477,7 +477,7 @@ def test_given_replay_on_change_full_when_migrating_then_destination_is_not_repl
         MigrationCompileErrorTestCase(
             description="column alias on a table that is not migrating",
             model_sql=(
-                "MODEL (materialized table, columns (revenue (migrate_from amount)));\n"
+                "MODEL (description 'Test model.', materialized table, columns (revenue (migrate_from amount)));\n"
                 "SELECT 1 AS revenue\n"
             ),
             expected_fragment="or for table and view models that declare migrate_from themselves",

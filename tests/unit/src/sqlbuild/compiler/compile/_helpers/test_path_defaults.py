@@ -79,7 +79,7 @@ def test_given_windows_style_model_path_when_finding_path_default_then_returns_n
     model_file: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
         file_path=Path("/repo") / test_case.model_relative_path,
         relative_path=Path(test_case.model_relative_path),
-        contents="MODEL ();\n\nselect 1\n",
+        contents="MODEL (description 'Test model.');\n\nselect 1\n",
         header_values={},
         header_column_locations={},
         output_column_locations={},
@@ -118,7 +118,7 @@ def test_given_ambiguous_globs_when_finding_path_default_then_raises_structured_
     model_file: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
         file_path=Path("/repo") / test_case.model_relative_path,
         relative_path=Path(test_case.model_relative_path),
-        contents="MODEL ();\n\nselect 1\n",
+        contents="MODEL (description 'Test model.');\n\nselect 1\n",
         header_values={},
         header_column_locations={},
         output_column_locations={},

@@ -752,9 +752,9 @@ class SyntheticSnowflakeProject:
     incremental_model_names: tuple[str, ...]
 
 
-_TABLE_MODEL_HEADER: str = "MODEL (\n  materialized table,\n);\n\n"
+_TABLE_MODEL_HEADER: str = "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
 _INCREMENTAL_MODEL_HEADER: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized incremental,\n"
     "  incremental_strategy delete_insert,\n"
     "  cursor ordered_at,\n"
@@ -953,6 +953,7 @@ def _sources_yml(*, database: str, source_schema: str, sources: int) -> str:
         lines.extend(
             (
                 f"  - name: raw_orders_{index}",
+                f"    description: Test source raw_orders_{index}.",
                 f"    database: {database.lower()}",
                 f"    schema: {source_schema}",
                 f"    table: orders_{index}",

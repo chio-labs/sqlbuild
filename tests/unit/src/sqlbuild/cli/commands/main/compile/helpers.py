@@ -93,7 +93,7 @@ def prepare_static_compile_project(root: Path) -> Path:
         encoding="utf-8",
     )
     (models_dir / "orders.sql").write_text(
-        "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        "MODEL (description 'Test model orders.', materialized view);\n\nSELECT 1 AS order_id\n",
         encoding="utf-8",
     )
     return project_dir
@@ -533,18 +533,21 @@ def prepare_rule_gated_compile_project(root: Path, *, test_header: str) -> Path:
     (project_dir / "sources").mkdir()
     (project_dir / "sources" / "raw.yml").write_text(
         "sources:\n"
-        "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
-        "  - name: raw_refunds\n    schema: main\n    table: raw_refunds\n",
+        "  - name: raw_orders\n    description: Test source raw_orders.\n"
+        "    schema: main\n    table: raw_orders\n"
+        "  - name: raw_refunds\n    description: Test source raw_refunds.\n"
+        "    schema: main\n    table: raw_refunds\n",
         encoding="utf-8",
     )
     (project_dir / "models" / "orders.sql").write_text(
-        "MODEL (materialized view);\n\n"
+        "MODEL (description 'Test model orders.', materialized view);\n\n"
         'SELECT o.order_id, r.refund_id FROM __source("raw_orders") AS o\n'
         'LEFT JOIN __source("raw_refunds") AS r ON r.order_id = o.order_id\n',
         encoding="utf-8",
     )
     (project_dir / "models" / "bad_star.sql").write_text(
-        'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n',
+        'MODEL (description "Test model bad_star.", '
+        'materialized view);\n\nSELECT * FROM __source("raw_orders")\n',
         encoding="utf-8",
     )
     (project_dir / "tests" / "unit").mkdir(parents=True)

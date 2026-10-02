@@ -17,7 +17,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     [
         ScanHeadersTestCase(
             description="finds model header",
-            contents="MODEL (\n  materialized table\n);\nSELECT 1\n",
+            contents='MODEL (\n  description "Test model.",\n  materialized table\n);\nSELECT 1\n',
             expected_kinds=("MODEL",),
         ),
         ScanHeadersTestCase(
@@ -57,7 +57,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
         ScanHeadersTestCase(
             description="ignores header keyword used as a nested column name",
             contents=(
-                "MODEL (\n  columns (\n    object_id (type INTEGER),\n"
+                'MODEL (\n  description "Test model.",\n  columns (\n    object_id (type INTEGER),\n'
                 "    SCHEMA (type VARCHAR(100)),\n  ),\n);\nSELECT 1 AS object_id\n"
             ),
             expected_kinds=("MODEL",),
@@ -65,7 +65,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
         ScanHeadersTestCase(
             description="ignores header-like text inside comments",
             contents=(
-                '-- TEST ();\n/*\nMODEL (not a header);\n*/\nMODEL (description "ok");\nSELECT 1\n'
+                '-- TEST ();\n/*\nMODEL (description "Test model.", not a header);\n*/\nMODEL (description "ok");\nSELECT 1\n'
             ),
             expected_kinds=("MODEL",),
         ),
@@ -86,7 +86,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
         ),
         ScanHeadersTestCase(
             description="standard SQL backslash does not escape closing quote",
-            contents="SCENARIO ();\nSELECT 'C:\\temp\\'\nTEST ();\nSELECT 1\n",
+            contents="SCENARIO (description \"Test scenario.\");\nSELECT 'C:\\temp\\'\nTEST ();\nSELECT 1\n",
             expected_kinds=("SCENARIO", "TEST"),
         ),
     ],
@@ -104,7 +104,7 @@ def test_given_contents_when_scanning_headers_then_kinds_match_expected(
     [
         ScanHeadersTestCase(
             description="first header only",
-            contents="MODEL ();\nSELECT 1\nTEST ();\nSELECT 2\n",
+            contents='MODEL (description "Test model.");\nSELECT 1\nTEST ();\nSELECT 2\n',
             expected_kinds=("MODEL",),
         )
     ],
@@ -125,13 +125,13 @@ def test_given_single_header_resource_when_scanning_first_only_then_body_is_not_
     [
         HeaderSpanTextTestCase(
             description="span covers header keyword through terminator",
-            contents="MODEL (\n  materialized table\n);\nSELECT 1\n",
-            expected_span_text="MODEL (\n  materialized table\n);",
+            contents='MODEL (\n  description "Test model.",\n  materialized table\n);\nSELECT 1\n',
+            expected_span_text='MODEL (\n  description "Test model.",\n  materialized table\n);',
         ),
         HeaderSpanTextTestCase(
             description="span without terminator ends at close paren",
-            contents="MODEL (\n  materialized table\n)\nSELECT 1\n",
-            expected_span_text="MODEL (\n  materialized table\n)",
+            contents='MODEL (\n  description "Test model.",\n  materialized table\n)\nSELECT 1\n',
+            expected_span_text='MODEL (\n  description "Test model.",\n  materialized table\n)',
         ),
         HeaderSpanTextTestCase(
             description="escaped quotes and quoted parens stay inside the span",
@@ -165,7 +165,7 @@ def test_given_model_file_when_scanning_then_span_covers_header_and_terminator(
     [
         SqlBodyRangesTestCase(
             description="bodies exclude headers and keep sql text",
-            contents="MODEL (\n  materialized table\n);\nSELECT 1\nTEST ();\nSELECT 2\n",
+            contents='MODEL (\n  description "Test model.",\n  materialized table\n);\nSELECT 1\nTEST ();\nSELECT 2\n',
             expected_fragments=("SELECT 1", "SELECT 2"),
             excluded_fragments=("MODEL", "TEST ()"),
         ),

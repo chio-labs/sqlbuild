@@ -75,7 +75,7 @@ _UPSTREAM: str = "SELECT 1 AS id, 'placed' AS status"
             _UPSTREAM,
             "SELECT 1 AS id",
             "B300",
-            "MODEL (materialized table, unique_key [missing]);\n",
+            "MODEL (description 'Test model.', materialized table, unique_key [missing]);\n",
         ),
         SemanticCompileCase(
             "date literal valid control",
@@ -117,16 +117,16 @@ def test_given_semantic_scope_when_compiling_then_closed_shapes_are_checked(
 ) -> None:
     write_semantic_binding_project(
         project_dir=tmp_path,
-        upstream_sql="MODEL (materialized view);\n" + test_case.upstream,
+        upstream_sql="MODEL (description 'Test model.', materialized view);\n" + test_case.upstream,
         downstream_sql=test_case.header + test_case.downstream,
     )
     (tmp_path / "sources").mkdir(exist_ok=True)
     (tmp_path / "sources" / "orders.yml").write_text(
         "sources:\n"
-        "  - name: open_orders\n    table: orders\n"
-        "  - name: closed_orders\n    table: orders\n    contract: enforced\n"
+        "  - name: open_orders\n    description: Test source open_orders.\n    table: orders\n"
+        "  - name: closed_orders\n    description: Test source closed_orders.\n    table: orders\n    contract: enforced\n"
         "    columns:\n      - name: id\n        type: INTEGER\n"
-        "  - name: expression_orders\n    expression: SELECT 1 AS id\n",
+        "  - name: expression_orders\n    description: Test source expression_orders.\n    expression: SELECT 1 AS id\n",
         encoding="utf-8",
     )
     exit_code: int = main(

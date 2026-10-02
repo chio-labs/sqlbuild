@@ -26,7 +26,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
     [
         RealDbtManifestCompileTestCase(
             description="validates and preserves SQLBuild dbt ref from real dbt manifest",
-            sqlbuild_model_sql='MODEL ();\n\nselect order_id from __dbt_ref("stg_orders")\n',
+            sqlbuild_model_sql='MODEL (description "Test model.");\n\nselect order_id from __dbt_ref("stg_orders")\n',
             expected_compiled_sql='select order_id from __dbt_ref("stg_orders")',
         ),
     ],

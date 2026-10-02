@@ -71,6 +71,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     schema: main
                     table: raw_orders
                 """
@@ -78,7 +79,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                MODEL (materialized view);
+                MODEL (description "Test model stg_orders.", materialized view);
 
                 SELECT
                   id AS order_id,
@@ -91,7 +92,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                MODEL (materialized table);
+                MODEL (description "Test model fact_orders.", materialized table);
 
                 SELECT order_id, quantity, ordered_at, line_total_cents
                 FROM __ref("stg_orders")
@@ -100,7 +101,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/hourly_order_activity.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model hourly_order_activity.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_hour,
@@ -127,7 +128,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/daily_activity_rollup.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model daily_activity_rollup.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_day,
@@ -154,7 +155,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/hourly_activity_with_daily_context.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model hourly_activity_with_daily_context.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_hour,

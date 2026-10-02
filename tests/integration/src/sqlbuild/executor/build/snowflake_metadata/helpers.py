@@ -426,7 +426,7 @@ _PROJECT_FILES: dict[str, str] = {
     ),
     "sources/raw.yml": (
         "sources:\n"
-        "  - name: raw_orders\n"
+        "  - name: raw_orders\n    description: Test source raw_orders.\n"
         "    database: analytics\n"
         "    schema: raw\n"
         "    table: orders\n"
@@ -439,14 +439,15 @@ _PROJECT_FILES: dict[str, str] = {
         "        type: NUMBER(10, 2)\n"
     ),
     "models/marts/orders_table.sql": (
-        "MODEL (\n  materialized table,\n);\n\n"
+        "MODEL (description 'Test model orders_table.',\n  materialized table,\n);\n\n"
         'SELECT order_id, ordered_at, amount FROM __source("raw_orders")\n'
     ),
     "models/marts/orders_view.sql": (
-        'MODEL (\n  materialized view,\n);\n\nSELECT order_id, amount FROM __ref("orders_table")\n'
+        'MODEL (description "Test model orders_view.",'
+        '\n  materialized view,\n);\n\nSELECT order_id, amount FROM __ref("orders_table")\n'
     ),
     "models/marts/orders_merge.sql": (
-        "MODEL (\n"
+        "MODEL (description 'Test model orders_merge.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy merge,\n"
         "  unique_key [order_id],\n"
@@ -459,7 +460,7 @@ _PROJECT_FILES: dict[str, str] = {
         'SELECT order_id, ordered_at, amount FROM __source("raw_orders")\n'
     ),
     "models/marts/orders_daily.sql": (
-        "MODEL (\n"
+        "MODEL (description 'Test model orders_daily.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  incremental_mode microbatch,\n"

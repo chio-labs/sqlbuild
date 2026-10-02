@@ -112,7 +112,7 @@ def add_dbt_profile_downstream_model(*, sqlbuild_project_dir: Path) -> None:
     models_dir: Path = sqlbuild_project_dir / "models"
     models_dir.mkdir(exist_ok=True)
     (models_dir / "downstream_orders.sql").write_text(
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model downstream_orders.', materialized table);\n\n"
         'SELECT order_id FROM __dbt_ref("analytics", "dbt_orders")\n',
         encoding="utf-8",
     )
@@ -523,7 +523,7 @@ def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[st
         "sqlbuild_project.toml": project_toml,
         "models/current_customers.sql": build_current_customers_model_sql(plan="basic"),
         "models/current_customer_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model current_customer_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id, region_id],\n"
             "  snapshot_strategy timestamp,\n"
@@ -541,7 +541,8 @@ def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[st
             'FROM __ref("current_customers")\n'
         ),
         "models/historical_customer_extracts.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model historical_customer_extracts.', "
+            "materialized table);\n\n"
             "SELECT 1 AS customer_id, 'basic' AS plan, "
             "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at, "
             "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
@@ -553,7 +554,7 @@ def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[st
             "CAST('2026-01-04 00:00:00' AS TIMESTAMP) AS observed_at\n"
         ),
         "models/historical_customer_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model historical_customer_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy timestamp,\n"
@@ -565,7 +566,7 @@ def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[st
             'FROM __ref("historical_customer_extracts")\n'
         ),
         "models/historical_membership_daily.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model historical_membership_daily.', materialized table);\n\n"
             "SELECT 1 AS customer_id, 'active' AS status, "
             "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS observed_at\n"
             "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "
@@ -578,7 +579,7 @@ def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[st
             "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
         ),
         "models/historical_membership_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model historical_membership_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy check,\n"
@@ -600,7 +601,7 @@ def build_current_customers_model_sql(*, plan: str, updated_at: str = "2026-01-0
     """Build the mutable current-state model for real-warehouse snapshot tests."""
 
     return (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model.', materialized table);\n\n"
         "SELECT 1 AS customer_id, 10 AS region_id, "
         f"'{plan}' AS plan, CAST('{updated_at}' AS TIMESTAMP) AS updated_at\n"
     )
@@ -615,7 +616,7 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
             changed=False
         ),
         "models/current_check_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model current_check_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy check,\n"
@@ -628,7 +629,7 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
             changed=False
         ),
         "models/current_delete_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model current_delete_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy timestamp,\n"
@@ -642,7 +643,7 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
             changed=False
         ),
         "models/historical_timestamp_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model historical_timestamp_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy timestamp,\n"
@@ -656,7 +657,7 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
         ),
         "models/historical_check_daily.sql": build_historical_check_daily_model_sql(changed=False),
         "models/historical_check_snapshot.sql": (
-            "MODEL (\n"
+            "MODEL (description 'Test model historical_check_snapshot.',\n"
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy check,\n"
@@ -676,12 +677,12 @@ def build_current_check_customers_model_sql(*, changed: bool) -> str:
 
     return {
         False: (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model.', materialized table);\n\n"
             "SELECT 1 AS customer_id, 'active' AS status\n"
             "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
         ),
         True: (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model.', materialized table);\n\n"
             "SELECT 1 AS customer_id, 'paused' AS status\n"
             "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
         ),
@@ -693,14 +694,14 @@ def build_current_delete_customers_model_sql(*, changed: bool) -> str:
 
     return {
         False: (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model.', materialized table);\n\n"
             "SELECT 1 AS customer_id, 'basic' AS plan, "
             "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
             "UNION ALL SELECT 2 AS customer_id, 'trial' AS plan, "
             "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
         ),
         True: (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model.', materialized table);\n\n"
             "SELECT 1 AS customer_id, 'pro' AS plan, "
             "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS updated_at\n"
         ),
@@ -711,7 +712,7 @@ def build_historical_timestamp_extracts_model_sql(*, changed: bool) -> str:
     """Build mutable historical timestamp source model for live apply tests."""
 
     sql: str = (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model.', materialized table);\n\n"
         "SELECT 1 AS customer_id, 'basic' AS plan, "
         "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at, "
         "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
@@ -734,7 +735,7 @@ def build_historical_check_daily_model_sql(*, changed: bool) -> str:
     """Build mutable historical check source model for live apply tests."""
 
     sql: str = (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model.', materialized table);\n\n"
         "SELECT 1 AS customer_id, 'active' AS status, "
         "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS observed_at\n"
         "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "

@@ -47,6 +47,7 @@ def test_given_reusable_inherited_schemas_when_building_then_all_materialization
                 """
                 sources:
                   - name: raw_events
+                    description: Test source raw_events.
                     schema: main
                     table: raw_events
                 """
@@ -54,7 +55,7 @@ def test_given_reusable_inherited_schemas_when_building_then_all_materialization
             + "\n",
             "schemas/events/base.sql": dedent(
                 """
-                SCHEMA (
+                SCHEMA (description "Test schema.",
                   name event,
                     columns (
                         event_id (type INTEGER, nullable false, audits [not_null]),
@@ -66,7 +67,7 @@ def test_given_reusable_inherited_schemas_when_building_then_all_materialization
             + "\n",
             "schemas/events/sourced.sql": dedent(
                 """
-                SCHEMA (
+                SCHEMA (description "Test schema.",
                   name sourced_event,
                   extends event,
                   columns (

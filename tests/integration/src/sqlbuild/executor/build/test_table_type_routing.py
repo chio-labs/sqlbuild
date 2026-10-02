@@ -25,11 +25,11 @@ _PROJECT_FILES: dict[str, str] = {
         'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
     ),
     "models/customer_totals.sql": (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model customer_totals.', materialized table);\n\n"
         "SELECT customer_id, SUM(amount) AS total FROM raw_orders GROUP BY customer_id"
     ),
     "models/orders.sql": (
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy append,\n"
         "  cursor updated_at,\n"

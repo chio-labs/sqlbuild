@@ -77,17 +77,18 @@ def build_scenario_project_files() -> dict[str, str]:
             'materialized = "table"\n'
         ),
         "sources/raw.yml": (
-            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
         ),
         "models/orders.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model orders.', materialized table);\n\n"
             "SELECT\n"
             "  id AS order_id,\n"
             "  amount\n"
             'FROM __source("raw_orders")\n'
         ),
         "models/order_totals.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model order_totals.', materialized table);\n\n"
             "SELECT\n"
             "  SUM(amount) AS total_amount\n"
             'FROM __ref("orders")\n'
@@ -106,7 +107,7 @@ def build_scenario_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
         "tests/scenarios/nested/orders_assert_pass.sql": (
-            "SCENARIO ();\n\n"
+            "SCENARIO (description 'Test scenario orders_assert_pass.');\n\n"
             "WITH\n"
             "__source__raw_orders AS (\n"
             "  SELECT 1 AS id, 10 AS amount\n"
@@ -117,7 +118,7 @@ def build_scenario_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
         "tests/scenarios/order_totals_fail.sql": (
-            "SCENARIO ();\n\n"
+            "SCENARIO (description 'Test scenario order_totals_fail.');\n\n"
             "WITH\n"
             "__source__raw_orders AS (\n"
             "  SELECT 1 AS id, 10 AS amount\n"
@@ -142,16 +143,19 @@ def build_partial_fixture_scenario_project_files() -> dict[str, str]:
         ),
         "sources/raw.yml": (
             "sources:\n"
-            "  - name: raw_orders\n"
+            "  - name: raw_orders\n    description: Test source raw_orders.\n"
             "    schema: main\n"
             "    table: raw_orders\n"
             "    columns:\n"
             "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
             "      - name: status\n        type: VARCHAR\n"
         ),
-        "models/orders.sql": ('MODEL ();\n\nSELECT order_id, status FROM __source("raw_orders")\n'),
+        "models/orders.sql": (
+            'MODEL (description "Test model orders.");\n\n'
+            'SELECT order_id, status FROM __source("raw_orders")\n'
+        ),
         "tests/scenarios/partial_orders.sql": (
-            "SCENARIO ();\n\n"
+            "SCENARIO (description 'Test scenario partial_orders.');\n\n"
             "WITH\n"
             "__source__raw_orders AS (SELECT 1 AS order_id),\n"
             "__expected__orders AS (\n"
@@ -170,13 +174,14 @@ def build_scenario_python_hooks_project_files() -> dict[str, str]:
         "from sqlbuild.hooks import hook\n\n"
         "@hook\n"
         "def log_scenario_model(ctx):\n"
-        "    ctx.execute_sql(\n"
+        "    '''Test hook log_scenario_model.'''\n    ctx.execute_sql(\n"
         '        f"CREATE TABLE {ctx.destination.schema}.scenario_hook_log AS "\n'
         "        f\"SELECT '{ctx.model_name}' AS model_name, '{ctx.phase}' AS phase\"\n"
         "    )\n"
     )
     repo_files["models/orders.sql"] = (
-        'MODEL (materialized table, post_hooks [python("log_scenario_model")]);\n\n'
+        'MODEL (description "Test model orders.", '
+        'materialized table, post_hooks [python("log_scenario_model")]);\n\n'
         "SELECT\n"
         "  id AS order_id,\n"
         "  amount\n"
@@ -209,7 +214,8 @@ def build_real_warehouse_local_replay_project_files(
     return {
         "sqlbuild_project.toml": project_toml,
         "sources/raw.yml": (
-            "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+            "sources:\n  - name: raw_events\n    description: Test source raw_events.\n"
+            "    schema: raw\n    table: raw_events\n"
         ),
         "models/event_rollup.sql": model_sql,
         f"tests/scenarios/{scenario_name}.sql": scenario_sql,
@@ -222,16 +228,17 @@ def build_real_warehouse_remote_scenario_project_files(*, project_toml: str) -> 
     return {
         "sqlbuild_project.toml": project_toml,
         "sources/raw.yml": (
-            "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+            "sources:\n  - name: raw_events\n    description: Test source raw_events.\n"
+            "    schema: raw\n    table: raw_events\n"
         ),
         "models/stg_events.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model stg_events.', materialized view);\n\n"
             "SELECT customer_id, amount_cents\n"
             'FROM __source("raw_events")\n'
             "WHERE amount_cents >= 1000\n"
         ),
         "models/event_rollup.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model event_rollup.', materialized table);\n\n"
             "SELECT\n"
             "  customer_id,\n"
             "  SUM(amount_cents) AS large_amount_cents,\n"
@@ -240,7 +247,7 @@ def build_real_warehouse_remote_scenario_project_files(*, project_toml: str) -> 
             "GROUP BY customer_id\n"
         ),
         "tests/scenarios/remote_event_rollup.sql": (
-            "SCENARIO ();\n\n"
+            "SCENARIO (description 'Test scenario remote_event_rollup.');\n\n"
             "WITH\n"
             "__source__raw_events AS (\n"
             "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"

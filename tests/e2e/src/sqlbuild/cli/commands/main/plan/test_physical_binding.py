@@ -30,14 +30,14 @@ def test_given_physical_source_shape_when_rebinding_then_rejects_downstream_befo
     )
     (tmp_path / "sources").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
-        "sources:\n  - name: raw_orders\n    table: raw_orders\n    schema: main\n"
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    table: raw_orders\n    schema: main\n"
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        'MODEL (materialized table, schema analytics); SELECT * FROM __source("raw_orders")'
+        'MODEL (description "Test model orders.", materialized table, schema analytics); SELECT * FROM __source("raw_orders")'
     )
     (tmp_path / "models/report.sql").write_text(
-        'MODEL (materialized table, schema analytics); SELECT missing FROM __ref("orders")'
+        'MODEL (description "Test model report.", materialized table, schema analytics); SELECT missing FROM __ref("orders")'
     )
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command, project_dir=tmp_path

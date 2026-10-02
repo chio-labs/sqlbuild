@@ -16,7 +16,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import write_semantic_binding_project
 
-_AUTHORITATIVE_MODEL: str = """MODEL (
+_AUTHORITATIVE_MODEL: str = """MODEL (description "Test model.",
   materialized table
   contract enforced
   columns (
@@ -114,7 +114,7 @@ def test_given_complete_contract_when_clause_references_missing_column_then_comp
     write_semantic_binding_project(
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
-        downstream_sql=f"MODEL (materialized view);\n{test_case.query_sql}\n",
+        downstream_sql=f"MODEL (description 'Test model.', materialized view);\n{test_case.query_sql}\n",
     )
 
     exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile", "--no-cache"])
@@ -150,7 +150,7 @@ def test_given_two_complete_contracts_when_unqualified_column_is_ambiguous_then_
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (materialized view);\n"
+            "MODEL (description 'Test model.', materialized view);\n"
             'SELECT id FROM __ref("upstream") l CROSS JOIN __ref("other") r\n'
         ),
     )
@@ -184,9 +184,9 @@ def test_given_explicit_projection_when_output_column_is_missing_then_compile_fa
 ) -> None:
     write_semantic_binding_project(
         project_dir=tmp_path,
-        upstream_sql="MODEL (materialized table);\nSELECT id FROM raw_orders\n",
+        upstream_sql="MODEL (description 'Test model.', materialized table);\nSELECT id FROM raw_orders\n",
         downstream_sql=(
-            'MODEL (materialized view);\nSELECT missing_column FROM __ref("upstream")\n'
+            'MODEL (description "Test model.", materialized view);\nSELECT missing_column FROM __ref("upstream")\n'
         ),
     )
 
@@ -233,6 +233,7 @@ def test_given_source_contract_default_when_compiling_then_effective_policy_cont
     _ = (sources_dir / "raw.yml").write_text(
         f"""sources:
   - name: raw_orders
+    description: Test source raw_orders.
     schema: raw
     table: orders
 {test_case.source_contract_yaml}    columns:
@@ -242,7 +243,7 @@ def test_given_source_contract_default_when_compiling_then_effective_policy_cont
         encoding="utf-8",
     )
     _ = (models_dir / "downstream.sql").write_text(
-        "MODEL (materialized view, columns (missing (type INTEGER)));\n"
+        "MODEL (description 'Test model downstream.', materialized view, columns (missing (type INTEGER)));\n"
         'SELECT CAST(missing AS INTEGER) AS missing FROM __source("raw_orders")\n',
         encoding="utf-8",
     )
@@ -274,12 +275,12 @@ def test_given_complete_inferred_intermediate_when_downstream_column_is_missing_
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (materialized view);\n"
+            "MODEL (description 'Test model.', materialized view);\n"
             'SELECT id FROM __ref("intermediate") WHERE missing_derived = TRUE\n'
         ),
     )
     _ = (tmp_path / "models" / "intermediate.sql").write_text(
-        'MODEL (materialized view);\nSELECT id FROM __ref("upstream")\n',
+        'MODEL (description "Test model intermediate.", materialized view);\nSELECT id FROM __ref("upstream")\n',
         encoding="utf-8",
     )
 
@@ -309,7 +310,7 @@ def test_given_model_analysis_disabled_when_column_is_missing_then_binding_is_sk
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (\n"
+            "MODEL (description 'Test model.',\n"
             "  materialized view\n"
             "  sql_analysis false\n"
             "  contract enforced\n"
@@ -349,12 +350,12 @@ def test_given_cached_dependent_error_when_upstream_analysis_disabled_then_stale
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            'MODEL (materialized view);\nSELECT runtime_column FROM __ref("intermediate")\n'
+            'MODEL (description "Test model.", materialized view);\nSELECT runtime_column FROM __ref("intermediate")\n'
         ),
     )
     intermediate_path: Path = tmp_path / "models" / "intermediate.sql"
     _ = intermediate_path.write_text(
-        'MODEL (materialized view);\nSELECT id FROM __ref("upstream")\n',
+        'MODEL (description "Test model intermediate.", materialized view);\nSELECT id FROM __ref("upstream")\n',
         encoding="utf-8",
     )
 
@@ -364,7 +365,7 @@ def test_given_cached_dependent_error_when_upstream_analysis_disabled_then_stale
     assert "error[B002]: Unknown column 'runtime_column'" in initial_output
 
     _ = intermediate_path.write_text(
-        "MODEL (materialized view, sql_analysis false);\n"
+        "MODEL (description 'Test model.', materialized view, sql_analysis false);\n"
         'SELECT runtime_column FROM __ref("upstream")\n',
         encoding="utf-8",
     )
@@ -401,7 +402,7 @@ def test_given_cli_analysis_disabled_when_sql_is_unsupported_then_compile_succee
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     _ = (models_dir / "vendor.sql").write_text(
-        "MODEL (materialized view);\nSELEC unsupported vendor sql\n",
+        "MODEL (description 'Test model vendor.', materialized view);\nSELEC unsupported vendor sql\n",
         encoding="utf-8",
     )
 
@@ -438,7 +439,7 @@ def test_given_lineage_uses_requested_when_query_filters_then_json_keeps_predica
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (materialized view);\n"
+            "MODEL (description 'Test model.', materialized view);\n"
             'SELECT id FROM __ref("upstream") u '
             "WHERE u.category = 'active' ORDER BY u.id\n"
         ),
@@ -491,7 +492,7 @@ def test_given_valid_using_and_qualify_alias_when_binding_then_compile_succeeds(
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (materialized view);\n"
+            "MODEL (description 'Test model.', materialized view);\n"
             "SELECT ROW_NUMBER() OVER (ORDER BY l.id) AS rn "
             'FROM __ref("upstream") l JOIN __ref("upstream") r USING (id) '
             "QUALIFY rn = 1\n"
@@ -524,7 +525,7 @@ def test_given_unresolved_star_when_contract_has_additional_column_then_compile_
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (\n"
+            "MODEL (description 'Test model.',\n"
             "  materialized view\n"
             "  contract enforced\n"
             "  columns (\n"
@@ -563,7 +564,7 @@ def test_given_sized_varchar_cast_when_compiling_enforced_contract_then_type_mat
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (\n"
+            "MODEL (description 'Test model.',\n"
             "  materialized view\n"
             "  contract enforced\n"
             "  columns (category (type VARCHAR(3)))\n"
@@ -608,6 +609,7 @@ def test_given_untyped_source_when_cast_flows_through_ctes_then_declared_type_ma
     _ = (sources_dir / "raw.yml").write_text(
         """sources:
   - name: raw_orders
+    description: Test source raw_orders.
     schema: raw
     table: orders
     columns:
@@ -616,7 +618,7 @@ def test_given_untyped_source_when_cast_flows_through_ctes_then_declared_type_ma
         encoding="utf-8",
     )
     model_path: Path = models_dir / "orders.sql"
-    model_sql: str = """MODEL (
+    model_sql: str = """MODEL (description "Test model orders.",
   materialized view
   database analytics
   schema analytics
@@ -693,7 +695,7 @@ def test_given_typed_union_ctes_when_compiling_enforced_contract_then_types_are_
             "  materialized table\n  database analytics\n  schema analytics\n",
         ),
         downstream_sql=(
-            "MODEL (\n"
+            "MODEL (description 'Test model.',\n"
             "  materialized view\n"
             "  database analytics\n"
             "  schema analytics\n"

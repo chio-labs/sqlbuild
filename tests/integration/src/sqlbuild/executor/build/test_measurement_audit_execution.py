@@ -37,7 +37,7 @@ def test_given_measurement_outcomes_when_building_then_gates_and_persists_canoni
     connection: Any,
 ) -> None:
     model_sql = """
-        MODEL (
+        MODEL (description "Test model.",
           materialized table,
           audits [
             configured_rate (

@@ -30,17 +30,17 @@ sql_analysis = false
 sql_validation = false
 """
 _ADVISORY_PROJECT_FILE: str = _PROJECT_FILE + "\n[scopes]\nenforce_placement = false\n"
-_ORDERS: str = "MODEL ();\nSELECT 1 AS order_id"
-_CUSTOMERS: str = "MODEL ();\nSELECT 1 AS order_id"
-_SOURCES: str = "sources:\n  - name: raw_orders\n    table: orders\n"
-_SEED_YAML: str = (
-    "seeds:\n  - name: order_codes\n    columns:\n      - name: order_id\n        type: INTEGER\n"
+_ORDERS: str = "MODEL (description 'Test model.');\nSELECT 1 AS order_id"
+_CUSTOMERS: str = "MODEL (description 'Test model.');\nSELECT 1 AS order_id"
+_SOURCES: str = (
+    "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    table: orders\n"
 )
-_TABLE_FUNCTION: str = "FUNCTION (returns table (order_id INTEGER));\nSELECT 1 AS order_id"
+_SEED_YAML: str = "seeds:\n  - name: order_codes\n    description: Test seed order_codes.\n    columns:\n      - name: order_id\n        type: INTEGER\n"
+_TABLE_FUNCTION: str = "FUNCTION (description 'Test function.', returns table (order_id INTEGER));\nSELECT 1 AS order_id"
 _GENERIC_AUDIT: str = 'AUDIT ();\nSELECT * FROM __ref("@model") WHERE order_id IS NULL'
 _SCHEMA: str = "SCHEMA (name order_shape, columns (order_id (type INTEGER)));"
-_SQL_HOOK: str = "HOOK ();\nSELECT 1"
-_PYTHON_HOOK: str = "from sqlbuild.hooks import hook\n\n\n@hook\ndef mark(ctx):\n    return None\n"
+_SQL_HOOK: str = "HOOK (description 'Test hook.');\nSELECT 1"
+_PYTHON_HOOK: str = "from sqlbuild.hooks import hook\n\n\n@hook\ndef mark(ctx):\n    '''Test hook mark.'''\n    return None\n"
 _SINGULAR_BASE_FILES: dict[str, str] = {
     "models/orders.sql": _ORDERS,
     "models/customers.sql": _CUSTOMERS,
@@ -252,7 +252,7 @@ def test_given_valid_named_declaration_layout_when_compiling_then_project_is_acc
                     "CONSTANT (name order_limit, value 10);"
                 ),
                 "models/staging/orders_stage.sql": (
-                    'MODEL ();\nSELECT @const("order_limit") AS order_id'
+                    'MODEL (description "Test model orders_stage.");\nSELECT @const("order_limit") AS order_id'
                 ),
                 "models/marts/_sqlbuild/_audits/generic/order_check.sql": (
                     'AUDIT ();\nSELECT * FROM __ref("@model") '
@@ -508,7 +508,7 @@ def test_given_invalid_named_declaration_layout_when_compiling_then_error_names_
                     "ENUM (name order_status, members [OPEN, CLOSED]);"
                 ),
                 "models/staging/orders_stage.sql": (
-                    'MODEL ();\nSELECT @enum("order_status").OPEN AS status'
+                    'MODEL (description "Test model orders_stage.");\nSELECT @enum("order_status").OPEN AS status'
                 ),
                 "models/marts/_sqlbuild/_schemas/order_shape.sql": (
                     "SCHEMA (name order_shape, columns (status (type order_status)));"

@@ -25,19 +25,19 @@ _PROJECT_TOML: str = (
 )
 _PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": (
-        "sources:\n  - name: raw_orders\n    managed: true\n    write_strategy: table\n"
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    managed: true\n    write_strategy: table\n"
         "    columns:\n      - name: order_id\n        type: INTEGER\n"
     ),
     "python/loaders/raw.py": (
         "from sqlbuild.loaders import loader\n\n\n"
-        "@loader\ndef raw_orders(ctx):\n    return [{'order_id': 1}]\n"
+        "@loader\ndef raw_orders(ctx):\n    '''Test loader raw_orders.'''\n    return [{'order_id': 1}]\n"
     ),
-    "models/order_marker.sql": "MODEL (materialized table);\nSELECT 1 AS n\n",
+    "models/order_marker.sql": "MODEL (description 'Test model order_marker.', materialized table);\nSELECT 1 AS n\n",
     "python/tasks/count.py": (
         "from sqlbuild.refs import source\nfrom sqlbuild.tasks import task\n\n\n"
         '@task(depends_on=source("raw_orders"))\n'
         "def count_task(ctx):\n"
-        "    ctx.query(f\"SELECT count(*) FROM {ctx.relation(source('raw_orders'))}\")\n"
+        "    '''Test task count_task.'''\n    ctx.query(f\"SELECT count(*) FROM {ctx.relation(source('raw_orders'))}\")\n"
     ),
 }
 

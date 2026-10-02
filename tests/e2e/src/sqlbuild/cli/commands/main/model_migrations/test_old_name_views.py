@@ -44,7 +44,7 @@ _REPORT_TASK: str = (
     "from sqlbuild.tasks import task\n\n\n"
     "@task\n"
     "def report(ctx):\n"
-    f'    ctx.query("SELECT count(*) FROM {OLD_NAME_SCHEMA}.{OLD_NAME_ORIGIN}").fetchall()\n'
+    f'    """Test task report."""\n    ctx.query("SELECT count(*) FROM {OLD_NAME_SCHEMA}.{OLD_NAME_ORIGIN}").fetchall()\n'
 )
 
 

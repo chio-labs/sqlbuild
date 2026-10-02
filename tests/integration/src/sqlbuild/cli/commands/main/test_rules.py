@@ -117,14 +117,16 @@ def test_given_exact_internal_edge_exception_when_compiling_then_live_edge_passe
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "commerce__stg__orders.sql").write_text(
-        'MODEL ();\nSELECT order_id FROM __ref("commerce__int_enriched__orders")\n',
+        'MODEL (description "Test model commerce__stg__orders.");\nSELECT order_id FROM __ref("commerce__int_enriched__orders")\n',
         encoding="utf-8",
     )
     (models / "commerce__int_enriched__orders.sql").write_text(
-        "MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8"
+        "MODEL (description 'Test model commerce__int_enriched__orders.');\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
     )
     (models / "commerce__mart__summary.sql").write_text(
-        "MODEL ();\nSELECT 1 AS order_count\n", encoding="utf-8"
+        "MODEL (description 'Test model commerce__mart__summary.');\nSELECT 1 AS order_count\n",
+        encoding="utf-8",
     )
 
     live_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
@@ -257,7 +259,7 @@ def test_given_constant_backed_decision_and_numeric_alias_when_compiling_then_ru
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(
-        """MODEL (
+        """MODEL (description "Test model orders.",
   constants (_large_batch 7),
 );
 
@@ -446,7 +448,7 @@ def test_given_enforced_contract_when_compiling_explicit_output_rule_then_enforc
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         "  contract enforced,\n"
         f"  columns ({test_case.columns_sql}),\n"
         ");\n\n"
@@ -492,7 +494,7 @@ def test_given_proven_dynamic_pivot_when_compiling_contract_rules_then_wildcard_
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     (models_dir / "stg_order_amounts.sql").write_text(
-        "MODEL (database analytics, schema analytics, columns (customer_id (type INTEGER), "
+        "MODEL (description 'Test model stg_order_amounts.', database analytics, schema analytics, columns (customer_id (type INTEGER), "
         "category (type VARCHAR), "
         'amount (type "DECIMAL(12,2)")));\n'
         "SELECT CAST(1 AS INTEGER) AS customer_id, "
@@ -502,7 +504,7 @@ def test_given_proven_dynamic_pivot_when_compiling_contract_rules_then_wildcard_
     )
     dynamic_model: Path = models_dir / "customer_category_amounts.sql"
     dynamic_model.write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model customer_category_amounts.',\n"
         "  database analytics,\n"
         "  schema analytics,\n"
         "  columns (customer_id (type INTEGER)),\n"
@@ -582,7 +584,7 @@ def test_given_contract_rules_when_compiling_then_contract_is_enforced_typed_and
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         f"  columns ({test_case.columns_sql}),\n"
         ");\n\n"
         "SELECT CAST(1 AS INTEGER) AS order_id, CAST('ready' AS VARCHAR) AS status\n",
@@ -1190,7 +1192,7 @@ def test_given_sql_function_argument_when_running_qualification_rule_then_argume
     function: Path = tmp_path / "functions" / "sql" / "orders_by_date.sql"
     function.parent.mkdir(parents=True)
     function.write_text(
-        """FUNCTION (
+        """FUNCTION (description "Test function orders_by_date.",
   arguments (start_date DATE),
   returns table (order_id INTEGER)
 );
@@ -1236,7 +1238,7 @@ def test_given_table_function_argument_when_running_alias_rule_then_left_alias_i
     function: Path = tmp_path / "functions" / "sql" / "expand_order.sql"
     function.parent.mkdir(parents=True)
     function.write_text(
-        """FUNCTION (
+        """FUNCTION (description "Test function expand_order.",
   arguments (order_id INTEGER),
   returns table (order_id INTEGER)
 );
@@ -1525,7 +1527,7 @@ def test_given_seed_and_function_references_when_running_source_rule_then_they_a
     function: Path = tmp_path / "functions" / "sql" / "normalize_quantity.sql"
     function.parent.mkdir(parents=True)
     function.write_text(
-        """FUNCTION (
+        """FUNCTION (description "Test function normalize_quantity.",
   arguments (quantity INTEGER),
   returns INTEGER,
 );
@@ -2210,7 +2212,9 @@ def test_given_custom_rule_module_constant_edit_when_compiling_then_cached_resul
     )
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
-    model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    model.write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
     rule_file: Path = tmp_path / "rules" / "architecture.py"
     rule_file.parent.mkdir()
     rule_source: str = """from sqlbuild.rules import Finding, Model, RuleContext, rule
@@ -2259,8 +2263,12 @@ def test_given_focused_project_rule_result_when_compiling_full_project_then_subs
     )
     models: Path = tmp_path / "models"
     models.mkdir()
-    (models / "orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
-    (models / "customers.sql").write_text("MODEL ();\nSELECT 1 AS customer_id\n", encoding="utf-8")
+    (models / "orders.sql").write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+    (models / "customers.sql").write_text(
+        "MODEL (description 'Test model customers.');\nSELECT 1 AS customer_id\n", encoding="utf-8"
+    )
     rule_file: Path = tmp_path / "rules" / "architecture.py"
     rule_file.parent.mkdir()
     rule_file.write_text(
@@ -2302,9 +2310,11 @@ def test_given_non_model_sql_violation_when_compiling_then_compile_is_authoritat
     )
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
-    model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    model.write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
     (tmp_path / "models" / "customers.sql").write_text(
-        "MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8"
+        "MODEL (description 'Test model customers.');\nSELECT 1 AS order_id\n", encoding="utf-8"
     )
     audit: Path = tmp_path / "audits" / "singular" / "order_sample.sql"
     audit.parent.mkdir(parents=True)
@@ -2339,9 +2349,12 @@ def test_given_exception_for_other_model_when_compiling_selection_then_exception
     )
     models: Path = tmp_path / "models"
     models.mkdir()
-    (models / "orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    (models / "orders.sql").write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
     (models / "customers.sql").write_text(
-        "MODEL ();\nSELECT customer_id FROM customers LIMIT 1\n", encoding="utf-8"
+        "MODEL (description 'Test model customers.');\nSELECT customer_id FROM customers LIMIT 1\n",
+        encoding="utf-8",
     )
 
     exit_code: int = main(
@@ -2372,6 +2385,7 @@ def test_given_typed_unselected_model_when_planning_selection_then_rules_use_sel
     (sources / "customers.yml").write_text(
         """sources:
   - name: raw_customers
+    description: Test source raw_customers.
     schema: raw
     table: customers
     columns:
@@ -2383,12 +2397,12 @@ def test_given_typed_unselected_model_when_planning_selection_then_rules_use_sel
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "orders.sql").write_text(
-        "MODEL (contract enforced, columns (order_id (type INTEGER)));\n"
+        "MODEL (description 'Test model orders.', contract enforced, columns (order_id (type INTEGER)));\n"
         "SELECT CAST(1 AS INTEGER) AS order_id\n",
         encoding="utf-8",
     )
     (models / "customers.sql").write_text(
-        """MODEL (
+        """MODEL (description "Test model customers.",
   contract enforced,
   columns (customer_id (type VARCHAR)),
 );
@@ -2485,7 +2499,10 @@ def test_given_relative_project_path_when_compiling_twice_then_sql_finding_remai
     )
     model: Path = project_dir / "models" / "orders.sql"
     model.parent.mkdir()
-    model.write_text("MODEL ();\nSELECT order_id FROM orders LIMIT 1\n", encoding="utf-8")
+    model.write_text(
+        "MODEL (description 'Test model orders.');\nSELECT order_id FROM orders LIMIT 1\n",
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
 
     first_exit: int = main(["--project-dir", "project", "compile", "--json"])
@@ -2515,7 +2532,7 @@ def test_given_unused_inline_suppression_when_compiling_then_stale_directive_is_
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(
-        "MODEL ();\n-- sqb: ignore SQBRSQL004 because this fixture checks stale directives\n"
+        "MODEL (description 'Test model orders.');\n-- sqb: ignore SQBRSQL004 because this fixture checks stale directives\n"
         "SELECT 1 AS order_id\n",
         encoding="utf-8",
     )
@@ -2544,7 +2561,9 @@ def test_given_unselected_custom_rule_options_when_compiling_then_configuration_
     )
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
-    model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    model.write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
     rule_file: Path = tmp_path / "rules" / "architecture.py"
     rule_file.parent.mkdir()
     rule_file.write_text(

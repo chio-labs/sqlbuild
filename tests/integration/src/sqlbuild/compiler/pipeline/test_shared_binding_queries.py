@@ -20,53 +20,53 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     [
         SharedBindingQueryCase(
             description="identical shapes and inputs share one query",
-            orders_summary_sql='MODEL (materialized view); SELECT id, amount FROM __ref("orders")',
-            customers_summary_sql='MODEL (materialized view); SELECT id, amount FROM __ref("customers")',
+            orders_summary_sql='MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("orders")',
+            customers_summary_sql='MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("customers")',
             expected_shared_queries=1,
         ),
         SharedBindingQueryCase(
             description="a relation name used as a qualifier is not shared",
             orders_summary_sql=(
-                'MODEL (materialized view); SELECT orders.id FROM __ref("orders") AS orders'
+                'MODEL (description "Test model.", materialized view); SELECT orders.id FROM __ref("orders") AS orders'
             ),
             customers_summary_sql=(
-                'MODEL (materialized view); SELECT customers.id FROM __ref("customers") AS customers'
+                'MODEL (description "Test model.", materialized view); SELECT customers.id FROM __ref("customers") AS customers'
             ),
             expected_shared_queries=0,
         ),
         SharedBindingQueryCase(
             description="an authored lowercase stub-named CTE is not shared",
             orders_summary_sql=(
-                "MODEL (materialized view); WITH __sqlbuild_project_input_0 AS "
+                "MODEL (description 'Test model.', materialized view); WITH __sqlbuild_project_input_0 AS "
                 '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("orders")'
             ),
             customers_summary_sql=(
-                "MODEL (materialized view); WITH __sqlbuild_project_input_0 AS "
+                "MODEL (description 'Test model.', materialized view); WITH __sqlbuild_project_input_0 AS "
                 '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("customers")'
             ),
             expected_shared_queries=0,
             later_models=(
                 (
                     "next_orders",
-                    'MODEL (materialized view); SELECT id + 1 AS next_id FROM __ref("orders_summary")',
+                    'MODEL (description "Test model.", materialized view); SELECT id + 1 AS next_id FROM __ref("orders_summary")',
                 ),
             ),
         ),
         SharedBindingQueryCase(
             description="an authored uppercase stub-named CTE is not shared",
             orders_summary_sql=(
-                "MODEL (materialized view); WITH __SQLBUILD_PROJECT_INPUT_0 AS "
+                "MODEL (description 'Test model.', materialized view); WITH __SQLBUILD_PROJECT_INPUT_0 AS "
                 '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("orders")'
             ),
             customers_summary_sql=(
-                "MODEL (materialized view); WITH __SQLBUILD_PROJECT_INPUT_0 AS "
+                "MODEL (description 'Test model.', materialized view); WITH __SQLBUILD_PROJECT_INPUT_0 AS "
                 '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("customers")'
             ),
             expected_shared_queries=0,
             later_models=(
                 (
                     "next_orders",
-                    'MODEL (materialized view); SELECT id + 1 AS next_id FROM __ref("orders_summary")',
+                    'MODEL (description "Test model.", materialized view); SELECT id + 1 AS next_id FROM __ref("orders_summary")',
                 ),
             ),
         ),
@@ -116,10 +116,10 @@ def test_given_models_with_equal_shapes_when_compiling_then_shares_only_lossless
         SharedBindingQueryCase(
             description="findings after the relation keep each model's names and positions",
             orders_summary_sql=(
-                'MODEL (materialized view); SELECT id FROM __ref("orders") WHERE missing > 0'
+                'MODEL (description "Test model.", materialized view); SELECT id FROM __ref("orders") WHERE missing > 0'
             ),
             customers_summary_sql=(
-                'MODEL (materialized view); SELECT id FROM __ref("customers") WHERE missing > 0'
+                'MODEL (description "Test model.", materialized view); SELECT id FROM __ref("customers") WHERE missing > 0'
             ),
             expected_shared_queries=1,
             expected_codes=("B002",),
@@ -163,19 +163,19 @@ def test_given_shared_query_with_finding_when_compiling_then_reports_each_model_
     [
         SharedBindingQueryCase(
             description="later-wave members reuse an exact shared result",
-            orders_summary_sql='MODEL (materialized view); SELECT id, amount FROM __ref("orders")',
+            orders_summary_sql='MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("orders")',
             customers_summary_sql=(
-                'MODEL (materialized view); SELECT id, amount FROM __ref("customers")'
+                'MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("customers")'
             ),
             expected_shared_queries=1,
             later_models=(
                 (
                     "orders_rollup",
-                    'MODEL (materialized view); SELECT id, amount FROM __ref("orders_summary")',
+                    'MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("orders_summary")',
                 ),
                 (
                     "customers_rollup",
-                    'MODEL (materialized view); SELECT id, amount FROM __ref("customers_summary")',
+                    'MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("customers_summary")',
                 ),
             ),
             expected_lineage=(
@@ -235,18 +235,21 @@ def test_given_later_wave_members_with_equal_keys_when_compiling_then_reuses_sha
         SharedBindingQueryCase(
             description="a later-wave member of a group with findings keeps its own names",
             orders_summary_sql=(
-                'MODEL (materialized view); SELECT id FROM __ref("orders") WHERE missing > 0'
+                'MODEL (description "Test model.", materialized view); SELECT id FROM __ref("orders") WHERE missing > 0'
             ),
             customers_summary_sql=(
-                'MODEL (materialized view); SELECT id FROM __ref("customers") WHERE missing > 0'
+                'MODEL (description "Test model.", materialized view); SELECT id FROM __ref("customers") WHERE missing > 0'
             ),
             expected_shared_queries=2,
             expected_codes=("B002",),
             later_models=(
-                ("orders_mid", 'MODEL (materialized view); SELECT id, amount FROM __ref("orders")'),
+                (
+                    "orders_mid",
+                    'MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("orders")',
+                ),
                 (
                     "orders_late",
-                    'MODEL (materialized view); SELECT id FROM __ref("orders_mid") WHERE missing > 0',
+                    'MODEL (description "Test model.", materialized view); SELECT id FROM __ref("orders_mid") WHERE missing > 0',
                 ),
             ),
             expected_findings=(

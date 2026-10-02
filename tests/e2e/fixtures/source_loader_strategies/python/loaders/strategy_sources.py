@@ -6,6 +6,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_countries(ctx: object) -> list[dict[str, object]]:
+    """Test loader raw_countries."""
     _ = ctx
     return [
         {"country_id": 1, "country_code": "US", "country_name": "United States"},
@@ -15,6 +16,7 @@ def raw_countries(ctx: object) -> list[dict[str, object]]:
 
 @loader
 def raw_webhook_events(ctx: object) -> list[dict[str, object]]:
+    """Test loader raw_webhook_events."""
     _ = ctx
     return [
         {"event_id": 101, "event_name": "signup"},
@@ -24,6 +26,7 @@ def raw_webhook_events(ctx: object) -> list[dict[str, object]]:
 
 @loader
 def raw_order_events(ctx: Any) -> list[dict[str, object]]:
+    """Test loader raw_order_events."""
     if ctx.current_cursor_value is None:
         return [
             {
@@ -53,6 +56,7 @@ def raw_order_events(ctx: Any) -> list[dict[str, object]]:
 
 @loader
 def raw_customers(ctx: Any) -> list[dict[str, object]]:
+    """Test loader raw_customers."""
     if ctx.current_cursor_value is None:
         return [
             {
@@ -82,6 +86,7 @@ def raw_customers(ctx: Any) -> list[dict[str, object]]:
 
 @loader
 def raw_loader_status(ctx: Any) -> None:
+    """Test loader raw_loader_status."""
     ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.destination}")
     ctx.execute_sql(
         f"CREATE TABLE {ctx.destination} AS "

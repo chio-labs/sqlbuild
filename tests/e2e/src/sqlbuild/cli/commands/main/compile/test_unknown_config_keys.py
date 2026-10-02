@@ -22,9 +22,9 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
             description="misspelled MODEL key",
             repo_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
-                "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+                "models/stg_orders.sql": "MODEL (description 'Test model stg_orders.', materialized view);\n\nSELECT 1 AS order_id\n",
                 "models/fct_orders.sql": (
-                    'MODEL (\n  materialized table,\n  descripton "Orders fact.",\n);\n\n'
+                    'MODEL (description "Test model fct_orders.",\n  materialized table,\n  descripton "Orders fact.",\n);\n\n'
                     'SELECT order_id FROM __ref("stg_orders")\n'
                 ),
             },
@@ -40,7 +40,7 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
                 "sqlbuild_project.toml": (
                     _PROJECT_TOML + '\n[path_defaults.staging]\nmaterialised = "view"\n'
                 ),
-                "models/staging/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+                "models/staging/stg_orders.sql": "MODEL (description 'Test model stg_orders.');\n\nSELECT 1 AS order_id\n",
             },
             expected_fragments=(
                 "error[D001]",
@@ -53,11 +53,11 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
             repo_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "sources/raw.yml": (
-                    "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS order_id\n"
+                    "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: SELECT 1 AS order_id\n"
                     "    columns:\n      - name: order_id\n        tpye: INTEGER\n"
                 ),
                 "models/stg_orders.sql": (
-                    'MODEL ();\n\nSELECT order_id FROM __source("raw_orders")\n'
+                    'MODEL (description "Test model stg_orders.");\n\nSELECT order_id FROM __source("raw_orders")\n'
                 ),
             },
             expected_fragments=(
@@ -71,7 +71,7 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
             repo_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/fct_orders.sql": (
-                    "MODEL (\n  materialized incremental,\n  incremental_strategy append,\n"
+                    "MODEL (description 'Test model fct_orders.',\n  materialized incremental,\n  incremental_strategy append,\n"
                     "  on_schema_change append_columns,\n);\n\nSELECT 1 AS order_id\n"
                 ),
             },
@@ -89,7 +89,7 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
                     _PROJECT_TOML + '\n[defaults]\nreplay_on_change = "everything"\n'
                 ),
                 "models/fct_orders.sql": (
-                    "MODEL (materialized incremental, incremental_strategy append);\n\n"
+                    "MODEL (description 'Test model fct_orders.', materialized incremental, incremental_strategy append);\n\n"
                     "SELECT 1 AS order_id\n"
                 ),
             },
@@ -110,7 +110,7 @@ _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n'
                     "      - name: raw_orders\n        table: orders\n"
                     "        primary_keys: order_id\n"
                 ),
-                "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+                "models/stg_orders.sql": "MODEL (description 'Test model stg_orders.');\n\nSELECT 1 AS order_id\n",
             },
             expected_fragments=(
                 "error[D006]",
@@ -151,7 +151,7 @@ def test_given_unknown_model_config_key_when_compiling_then_fails_naming_key_and
                     "    return MaterializationResult(success=True)\n"
                 ),
                 "models/order_snapshot.sql": (
-                    "MODEL (\n  materialized order_snapshot,\n"
+                    "MODEL (description 'Test model order_snapshot.',\n  materialized order_snapshot,\n"
                     "  config (retention_days 7, partition_column order_id),\n);\n\n"
                     "SELECT 1 AS order_id\n"
                 ),

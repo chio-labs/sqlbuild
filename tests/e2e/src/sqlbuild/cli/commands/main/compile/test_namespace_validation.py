@@ -34,6 +34,7 @@ _SEED_SCHEMA: str = (
         """
     seeds:
       - name: countries
+        description: Test seed countries.
         columns:
           - name: code
             type: VARCHAR
@@ -52,11 +53,11 @@ _PYTHON_FUNCTION: str = (
     "from sqlbuild.functions import udf\n\n"
     '@udf(arguments={}, returns="INTEGER", runtime_version="3.11")\n'
     "def main():\n"
-    "    return 42\n"
+    "    '''Test function main.'''\n    return 42\n"
 )
 _MANAGED_SOURCE: str = (
     "sources:\n"
-    "  - name: raw_events\n"
+    "  - name: raw_events\n    description: Test source raw_events.\n"
     "    managed: true\n"
     "    write_strategy: table\n"
     "    columns:\n"
@@ -67,7 +68,7 @@ _MANAGED_SOURCE_LOADER: str = (
     "from sqlbuild.loaders import loader\n\n"
     "@loader\n"
     "def raw_events(ctx):\n"
-    "    return [{'event_id': 1}]\n"
+    "    '''Test loader raw_events.'''\n    return [{'event_id': 1}]\n"
 )
 
 
@@ -78,7 +79,7 @@ _MANAGED_SOURCE_LOADER: str = (
             description="model without logical schema fails under preserve",
             repo_files={
                 "sqlbuild_project.toml": _PRESERVE_CONFIG,
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment="Model 'orders' has no logical schema",
@@ -97,7 +98,7 @@ _MANAGED_SOURCE_LOADER: str = (
             description="SQL scalar function without logical schema fails under preserve",
             repo_files={
                 "sqlbuild_project.toml": _PRESERVE_CONFIG,
-                "functions/sql/answer.sql": "FUNCTION (returns INTEGER);\n\n42\n",
+                "functions/sql/answer.sql": "FUNCTION (description 'Test function answer.', returns INTEGER);\n\n42\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment="SQL function 'answer' has no logical schema",
@@ -108,7 +109,7 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sqlbuild_project.toml": _PRESERVE_CONFIG,
                 "functions/sql/answers.sql": dedent(
                     """
-                FUNCTION (
+                FUNCTION (description "Test function answers.",
                   returns table (
                     answer INTEGER
                   )
@@ -132,6 +133,7 @@ _MANAGED_SOURCE_LOADER: str = (
 
                 @udf(arguments={}, returns="INTEGER", runtime_version="3.11")
                 def main():
+                    '''Test function main.'''
                     return 42
                 """
                 ).strip()
@@ -174,16 +176,17 @@ _MANAGED_SOURCE_LOADER: str = (
                 """
                 ).strip()
                 + "\n",
-                "models/marts/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/marts/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
                 "seeds/schema.yml": _SEED_SCHEMA,
                 "seeds/countries.csv": "code\nGB\n",
-                "functions/sql/answer.sql": "FUNCTION (returns INTEGER);\n\n42\n",
+                "functions/sql/answer.sql": "FUNCTION (description 'Test function answer.', returns INTEGER);\n\n42\n",
                 "functions/python/python_answer.py": dedent(
                     """
                 from sqlbuild.functions import udf
 
                 @udf(arguments={}, returns="INTEGER", runtime_version="3.11")
                 def main():
+                    '''Test function main.'''
                     return 42
                 """
                 ).strip()
@@ -198,16 +201,17 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sqlbuild_project.toml": _PRESERVE_CONFIG.replace(
                     'schema = "preserve"', 'schema = "physical"'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
                 "seeds/schema.yml": _SEED_SCHEMA,
                 "seeds/countries.csv": "code\nGB\n",
-                "functions/sql/answer.sql": "FUNCTION (returns INTEGER);\n\n42\n",
+                "functions/sql/answer.sql": "FUNCTION (description 'Test function answer.', returns INTEGER);\n\n42\n",
                 "functions/python/python_answer.py": dedent(
                     """
                 from sqlbuild.functions import udf
 
                 @udf(arguments={}, returns="INTEGER", runtime_version="3.11")
                 def main():
+                    '''Test function main.'''
                     return 42
                 """
                 ).strip()
@@ -220,7 +224,7 @@ _MANAGED_SOURCE_LOADER: str = (
             description="warehouse model without explicit schema fails offline",
             repo_files={
                 "sqlbuild_project.toml": _POSTGRES_CONFIG_WITHOUT_SCHEMA,
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment="Model 'orders' has no explicitly resolved physical write schema",
@@ -239,7 +243,7 @@ _MANAGED_SOURCE_LOADER: str = (
             description="warehouse SQL scalar function without explicit schema fails offline",
             repo_files={
                 "sqlbuild_project.toml": _POSTGRES_CONFIG_WITHOUT_SCHEMA,
-                "functions/sql/answer.sql": "FUNCTION (returns INTEGER);\n\n42\n",
+                "functions/sql/answer.sql": "FUNCTION (description 'Test function answer.', returns INTEGER);\n\n42\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment="Function 'answer' has no explicitly resolved physical write schema",
@@ -249,7 +253,7 @@ _MANAGED_SOURCE_LOADER: str = (
             repo_files={
                 "sqlbuild_project.toml": _POSTGRES_CONFIG_WITHOUT_SCHEMA,
                 "functions/sql/answers.sql": (
-                    "FUNCTION (returns table (answer INTEGER));\n\nSELECT 42 AS answer\n"
+                    "FUNCTION (description 'Test function answers.', returns table (answer INTEGER));\n\nSELECT 42 AS answer\n"
                 ),
             },
             expected_exit_code=1,
@@ -280,7 +284,7 @@ _MANAGED_SOURCE_LOADER: str = (
             description="resource schema supplies physical namespace",
             repo_files={
                 "sqlbuild_project.toml": _POSTGRES_CONFIG_WITHOUT_SCHEMA,
-                "models/orders.sql": "MODEL (schema analytics);\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.', schema analytics);\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",
@@ -291,7 +295,7 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sqlbuild_project.toml": (
                     _POSTGRES_CONFIG_WITHOUT_SCHEMA + '\n[defaults]\nschema = "analytics"\n'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",
@@ -305,7 +309,7 @@ _MANAGED_SOURCE_LOADER: str = (
                     )
                     + '\n[targets.dev]\nschema = "analytics"\n'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",
@@ -316,7 +320,7 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sqlbuild_project.toml": (
                     _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA + 'schema = "preserve"\n'
                 ),
-                "models/orders.sql": "MODEL (schema analytics);\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.', schema analytics);\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",
@@ -325,7 +329,7 @@ _MANAGED_SOURCE_LOADER: str = (
             description="named target rejects model logical schema as strategy",
             repo_files={
                 "sqlbuild_project.toml": _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA,
-                "models/orders.sql": "MODEL (schema analytics);\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.', schema analytics);\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment=(
@@ -338,7 +342,7 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sqlbuild_project.toml": (
                     _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA + '\n[defaults]\nschema = "analytics"\n'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment="Named target 'dev' must explicitly set schema",
@@ -350,7 +354,7 @@ _MANAGED_SOURCE_LOADER: str = (
                     'database = "analytics"',
                     'database = "analytics"\nschema = "connection_schema"',
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment="Named target 'dev' must explicitly set schema",
@@ -361,7 +365,7 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sqlbuild_project.toml": (
                     _POSTGRES_CONFIG_WITHOUT_SCHEMA + 'schema = "analytics"\n'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",
@@ -389,10 +393,10 @@ _MANAGED_SOURCE_LOADER: str = (
                     "[connection]\n"
                     'database = ":memory:"\n'
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
                 "seeds/schema.yml": _SEED_SCHEMA,
                 "seeds/countries.csv": "code\nGB\n",
-                "functions/sql/answer.sql": "FUNCTION (returns INTEGER);\n\n42\n",
+                "functions/sql/answer.sql": "FUNCTION (description 'Test function answer.', returns INTEGER);\n\n42\n",
                 "sources/raw.yml": _MANAGED_SOURCE,
                 "python/loaders/raw_events.py": _MANAGED_SOURCE_LOADER,
             },
@@ -408,7 +412,7 @@ _MANAGED_SOURCE_LOADER: str = (
                     'database = ":memory:"\n\n'
                     "[targets.dev]\n"
                 ),
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",

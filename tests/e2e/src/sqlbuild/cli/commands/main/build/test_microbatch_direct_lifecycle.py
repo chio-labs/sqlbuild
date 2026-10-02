@@ -132,7 +132,7 @@ def test_given_integer_cursor_maximum_when_building_then_half_open_batches_inclu
             ),
             "sources/raw.yml": raw_events_source_yml(),
             "models/orders.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model orders.',\n"
                 "  materialized incremental,\n"
                 "  incremental_strategy delete_insert,\n"
                 "  incremental_mode microbatch,\n"

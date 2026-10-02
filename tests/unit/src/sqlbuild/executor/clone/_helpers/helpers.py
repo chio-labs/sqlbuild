@@ -123,7 +123,7 @@ def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
         ),
         fingerprint_query_sql="SELECT 1",
         resolved_sql="SELECT 1",
-        logical_ddl="MODEL (materialized table);",
+        logical_ddl="MODEL (description 'Test model.', materialized table);",
     )
 
 

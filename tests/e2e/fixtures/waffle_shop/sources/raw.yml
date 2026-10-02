@@ -1,5 +1,6 @@
 sources:
   - name: raw_customers
+    description: Test source raw_customers.
     managed: true
     write_strategy: table
     columns:
@@ -15,6 +16,7 @@ sources:
         type: TIMESTAMP
 
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: delete_insert
     cursor_column: ordered_at
@@ -33,6 +35,7 @@ sources:
         type: VARCHAR
 
   - name: raw_payments
+    description: Test source raw_payments.
     expression: |
       SELECT 1 AS id, 1 AS order_id, 1700 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status
       UNION ALL SELECT 2 AS id, 2 AS order_id, 1050 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status

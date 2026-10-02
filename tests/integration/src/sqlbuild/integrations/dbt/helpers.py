@@ -33,7 +33,7 @@ def build_sqlbuild_project_with_manifest(
     sql: str
     for model_name, sql in model_sql_by_name.items():
         project_dir.joinpath(f"models/{model_name}.sql").write_text(
-            f"MODEL ();\n\n{sql}\n", encoding="utf-8"
+            f"MODEL (description 'Test model.');\n\n{sql}\n", encoding="utf-8"
         )
     project_dir.joinpath("target/manifest.json").write_text(
         manifest_source.read_text(encoding="utf-8"),

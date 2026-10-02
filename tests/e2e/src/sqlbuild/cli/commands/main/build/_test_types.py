@@ -1190,7 +1190,10 @@ class PythonNodeSelectionE2ETestCase:
     expected_row_counts: dict[str, int]
     expected_node_counts: dict[str, int]
     expected_missing_tables: tuple[str, ...] = ()
-    orders_sql: str = 'MODEL (materialized table);\nSELECT order_id FROM __source("raw_orders")\n'
+    orders_sql: str = (
+        'MODEL (description "Test model.", '
+        'materialized table);\nSELECT order_id FROM __source("raw_orders")\n'
+    )
     existing_sql: str = ""
 
 
