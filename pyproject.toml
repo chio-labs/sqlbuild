@@ -139,6 +139,7 @@ cache-keys = [
   { file = "pyproject.toml" },
   { file = "Cargo.toml" },
   { file = "crates/sqlbuild-rules-native/Cargo.toml" },
+  { file = "crates/sqlbuild-rules-native/build.rs" },
   { file = "crates/sqlbuild-rules-native/src/**/*.rs" },
   { file = "src/sqlbuild/_native.pyi" },
 ]

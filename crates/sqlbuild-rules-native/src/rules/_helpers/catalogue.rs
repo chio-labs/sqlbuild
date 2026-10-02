@@ -1,4 +1,4 @@
-use crate::constants::API_VERSION;
+use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::models::RulesCodeGrammar;
 use crate::models::{CustomRule, ResolveRulesRequest, RuleGuidance, RuleMetadata};
 use fensu_policy::policy::errors::PolicyError;
@@ -487,6 +487,7 @@ pub(crate) fn fingerprint(
     config: &crate::models::RulesConfig,
     dialect: &str,
 ) -> Result<String, String> {
-    let payload = serde_json::to_vec(&(rules, config, dialect)).map_err(|e| e.to_string())?;
+    let payload = serde_json::to_vec(&(rules, config, dialect, NATIVE_BUILD_IDENTITY))
+        .map_err(|e| e.to_string())?;
     Ok(format!("{:x}", Sha256::digest(payload)))
 }

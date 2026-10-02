@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
+use crate::constants::NATIVE_BUILD_IDENTITY;
 use crate::engine::main::evaluate::evaluate_json;
 use crate::engine::tests::helpers;
 use crate::engine::tests::test_types;
@@ -1342,4 +1343,23 @@ fn given_threshold_override_change_when_evaluating_then_ruleset_fingerprint_chan
         );
     }
     Ok(())
+}
+
+#[test]
+fn given_native_build_when_reading_cache_identity_then_version_carries_source_hash() {
+    let test_cases = [test_types::BuildIdentityTestCase {
+        description: "cache identity is the package version plus a source content hash",
+        expected_prefix: concat!(env!("CARGO_PKG_VERSION"), "+"),
+        expected_hash_length: 16,
+    }];
+    for test_case in &test_cases {
+        let hash = NATIVE_BUILD_IDENTITY.strip_prefix(test_case.expected_prefix);
+
+        assert!(
+            hash.is_some_and(|hash| hash.len() == test_case.expected_hash_length
+                && hash.bytes().all(|byte| byte.is_ascii_hexdigit())),
+            "{}",
+            test_case.description
+        );
+    }
 }
