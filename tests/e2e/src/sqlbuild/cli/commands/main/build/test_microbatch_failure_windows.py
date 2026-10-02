@@ -59,7 +59,7 @@ def test_given_completion_write_failure_during_rebuild_when_retried_then_live_ta
             "models/orders.sql": timestamp_microbatch_model_sql(
                 value_expression="payload",
                 batch_concurrency=3,
-                replay_policy="forward_only",
+                replay_policy="forward",
             ),
             "adapters/failing_microbatch_state_duckdb.py": (
                 "import os\n"
@@ -166,7 +166,7 @@ def test_given_concurrent_delta_audit_failure_when_fixed_then_rejected_partition
             "models/orders.sql": timestamp_microbatch_model_sql(
                 value_expression="CAST(payload AS INTEGER)",
                 batch_concurrency=3,
-                replay_policy="forward_only",
+                replay_policy="forward",
                 extra_config=(
                     "audits [expression_is_true ("
                     'name "positive_value", expression "value > 0", severity error, '
@@ -255,7 +255,7 @@ def test_given_concurrent_batches_when_audit_and_hooks_wrap_model_then_aggregate
     model_sql: str = timestamp_microbatch_model_sql(
         value_expression="payload",
         batch_concurrency=3,
-        replay_policy="forward_only",
+        replay_policy="forward",
         extra_config=(
             "pre_hooks [inline_sql(\"INSERT INTO main.hook_log VALUES ('pre')\")], "
             "post_hooks [inline_sql(\"INSERT INTO main.hook_log VALUES ('post')\")],"

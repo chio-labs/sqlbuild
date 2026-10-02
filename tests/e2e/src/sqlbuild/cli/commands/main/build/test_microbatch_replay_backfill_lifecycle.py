@@ -37,7 +37,7 @@ def test_given_ahead_of_frontier_partial_backfill_when_normal_run_resumes_then_l
         tmp_path=tmp_path,
         project_name="microbatch_future_backfill",
         database_name="future_backfill.duckdb",
-        replay_policy="forward_only",
+        replay_policy="forward",
     )
     execute_duckdb(
         db_path=db_path,
@@ -120,7 +120,7 @@ def test_given_failed_backfill_tail_when_source_tail_disappears_then_no_durable_
         tmp_path=tmp_path,
         project_name="microbatch_backfill_tail",
         database_name="backfill_tail.duckdb",
-        replay_policy="forward_only",
+        replay_policy="forward",
     )
     execute_duckdb(
         db_path=db_path,

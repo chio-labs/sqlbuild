@@ -59,7 +59,7 @@ def test_given_serial_microbatch_when_building_then_state_table_is_not_used(
             "models/orders.sql": timestamp_microbatch_model_sql(
                 value_expression="payload",
                 batch_concurrency=1,
-                replay_policy="forward_only",
+                replay_policy="forward",
             ),
         },
     )
@@ -217,7 +217,7 @@ def test_given_concurrent_ceiling_when_first_run_and_full_refresh_then_target_bo
             "models/orders.sql": timestamp_microbatch_model_sql(
                 value_expression="payload",
                 batch_concurrency=3,
-                replay_policy="forward_only",
+                replay_policy="forward",
             ),
         },
     )
@@ -303,7 +303,7 @@ def test_given_recreated_target_when_building_then_old_completion_generation_is_
             "models/orders.sql": timestamp_microbatch_model_sql(
                 value_expression="payload",
                 batch_concurrency=2,
-                replay_policy="forward_only",
+                replay_policy="forward",
             ),
         },
     )
