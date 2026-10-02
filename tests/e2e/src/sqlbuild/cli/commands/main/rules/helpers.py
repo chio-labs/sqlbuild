@@ -1,5 +1,6 @@
 """Compiler Rules end-to-end fixture helpers."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -226,3 +227,147 @@ def long_literal_hints(result: subprocess.CompletedProcess[str]) -> dict[str, st
         str(item["path"]): str(item["remediation"]).partition("Define the value once")[0].strip()
         for item in json.loads(result.stdout)["findings"]
     }
+
+
+INCREMENTAL_RULES_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        '[connection]\ndatabase = "warehouse.duckdb"\n\n'
+        '[targets.dev]\nschema = "dev"\n\n[targets.prod]\nschema = "prod"\n\n'
+        '[vars]\ndiscount_rate = "0.1"\n\n'
+        '[rules]\nselect = ["SQBR", "XSQBR"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
+    ),
+    "models/staging/stg_orders.sql": (
+        "MODEL (\n  materialized view,\n  contract enforced,\n  columns (\n"
+        "    order_id (type INTEGER, nullable false, audits [not_null]),\n"
+        "    amount (type DOUBLE),\n  ),\n);\n\n"
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST(10.5 AS DOUBLE) AS amount\n"
+    ),
+    "models/marts/order_totals.sql": (
+        "MODEL (\n  columns (\n"
+        "    order_id (type INTEGER, nullable false, audits [not_null]),\n"
+        "    net_amount (type DOUBLE),\n  ),\n);\n\n"
+        "SELECT\n  o.order_id,\n"
+        '  CAST(@discounted("o.amount") * (1 - CAST(@@discount_rate AS DOUBLE)) AS DOUBLE)'
+        " AS net_amount\n"
+        'FROM __ref("stg_orders") AS o\n'
+    ),
+    "models/marts/_sqlbuild/_macros/amounts.py": (
+        'def discounted(amount: str) -> str:\n    return f"({amount}) * 0.9"\n'
+    ),
+    "tests/unit/test_order_totals.sql": (
+        "TEST ();\n\nWITH\n__ref__stg_orders AS (\n  SELECT 1 AS order_id, 10.0 AS amount\n),\n"
+        "__expected__order_totals AS (\n  SELECT 1 AS order_id, 9.0 AS net_amount\n)\n"
+        "SELECT 1\n"
+    ),
+    "config/policy.yml": "strict: false\n",
+    "rules/limits.py": "MAX_NAME_LENGTH: int = 30\n",
+    "rules/memo.py": """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+_SEEN_SQL: dict[str, str] = {}
+
+
+@rule(code="XSQBRGOV005", message="Models must not repeat SQL", remediation="Deduplicate.")
+def unique_sql(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if not _SEEN_SQL:
+        for item in ctx.project.models:
+            _SEEN_SQL[item.name] = ctx.sql.for_model(item).expanded.source
+    own: str = _SEEN_SQL[model.name]
+    repeated: bool = sum(source == own for source in _SEEN_SQL.values()) > 1
+    return [ctx.finding(subject=model)] if repeated else []
+""",
+    "rules/governance.py": """from sqlbuild.rules import Finding, Model, Project, RuleContext, rule
+
+from rules import limits
+
+
+@rule(code="XSQBRGOV001", message="Contracts must be enforced", remediation="Enforce it.")
+def enforced_contracts(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if "SELECT" not in ctx.sql.for_model(model).authored.source:
+        return []
+    return [] if ctx.contracts.enforced(model) else [ctx.finding(subject=model)]
+
+
+@rule(code="XSQBRGOV002", message="Staging models need a consumer", remediation="Use it.")
+def staging_consumers(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if not model.name.startswith("stg_"):
+        return []
+    return [] if ctx.graph.dependents(model) else [ctx.finding(subject=model)]
+
+
+@rule(code="XSQBRGOV003", message="Strict policy limits models", remediation="Relax it.")
+def strict_policy(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    findings: list[Finding] = []
+    if "strict: true" in ctx.project.tree.read_text("config/policy.yml"):
+        findings.append(ctx.finding(subject="config/policy.yml", message="strict policy"))
+    if len(ctx.project.tree.glob("config/*.yml")) > 1:
+        findings.append(ctx.finding(subject="config/policy.yml", message="several policies"))
+    if len(ctx.project.models) > 2:
+        findings.append(ctx.finding(subject="config/policy.yml", message="too many models"))
+    return findings
+
+
+@rule(code="XSQBRGOV004", message="Model names are bounded", remediation="Shorten it.")
+def bounded_names(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    names: list[str] = [test.name for test in ctx.tests.for_model(model)]
+    too_long: bool = len(model.name) > limits.MAX_NAME_LENGTH
+    unnamed: bool = any("discount" not in name for name in names)
+    return [ctx.finding(subject=model)] if too_long or unnamed else []
+
+
+@rule(code="XSQBRGOV006", message="Expanded SQL uses a flagged value", remediation="Review.")
+def flagged_values(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    expanded: str = ctx.sql.for_model(model).expanded.source
+    flagged: bool = any(value in expanded for value in ("12.5", "0.8", "0.2"))
+    return [ctx.finding(subject=model)] if flagged else []
+""",
+}
+
+
+def write_project_files(*, project_dir: Path, files: dict[str, str]) -> None:
+    """Write authored project files beneath one project directory."""
+
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
+def rules_compile_outcome(project_dir: Path, *arguments: str) -> tuple[int, str, str]:
+    """Compile in a fresh process and return its exit code, diagnostics, and artifacts digest."""
+
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--no-color",
+            "--project-dir",
+            str(project_dir),
+            "compile",
+            "--json",
+            *arguments,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    payload: dict[str, Any] = json.loads(result.stdout or "{}")
+    artifacts: Any = hashlib.sha256()
+    compiled: Path = project_dir / "target" / "compiled"
+    for path in sorted(filter(Path.is_file, compiled.rglob("*"))):
+        artifacts.update(path.relative_to(compiled).as_posix().encode())
+        artifacts.update(path.read_bytes())
+    return (
+        result.returncode,
+        json.dumps(payload.get("diagnostics"), sort_keys=True),
+        artifacts.hexdigest(),
+    )
+
+
+def rule_cache_counts(project_dir: Path) -> tuple[int, int]:
+    """Return rule cache hits and misses of one fresh-process compile."""
+
+    result: subprocess.CompletedProcess[str] = run_compile_cli(project_dir)
+    timings: dict[str, int] = json.loads(result.stdout)["compile_timings"]
+    return timings["rule_cache_hits"], timings["rule_cache_misses"]

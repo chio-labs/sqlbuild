@@ -1,6 +1,6 @@
 """Test case declarations for rules engine helpers."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.rule_engine.models import RuleExemption, RuleIgnore
 
@@ -112,12 +112,6 @@ class ScopePayloadTestCase:
 
 
 @dataclass(frozen=True)
-class ProjectFingerprintRepresentationTestCase:
-    description: str
-    expected_equivalent: bool
-
-
-@dataclass(frozen=True)
 class NativeFactPayloadTestCase:
     description: str
     expected_test_count: int
@@ -155,3 +149,15 @@ class CustomRuleImportTestCase:
     extra_files: tuple[tuple[str, str], ...] = ()
     expected_rule_codes: tuple[str, ...] = ("XSQBRT101",)
     expected_error_pattern: str = ""
+
+
+@dataclass(frozen=True)
+class CustomRuleReadTrackingTestCase:
+    """One model-subject rule, an edit to the second model, and the expected reuse."""
+
+    description: str
+    body: str
+    expected_hits_after_edit: int
+    module_prelude: str = ""
+    edited_customers_sql: str = "SELECT 2 AS customer_id"
+    edited_customers_config: dict[str, object] = field(default_factory=dict)

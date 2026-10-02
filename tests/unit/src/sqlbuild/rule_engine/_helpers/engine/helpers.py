@@ -22,8 +22,9 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, Discovere
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
+from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
-from sqlbuild.rule_engine.models import Rule, RulesCacheConfig, RulesConfig
+from sqlbuild.rule_engine.models import CustomRulesOutcome, Rule, RulesCacheConfig, RulesConfig
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -58,6 +59,7 @@ def captured_native_request(
                 "evaluated_models": 0,
                 "cache_hits": 0,
                 "cache_misses": 0,
+                "selected_codes": [],
             }
         )
 
@@ -226,3 +228,39 @@ def custom_rules_with_imports(
         config=RulesConfig(select=("XSQBRT101",)), project_dir=project_dir
     )
     return tuple(filter(lambda rule: rule.custom, catalogue))
+
+
+def two_model_project(
+    *, customers_sql: str, customers_config: dict[str, object]
+) -> CompiledProject:
+    """Return an orders and customers project with configurable customers facts."""
+
+    orders: CompiledProject = build_project(
+        name="orders",
+        relative_path="models/orders.sql",
+        sql="SELECT 1 AS order_id",
+        config_values={},
+    )
+    customers: CompiledProject = build_project(
+        name="customers",
+        relative_path="models/customers.sql",
+        sql=customers_sql,
+        config_values=customers_config,
+    )
+    return replace(orders, models=(*orders.models, *customers.models))
+
+
+def evaluate_cached_custom_rules(
+    *, project: CompiledProject, project_dir: Path, cache_enabled: bool
+) -> CustomRulesOutcome:
+    """Evaluate the selected custom rule through the incremental read-tracking cache."""
+
+    config: RulesConfig = RulesConfig(
+        select=("XSQBRT101",), cache=RulesCacheConfig(enabled=cache_enabled)
+    )
+    rules: tuple[Rule, ...] = tuple(
+        filter(attrgetter("custom"), build_catalogue(config=config, project_dir=project_dir))
+    )
+    return evaluate_custom_rules_cached(
+        project=project, config=config, project_dir=project_dir, rules=rules, dialect="duckdb"
+    )

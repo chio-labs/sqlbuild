@@ -1,9 +1,6 @@
 use crate::configuration::main::validate as config;
-use crate::constants::{
-    API_VERSION, CUSTOM_HOST_REQUIRED_ERROR, GIT_DIRECTORY, LOGS_DIRECTORY, NATIVE_BUILD_IDENTITY,
-    PYTHON_EXTENSION, RULES_DIRECTORY, TARGET_DIRECTORY,
-};
-use crate::engine::_helpers::cache::{Cache, RuleCacheBucket, RuleCacheEntry};
+use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
+use crate::engine::_helpers::cache::{Cache, RuleCacheEntry};
 use crate::models::{
     EvaluateRequest, EvaluateResponse, Fault, Model, RuleMetadata, RulesCodeGrammar,
 };
@@ -17,21 +14,21 @@ use crate::rules::models::{
 use fensu_policy::lifecycle::constants::ANALYSIS_BATCH_SCHEMA_VERSION;
 use fensu_policy::lifecycle::errors::LifecycleError;
 use fensu_policy::lifecycle::models::{
-    AnalysisBatchRequest, AnalysisInput, ApplySuppressionsRequest, CustomHostInvocation,
-    CustomHostOutputLimits, CustomHostRequest, ExactSuppression, Finding, FindingSeverity,
-    RuntimeIdentity, ScopedIgnore,
+    AnalysisBatchRequest, AnalysisInput, ApplySuppressionsRequest, ExactSuppression, Finding,
+    FindingSeverity, RuntimeIdentity, ScopedIgnore,
 };
-use fensu_policy::{apply_suppressions, evaluate_batch, run_custom_host};
+use fensu_policy::{apply_suppressions, evaluate_batch};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::path::Path;
+use std::time::Instant;
 
 const NATIVE_RULE_WORKERS: usize = 4;
 const NATIVE_RULE_STACK_BYTES: usize = 16 * 1024 * 1024;
+const COMPILER_FACTS_FINGERPRINT_SEED: &str = "compiler-owned-rules-facts-v2";
 
 struct PendingModelRule<'a> {
     index: usize,
@@ -225,103 +222,51 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
             cache_hits: 0,
             cache_misses: 0,
             ruleset_fingerprint,
+            selected_codes: Vec::new(),
             built_in_ms: 0,
-            custom_ms: 0,
         })
         .map_err(|error| error.to_string());
     }
 
-    let custom_selected = selected.iter().any(|rule| rule.custom);
     let cache_enabled = request.config.cache.enabled;
     let project_aware = selected.iter().any(|rule| rule.project_wide || rule.custom);
-    let project_fingerprint = if project_aware {
-        Some(if custom_selected {
-            match &request.project_fingerprint {
-                Some(value) => fingerprint_request_facts(value.as_bytes(), &request)?,
-                None => fingerprint_project(Path::new(&request.project_dir), &request)?,
-            }
-        } else {
-            fingerprint_request_facts(b"compiler-owned-rules-facts-v1", &request)?
+    let project_fingerprint = project_aware
+        .then(|| {
+            fingerprint_request_facts(
+                request
+                    .project_fingerprint
+                    .as_deref()
+                    .unwrap_or(COMPILER_FACTS_FINGERPRINT_SEED)
+                    .as_bytes(),
+                &request,
+            )
         })
-    } else {
-        None
-    };
+        .transpose()?;
     let cache = cache_enabled
         .then(|| Cache::open(Path::new(&request.project_dir)))
         .transpose()?;
-    let (cached_custom, custom_probe_ms) = probe_custom_rules_cache(CustomRulesCacheRequest {
-        request: &request,
-        selected: &selected_by_code,
+    let built_in_started = Instant::now();
+    let mut raw_faults = request.initial_findings.clone();
+    raw_faults.extend(evaluate_project::evaluate_project(
+        ProjectEvaluationRequest {
+            selected: &selected_by_code,
+            request: &request,
+        },
+    )?);
+    let native = evaluate_native_models(NativeModelRuleRequest {
+        context: ModelRuleBatchContext {
+            request: &request,
+            selected: &selected_by_code,
+            threshold_overrides: &threshold_overrides,
+        },
         cache: cache.as_ref(),
+        ruleset_fingerprint: &ruleset_fingerprint,
         project_fingerprint: project_fingerprint.as_deref(),
     })?;
-    let (raw_faults, cache_hits, cache_misses, built_in_ms, custom_ms) =
-        std::thread::scope(|scope| {
-            let custom_parallel_started = Instant::now();
-            let custom_task = cached_custom.is_none().then(|| {
-                scope.spawn(|| {
-                    evaluate_custom_rules_cached(CustomRulesCacheRequest {
-                        request: &request,
-                        selected: &selected_by_code,
-                        cache: cache.as_ref(),
-                        project_fingerprint: project_fingerprint.as_deref(),
-                    })
-                })
-            });
-            let built_in_started = Instant::now();
-            let mut raw_faults = request.initial_findings.clone();
-            raw_faults.extend(evaluate_project::evaluate_project(
-                ProjectEvaluationRequest {
-                    selected: &selected_by_code,
-                    request: &request,
-                },
-            )?);
-            let native = evaluate_native_models(NativeModelRuleRequest {
-                context: ModelRuleBatchContext {
-                    request: &request,
-                    selected: &selected_by_code,
-                    threshold_overrides: &threshold_overrides,
-                },
-                cache: cache.as_ref(),
-                ruleset_fingerprint: &ruleset_fingerprint,
-                project_fingerprint: project_fingerprint.as_deref(),
-            })?;
-            let mut cache_hits = native.hits;
-            let mut cache_misses = native.misses;
-            raw_faults.extend(native.faults);
-            let built_in_ms = built_in_started.elapsed().as_millis() as u64;
-            let custom_started = if custom_task.is_some() {
-                custom_parallel_started
-            } else {
-                Instant::now()
-            };
-            let custom_result = if let Some(task) = custom_task {
-                task.join()
-                    .map_err(|_| "custom rule evaluation worker panicked".to_string())?
-            } else {
-                match cached_custom {
-                    Some(custom) => Ok(custom),
-                    None => evaluate_custom_rules_cached(CustomRulesCacheRequest {
-                        request: &request,
-                        selected: &selected_by_code,
-                        cache: cache.as_ref(),
-                        project_fingerprint: project_fingerprint.as_deref(),
-                    }),
-                }
-            };
-            let custom = match custom_result {
-                Ok(value) => value,
-                Err(error) if error == CUSTOM_HOST_REQUIRED_ERROR => {
-                    return Err(format!("{error} [native_cache_misses={cache_misses}]"));
-                }
-                Err(error) => return Err(error),
-            };
-            cache_hits += custom.hits;
-            cache_misses += custom.misses;
-            raw_faults.extend(custom.faults);
-            let custom_ms = custom_probe_ms + custom_started.elapsed().as_millis() as u64;
-            Ok::<_, String>((raw_faults, cache_hits, cache_misses, built_in_ms, custom_ms))
-        })?;
+    let cache_hits = native.hits;
+    let cache_misses = native.misses;
+    raw_faults.extend(native.faults);
+    let built_in_ms = built_in_started.elapsed().as_millis() as u64;
     validate_exception_paths(&request)?;
     let faults = if request.defer_suppressions {
         raw_faults
@@ -335,261 +280,10 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
         cache_hits,
         cache_misses,
         ruleset_fingerprint,
+        selected_codes: selected.iter().map(|rule| rule.code.clone()).collect(),
         built_in_ms,
-        custom_ms,
     })
     .map_err(|error| error.to_string())
-}
-
-struct CustomRulesCacheRequest<'a> {
-    request: &'a EvaluateRequest,
-    selected: &'a BTreeMap<String, &'a RuleMetadata>,
-    cache: Option<&'a Cache>,
-    project_fingerprint: Option<&'a str>,
-}
-
-struct CustomEvaluation {
-    faults: Vec<Fault>,
-    hits: usize,
-    misses: usize,
-}
-
-fn probe_custom_rules_cache(
-    request: CustomRulesCacheRequest<'_>,
-) -> Result<(Option<CustomEvaluation>, u64), String> {
-    let started = Instant::now();
-    let cached = if request.request.custom_host.is_none() {
-        Some(evaluate_custom_rules_cached(request)?)
-    } else {
-        None
-    };
-    Ok((cached, started.elapsed().as_millis() as u64))
-}
-
-type LocalRuleMiss<'a> = (
-    &'a RuleMetadata,
-    String,
-    RuleCacheBucket,
-    BTreeMap<String, String>,
-);
-
-fn count_custom_rules(selected: &BTreeMap<String, &RuleMetadata>) -> usize {
-    let mut count = 0;
-    for rule in selected.values() {
-        if rule.custom {
-            count += 1;
-        }
-    }
-    count
-}
-
-fn evaluate_custom_rules_cached(
-    request: CustomRulesCacheRequest<'_>,
-) -> Result<CustomEvaluation, String> {
-    let CustomRulesCacheRequest {
-        request,
-        selected,
-        cache,
-        project_fingerprint,
-    } = request;
-    let custom_selected = selected.values().any(|rule| rule.custom);
-    if !custom_selected {
-        return Ok(CustomEvaluation {
-            faults: Vec::new(),
-            hits: 0,
-            misses: 0,
-        });
-    }
-    let Some(cache) = cache else {
-        return evaluate_custom_rules(request, selected, None).map(|faults| CustomEvaluation {
-            faults,
-            hits: 0,
-            misses: count_custom_rules(selected),
-        });
-    };
-    let mut faults: Vec<Fault> = Vec::new();
-    let mut hits = 0;
-    let mut misses_count = 0;
-    let mut project_misses: BTreeMap<String, (&RuleMetadata, String)> = BTreeMap::new();
-    let mut local_misses: BTreeMap<String, LocalRuleMiss<'_>> = BTreeMap::new();
-    let mut selected_misses: BTreeMap<String, &RuleMetadata> = BTreeMap::new();
-    let mut selected_model_paths: BTreeSet<String> = BTreeSet::new();
-    let model_fact_identities = custom_model_fact_identities(&request.models)?;
-    for (code, rule) in selected
-        .iter()
-        .filter(|(_, rule)| rule.custom && rule.project_wide)
-    {
-        let rule_identity = custom_rule_identity(rule, request)?;
-        let identity = custom_project_identity(&rule_identity, project_fingerprint);
-        let cache_path = format!("__custom_rules__/{code}/project");
-        if let Some(cached) = cache.get(&cache_path, &identity)? {
-            faults.extend(cached);
-            hits += 1;
-        } else {
-            project_misses.insert(code.clone(), (*rule, identity));
-            selected_misses.insert(code.clone(), *rule);
-            misses_count += 1;
-        }
-    }
-    for (code, rule) in selected
-        .iter()
-        .filter(|(_, rule)| rule.custom && !rule.project_wide)
-    {
-        let rule_identity = custom_rule_identity(rule, request)?;
-        let project_dependent = request
-            .custom_rules
-            .iter()
-            .find(|custom| custom.code == *code)
-            .is_some_and(|custom| custom.project_dependent);
-        let bucket = cache.custom_rule_bucket(code, &rule_identity)?;
-        let mut misses: BTreeMap<String, String> = BTreeMap::new();
-        for model in &request.models {
-            let model_identity = model_fact_identities
-                .get(&model.relative_path)
-                .ok_or_else(|| format!("missing custom rule model identity for {}", model.name))?;
-            let identity = custom_local_identity(
-                model_identity,
-                &rule_identity,
-                project_dependent.then_some(project_fingerprint).flatten(),
-            );
-            if let Some(entry) = bucket
-                .entries
-                .get(&model.relative_path)
-                .filter(|entry| entry.identity == identity)
-            {
-                faults.extend(entry.faults.clone());
-                hits += 1;
-            } else {
-                misses.insert(model.relative_path.clone(), identity);
-                selected_model_paths.insert(model.relative_path.clone());
-                misses_count += 1;
-            }
-        }
-        if !misses.is_empty() {
-            selected_misses.insert(code.clone(), *rule);
-            local_misses.insert(code.clone(), (*rule, rule_identity, bucket, misses));
-        }
-    }
-    if selected_misses.is_empty() {
-        return Ok(CustomEvaluation {
-            faults,
-            hits,
-            misses: misses_count,
-        });
-    }
-    let selected_paths = (!selected_model_paths.is_empty()).then_some(&selected_model_paths);
-    let evaluated = evaluate_custom_rules(request, &selected_misses, selected_paths)?;
-    for (code, (_, _, _, _)) in &local_misses {
-        if let Some(fault) = evaluated
-            .iter()
-            .find(|fault| fault.code == *code && !selected_model_paths.contains(&fault.path))
-        {
-            return Err(format!(
-                "model-subject custom rule returned a finding for unrelated path {}",
-                fault.path
-            ));
-        }
-    }
-    for (code, (_, rule_identity, mut bucket, misses)) in local_misses {
-        for (path, identity) in misses {
-            let model_faults: Vec<Fault> = evaluated
-                .iter()
-                .filter(|fault| fault.code == code && fault.path == path)
-                .cloned()
-                .collect();
-            let _ = bucket.entries.insert(
-                path,
-                RuleCacheEntry {
-                    identity,
-                    faults: model_faults.clone(),
-                },
-            );
-            faults.extend(model_faults);
-        }
-        cache.put_custom_rule_bucket(&code, &rule_identity, &bucket)?;
-    }
-    for (code, (_, identity)) in project_misses {
-        let project_faults: Vec<Fault> = evaluated
-            .iter()
-            .filter(|fault| fault.code == code)
-            .cloned()
-            .collect();
-        cache.put(
-            &format!("__custom_rules__/{code}/project"),
-            &identity,
-            &project_faults,
-        )?;
-        faults.extend(project_faults);
-    }
-    Ok(CustomEvaluation {
-        faults,
-        hits,
-        misses: misses_count,
-    })
-}
-
-fn custom_project_identity(rule: &str, project: Option<&str>) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"custom-rule-project-v3");
-    digest.update(rule.as_bytes());
-    digest.update(project.unwrap_or("no-project-fingerprint").as_bytes());
-    format!("{:x}", digest.finalize())
-}
-
-fn custom_local_identity(model_identity: &str, rule: &str, project: Option<&str>) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"custom-rule-model-v3");
-    digest.update(model_identity.as_bytes());
-    digest.update(rule.as_bytes());
-    digest.update(project.unwrap_or("model-local").as_bytes());
-    format!("{:x}", digest.finalize())
-}
-
-fn custom_model_fact_identities(
-    models: &[crate::models::Model],
-) -> Result<BTreeMap<String, String>, String> {
-    let identity = |model: &crate::models::Model| -> Result<(String, String), String> {
-        let mut digest = Sha256::new();
-        digest.update(b"custom-rule-model-facts-v1");
-        digest.update(ANALYSIS_BATCH_SCHEMA_VERSION.to_le_bytes());
-        digest.update(NATIVE_BUILD_IDENTITY.as_bytes());
-        digest.update(serde_json::to_vec(model).map_err(|error| error.to_string())?);
-        Ok((
-            model.relative_path.clone(),
-            format!("{:x}", digest.finalize()),
-        ))
-    };
-    let results: Vec<Result<(String, String), String>> = if models.len() <= 1 {
-        models.iter().map(identity).collect()
-    } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(NATIVE_RULE_WORKERS.min(models.len()))
-            .stack_size(NATIVE_RULE_STACK_BYTES)
-            .build()
-            .map_err(|error| error.to_string())?;
-        pool.install(|| models.par_iter().map(identity).collect())
-    };
-    results.into_iter().collect()
-}
-
-fn custom_rule_identity(rule: &RuleMetadata, request: &EvaluateRequest) -> Result<String, String> {
-    let mut digest = Sha256::new();
-    digest.update(b"custom-rule-identity-v1");
-    digest.update(NATIVE_BUILD_IDENTITY.as_bytes());
-    digest.update(serde_json::to_vec(rule).map_err(|error| error.to_string())?);
-    digest.update(
-        serde_json::to_vec(&request.config.rule_options.get(&rule.code))
-            .map_err(|error| error.to_string())?,
-    );
-    digest.update(request.dialect.as_bytes());
-    if let Some(custom) = request
-        .custom_rules
-        .iter()
-        .find(|custom| custom.code == rule.code)
-    {
-        digest.update(custom.fact_fingerprint.as_bytes());
-    }
-    Ok(format!("{:x}", digest.finalize()))
 }
 
 fn model_cache_identities(
@@ -639,23 +333,6 @@ fn model_cache_identity(
         .map_err(lifecycle_error)
 }
 
-fn fingerprint_project(project_dir: &Path, request: &EvaluateRequest) -> Result<String, String> {
-    let mut files = collect_rule_input_files(project_dir, project_dir)?;
-    files.sort();
-    let mut digest = Sha256::new();
-    for path in files {
-        let relative = path.strip_prefix(project_dir).unwrap_or(&path);
-        digest.update(relative.to_string_lossy().as_bytes());
-        digest.update(std::fs::read(&path).map_err(|error| {
-            format!(
-                "could not fingerprint rules project file {}: {error}",
-                path.display()
-            )
-        })?);
-    }
-    fingerprint_request_facts(&digest.finalize(), request)
-}
-
 fn fingerprint_request_facts(seed: &[u8], request: &EvaluateRequest) -> Result<String, String> {
     let mut digest = Sha256::new();
     digest.update(seed);
@@ -666,46 +343,12 @@ fn fingerprint_request_facts(seed: &[u8], request: &EvaluateRequest) -> Result<S
             &request.public_constants,
             &request.sql_tests,
             &request.sql_scenarios,
+            &request.scope_index,
+            &request.custom_rules,
         ))
         .map_err(|error| error.to_string())?,
     );
     Ok(format!("{:x}", digest.finalize()))
-}
-
-fn collect_rule_input_files(root: &Path, directory: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut output: Vec<PathBuf> = Vec::new();
-    for entry in std::fs::read_dir(directory)
-        .map_err(|error| format!("could not read rules project directory: {error}"))?
-    {
-        let entry =
-            entry.map_err(|error| format!("could not read rules project entry: {error}"))?;
-        let path = entry.path();
-        if path.is_dir() {
-            if path.file_name().is_some_and(|name| {
-                name == TARGET_DIRECTORY || name == LOGS_DIRECTORY || name == GIT_DIRECTORY
-            }) {
-                continue;
-            }
-            output.extend(collect_rule_input_files(root, &path)?);
-            continue;
-        }
-        let supported = path
-            .extension()
-            .and_then(|value| value.to_str())
-            .is_some_and(|value| {
-                matches!(value, PYTHON_EXTENSION | "sql" | "toml" | "yaml" | "yml")
-            });
-        let is_rule_python = path.strip_prefix(root).is_ok_and(|relative| {
-            relative.starts_with(RULES_DIRECTORY)
-                && path
-                    .extension()
-                    .is_some_and(|value| value == PYTHON_EXTENSION)
-        });
-        if supported && !is_rule_python && path.starts_with(root) {
-            output.push(path);
-        }
-    }
-    Ok(output)
 }
 
 fn validate_suppression_codes(
@@ -734,83 +377,6 @@ fn validate_suppression_codes(
         }
     }
     Ok(())
-}
-
-fn validate_custom_faults(
-    faults: &[Fault],
-    selected: &BTreeMap<String, &RuleMetadata>,
-) -> Result<(), String> {
-    for fault in faults {
-        if !selected.get(&fault.code).is_some_and(|rule| rule.custom) {
-            return Err(format!(
-                "custom rule host returned a finding for unselected rule {}",
-                fault.code
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_custom_rules(
-    request: &EvaluateRequest,
-    selected: &BTreeMap<String, &RuleMetadata>,
-    model_paths: Option<&BTreeSet<String>>,
-) -> Result<Vec<Fault>, String> {
-    let custom_selected = selected.values().any(|rule| rule.custom);
-    let Some(spec) = &request.custom_host else {
-        return if custom_selected {
-            Err("selected custom rules require a custom host".to_owned())
-        } else {
-            Ok(Vec::new())
-        };
-    };
-    if !custom_selected {
-        return Ok(Vec::new());
-    }
-    let mut payload = spec.payload.clone();
-    let payload_object = payload
-        .as_object_mut()
-        .ok_or_else(|| "custom rule host payload must be an object".to_owned())?;
-    payload_object.insert(
-        "selected_codes".to_owned(),
-        serde_json::Value::Array(
-            selected
-                .values()
-                .filter(|rule| rule.custom)
-                .map(|rule| serde_json::Value::String(rule.code.clone()))
-                .collect(),
-        ),
-    );
-    payload_object.insert(
-        "selected_model_paths".to_owned(),
-        model_paths.map_or(serde_json::Value::Null, |paths| {
-            serde_json::Value::Array(
-                paths
-                    .iter()
-                    .cloned()
-                    .map(serde_json::Value::String)
-                    .collect(),
-            )
-        }),
-    );
-    let host_request = CustomHostRequest {
-        protocol: fensu_policy::lifecycle::constants::CUSTOM_HOST_PROTOCOL_VERSION,
-        runtime_version: spec.runtime_version.clone(),
-        payload,
-    };
-    let response = run_custom_host::<_, Vec<Fault>>(CustomHostInvocation {
-        program: Path::new(&spec.program),
-        arguments: &spec.arguments,
-        timeout: Duration::from_millis(spec.timeout_millis),
-        output_limits: CustomHostOutputLimits::default(),
-        request: &host_request,
-    })
-    .map_err(lifecycle_error)?;
-    let faults = response.payload.ok_or_else(|| {
-        "custom rule host returned no finding payload after successful validation".to_owned()
-    })?;
-    validate_custom_faults(&faults, selected)?;
-    Ok(faults)
 }
 
 fn validate_exception_paths(request: &EvaluateRequest) -> Result<(), String> {

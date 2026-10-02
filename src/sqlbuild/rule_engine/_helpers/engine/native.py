@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import inspect
 import json
-import pickle
-import re
-import sys
-import tempfile
-from collections.abc import Sequence
-from dataclasses import asdict, fields, replace
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import asdict, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -20,8 +15,6 @@ import orjson
 import sqlbuild._native as _native
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
-    CompactLineageFacts,
-    CompiledLineageColumnFact,
     CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
@@ -37,22 +30,16 @@ from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projecti
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
     custom_rule_import_closure,
-    custom_rule_project_fact_attributes,
     custom_rule_test_evidence,
 )
+from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine.constants import (
-    CUSTOM_HOST_LAUNCH_MODULE,
-    CUSTOM_HOST_RUNTIME_VERSION,
-    RULE_CONTEXT_AUDITS_FACT,
-    RULE_CONTEXT_DECLARATIONS_FACT,
-    RULE_CONTEXT_GRAPH_FACT,
-    RULE_CONTEXT_PROJECT_FACT,
-    RULE_CONTEXT_TESTS_FACT,
     RULES_NATIVE_API_VERSION,
     TYPE_PROOF_RULE_CODES,
 )
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import (
+    CustomRulesOutcome,
     Finding,
     Rule,
     RulesConfig,
@@ -60,9 +47,6 @@ from sqlbuild.rule_engine.models import (
 )
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
-
-_CUSTOM_HOST_REQUIRED: str = "selected custom rules require a custom host"
-_NATIVE_CACHE_MISSES_PATTERN: re.Pattern[str] = re.compile(r"native_cache_misses=(\d+)")
 
 
 def evaluate_native(
@@ -75,15 +59,15 @@ def evaluate_native(
     initial_findings: tuple[Finding, ...] = (),
     defer_suppressions: bool = False,
     verify_determinism: bool = False,
-    rules_cache_present_at_start: bool | None = None,
 ) -> RulesResult:
-    """Evaluate one compiled model batch through the native engine."""
+    """Evaluate built-in rules natively while custom rules run incrementally beside them."""
 
-    selected_catalogue: list[Rule] = []
-    for rule in catalogue:
-        selected_by_config: bool = any(rule.code.startswith(selector) for selector in config.select)
-        if rule.custom and selected_by_config:
-            selected_catalogue.append(rule)
+    custom_payloads: list[dict[str, object]] = _custom_rule_payloads(
+        catalogue=catalogue, project_dir=project_dir
+    )
+    custom_rules: tuple[Rule, ...] = _selected_custom_rules(
+        config=config, catalogue=catalogue, custom_payloads=custom_payloads
+    )
     request: dict[str, object] = {
         "version": RULES_NATIVE_API_VERSION,
         "project_dir": str(project_dir.resolve()),
@@ -106,77 +90,73 @@ def evaluate_native(
         ],
         "scope_index": scope_metadata_projection(index=project.scope_index),
         "initial_findings": [_finding_payload(finding) for finding in initial_findings],
-        "defer_suppressions": defer_suppressions,
-        "custom_rules": _custom_rule_payloads(
-            catalogue=catalogue,
-            project=project,
-            project_dir=project_dir,
-            cache_enabled=config.cache.enabled,
-        ),
+        "defer_suppressions": True,
+        "custom_rules": custom_payloads,
     }
-    custom_host_input: Path | None = None
-    retry_native_misses: int = 0
-    request["custom_host"] = None
-    try:
-        if not config.cache.enabled or not (
-            rules_cache_exists(project_dir)
-            if rules_cache_present_at_start is None
-            else rules_cache_present_at_start
-        ):
-            custom_host, custom_host_input = _custom_host_payload(
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-rules") as pool:
+        custom_future: Future[CustomRulesOutcome] | None = (
+            pool.submit(
+                evaluate_custom_rules_cached,
                 project=project,
                 config=config,
-                project_dir=project_dir,
-                catalogue=tuple(selected_catalogue),
+                project_dir=project_dir.resolve(),
+                rules=custom_rules,
                 dialect=dialect,
                 verify_determinism=verify_determinism,
             )
-            request["custom_host"] = custom_host
+            if custom_rules
+            else None
+        )
         try:
-            response_json: str = _evaluate_request(request)
-        except ValueError as error:
-            if _CUSTOM_HOST_REQUIRED not in str(error):
-                raise
-            match: re.Match[str] | None = _NATIVE_CACHE_MISSES_PATTERN.search(str(error))
-            retry_native_misses = 0 if match is None else int(match.group(1))
-            custom_host, custom_host_input = _custom_host_payload(
-                project=project,
-                config=config,
-                project_dir=project_dir,
-                catalogue=tuple(selected_catalogue),
-                dialect=dialect,
-                verify_determinism=verify_determinism,
-            )
-            request["custom_host"] = custom_host
-            response_json = _evaluate_request(request)
-        response: object = orjson.loads(response_json)
-    except (ValueError, TypeError) as error:
-        raise RulesError(str(error)) from error
-    finally:
-        if custom_host_input is not None:
-            custom_host_input.unlink(missing_ok=True)
+            response: object = orjson.loads(_evaluate_request(request))
+        except (ValueError, TypeError) as error:
+            raise RulesError(str(error)) from error
+        custom: CustomRulesOutcome = (
+            CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
+            if custom_future is None
+            else custom_future.result()
+        )
     if not isinstance(response, dict):
         raise RulesError("native rules engine returned an invalid response")
     payload: dict[str, Any] = response
     if payload.get("version") != RULES_NATIVE_API_VERSION:
         raise RulesError("native rules engine returned an unsupported response version")
     raw_findings: object = payload.get("faults")
-    if not isinstance(raw_findings, list):
+    selected_codes: object = payload.get("selected_codes")
+    if not isinstance(raw_findings, list) or not isinstance(selected_codes, list):
         raise RulesError("native rules engine returned invalid findings")
+    findings: tuple[Finding, ...] = tuple(
+        decode_rule_finding(value) for value in (*raw_findings, *custom.findings)
+    )
+    if not defer_suppressions:
+        findings = finalize_native_findings(
+            config=config,
+            project_dir=project_dir,
+            evaluated_codes=tuple(str(code) for code in selected_codes),
+            findings=findings,
+        )
     return RulesResult(
-        findings=tuple(decode_rule_finding(value) for value in raw_findings),
+        findings=findings,
         evaluated_models=int(payload.get("evaluated_models", 0)),
-        cache_hits=max(0, int(payload.get("cache_hits", 0)) - retry_native_misses),
-        cache_misses=int(payload.get("cache_misses", 0)) + retry_native_misses,
+        cache_hits=int(payload.get("cache_hits", 0)) + custom.cache_hits,
+        cache_misses=int(payload.get("cache_misses", 0)) + custom.cache_misses,
         built_in_ms=int(payload.get("built_in_ms", 0)),
-        custom_ms=int(payload.get("custom_ms", 0)),
+        custom_ms=custom.custom_ms,
     )
 
 
-def rules_cache_exists(project_dir: Path) -> bool:
-    """Return whether this project already has persisted rules-cache state."""
-
-    return (project_dir / "target" / "rules-cache").exists()
+def _selected_custom_rules(
+    *,
+    config: RulesConfig,
+    catalogue: tuple[Rule, ...],
+    custom_payloads: list[dict[str, object]],
+) -> tuple[Rule, ...]:
+    if not custom_payloads:
+        return ()
+    selected: frozenset[str] = frozenset(
+        _selected_codes(config=config, custom_payloads=custom_payloads)
+    )
+    return tuple(rule for rule in catalogue if rule.custom and rule.code in selected)
 
 
 def _evaluate_request(request: dict[str, object]) -> str:
@@ -264,33 +244,19 @@ def native_selected_codes(
 ) -> tuple[str, ...]:
     """Resolve the active ruleset through the native Fensu adapter."""
 
-    closures: dict[str, tuple[Path, ...]] = {}
+    return _selected_codes(
+        config=config,
+        custom_payloads=_custom_rule_payloads(catalogue=catalogue, project_dir=project_dir),
+    )
+
+
+def _selected_codes(
+    *, config: RulesConfig, custom_payloads: list[dict[str, object]]
+) -> tuple[str, ...]:
     request: dict[str, object] = {
         "version": RULES_NATIVE_API_VERSION,
         "config": _config_payload(config),
-        "custom_rules": [
-            {
-                "code": rule.code,
-                "family": rule.family,
-                "slug": rule.slug,
-                "message": rule.message,
-                "remediation": rule.remediation,
-                "enabled_by_default": rule.enabled_by_default,
-                "implementation_fingerprint": custom_rule_implementation_fingerprint(
-                    rule=rule,
-                    project_dir=project_dir,
-                    import_closure=_shared_import_closure(
-                        rule=rule, project_dir=project_dir, cache=closures
-                    ),
-                ),
-                **_custom_rule_source_payload(rule=rule, project_dir=project_dir),
-                "project_wide": rule.project_wide,
-                "check_name": getattr(rule.check, "__name__", ""),
-                "test_case_count": 0,
-            }
-            for rule in catalogue
-            if rule.custom
-        ],
+        "custom_rules": custom_payloads,
     }
     try:
         payload: object = json.loads(
@@ -586,50 +552,25 @@ def _typed_value_payload(value: SqlValue) -> object:
 
 
 def _custom_rule_payloads(
-    *,
-    catalogue: tuple[Rule, ...],
-    project: CompiledProject,
-    project_dir: Path,
-    cache_enabled: bool,
+    *, catalogue: tuple[Rule, ...], project_dir: Path
 ) -> list[dict[str, object]]:
-    fingerprints: dict[frozenset[str], str] = {}
     closures: dict[str, tuple[Path, ...]] = {}
-    payloads: list[dict[str, object]] = []
-    for rule in catalogue:
-        if not rule.custom:
-            continue
-        closure: tuple[Path, ...] = _shared_import_closure(
-            rule=rule, project_dir=project_dir, cache=closures
+    return [
+        _custom_rule_payload(
+            rule=rule,
+            project_dir=project_dir,
+            import_closure=_shared_import_closure(
+                rule=rule, project_dir=project_dir, cache=closures
+            ),
         )
-        attributes: frozenset[str] = custom_rule_project_fact_attributes(
-            rule=rule, project_dir=project_dir, import_closure=closure
-        )
-        if cache_enabled and attributes not in fingerprints:
-            fingerprints[attributes] = _custom_fact_fingerprint(
-                project=project, attributes=attributes
-            )
-        fact_fingerprint: str = fingerprints[attributes] if cache_enabled else ""
-        payloads.append(
-            _custom_rule_payload(
-                rule=rule,
-                project_dir=project_dir,
-                project_attributes=attributes,
-                fact_fingerprint=fact_fingerprint,
-                import_closure=closure,
-            )
-        )
-    return payloads
+        for rule in catalogue
+        if rule.custom
+    ]
 
 
 def _custom_rule_payload(
-    *,
-    rule: Rule,
-    project_dir: Path,
-    project_attributes: frozenset[str],
-    fact_fingerprint: str,
-    import_closure: tuple[Path, ...],
+    *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...]
 ) -> dict[str, object]:
-    check_name: str = getattr(rule.check, "__name__", "")
     return {
         "code": rule.code,
         "family": rule.family,
@@ -642,9 +583,7 @@ def _custom_rule_payload(
         ),
         **_custom_rule_source_payload(rule=rule, project_dir=project_dir),
         "project_wide": rule.project_wide,
-        "project_dependent": RULE_CONTEXT_PROJECT_FACT in project_attributes,
-        "fact_fingerprint": fact_fingerprint,
-        "check_name": check_name,
+        "check_name": getattr(rule.check, "__name__", ""),
         "test_case_count": len(custom_rule_test_evidence(rule=rule, project_dir=project_dir)),
     }
 
@@ -658,82 +597,6 @@ def _shared_import_closure(
     if source not in cache:
         cache[source] = custom_rule_import_closure(rule=rule, project_dir=project_dir)
     return cache[source]
-
-
-def _custom_fact_fingerprint(*, project: CompiledProject, attributes: frozenset[str]) -> str:
-    facts: dict[str, object] = {}
-    if RULE_CONTEXT_GRAPH_FACT in attributes:
-        facts[RULE_CONTEXT_GRAPH_FACT] = [
-            (model.name, model.relative_path, model.deps) for model in project.models
-        ]
-    if RULE_CONTEXT_TESTS_FACT in attributes:
-        facts[RULE_CONTEXT_TESTS_FACT] = project.sql_tests
-    if RULE_CONTEXT_AUDITS_FACT in attributes:
-        facts[RULE_CONTEXT_AUDITS_FACT] = project.audits
-    if RULE_CONTEXT_DECLARATIONS_FACT in attributes:
-        facts[RULE_CONTEXT_DECLARATIONS_FACT] = (
-            project.public_enums,
-            project.public_constants,
-            tuple(model.enum_declarations for model in project.models),
-            tuple(model.constant_declarations for model in project.models),
-        )
-    if RULE_CONTEXT_PROJECT_FACT in attributes:
-        facts[RULE_CONTEXT_PROJECT_FACT] = _project_fact_models(project=project)
-    encoded: bytes = orjson.dumps(facts, option=orjson.OPT_SORT_KEYS, default=str)
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _project_fact_models(*, project: CompiledProject) -> tuple[dict[str, object], ...]:
-    """Project models with lazy lineage represented by stable semantic data only."""
-
-    projected: list[dict[str, object]] = []
-    for model in project.models:
-        payload: dict[str, object] = {
-            field.name: getattr(model, field.name) for field in fields(model)
-        }
-        payload["fast_lineage_columns"] = _lineage_fingerprint_payload(
-            lineage=model.fast_lineage_columns
-        )
-        projected.append(payload)
-    return tuple(projected)
-
-
-def _lineage_fingerprint_payload(
-    *, lineage: Sequence[CompiledLineageColumnFact] | None
-) -> tuple[tuple[object, ...], ...] | None:
-    """Hash semantic lineage without rehydrating compact facts into Python objects."""
-
-    if lineage is None:
-        return None
-    payloads: list[tuple[object, ...]] = []
-    if isinstance(lineage, CompactLineageFacts):
-        for name_index, transform_code, confidence_code, sources in lineage.rows:
-            upstream: tuple[tuple[str, str, str], ...] = tuple(
-                (
-                    lineage.string_pool[source[0]],
-                    lineage.resource_name(source[1]),
-                    lineage.string_pool[source[2]],
-                )
-                for source in sources
-            )
-            payloads.append(
-                (
-                    lineage.string_pool[name_index],
-                    upstream,
-                    lineage.transform_kind(transform_code),
-                    lineage.confidence(confidence_code),
-                )
-            )
-    else:
-        for column in lineage:
-            upstream = tuple(
-                (source.resource_type, source.resource_name, source.column_name)
-                for source in column.upstream_columns
-            )
-            payloads.append(
-                (column.output_column, upstream, column.transform_kind, column.confidence)
-            )
-    return tuple(payloads)
 
 
 def _custom_rule_source_payload(*, rule: Rule, project_dir: Path) -> dict[str, object]:
@@ -754,62 +617,6 @@ def _custom_rule_source_payload(*, rule: Rule, project_dir: Path) -> dict[str, o
         "source_column": 1,
         "owner": f"{source or 'rules'}:{check_owner}",
     }
-
-
-def _custom_host_payload(
-    *,
-    project: CompiledProject,
-    config: RulesConfig,
-    project_dir: Path,
-    catalogue: tuple[Rule, ...],
-    dialect: str,
-    verify_determinism: bool,
-) -> tuple[dict[str, object] | None, Path | None]:
-    if not any(rule.custom for rule in catalogue):
-        return None, None
-    serializable_project: CompiledProject = replace(
-        project,
-        binding_catalog=None,
-        sql_expansions={},
-        loaded_macros={},
-        loader_functions=(),
-        hook_functions=(),
-        materialization_files=(),
-        external_sql_reference_resolver=None,
-    )
-    input_dir: Path = project_dir / "target" / "rules-cache" / "host-inputs"
-    input_dir.mkdir(parents=True, exist_ok=True)
-    input_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            dir=input_dir,
-            prefix="project-",
-            suffix=".pickle",
-            delete=False,
-        ) as handle:
-            input_path = Path(handle.name)
-            pickle.dump((serializable_project, config), handle)
-    except Exception:
-        if input_path is not None:
-            input_path.unlink(missing_ok=True)
-        raise
-    if input_path is None:
-        raise RulesError("custom host project payload was not created")
-    return (
-        {
-            "program": sys.executable,
-            "arguments": ["-m", CUSTOM_HOST_LAUNCH_MODULE],
-            "timeout_millis": 120_000,
-            "runtime_version": CUSTOM_HOST_RUNTIME_VERSION,
-            "payload": {
-                "project_pickle_path": str(input_path.resolve()),
-                "project_dir": str(project_dir.resolve()),
-                "dialect": dialect,
-                "verify_determinism": verify_determinism,
-            },
-        },
-        input_path,
-    )
 
 
 def decode_rule_finding(value: object) -> Finding:

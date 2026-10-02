@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     )
 
 type RuleOptionValue = bool | int | str | tuple[str, ...] | tuple[int, ...]
+type FactKey = tuple[str, ...]
+type CustomRulePlan = dict[str, frozenset[str] | None]
 
 
 class RuleSubject(StrEnum):

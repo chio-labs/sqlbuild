@@ -212,7 +212,6 @@ pub(crate) fn request_with_scope(scope: Value) -> Value {
         "public_enums": [],
         "public_constants": [],
         "custom_rules": [],
-        "custom_host": null,
         "project_fingerprint": null,
         "scope_index": scope
     })

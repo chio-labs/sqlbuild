@@ -381,3 +381,31 @@ class RuleResult:
     @property
     def finding_count(self) -> int:
         return len(self.findings)
+
+
+@dataclass(frozen=True)
+class CustomRuleEvaluation:
+    """Findings and observed fact reads of one rule invocation for one subject."""
+
+    code: str
+    subject: str | None
+    findings: tuple[Finding, ...]
+    reads: frozenset[tuple[object, ...]] | None
+
+
+@dataclass(frozen=True)
+class CustomRuleRun:
+    """Every invocation of one host run plus rules whose reads could not be attributed."""
+
+    evaluations: tuple[CustomRuleEvaluation, ...]
+    untracked_codes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CustomRulesOutcome:
+    """Custom-rule finding payloads in canonical order and their cache accounting."""
+
+    findings: tuple[dict[str, object], ...]
+    cache_hits: int
+    cache_misses: int
+    custom_ms: int

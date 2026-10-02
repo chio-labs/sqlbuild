@@ -74,6 +74,12 @@ fn evaluate_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn run_custom_host_json(py: Python<'_>, spec_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| crate::engine::main::custom_host::run_custom_host_json(spec_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
 fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| crate::sql_lint::main::engine::lint_json(request_json))
         .map_err(value_error)
@@ -422,6 +428,7 @@ fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
     module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
+    module.add_function(wrap_pyfunction!(run_custom_host_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
     module.add(
