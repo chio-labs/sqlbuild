@@ -8,6 +8,7 @@ from typing import Any, cast
 from sqlbuild.python_nodes._helpers.attachment import attach_definition
 from sqlbuild.python_nodes._helpers.column_normalization import normalize_columns
 from sqlbuild.python_nodes._helpers.dependency_normalization import normalize_loader_dependencies
+from sqlbuild.python_nodes._helpers.description_resolution import resolve_description
 from sqlbuild.python_nodes._helpers.loader_normalization import (
     normalize_unique_key,
     normalize_write_strategy,
@@ -28,6 +29,7 @@ def apply_loader(
     unique_key: str | Sequence[str] | None = None,
     columns: Sequence[LoaderColumnSpec | SourceColumnEntry] = (),
     contract: str | None = None,
+    description: str | None = None,
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Apply SQLBuild loader metadata to a Python function."""
 
@@ -44,6 +46,7 @@ def apply_loader(
             unique_key=normalize_unique_key(unique_key),
             columns=normalize_columns(columns),
             contract=contract,
+            description=resolve_description(function=inner, description=description),
         )
         return attach_definition(
             function=inner,

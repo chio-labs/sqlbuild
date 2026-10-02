@@ -1,4 +1,4 @@
-MODEL (materialized table);
+MODEL (description "Revenue per customer from completed waffle orders", materialized table);
 
 SELECT
   customer_id,

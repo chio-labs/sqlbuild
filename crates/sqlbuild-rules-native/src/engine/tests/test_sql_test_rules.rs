@@ -192,32 +192,6 @@ fn given_sql_test_facts_when_evaluating_project_rules_then_returns_expected_faul
             ],
         },
         test_types::SqlTestRulesTestCase {
-            description: "scenario descriptions reject generic numbering",
-            code: "SQBRTEST105",
-            tests: json!([]),
-            scenarios: json!([
-                {
-                    "source_path": "tests/scenarios/orders__paid.sql",
-                    "ownership_root": "tests/scenarios", "name": "orders__paid",
-                    "description": "Paid orders remain visible", "expected_model_names": [],
-                    "assertion_names": [], "assertion_target_model_names": [],
-                    "target_model_names": []
-                },
-                {
-                    "source_path": "tests/scenarios/orders__case_1.sql",
-                    "ownership_root": "tests/scenarios", "name": "orders__case_1",
-                    "description": "case 1", "expected_model_names": [],
-                    "assertion_names": [], "assertion_target_model_names": [],
-                    "target_model_names": []
-                }
-            ]),
-            scope_index: helpers::scope_index(),
-            config: json!({}),
-            expected_fault_count: 1,
-            expected_evaluated_models: 0,
-            expected_paths: &["tests/scenarios/orders__case_1.sql"],
-        },
-        test_types::SqlTestRulesTestCase {
             description: "path-scoped ignore suppresses a test rule finding",
             code: "SQBRTEST104",
             tests: json!([helpers::sql_test_fact(

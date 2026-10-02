@@ -1,5 +1,6 @@
 sources:
   - name: raw_orders
+    description: Raw waffle orders loaded by the Python loader
     contract: enforced
     managed: true
     write_strategy: table
@@ -17,6 +18,7 @@ sources:
       - name: load_seq
         type: INTEGER
   - name: raw_customers
+    description: Raw customers loaded by the Python loader
     contract: enforced
     managed: true
     write_strategy: table

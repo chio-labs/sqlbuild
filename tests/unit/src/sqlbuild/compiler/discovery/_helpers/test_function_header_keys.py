@@ -21,10 +21,11 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
             description="sql udf with every supported key",
             file_name="normalize_status.sql",
             contents=(
-                "FUNCTION (\n  arguments (status VARCHAR),\n  returns VARCHAR,\n"
+                'FUNCTION (\n  description "Normalise an order status",\n'
+                "  arguments (status VARCHAR),\n  returns VARCHAR,\n"
                 "  database analytics,\n  schema udfs,\n  tags [orders],\n);\n\nlower(status)\n"
             ),
-            expected_keys=("arguments", "database", "returns", "schema", "tags"),
+            expected_keys=("arguments", "database", "description", "returns", "schema", "tags"),
         ),
         FunctionHeaderKeysTestCase(
             description="table function with a returns table declaration",
@@ -68,11 +69,10 @@ def test_given_supported_function_header_keys_when_parsing_then_accepts_header(
             file_name="expand_order.sql",
             contents=(
                 'FUNCTION (\n  description "Expand one order",\n  arguments (order_id INTEGER),\n'
-                "  returns table (order_id INTEGER),\n  owner orders_team,\n);\n\nSELECT order_id\n"
+                "  returns table (order_id INTEGER),\n  owner orders_team,\n  team sales,\n);\n\n"
+                "SELECT order_id\n"
             ),
-            expected_error=(
-                "FUNCTION() in 'expand_order.sql:2' has unsupported keys: description, owner"
-            ),
+            expected_error=("FUNCTION() in 'expand_order.sql:5' has unsupported keys: owner, team"),
         ),
     ],
     ids=lambda case: case.description,
@@ -112,6 +112,56 @@ def test_given_unknown_python_udf_key_when_parsing_then_rejects_key_with_locatio
         parse_python_function(contents=test_case.contents, file_path=Path(test_case.file_name))
 
     assert raised.value.message == test_case.expected_error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FunctionHeaderKeysTestCase(
+            description="docstring describes the udf",
+            file_name="is_large_order_py.py",
+            contents=(
+                "from sqlbuild.functions import udf\n\n\n"
+                '@udf(arguments={"amount": "INTEGER"}, returns="BOOLEAN")\n'
+                'def main(amount):\n    """Whether an order amount is large."""\n'
+                "    return amount > 100\n"
+            ),
+            expected_description="Whether an order amount is large.",
+        ),
+        FunctionHeaderKeysTestCase(
+            description="decorator description wins over the docstring",
+            file_name="is_large_order_py.py",
+            contents=(
+                "from sqlbuild.functions import udf\n\n\n"
+                '@udf(description="Large order flag", arguments={"amount": "INTEGER"}, '
+                'returns="BOOLEAN")\n'
+                'def main(amount):\n    """Whether an order amount is large."""\n'
+                "    return amount > 100\n"
+            ),
+            expected_description="Large order flag",
+        ),
+        FunctionHeaderKeysTestCase(
+            description="undocumented udf has no description",
+            file_name="is_large_order_py.py",
+            contents=(
+                "from sqlbuild.functions import udf\n\n\n"
+                '@udf(arguments={"amount": "INTEGER"}, returns="BOOLEAN")\n'
+                "def main(amount):\n    return amount > 100\n"
+            ),
+            expected_description=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_udf_when_parsing_then_description_comes_from_decorator_or_docstring(
+    test_case: FunctionHeaderKeysTestCase,
+) -> None:
+    header_values: dict[str, object]
+    header_values, _, _ = parse_python_function(
+        contents=test_case.contents, file_path=Path(test_case.file_name)
+    )
+
+    assert header_values.get("description") == test_case.expected_description
 
 
 if __name__ == "__main__":

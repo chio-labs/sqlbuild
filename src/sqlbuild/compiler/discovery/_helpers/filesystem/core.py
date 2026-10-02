@@ -1658,6 +1658,7 @@ def _append_python_node_function(
                 unique_key=loader_definition.unique_key,
                 columns=loader_definition.columns,
                 contract=loader_definition.contract,
+                description=loader_definition.description,
                 provider_usages=_provider_usages(
                     function=function,
                     provider_by_name=resolved_provider_by_name,

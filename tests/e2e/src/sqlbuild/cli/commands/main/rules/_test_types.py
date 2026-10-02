@@ -200,3 +200,4 @@ class RulesCacheEditCase:
     description: str
     edit: Callable[[Path], None]
     expected_exit_code: int = 1
+    expected_diagnostics_fragment: str = ""

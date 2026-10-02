@@ -483,6 +483,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
                   schema: main
                 resources:
                   - name: raw_orders
+                    description: Orders from the storefront database
                     table: orders
                     write_disposition: merge
                     primary_key: order_id
@@ -497,6 +498,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
             expected_dlt_names=("orders", "customers"),
             expected_schemas=("raw", "raw_customers_override"),
             expected_destination_config={"naming_convention": "sql_cs_v1", "create_indexes": True},
+            expected_descriptions=("Orders from the storefront database", None),
         )
     ],
     ids=lambda case: case.description,
@@ -526,6 +528,8 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
         tuple(config.resource.dlt_name for config in typed_configs) == test_case.expected_dlt_names
     )
     assert tuple(entry.schema for entry in source_entries) == test_case.expected_schemas
+    assert tuple(entry.description for entry in source_entries) == test_case.expected_descriptions
+    assert all("description" not in config.resource.raw_config for config in typed_configs)
     assert tuple(config.resource.schema for config in typed_configs) == test_case.expected_schemas
     assert tuple(config.destination for config in typed_configs) == (
         test_case.expected_destination_config,

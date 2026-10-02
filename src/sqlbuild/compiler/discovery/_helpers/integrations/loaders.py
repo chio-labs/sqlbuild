@@ -50,7 +50,15 @@ _DLT_SOURCE_GROUP_KEYS: frozenset[str] = frozenset(
     {"config", "destination", "resources", "schema", "type"}
 )
 _DLT_RESOURCE_COMMON_KEYS: frozenset[str] = frozenset(
-    {"incremental", "merge_key", "name", "primary_key", "schema", "write_disposition"}
+    {
+        "description",
+        "incremental",
+        "merge_key",
+        "name",
+        "primary_key",
+        "schema",
+        "write_disposition",
+    }
 )
 _DLT_RESOURCE_TYPE_KEYS: dict[str, frozenset[str]] = {
     DLT_SOURCE_TYPE_FILESYSTEM: frozenset({"reader"}),
@@ -338,6 +346,13 @@ def _parse_dlt_resource_entry(
     )
     return SourceEntry(
         name=name,
+        description=optional_non_empty_string(
+            entry=resource,
+            key="description",
+            file_path=file_path,
+            label=f"dlt resource '{name}'",
+            error_class=SourceParseError,
+        ),
         schema=schema,
         table=name,
         managed=True,
@@ -426,6 +441,7 @@ def _raw_dlt_resource_config(*, source_type: str, resource: dict[str, object]) -
         "merge_key",
         "incremental",
         "schema",
+        "description",
     }
     if source_type == DLT_SOURCE_TYPE_REST_API:
         return {"endpoint": resource["endpoint"]}

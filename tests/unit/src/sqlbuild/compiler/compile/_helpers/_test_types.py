@@ -21,6 +21,7 @@ from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.sql_values.models import SqlValue
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import RequiredDescriptionInputs
 
 
 @dataclass(frozen=True)
@@ -1099,3 +1100,32 @@ class CompactLineageCacheEncodingTestCase:
     output_column: str
     resource_names: dict[int, str]
     expected_lineage_columns: int = 2
+
+
+@dataclass(frozen=True)
+class RequiredDescriptionUnitCase:
+    """One resource kind checked by the required-description compile rule."""
+
+    description: str
+    build: Callable[[str | None], RequiredDescriptionInputs]
+    expected_message: str
+    expected_location: tuple[str, int, int]
+
+
+@dataclass(frozen=True)
+class DescriptionInputClassificationCase:
+    """Discovered input fields split between required and exempt description kinds."""
+
+    description: str
+    required: frozenset[str]
+    exempt: frozenset[str]
+    expected_fields: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RequiredDescriptionLocationCase:
+    """Where a P010 finding points when comments or docstrings precede the declaration."""
+
+    description: str
+    build: Callable[[], RequiredDescriptionInputs]
+    expected_location: tuple[str, int, int]

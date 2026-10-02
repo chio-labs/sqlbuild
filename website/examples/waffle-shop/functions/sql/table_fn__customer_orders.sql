@@ -1,4 +1,5 @@
 FUNCTION (
+  description "Orders placed by one customer with their line totals",
   arguments (p_customer_id INTEGER),
   returns table (
     order_id INTEGER,

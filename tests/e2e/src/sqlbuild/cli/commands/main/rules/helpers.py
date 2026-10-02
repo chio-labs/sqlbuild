@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.rules_benchmark._helpers.custom_rules import write_custom_rules
+from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import replace_project_text
 
 __all__ = ("write_custom_rules",)
 
@@ -371,3 +372,20 @@ def rule_cache_counts(project_dir: Path) -> tuple[int, int]:
     result: subprocess.CompletedProcess[str] = run_compile_cli(project_dir)
     timings: dict[str, int] = json.loads(result.stdout)["compile_timings"]
     return timings["rule_cache_hits"], timings["rule_cache_misses"]
+
+
+def move_order_totals_description_to_path_defaults(root: Path) -> None:
+    """Drop the mart model's header description and supply it from `[path_defaults]`."""
+
+    replace_project_text(
+        root,
+        "models/marts/order_totals.sql",
+        "MODEL (description 'Test model order_totals.',\n",
+        "MODEL (\n",
+    )
+    config: Path = root / "sqlbuild_project.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8")
+        + '\n[path_defaults.marts]\ndescription = "Order totals per order"\n',
+        encoding="utf-8",
+    )

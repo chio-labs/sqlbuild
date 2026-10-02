@@ -620,6 +620,7 @@ class ParseSourcesYamlDltTestCase:
     expected_dlt_names: tuple[str, ...]
     expected_schemas: tuple[str | None, ...]
     expected_destination_config: dict[str, object] = field(default_factory=dict)
+    expected_descriptions: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -760,8 +761,9 @@ class DiscoverLoaderFunctionsTestCase:
     description: str
     files: dict[str, str]
     expected_names: tuple[str, ...]
-    expected_targets: tuple[str | None, ...]
-    expected_dependency_counts: tuple[int, ...]
+    expected_targets: tuple[str | None, ...] = ()
+    expected_dependency_counts: tuple[int, ...] = ()
+    expected_descriptions: tuple[str | None, ...] = ()
     expected_write_strategies: tuple[str | None, ...] = ()
     expected_cursor_columns: tuple[str | None, ...] = ()
     expected_unique_keys: tuple[tuple[str, ...], ...] = ()
@@ -928,6 +930,7 @@ class FunctionHeaderKeysTestCase:
     contents: str
     expected_error: str = ""
     expected_keys: tuple[str, ...] = ()
+    expected_description: str | None = None
 
 
 @dataclass(frozen=True)

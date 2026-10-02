@@ -388,6 +388,7 @@ def _function_resource(function: CompiledFunction) -> dict[str, object]:
         "name": function.name,
         "relative_path": str(function.relative_path),
         "language": function.language.value,
+        "description": function.description,
         "return_kind": "table" if function.return_columns else "scalar",
         "returns": function.returns,
         "return_columns": [

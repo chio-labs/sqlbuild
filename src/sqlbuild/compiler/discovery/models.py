@@ -436,6 +436,7 @@ class DiscoveredLoaderFunction:
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     contract: str | None = None
+    description: str | None = None
     connection_mode: LoaderConnectionMode = LoaderConnectionMode.SQLBUILD
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 

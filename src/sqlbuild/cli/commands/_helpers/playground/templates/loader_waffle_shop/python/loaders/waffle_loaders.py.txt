@@ -13,6 +13,8 @@ from sqlbuild.loaders import loader
     ],
 )
 def fetch_order_events(ctx):
+    """Fetch new order events since the last loaded sequence number."""
+
     if ctx.current_cursor_value is None:
         next_seq = 1
     else:
@@ -47,6 +49,8 @@ def fetch_order_events(ctx):
     ],
 )
 def fetch_customers(ctx):
+    """Fetch customer records changed since the last load."""
+
     if ctx.current_cursor_value is None:
         return [
             {"customer_id": 1, "plan_name": "basic", "load_seq": 1},
@@ -68,6 +72,8 @@ def fetch_customers(ctx):
     ],
 )
 def fetch_prices(ctx):
+    """Fetch the current waffle price list."""
+
     classic_price = 600 if ctx.current_cursor_value is None else 650
     return [
         {"waffle_type": "classic", "price_cents": classic_price, "load_seq": 1},

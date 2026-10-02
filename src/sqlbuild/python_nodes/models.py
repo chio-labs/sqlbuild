@@ -106,6 +106,7 @@ class LoaderDefinition:
     unique_key: tuple[str, ...] = ()
     columns: tuple[SourceColumnEntry, ...] = ()
     contract: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)

@@ -224,6 +224,7 @@ def _build_loader_node(
                 else None,
             },
         ),
+        description=loader.description,
         loader=DiscoveredPythonLoaderMetadata(
             destination=loader.destination,
             write_strategy=loader.write_strategy,

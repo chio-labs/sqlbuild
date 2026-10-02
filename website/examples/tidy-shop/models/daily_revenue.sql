@@ -1,4 +1,5 @@
 MODEL (
+  description "Daily revenue from successful payments",
   materialized table,
 );
 

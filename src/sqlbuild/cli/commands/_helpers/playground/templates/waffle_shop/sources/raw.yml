@@ -1,5 +1,6 @@
 sources:
   - name: raw__customers
+    description: Raw customer records loaded by the Python loader
     contract: enforced
     managed: true
     write_strategy: table
@@ -16,6 +17,7 @@ sources:
         type: TIMESTAMP
 
   - name: raw__orders
+    description: Raw order records loaded by the Python loader
     contract: enforced
     managed: true
     write_strategy: delete_insert
@@ -35,6 +37,7 @@ sources:
         type: VARCHAR
 
   - name: raw__payments
+    description: Payment records for each order, defined inline
     expression: |
       SELECT 1 AS id, 1 AS order_id, 1700 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status
       UNION ALL SELECT 2 AS id, 2 AS order_id, 1050 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status

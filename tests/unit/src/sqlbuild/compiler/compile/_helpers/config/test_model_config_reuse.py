@@ -45,7 +45,7 @@ time_travel_retention = "14d"
 """.strip()
             + "\n",
             "models/customers.sql": """
-MODEL (
+MODEL (description "Test model customers.",
   columns (customer_id (type INTEGER, nullable false, description "Customer id")),
 );
 
@@ -53,7 +53,7 @@ SELECT 1 AS customer_id
 """.strip()
             + "\n",
             "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   columns (order_id (type BIGINT, nullable true, description "Order id")),
 );
 
@@ -118,7 +118,7 @@ identifier_type = "INTEGER"
 """.strip()
             + "\n",
             "models/customers.sql": """
-MODEL (
+MODEL (description "Test model customers.",
   columns (
     customer_id (
       type ${identifier_type},
@@ -131,7 +131,7 @@ SELECT 1 AS customer_id
 """.strip()
             + "\n",
             "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   columns (
     order_id (
       type ${identifier_type},

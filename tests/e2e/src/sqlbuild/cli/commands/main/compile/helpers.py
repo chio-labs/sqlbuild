@@ -2823,3 +2823,55 @@ def measure_union_fixture_compile(
             )
         )
     return min(measurements)
+
+
+REQUIRED_DESCRIPTIONS_PROJECT: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
+)
+_REQUIRED_DESCRIPTIONS_ORDERS_MODEL: str = (
+    'MODEL (description "One row per order");\n\nSELECT 1 AS order_id\n'
+)
+_REQUIRED_DESCRIPTIONS_COMPILE: tuple[str, ...] = ("--no-color", "compile", "--json", "--no-cache")
+
+
+def hooked_model_file(*, model_name: str, hook: str) -> tuple[str, str]:
+    """Return a described model file whose post hook references ``hook``."""
+
+    return (
+        f"models/{model_name}.sql",
+        f'MODEL (description "Orders with a hook", post_hooks [{hook}]);\n\nSELECT 1 AS order_id\n',
+    )
+
+
+def python_node_source(
+    *,
+    module: str,
+    decorator: str,
+    name: str,
+    docstring_line: str = "",
+    extra_import: str = "",
+    decorator_arguments: str = "",
+) -> str:
+    """Render one decorated Python node module for required-description E2Es."""
+
+    return (
+        f"from sqlbuild.{module} import {decorator}\n{extra_import}\n\n"
+        f"@{decorator}{decorator_arguments}\ndef {name}(ctx):\n{docstring_line}    return None\n"
+    )
+
+
+def compile_inline_files(
+    *, tmp_path: Path, files: tuple[tuple[str, str], ...]
+) -> subprocess.CompletedProcess[str]:
+    """Compile a described orders project extended with ``files``."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="orders",
+        repo_files={
+            "sqlbuild_project.toml": REQUIRED_DESCRIPTIONS_PROJECT,
+            "models/orders.sql": _REQUIRED_DESCRIPTIONS_ORDERS_MODEL,
+            **dict(files),
+        },
+    )
+    return run_sqb(project_dir=project_dir, command=_REQUIRED_DESCRIPTIONS_COMPILE)

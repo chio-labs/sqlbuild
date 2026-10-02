@@ -145,7 +145,6 @@ def _rule_example(*, rule: Rule) -> str:
         "SQBRTEST102": "test_stg_orders__excludes_cancelled.sql and daily_revenue__minimal.sql.",
         "SQBRTEST103": "models/staging/stg_orders.sql maps to tests/unit/staging/.",
         "SQBRTEST104": 'TEST (name "stg_orders__excludes_cancelled_orders");',
-        "SQBRTEST105": 'SCENARIO (description "Daily revenue includes successful payments");',
         "SQBRTEST201": "Attach not_null/unique audits to the model key.",
     }
     if rule.guidance is not None:

@@ -1,4 +1,4 @@
-MODEL (materialized table);
+MODEL (description "One row per waffle order with its customer and line total", materialized table);
 
 SELECT
   o.order_id,

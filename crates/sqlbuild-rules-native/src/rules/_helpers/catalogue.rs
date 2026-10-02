@@ -38,7 +38,6 @@ macro_rules! rule {
                     | "SQBRTEST102"
                     | "SQBRTEST103"
                     | "SQBRTEST104"
-                    | "SQBRTEST105"
                     | "SQBRTEST203"
                     | "SQBRTEST301"
             ),
@@ -293,13 +292,6 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "structured-test-name",
             "every SQL unit-test block must have a target-aware subject__expected_behavior name",
             "Add name \"<resolved_subject>__<expected_behavior>\" to this TEST header.",
-        ),
-        rule!(
-            "SQBRTEST105",
-            "tests",
-            "scenario-business-description",
-            "scenario descriptions must identify a concrete business behavior",
-            "Write a non-generic SCENARIO description that states the business behavior under test.",
         ),
         rule!(
             "SQBRTEST201",

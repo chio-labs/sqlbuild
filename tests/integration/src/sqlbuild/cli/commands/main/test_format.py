@@ -16,11 +16,11 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DescriptionFormatIntegrationTestCase,
     DollarQuoteFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
+    FormatDescriptionFaultIntegrationTestCase,
     FormatPathArgumentsIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
     FormatScopeIntegrationTestCase,
     FormatterDeclineIntegrationTestCase,
-    FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
     LayoutOnlyFormatIntegrationTestCase,
     LeadingCteCommentFormatIntegrationTestCase,
@@ -871,17 +871,19 @@ def test_given_format_selectors_when_scoping_then_paths_and_default_exclusions_a
 @pytest.mark.parametrize(
     "test_case",
     [
-        FormatWarningIntegrationTestCase(
-            description="missing model description warns without failing format",
-            expected_exit_code=0,
+        FormatDescriptionFaultIntegrationTestCase(
+            description="missing model description fails check and write modes",
+            authored_sql="MODEL (materialized table);\nselect 1 as order_id\n",
+            expected_exit_code=1,
             expected_code="description-present",
-            expected_severity="warning",
+            expected_severity="fault",
+            expected_formatted_sql="MODEL (materialized table);\nSELECT 1 AS order_id\n",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_missing_description_when_formatting_then_warning_does_not_fail(
-    test_case: FormatWarningIntegrationTestCase,
+def test_given_missing_description_when_formatting_then_check_and_write_fault(
+    test_case: FormatDescriptionFaultIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -890,25 +892,28 @@ def test_given_missing_description_when_formatting_then_warning_does_not_fail(
     )
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
-    model.write_text("MODEL (materialized table);\nSELECT 1 AS order_id\n", encoding="utf-8")
+    model.write_text(test_case.authored_sql, encoding="utf-8")
 
-    write_exit: int = main(["--project-dir", str(tmp_path), "format"])
-    _ = capsys.readouterr()
     text_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
     text_output: str = capsys.readouterr().out
     json_exit: int = main(["--project-dir", str(tmp_path), "format", "--check", "--json"])
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
 
-    assert write_exit == test_case.expected_exit_code
     assert text_exit == test_case.expected_exit_code
-    assert f"warning[{test_case.expected_code}]" in text_output
+    assert f"error[{test_case.expected_code}]" in text_output
     assert json_exit == test_case.expected_exit_code
-    assert payload["faults"] == 0
-    assert payload["warnings"] == 1
+    assert payload["faults"] == 1
+    assert payload["warnings"] == 0
     violations: object = payload["violations"]
     assert isinstance(violations, list)
     assert violations[0]["code"] == test_case.expected_code
     assert violations[0]["severity"] == test_case.expected_severity
+
+    write_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    write_output: str = capsys.readouterr().out
+    assert write_exit == test_case.expected_exit_code
+    assert f"error[{test_case.expected_code}]" in write_output
+    assert model.read_text(encoding="utf-8") == test_case.expected_formatted_sql
 
 
 @pytest.mark.parametrize(

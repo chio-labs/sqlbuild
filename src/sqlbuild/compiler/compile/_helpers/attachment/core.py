@@ -170,7 +170,11 @@ from sqlbuild.spec.contracts.models import (
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_REUSABLE_MODEL_HEADER_KEYS: frozenset[str] = frozenset({"columns"})
+_MODEL_HEADER_COLUMNS_KEY: str = "columns"
+_MODEL_HEADER_DESCRIPTION_KEY: str = "description"
+_REUSABLE_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
+    {_MODEL_HEADER_COLUMNS_KEY, _MODEL_HEADER_DESCRIPTION_KEY}
+)
 _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
     {"ctx", "context", "_ctx", "hook_context"}
 )
@@ -286,6 +290,9 @@ class _ReusableModelConfigCache:
     path_defaults: dict[str, dict[str, object]]
     target_config: TargetConfig | None
     reusable_by_path_default: dict[str | None, bool] = field(default_factory=dict)
+    inherited_values_by_path_default: dict[str | None, dict[str, object]] = field(
+        default_factory=dict
+    )
     reusable_metadata_by_identity: dict[int, tuple[object, bool]] = field(default_factory=dict)
     configs: dict[str | None, CompileModelConfig] = field(default_factory=dict)
 
@@ -315,9 +322,15 @@ class _ReusableModelConfigCache:
         reusable_metadata: dict[str, object] | None = self._reusable_metadata(model_header_values)
         if reusable_metadata is None or not self._is_reusable(matched_path_default):
             return
+        inherited_values: dict[str, object] = self.inherited_values_by_path_default[
+            matched_path_default
+        ]
         reusable_values: dict[str, object] = {
             key: value for key, value in config.values.items() if key not in reusable_metadata
         }
+        reusable_values.update(
+            (key, inherited_values[key]) for key in reusable_metadata if key in inherited_values
+        )
         self.configs[matched_path_default] = replace(config, values=reusable_values)
 
     def _reusable_metadata(
@@ -326,9 +339,15 @@ class _ReusableModelConfigCache:
     ) -> dict[str, object] | None:
         if not model_header_values:
             return {}
-        if model_header_values.keys() != _REUSABLE_MODEL_HEADER_KEYS:
+        if not model_header_values.keys() <= _REUSABLE_MODEL_HEADER_KEYS:
             return None
-        metadata: object = model_header_values["columns"]
+        if _contains_dynamic_or_unsupported_reusable_metadata(
+            model_header_values.get(_MODEL_HEADER_DESCRIPTION_KEY)
+        ):
+            return None
+        if _MODEL_HEADER_COLUMNS_KEY not in model_header_values:
+            return model_header_values
+        metadata: object = model_header_values[_MODEL_HEADER_COLUMNS_KEY]
         cached: tuple[object, bool] | None = self.reusable_metadata_by_identity.get(id(metadata))
         if cached is not None and cached[0] is metadata:
             return model_header_values if cached[1] else None
@@ -356,6 +375,7 @@ class _ReusableModelConfigCache:
             (layered_values, target_namespace_values)
         ) and not _contains_mutable_nested_config(layered_values)
         self.reusable_by_path_default[matched_path_default] = reusable
+        self.inherited_values_by_path_default[matched_path_default] = layered_values
         return reusable
 
 

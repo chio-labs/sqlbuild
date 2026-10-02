@@ -11,6 +11,7 @@ from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, plan_rule_fixes
 from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import (
+    drop_resolved_description_faults,
     format_native_headers,
     lint_native_headers,
     prepare_native_header_cache,
@@ -20,7 +21,6 @@ from sqlbuild.lint._helpers.native import (
 from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
-from sqlbuild.lint.constants import VIOLATION_SEVERITY_WARNING
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.lint.models import (
     FormatChange,
@@ -90,6 +90,7 @@ def run_format(
         )
     )
     violations.extend(format_faults)
+    violations = drop_resolved_description_faults(violations=violations, project_dir=project_dir)
     final_contents: dict[Path, str] = {
         path: updated_contents.get(path, contents) for path, contents in files.items()
     }
@@ -214,7 +215,6 @@ def _lint_final_contents(
                 file_path=file_path,
                 headers=headers,
                 config=config,
-                description_present_severity=VIOLATION_SEVERITY_WARNING,
             )
         )
     return violations
