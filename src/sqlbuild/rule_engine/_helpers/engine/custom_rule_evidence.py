@@ -19,9 +19,6 @@ _MIN_PARAMETRIZE_ARGUMENTS: int = 2
 _PARAMETRIZE_ATTRIBUTE: str = "parametrize"
 _PYTEST_MARK_ATTRIBUTE: str = "mark"
 _PYTEST_MODULE_NAME: str = "pytest"
-_PROJECT_FACT_ATTRIBUTES: frozenset[str] = frozenset(
-    {"audits", "declarations", "graph", "project", "tests"}
-)
 
 
 @dataclass(frozen=True, order=True)
@@ -90,38 +87,6 @@ def custom_rule_implementation_fingerprint(
 
 def _fingerprint_label(*, path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()
-
-
-def custom_rule_project_fact_attributes(
-    *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
-) -> frozenset[str]:
-    """Return project-wide context attributes used by implementation or helper code."""
-
-    if rule.project_wide:
-        return frozenset({"project"})
-    if rule.source is None:
-        sources: tuple[str, ...] = (inspect.getsource(rule.check),)
-    else:
-        helper_paths: tuple[Path, ...] = (
-            _import_closure(
-                source_path=Path(rule.source).resolve(), project_dir=project_dir.resolve()
-            )
-            if import_closure is None
-            else import_closure
-        )
-        sources = (
-            inspect.getsource(rule.check),
-            *(path.read_text(encoding="utf-8") for path in helper_paths),
-        )
-    attributes: set[str] = set()
-    for source in sources:
-        tree: ast.Module = ast.parse(source)
-        attributes.update(
-            node.attr
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Attribute) and node.attr in _PROJECT_FACT_ATTRIBUTES
-        )
-    return frozenset(attributes)
 
 
 def _import_closure(*, source_path: Path, project_dir: Path) -> tuple[Path, ...]:

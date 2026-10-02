@@ -14,17 +14,20 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
+from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_key_payload
 from sqlbuild.rule_engine._helpers.host.custom_evaluation import evaluate_custom_rules
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_HASH_SEED,
     CUSTOM_HOST_INPUT_TUPLE_SIZE,
     CUSTOM_HOST_LAUNCH_MODULE,
+    CUSTOM_HOST_MAX_TRACKED_READS,
     CUSTOM_HOST_PROTOCOL_VERSION,
     CUSTOM_HOST_RUNTIME_VERSION,
 )
 from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig
+from sqlbuild.rule_engine.models import CustomRuleRun, Finding, Rule, RulesConfig
+from sqlbuild.rule_engine.types import CustomRulePlan
 
 
 def main() -> int:
@@ -51,13 +54,8 @@ def main() -> int:
         project_dir: Path = Path(str(payload["project_dir"])).resolve()
         dialect: str = str(payload.get("dialect", "generic"))
         verify_determinism: bool = payload.get("verify_determinism") is True
-        selected_codes: tuple[str, ...] = tuple(str(code) for code in payload["selected_codes"])
-        raw_model_paths: object = payload.get("selected_model_paths")
-        selected_model_paths: frozenset[str] | None = (
-            frozenset(str(path) for path in raw_model_paths)
-            if isinstance(raw_model_paths, list)
-            else None
-        )
+        track_reads: bool = payload.get("track_reads") is True
+        plan: CustomRulePlan = _decode_plan(payload["plan"])
         os.environ.clear()
         os.chdir(project_dir)
         guard = RuntimeGuard(project_dir=project_dir)
@@ -68,14 +66,15 @@ def main() -> int:
             catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=project_dir)
             guard.raise_violation()
             by_code: dict[str, Rule] = {rule.code: rule for rule in catalogue}
-            selected: tuple[Rule, ...] = tuple(by_code[code] for code in selected_codes)
-            findings: list[Finding] = evaluate_custom_rules(
+            selected: tuple[Rule, ...] = tuple(by_code[code] for code in sorted(plan))
+            run: CustomRuleRun = evaluate_custom_rules(
                 project=project,
                 config=config,
                 project_dir=project_dir,
                 selected_rules=selected,
                 dialect=dialect,
-                selected_model_paths=selected_model_paths,
+                plan=plan,
+                track_reads=track_reads,
                 verify_determinism=verify_determinism,
                 guard=guard,
             )
@@ -86,7 +85,7 @@ def main() -> int:
         "protocol": CUSTOM_HOST_PROTOCOL_VERSION,
         "runtime_version": CUSTOM_HOST_RUNTIME_VERSION,
         "error": None,
-        "payload": [_finding_payload(finding) for finding in findings],
+        "payload": _run_payload(run),
         "messages": messages.getvalue().splitlines(),
     }
     sys.stdout.write(json.dumps(response, sort_keys=True))
@@ -113,6 +112,57 @@ def _decode_inputs(payload: dict[str, Any]) -> tuple[CompiledProject, RulesConfi
     ):
         raise RulesError("custom host project payload has invalid types")
     return decoded
+
+
+def _decode_plan(value: object) -> CustomRulePlan:
+    if not isinstance(value, dict):
+        raise RulesError("custom host plan must be an object")
+    plan: CustomRulePlan = {}
+    for code, subjects in value.items():
+        if subjects is not None and not isinstance(subjects, list):
+            raise RulesError("custom host plan subjects must be a list or null")
+        plan[str(code)] = (
+            None if subjects is None else frozenset(str(subject) for subject in subjects)
+        )
+    return plan
+
+
+def _run_payload(run: CustomRuleRun) -> dict[str, object]:
+    """Encode invocations with read sets deduplicated across subjects and bounded in size."""
+
+    readsets: dict[frozenset[tuple[object, ...]], int] = {}
+    evaluations: list[dict[str, object]] = []
+    untracked: set[str] = set(run.untracked_codes)
+    for evaluation in run.evaluations:
+        index: int | None = None
+        if evaluation.reads is not None and evaluation.code not in untracked:
+            index = readsets.setdefault(evaluation.reads, len(readsets))
+        evaluations.append(
+            {
+                "code": evaluation.code,
+                "subject": evaluation.subject,
+                "findings": [_finding_payload(finding) for finding in evaluation.findings],
+                "reads": index,
+            }
+        )
+    if sum(map(len, readsets)) > CUSTOM_HOST_MAX_TRACKED_READS:
+        untracked.update(str(item["code"]) for item in evaluations if item["reads"] is not None)
+        readsets = {}
+        for item in evaluations:
+            item["reads"] = None
+    untracked_reads: dict[str, set[tuple[object, ...]]] = {code: set() for code in untracked}
+    for evaluation in run.evaluations:
+        if evaluation.code in untracked_reads and evaluation.reads is not None:
+            untracked_reads[evaluation.code].update(evaluation.reads)
+    return {
+        "evaluations": evaluations,
+        "readsets": [sorted(map(fact_key_payload, readset)) for readset in readsets],
+        "untracked": {
+            code: sorted(map(fact_key_payload, reads)) for code, reads in untracked_reads.items()
+        },
+        "uncacheable": sorted(run.uncacheable_codes),
+        "observed": sorted([list(key), digest] for key, digest in run.observed),
+    }
 
 
 def _finding_payload(finding: Finding) -> dict[str, object]:

@@ -1,6 +1,7 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from operator import attrgetter
 from pathlib import Path
@@ -22,8 +23,16 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, Discovere
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
+from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
-from sqlbuild.rule_engine.models import Rule, RulesCacheConfig, RulesConfig
+from sqlbuild.rule_engine.main._evaluate import evaluate
+from sqlbuild.rule_engine.models import (
+    CustomRulesOutcome,
+    Rule,
+    RulesCacheConfig,
+    RulesConfig,
+    RulesResult,
+)
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -58,13 +67,14 @@ def captured_native_request(
                 "evaluated_models": 0,
                 "cache_hits": 0,
                 "cache_misses": 0,
+                "selected_codes": [],
             }
         )
 
     monkeypatch.setattr(native._native, "evaluate_json", evaluate_json)
     native.evaluate_native(
         project=project,
-        config=RulesConfig(),
+        config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
         project_dir=project_dir,
         catalogue=(),
     )
@@ -178,6 +188,18 @@ def write_rule(
     return path.relative_to(root)
 
 
+def write_project_file_rule(
+    *, root: Path, file_path: str, contents: str, body: str, module_import: str
+) -> Path:
+    """Write one project file plus a custom rule and return the absolute file path."""
+
+    path: Path = root / file_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+    _ = write_rule(root=root, body=body, module_import=module_import)
+    return path
+
+
 def load_custom_rule(*, root: Path, configured_path: Path) -> Rule:
     del configured_path
     config: RulesConfig = RulesConfig()
@@ -226,3 +248,70 @@ def custom_rules_with_imports(
         config=RulesConfig(select=("XSQBRT101",)), project_dir=project_dir
     )
     return tuple(filter(lambda rule: rule.custom, catalogue))
+
+
+def two_model_project(
+    *, customers_sql: str, customers_config: dict[str, object]
+) -> CompiledProject:
+    """Return an orders and customers project with configurable customers facts."""
+
+    orders: CompiledProject = build_project(
+        name="orders",
+        relative_path="models/orders.sql",
+        sql="SELECT 1 AS order_id",
+        config_values={},
+    )
+    customers: CompiledProject = build_project(
+        name="customers",
+        relative_path="models/customers.sql",
+        sql=customers_sql,
+        config_values=customers_config,
+    )
+    return replace(orders, models=(*orders.models, *customers.models))
+
+
+def evaluate_cached_custom_rules(
+    *, project: CompiledProject, project_dir: Path, cache_enabled: bool
+) -> CustomRulesOutcome:
+    """Evaluate the selected custom rule through the incremental read-tracking cache."""
+
+    config: RulesConfig = RulesConfig(
+        select=("XSQBRT101",), cache=RulesCacheConfig(enabled=cache_enabled)
+    )
+    rules: tuple[Rule, ...] = tuple(
+        filter(attrgetter("custom"), build_catalogue(config=config, project_dir=project_dir))
+    )
+    return evaluate_custom_rules_cached(
+        project=project, config=config, project_dir=project_dir, rules=rules, dialect="duckdb"
+    )
+
+
+def evaluate_contract_rule(
+    *, config_values: dict[str, object], project_dir: Path, cache_enabled: bool
+) -> RulesResult:
+    """Evaluate one built-in contract rule over a single mart model."""
+
+    config: RulesConfig = RulesConfig(
+        select=("SQBRCONTRACT101",), cache=RulesCacheConfig(enabled=cache_enabled)
+    )
+    project: CompiledProject = build_project(
+        name="commerce__mart__orders",
+        relative_path="models/mart/commerce__mart__orders.sql",
+        sql="WITH orders AS (SELECT id FROM source_orders) SELECT id FROM orders",
+        config_values=config_values,
+    )
+    return evaluate(project=project, config=config, project_dir=project_dir)
+
+
+def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Count every request that reaches the native built-in rules engine."""
+
+    requests: list[str] = []
+    evaluate_json: Callable[[str], str] = native._native.evaluate_json
+
+    def recording(request_json: str) -> str:
+        requests.append(request_json)
+        return evaluate_json(request_json)
+
+    monkeypatch.setattr(native._native, "evaluate_json", recording)
+    return requests

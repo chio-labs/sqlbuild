@@ -691,10 +691,6 @@ pub(crate) struct CustomRule {
     #[serde(default)]
     pub project_wide: bool,
     #[serde(default)]
-    pub project_dependent: bool,
-    #[serde(default)]
-    pub fact_fingerprint: String,
-    #[serde(default)]
     pub check_name: String,
     #[serde(default)]
     pub test_case_count: u32,
@@ -729,7 +725,6 @@ pub(crate) struct EvaluateRequest {
     pub initial_findings: Vec<Fault>,
     pub defer_suppressions: bool,
     pub custom_rules: Vec<CustomRule>,
-    pub custom_host: Option<CustomHostSpec>,
     pub project_fingerprint: Option<String>,
 }
 
@@ -767,7 +762,6 @@ impl Default for EvaluateRequest {
             initial_findings: vec![],
             defer_suppressions: false,
             custom_rules: vec![],
-            custom_host: None,
             project_fingerprint: None,
         }
     }
@@ -791,8 +785,8 @@ pub(crate) struct EvaluateResponse {
     pub cache_hits: usize,
     pub cache_misses: usize,
     pub ruleset_fingerprint: String,
+    pub selected_codes: Vec<String>,
     pub built_in_ms: u64,
-    pub custom_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]

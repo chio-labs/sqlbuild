@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -14,13 +13,12 @@ from _pytest.capture import CaptureResult
 import sqlbuild.compiler.compile._helpers.attachment.declaration_scope as declaration_scope_module
 import sqlbuild.compiler.compile.main._build_compile_inputs as compile_inputs_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
-import sqlbuild.rule_engine._helpers.engine.native as native_module
+import sqlbuild.rule_engine._helpers.engine.custom_rules as custom_rules_module
 import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile.models import CompiledProject, DeclarationScopeBuild, LoadedMacro
+from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.rule_engine.models import Rule
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
@@ -921,10 +919,10 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
 
 @pytest.mark.parametrize(
     "test_case",
-    [RulesIntegrationTestCase("custom host starts with the first request", 1, "XSQBRARCH001")],
+    [RulesIntegrationTestCase("custom host runs once and is skipped when warm", 1, "XSQBRARCH001")],
     ids=lambda case: case.description,
 )
-def test_given_sql_rules_create_cache_first_when_compiling_then_custom_host_is_not_retried(
+def test_given_sql_and_custom_rules_when_compiling_twice_then_custom_host_runs_only_cold(
     test_case: RulesIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -962,43 +960,21 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
 """,
         encoding="utf-8",
     )
-    sql_cache_written: threading.Event = threading.Event()
-    requests: list[bool] = []
-    original_write: Callable[..., None] = rules_module._write_sql_rule_cache
-    original_payloads: Callable[..., list[dict[str, object]]] = native_module._custom_rule_payloads
-    original_request: Callable[[dict[str, object]], str] = native_module._evaluate_request
+    host_runs: list[str] = []
+    original_host: Callable[[str], str] = custom_rules_module._native.run_custom_host_json
 
-    def signalling_write(*, project_dir: Path, bucket: dict[str, dict[str, object]]) -> None:
-        original_write(project_dir=project_dir, bucket=bucket)
-        sql_cache_written.set()
+    def recording_host(spec_json: str) -> str:
+        host_runs.append(spec_json)
+        return original_host(spec_json)
 
-    def delayed_payloads(
-        *,
-        catalogue: tuple[Rule, ...],
-        project: CompiledProject,
-        project_dir: Path,
-        cache_enabled: bool,
-    ) -> list[dict[str, object]]:
-        _ = sql_cache_written.wait(timeout=30)
-        return original_payloads(
-            catalogue=catalogue,
-            project=project,
-            project_dir=project_dir,
-            cache_enabled=cache_enabled,
-        )
-
-    def recording_request(request: dict[str, object]) -> str:
-        requests.append(request["custom_host"] is not None)
-        return original_request(request)
-
-    monkeypatch.setattr(rules_module, "_write_sql_rule_cache", signalling_write)
-    monkeypatch.setattr(native_module, "_custom_rule_payloads", delayed_payloads)
-    monkeypatch.setattr(native_module, "_evaluate_request", recording_request)
+    monkeypatch.setattr(custom_rules_module._native, "run_custom_host_json", recording_host)
 
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
 
-    assert sql_cache_written.is_set()
-    assert requests == [True]
+    warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+
+    assert len(host_runs) == 1
+    assert warm == cold
     assert {
         f"models/orders.sql:{test_case.expected_code}",
         "tests/unit/test_orders.sql:SQBRSQL004",

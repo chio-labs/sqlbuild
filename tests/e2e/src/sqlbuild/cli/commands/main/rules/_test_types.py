@@ -1,6 +1,8 @@
 """Test case types for Rules performance guards."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -189,3 +191,12 @@ class DuplicateLiteralCase:
     description: str
     literals: tuple[tuple[str, str], ...]
     expected_hints: tuple[tuple[str, str | None], ...]
+
+
+@dataclass(frozen=True)
+class RulesCacheEditCase:
+    """One authored input edit applied after a warm compile with every rule selected."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_exit_code: int = 1

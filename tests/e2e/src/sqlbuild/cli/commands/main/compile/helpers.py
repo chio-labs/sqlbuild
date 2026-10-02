@@ -840,6 +840,51 @@ def prepare_small_inspection_project(*, project_dir: Path, model_count: int) -> 
     )
 
 
+def run_dense_warm_edit_benchmark(
+    *,
+    project_dir: Path,
+    edited_model_path: Path,
+    expected_warm_max_seconds: float,
+    expected_edit_max_seconds: float,
+) -> dict[str, FreshProcessCompileBenchmarkResult]:
+    """Measure cached cold, warm, and one-model edit plus a from-scratch oracle of the edit."""
+
+    measurements: dict[str, FreshProcessCompileBenchmarkResult] = {
+        "cold": _run_fresh_process_compile_benchmark(
+            project_dir=project_dir,
+            label="dense-cold",
+            expected_max_wall_seconds=4 * expected_warm_max_seconds,
+            compile_args=(),
+        ),
+        "warm": _run_fresh_process_compile_benchmark(
+            project_dir=project_dir,
+            label="dense-warm",
+            expected_max_wall_seconds=expected_warm_max_seconds,
+            compile_args=(),
+        ),
+    }
+    _replace_benchmark_text(
+        path=edited_model_path,
+        old="COALESCE(b.amount, 0) + CAST(b.id AS DOUBLE)",
+        new="COALESCE(b.amount, 1000) + CAST(b.id AS DOUBLE)",
+    )
+    measurements["edit"] = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label="dense-edit",
+        expected_max_wall_seconds=expected_edit_max_seconds,
+        compile_args=(),
+    )
+    oracle_dir: Path = project_dir.with_name(f"{project_dir.name}_oracle")
+    _ = shutil.copytree(project_dir, oracle_dir, ignore=shutil.ignore_patterns("target"))
+    measurements["oracle"] = _run_fresh_process_compile_benchmark(
+        project_dir=oracle_dir,
+        label="dense-oracle",
+        expected_max_wall_seconds=4 * expected_edit_max_seconds,
+        compile_args=("--no-cache",),
+    )
+    return measurements
+
+
 def _append_benchmark_edit(path: Path, label: str) -> None:
     path.write_text(
         path.read_text(encoding="utf-8") + f"\n-- one {label} edit\n",

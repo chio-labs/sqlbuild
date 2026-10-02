@@ -1,6 +1,6 @@
 """Test case declarations for rules engine helpers."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.rule_engine.models import RuleExemption, RuleIgnore
 
@@ -112,12 +112,6 @@ class ScopePayloadTestCase:
 
 
 @dataclass(frozen=True)
-class ProjectFingerprintRepresentationTestCase:
-    description: str
-    expected_equivalent: bool
-
-
-@dataclass(frozen=True)
 class NativeFactPayloadTestCase:
     description: str
     expected_test_count: int
@@ -155,3 +149,56 @@ class CustomRuleImportTestCase:
     extra_files: tuple[tuple[str, str], ...] = ()
     expected_rule_codes: tuple[str, ...] = ("XSQBRT101",)
     expected_error_pattern: str = ""
+
+
+@dataclass(frozen=True)
+class CustomRuleReadTrackingTestCase:
+    """One model-subject rule, an edit to the second model, and the expected reuse."""
+
+    description: str
+    body: str
+    expected_hits_after_edit: int
+    module_prelude: str = ""
+    edited_customers_sql: str = "SELECT 2 AS customer_id"
+    edited_customers_config: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CustomRuleUncacheableTestCase:
+    """One model-subject rule whose fact access cannot be attributed to recorded reads."""
+
+    description: str
+    body: str
+    expected_warm_hits: int = 0
+
+
+@dataclass(frozen=True)
+class CustomRuleProjectFileTestCase:
+    """One rule reading a project file whose contents change from customers to orders."""
+
+    description: str
+    file_path: str
+    body: str
+    expected_rerun_hits: int
+    expected_finding_paths: tuple[str, ...]
+    module_prelude: str = ""
+
+
+@dataclass(frozen=True)
+class NativeMemoTestCase:
+    """One warm built-in evaluation followed by an edit that must invalidate the memo."""
+
+    description: str
+    original_config: dict[str, object]
+    edited_config: dict[str, object]
+    expected_original_codes: tuple[str, ...]
+    expected_edited_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeBuildIdentityTestCase:
+    """One cached evaluation repeated after the native extension reports another build."""
+
+    description: str
+    expected_rebuilt_evaluations: int
+    expected_warm_evaluations: int

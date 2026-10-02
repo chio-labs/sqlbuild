@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Any, overload
 
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
-from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
+from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -233,6 +235,20 @@ class LoadedMacro:
     raw_source: str
     function: Callable[..., object]
     dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
+
+    @cached_property
+    def injects_context(self) -> bool:
+        """Whether the first positional parameter receives the injected macro context."""
+
+        parameters: tuple[inspect.Parameter, ...] = tuple(
+            inspect.signature(self.function).parameters.values()
+        )
+        return bool(
+            parameters
+            and parameters[0].kind
+            in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+            and parameters[0].name == MACRO_CONTEXT_PARAMETER_NAME
+        )
 
 
 @dataclass(frozen=True)

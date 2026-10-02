@@ -15,3 +15,11 @@ class NonHermeticRuleError(RulesError):
 
 class RuleAssertionError(RulesError):
     """Raised when a custom-rule harness case produces an unexpected result."""
+
+
+class FactDigestError(RulesError):
+    """Raised when a recorded custom-rule fact cannot be recomputed or encoded deterministically."""
+
+
+class OpaqueModuleStateError(RulesError):
+    """Raised when custom-rule module state holds a value whose mutations cannot be observed."""

@@ -20,10 +20,16 @@ class ProjectTree:
 
     def __init__(self, *, project_dir: Path, project: CompiledProject) -> None:
         self._root: Path = project_dir.resolve()
-        self._nodes: tuple[ProjectPath, ...] = self._discover()
+        self._discovered: tuple[ProjectPath, ...] | None = None
         self._resource_paths: dict[str, Model] = {
             item.relative_path.as_posix(): public_model(item) for item in project.models
         }
+
+    @property
+    def _nodes(self) -> tuple[ProjectPath, ...]:
+        if self._discovered is None:
+            self._discovered = self._discover()
+        return self._discovered
 
     def paths(self) -> tuple[ProjectPath, ...]:
         return self._nodes

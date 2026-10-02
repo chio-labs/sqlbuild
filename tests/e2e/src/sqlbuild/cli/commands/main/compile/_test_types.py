@@ -241,6 +241,19 @@ class DenseCompileGuardTestCase:
 
 
 @dataclass(frozen=True)
+class DenseWarmEditCompileGuardTestCase:
+    description: str
+    model_count: int
+    edited_model_index: int
+    expected_warm_max_seconds: float
+    expected_edit_max_seconds: float
+    expected_max_rss_bytes: int
+    expected_cold_fingerprint: str
+    expected_edit_fingerprint: str
+    expected_edit_rule_cache_misses: int
+
+
+@dataclass(frozen=True)
 class RuleGatedTestDiagnosticsTestCase:
     description: str
     filler_model_count: int

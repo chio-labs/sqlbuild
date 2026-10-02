@@ -10,6 +10,7 @@ from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.classes.column_facts import ColumnFacts
 from sqlbuild.rule_engine.classes.contract_facts import ContractFacts
 from sqlbuild.rule_engine.classes.declaration_facts import DeclarationFacts
+from sqlbuild.rule_engine.classes.fact_reads import FactReads
 from sqlbuild.rule_engine.classes.graph_facts import GraphFacts
 from sqlbuild.rule_engine.classes.model_test_facts import TestFacts
 from sqlbuild.rule_engine.classes.project_facts import ProjectFacts
@@ -59,6 +60,7 @@ class EvaluationRuleContext:
         selected_rules: tuple[Rule, ...],
         dialect: str,
         facts: RuleFactViews | None = None,
+        reads: FactReads | None = None,
     ) -> None:
         del model, selected_rules
         self._rule = rule
@@ -74,6 +76,13 @@ class EvaluationRuleContext:
         self.tests = views.tests
         self.audits = views.audits
         self.declarations = views.declarations
+        self._reads: FactReads | None = reads
+
+    def __setattr__(self, name: str, value: object) -> None:
+        reads: FactReads | None = self.__dict__.get("_reads")
+        if reads is not None:
+            reads.untracked = True
+        object.__setattr__(self, name, value)
 
     def option[T](self, option: RuleOption[T]) -> T:
         """Return one declared option after native configuration validation."""
