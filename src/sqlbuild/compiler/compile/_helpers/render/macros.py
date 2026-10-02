@@ -1717,14 +1717,7 @@ def _call_loaded_macro(
     args: tuple[object, ...],
     kwargs: dict[str, object],
 ) -> object:
-    signature: inspect.Signature = inspect.signature(loaded_macro.function)
-    parameters: tuple[inspect.Parameter, ...] = tuple(signature.parameters.values())
-    if (
-        parameters
-        and parameters[0].kind
-        in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
-        and parameters[0].name == MACRO_CONTEXT_PARAMETER_NAME
-    ):
+    if loaded_macro.injects_context:
         if MACRO_CONTEXT_PARAMETER_NAME in kwargs:
             raise CompileInputError(
                 f"Macro '@{loaded_macro.name}' must not be called with keyword argument 'ctx'; "
