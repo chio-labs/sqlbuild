@@ -73,3 +73,16 @@ pub(crate) struct ProtectedRangeTestCase {
     pub(crate) ranges: &'static [(usize, usize)],
     pub(crate) expected_protected: &'static [usize],
 }
+
+pub(crate) struct RelationMarkersTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_calls: &'static [(&'static str, &'static str)],
+}
+
+pub(crate) struct RelationMarkerOracleTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) expected_mismatches: &'static [&'static str],
+}
