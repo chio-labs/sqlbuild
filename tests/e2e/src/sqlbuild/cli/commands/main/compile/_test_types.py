@@ -496,6 +496,7 @@ class UnionFixtureCompileScalingTestCase:
     expected_sql_tests: int
     expected_errors: int
     expected_max_scaling_ratio: float
+    input_fixture_row_separator: str = " UNION ALL\n"
 
 
 @dataclass(frozen=True)

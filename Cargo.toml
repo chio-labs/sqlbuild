@@ -17,7 +17,7 @@ globset = "0.4"
 mimalloc = { version = "0.1", default-features = false, features = ["local_dynamic_tls"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 pyo3 = { version = "0.26", features = ["abi3-py312"] }
-polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "a7413439c520d7949924149b7ea02fa3817463fc", default-features = false, features = [
+polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "91fa625baaf8023f2065bbe6dfe47814574c4d3f", default-features = false, features = [
     "ast-tools",
     "builder",
     "dialect-bigquery",
@@ -29,7 +29,7 @@ polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "a7413
     "semantic",
     "stacker",
 ] }
-polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.git", rev = "a7413439c520d7949924149b7ea02fa3817463fc", default-features = false, features = [
+polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.git", rev = "91fa625baaf8023f2065bbe6dfe47814574c4d3f", default-features = false, features = [
     "dialect-duckdb",
 ] }
 quote = "1"
