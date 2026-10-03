@@ -9,6 +9,7 @@ from types import MappingProxyType
 
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
+from sqlbuild.compiler.scopes._helpers.visibility import build_visibility_index
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -116,6 +117,7 @@ def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
             key=lambda item: item.resource,
             sort_key=grant_sort_key,
         ),
+        visibility_index=build_visibility_index(declarations=canonical_index.declarations),
     )
 
 

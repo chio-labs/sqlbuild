@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import PurePath
+from types import MappingProxyType
 
 from sqlbuild.compiler.scopes._helpers.identities import parse_identity
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
@@ -15,6 +16,8 @@ from sqlbuild.compiler.scopes.constants import (
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    DeclarationVisibility,
+    DeclarationVisibilityIndex,
     GrantRecord,
     InaccessibleRecord,
     OwnershipRoot,
@@ -62,49 +65,186 @@ def query_target(
 def resolve_visibility(
     *, lookup: ScopeLookup, target: ResourceIdentity | str | PurePath
 ) -> VisibilityResolution:
-    query: ScopeTargetQuery = query_target(lookup=lookup, target=target)
-    if query.unknown:
-        return VisibilityResolution(target=query)
-    visible: list[VisibilityRecord] = []
+    query, visible, inaccessible_groups = _classify_target(lookup=lookup, target=target)
+    declarations: tuple[DeclarationRecord, ...] = lookup.index.declarations
     inaccessible: list[InaccessibleRecord] = []
     resource: ResourceRecord
-    for resource in query.matches:
-        grants_by_declaration: dict[DeclarationIdentity, list[GrantRecord]] = {}
-        for grant in lookup.grants_by_resource.get(resource.identity, ()):
-            grants_by_declaration.setdefault(grant.declaration, []).append(grant)
-        declaration: DeclarationRecord
-        for declaration in lookup.index.declarations:
-            positive: VisibilityReason | None = _visibility_reason(
-                resource=resource, declaration=declaration
+    positions: list[int]
+    for resource, positions in inaccessible_groups:
+        inaccessible.extend(
+            InaccessibleRecord(
+                resource.identity,
+                declarations[position].identity,
+                _inaccessible_reason(resource=resource, declaration=declarations[position]),
             )
-            if positive is not None:
-                visible.append(VisibilityRecord(resource.identity, declaration.identity, positive))
-            declaration_grants: list[GrantRecord] | None = grants_by_declaration.get(
-                declaration.identity
-            )
-            if declaration_grants is not None:
-                visible.extend(
-                    VisibilityRecord(
-                        resource.identity,
-                        declaration.identity,
-                        (
-                            VisibilityReason.TESTED_MACRO
-                            if grant.kind is GrantKind.TESTED_MACRO
-                            else VisibilityReason.EXPECTED_MODEL
-                        ),
-                        grant.through,
-                    )
-                    for grant in declaration_grants
-                )
-            elif positive is None:
-                inaccessible.append(
-                    InaccessibleRecord(
-                        resource.identity,
-                        declaration.identity,
-                        _inaccessible_reason(resource=resource, declaration=declaration),
-                    )
-                )
+            for position in positions
+        )
     return VisibilityResolution(query, tuple(visible), tuple(inaccessible))
+
+
+def resolve_declaration_visibility(
+    *, lookup: ScopeLookup, target: ResourceIdentity | str | PurePath
+) -> DeclarationVisibility:
+    """Resolve visible facts and inaccessible identities without per-pair inaccessible reasons."""
+
+    query, visible, inaccessible_groups = _classify_target(lookup=lookup, target=target)
+    identities: tuple[DeclarationIdentity, ...] = lookup.visibility_index.identities
+    inaccessible: list[DeclarationIdentity] = []
+    positions: list[int]
+    for _resource, positions in inaccessible_groups:
+        inaccessible.extend(identities[position] for position in positions)
+    return DeclarationVisibility(query, tuple(visible), tuple(inaccessible))
+
+
+def _classify_target(
+    *, lookup: ScopeLookup, target: ResourceIdentity | str | PurePath
+) -> tuple[ScopeTargetQuery, list[VisibilityRecord], list[tuple[ResourceRecord, list[int]]]]:
+    """Return the query, ordered visible records, and inaccessible positions per match."""
+
+    query: ScopeTargetQuery = query_target(lookup=lookup, target=target)
+    visible: list[VisibilityRecord] = []
+    inaccessible_groups: list[tuple[ResourceRecord, list[int]]] = []
+    resource: ResourceRecord
+    for resource in query.matches:
+        resource_visible, positions = _classify_resource(lookup=lookup, resource=resource)
+        visible.extend(resource_visible)
+        inaccessible_groups.append((resource, positions))
+    return query, visible, inaccessible_groups
+
+
+def _classify_resource(
+    *, lookup: ScopeLookup, resource: ResourceRecord
+) -> tuple[list[VisibilityRecord], list[int]]:
+    """Return ordered visible records and the declaration positions left inaccessible."""
+
+    index: DeclarationVisibilityIndex = lookup.visibility_index
+    positive: list[tuple[int, VisibilityReason]] = _visible_positions(
+        index=index, resource=resource
+    )
+    grants: tuple[GrantRecord, ...] = lookup.grants_by_resource.get(resource.identity, ())
+    if not grants:
+        visible_positions: set[int] = {position for position, _reason in positive}
+        return (
+            [
+                VisibilityRecord(resource.identity, index.identities[position], reason)
+                for position, reason in positive
+            ],
+            [
+                position
+                for position in range(len(index.identities))
+                if position not in visible_positions
+            ],
+        )
+    reasons: dict[int, VisibilityReason] = dict(positive)
+    grants_by_declaration: dict[DeclarationIdentity, list[GrantRecord]] = {}
+    for grant in grants:
+        grants_by_declaration.setdefault(grant.declaration, []).append(grant)
+    visible: list[VisibilityRecord] = []
+    inaccessible: list[int] = []
+    position: int
+    identity: DeclarationIdentity
+    for position, identity in enumerate(index.identities):
+        reason: VisibilityReason | None = reasons.get(position)
+        if reason is not None:
+            visible.append(VisibilityRecord(resource.identity, identity, reason))
+        declaration_grants: list[GrantRecord] | None = grants_by_declaration.get(identity)
+        if declaration_grants is not None:
+            visible.extend(
+                VisibilityRecord(
+                    resource.identity,
+                    identity,
+                    (
+                        VisibilityReason.TESTED_MACRO
+                        if grant.kind is GrantKind.TESTED_MACRO
+                        else VisibilityReason.EXPECTED_MODEL
+                    ),
+                    grant.through,
+                )
+                for grant in declaration_grants
+            )
+        elif reason is None:
+            inaccessible.append(position)
+    return visible, inaccessible
+
+
+def build_visibility_index(
+    *, declarations: tuple[DeclarationRecord, ...]
+) -> DeclarationVisibilityIndex:
+    """Group canonical declaration positions by the scope facts that make them visible."""
+
+    global_positions: list[int] = []
+    private: dict[ResourceIdentity, list[int]] = {}
+    local: dict[str, list[int]] = {}
+    inherited: dict[str, list[int]] = {}
+    position: int
+    declaration: DeclarationRecord
+    for position, declaration in enumerate(declarations):
+        if declaration.scope is ScopeKind.GLOBAL:
+            global_positions.append(position)
+        elif declaration.scope is ScopeKind.PRIVATE and declaration.identity.owner is not None:
+            private.setdefault(declaration.identity.owner, []).append(position)
+        elif declaration.scope is ScopeKind.LOCAL:
+            local.setdefault(_declaration_owner(declaration), []).append(position)
+        elif declaration.scope is ScopeKind.INHERITED:
+            inherited.setdefault(_declaration_owner(declaration), []).append(position)
+    return DeclarationVisibilityIndex(
+        identities=tuple(declaration.identity for declaration in declarations),
+        global_positions=tuple(global_positions),
+        private_positions=MappingProxyType(
+            {owner: tuple(positions) for owner, positions in private.items()}
+        ),
+        local_positions=MappingProxyType(
+            {owner: tuple(positions) for owner, positions in local.items()}
+        ),
+        inherited_positions=MappingProxyType(
+            {owner: tuple(positions) for owner, positions in inherited.items()}
+        ),
+    )
+
+
+def _visible_positions(
+    *, index: DeclarationVisibilityIndex, resource: ResourceRecord
+) -> list[tuple[int, VisibilityReason]]:
+    """Return declaration positions visible to a resource, in declaration order."""
+
+    positive: list[tuple[int, VisibilityReason]] = [
+        (position, VisibilityReason.GLOBAL) for position in index.global_positions
+    ]
+    positive.extend(
+        (position, VisibilityReason.PRIVATE_OWNER)
+        for position in index.private_positions.get(resource.identity, ())
+    )
+    if index.local_positions or index.inherited_positions:
+        parent: str = _parent(resource.path)
+        positive.extend(
+            (position, VisibilityReason.LOCAL_OWNER)
+            for position in index.local_positions.get(parent, ())
+        )
+        ancestor: str
+        for ancestor in _canonical_ancestors(parent):
+            positive.extend(
+                (position, VisibilityReason.INHERITED_ANCESTOR)
+                for position in index.inherited_positions.get(ancestor, ())
+            )
+    positive.sort()
+    return positive
+
+
+def _declaration_owner(declaration: DeclarationRecord) -> str:
+    return _canonical_owner(declaration.owning_path or CURRENT_PATH_COMPONENT)
+
+
+@lru_cache(maxsize=65_536)
+def _canonical_ancestors(path: str) -> tuple[str, ...]:
+    """Return every owner that ``_is_canonical_descendant`` accepts as an ancestor of ``path``."""
+
+    prefixes: list[str] = [CURRENT_PATH_COMPONENT]
+    index: int = path.find(PATH_SEPARATOR)
+    while index >= 0:
+        prefixes.append(path[:index])
+        index = path.find(PATH_SEPARATOR, index + 1)
+    prefixes.append(path)
+    return tuple(dict.fromkeys(prefixes))
 
 
 def resolve_path_visibility(
