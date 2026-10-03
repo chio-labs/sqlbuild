@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.133.0](https://github.com/chio-labs/sqlbuild/compare/v0.132.1...v0.133.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **compile:** projects with undescribed resources no longer compile. SQBRTEST105 was replaced by P010 and must be removed from [rules] select and ignore selectors, which otherwise fail with C000.
+
+### Features
+
+* **compile:** require a description on every named resource ([#917](https://github.com/chio-labs/sqlbuild/issues/917)) ([2fafd63](https://github.com/chio-labs/sqlbuild/commit/2fafd63c7d985b329c059a323a3f16f2629fb7c5))
+
+
+### Performance Improvements
+
+* **compile:** faster cold compiles ([#922](https://github.com/chio-labs/sqlbuild/issues/922)) ([9311dda](https://github.com/chio-labs/sqlbuild/commit/9311dda90b2a69b190bf23827087e98b84bb52d8))
+* **compile:** stop the unused early SQL lint and map lint lines once per file ([#919](https://github.com/chio-labs/sqlbuild/issues/919)) ([9fae2ec](https://github.com/chio-labs/sqlbuild/commit/9fae2ec9c36431f5bf16e7f86cd8a37af894af1b))
+* pin polyglot with faster column qualification ([#923](https://github.com/chio-labs/sqlbuild/issues/923)) ([cbe710d](https://github.com/chio-labs/sqlbuild/commit/cbe710d2a6092e3ebe3048c83fed8683355dc16c))
+
 ## [0.132.1](https://github.com/chio-labs/sqlbuild/compare/v0.132.0...v0.132.1) (2026-10-02)
 
 
