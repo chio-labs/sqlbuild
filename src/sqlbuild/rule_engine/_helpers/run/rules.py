@@ -7,8 +7,10 @@ import json
 import os
 import time
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from contextvars import Token
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 import sqlbuild._native as _native
@@ -25,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
     DEFAULT_MAX_LITERAL_LENGTH,
     DEFAULT_MAX_RANKING_ORDER_BY,
@@ -244,7 +247,7 @@ def _config_references_custom_rules(config: RulesConfig) -> bool:
 
 
 def prepare_sql_rules(
-    *, inputs: CompileProjectInputs, executor: Executor, dialect: str
+    *, inputs: CompileProjectInputs, executor: Executor, dialect: str, stop: Event
 ) -> PreparedSqlLint | None:
     project_dir: Path | None = inputs.discovered_inputs.project_dir
     if project_dir is None or any(diagnostic.is_error for diagnostic in inputs.diagnostics):
@@ -302,6 +305,7 @@ def prepare_sql_rules(
                 for model in inputs.model_inputs
                 if model.sql_expansion is not None
             },
+            stop=stop,
         ),
     )
 
@@ -313,19 +317,24 @@ def _prepare_sql_lint(
     discovered_inputs: DiscoveredProjectInputs,
     static_declaration_scope: DeclarationScopeBuild | None,
     compiled_expansions: dict[Path, CompiledSqlExpansion],
+    stop: Event,
 ) -> PreparedSqlLintResult:
-    context: SqlExpansionContext = build_expansion_context(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        static_declaration_scope=static_declaration_scope,
-    )
-    result: LintRunResult = run_lint(
-        project_dir=project_dir,
-        config=config,
-        discovered_inputs=discovered_inputs,
-        compiled_expansions=compiled_expansions,
-        expansion_context=context,
-    )
+    stop_token: Token[Event | None] = LintStopContext.active.set(stop)
+    try:
+        context: SqlExpansionContext = build_expansion_context(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            static_declaration_scope=static_declaration_scope,
+        )
+        result: LintRunResult = run_lint(
+            project_dir=project_dir,
+            config=config,
+            discovered_inputs=discovered_inputs,
+            compiled_expansions=compiled_expansions,
+            expansion_context=context,
+        )
+    finally:
+        LintStopContext.active.reset(stop_token)
     return PreparedSqlLintResult(result=result, context=context)
 
 

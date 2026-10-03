@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from threading import Event
+from typing import Any, cast
 
 import pytest
 from _pytest.capture import CaptureResult
@@ -19,6 +20,8 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.lint.classes.stop_context import LintStopContext
+from sqlbuild.lint.models import LintRunResult
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
@@ -29,6 +32,8 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     TypedContractRuleIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import compile_finding_keys
+
+_EARLY_LINT_STOP_TIMEOUT_S: float = 30.0
 
 
 @pytest.mark.parametrize(
@@ -917,6 +922,56 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
     assert warm == cold
     assert cold_collections == 0
     assert collections == [None]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulePassIntegrationTestCase("graph error stops the unused early lint", 1, ("B002",))],
+    ids=lambda case: case.description,
+)
+def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_awaited(
+    test_case: RulePassIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL005"]\n',
+        encoding="utf-8",
+    )
+    models_dir: Path = tmp_path / "models"
+    models_dir.mkdir()
+    (models_dir / "orders.sql").write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8"
+    )
+    (models_dir / "order_totals.sql").write_text(
+        'MODEL (description "Order totals");\n'
+        "WITH unused_orders AS (SELECT 1 AS order_id)\n"
+        'SELECT order_id, missing_column FROM __ref("orders")\n',
+        encoding="utf-8",
+    )
+    lint_started: Event = Event()
+    stop_observed: list[bool] = []
+    original_run_lint: Callable[..., LintRunResult] = rules_module.run_lint
+
+    def stop_awaiting_run_lint(**kwargs: Any) -> LintRunResult:
+        lint_started.set()
+        stop: Event | None = LintStopContext.active.get()
+        stop_observed.append(stop is not None and stop.wait(timeout=_EARLY_LINT_STOP_TIMEOUT_S))
+        return original_run_lint(**kwargs)
+
+    monkeypatch.setattr(rules_module, "run_lint", stop_awaiting_run_lint)
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], payload["diagnostics"])
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(diagnostic["code"] for diagnostic in diagnostics) == (
+        test_case.expected_diagnostics
+    )
+    assert lint_started.is_set()
+    assert stop_observed == [True]
 
 
 @pytest.mark.parametrize(

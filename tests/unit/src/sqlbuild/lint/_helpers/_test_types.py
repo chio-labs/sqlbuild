@@ -204,3 +204,14 @@ class HeaderAuditWrapTestCase:
     line_width: int
     header: str
     expected_header: str
+
+
+@dataclass(frozen=True)
+class ManyViolationLocationTestCase:
+    """Multi-line files with many native findings at independently known positions."""
+
+    description: str
+    prefix: str
+    unused_cte_count: int
+    file_count: int
+    expected_code: str

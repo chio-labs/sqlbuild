@@ -14,12 +14,17 @@ from sqlbuild.lint.models import LintBody, LintConfig, LintViolation
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
+    ManyViolationLocationTestCase,
     NativeParseIsolationTestCase,
     NativeSqlDependencyCacheTestCase,
     NativeSqlFindingTestCase,
     NativeSqlFixTestCase,
     NativeSqlReuseTestCase,
     ReservedCteLintTestCase,
+)
+from tests.unit.src.sqlbuild.lint._helpers.helpers import (
+    authored_positions,
+    unused_cte_orders_file,
 )
 
 
@@ -494,3 +499,49 @@ def test_given_diagnostic_crossing_generated_sql_when_mapping_then_range_falls_b
     violation: LintViolation = result[target][0]
     assert (violation.line, violation.column) == test_case.expected_position
     assert (violation.end_line, violation.end_column) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ManyViolationLocationTestCase(
+            description="many unused CTEs across several multi-line files",
+            prefix="-- orders header\n-- second header line\n\n",
+            unused_cte_count=40,
+            file_count=3,
+            expected_code="SQBRSQL005",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_many_violations_per_file_when_linting_then_locations_match_authored_lines(
+    test_case: ManyViolationLocationTestCase,
+    tmp_path: Path,
+) -> None:
+    files: tuple[tuple[Path, str, LintBody], ...] = tuple(
+        unused_cte_orders_file(
+            tmp_path=tmp_path,
+            prefix=test_case.prefix,
+            file_index=file_index,
+            unused_cte_count=test_case.unused_cte_count,
+        )
+        for file_index in range(test_case.file_count)
+    )
+    contents_by_path: dict[Path, str] = {target: contents for target, contents, _ in files}
+    bodies: tuple[LintBody, ...] = tuple(body for _, _, body in files)
+    config: LintConfig = LintConfig(
+        dialect="duckdb", enabled_native_rules=(test_case.expected_code,)
+    )
+
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=bodies, contents_by_path=contents_by_path, config=config
+    )
+
+    for target, contents in contents_by_path.items():
+        assert {violation.code for violation in result[target]} == {test_case.expected_code}
+        assert sorted((violation.line, violation.column) for violation in result[target]) == (
+            authored_positions(
+                contents=contents,
+                needles=tuple(f"unused_{index:03d}" for index in range(test_case.unused_cte_count)),
+            )
+        )

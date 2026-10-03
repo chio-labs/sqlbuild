@@ -155,6 +155,8 @@ def _analyze_compile_project(
     _ = complete_compile_phase(
         status=status, message=f"Compiled project graph. ({graph_ms / 1000:.2f}s)"
     )
+    graph_failed: bool = any(diagnostic.is_error for diagnostic in graph.project.diagnostics)
+    early_lint_wait_ms: int = early_lint.stop() if graph_failed else 0
     lineage_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Analyzing column lineage...")
     lineage: ProjectColumnLineage | None = build_compile_lineage(
@@ -197,7 +199,7 @@ def _analyze_compile_project(
         *graph.project.diagnostics,
         *contract_result.diagnostics,
     )
-    if not any(diagnostic.is_error for diagnostic in graph.project.diagnostics):
+    if not graph_failed:
         rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
         if (
             prepared_artifacts is not None
@@ -224,6 +226,7 @@ def _analyze_compile_project(
                 elapsed_seconds=time.monotonic() - rules_start, result=rules_result
             ),
         )
+        early_lint_wait_ms = early_lint.stop()
     rule_diagnostics: tuple[CompilerDiagnostic, ...] = tuple(
         CompilerDiagnostic(
             phase=DiagnosticPhase.RULE,
@@ -252,6 +255,7 @@ def _analyze_compile_project(
         contract_ms=contract_ms,
         built_in_rules_ms=rules_result.built_in_ms,
         custom_rules_ms=rules_result.custom_ms,
+        early_lint_wait_ms=early_lint_wait_ms,
         rule_cache_hits=rules_result.cache_hits,
         rule_cache_misses=rules_result.cache_misses,
         skipped_type_proof_rules=rules_result.skipped_type_proof_rules,

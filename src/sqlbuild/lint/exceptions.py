@@ -31,3 +31,7 @@ class ProjectCompileError(LintError):
     """The project could not be compiled, so its SQL cannot be linted."""
 
     code: str = "L005"
+
+
+class LintStoppedError(Exception):
+    """A speculative lint run was stopped because its result is no longer needed."""
