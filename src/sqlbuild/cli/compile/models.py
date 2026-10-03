@@ -8,10 +8,15 @@ from pathlib import Path
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import WrittenTarget
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledSqlTest,
+    CompilerDiagnostic,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 
 
 @dataclass(frozen=True)
@@ -90,3 +95,23 @@ class SqlTestArtifactIdentityContext:
 
     common_identity: str
     model_identities: dict[str, str]
+
+
+@dataclass(frozen=True)
+class PendingStaticSqlTest:
+    """One SQL test that needs a freshly planned artifact, with its optional cache identity."""
+
+    test: CompiledSqlTest
+    record_key: str | None
+    artifact_identity: str | None
+
+
+@dataclass(frozen=True)
+class PlannedStaticSqlTests:
+    """SQL-test artifacts planned for one target directory before any file is written."""
+
+    tests_root: Path
+    pending: tuple[PendingStaticSqlTest, ...]
+    artifacts: tuple[NativeSqlTestArtifact, ...]
+    cached_paths: frozenset[Path]
+    cached_records: dict[str, SqlTestArtifactCacheRecord]

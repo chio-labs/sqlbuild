@@ -1,4 +1,4 @@
-"""Own staged cold compile artifacts and publish them only at the normal write phase."""
+"""Prepare compile artifacts in the background and publish them only at the normal write phase."""
 
 from __future__ import annotations
 
@@ -14,11 +14,14 @@ from filelock import FileLock, Timeout
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.compile.target_writer import (
+    plan_static_sql_tests,
     publish_static_compile_target,
     staged_artifact_files,
+    static_sql_test_planning_diagnostics,
     write_static_compile_target,
 )
 from sqlbuild.cli.commands.exceptions import StagedArtifactsChangedError
+from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.cli.output.models import WrittenTarget
 from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
 
@@ -32,7 +35,7 @@ type _PreparedResult = tuple[WrittenTarget, frozenset[str]]
 
 
 class PreparedCompileArtifacts:
-    """Own one bounded preparation task and its disposable output directory."""
+    """Own one background preparation task: staged artifacts, or planned SQL tests only."""
 
     def __init__(self, *, enabled: bool) -> None:
         self.enabled: bool = enabled
@@ -41,6 +44,8 @@ class PreparedCompileArtifacts:
         self._created_target_dir: Path | None = None
         self._executor: ThreadPoolExecutor | None = None
         self._future: Future[_PreparedResult] | None = None
+        self._planned_tests: Future[PlannedStaticSqlTests] | None = None
+        self._planning_inputs: tuple[CompiledProject, BaseAdapter, Path] | None = None
 
     def __enter__(self) -> PreparedCompileArtifacts:
         return self
@@ -73,16 +78,48 @@ class PreparedCompileArtifacts:
             if not _remove_abandoned_directory(directory):
                 return
 
-    def start(self, *, project: CompiledProject, adapter: BaseAdapter, target_dir: Path) -> None:
-        """Stage artifacts beside target_dir so publication can move them instead of copying."""
+    def start(
+        self,
+        *,
+        project: CompiledProject,
+        adapter: BaseAdapter,
+        target_dir: Path,
+        stage_artifacts: bool,
+    ) -> None:
+        """Stage artifacts beside target_dir when worthwhile, otherwise plan SQL tests ahead."""
 
+        if not self.enabled:
+            return
         if (
-            not self.enabled
-            or project.compile_cache_dir is not None
-            or len(project.models) < _MIN_PREPARED_ARTIFACT_MODELS
-            or len(project.models) > _MAX_PREPARED_ARTIFACT_MODELS
+            stage_artifacts
+            and _stages_artifacts(project)
+            and self._start_staging(project=project, adapter=adapter, target_dir=target_dir)
         ):
             return
+        if project.sql_tests:
+            self._start_test_planning(project=project, adapter=adapter, target_dir=target_dir)
+
+    def _start_test_planning(
+        self, *, project: CompiledProject, adapter: BaseAdapter, target_dir: Path
+    ) -> None:
+        """Plan SQL tests against the published target while the compile continues."""
+
+        self._planning_inputs = (project, adapter, target_dir)
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-tests")
+        context: Context = copy_context()
+
+        def plan() -> PlannedStaticSqlTests:
+            return context.run(
+                plan_static_sql_tests, target_dir=target_dir, adapter=adapter, project=project
+            )
+
+        self._planned_tests = self._executor.submit(plan)
+
+    def _start_staging(
+        self, *, project: CompiledProject, adapter: BaseAdapter, target_dir: Path
+    ) -> bool:
+        """Stage artifacts beside target_dir so publication can move them instead of copying."""
+
         staging_dir: Path = target_dir / f"{_STAGING_PREFIX}{uuid.uuid4().hex}"
         try:
             if not target_dir.is_dir():
@@ -92,7 +129,7 @@ class PreparedCompileArtifacts:
             self._owner_lock.acquire()
             _create_staging_directory(staging_dir)
         except OSError:
-            return
+            return False
         self._staging_dir = staging_dir
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-artifacts")
         context: Context = copy_context()
@@ -107,10 +144,20 @@ class PreparedCompileArtifacts:
             return written, staged_artifact_files(target_dir=staging_dir)
 
         self._future = self._executor.submit(prepare)
+        return True
 
     def publish(
         self, *, target_dir: Path, manifest: dict[str, object] | None
     ) -> WrittenTarget | None:
+        if self._planned_tests is not None and self._planning_inputs is not None:
+            project, adapter, _ = self._planning_inputs
+            return write_static_compile_target(
+                target_dir=target_dir,
+                adapter=adapter,
+                project=project,
+                manifest=manifest,
+                planned_tests=self._planned_tests.result,
+            )
         if self._future is None or self._staging_dir is None:
             return None
         try:
@@ -131,14 +178,31 @@ class PreparedCompileArtifacts:
         )
 
     def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None:
-        """Return staged SQL test planning diagnostics without publishing any artifact."""
+        """Return background SQL test planning diagnostics without publishing any artifact."""
 
+        if self._planned_tests is not None and self._planning_inputs is not None:
+            project, adapter, target_dir = self._planning_inputs
+            return static_sql_test_planning_diagnostics(
+                target_dir=target_dir,
+                adapter=adapter,
+                project=project,
+                planned_tests=self._planned_tests.result,
+            )
         if self._future is None:
             return None
         try:
             return self._future.result()[0].diagnostics
         except OSError:
             return None
+
+
+def _stages_artifacts(project: CompiledProject) -> bool:
+    """Staging pays off for uncached, mid-sized projects whose memory stays within budget."""
+
+    return (
+        project.compile_cache_dir is None
+        and _MIN_PREPARED_ARTIFACT_MODELS <= len(project.models) <= _MAX_PREPARED_ARTIFACT_MODELS
+    )
 
 
 def _owner_lock_path(staging_dir: Path) -> Path:

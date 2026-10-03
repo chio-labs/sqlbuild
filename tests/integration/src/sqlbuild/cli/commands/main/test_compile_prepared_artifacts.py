@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,21 +12,166 @@ import pytest
 from filelock import FileLock
 
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
+from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     AbandonedStagingCompileTestCase,
+    BackgroundTestPlanningCompileTestCase,
+    BackgroundTestPlanningFailureTestCase,
     CrossDeviceArtifactsCompileTestCase,
     PreparedArtifactsCompileTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    SELECTED_RULES_CONFIG,
+    TEST_PLANNING_MODELS,
+    compile_project_json,
+    compile_then_edit_one_test,
+    compiled_files,
+    fail_native_planner,
     has_second_filesystem,
+    keep_native_planner,
+    keep_project_unchanged,
+    record_test_planning_threads,
+    skip_artifact_preparation,
     staging_directories,
     unavailable_staging_directory,
     write_prepared_artifacts_project,
     write_staging_directory,
+    write_test_planning_project,
 )
 
 _SECOND_FILESYSTEM: Path = Path("/dev/shm")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BackgroundTestPlanningCompileTestCase(
+            "cold compile with the compile cache",
+            (),
+            SELECTED_RULES_CONFIG,
+            keep_project_unchanged,
+        ),
+        BackgroundTestPlanningCompileTestCase(
+            "warm compile after one SQL test edit",
+            (),
+            SELECTED_RULES_CONFIG,
+            compile_then_edit_one_test,
+        ),
+        BackgroundTestPlanningCompileTestCase(
+            "no-cache compile above the staged artifact limit",
+            ("--no-cache",),
+            SELECTED_RULES_CONFIG,
+            keep_project_unchanged,
+            max_prepared_models=1,
+        ),
+        BackgroundTestPlanningCompileTestCase(
+            "no-cache compile without selected rules", ("--no-cache",), "", keep_project_unchanged
+        ),
+        BackgroundTestPlanningCompileTestCase(
+            "no-cache compile that stages every artifact",
+            ("--no-cache",),
+            SELECTED_RULES_CONFIG,
+            keep_project_unchanged,
+            expected_background_plans=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_compile_mode_when_preparing_artifacts_in_background_then_output_matches_inline(
+    test_case: BackgroundTestPlanningCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
+    monkeypatch.setattr(
+        prepared_compile_artifacts, "_MAX_PREPARED_ARTIFACT_MODELS", test_case.max_prepared_models
+    )
+    background: Path = tmp_path / "background"
+    write_test_planning_project(
+        project_dir=background,
+        model_count=TEST_PLANNING_MODELS,
+        rules_config=test_case.rules_config,
+    )
+    test_case.prepare_project(project_dir=background, capsys=capsys)
+    inline: Path = tmp_path / "inline"
+    shutil.copytree(background, inline)
+    planning_threads: list[str] = record_test_planning_threads(monkeypatch)
+
+    background_result: tuple[int, dict[str, object]] = compile_project_json(
+        project_dir=background, compile_args=test_case.compile_args, capsys=capsys
+    )
+    with monkeypatch.context() as inline_patch:
+        inline_patch.setattr(PreparedCompileArtifacts, "start", skip_artifact_preparation)
+        inline_result: tuple[int, dict[str, object]] = compile_project_json(
+            project_dir=inline, compile_args=test_case.compile_args, capsys=capsys
+        )
+
+    assert tuple(planning_threads) == test_case.expected_background_plans
+    assert background_result[0] == 0
+    assert background_result == inline_result
+    assert background_result[1]["has_errors"] is False
+    artifacts: dict[str, bytes] = compiled_files(background)
+    assert artifacts == compiled_files(inline)
+    assert sum(path.startswith("tests/") for path in artifacts) == TEST_PLANNING_MODELS - 1
+    assert staging_directories(background / "target") == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BackgroundTestPlanningFailureTestCase(
+            "planner input error with the compile cache",
+            (),
+            ', cursor_start "2026-02-01"',
+            keep_native_planner,
+            "declares cursor_start or cursor_end",
+        ),
+        BackgroundTestPlanningFailureTestCase(
+            "unexpected native planning failure without the compile cache",
+            ("--no-cache",),
+            "",
+            fail_native_planner,
+            "worker stopped",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_background_planning_fails_when_compiling_then_error_matches_inline_planning(
+    test_case: BackgroundTestPlanningFailureTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_case.patch_native_planner(monkeypatch)
+    background: Path = tmp_path / "background"
+    write_test_planning_project(
+        project_dir=background,
+        model_count=TEST_PLANNING_MODELS,
+        rules_config=SELECTED_RULES_CONFIG,
+        test_options=test_case.test_options,
+    )
+    inline: Path = tmp_path / "inline"
+    shutil.copytree(background, inline)
+    planning_threads: list[str] = record_test_planning_threads(monkeypatch)
+
+    background_result: tuple[int, dict[str, object]] = compile_project_json(
+        project_dir=background, compile_args=test_case.compile_args, capsys=capsys
+    )
+    with monkeypatch.context() as inline_patch:
+        inline_patch.setattr(PreparedCompileArtifacts, "start", skip_artifact_preparation)
+        inline_result: tuple[int, dict[str, object]] = compile_project_json(
+            project_dir=inline, compile_args=test_case.compile_args, capsys=capsys
+        )
+
+    assert planning_threads == ["sqlbuild-tests"]
+    assert background_result[0] == 1
+    assert background_result == inline_result
+    assert test_case.expected_error_fragment in json.dumps(background_result[1])
+    artifacts: dict[str, bytes] = compiled_files(background)
+    assert artifacts == compiled_files(inline)
+    assert not any(path.startswith("tests/") for path in artifacts)
 
 
 @pytest.mark.parametrize(

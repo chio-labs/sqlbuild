@@ -172,6 +172,7 @@ def test_given_cleanup_interleaved_with_staging_when_compiling_then_live_staging
             project=build_static_target_writer_project(),
             adapter=DuckDbAdapter(),
             target_dir=target,
+            stage_artifacts=True,
         )
         written: WrittenTarget | None = artifacts.publish(target_dir=target, manifest=None)
 
@@ -208,6 +209,7 @@ def test_given_staging_owner_lost_when_publishing_then_compile_fails_without_del
             project=build_static_target_writer_project(),
             adapter=DuckDbAdapter(),
             target_dir=target,
+            stage_artifacts=True,
         )
         _ = artifacts.planning_diagnostics()
         for relative in test_case.removed_staged_files:

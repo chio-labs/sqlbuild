@@ -201,13 +201,12 @@ def _analyze_compile_project(
     )
     if not graph_failed:
         rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
-        if (
-            prepared_artifacts is not None
-            and rules_config.select
-            and not any(item.is_error for item in core_diagnostics)
-        ):
+        if prepared_artifacts is not None and not any(item.is_error for item in core_diagnostics):
             prepared_artifacts.start(
-                project=graph.project, adapter=adapter, target_dir=project_dir / "target"
+                project=graph.project,
+                adapter=adapter,
+                target_dir=project_dir / "target",
+                stage_artifacts=bool(rules_config.select),
             )
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
         rules_start: float = time.monotonic()
