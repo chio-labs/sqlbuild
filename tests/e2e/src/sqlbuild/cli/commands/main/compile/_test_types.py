@@ -378,10 +378,57 @@ class CompileCacheInvalidationTestCase:
 
     description: str
     edit: Callable[[Path], None]
+    setup: Callable[[Path], None] = lambda _root: None
     edited_env: dict[str, str] = field(default_factory=dict)
+    edited_compile_args: tuple[str, ...] = ()
     expected_failure: bool = False
     expected_output_change: bool = True
     expected_rewarmed_fact_cache_misses: int = 0
+
+
+@dataclass(frozen=True)
+class AttachmentCacheReuseTestCase:
+    """One project change after a warm compile and the expected model attachment reuse."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_attachment_counts: tuple[int, int, int]
+    setup: Callable[[Path], None] = lambda _root: None
+    initial_env: dict[str, str] = field(default_factory=dict)
+    edited_env: dict[str, str] = field(default_factory=dict)
+    expected_failure: bool = False
+
+
+@dataclass(frozen=True)
+class AttachmentRunIdTestCase:
+    """One model whose hook renders the per-invocation run id."""
+
+    description: str
+    model_path: str
+    model_sql: str
+    expected_warm_attachment_counts: tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class AttachmentDiagnosticReplayTestCase:
+    """Project files whose attachment reports diagnostics a cache hit must replay."""
+
+    description: str
+    files: dict[str, str]
+    expected_diagnostic_codes: tuple[str, ...]
+    expected_warm_attachment_counts: tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class AttachmentReferencePolicyTestCase:
+    """A replayed diagnostic whose presence follows the explicit-reference policy."""
+
+    description: str
+    files: dict[str, str]
+    relax: Callable[[Path], None]
+    restore: Callable[[Path], None]
+    expected_strict_codes: tuple[str, ...]
+    expected_relaxed_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)

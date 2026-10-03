@@ -43,3 +43,11 @@ class ParameterizedSqlRenderErrorTestCase:
     sql: str
     arguments: dict[str, object]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class VolatileReadTestCase:
+    description: str
+    template: str
+    sql: str
+    expected_reads: frozenset[str]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -2424,6 +2425,9 @@ def write_relation_stub_project(
 
 
 COMPILE_CACHE_REGION_ENV_VAR: str = "SQB_CACHE_INVALIDATION_REGION"
+DESCRIBED_HOOK_DECORATOR: str = '@hook(description="Notify that orders completed")'
+COMPILE_CACHE_SCHEMA_ENV_VAR: str = "SQB_CACHE_INVALIDATION_SCHEMA"
+_HOOK_RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"'(\d{8}T\d{6}Z_[0-9a-f]{12})' AS run_id")
 _COMPILE_CACHE_DIAGNOSTIC_PATTERN: re.Pattern[str] = re.compile(
     r"^(?:error|warning)\[.*$", re.MULTILINE
 )
@@ -2480,7 +2484,70 @@ _COMPILE_CACHE_EXTRA_PROJECT_FILES: dict[str, str] = {
         ")\n"
         "SELECT 1\n"
     ),
+    "models/marts/_sqlbuild/_macros/scaling.py": (
+        '"""Marts scaling macros."""\n\n'
+        "from macros.currency import line_total_cents\n\n\n"
+        "def scaled_quantity(column: str) -> str:\n"
+        '    """Scale an order quantity column."""\n'
+        '    return line_total_cents(column, "2")\n'
+    ),
+    "models/marts/_sqlbuild/_schemas/order_metric.sql": (
+        "SCHEMA (\n"
+        "  name order_metric,\n"
+        '  description "Scaled order quantities",\n'
+        "  columns (\n"
+        "    order_id (nullable false),\n"
+        "    scaled_quantity (nullable true),\n"
+        "  ),\n"
+        ");\n"
+    ),
+    "models/marts/_sqlbuild/_hooks/sql/record_orders.sql": (
+        'HOOK (\n  description "Count the rows written to a relation"\n);\n\n'
+        "SELECT COUNT(*) AS row_count FROM @relation\n"
+    ),
+    "models/marts/_sqlbuild/_hooks/python/notifications.py": (
+        "from sqlbuild.hooks import hook\n\n\n"
+        '@hook(description="Notify that orders completed")\n'
+        'def notify_complete(ctx, channel="#orders"):\n'
+        '    ctx.log(f"Notify {channel}: {ctx.model_name} completed")\n'
+    ),
+    "python/audits/order_quality.py": (
+        "from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory\n\n\n"
+        "@audit_factory\n"
+        "def order_quality():\n"
+        "    return [\n"
+        "        AuditCase(\n"
+        '            name="non_negative_quantity",\n'
+        '            definition="expression_is_true",\n'
+        '            arguments={"expression": "scaled_quantity >= 0"},\n'
+        "            severity=AuditSeverity.WARN,\n"
+        "        )\n"
+        "    ]\n"
+    ),
+    "models/marts/order_metrics.sql": (
+        "MODEL (\n"
+        "  materialized table,\n"
+        "  model_schema order_metric,\n"
+        "  audit_factories [order_quality],\n"
+        "  post_hooks [\n"
+        '    sql("record_orders", relation: "@@CTX:destination.qualified"),\n'
+        '    python("notify_complete", channel: "#orders"),\n'
+        "  ],\n"
+        ");\n\n"
+        'SELECT o.order_id, @scaled_quantity("o.quantity") AS scaled_quantity\n'
+        'FROM __ref("stg_orders") o\n'
+    ),
 }
+
+
+_CUSTOM_DUCKDB_ADAPTER_SOURCE: str = (
+    "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n\n"
+    "class DuckDbPlusAdapter(DuckDbAdapter):\n"
+    '    adapter_name = "duckdb_plus"\n\n'
+    "    def render_typed_scalar(self, *, value):\n"
+    "        rendered = super().render_typed_scalar(value=value)\n"
+    '        return f"{rendered}"\n'
+)
 
 
 class CompileCacheOutcome(NamedTuple):
@@ -2491,6 +2558,9 @@ class CompileCacheOutcome(NamedTuple):
     fingerprint: str
     fact_cache_hits: int
     fact_cache_misses: int
+    attachment_cache_hits: int = 0
+    attachment_cache_misses: int = 0
+    attachment_cache_bypasses: int = 0
 
 
 def run_installed_sqb(
@@ -2516,21 +2586,129 @@ def run_installed_sqb(
 def compile_cache_outcome(
     *, project_dir: Path, env: dict[str, str], compile_args: tuple[str, ...] = ()
 ) -> CompileCacheOutcome:
-    """Compile in a fresh process and return its semantic fingerprint and fact-cache counts."""
+    """Compile in a fresh process and return its output fingerprint and fact-cache counts."""
 
+    manifest_path: Path = project_dir / "target" / "manifest.json"
+    manifest_path.unlink(missing_ok=True)
     result: subprocess.CompletedProcess[str] = run_installed_sqb(
-        project_dir=project_dir, args=("compile", "--json", *compile_args), env=env
+        project_dir=project_dir, args=("compile", "--json", "--manifest", *compile_args), env=env
     )
     values: dict[str, object] = cast(dict[str, object], json.loads(result.stdout or "{}"))
     timings: dict[str, int] = cast(dict[str, int], values.get("compile_timings", {}))
+    manifest_digest: str = "".join(
+        _invocation_independent_manifest_digest(path)
+        for path in manifest_path.parent.glob(manifest_path.name)
+    )
     return CompileCacheOutcome(
         returncode=result.returncode,
         diagnostics=tuple(_COMPILE_CACHE_DIAGNOSTIC_PATTERN.findall(result.stderr)),
         fingerprint=semantic_compile_fingerprint(
             payload=values, compiled_dir=project_dir / "target" / "compiled"
-        ),
+        )
+        + manifest_digest,
         fact_cache_hits=timings.get("fact_cache_hits", 0),
         fact_cache_misses=timings.get("fact_cache_misses", 0),
+        attachment_cache_hits=timings.get("attachment_cache_hits", 0),
+        attachment_cache_misses=timings.get("attachment_cache_misses", 0),
+        attachment_cache_bypasses=timings.get("attachment_cache_bypasses", 0),
+    )
+
+
+def _invocation_independent_manifest_digest(manifest_path: Path) -> str:
+    manifest: dict[str, Any] = cast(dict[str, Any], json.loads(manifest_path.read_text()))
+    metadata: dict[str, object] = manifest["metadata"]
+    for volatile_key in ("generated_at", "invocation_id"):
+        _ = metadata.pop(volatile_key)
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
+
+
+def compile_manifest_run_ids(*, project_dir: Path, env: dict[str, str]) -> frozenset[str]:
+    """Compile with a manifest and return the run ids rendered into compiled hooks."""
+
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir, args=("compile", "--json", "--manifest"), env=env
+    )
+    assert result.returncode == 0, result.stderr
+    manifest: str = (project_dir / "target" / "manifest.json").read_text(encoding="utf-8")
+    return frozenset(_HOOK_RUN_ID_PATTERN.findall(manifest))
+
+
+def compile_json_payload(*, project_dir: Path, env: dict[str, str]) -> dict[str, Any]:
+    """Compile in a fresh process and return the parsed JSON payload."""
+
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir, args=("compile", "--json"), env=env
+    )
+    return cast(dict[str, Any], json.loads(result.stdout))
+
+
+def attachment_cache_counts(timings: dict[str, int]) -> tuple[int, int, int]:
+    """Return model attachment cache hits, misses, and bypasses from compile timings."""
+
+    return (
+        timings["attachment_cache_hits"],
+        timings["attachment_cache_misses"],
+        timings["attachment_cache_bypasses"],
+    )
+
+
+def outcome_attachment_counts(outcome: CompileCacheOutcome) -> tuple[int, int, int]:
+    """Return model attachment cache hits, misses, and bypasses from one compile outcome."""
+
+    return (
+        outcome.attachment_cache_hits,
+        outcome.attachment_cache_misses,
+        outcome.attachment_cache_bypasses,
+    )
+
+
+def write_project_files(project_dir: Path, files: dict[str, str]) -> None:
+    """Write several authored project files."""
+
+    for relative_path, contents in files.items():
+        write_project_file(project_dir, relative_path, contents)
+
+
+def install_custom_duckdb_adapter(project_dir: Path) -> None:
+    """Switch the project to a project-local adapter and add a model rendering a constant."""
+
+    write_project_file(project_dir, "adapters/duckdb_plus.py", _CUSTOM_DUCKDB_ADAPTER_SOURCE)
+    replace_project_text(
+        project_dir, "sqlbuild_project.toml", 'adapter = "duckdb"', 'adapter = "duckdb_plus"'
+    )
+    write_project_file(
+        project_dir,
+        "models/marts/minimum_orders.sql",
+        'MODEL (description "Orders meeting the minimum");\n\n'
+        'SELECT order_id\nFROM __ref("stg_orders")\n'
+        'WHERE quantity >= @const("min_quantity")\n',
+    )
+
+
+def add_project_provider(project_dir: Path, provider_name: str) -> None:
+    """Add one project provider with an explicit runtime name."""
+
+    write_project_file(
+        project_dir,
+        f"providers/{provider_name}_client.py",
+        "from sqlbuild.providers import Provider\n\n\n"
+        "class OrdersClient(Provider):\n"
+        '    """Order notification client."""\n\n'
+        f'    provider_name = "{provider_name}"\n',
+    )
+
+
+def rewrite_python_hook(project_dir: Path, *, decorator: str, parameters: str) -> None:
+    """Rewrite the order notification hook with a new decorator and parameter list."""
+
+    write_project_file(
+        project_dir,
+        "models/marts/_sqlbuild/_hooks/python/notifications.py",
+        "from sqlbuild.hooks import hook\n"
+        "from sqlbuild.refs import model\n\n\n"
+        f"{decorator}\n"
+        f"def notify_complete({parameters}):\n"
+        '    ctx.log(f"{ctx.model_name} completed")\n',
     )
 
 

@@ -66,6 +66,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
 )
+from sqlbuild.compiler.fact_cache._helpers.publication import await_fact_publication
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
@@ -761,3 +762,13 @@ def required_description_diagnostics(
         source_inputs=inputs.source_inputs,
         function_inputs=inputs.function_inputs,
     )
+
+
+def clear_model_attachment_cache(*, project_dir: Path) -> None:
+    """Remove reusable model attachment facts so the next compile re-attaches every model."""
+
+    await_fact_publication()
+    for database in (project_dir / "target" / "cache" / "compiler").rglob(
+        "model-attachment.sqlite3"
+    ):
+        database.unlink()

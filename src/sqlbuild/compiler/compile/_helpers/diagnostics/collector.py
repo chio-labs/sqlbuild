@@ -35,6 +35,24 @@ def collect_compile_diagnostics() -> Iterator[CollectedCompileDiagnostics]:
         _ACTIVE_COLLECTOR.reset(token)
 
 
+@contextmanager
+def capture_compile_diagnostics() -> Iterator[CollectedCompileDiagnostics | None]:
+    """Record diagnostics reported inside the block and forward them to the active collector."""
+
+    parent: CollectedCompileDiagnostics | None = _ACTIVE_COLLECTOR.get()
+    if parent is None:
+        yield None
+        return
+    captured: CollectedCompileDiagnostics = CollectedCompileDiagnostics()
+    token: Token[CollectedCompileDiagnostics | None] = _ACTIVE_COLLECTOR.set(captured)
+    try:
+        yield captured
+    finally:
+        _ACTIVE_COLLECTOR.reset(token)
+        for key, diagnostic in captured.entries:
+            parent.add(key=key, diagnostic=diagnostic)
+
+
 def with_collected_compile_diagnostics[**P, R: (CompileProjectInputs, CompiledProject)](
     build: Callable[P, R],
 ) -> Callable[P, R]:

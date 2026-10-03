@@ -44,6 +44,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompactLineageCacheEncodingTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    clear_model_attachment_cache,
     compile_project_with_cache,
     stored_analysis_contents,
 )
@@ -146,7 +147,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     signature_builder.assert_not_called()
     reference_scanner.assert_not_called()
     assert len(tuple((tmp_path / "target" / "cache" / "compiler").rglob("*.sqlite3"))) == (
-        test_case.expected_count + 1
+        test_case.expected_count + 2
     )
 
 
@@ -396,6 +397,7 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
             "UPDATE sql_reference SET payload = ?",
             (corrupt_contents,),
         )
+    clear_model_attachment_cache(project_dir=tmp_path)
     scanner: Mock = Mock(wraps=reference_cache.extract_sql_references)
     monkeypatch.setattr(reference_cache, "extract_sql_references", scanner)
 
@@ -431,6 +433,7 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
             "UPDATE sql_reference SET payload = ?",
             (sqlite3.Binary(b"broken"),),
         )
+    clear_model_attachment_cache(project_dir=tmp_path)
     scanner: Mock = Mock(wraps=reference_cache.extract_sql_references)
     monkeypatch.setattr(reference_cache, "extract_sql_references", scanner)
 
