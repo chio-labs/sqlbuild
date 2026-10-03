@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import Field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar, NamedTuple, Protocol
 
 from sqlbuild.compiler.scopes.types import ScopeKind
 
@@ -25,3 +25,11 @@ class ScopedDeclarationFile(Protocol):
     ownership_root: Path | None
     owning_path: Path | None
     declaration_root: Path | None
+
+
+class DirectorySnapshotEntry(NamedTuple):
+    """One directory entry in a discovery snapshot."""
+
+    name: str
+    is_dir: bool
+    is_walkable_dir: bool

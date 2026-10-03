@@ -34,6 +34,7 @@ from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
+from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,
@@ -81,9 +82,12 @@ def build_discovered_project_inputs(
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
-    with OperationLifecycle(
-        operation_kind="project", operation_name="discovery_declaration_parse"
-    ) as declaration_lifecycle:
+    with (
+        OperationLifecycle(
+            operation_kind="project", operation_name="discovery_declaration_parse"
+        ) as declaration_lifecycle,
+        DirectorySnapshot.scope(project_dir=project_dir),
+    ):
         source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(
             project_dir=project_dir, fact_cache=fact_cache
         )
@@ -227,6 +231,11 @@ def build_discovered_project_inputs(
 def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
     """Aggregate bounded scope inputs while retaining independent authored faults."""
 
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        return _build_tolerant_scope_discovery(project_dir=project_dir)
+
+
+def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
     project_config, local_config, config_faults = _discover_configs(project_dir=project_dir)
     models, model_faults = _discover_models(project_dir=project_dir)
     enums, constants, macros, declaration_faults = _discover_declarations(project_dir=project_dir)

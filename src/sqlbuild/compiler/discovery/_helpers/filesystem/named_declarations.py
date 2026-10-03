@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
+from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import CANONICAL_AUTHORED_ROOTS
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import NamedDeclarationRoot
@@ -21,6 +23,8 @@ from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 _AUDIT_ROLE_DIRECTORY: str = "audits"
 _LOCAL_AUDIT_ROLE_DIRECTORY: str = "_audits"
 _SINGULAR_AUDIT_DIRECTORY: str = "singular"
+_LAYOUT_MEMO_KEY: str = "named_declaration_layout"
+_GROUPS_MEMO_KEY: str = "declaration_groups"
 _NESTED_ROLE_DIRECTORIES: frozenset[str] = frozenset(
     {DECLARATION_GROUP_DIRECTORY}
     | INHERITED_DECLARATION_DIRECTORIES
@@ -33,7 +37,10 @@ def named_declaration_roots(
 ) -> tuple[NamedDeclarationRoot, ...]:
     """Return validated top-level and grouped declaration roots for the requested kinds."""
 
-    validate_named_declaration_layout(project_dir=project_dir)
+    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
+    if _LAYOUT_MEMO_KEY not in tree.memo:
+        validate_named_declaration_layout(project_dir=project_dir)
+        tree.memo[_LAYOUT_MEMO_KEY] = True
     roots: list[NamedDeclarationRoot] = []
     for role_parts, kind in GLOBAL_NAMED_DECLARATION_ROOTS.items():
         directory: Path = project_dir.joinpath(*role_parts)
@@ -67,20 +74,22 @@ def named_declaration_roots(
 
 
 def named_declaration_files(
-    *, roots: tuple[NamedDeclarationRoot, ...], pattern: str
+    *, project_dir: Path, roots: tuple[NamedDeclarationRoot, ...], pattern: str
 ) -> Iterator[tuple[NamedDeclarationRoot, Path]]:
     """Yield every matching file below each root, paired with its root."""
 
+    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
     root: NamedDeclarationRoot
     for root in roots:
         file_path: Path
-        for file_path in sorted(root.directory.rglob(pattern)):
+        for file_path in sorted(tree.rglob(root=root.directory, pattern=pattern)):
             yield root, file_path
 
 
 def validate_named_declaration_layout(*, project_dir: Path) -> None:
     """Reject entries that no named declaration role accepts."""
 
+    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
     audits_root: Path = project_dir / _AUDIT_ROLE_DIRECTORY
     if audits_root.is_dir():
         _require_role_children(
@@ -93,7 +102,7 @@ def validate_named_declaration_layout(*, project_dir: Path) -> None:
         directory: Path = project_dir / top_level
         if not directory.is_dir():
             continue
-        for nested in sorted(path for path in directory.rglob("*") if path.is_dir()):
+        for nested in sorted(tree.directories(root=directory)):
             if nested.name in _NESTED_ROLE_DIRECTORIES:
                 nested_path: str = _relative(path=nested, project_dir=project_dir)
                 raise DeclarationParseError(
@@ -154,6 +163,10 @@ def _require_role_children(
 
 
 def _declaration_groups(*, project_dir: Path) -> tuple[tuple[tuple[str, ...], Path], ...]:
+    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
+    cached: object = tree.memo.get(_GROUPS_MEMO_KEY)
+    if cached is not None:
+        return cast(tuple[tuple[tuple[str, ...], Path], ...], cached)
     groups: list[tuple[tuple[str, ...], Path]] = []
     for root_components in CANONICAL_AUTHORED_ROOTS:
         authored_root: Path = project_dir.joinpath(*root_components)
@@ -161,10 +174,12 @@ def _declaration_groups(*, project_dir: Path) -> tuple[tuple[tuple[str, ...], Pa
             continue
         groups.extend(
             (root_components, group)
-            for group in sorted(authored_root.rglob(DECLARATION_GROUP_DIRECTORY))
+            for group in sorted(tree.rglob(root=authored_root, pattern=DECLARATION_GROUP_DIRECTORY))
             if group.is_dir() and group.parent != authored_root
         )
-    return tuple(groups)
+    result: tuple[tuple[tuple[str, ...], Path], ...] = tuple(groups)
+    tree.memo[_GROUPS_MEMO_KEY] = result
+    return result
 
 
 def _relative(*, path: Path, project_dir: Path) -> str:

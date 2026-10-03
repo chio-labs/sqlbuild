@@ -62,6 +62,9 @@ DECLARATION_GROUP_DIRECTORY: str = "_sqlbuild"
 GLOBAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"macros", "enums", "constants"})
 INHERITED_DECLARATION_DIRECTORIES: frozenset[str] = GLOBAL_DECLARATION_DIRECTORIES
 LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"_macros", "_enums", "_constants"})
+SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
+    INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
+)
 DECLARATION_DIRECTORY_FACTS: dict[str, tuple[DeclarationKind, ScopeKind]] = {
     "macros": (DeclarationKind.MACRO, ScopeKind.INHERITED),
     "enums": (DeclarationKind.ENUM, ScopeKind.INHERITED),

@@ -1,3 +1,4 @@
+pub(crate) mod model_header_matching;
 pub(crate) mod model_header_parsing;
 pub(crate) mod model_header_tokenizing;
 pub(crate) mod sql_interpolation;
