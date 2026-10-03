@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, cast
 
 import duckdb
@@ -25,8 +26,51 @@ from sqlbuild.compiler.discovery._helpers.filesystem import (
 from sqlbuild.spec.contracts.models import SourceLocation
 
 
-def unavailable_artifact_directory(*, prefix: str) -> TemporaryDirectory[str]:
-    raise OSError("temporary storage unavailable")
+def staging_directories(target_dir: Path) -> list[str]:
+    """Return hidden entries left in target_dir, such as abandoned artifact staging."""
+
+    return sorted(path.name for path in target_dir.glob(".*"))
+
+
+def write_staging_directory(*, target_dir: Path, name: str) -> Path:
+    """Write one artifact staging directory with a staged model file."""
+
+    directory: Path = target_dir / name
+    (directory / "compiled" / "models").mkdir(parents=True)
+    (directory / "compiled" / "models" / "orders.sql").write_text("SELECT 1\n", encoding="utf-8")
+    return directory
+
+
+def write_prepared_artifacts_project(*, project_dir: Path, model_count: int) -> None:
+    """Write a DuckDB project large enough to stage compile artifacts in the background."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL021"]\n',
+        encoding="utf-8",
+    )
+    models: Path = project_dir / "models"
+    models.mkdir()
+    for index in range(model_count):
+        (models / f"orders_{index:03}.sql").write_text(
+            "MODEL (description 'Test model.', materialized table, contract enforced, "
+            "columns (order_id (type INTEGER)));\n"
+            f"SELECT CAST({index} AS INTEGER) AS order_id\n",
+            encoding="utf-8",
+        )
+
+
+def has_second_filesystem(root: Path) -> bool:
+    """Return whether root is a writable directory on another device than the temp directory."""
+
+    return (
+        root.is_dir()
+        and os.access(root, os.W_OK)
+        and root.stat().st_dev != Path(tempfile.gettempdir()).stat().st_dev
+    )
+
+
+def unavailable_staging_directory(staging_dir: Path) -> None:
+    raise OSError(f"staging storage unavailable for {staging_dir.name}")
 
 
 def write_compile_startup_project(project_dir: Path) -> None:

@@ -81,6 +81,7 @@ def _run_compile_with_status(
     manifest: bool = request.manifest
     no_color: bool = request.no_color
     lineage_mode: CompileLineageMode = request.lineage_mode
+    prepared_artifacts.remove_abandoned_staging(target_dir=project_dir / "target")
     analysis: CompileAnalysis = analyze_compile_project(
         project_dir=project_dir,
         no_sql_validation=request.no_sql_validation,

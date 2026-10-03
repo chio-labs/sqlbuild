@@ -166,3 +166,26 @@ class RuleGatedTestPlanningTestCase:
     expected_codes: tuple[str, ...]
     expected_message_fragment: str
     expected_inline_planning_calls: int
+
+
+@dataclass(frozen=True)
+class CrossDeviceStagedPublishTestCase:
+    description: str
+    existing_files: dict[str, str]
+    expected_files: dict[str, str]
+    expected_removed: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TamperedStagedPublishTestCase:
+    description: str
+    existing_files: dict[str, str]
+    removed_staged_files: tuple[str, ...]
+    expected_kept_files: dict[str, str]
+
+
+@dataclass(frozen=True)
+class StagingInterleavingTestCase:
+    description: str
+    existing_files: dict[str, str]
+    expected_files: dict[str, str]
