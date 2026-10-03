@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.132.1](https://github.com/chio-labs/sqlbuild/compare/v0.132.0...v0.132.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* keep set operations after subquery operands at the outer query ([#914](https://github.com/chio-labs/sqlbuild/issues/914)) ([d8d9507](https://github.com/chio-labs/sqlbuild/commit/d8d950779515cd1de3f836bea32bfad736f582da))
+
+
+### Performance Improvements
+
+* **compile:** reuse rule results on warm and one-edit compiles ([#915](https://github.com/chio-labs/sqlbuild/issues/915)) ([01a2bbd](https://github.com/chio-labs/sqlbuild/commit/01a2bbd7e6dcbc905a776c7111c6eca506bf5368))
+
 ## [0.132.0](https://github.com/chio-labs/sqlbuild/compare/v0.131.0...v0.132.0) (2026-10-02)
 
 
