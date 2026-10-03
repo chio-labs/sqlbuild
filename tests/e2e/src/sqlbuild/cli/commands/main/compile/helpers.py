@@ -2633,7 +2633,7 @@ def compile_manifest_run_ids(*, project_dir: Path, env: dict[str, str]) -> froze
     return frozenset(_HOOK_RUN_ID_PATTERN.findall(manifest))
 
 
-def compile_json_payload(*, project_dir: Path, env: dict[str, str]) -> dict[str, Any]:
+def fresh_compile_json_payload(*, project_dir: Path, env: dict[str, str]) -> dict[str, Any]:
     """Compile in a fresh process and return the parsed JSON payload."""
 
     result: subprocess.CompletedProcess[str] = run_installed_sqb(

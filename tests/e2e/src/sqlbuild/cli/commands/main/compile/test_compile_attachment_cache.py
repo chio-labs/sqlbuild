@@ -19,8 +19,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileCacheOutcome,
     attachment_cache_counts,
     compile_cache_outcome,
-    compile_json_payload,
     compile_manifest_run_ids,
+    fresh_compile_json_payload,
     outcome_attachment_counts,
     replace_project_text,
     write_project_file,
@@ -175,8 +175,8 @@ def test_given_attachment_diagnostics_when_compiling_warm_then_cache_hit_replays
     write_project_files(project_dir, test_case.files)
     env: dict[str, str] = {COMPILE_CACHE_REGION_ENV_VAR: "east"}
 
-    cold: dict[str, Any] = compile_json_payload(project_dir=project_dir, env=env)
-    warm: dict[str, Any] = compile_json_payload(project_dir=project_dir, env=env)
+    cold: dict[str, Any] = fresh_compile_json_payload(project_dir=project_dir, env=env)
+    warm: dict[str, Any] = fresh_compile_json_payload(project_dir=project_dir, env=env)
     warm_outcome: CompileCacheOutcome = compile_cache_outcome(project_dir=project_dir, env=env)
     reference: CompileCacheOutcome = compile_cache_outcome(
         project_dir=project_dir, env=env, compile_args=("--no-cache",)
@@ -230,21 +230,21 @@ def test_given_replayed_diagnostic_when_reference_policy_toggles_then_matches_un
     project_dir: Path = cache_invalidation_project
     write_project_files(project_dir, test_case.files)
     env: dict[str, str] = {COMPILE_CACHE_REGION_ENV_VAR: "east"}
-    _ = compile_json_payload(project_dir=project_dir, env=env)
-    strict_warm: dict[str, Any] = compile_json_payload(project_dir=project_dir, env=env)
+    _ = fresh_compile_json_payload(project_dir=project_dir, env=env)
+    strict_warm: dict[str, Any] = fresh_compile_json_payload(project_dir=project_dir, env=env)
 
     test_case.relax(project_dir)
     relaxed: CompileCacheOutcome = compile_cache_outcome(project_dir=project_dir, env=env)
     relaxed_reference: CompileCacheOutcome = compile_cache_outcome(
         project_dir=project_dir, env=env, compile_args=("--no-cache",)
     )
-    relaxed_rewarm: dict[str, Any] = compile_json_payload(project_dir=project_dir, env=env)
+    relaxed_rewarm: dict[str, Any] = fresh_compile_json_payload(project_dir=project_dir, env=env)
     test_case.restore(project_dir)
     restored: CompileCacheOutcome = compile_cache_outcome(project_dir=project_dir, env=env)
     restored_reference: CompileCacheOutcome = compile_cache_outcome(
         project_dir=project_dir, env=env, compile_args=("--no-cache",)
     )
-    restored_rewarm: dict[str, Any] = compile_json_payload(project_dir=project_dir, env=env)
+    restored_rewarm: dict[str, Any] = fresh_compile_json_payload(project_dir=project_dir, env=env)
 
     assert tuple(item["code"] for item in strict_warm["diagnostics"]) == (
         test_case.expected_strict_codes
