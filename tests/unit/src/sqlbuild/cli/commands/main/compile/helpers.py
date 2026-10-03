@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import errno
+import os
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -560,3 +563,35 @@ def prepare_rule_gated_compile_project(root: Path, *, test_header: str) -> Path:
         encoding="utf-8",
     )
     return project_dir
+
+
+def write_relative_files(*, root: Path, files: dict[str, str]) -> None:
+    """Write each relative path under root with its text contents."""
+
+    for relative, contents in files.items():
+        path: Path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
+def cross_device_replace(
+    *, staging_root: Path, real_replace: Callable[[Any, Any], None]
+) -> Callable[[Any, Any], None]:
+    """Return an os.replace that rejects moves out of staging_root like a second filesystem."""
+
+    staging_prefix: str = os.fspath(staging_root)
+    replacements: dict[bool, Callable[[Any, Any], None]] = {
+        True: cross_device_rename,
+        False: real_replace,
+    }
+
+    def replace_file(source: Any, destination: Any) -> None:
+        replacements[os.fspath(source).startswith(staging_prefix)](source, destination)
+
+    return replace_file
+
+
+def cross_device_rename(source: Any, destination: Any) -> None:
+    """Reject a move as if source and destination were on different filesystems."""
+
+    raise OSError(errno.EXDEV, "Invalid cross-device link")

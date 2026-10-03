@@ -19,7 +19,7 @@ pub(crate) fn replace_callable_markers<F>(
 where
     F: FnMut(&str, &str) -> Option<(String, bool)>,
 {
-    let protected = protected_ranges(syntax, sql);
+    let mut protected = ProtectedRanges::new(syntax, sql);
     let mut output = String::with_capacity(sql.len());
     let mut reached: HashSet<String> = HashSet::new();
     let mut cursor = 0;
@@ -27,7 +27,7 @@ where
         let Some(full) = captures.get(0) else {
             continue;
         };
-        if full.start() < cursor || in_protected_range(full.start(), &protected) {
+        if full.start() < cursor || protected.contains(full.start()) {
             continue;
         }
         let suffix_start = skip_whitespace(sql, full.end());
@@ -107,14 +107,14 @@ fn replace_marker_captures<F>(
 where
     F: FnMut(&Captures<'_>) -> Option<String>,
 {
-    let protected = protected_ranges(syntax, sql);
+    let mut protected = ProtectedRanges::new(syntax, sql);
     let mut output = String::with_capacity(sql.len());
     let mut cursor = 0;
     for captures in pattern.captures_iter(sql) {
         let Some(full) = captures.get(0) else {
             continue;
         };
-        if in_protected_range(full.start(), &protected) {
+        if protected.contains(full.start()) {
             continue;
         }
         let Some(value) = replacement(&captures) else {
@@ -129,13 +129,18 @@ where
 }
 
 pub(crate) fn marker_names(pattern: &Regex, syntax: &LexicalSyntax, sql: &str) -> Vec<String> {
-    let protected = protected_ranges(syntax, sql);
+    marker_names_in(pattern, &mut ProtectedRanges::new(syntax, sql))
+}
+
+/// Marker names outside the comments and quoted text of the SQL that `protected` scans.
+pub(crate) fn marker_names_in(pattern: &Regex, protected: &mut ProtectedRanges<'_>) -> Vec<String> {
+    let sql = protected.sql;
     let mut names: Vec<String> = Vec::new();
     for captures in pattern.captures_iter(sql) {
         let Some(full) = captures.get(0) else {
             continue;
         };
-        if in_protected_range(full.start(), &protected) {
+        if protected.contains(full.start()) {
             continue;
         }
         if let Some(name) = captures.get(1) {
@@ -149,8 +154,32 @@ pub(crate) fn protected_ranges(syntax: &LexicalSyntax, sql: &str) -> Vec<(usize,
     dialect_non_code_ranges(sql, syntax)
 }
 
+/// Whether `index` falls inside one of the sorted, non-overlapping `ranges`.
 pub(crate) fn in_protected_range(index: usize, ranges: &[(usize, usize)]) -> bool {
-    ranges
-        .iter()
-        .any(|(start, end)| index >= *start && index < *end)
+    let following = ranges.partition_point(|(start, _)| *start <= index);
+    following > 0 && index < ranges[following - 1].1
+}
+
+/// Comment and quoted-text ranges of one SQL text, scanned only when a marker needs them.
+pub(crate) struct ProtectedRanges<'a> {
+    sql: &'a str,
+    syntax: &'a LexicalSyntax,
+    ranges: Option<Vec<(usize, usize)>>,
+}
+
+impl<'a> ProtectedRanges<'a> {
+    pub(crate) fn new(syntax: &'a LexicalSyntax, sql: &'a str) -> Self {
+        Self {
+            sql,
+            syntax,
+            ranges: None,
+        }
+    }
+
+    pub(crate) fn contains(&mut self, index: usize) -> bool {
+        let ranges = self
+            .ranges
+            .get_or_insert_with(|| protected_ranges(self.syntax, self.sql));
+        in_protected_range(index, ranges)
+    }
 }

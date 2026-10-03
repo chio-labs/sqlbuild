@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
+import uuid
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -16,6 +18,7 @@ from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
     sql_test_artifact_record_key,
     write_sql_test_artifact_cache,
 )
+from sqlbuild.cli.commands.exceptions import StagedArtifactsChangedError
 from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
@@ -168,27 +171,45 @@ def write_static_compile_target(
     )
 
 
+def staged_artifact_files(*, target_dir: Path) -> frozenset[str]:
+    """Return the relative paths of every compiled artifact staged under target_dir."""
+
+    return frozenset(
+        relative for _, relative in _staged_files(staged_dir=target_dir / _COMPILED_DIR)
+    )
+
+
 def publish_static_compile_target(
-    *, prepared: WrittenTarget, target_dir: Path, manifest: dict[str, object] | None
+    *,
+    prepared: WrittenTarget,
+    target_dir: Path,
+    manifest: dict[str, object] | None,
+    expected_files: frozenset[str],
 ) -> WrittenTarget:
     """Publish staged files with the same unchanged-file and stale-file semantics."""
 
     compiled_dir: Path = target_dir / _COMPILED_DIR
     staged_dir: Path = prepared.target_dir / _COMPILED_DIR
-    check_existing: bool = compiled_dir.is_dir()
-    managed_paths: set[Path] = set()
-    target_dir.mkdir(parents=True, exist_ok=True)
-    for source in sorted(staged_dir.rglob("*")):
-        if not source.is_file():
-            continue
-        path: Path = compiled_dir / source.relative_to(staged_dir)
-        _write_bytes_if_changed(
-            path=path, contents=source.read_bytes(), check_existing=check_existing
+    staged_files: list[tuple[Path, str]] = _staged_files(staged_dir=staged_dir)
+    if frozenset(relative for _, relative in staged_files) != expected_files:
+        raise StagedArtifactsChangedError(
+            "staged compile artifacts changed before publication; no artifact was published",
+            help="Rerun the compile; avoid deleting target/ while a compile is running.",
         )
-        managed_paths.add(path)
-    if check_existing:
-        with record_compile_timing("stale_traversal_ms"):
-            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    moved: bool = not compiled_dir.is_dir() and _move_staged_tree(
+        staged_dir=staged_dir, path=compiled_dir
+    )
+    if not moved:
+        check_existing: bool = compiled_dir.is_dir()
+        managed_paths: set[Path] = set()
+        for source, relative in staged_files:
+            path: Path = compiled_dir / relative
+            _publish_staged_file(source=source, path=path, check_existing=check_existing)
+            managed_paths.add(path)
+        if check_existing:
+            with record_compile_timing("stale_traversal_ms"):
+                _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
     return WrittenTarget(
@@ -200,6 +221,67 @@ def publish_static_compile_target(
         target_dir=target_dir,
         diagnostics=prepared.diagnostics,
     )
+
+
+def _move_staged_tree(*, staged_dir: Path, path: Path) -> bool:
+    with record_compile_timing("physical_write_ms"):
+        try:
+            os.rename(staged_dir, path)
+        except OSError:
+            return False
+    return True
+
+
+def _staged_files(*, staged_dir: Path) -> list[tuple[Path, str]]:
+    root_prefix_length: int = len(os.fspath(staged_dir)) + 1
+    files: list[tuple[Path, str]] = []
+    for root, _, filenames in os.walk(staged_dir):
+        relative_root: str = root[root_prefix_length:]
+        for filename in filenames:
+            files.append((Path(root, filename), os.path.join(relative_root, filename)))
+    return files
+
+
+def _publish_staged_file(*, source: Path, path: Path, check_existing: bool) -> None:
+    with record_compile_timing("physical_write_ms"):
+        if check_existing and path.is_file():
+            contents: bytes = source.read_bytes()
+            existing: bytes = path.read_bytes()
+            if existing == contents:
+                return
+            _ = existing.decode("utf-8")
+            _overwrite_bytes(path=path, contents=contents)
+            return
+        try:
+            _move_new_file(source=source, path=path)
+        except FileNotFoundError:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _move_new_file(source=source, path=path)
+
+
+def _move_new_file(*, source: Path, path: Path) -> None:
+    try:
+        os.replace(source, path)
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise
+        _copy_new_file(source=source, path=path)
+
+
+def _copy_new_file(*, source: Path, path: Path) -> None:
+    """Copy across filesystems through a sibling temporary file so the new file is atomic."""
+
+    temporary: Path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    descriptor: int = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        try:
+            _write_all(descriptor=descriptor, path=path, contents=source.read_bytes())
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def _write_models(*, target_dir: Path, plan_output: PlanOutput, check_existing: bool) -> set[Path]:
@@ -568,14 +650,18 @@ def _overwrite_text(*, path: Path, contents: str) -> None:
 def _overwrite_bytes(*, path: Path, contents: bytes) -> None:
     descriptor: int = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
     try:
-        offset: int = 0
-        while offset < len(contents):
-            written: int = os.write(descriptor, contents[offset:])
-            if written == 0:
-                raise OSError(f"failed to write compiled artifact '{path}'")
-            offset += written
+        _write_all(descriptor=descriptor, path=path, contents=contents)
     finally:
         os.close(descriptor)
+
+
+def _write_all(*, descriptor: int, path: Path, contents: bytes) -> None:
+    offset: int = 0
+    while offset < len(contents):
+        written: int = os.write(descriptor, contents[offset:])
+        if written == 0:
+            raise OSError(f"failed to write compiled artifact '{path}'")
+        offset += written
 
 
 def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:

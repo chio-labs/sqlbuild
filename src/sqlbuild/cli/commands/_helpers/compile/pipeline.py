@@ -206,7 +206,9 @@ def _analyze_compile_project(
             and rules_config.select
             and not any(item.is_error for item in core_diagnostics)
         ):
-            prepared_artifacts.start(project=graph.project, adapter=adapter)
+            prepared_artifacts.start(
+                project=graph.project, adapter=adapter, target_dir=project_dir / "target"
+            )
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
         rules_start: float = time.monotonic()
         rules_result = run_rules(

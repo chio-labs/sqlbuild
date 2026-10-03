@@ -333,7 +333,7 @@ def matched_model_output_column_locations(
         relative_path=relative_path,
         projection_ranges=projection_ranges,
         extract_implicit_alias_columns=extract_implicit_alias_columns,
-        line_starts=_line_starts(contents),
+        line_starts=source_line_starts(contents),
     )
 
 
@@ -487,13 +487,22 @@ def _location_for_absolute_span(
     )
 
 
-def _line_starts(contents: str) -> tuple[int, ...]:
+def source_line_starts(contents: str) -> tuple[int, ...]:
+    """Return the offset where each line of contents starts."""
+
     starts: list[int] = [0]
     index: int = contents.find("\n")
     while index != -1:
         starts.append(index + 1)
         index = contents.find("\n", index + 1)
     return tuple(starts)
+
+
+def source_position(*, offset: int, line_starts: tuple[int, ...]) -> tuple[int, int]:
+    """Map a zero-based offset to a one-based line and column."""
+
+    line_index: int = bisect_right(line_starts, offset) - 1
+    return line_index + 1, offset - line_starts[line_index] + 1
 
 
 def _split_top_level_select_items(*, sql: str, start: int, end: int) -> tuple[tuple[int, int], ...]:

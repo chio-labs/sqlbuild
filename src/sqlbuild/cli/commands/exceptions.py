@@ -15,6 +15,10 @@ class CliUserError(Exception):
         self.help = help
 
 
+class StagedArtifactsChangedError(CliUserError):
+    """Staged compile artifacts changed before publication, so nothing stale is deleted."""
+
+
 class QueryExecutionError(CliUserError):
     """The warehouse rejected or failed an ad hoc query."""
 

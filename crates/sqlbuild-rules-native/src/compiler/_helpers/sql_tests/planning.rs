@@ -19,7 +19,7 @@ use crate::compiler::_helpers::sql_tests::helper_scope::{
     ScopeGraph, helper_scope_ctes, merged_scoped_ctes,
 };
 use crate::compiler::_helpers::sql_tests::markers::{
-    in_protected_range, marker_names, protected_ranges, replace_callable_markers,
+    ProtectedRanges, marker_names, marker_names_in, replace_callable_markers,
     replace_dbt_ref_markers, replace_named_markers,
 };
 use crate::compiler::_helpers::sql_tests::rendering::{
@@ -1620,7 +1620,8 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
             });
         }
     };
-    for name in marker_names(&patterns.reference, &patterns.lexical, sql) {
+    let mut protected = ProtectedRanges::new(&patterns.lexical, sql);
+    for name in marker_names_in(&patterns.reference, &mut protected) {
         let message = format!(
             "test '{test_name}': model '{model_name}' references __ref('{name}') which has no mock and is not in the expected chain"
         );
@@ -1630,19 +1631,18 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
         (&patterns.source, SOURCE_FUNCTION),
         (&patterns.seed, SEED_FUNCTION),
     ] {
-        for name in marker_names(pattern, &patterns.lexical, sql) {
+        for name in marker_names_in(pattern, &mut protected) {
             let message = format!(
                 "test '{test_name}': model '{model_name}' references {function_name}('{name}') which has no mock"
             );
             warn(function_name, name, message);
         }
     }
-    let protected = protected_ranges(&patterns.lexical, sql);
     for captures in patterns.dbt_reference.captures_iter(sql) {
         let Some(full) = captures.get(0) else {
             continue;
         };
-        if in_protected_range(full.start(), &protected) {
+        if protected.contains(full.start()) {
             continue;
         }
         let Some(first) = captures.get(1).map(|value| value.as_str()) else {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -11,6 +12,7 @@ from sqlbuild.cli.commands._helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands._helpers.compile import pipeline as compile_pipeline
 from sqlbuild.cli.commands._helpers.compile import status as compile_status
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
+from sqlbuild.cli.commands.main.project import _compile as compile_command
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
 from sqlbuild.cli.compile.models import (
@@ -22,6 +24,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileColumnContractModeTestCase,
     CompileCommandTestCase,
+    CompileCyclicCollectionTestCase,
     CompileDagArtifactTestCase,
     CompileJsonDiagnosticsTestCase,
     CompileLineageModeTestCase,
@@ -625,3 +628,53 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
     assert payload["summary"]["errors"] == len(test_case.expected_codes)
     assert len(planning_calls) == test_case.expected_inline_planning_calls
     assert not (project_dir / "target" / "compiled" / "tests").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileCyclicCollectionTestCase(
+            description="enabled collection is paused and restored",
+            collection_enabled_before=True,
+            expected_enabled_during=False,
+            expected_enabled_after=True,
+        ),
+        CompileCyclicCollectionTestCase(
+            description="disabled collection stays disabled",
+            collection_enabled_before=False,
+            expected_enabled_during=False,
+            expected_enabled_after=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_collection_state_when_compiling_then_cycles_are_paused_and_state_restored(
+    test_case: CompileCyclicCollectionTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_static_compile_project(tmp_path)
+    enabled_during: list[bool] = []
+    analyze: Callable[..., Any] = compile_pipeline.analyze_compile_project
+
+    def observed_analyze(**kwargs: Any) -> Any:
+        enabled_during.append(gc.isenabled())
+        return analyze(**kwargs)
+
+    monkeypatch.setattr(
+        compile_pipeline, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
+    )
+    monkeypatch.setattr(compile_command, "analyze_compile_project", observed_analyze)
+    set_collection: dict[bool, Callable[[], None]] = {True: gc.enable, False: gc.disable}
+    was_enabled: bool = gc.isenabled()
+    set_collection[test_case.collection_enabled_before]()
+    try:
+        exit_code: int = run_compile(CompileCommandRequest(project_dir=project_dir))
+        enabled_after: bool = gc.isenabled()
+    finally:
+        set_collection[was_enabled]()
+
+    assert exit_code == 0
+    assert enabled_during == [test_case.expected_enabled_during]
+    assert enabled_after is test_case.expected_enabled_after
+    assert (project_dir / "target" / "compiled" / "models" / "orders.sql").exists()

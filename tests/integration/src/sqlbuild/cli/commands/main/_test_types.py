@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from tempfile import TemporaryDirectory
+from pathlib import Path
 
 from sqlbuild.compiler.planner.models import CursorOverrides
 
@@ -27,7 +27,23 @@ class VariedCompileFixtureTestCase:
 class PreparedArtifactsCompileTestCase:
     description: str
     model_count: int
-    temporary_directory_factory: Callable[..., TemporaryDirectory[str]]
+    staging_directory_factory: Callable[[Path], None]
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class AbandonedStagingCompileTestCase:
+    description: str
+    model_count: int
+    abandoned: tuple[str, ...]
+    locked: tuple[str, ...]
+    expected_remaining: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CrossDeviceArtifactsCompileTestCase:
+    description: str
+    model_count: int
     expected_exit_code: int = 0
 
 

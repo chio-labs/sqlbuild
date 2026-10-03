@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import textwrap
-from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +13,8 @@ from sqlbuild.compiler.compile.classes.model_description_resolution import (
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,  # noqa: FFL102 - the compiler owns the canonical native header grammar
     prepare_model_header_tokens,
+    source_line_starts,
+    source_position,
 )
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 from sqlbuild.lint.constants import (
@@ -87,7 +88,7 @@ def lint_native_headers(
     """Run all native header rules and return their violations."""
 
     violations: list[LintViolation] = []
-    line_starts: tuple[int, ...] = _line_starts(contents)
+    line_starts: tuple[int, ...] = source_line_starts(contents)
     header: HeaderSpan
     for header in headers:
         violations.extend(
@@ -234,9 +235,7 @@ def _lint_header_values(
     try:
         values: dict[str, object] = _parse_header_values(kind=header.kind, header_text=header_text)
     except Exception as error:  # noqa: BLE001 - any parse failure is a lint fault
-        position: tuple[int, int] = _offset_to_position(
-            offset=header.start, line_starts=line_starts
-        )
+        position: tuple[int, int] = source_position(offset=header.start, line_starts=line_starts)
         return (
             LintViolation(
                 file_path=file_path,
@@ -341,7 +340,7 @@ def _lint_header_whitespace(
     header_text: str = contents[header.start : header.end]
     if not any(line != line.rstrip() for line in _split_outside_quotes(text=header_text)):
         return ()
-    position: tuple[int, int] = _offset_to_position(offset=header.start, line_starts=line_starts)
+    position: tuple[int, int] = source_position(offset=header.start, line_starts=line_starts)
     return (
         LintViolation(
             file_path=file_path,
@@ -592,8 +591,8 @@ def _relocate_leading_comment(
     )
     faults: list[LintViolation] = []
     if relocated_description.count("\n") + 1 > config.max_description_lines:
-        position: tuple[int, int] = _offset_to_position(
-            offset=header.start, line_starts=_line_starts(contents)
+        position: tuple[int, int] = source_position(
+            offset=header.start, line_starts=source_line_starts(contents)
         )
         faults.append(
             LintViolation(
@@ -699,8 +698,8 @@ def _violation_for_header_start(
     message: str,
     remediation: str,
 ) -> LintViolation:
-    position: tuple[int, int] = _offset_to_position(
-        offset=header.start, line_starts=_line_starts(contents)
+    position: tuple[int, int] = source_position(
+        offset=header.start, line_starts=source_line_starts(contents)
     )
     return LintViolation(
         file_path=file_path,
@@ -712,20 +711,6 @@ def _violation_for_header_start(
         engine=LINT_ENGINE_SQLBUILD,
         remediation=remediation,
     )
-
-
-def _line_starts(contents: str) -> tuple[int, ...]:
-    starts: list[int] = [0]
-    index: int = contents.find("\n")
-    while index >= 0:
-        starts.append(index + 1)
-        index = contents.find("\n", index + 1)
-    return tuple(starts)
-
-
-def _offset_to_position(*, offset: int, line_starts: tuple[int, ...]) -> tuple[int, int]:
-    line_index: int = bisect_right(line_starts, offset) - 1
-    return line_index + 1, offset - line_starts[line_index] + 1
 
 
 def _inner_header_text(*, header_text: str) -> str:

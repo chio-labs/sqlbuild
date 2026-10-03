@@ -60,3 +60,16 @@ pub(crate) struct CteRenameTestCase {
     pub(crate) renamed_index: usize,
     pub(crate) expected_sql: Option<&'static str>,
 }
+
+pub(crate) struct MarkerNamesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_names: &'static [&'static str],
+    pub(crate) expected_replaced_sql: &'static str,
+}
+
+pub(crate) struct ProtectedRangeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) ranges: &'static [(usize, usize)],
+    pub(crate) expected_protected: &'static [usize],
+}
