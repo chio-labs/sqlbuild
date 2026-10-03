@@ -132,3 +132,34 @@ def write_single_model_diagnostic_project(*, project_dir: Path, diagnostics: int
         + ",\n".join(projections)
         + '\nFROM __ref("orders") AS o\n'
     )
+
+
+def write_undescribed_project(*, project_dir: Path, model_count: int, width: int = 6) -> None:
+    """Generate models, seeds, and one large source file whose resources all lack descriptions."""
+    project_dir.mkdir(parents=True, exist_ok=True)
+    for folder in ("models", "sources", "seeds"):
+        (project_dir / folder).mkdir(exist_ok=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "undescribed_orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+    )
+    columns: list[str] = [f"amount_{index:03}" for index in range(width)]
+    sources: list[str] = ["sources:"]
+    seeds: list[str] = ["seeds:"]
+    for index in range(model_count):
+        sources.extend(
+            (f"  - name: orders_{index:05}", "    schema: main", f"    table: orders_{index:05}")
+        )
+        sources.append("    columns:")
+        sources.extend(f"      - name: {column}\n        type: INTEGER" for column in columns)
+        (project_dir / "models" / f"order_totals_{index:05}.sql").write_text(
+            "MODEL (materialized view);\n"
+            f'SELECT {", ".join(columns)} FROM __source("orders_{index:05}")\n'
+        )
+        if index % 10 == 0:
+            seeds.append(f"  - name: products_{index:05}\n    columns:")
+            seeds.extend(f"      - name: {column}\n        type: INTEGER" for column in columns)
+            (project_dir / "seeds" / f"products_{index:05}.csv").write_text(
+                ",".join(columns) + "\n" + ",".join("1" for _ in columns) + "\n"
+            )
+    (project_dir / "sources" / "orders.yml").write_text("\n".join(sources) + "\n")
+    (project_dir / "seeds" / "products.yml").write_text("\n".join(seeds) + "\n")

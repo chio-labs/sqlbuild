@@ -18,6 +18,7 @@ from scripts.cold_compile_performance._helpers.diagnostic_project import (
     write_diagnostic_project,
     write_function_name_project,
     write_single_model_diagnostic_project,
+    write_undescribed_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import DiagnosticPerformanceCase
 
@@ -100,6 +101,40 @@ def test_given_one_model_with_many_diagnostics_when_compiling_then_scales_linear
     _LOGGER.info("single-model diagnostics 1x/4x wall=%s", timings)
     assert max(timings) < test_case.expected_max_wall_seconds
     assert timings[1] <= timings[0] * 4.5 + 1.0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiagnosticPerformanceCase(
+            "many_undescribed_resources",
+            diagnostic_count=500,
+            expected_max_wall_seconds=15.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_many_undescribed_resources_when_compiling_then_scales_linearly(
+    test_case: DiagnosticPerformanceCase, tmp_path: Path
+) -> None:
+    timings: list[float] = []
+    for multiplier in (1, 4):
+        project: Path = tmp_path / f"undescribed_{multiplier}"
+        count: int = test_case.diagnostic_count * multiplier
+        write_undescribed_project(project_dir=project, model_count=count)
+        elapsed, payload = measure_diagnostic_compile(
+            project_dir=project, timeout=test_case.expected_timeout_seconds
+        )
+        kinds: Counter[tuple[str, str]] = Counter(
+            (item["code"], item["resource_type"]) for item in payload["diagnostics"]
+        )
+        assert kinds == Counter(
+            {("P010", "model"): count, ("P010", "source"): count, ("P010", "seed"): count // 10}
+        )
+        timings.append(elapsed)
+    _LOGGER.info("undescribed resources 1x/4x wall=%s", timings)
+    assert max(timings) < test_case.expected_max_wall_seconds
+    assert timings[1] <= timings[0] * 5.0 + 1.0
 
 
 @pytest.mark.parametrize(
