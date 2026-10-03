@@ -35,7 +35,7 @@ type _PreparedResult = tuple[WrittenTarget, frozenset[str]]
 
 
 class PreparedCompileArtifacts:
-    """Own one background preparation task: staged artifacts, or planned SQL tests only."""
+    """Own one background preparation task, either staged artifacts or planned SQL tests only."""
 
     def __init__(self, *, enabled: bool) -> None:
         self.enabled: bool = enabled
