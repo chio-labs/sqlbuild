@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.133.1](https://github.com/chio-labs/sqlbuild/compare/v0.133.0...v0.133.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **compile:** linear missing-description locations and comment-tolerant expected fixtures ([#924](https://github.com/chio-labs/sqlbuild/issues/924)) ([2d8fe1d](https://github.com/chio-labs/sqlbuild/commit/2d8fe1dbc5215e4f26ba701641ac2ccf41fcc2ed))
+
 ## [0.133.0](https://github.com/chio-labs/sqlbuild/compare/v0.132.1...v0.133.0) (2026-10-03)
 
 
