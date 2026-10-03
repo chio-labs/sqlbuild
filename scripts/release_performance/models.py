@@ -68,6 +68,7 @@ class RunnerContext:
 class ReleaseComparison:
     baseline_version: str
     candidate_version: str
+    baseline_generator: str
     runs: int
     runner: RunnerContext
     commands: tuple[CommandComparison, ...]
@@ -84,3 +85,4 @@ class ComparisonOptions:
     build_models: int
     work_dir: Path | None
     output: Path | None
+    baseline_source: Path | None = None

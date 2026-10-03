@@ -39,6 +39,15 @@ def _parse_args(argv: list[str] | None) -> ComparisonOptions:
     parser.add_argument("--python", default=DEFAULT_PYTHON)
     parser.add_argument("--inspection-models", type=int, default=DEFAULT_INSPECTION_MODELS)
     parser.add_argument("--build-models", type=int, default=DEFAULT_BUILD_MODELS)
+    parser.add_argument(
+        "--baseline-source",
+        type=Path,
+        default=None,
+        help=(
+            "Source tree whose benchmark generator writes the baseline's projects. Defaults to "
+            "the baseline's release tag extracted from this repository."
+        ),
+    )
     parser.add_argument("--work-dir", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=None)
     args: argparse.Namespace = parser.parse_args(argv)
@@ -53,4 +62,5 @@ def _parse_args(argv: list[str] | None) -> ComparisonOptions:
         build_models=args.build_models,
         work_dir=args.work_dir,
         output=args.output,
+        baseline_source=args.baseline_source,
     )

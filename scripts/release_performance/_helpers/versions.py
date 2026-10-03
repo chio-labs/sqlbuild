@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import platform
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.request
 from pathlib import Path
@@ -22,6 +24,7 @@ from scripts.release_performance.constants import (
     PYPI_SIMPLE_JSON,
     PYPI_SIMPLE_URL,
     RELEASE_TAG_PATTERN,
+    RELEASE_TAG_PREFIX,
     STDERR_TAIL_CHARACTERS,
     UNIVERSAL_WHEEL_MACHINE,
     WHEEL_MACHINE_ALIASES,
@@ -116,6 +119,28 @@ def tagged_versions(*, repo_dir: Path) -> tuple[str, ...]:
         for tag in completed.stdout.split()
         if _RELEASE_VERSION.fullmatch(tag.removeprefix("v"))
     )
+
+
+def release_source(*, version: str, repo_dir: Path, destination: Path) -> Path:
+    """Extract the source tree of release tag v<version> from repo_dir into destination."""
+
+    tag: str = RELEASE_TAG_PREFIX + version
+    completed: subprocess.CompletedProcess[bytes] = subprocess.run(
+        ["git", "-C", str(repo_dir), "archive", "--format=tar", tag],
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ReleasePerformanceError(
+            f"Release tag {tag} is not available in {repo_dir}, so the baseline's own benchmark "
+            "generator cannot be used; fetch the release tags or pass --baseline-source: "
+            + _tail(completed.stderr.decode("utf-8", errors="replace"))
+        )
+    shutil.rmtree(destination, ignore_errors=True)
+    destination.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(completed.stdout)) as archive:
+        archive.extractall(destination, filter="data")
+    return destination
 
 
 def resolve_baseline(*, candidate: str, repo_dir: Path) -> str:

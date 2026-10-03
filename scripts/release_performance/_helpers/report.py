@@ -31,6 +31,9 @@ def comparison_markdown(*, comparison: ReleaseComparison) -> str:
         f"{comparison.runs} interleaved runs per version; wall and CPU are medians, "
         "peak RSS is the worst run.",
         "",
+        "Benchmark projects are generated per side: the baseline runs projects from its own "
+        f"generator ({comparison.baseline_generator}), the candidate from the candidate's.",
+        "",
         f"Limits: wall {_percent(MAX_WALL_RATIO)} (ignored under "
         f"{MIN_WALL_REGRESSION_SECONDS:g} s), CPU {_percent(MAX_CPU_RATIO)} (ignored under "
         f"{MIN_CPU_REGRESSION_SECONDS:g} s), peak RSS {_percent(MAX_RSS_RATIO)} (ignored under "

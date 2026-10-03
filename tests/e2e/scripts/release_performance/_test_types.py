@@ -12,3 +12,4 @@ class ReleasePerformanceTestCase:
     build_models: int
     expected_return_code: int
     expected_fragments: tuple[str, ...]
+    expected_marked_projects: tuple[str, ...]

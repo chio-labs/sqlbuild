@@ -13,6 +13,7 @@ from scripts.compile_performance_ratio._helpers.report import cpu_model
 from scripts.release_performance._helpers.benchmark import (
     compare_command,
     prepare_version_projects,
+    write_baseline_pristine_projects,
     write_pristine_projects,
 )
 from scripts.release_performance._helpers.report import (
@@ -30,13 +31,17 @@ from scripts.release_performance._helpers.versions import (
     install_published,
     install_wheel,
     installed_version,
+    release_source,
     resolve_baseline,
 )
 from scripts.release_performance.constants import (
+    BASELINE_GENERATED_DIRECTORY,
     BASELINE_LABEL,
     BASELINE_PUBLICATION_WAIT_SECONDS,
+    BASELINE_SOURCE_DIRECTORY,
     BENCHMARK_COMMANDS,
     CANDIDATE_LABEL,
+    RELEASE_TAG_PREFIX,
     REPO_ROOT,
 )
 from scripts.release_performance.exceptions import ReleasePerformanceError
@@ -104,16 +109,40 @@ def _compare(*, options: ComparisonOptions, root: Path) -> ReleaseComparison:
         file=sys.stderr,
     )
     load_before: tuple[float, float, float] = os.getloadavg()
-    print("Generating benchmark projects", file=sys.stderr)
-    pristine: Path = write_pristine_projects(
-        root=root, inspection_models=options.inspection_models, build_models=options.build_models
+    print("Generating candidate benchmark projects", file=sys.stderr)
+    pristine: dict[str, Path] = {
+        CANDIDATE_LABEL: write_pristine_projects(
+            root=root,
+            inspection_models=options.inspection_models,
+            build_models=options.build_models,
+        )
+    }
+    baseline_generator: str = (
+        str(options.baseline_source)
+        if options.baseline_source is not None
+        else RELEASE_TAG_PREFIX + baseline.version
+    )
+    print(f"Generating baseline benchmark projects with {baseline_generator}", file=sys.stderr)
+    pristine[BASELINE_LABEL] = write_baseline_pristine_projects(
+        source=(
+            options.baseline_source.absolute()
+            if options.baseline_source is not None
+            else release_source(
+                version=baseline.version,
+                repo_dir=REPO_ROOT,
+                destination=root / BASELINE_SOURCE_DIRECTORY,
+            )
+        ),
+        root=root / BASELINE_GENERATED_DIRECTORY,
+        inspection_models=options.inspection_models,
+        build_models=options.build_models,
     )
     versions: tuple[InstalledVersion, InstalledVersion] = (baseline, candidate)
     projects: dict[str, dict[str, Path]] = {}
     for version in versions:
         print(f"Warming caches for {version.label} {version.version}", file=sys.stderr)
         projects[version.label] = prepare_version_projects(
-            version=version, pristine=pristine, root=root
+            version=version, pristine=pristine[version.label], root=root
         )
     measured: list[CommandComparison] = []
     skipped: list[SkippedCommand] = []
@@ -133,6 +162,7 @@ def _compare(*, options: ComparisonOptions, root: Path) -> ReleaseComparison:
     return ReleaseComparison(
         baseline_version=baseline.version,
         candidate_version=candidate.version,
+        baseline_generator=baseline_generator,
         runs=options.runs,
         runner=RunnerContext(
             cpu_model=cpu_model(),

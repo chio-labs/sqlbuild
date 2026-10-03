@@ -11,7 +11,9 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from scripts.compile_performance_ratio._helpers.measure import run_checkout_generator
 from scripts.release_performance.constants import (
+    BASELINE_GENERATOR_ENTRY,
     BUILD_PROJECT,
     BUILD_WARMUPS,
     COMMAND_TIMEOUT_SECONDS,
@@ -20,6 +22,7 @@ from scripts.release_performance.constants import (
     EXCLUDED_ENVIRONMENT_PREFIX,
     INSPECTION_PROJECT,
     INSPECTION_WARMUPS,
+    PRISTINE_DIRECTORY,
     STDERR_TAIL_CHARACTERS,
     TIME_FORMAT,
 )
@@ -42,12 +45,32 @@ _TEMPLATE_SUFFIX: str = "-template"
 def write_pristine_projects(*, root: Path, inspection_models: int, build_models: int) -> Path:
     """Generate the inspection and build benchmarks once so every version reads the same files."""
 
-    pristine: Path = root / "pristine"
+    pristine: Path = root / PRISTINE_DIRECTORY
     write_inspection_benchmark_project(
         project_dir=pristine / INSPECTION_PROJECT, model_count=inspection_models
     )
     write_build_benchmark_project(project_dir=pristine / BUILD_PROJECT, model_count=build_models)
     return pristine
+
+
+def write_baseline_pristine_projects(
+    *, source: Path, root: Path, inspection_models: int, build_models: int
+) -> Path:
+    """Generate the baseline's benchmarks with the baseline source's own generator."""
+
+    completed: subprocess.CompletedProcess[str] = run_checkout_generator(
+        checkout=source,
+        python=Path(sys.executable).absolute(),
+        entry=BASELINE_GENERATOR_ENTRY,
+        arguments=(str(root), str(inspection_models), str(build_models)),
+        environment=_environment(),
+    )
+    if completed.returncode != 0:
+        raise ReleasePerformanceError(
+            f"Baseline benchmark generation with the generator in {source} failed with exit "
+            f"{completed.returncode}:\n{completed.stderr[-STDERR_TAIL_CHARACTERS:]}"
+        )
+    return root / PRISTINE_DIRECTORY
 
 
 def prepare_version_projects(
