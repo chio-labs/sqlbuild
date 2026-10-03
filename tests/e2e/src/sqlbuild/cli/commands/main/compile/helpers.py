@@ -2771,17 +2771,25 @@ class UnionFixtureCompileMeasurement(NamedTuple):
     errors: int
 
 
-def _union_all_fixture_rows(*, row_count: int, status: str) -> str:
-    return " UNION ALL\n".join(
+def _union_all_fixture_rows(*, row_count: int, status: str, separator: str) -> str:
+    return separator.join(
         f"  SELECT {row} AS order_id, CAST({row} AS DOUBLE) AS amount, '{status}' AS status"
         for row in range(row_count)
     )
 
 
 def write_union_fixture_test_project(
-    *, project_dir: Path, sql_test_count: int, fixture_row_count: int
+    *,
+    project_dir: Path,
+    sql_test_count: int,
+    fixture_row_count: int,
+    input_fixture_row_separator: str,
 ) -> None:
-    """Write a DuckDB project whose SQL tests use long UNION ALL fixture chains."""
+    """Write a DuckDB project whose SQL tests use long UNION ALL fixture chains.
+
+    `input_fixture_row_separator` joins the rows of the mocked input fixture; the
+    expected fixture always uses plain `UNION ALL`.
+    """
 
     files: dict[str, str] = {
         "sqlbuild_project.toml": (
@@ -2798,13 +2806,17 @@ def write_union_fixture_test_project(
         ),
     }
     for index in range(sql_test_count):
-        fixture_rows: str = _union_all_fixture_rows(
-            row_count=fixture_row_count, status=f"status_{index:02d}"
+        status: str = f"status_{index:02d}"
+        input_rows: str = _union_all_fixture_rows(
+            row_count=fixture_row_count, status=status, separator=input_fixture_row_separator
+        )
+        expected_rows: str = _union_all_fixture_rows(
+            row_count=fixture_row_count, status=status, separator=" UNION ALL\n"
         )
         files[f"tests/unit/orders_case_{index:02d}.sql"] = (
             f'TEST (name "orders_case_{index:02d}");\n\n'
-            f"WITH\n__ref__base_orders AS (\n{fixture_rows}\n),\n"
-            f"__expected__orders AS (\n{fixture_rows}\n)\nSELECT 1\n"
+            f"WITH\n__ref__base_orders AS (\n{input_rows}\n),\n"
+            f"__expected__orders AS (\n{expected_rows}\n)\nSELECT 1\n"
         )
     prepare_inline_project(
         tmp_path=project_dir.parent, project_name=project_dir.name, repo_files=files

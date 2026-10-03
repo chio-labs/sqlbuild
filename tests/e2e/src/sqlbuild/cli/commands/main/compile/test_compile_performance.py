@@ -140,7 +140,18 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
             expected_sql_tests=4,
             expected_errors=0,
             expected_max_scaling_ratio=6.0,
-        )
+        ),
+        UnionFixtureCompileScalingTestCase(
+            description="quadrupling commented UNION ALL input fixture rows keeps SQL test analysis linear",
+            sql_test_count=4,
+            small_fixture_rows=50,
+            large_fixture_rows=200,
+            measured_runs=3,
+            expected_sql_tests=4,
+            expected_errors=0,
+            expected_max_scaling_ratio=6.0,
+            input_fixture_row_separator="\n  -- fixture row\n  UNION ALL\n",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -154,11 +165,13 @@ def test_given_sql_tests_with_union_all_fixtures_when_quadrupling_rows_then_anal
         project_dir=small_project_dir,
         sql_test_count=test_case.sql_test_count,
         fixture_row_count=test_case.small_fixture_rows,
+        input_fixture_row_separator=test_case.input_fixture_row_separator,
     )
     write_union_fixture_test_project(
         project_dir=large_project_dir,
         sql_test_count=test_case.sql_test_count,
         fixture_row_count=test_case.large_fixture_rows,
+        input_fixture_row_separator=test_case.input_fixture_row_separator,
     )
     small: UnionFixtureCompileMeasurement = measure_union_fixture_compile(
         project_dir=small_project_dir, runs=test_case.measured_runs
