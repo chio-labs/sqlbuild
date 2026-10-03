@@ -10,6 +10,14 @@ HEAD_LABEL: str = "head"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset({"VIRTUAL_ENV"})
 EXCLUDED_ENVIRONMENT_PREFIX: str = "DBT_"
 COMPILE_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
+BASE_GENERATOR_ENTRY: str = (
+    "import sys; from pathlib import Path; "
+    "from scripts.compile_performance_ratio._helpers.measure import write_benchmark_project; "
+    "write_benchmark_project("
+    "kind=sys.argv[1], project_dir=Path(sys.argv[2]), models=int(sys.argv[3]))"
+)
+PYTHONPATH_KEY: str = "PYTHONPATH"
+ERROR_TAIL_CHARACTERS: int = 2000
 FRESH_SOURCE_SHARE: float = 713 / 3000
 FRESH_SEED_SHARE: float = 141 / 3000
 FRESH_FUNCTION_SHARE: float = 71 / 3000
