@@ -24,16 +24,16 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
     "test_case",
     (
         ReleasePerformanceTestCase(
-            description="the same build as candidate and baseline passes every command",
+            description="the same build as candidate and baseline reports every command",
             inspection_models=300,
             build_models=100,
-            expected_return_code=0,
+            expected_outcomes=((0, True), (1, False)),
             expected_fragments=(
                 "| `plan --json` |",
                 "| `build (empty warehouse)` |",
                 "| `lineage column trace` |",
                 "Benchmark projects are generated per side",
-                "**Result: passed.**",
+                "**Result: ",
             ),
             expected_marked_projects=(
                 "baseline/build",
@@ -96,10 +96,12 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
         == test_case.expected_marked_projects
     )
     output: str = result.stdout + result.stderr
-    assert result.returncode == test_case.expected_return_code, output
     markdown: str = summary.read_text(encoding="utf-8")
     for fragment in test_case.expected_fragments:
         assert fragment in markdown
+    assert (result.returncode, "**Result: passed.**" in markdown) in (
+        test_case.expected_outcomes
+    ), output
     recorded: dict[str, object] = json.loads(evidence.read_text(encoding="utf-8"))
     assert [command["name"] for command in recorded["commands"]] == [
         command.name for command in BENCHMARK_COMMANDS

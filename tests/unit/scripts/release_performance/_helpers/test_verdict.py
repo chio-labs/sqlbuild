@@ -64,6 +64,24 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
             expected_regressed=(False, True, False),
         ),
         MetricVerdictTestCase(
+            description="a wall-only regression at CPU parity fails on wall alone",
+            comparison=comparison(
+                name="build (empty warehouse)",
+                baseline=((10.0, 6.4, 330),) * 3,
+                candidate=((13.14, 6.36, 330),) * 3,
+            ),
+            expected_regressed=(True, False, False),
+        ),
+        MetricVerdictTestCase(
+            description="a wall-only slowdown under the ratio limit at CPU parity passes",
+            comparison=comparison(
+                name="build (empty warehouse)",
+                baseline=((10.0, 6.4, 330),) * 3,
+                candidate=((12.4, 6.4, 330),) * 3,
+            ),
+            expected_regressed=(False, False, False),
+        ),
+        MetricVerdictTestCase(
             description="one slow outlier does not move the median time",
             comparison=comparison(
                 name="build (empty warehouse)",
