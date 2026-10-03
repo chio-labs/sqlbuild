@@ -3,9 +3,12 @@
 from sqlbuild.compiler.sql_analysis._helpers.set_operations import (
     split_set_operation_branches_impl,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
-def split_set_operation_branches(*, sql: str, context: str = "SQL") -> tuple[str, ...]:
+def split_set_operation_branches(
+    *, sql: str, context: str = "SQL", syntax: SqlLexicalSyntax | None = None
+) -> tuple[str, ...]:
     """Split SQL on top-level `UNION`, `INTERSECT` and `EXCEPT`, ignoring quotes and comments."""
 
-    return split_set_operation_branches_impl(sql=sql, context=context)
+    return split_set_operation_branches_impl(sql=sql, context=context, syntax=syntax)

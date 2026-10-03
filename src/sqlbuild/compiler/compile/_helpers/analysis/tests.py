@@ -15,6 +15,7 @@ from sqlbuild.compiler.sql_analysis.main._split_set_operation_branches import (
     split_set_operation_branches,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _POLYGLOT_VALUES_EXPRESSION_NAME: str = "Values"
 _POLYGLOT_VALUES_SET_ALIAS: str = "_values"
@@ -22,7 +23,11 @@ _SCAN_CONTEXT: str = "SQL test"
 
 
 def extract_expected_branch_column_names_with_sql_analysis(
-    *, sql: str, file_label: str, label: str = "__expected__<model>"
+    *,
+    sql: str,
+    file_label: str,
+    syntax: SqlLexicalSyntax,
+    label: str = "__expected__<model>",
 ) -> tuple[tuple[str, ...], ...] | None:
     """Return expected SELECT branch names using required Polyglot analysis."""
 
@@ -32,17 +37,23 @@ def extract_expected_branch_column_names_with_sql_analysis(
         parsed_expression: Any = polyglot_module.parse_one(sql, dialect="generic")
     except polyglot_module.PolyglotError:
         return _extract_unparsed_branch_names(
-            sql=sql, polyglot_module=polyglot_module, file_label=file_label, label=label
+            sql=sql,
+            polyglot_module=polyglot_module,
+            file_label=file_label,
+            label=label,
+            syntax=syntax,
         )
     return _extract_branch_names(expression=parsed_expression, file_label=file_label, label=label)
 
 
 def _extract_unparsed_branch_names(
-    *, sql: str, polyglot_module: Any, file_label: str, label: str
+    *, sql: str, polyglot_module: Any, file_label: str, label: str, syntax: SqlLexicalSyntax
 ) -> tuple[tuple[str, ...], ...] | None:
     """Parse each top-level set-operation branch separately when the whole query cannot parse."""
 
-    branches: tuple[str, ...] = split_set_operation_branches(sql=sql, context=_SCAN_CONTEXT)
+    branches: tuple[str, ...] = split_set_operation_branches(
+        sql=sql, context=_SCAN_CONTEXT, syntax=syntax
+    )
     if len(branches) <= 1:
         return None
     try:

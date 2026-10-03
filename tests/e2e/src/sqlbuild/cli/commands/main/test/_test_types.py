@@ -212,3 +212,13 @@ class AuthoredSqlParityTestCase:
     description: str
     compiled_test_name: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CommentedFixtureE2ETestCase:
+    """SQL tests whose fixture CTEs carry comments around set-operation branches."""
+
+    description: str
+    test_files: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]

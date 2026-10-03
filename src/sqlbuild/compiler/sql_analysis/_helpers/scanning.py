@@ -231,6 +231,50 @@ def iter_code_positions_impl(
         index += 1
 
 
+def skip_ignorable_impl(
+    *, sql: str, start: int, context: str = "SQL", syntax: SqlLexicalSyntax | None = None
+) -> int:
+    """Return the first offset at or after `start` that is not whitespace or a comment."""
+
+    index: int = start
+    while index < len(sql):
+        if sql[index].isspace():
+            index += 1
+            continue
+        if sql[index] in SQL_TEXT_START_CHARACTERS:
+            return index
+        comment_end: int | None = _non_code_end(
+            sql=sql, index=index, context=context, syntax=syntax
+        )
+        if comment_end is None:
+            return index
+        index = comment_end
+    return index
+
+
+def strip_ignorable_impl(
+    *, sql: str, context: str = "SQL", syntax: SqlLexicalSyntax | None = None
+) -> str:
+    """Return the SQL without leading or trailing whitespace and comments."""
+
+    code_start: int = skip_ignorable_impl(sql=sql, start=0, context=context, syntax=syntax)
+    code_end: int = code_start
+    index: int = code_start
+    while index < len(sql):
+        non_code_end: int | None = _non_code_end(
+            sql=sql, index=index, context=context, syntax=syntax
+        )
+        if non_code_end is None:
+            index += 1
+            if not sql[index - 1].isspace():
+                code_end = index
+            continue
+        if sql[index] in SQL_TEXT_START_CHARACTERS:
+            code_end = non_code_end
+        index = non_code_end
+    return sql[code_start:code_end]
+
+
 def _non_code_end(
     *, sql: str, index: int, context: str, syntax: SqlLexicalSyntax | None
 ) -> int | None:

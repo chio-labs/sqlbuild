@@ -762,12 +762,14 @@ def _extract_expected_branch_column_names(
 ) -> tuple[tuple[str, ...], ...]:
     sql_analysis_column_names: tuple[tuple[str, ...], ...] | None = (
         extract_expected_branch_column_names_with_sql_analysis(
-            sql=sql, file_label=file_label, label=label
+            sql=sql, file_label=file_label, label=label, syntax=syntax
         )
     )
     if sql_analysis_column_names is not None:
         return sql_analysis_column_names
-    branches: tuple[str, ...] = split_set_operation_branches(sql=sql, context=_CONTEXT)
+    branches: tuple[str, ...] = split_set_operation_branches(
+        sql=sql, context=_CONTEXT, syntax=syntax
+    )
     return tuple(
         _extract_expected_select_column_names(
             branch_sql=branch, file_label=file_label, label=label, syntax=syntax
@@ -837,9 +839,13 @@ def _extract_expected_projection_name(
     alias_name: str | None = _extract_as_alias(expression=expression, syntax=syntax)
     if alias_name is not None:
         return alias_name
-    stripped_expression: str = expression.strip()
-    if _is_simple_identifier(stripped_expression):
-        return stripped_expression
+    start: int = _skip_ignorable(sql=expression, start=0, syntax=syntax)
+    if start < len(expression) and is_identifier_start(expression[start]):
+        name: str
+        end: int
+        name, end = _read_identifier(sql=expression, start=start, file_label="projection")
+        if _skip_ignorable(sql=expression, start=end, syntax=syntax) == len(expression):
+            return name
     raise CompileInputError(
         f"SQL test '{file_label}' must alias every non-trivial {label} projection"
     )
@@ -862,15 +868,9 @@ def _extract_as_alias(*, expression: str, syntax: SqlLexicalSyntax) -> str | Non
                 start=alias_index,
                 file_label="projection",
             )
-            if not expression[alias_end:].strip():
+            if _skip_ignorable(sql=expression, start=alias_end, syntax=syntax) == len(expression):
                 last_alias_name = alias_name
     return last_alias_name
-
-
-def _is_simple_identifier(value: str) -> bool:
-    if not value or not is_identifier_start(value[0]):
-        return False
-    return all(is_identifier_character(character) for character in value[1:])
 
 
 def _contains_select_star(*, sql: str, syntax: SqlLexicalSyntax) -> bool:

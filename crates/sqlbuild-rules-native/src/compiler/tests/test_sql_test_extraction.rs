@@ -91,11 +91,25 @@ fn given_expected_cte_sql_when_scanning_top_level_then_set_operations_commas_and
             ]),
             expected_commas: Ok(vec![
                 "SELECT 'x, UNION (' AS a",
-                "/* UNION , FROM */ \"b)\"",
+                "\"b)\"",
                 "`c,d`",
                 "f(1, (SELECT 2 FROM t UNION SELECT 3)) -- , FROM\nFROM t",
             ]),
             expected_from: Ok(Some(107)),
+        },
+        TopLevelScanTestCase {
+            description: "comments around branches and projections are not code",
+            sql: "-- lead\nSELECT 1 AS a, /* b */ 2 AS b -- first\n/* x */ UNION ALL -- second\nSELECT '--' AS a, 3 AS b /* end */",
+            expected_unions: Ok(vec![
+                "SELECT 1 AS a, /* b */ 2 AS b",
+                "SELECT '--' AS a, 3 AS b",
+            ]),
+            expected_commas: Ok(vec![
+                "SELECT 1 AS a",
+                "2 AS b -- first\n/* x */ UNION ALL -- second\nSELECT '--' AS a",
+                "3 AS b",
+            ]),
+            expected_from: Ok(None),
         },
         TopLevelScanTestCase {
             description: "keyword boundaries and empty pieces",

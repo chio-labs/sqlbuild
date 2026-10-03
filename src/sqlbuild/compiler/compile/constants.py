@@ -96,7 +96,7 @@ POLYGLOT_SET_OPERATION_EXPRESSION_NAMES: frozenset[str] = frozenset(
 )
 POLYGLOT_SELECT_EXPRESSION_NAME: str = "Select"
 POLYGLOT_COLUMN_EXPRESSION_NAME: str = "Column"
-POLYGLOT_WRAPPER_EXPRESSION_NAMES: frozenset[str] = frozenset({"Subquery", "Paren"})
+POLYGLOT_WRAPPER_EXPRESSION_NAMES: frozenset[str] = frozenset({"Annotated", "Subquery", "Paren"})
 
 TABLE_FUNCTION_RETURN_KEYS: frozenset[str] = frozenset({"table"})
 

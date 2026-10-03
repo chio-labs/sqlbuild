@@ -512,7 +512,7 @@ fn projection_name(expression: &str, file: &str, label: &str) -> Result<String, 
     if let Some(position) = find_last_top_level_keyword(expression, "AS")? {
         let alias_start = skip_ignorable(expression, position + 2)?;
         if let Some((alias, end)) = read_identifier(expression, alias_start)
-            && expression[end..].trim().is_empty()
+            && skip_ignorable(expression, end)? == expression.len()
         {
             return Ok(alias);
         }
@@ -880,8 +880,34 @@ fn scan_code<T>(
     Ok(None)
 }
 
-fn non_empty_trimmed(value: &str) -> Option<&str> {
-    Some(value.trim()).filter(|trimmed| !trimmed.is_empty())
+/// Return `value` without surrounding whitespace and comments, or `None` when no code remains.
+fn non_empty_trimmed(value: &str) -> Result<Option<&str>, String> {
+    if !value.contains("--") && !value.contains("/*") {
+        return Ok(Some(value.trim()).filter(|trimmed| !trimmed.is_empty()));
+    }
+    let start = skip_ignorable(value, 0)?;
+    let mut end = start;
+    let mut index = start;
+    while index < value.len() {
+        if let Some(comment) = comment_end(value.as_bytes(), index)
+            .map_err(|error| scan_error_message(error, "SQL test"))?
+        {
+            index = comment;
+            continue;
+        }
+        let next = skip_non_code(value, index)?;
+        if next != index {
+            end = next;
+            index = next;
+            continue;
+        }
+        let width = char_len(value, index);
+        if !value[index..].starts_with(char::is_whitespace) {
+            end = index + width;
+        }
+        index += width;
+    }
+    Ok(Some(&value[start..end]).filter(|trimmed| !trimmed.is_empty()))
 }
 
 /// Split on top-level `UNION`, `INTERSECT` and `EXCEPT`, each with an optional `ALL`/`DISTINCT`.
@@ -895,7 +921,7 @@ pub(crate) fn split_set_operations(sql: &str) -> Result<Vec<&str>, String> {
         let Some(end) = set_operator_end(sql, index)? else {
             return Ok(CodeStep::Advance);
         };
-        values.extend(non_empty_trimmed(&sql[start..index]));
+        values.extend(non_empty_trimmed(&sql[start..index])?);
         let mut resume = skip_ignorable(sql, end)?;
         if let Some(quantifier_end) =
             consume_keyword(sql, resume, "ALL").or_else(|| consume_keyword(sql, resume, "DISTINCT"))
@@ -905,7 +931,7 @@ pub(crate) fn split_set_operations(sql: &str) -> Result<Vec<&str>, String> {
         start = resume;
         Ok(CodeStep::Resume(resume))
     })?;
-    values.extend(non_empty_trimmed(&sql[start..]));
+    values.extend(non_empty_trimmed(&sql[start..])?);
     Ok(values)
 }
 
@@ -927,12 +953,12 @@ pub(crate) fn split_top_level(sql: &str, separator: u8) -> Result<Vec<&str>, Str
     let mut start = 0;
     scan_code::<()>(sql, 0, |index, depth| {
         if depth == 0 && byte_at(sql, index) == Some(separator) {
-            values.extend(non_empty_trimmed(&sql[start..index]));
+            values.extend(non_empty_trimmed(&sql[start..index])?);
             start = index + 1;
         }
         Ok(CodeStep::Advance)
     })?;
-    values.extend(non_empty_trimmed(&sql[start..]));
+    values.extend(non_empty_trimmed(&sql[start..])?);
     Ok(values)
 }
 

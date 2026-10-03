@@ -7,6 +7,7 @@ pytest.importorskip("polyglot_sql")
 from sqlbuild.compiler.compile._helpers.analysis.tests import (  # noqa: E402
     extract_expected_branch_column_names_with_sql_analysis,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax  # noqa: E402
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (  # noqa: E402
     ExtractSqlAnalysisExpectedBranchesErrorTestCase,
     ExtractSqlAnalysisExpectedBranchesTestCase,
@@ -89,6 +90,7 @@ def test_given_sql_analysis_available_when_extracting_expected_branches_then_it_
         extract_expected_branch_column_names_with_sql_analysis(
             sql=test_case.sql,
             file_label="tests/unit/orders.sql",
+            syntax=SqlLexicalSyntax(),
         )
     )
 
@@ -128,4 +130,5 @@ def test_given_invalid_sql_analysis_expected_branches_when_extracting_then_it_ra
         extract_expected_branch_column_names_with_sql_analysis(
             sql=test_case.sql,
             file_label="tests/unit/orders.sql",
+            syntax=SqlLexicalSyntax(),
         )
