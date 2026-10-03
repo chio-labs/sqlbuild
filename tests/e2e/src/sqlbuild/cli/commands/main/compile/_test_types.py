@@ -539,3 +539,13 @@ class FormatDescriptionResolutionE2ECase:
     extra_files: tuple[tuple[str, str], ...]
     expected_returncode: int
     expected_faults: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class EarlyLintCompileTestCase:
+    """A rules-enabled project and the diagnostics compile must report for it."""
+
+    description: str
+    order_totals_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[tuple[str, str, int, int], ...]

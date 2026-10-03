@@ -124,6 +124,7 @@ def _run_compile_with_status(
         "contracts_ms": analysis.contract_ms,
         "built_in_rules_ms": analysis.built_in_rules_ms,
         "custom_rules_ms": analysis.custom_rules_ms,
+        "early_lint_wait_ms": analysis.early_lint_wait_ms,
         "rule_cache_hits": analysis.rule_cache_hits,
         "rule_cache_misses": analysis.rule_cache_misses,
         "write_ms": write_result.write_ms,

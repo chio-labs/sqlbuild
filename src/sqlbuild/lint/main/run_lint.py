@@ -17,7 +17,7 @@ from sqlbuild.compiler.scopes.constants import (
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role, scan_headers
 from sqlbuild.lint._helpers.native import external_identifiers_for_headers, lint_native_headers
-from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
+from sqlbuild.lint._helpers.native_sql import check_lint_not_stopped, run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.constants import HEADER_KIND_SCENARIO, HEADER_KIND_TEST
@@ -154,6 +154,7 @@ def _prepared_bodies(
 ) -> tuple[LintBody, ...] | str:
     """Prepared bodies of one file, or the reason its SQL cannot be expanded when skipping."""
 
+    check_lint_not_stopped()
     bodies: list[LintBody] = []
     role: LintFileRole = lint_file_role(
         file_path=file_path, project_dir=project_dir, relative_path=relative_path

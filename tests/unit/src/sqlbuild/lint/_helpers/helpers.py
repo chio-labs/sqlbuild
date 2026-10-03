@@ -26,3 +26,41 @@ def lint_bodies_for(*, file_path: Path, contents: str) -> tuple[LintBody, ...]:
             )
         )
     return tuple(bodies)
+
+
+def unused_cte_orders_file(
+    *, tmp_path: Path, prefix: str, file_index: int, unused_cte_count: int
+) -> tuple[Path, str, LintBody]:
+    """Build one multi-line file, offset by its index, whose body declares many unused CTEs."""
+
+    target: Path = tmp_path / f"orders_{file_index}.sql"
+    sql: str = (
+        "WITH\n"
+        + "".join(
+            f"  unused_{index:03d} AS (\n    SELECT {index} AS order_id\n  ),\n"
+            for index in range(unused_cte_count)
+        )
+        + "  final AS (SELECT 1 AS order_id)\nSELECT order_id\nFROM final\n"
+    )
+    header: str = prefix + "-- order history\n" * file_index
+    contents: str = header + sql
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=len(header),
+        body_end=len(contents),
+        lint_text=sql,
+        passes=(),
+    )
+    return target, contents, body
+
+
+def authored_positions(*, contents: str, needles: tuple[str, ...]) -> list[tuple[int, int]]:
+    """One-based line and column of each needle's first occurrence."""
+
+    positions: list[tuple[int, int]] = []
+    for needle in needles:
+        offset: int = contents.index(needle)
+        positions.append(
+            (contents.count("\n", 0, offset) + 1, offset - contents.rfind("\n", 0, offset))
+        )
+    return positions

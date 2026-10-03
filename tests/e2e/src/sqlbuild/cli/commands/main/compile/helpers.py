@@ -2888,3 +2888,23 @@ def compile_inline_files(
         },
     )
     return run_sqb(project_dir=project_dir, command=_REQUIRED_DESCRIPTIONS_COMPILE)
+
+
+def compile_json_payload(*, project_dir: Path) -> tuple[int, dict[str, Any]]:
+    """Run one JSON compile through the CLI and return its exit code and payload."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile", "--json"), project_dir=project_dir
+    )
+    return result.returncode, json.loads(result.stdout)
+
+
+def diagnostic_location_keys(payload: dict[str, Any]) -> tuple[tuple[str, str, int, int], ...]:
+    """Sorted code, path, line, and column of every diagnostic in a compile payload."""
+
+    return tuple(
+        sorted(
+            (diagnostic["code"], diagnostic["path"], diagnostic["line"], diagnostic["column"])
+            for diagnostic in payload["diagnostics"]
+        )
+    )

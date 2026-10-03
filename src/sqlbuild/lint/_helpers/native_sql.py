@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from bisect import bisect_right
 from pathlib import Path
+from threading import Event
 from typing import Any, cast
 
 import orjson
@@ -28,6 +29,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import MappedOffset
 from sqlbuild.lint._helpers.sqlbuild_tokens import interpolation_text_at
+from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
     GENERATED_SQL_MESSAGE_SUFFIX,
     GENERATED_SQL_MESSAGE_TEMPLATE,
@@ -35,7 +37,7 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_FAULT,
     VIOLATION_SEVERITY_WARNING,
 )
-from sqlbuild.lint.exceptions import NativeLintError
+from sqlbuild.lint.exceptions import LintStoppedError, NativeLintError
 from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 
 _NATIVE_LINT_API_VERSION: int = 1
@@ -87,6 +89,7 @@ def run_native_sql_lint(
     """Lint expanded bodies in Rust and map diagnostics to authored source."""
 
     violations_by_file: dict[Path, list[LintViolation]] = {}
+    line_starts_by_path: dict[Path, tuple[int, ...]] = {}
     requests: dict[_NativeCacheKey, dict[str, object]] = {}
     for body in bodies:
         cache_key: _NativeCacheKey = _native_cache_key(body=body, config=config)
@@ -118,15 +121,20 @@ def run_native_sql_lint(
         if cache_key[-1]:
             payload["relation_keys"] = dict(cache_key[-1])
         requests[cache_key] = payload
+    check_lint_not_stopped()
     response_cache: dict[_NativeCacheKey, _NativeResult] = _native_responses(requests=requests)
 
     for body in bodies:
+        check_lint_not_stopped()
         response: _NativeResult = response_cache[_native_cache_key(body=body, config=config)]
+        contents: str = contents_by_path[body.file_path]
+        line_starts: tuple[int, ...] | None = line_starts_by_path.get(body.file_path)
+        if line_starts is None:
+            line_starts = _line_starts(contents)
+            line_starts_by_path[body.file_path] = line_starts
         if isinstance(response, NativeLintError):
             parse_violation: LintViolation | None = _parse_failure_violation(
-                error=response,
-                body=body,
-                contents=contents_by_path[body.file_path],
+                error=response, body=body, line_starts=line_starts
             )
             if parse_violation is None:
                 raise response
@@ -140,16 +148,25 @@ def run_native_sql_lint(
                 violation: LintViolation | None = _authored_violation(
                     raw_diagnostic=raw_diagnostic,
                     body=body,
-                    contents=contents_by_path[body.file_path],
+                    contents=contents,
+                    line_starts=line_starts,
                     dialect=config.dialect,
                 )
             except NativeLintError as error:
                 violation = _parse_failure_violation(
-                    error=error, body=body, contents=contents_by_path[body.file_path]
+                    error=error, body=body, line_starts=line_starts
                 )
             if violation is not None:
                 violations_by_file.setdefault(body.file_path, []).append(violation)
     return {path: tuple(entries) for path, entries in violations_by_file.items()}
+
+
+def check_lint_not_stopped() -> None:
+    """Abandon a speculative lint run on this thread once its owner no longer needs it."""
+
+    stop: Event | None = LintStopContext.active.get()
+    if stop is not None and stop.is_set():
+        raise LintStoppedError
 
 
 def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
@@ -223,7 +240,7 @@ def _native_result(*, response: object) -> _NativeResult:
 
 
 def _parse_failure_violation(
-    *, error: NativeLintError, body: LintBody, contents: str
+    *, error: NativeLintError, body: LintBody, line_starts: tuple[int, ...]
 ) -> LintViolation:
     """Convert a per-body native parse rejection into an authored project fault."""
 
@@ -237,7 +254,7 @@ def _parse_failure_violation(
         expanded_offset += min(expanded_column - 1, len(expanded_lines[expanded_line - 1]))
     mapped: MappedOffset = map_expanded_offset(offset=expanded_offset, passes=body.passes)
     absolute_offset: int = body.body_start + mapped.offset
-    line, column = _offset_position(offset=absolute_offset, line_starts=_line_starts(contents))
+    line, column = _offset_position(offset=absolute_offset, line_starts=line_starts)
     return LintViolation(
         file_path=body.file_path,
         line=line,
@@ -251,7 +268,12 @@ def _parse_failure_violation(
 
 
 def _authored_violation(
-    *, raw_diagnostic: object, body: LintBody, contents: str, dialect: str
+    *,
+    raw_diagnostic: object,
+    body: LintBody,
+    contents: str,
+    line_starts: tuple[int, ...],
+    dialect: str,
 ) -> LintViolation | None:
     if not isinstance(raw_diagnostic, dict):
         raise NativeLintError("native lint diagnostic must be an object")
@@ -286,8 +308,7 @@ def _authored_violation(
         _SQLBUILD_HARNESS_CTE_PREFIXES, absolute_offset
     ):
         return None
-    starts: tuple[int, ...] = _line_starts(contents)
-    line, column = _offset_position(offset=absolute_offset, line_starts=starts)
+    line, column = _offset_position(offset=absolute_offset, line_starts=line_starts)
     end_position: tuple[int, int] | None = _authored_end_position(
         start=start,
         end=end,
@@ -295,7 +316,7 @@ def _authored_violation(
         absolute_start=absolute_offset,
         body=body,
         contents=contents,
-        line_starts=starts,
+        line_starts=line_starts,
         dialect=dialect,
     )
     fix: LintEdit | None = _authored_fix(

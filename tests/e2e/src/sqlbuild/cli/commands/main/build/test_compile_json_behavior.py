@@ -70,6 +70,7 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         "attachment_ms",
         "built_in_rules_ms",
         "custom_rules_ms",
+        "early_lint_wait_ms",
         "model_analysis_ms",
         "analysis_preparation_ms",
         "analysis_native_ms",
