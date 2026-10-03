@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.133.2](https://github.com/chio-labs/sqlbuild/compare/v0.133.1...v0.133.2) (2026-10-03)
+
+
+### Performance Improvements
+
+* **compile:** plan SQL tests in the background in every mode ([#926](https://github.com/chio-labs/sqlbuild/issues/926)) ([9f94ebd](https://github.com/chio-labs/sqlbuild/commit/9f94ebdcc1081d3f2534319dc032c7e14560a806))
+
 ## [0.133.1](https://github.com/chio-labs/sqlbuild/compare/v0.133.0...v0.133.1) (2026-10-03)
 
 
