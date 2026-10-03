@@ -34,7 +34,7 @@ PROJECT_TOML: str = dedent(
 ).lstrip()
 _FACT_ORDER: tuple[str, ...] = ("required", "origin_archived", "view_created", "view_dropped")
 _TABLE_SQL: str = (
-    "MODEL (materialized table{extra});\n"
+    "MODEL (description 'Test model.', materialized table{extra});\n"
     'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
 )
 
@@ -206,7 +206,8 @@ def disabled_table_sql(*, migrate_from: str) -> str:
     """Return a table model that declares its rename with old-name views turned off."""
 
     return (
-        f"MODEL (materialized table, migrate_from {migrate_from}, old_name_view false);\n"
+        "MODEL (description 'Test model.', "
+        f"materialized table, migrate_from {migrate_from}, old_name_view false);\n"
         'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
     )
 
@@ -225,7 +226,7 @@ def claiming_view_models() -> dict[str, str]:
     return {
         DESTINATION_MODEL: table_sql(migrate_from=ORIGIN_MODEL),
         ORIGIN_MODEL: (
-            "MODEL (materialized view);\n"
+            "MODEL (description 'Test model.', materialized view);\n"
             'SELECT order_id, amount_cents * 2 AS doubled FROM __source("raw_orders")\n'
         ),
     }
@@ -236,7 +237,7 @@ def aliased_orders_sql(*, alias: str, migrate_from: str | None = None) -> str:
 
     migration: str = {None: ""}.get(migrate_from, f", migrate_from {migrate_from}")
     return (
-        f"MODEL (materialized table, alias {alias}{migration});\n"
+        f"MODEL (description 'Test model.', materialized table, alias {alias}{migration});\n"
         'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
     )
 
@@ -264,7 +265,7 @@ def aliased_table_sql(*, extra_column: str = "") -> str:
     """Return the renamed table model with ``amount`` renamed to ``revenue`` in its old view."""
 
     return (
-        f"MODEL (materialized table, migrate_from {ORIGIN_MODEL}, "
+        f"MODEL (description 'Test model.', materialized table, migrate_from {ORIGIN_MODEL}, "
         "columns (revenue (migrate_from amount_cents)));\n"
         f'SELECT order_id, amount_cents AS revenue{extra_column} FROM __source("raw_orders")\n'
     )

@@ -30,7 +30,8 @@ def write_format_performance_project(
     tests_dir.mkdir(parents=True)
     for model_index in range(model_count):
         models_dir.joinpath(f"orders_{model_index:05d}.sql").write_text(
-            "MODEL (columns (order_id (type INTEGER), note (type VARCHAR)));\n"
+            'MODEL (description "Test model.", '
+            "columns (order_id (type INTEGER), note (type VARCHAR)));\n"
             f"SELECT {model_index} AS order_id, 'ready' AS note\n",
             encoding="utf-8",
         )

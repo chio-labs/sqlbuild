@@ -59,9 +59,11 @@ def test_given_parameterized_model_test_when_compiled_and_executed_then_duckdb_p
         {
             "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
             "sources/raw.yml": (
-                "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS order_id\n"
+                "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: SELECT 1 AS order_id\n"
             ),
-            "models/orders.sql": ('MODEL ();\n\nSELECT order_id FROM __source("raw_orders")\n'),
+            "models/orders.sql": (
+                'MODEL (description "Test model orders.");\n\nSELECT order_id FROM __source("raw_orders")\n'
+            ),
             "tests/unit/orders.sql": f"""
 TEST (
   name "parameterized_orders",

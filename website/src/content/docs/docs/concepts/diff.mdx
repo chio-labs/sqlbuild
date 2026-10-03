@@ -81,6 +81,7 @@ inherited sample and request exhaustive comparison with `row_diff_sample_rows 0`
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   unique_key [order_id, line_id],
   row_diff_sample_rows 0,
@@ -145,6 +146,7 @@ Numeric columns can have tolerance rules to avoid false positives from floating-
 
 ```sql
 MODEL (
+  description "Example model",
   materialized incremental,
   ...
   row_diff_tolerances (
@@ -169,6 +171,7 @@ Columns that are expected to differ between the two sides (like timestamps or co
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   ...
   row_diff_exclude_columns [latest_order_status],

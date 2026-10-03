@@ -18,5 +18,6 @@ def loader(
     unique_key: str | Sequence[str] | None = None,
     columns: Sequence[LoaderColumnSpec | SourceColumnEntry] = (),
     contract: str | None = None,
+    description: str | None = None,
 ) -> Callable[[Callable[..., object]], Callable[..., object]]: ...
 def get_loader_definition(function: Callable[..., object]) -> LoaderDefinition | None: ...

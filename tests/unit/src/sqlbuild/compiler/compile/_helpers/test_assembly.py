@@ -58,7 +58,7 @@ schema = "analytics"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   columns (
     order_id (type VARCHAR),
   ),
@@ -71,6 +71,7 @@ select * from __source('raw_orders')
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     schema: public
     table: orders
 """.strip()
@@ -78,6 +79,7 @@ sources:
                 "seeds/schema.yml": """
 seeds:
   - name: country_codes
+    description: Test seed country_codes.
     columns:
       - name: code
         type: VARCHAR
@@ -132,10 +134,11 @@ SELECT 1
             repo_files=base_repo_files()
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS order_id\n",
                 "seeds/schema.yml": """
 seeds:
   - name: order_codes
+    description: Test seed order_codes.
     columns:
       - name: order_id
         type: INTEGER
@@ -209,6 +212,7 @@ database = "${ENV:LOCAL_TARGET_DB}_${project}"
                 "seeds/schema.yml": """
 seeds:
   - name: country_codes
+    description: Test seed country_codes.
     columns:
       - name: code
         type: VARCHAR
@@ -262,6 +266,7 @@ schema = "env_schema"
                 "seeds/lookups.yml": """
 seeds:
   - name: country_codes
+    description: Test seed country_codes.
     database: "${if(ENV:USE_SEED_DB, 'seed_db', CTX:destination.database)}"
     schema: "${CTX:destination.schema}_${seed_schema_suffix}"
     columns:
@@ -300,9 +305,9 @@ seeds:
                     'def normalize_status(value):\n    return f"LOWER(TRIM({value}))"\n'
                 ),
                 "models/orders.sql": (
-                    "MODEL ();\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
+                    "MODEL (description 'Test model orders.');\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
                 ),
-                "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
+                "models/customers.sql": "MODEL (description 'Test model customers.');\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_normalize_status.sql": """
 TEST (mode macro, name "normalizes_status");
 
@@ -354,6 +359,7 @@ suffix = "dev"
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
 """.strip()
@@ -363,6 +369,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     return [{"id": 1}]
 """.strip()
                 + "\n",
@@ -387,7 +394,7 @@ def raw_orders(ctx):
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "functions/sql/format_cents.sql": """
-FUNCTION (
+FUNCTION (description "Test function format_cents.",
   arguments (amount_cents INTEGER),
   returns VARCHAR,
 );
@@ -396,9 +403,9 @@ FUNCTION (
 """.strip()
                 + "\n",
                 "models/orders.sql": (
-                    'MODEL ();\n\nSELECT __udf("format_cents")(1250) AS formatted\n'
+                    'MODEL (description "Test model orders.");\n\nSELECT __udf("format_cents")(1250) AS formatted\n'
                 ),
-                "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
+                "models/customers.sql": "MODEL (description 'Test model customers.');\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_format_cents.sql": """
 TEST (mode udf, name "formats_cents");
 
@@ -438,7 +445,7 @@ SELECT 1
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "functions/sql/customer_orders.sql": """
-FUNCTION (
+FUNCTION (description "Test function customer_orders.",
   arguments (p_customer_id INTEGER),
   returns table (
     customer_id INTEGER,
@@ -450,7 +457,7 @@ SELECT p_customer_id AS customer_id, 1 AS order_id
 """.strip()
                 + "\n",
                 "models/customer_order_summary.sql": (
-                    "MODEL ();\n\nSELECT customer_id, order_id "
+                    "MODEL (description 'Test model customer_order_summary.');\n\nSELECT customer_id, order_id "
                     'FROM __table_fn("customer_orders")(42)\n'
                 ),
                 "tests/unit/test_customer_orders.sql": """
@@ -593,7 +600,7 @@ def test_given_named_generic_audit_instances_when_assembling_then_each_name_is_p
         base_repo_files()
         | {
             "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   audits [
     expression_is_true (name "positive_revenue", expression "revenue > 0"),
     expression_is_true (name "bounded_revenue", expression "revenue < 1000"),
@@ -666,12 +673,14 @@ schema = "physical_schema"
             "seeds/schema.yml": """
 seeds:
   - name: country_codes
+    description: Test seed country_codes.
     database: declared_seed_db
     schema: declared_seed_schema
     columns:
       - name: code
         type: VARCHAR
   - name: currencies
+    description: Test seed currencies.
     columns:
       - name: code
         type: VARCHAR
@@ -802,12 +811,12 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
         AssembleSqlHookValidationTestCase(
             description="validates named and inline payloads with adapter dialect",
             model_sql=(
-                'MODEL (pre_hooks [sql("vendor_hook")], '
+                'MODEL (description "Test model.", pre_hooks [sql("vendor_hook")], '
                 'post_hooks [inline_sql("SELECT [other] FROM [orders]; '
                 'SELECT [other] FROM [orders]")]);\n\nSELECT 1 AS id\n'
             ),
             named_hook_sql=(
-                "HOOK ();\n\nSELECT [value] FROM [orders]; SELECT [value] FROM [orders]\n"
+                "HOOK (description 'Test hook.');\n\nSELECT [value] FROM [orders]; SELECT [value] FROM [orders]\n"
             ),
             dialect="tsql",
             expected_hook_statements=(
@@ -818,11 +827,11 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
         AssembleSqlHookValidationTestCase(
             description="skips named and inline Polyglot validation for model opt out",
             model_sql=(
-                'MODEL (sql_validation false, pre_hooks [sql("vendor_hook")], '
+                'MODEL (description "Test model.", sql_validation false, pre_hooks [sql("vendor_hook")], '
                 'post_hooks [inline_sql("DBCC CHECKIDENT (orders, RESEED, 0)")]);'
                 "\n\nSELECT 1 AS id\n"
             ),
-            named_hook_sql="HOOK ();\n\nDBCC CHECKIDENT ('orders', RESEED, 0)\n",
+            named_hook_sql="HOOK (description 'Test hook.');\n\nDBCC CHECKIDENT ('orders', RESEED, 0)\n",
             dialect="tsql",
             expected_hook_statements=(
                 "DBCC CHECKIDENT ('orders', RESEED, 0)",

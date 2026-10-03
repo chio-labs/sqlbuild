@@ -9,13 +9,22 @@ from scripts.compile_performance_ratio.constants import REPORTED_PHASES
 from scripts.compile_performance_ratio.models import CompileComparison
 
 
-def comparison_markdown(*, comparison: CompileComparison, runs: int, max_ratio: float) -> str:
+def comparison_markdown(
+    *, comparison: CompileComparison, runs: int, max_ratio: float, per_side_projects: bool
+) -> str:
     """Summarize medians, ratios and per-phase timings as a Markdown table."""
 
+    generation: str = (
+        "Projects generated per side: base with the base checkout's generator, head with head's."
+        if per_side_projects
+        else "One project generated with head's generator and compiled by both builds."
+    )
     lines: list[str] = [
         f"### {comparison.kind} {comparison.models} models: head vs base (same runner)",
         "",
         f"Runner CPU: {cpu_model()}; {runs} alternating runs each; limit {max_ratio:.2f}x.",
+        "",
+        generation,
         "",
         "| Metric | Base | Head | Ratio |",
         "|---|---:|---:|---:|",

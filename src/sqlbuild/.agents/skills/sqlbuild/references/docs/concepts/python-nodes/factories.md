@@ -27,6 +27,7 @@ def export_assets():
     for table in TABLES:
         @asset(name=f"export_{table}", tags=("export",))
         def export(ctx, table=table):
+            """Export one table to object storage."""
             return ctx.result(metadata={"table": table}, materialized=True)
         nodes.append(export)
     return nodes
@@ -57,14 +58,17 @@ from sqlbuild.checks import check
 def orders_pipeline():
     @loader(name="raw_orders")
     def load(ctx):
+        """Load orders from the storefront API."""
         return fetch_orders()
 
     @asset(name="orders_export", depends_on=load)
     def export(ctx):
+        """Export the order summary."""
         return ctx.result(materialized=True)
 
     @check(depends_on=export)
     def orders_export_check(ctx):
+        """Check that the orders export is ready."""
         return ctx.pass_("export ready")
 
     return [load, export, orders_export_check]

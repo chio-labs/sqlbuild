@@ -49,6 +49,7 @@ Use `@macro_name(...)` in a model query:
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   tags [marts],
 );
@@ -196,6 +197,7 @@ def grant_target(target: str) -> str:
 
 ```sql
 MODEL (
+  description "Example model",
   post_hooks [inline_sql('@grant_target(@@CTX:destination.qualified)')],
 );
 

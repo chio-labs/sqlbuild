@@ -53,6 +53,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         schema: main
                         table: raw_orders
                     """
@@ -60,7 +61,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model orders.",
                       materialized incremental,
                       incremental_strategy append,
                       cursor ordered_at,
@@ -180,6 +181,7 @@ def test_given_append_cursor_project_when_rerunning_build_then_boundary_behavior
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         schema: main
                         table: raw_orders
                     """
@@ -187,7 +189,7 @@ def test_given_append_cursor_project_when_rerunning_build_then_boundary_behavior
                 + "\n",
                 "models/orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model orders.",
                       materialized incremental,
                       incremental_strategy append,
                       cursor ordered_at,

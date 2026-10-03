@@ -88,18 +88,14 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
 )
-from sqlbuild.compiler.compile._helpers.render.declarations import (
-    build_declaration_scope_resolver,
-)
+from sqlbuild.compiler.compile._helpers.render.declarations import build_declaration_scope_resolver
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
-from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
-    build_sql_test_case_fingerprint,
-)
+from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
@@ -1690,6 +1686,7 @@ def _assemble_compiled_function(
         entry_point=function_input.entry_point,
         packages=function_input.packages,
         tags=function_input.tags,
+        description=function_input.description,
     )
 
 

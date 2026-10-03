@@ -154,6 +154,7 @@ def test_given_local_project_when_running_dag_json_then_outputs_static_graph_wit
                 "kind": "python_check",
                 "name": "check_loader_export",
                 "checked_asset_ids": ["loader:warehouse_export"],
+                "description": "Test check check_loader_export.",
                 "path": "python/checks/check_loader_export.py",
                 "severity": "error",
                 "tags": ["loader"],

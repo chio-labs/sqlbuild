@@ -31,15 +31,19 @@ sql_analysis = false
 sql_validation = false
 """
 _HOOK_PATH: str = "models/marts/_sqlbuild/_hooks/python/lookups.py"
-_HOOKED_HEADER: str = 'MODEL (post_hooks [python("refresh_lookup")]);'
-_COUNTRY_SEED: str = (
-    "seeds:\n  - name: country_codes\n    columns:\n      - name: code\n        type: VARCHAR\n"
+_HOOKED_HEADER: str = (
+    'MODEL (description "Test model lookups.", post_hooks [python("refresh_lookup")]);'
 )
-_SOURCES: str = "sources:\n  - name: raw_orders\n    table: orders\n"
+_COUNTRY_SEED: str = "seeds:\n  - name: country_codes\n    description: Test seed country_codes.\n    columns:\n      - name: code\n        type: VARCHAR\n"
+_SOURCES: str = (
+    "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    table: orders\n"
+)
 _SQL_HOOK_PATH: str = "models/marts/_sqlbuild/_hooks/sql/record_rows.sql"
 _MACRO_PATH: str = "models/marts/_sqlbuild/_macros/counts.py"
 _IGNORING_MACRO: str = "def count_rows(relation):\n    return 'SELECT 1'\n"
-_NAMED_SQL_HOOK_HEADER: str = 'MODEL (post_hooks [sql("record_rows")]);'
+_NAMED_SQL_HOOK_HEADER: str = (
+    'MODEL (description "Test model counts.", post_hooks [sql("record_rows")]);'
+)
 
 
 @pytest.mark.parametrize(
@@ -86,7 +90,7 @@ _NAMED_SQL_HOOK_HEADER: str = 'MODEL (post_hooks [sql("record_rows")]);'
             description="named SQL hook passing a model to a macro that ignores it",
             files={
                 _MACRO_PATH: _IGNORING_MACRO,
-                _SQL_HOOK_PATH: 'HOOK ();\n@count_rows(__ref("customers"))\n',
+                _SQL_HOOK_PATH: 'HOOK (description "Test hook.");\n@count_rows(__ref("customers"))\n',
                 "models/marts/customers.sql": gate_model(sql="SELECT 1 AS customer_id"),
                 "models/marts/orders.sql": gate_model(
                     sql="SELECT 1 AS order_id", header=_NAMED_SQL_HOOK_HEADER
@@ -199,11 +203,11 @@ def test_given_sql_hook_read_when_compiling_then_lineage_and_selection_ignore_it
             description="inline and named SQL hooks reading a model built from their model",
             files={
                 _MACRO_PATH: _IGNORING_MACRO,
-                _SQL_HOOK_PATH: 'HOOK ();\n@count_rows(__ref("order_count"))\n',
+                _SQL_HOOK_PATH: 'HOOK (description "Test hook.");\n@count_rows(__ref("order_count"))\n',
                 "models/marts/orders.sql": gate_model(
                     sql="SELECT 1 AS order_id",
                     header=(
-                        "MODEL (pre_hooks [inline_sql('SELECT * FROM __ref(\"order_rollup\")')], "
+                        "MODEL (description 'Test model orders.', pre_hooks [inline_sql('SELECT * FROM __ref(\"order_rollup\")')], "
                         'post_hooks [sql("record_rows")]);'
                     ),
                 ),

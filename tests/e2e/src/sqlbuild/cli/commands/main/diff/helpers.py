@@ -50,6 +50,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
                 """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     expression: |
                       SELECT * FROM (VALUES
                         (1, 1, TIMESTAMP '2026-04-01 09:15:00', 'placed', 100),
@@ -61,7 +62,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/staging/stg_orders.sql": dedent(
                 """
-                MODEL (materialized view);
+                MODEL (description "Test model stg_orders.", materialized view);
 
                 SELECT
                   order_id,
@@ -75,7 +76,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/intermediate/orders_snapshot.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders_snapshot.",
                   materialized table,
                   unique_key [order_id],
                   cursor ordered_at,
@@ -102,7 +103,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/intermediate/customer_totals.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model customer_totals.",
                   materialized table,
                   unique_key [customer_id]
                 );
@@ -118,7 +119,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/intermediate/orders_sparse.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders_sparse.",
                   materialized table,
                   unique_key [order_id]
                 );
@@ -133,7 +134,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/marts/daily_revenue.sql": dedent(
                 """
-                MODEL (materialized table);
+                MODEL (description "Test model daily_revenue.", materialized table);
 
                 SELECT
                   CAST(ordered_at AS DATE) AS revenue_date,

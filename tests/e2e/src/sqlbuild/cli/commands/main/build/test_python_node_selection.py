@@ -24,7 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 _FAILING_ORDERS_SQL: str = (
-    "MODEL (materialized table);\n"
+    "MODEL (description 'Test model.', materialized table);\n"
     "SELECT order_id FROM __source(\"raw_orders\") WHERE error('orders failed') IS NULL\n"
 )
 _EXISTING_ORDERS: str = "CREATE TABLE main.orders AS SELECT * FROM range(1, 6) AS t(order_id);"

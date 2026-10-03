@@ -18,7 +18,7 @@ LANGUAGE_PYTHON_ROOT_PART_COUNT: int = 2
 PYTHON_NODE_ROOT: str = "python"
 PYTHON_UDF_DECORATOR_NAME: str = "udf"
 SQL_FUNCTION_HEADER_KEYS: frozenset[str] = frozenset(
-    {"arguments", "returns", "database", "schema", "tags"}
+    {"arguments", "returns", "database", "schema", "tags", "description"}
 )
 SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
     {
@@ -94,6 +94,7 @@ SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
 REMOVED_SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset({"run_despite_unchanged"})
 PYTHON_UDF_KEYS: frozenset[str] = frozenset(
     {
+        "description",
         "arguments",
         "returns",
         "runtime_version",

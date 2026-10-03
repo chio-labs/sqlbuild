@@ -39,9 +39,7 @@ def test_given_existing_artifacts_when_rules_fail_then_staged_changes_are_not_pu
     config_path.write_text(config, encoding="utf-8")
     models: Path = tmp_path / "models"
     models.mkdir()
-    header: str = (
-        "MODEL (materialized table, contract enforced, columns (order_id (type INTEGER)));\n"
-    )
+    header: str = "MODEL (description 'Test model.', materialized table, contract enforced, columns (order_id (type INTEGER)));\n"
     for index in range(test_case.model_count):
         (models / f"orders_{index:03}.sql").write_text(
             header + "SELECT CAST(1 AS INTEGER) AS order_id\n", encoding="utf-8"

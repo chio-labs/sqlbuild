@@ -63,6 +63,7 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
                 from sqlbuild.providers import Provider
 
                 class EventSink(Provider):
+                    '''Test provider EventSink.'''
                     path: Path | None = None
 
                     def setup(self, ctx):
@@ -106,7 +107,7 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (materialized table);
+                MODEL (description "Test model orders.", materialized table);
 
                 SELECT 'do-not-export-this-sql' AS secret_value
                 """
@@ -191,7 +192,7 @@ def test_given_command_output_sink_when_compiling_then_multiline_chunks_reconstr
                 """
             ).strip()
             + "\n",
-            "models/orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+            "models/orders.sql": "MODEL (description 'Test model orders.', materialized view);\n\nSELECT 1 AS order_id\n",
         },
     )
 
@@ -237,7 +238,7 @@ def test_given_configured_provider_and_sink_when_lineage_runs_then_skips_extensi
                 "from pathlib import Path\n"
                 "from sqlbuild.providers import Provider\n"
                 "class OutputProvider(Provider):\n"
-                "    def setup(self, ctx):\n"
+                "    '''Test provider OutputProvider.'''\n    def setup(self, ctx):\n"
                 "        del ctx\n"
                 f"        Path({str(provider_marker)!r}).write_text('initialized', encoding='utf-8')\n"
                 "    def write(self, record):\n"
@@ -252,7 +253,7 @@ def test_given_configured_provider_and_sink_when_lineage_runs_then_skips_extensi
                 "def export_output(record, output_provider: OutputProvider):\n"
                 "    output_provider.write(record)\n"
             ),
-            "models/orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+            "models/orders.sql": "MODEL (description 'Test model orders.', materialized view);\n\nSELECT 1 AS order_id\n",
         },
     )
 
@@ -303,7 +304,7 @@ def test_given_no_exporters_and_exploding_provider_when_non_provider_command_run
                 f"Path({str(helper_marker_path)!r}).write_text('imported', encoding='utf-8')\n"
                 "def encode(value):\n    return value\n"
             ),
-            "models/example.sql": "MODEL (materialized view);\n\nSELECT 1 AS value\n",
+            "models/example.sql": "MODEL (description 'Test model example.', materialized view);\n\nSELECT 1 AS value\n",
         },
     )
 

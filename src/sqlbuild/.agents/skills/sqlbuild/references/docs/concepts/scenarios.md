@@ -120,7 +120,7 @@ The header is metadata only:
 
 | Field | Description |
 |-------|-------------|
-| `description` | Optional description string |
+| `description` | Required description of the behaviour the scenario proves ([Descriptions](models/configuration.md#descriptions)) |
 | `tags` | Optional list of string tags |
 
 ## How scenarios execute

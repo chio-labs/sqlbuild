@@ -496,3 +496,46 @@ class UnionFixtureCompileScalingTestCase:
     expected_sql_tests: int
     expected_errors: int
     expected_max_scaling_ratio: float
+
+
+@dataclass(frozen=True)
+class RequiredDescriptionCase:
+    description: str
+    missing_files: tuple[tuple[str, str], ...]
+    described_files: tuple[tuple[str, str], ...]
+    expected_diagnostic: tuple[str, str, int]
+    expected_message: str
+    expected_help_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RequiredDescriptionAggregateCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    expected_codes: frozenset[str]
+    expected_kinds: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RequiredDescriptionPlanCase:
+    description: str
+    model_sql: str
+    expected_returncode: int
+    expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class PathDefaultDescriptionCase:
+    description: str
+    model_files: tuple[tuple[str, str], ...]
+    expected_returncode: int
+    expected_diagnostics: tuple[object, ...]
+    expected_descriptions: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class FormatDescriptionResolutionE2ECase:
+    description: str
+    extra_files: tuple[tuple[str, str], ...]
+    expected_returncode: int
+    expected_faults: tuple[tuple[str, str], ...]

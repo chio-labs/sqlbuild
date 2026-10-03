@@ -53,6 +53,7 @@ _CACHE_REPO_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     contract: enforced
     expression: "(SELECT 1 AS order_id)"
     columns:
@@ -62,7 +63,7 @@ sources:
 """.strip()
     + "\n",
     "models/orders.sql": """
-MODEL ();
+MODEL (description "Test model orders.");
 
 SELECT order_id FROM __source("raw_orders")
 """.strip()
@@ -70,10 +71,10 @@ SELECT order_id FROM __source("raw_orders")
 }
 _SELECTION_REPO_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "selection_demo"\nadapter = "duckdb"\n',
-    "models/root.sql": "MODEL ();\n\nSELECT 1 AS id\n",
-    "models/middle.sql": 'MODEL ();\n\nSELECT id FROM __ref("root")\n',
-    "models/leaf.sql": 'MODEL ();\n\nSELECT id FROM __ref("middle")\n',
-    "models/unrelated.sql": "MODEL ();\n\nSELECT 2 AS id\n",
+    "models/root.sql": "MODEL (description 'Test model root.');\n\nSELECT 1 AS id\n",
+    "models/middle.sql": 'MODEL (description "Test model middle.");\n\nSELECT id FROM __ref("root")\n',
+    "models/leaf.sql": 'MODEL (description "Test model leaf.");\n\nSELECT id FROM __ref("middle")\n',
+    "models/unrelated.sql": "MODEL (description 'Test model unrelated.');\n\nSELECT 2 AS id\n",
 }
 
 
@@ -229,7 +230,7 @@ def test_given_one_changed_model_when_entry_rows_are_absent_then_compact_batch_r
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute("DELETE FROM model_analysis")
     (tmp_path / "models" / "unrelated.sql").write_text(
-        "MODEL ();\n\nSELECT 3 AS id\n",
+        "MODEL (description 'Test model unrelated.');\n\nSELECT 3 AS id\n",
         encoding="utf-8",
     )
 
@@ -290,7 +291,7 @@ def test_given_changed_expanded_sql_when_compiling_then_writes_a_new_analysis_ob
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    changed_sql = 'MODEL ();\n\nSELECT order_id + 1 AS order_id FROM __source("raw_orders")\n'
+    changed_sql = 'MODEL (description "Test model.");\n\nSELECT order_id + 1 AS order_id FROM __source("raw_orders")\n'
     (tmp_path / "models" / "orders.sql").write_text(changed_sql, encoding="utf-8")
     analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
@@ -766,7 +767,7 @@ def test_given_schema_change_when_compiling_then_affected_consumers_miss_cache(
         tmp_path,
         {
             **_SELECTION_REPO_FILES,
-            "models/root.sql": "MODEL ();\n\nSELECT CAST(NULL AS INTEGER) AS id\n",
+            "models/root.sql": "MODEL (description 'Test model root.');\n\nSELECT CAST(NULL AS INTEGER) AS id\n",
         },
     )
     _ = compile_project_with_cache(project_dir=tmp_path)
@@ -775,8 +776,8 @@ def test_given_schema_change_when_compiling_then_affected_consumers_miss_cache(
     unrelated_path: Path = tmp_path / "models" / "unrelated.sql"
     unrelated_path.write_text(
         unrelated_path.read_text(encoding="utf-8").replace(
-            "MODEL ();",
-            "MODEL (columns (id (nullable false)));",
+            "MODEL (description 'Test model unrelated.');",
+            "MODEL (description 'Test model unrelated.', columns (id (nullable false)));",
             1,
         ),
         encoding="utf-8",
@@ -788,8 +789,8 @@ def test_given_schema_change_when_compiling_then_affected_consumers_miss_cache(
     root_path: Path = tmp_path / "models" / "root.sql"
     root_path.write_text(
         root_path.read_text(encoding="utf-8").replace(
-            "MODEL ();",
-            "MODEL (columns (id (nullable false)));",
+            "MODEL (description 'Test model root.');",
+            "MODEL (description 'Test model root.', columns (id (nullable false)));",
             1,
         ),
         encoding="utf-8",
@@ -818,7 +819,7 @@ def test_given_model_sql_change_with_stable_signature_when_compiling_then_downst
     analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
     (tmp_path / "models" / "root.sql").write_text(
-        "MODEL ();\n\nSELECT 3 AS id\n",
+        "MODEL (description 'Test model root.');\n\nSELECT 3 AS id\n",
         encoding="utf-8",
     )
 
@@ -843,7 +844,7 @@ def test_given_model_output_change_when_compiling_then_downstream_closure_misses
     analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
     (tmp_path / "models" / "root.sql").write_text(
-        "MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n",
+        "MODEL (description 'Test model root.');\n\nSELECT 1 AS id, 2 AS extra\n",
         encoding="utf-8",
     )
 
@@ -869,7 +870,9 @@ def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_de
     _ = compile_project_with_cache(project_dir=tmp_path)
     root_path: Path = tmp_path / "models" / "root.sql"
     original_sql: str = root_path.read_text(encoding="utf-8")
-    root_path.write_text("MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n", encoding="utf-8")
+    root_path.write_text(
+        "MODEL (description 'Test model root.');\n\nSELECT 1 AS id, 2 AS extra\n", encoding="utf-8"
+    )
     _ = compile_project_with_cache(project_dir=tmp_path)
     batcher: Mock = Mock(wraps=assembly_project.analyze_queries_with_compact_polyglot_batch)
     monkeypatch.setattr(assembly_project, "analyze_queries_with_compact_polyglot_batch", batcher)
@@ -896,7 +899,9 @@ def test_given_cached_model_signature_is_restored_when_compiling_then_downstream
     _ = compile_project_with_cache(project_dir=tmp_path)
     root_path: Path = tmp_path / "models" / "root.sql"
     original_sql: str = root_path.read_text(encoding="utf-8")
-    root_path.write_text("MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n", encoding="utf-8")
+    root_path.write_text(
+        "MODEL (description 'Test model root.');\n\nSELECT 1 AS id, 2 AS extra\n", encoding="utf-8"
+    )
     _ = compile_project_with_cache(project_dir=tmp_path)
     analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
@@ -922,13 +927,13 @@ def test_given_selected_upstream_change_when_compiling_full_project_then_stale_c
         tmp_path,
         {
             **_SELECTION_REPO_FILES,
-            "models/middle.sql": 'MODEL ();\n\nSELECT * FROM __ref("root")\n',
-            "models/leaf.sql": 'MODEL ();\n\nSELECT * FROM __ref("middle")\n',
+            "models/middle.sql": 'MODEL (description "Test model middle.");\n\nSELECT * FROM __ref("root")\n',
+            "models/leaf.sql": 'MODEL (description "Test model leaf.");\n\nSELECT * FROM __ref("middle")\n',
         },
     )
     _ = compile_project_with_cache(project_dir=tmp_path)
     (tmp_path / "models" / "root.sql").write_text(
-        "MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n",
+        "MODEL (description 'Test model root.');\n\nSELECT 1 AS id, 2 AS extra\n",
         encoding="utf-8",
     )
     _ = compile_project_with_cache(
@@ -958,14 +963,14 @@ def test_given_upstream_interface_change_when_compact_batch_exists_then_dependen
         tmp_path,
         {
             **_SELECTION_REPO_FILES,
-            "models/middle.sql": 'MODEL ();\n\nSELECT * FROM __ref("root")\n',
-            "models/leaf.sql": 'MODEL ();\n\nSELECT * FROM __ref("middle")\n',
+            "models/middle.sql": 'MODEL (description "Test model middle.");\n\nSELECT * FROM __ref("root")\n',
+            "models/leaf.sql": 'MODEL (description "Test model leaf.");\n\nSELECT * FROM __ref("middle")\n',
         },
     )
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     _ = compile_project_with_cache(project_dir=tmp_path)
     (tmp_path / "models" / "root.sql").write_text(
-        "MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n",
+        "MODEL (description 'Test model root.');\n\nSELECT 1 AS id, 2 AS extra\n",
         encoding="utf-8",
     )
 
@@ -1060,7 +1065,7 @@ def test_given_unselected_invalid_reference_when_compiling_then_live_validation_
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     repo_files: dict[str, str] = _SELECTION_REPO_FILES | {
-        "models/unrelated.sql": 'MODEL ();\n\nSELECT id FROM __ref("missing")\n'
+        "models/unrelated.sql": 'MODEL (description "Test model unrelated.");\n\nSELECT id FROM __ref("missing")\n'
     }
     write_repo_files(tmp_path, repo_files)
 

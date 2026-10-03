@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
     [
         RuleFixTestCase(
             "verification failure",
-            "MODEL (sql_analysis false);\nWITH unused AS (SELECT 1 AS item) SELECT 2 AS item",
+            'MODEL (description "Test model.", sql_analysis false);\nWITH unused AS (SELECT 1 AS item) SELECT 2 AS item',
             "refused",
             "SQBRSQL005",
             1,
@@ -30,7 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
         ),
         RuleFixTestCase(
             "generated dependency region",
-            "MODEL ();\n"
+            'MODEL (description "Test model.");\n'
             'WITH unused AS (SELECT customer_id FROM __ref("customers")) SELECT 2 AS item',
             "refused",
             "SQBRSQL005",
@@ -40,7 +40,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
         ),
         RuleFixTestCase(
             "fixed point with overlapping unused CTE deletions",
-            "MODEL ();\n"
+            'MODEL (description "Test model.");\n'
             "WITH first AS (SELECT 1 AS item), second AS (SELECT item FROM first), "
             "third AS (SELECT item FROM second) SELECT 2 AS item",
             "applied",
@@ -59,7 +59,9 @@ def test_given_rule_fixes_when_running_cli_then_reports_verified_or_refused_chan
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(test_case.sql)
-    (model.parent / "customers.sql").write_text("MODEL (); SELECT 1 AS customer_id")
+    (model.parent / "customers.sql").write_text(
+        'MODEL (description "Test model customers."); SELECT 1 AS customer_id'
+    )
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
             str(Path(sys.executable).with_name("sqb")),
@@ -104,7 +106,9 @@ def test_given_wide_or_deep_unused_ctes_when_fixing_then_work_is_bounded(
     ctes: list[str] = [f"items_0 AS (SELECT {columns})"]
     for index in range(1, test_case.depth):
         ctes.append(f"items_{index} AS (SELECT * FROM items_{index - 1})")
-    model.write_text("MODEL (); WITH " + ", ".join(ctes) + " SELECT 1 AS order_id")
+    model.write_text(
+        'MODEL (description "Test model."); WITH ' + ", ".join(ctes) + " SELECT 1 AS order_id"
+    )
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
             str(Path(sys.executable).with_name("sqb")),

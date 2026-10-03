@@ -91,7 +91,7 @@ def test_given_snowflake_semantics_when_compiling_then_preserves_native_verdicts
     (tmp_path / "models").mkdir()
     (tmp_path / "sources").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
-        "sources:\n  - name: orders\n    table: orders\n    contract: enforced\n    columns:\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    table: orders\n    contract: enforced\n    columns:\n"
         "      - {name: order_id, type: INTEGER}\n"
         "      - {name: quantity, type: INTEGER}\n"
         "      - {name: value, type: VARCHAR}\n"
@@ -99,7 +99,8 @@ def test_given_snowflake_semantics_when_compiling_then_preserves_native_verdicts
         "      - {name: ordered_at, type: TIMESTAMP}\n"
     )
     (tmp_path / "models/report.sql").write_text(
-        "MODEL (materialized view, database warehouse, schema analytics);\n" + test_case.sql
+        "MODEL (description 'Test model report.', materialized view, database warehouse, schema analytics);\n"
+        + test_case.sql
     )
     assert (
         main(["--project-dir", str(tmp_path), "compile", "--no-cache", "--json"])
@@ -135,7 +136,8 @@ def test_given_snowflake_query_when_inferring_rich_types_then_preserves_proven_o
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
     (tmp_path / "models").mkdir()
     (tmp_path / "models/report.sql").write_text(
-        "MODEL (materialized view, database warehouse, schema analytics);\n" + test_case.sql
+        "MODEL (description 'Test model report.', materialized view, database warehouse, schema analytics);\n"
+        + test_case.sql
     )
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),

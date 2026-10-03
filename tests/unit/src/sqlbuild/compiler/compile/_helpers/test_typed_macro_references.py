@@ -37,8 +37,8 @@ _DEPENDENCY_PROJECT_FILES: dict[str, str] = {
         'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_analysis = false\n'
         "sql_validation = false\n"
     ),
-    "models/orders_eu.sql": "MODEL ();\nSELECT 1 AS order_id",
-    "models/orders_us.sql": "MODEL ();\nSELECT 2 AS order_id",
+    "models/orders_eu.sql": "MODEL (description 'Test model orders_eu.');\nSELECT 1 AS order_id",
+    "models/orders_us.sql": "MODEL (description 'Test model orders_us.');\nSELECT 2 AS order_id",
 }
 
 
@@ -392,7 +392,7 @@ def test_given_typed_macro_arguments_when_compiling_then_every_argument_is_a_dep
         _DEPENDENCY_PROJECT_FILES
         | {
             "macros/common.py": test_case.macro_file_contents,
-            "models/order_summary.sql": f"MODEL ();\n{test_case.sql}",
+            "models/order_summary.sql": f"MODEL (description 'Test model order_summary.');\n{test_case.sql}",
         },
     )
 

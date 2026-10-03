@@ -49,12 +49,12 @@ def test_given_typed_dependency_when_compiling_cte_then_preserves_binding_and_ou
     sources: Path = tmp_path / "sources"
     sources.mkdir()
     (sources / "orders.yml").write_text(
-        "sources:\n  - name: orders\n    contract: enforced\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    contract: enforced\n"
         '    expression: "(SELECT CAST(1 AS BIGINT) AS order_id)"\n'
         "    columns:\n      - name: order_id\n        type: BIGINT\n"
     )
     (models / "selected_orders.sql").write_text(
-        "MODEL (columns (result (type BOOLEAN)));\n"
+        "MODEL (description 'Test model selected_orders.', columns (result (type BOOLEAN)));\n"
         'WITH selected AS (SELECT order_id FROM __source("orders"))\n'
         f"SELECT {test_case.projection} AS result FROM selected\n"
     )
@@ -83,7 +83,7 @@ def test_given_multiple_typed_model_headers_when_compiling_then_cli_preserves_he
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     (models_dir / "staged_orders.sql").write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model staged_orders.',\n"
         "  materialized table,\n"
         "  columns (order_id (type INTEGER, nullable false)),\n"
         '  pre_hooks [inline_sql("SELECT 1")],\n'
@@ -92,7 +92,7 @@ def test_given_multiple_typed_model_headers_when_compiling_then_cli_preserves_he
         encoding="utf-8",
     )
     (models_dir / "orders.sql").write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         "  materialized view,\n"
         "  tags [core, 'daily orders'],\n"
         "  columns (order_id (type DECIMAL(10,2))),\n"
@@ -141,7 +141,7 @@ def test_given_model_macro_when_compiling_with_sql_rules_then_expands_once_and_p
         "    return 'NULL'\n"
     )
     (tmp_path / "models" / "orders" / "orders.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 1 AS order_id WHERE 1 = @missing_value()\n"
+        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id WHERE 1 = @missing_value()\n"
     )
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
@@ -173,7 +173,7 @@ def test_given_unicode_model_when_compiling_twice_then_cli_preserves_unchanged_a
     model_path: Path = tmp_path / "models" / "products.sql"
     model_path.parent.mkdir()
     model_path.write_text(
-        "MODEL (materialized table);\nSELECT 'café' AS product_name  \n\n",
+        "MODEL (description 'Test model products.', materialized table);\nSELECT 'café' AS product_name  \n\n",
         encoding="utf-8",
     )
 
@@ -235,7 +235,7 @@ def test_given_supported_snowflake_aggregation_when_compiling_then_project_succe
     model: Path = tmp_path / "models" / "order_summary.sql"
     model.parent.mkdir()
     model.write_text(
-        f"MODEL (database warehouse, schema analytics);\n\n{test_case.query_sql}",
+        f"MODEL (description 'Test model order_summary.', database warehouse, schema analytics);\n\n{test_case.query_sql}",
         encoding="utf-8",
     )
 
@@ -279,7 +279,7 @@ def test_given_nullable_output_when_compiling_contract_then_only_schema_nullabil
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         "  contract enforced,\n"
         f"  columns ({test_case.column_sql}),\n"
         ");\n\n"
@@ -319,7 +319,7 @@ def test_given_relative_project_directory_when_compiling_then_private_macro_is_v
         'def order_id() -> str:\n    return "CAST(1 AS INTEGER)"\n', encoding="utf-8"
     )
     (project_dir / "models" / "orders" / "orders.sql").write_text(
-        "MODEL (materialized table);\nSELECT @order_id() AS order_id\n",
+        "MODEL (description 'Test model orders.', materialized table);\nSELECT @order_id() AS order_id\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -350,17 +350,17 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     (models_dir / "stg_orders.sql").write_text(
-        'MODEL (materialized table);\nSELECT order_id, amount FROM __source("raw_orders")\n',
+        'MODEL (description "Test model stg_orders.", materialized table);\nSELECT order_id, amount FROM __source("raw_orders")\n',
         encoding="utf-8",
     )
     (models_dir / "orders.sql").write_text(
-        'MODEL (materialized table);\nSELECT order_id, amount FROM __ref("stg_orders")\n',
+        'MODEL (description "Test model orders.", materialized table);\nSELECT order_id, amount FROM __ref("stg_orders")\n',
         encoding="utf-8",
     )
     sources_dir: Path = tmp_path / "sources"
     sources_dir.mkdir()
     (sources_dir / "raw_orders.yml").write_text(
-        "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n",
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    schema: main\n    table: raw_orders\n",
         encoding="utf-8",
     )
     tests_dir: Path = tmp_path / "tests" / "unit"

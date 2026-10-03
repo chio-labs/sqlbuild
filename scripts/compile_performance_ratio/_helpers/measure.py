@@ -1,4 +1,4 @@
-"""Generate a benchmark project once and time alternating base and head compiles."""
+"""Generate benchmark projects and time alternating base and head compiles."""
 
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ from pathlib import Path
 
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.compile_performance_ratio.constants import (
+    BASE_GENERATOR_ENTRY,
     BASE_LABEL,
     COMPILE_ENTRY,
     DENSE_KIND,
+    ERROR_TAIL_CHARACTERS,
     EXCLUDED_ENVIRONMENT_KEYS,
     EXCLUDED_ENVIRONMENT_PREFIX,
     FRESH_AUDIT_SHARE,
@@ -25,6 +27,7 @@ from scripts.compile_performance_ratio.constants import (
     FRESH_SOURCE_SHARE,
     FRESH_TEST_SHARE,
     HEAD_LABEL,
+    PYTHONPATH_KEY,
     REPORTED_PHASES,
 )
 from scripts.compile_performance_ratio.exceptions import CompileComparisonError
@@ -52,23 +55,47 @@ def write_benchmark_project(*, kind: str, project_dir: Path, models: int) -> Non
     )
 
 
+def write_base_benchmark_project(
+    *, base_root: Path, python: Path, kind: str, project_dir: Path, models: int
+) -> None:
+    """Write the base project with the base checkout's own generator, run by `python`."""
+
+    completed: subprocess.CompletedProcess[str] = subprocess.run(
+        [str(python), "-c", BASE_GENERATOR_ENTRY, kind, str(project_dir), str(models)],
+        cwd=base_root,
+        capture_output=True,
+        text=True,
+        env={**_compile_environment(), PYTHONPATH_KEY: str(base_root)},
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise CompileComparisonError(
+            f"base project generation in {base_root} failed with exit {completed.returncode}: "
+            f"{completed.stderr[-ERROR_TAIL_CHARACTERS:]}"
+        )
+
+
 def compare_builds(
     *,
     kind: str,
     models: int,
-    project_dir: Path,
+    base_project_dir: Path,
+    head_project_dir: Path,
     base_python: Path,
     head_python: Path,
     runs: int,
 ) -> CompileComparison:
     """Alternate base and head cold compiles after one untimed warm-up compile per build."""
 
-    builds: tuple[tuple[str, Path], ...] = ((BASE_LABEL, base_python), (HEAD_LABEL, head_python))
-    for label, python in builds:
+    builds: tuple[tuple[str, Path, Path], ...] = (
+        (BASE_LABEL, base_python, base_project_dir),
+        (HEAD_LABEL, head_python, head_project_dir),
+    )
+    for label, python, project_dir in builds:
         _compile_once(label=label, python=python, project_dir=project_dir)
     results: dict[str, list[CompileRun]] = {BASE_LABEL: [], HEAD_LABEL: []}
     for _ in range(runs):
-        for label, python in builds:
+        for label, python, project_dir in builds:
             results[label].append(
                 _compile_once(label=label, python=python, project_dir=project_dir)
             )
@@ -88,11 +115,7 @@ def compare_builds(
 
 def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
     shutil.rmtree(project_dir / "target", ignore_errors=True)
-    environment: dict[str, str] = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in EXCLUDED_ENVIRONMENT_KEYS and not key.startswith(EXCLUDED_ENVIRONMENT_PREFIX)
-    }
+    environment: dict[str, str] = _compile_environment()
     before: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     started: float = time.perf_counter()
     completed: subprocess.CompletedProcess[str] = subprocess.run(
@@ -116,7 +139,8 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
     after: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     if completed.returncode != 0:
         raise CompileComparisonError(
-            f"{label} compile failed with exit {completed.returncode}: {completed.stderr[-2000:]}"
+            f"{label} compile failed with exit {completed.returncode}: "
+            f"{completed.stderr[-ERROR_TAIL_CHARACTERS:]}"
         )
     payload: dict[str, object] = json.loads(completed.stdout)
     timings: object = payload.get("compile_timings", {})
@@ -130,6 +154,14 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
             if name in REPORTED_PHASES and isinstance(value, (int, float))
         },
     )
+
+
+def _compile_environment() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in EXCLUDED_ENVIRONMENT_KEYS and not key.startswith(EXCLUDED_ENVIRONMENT_PREFIX)
+    }
 
 
 def _median_phases(*, runs: list[CompileRun]) -> dict[str, float]:

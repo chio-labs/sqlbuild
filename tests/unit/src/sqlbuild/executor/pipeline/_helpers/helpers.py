@@ -265,7 +265,7 @@ def build_compiled_scenario(*, name: str) -> CompiledSqlScenario:
         scenario_file=DiscoveredSqlScenarioFile(
             file_path=Path(f"tests/scenarios/{name}.sql"),
             relative_path=Path(f"tests/scenarios/{name}.sql"),
-            contents="SCENARIO ();",
+            contents="SCENARIO (description 'Test scenario.');",
             header_values={},
             sql_body="",
             name=name,

@@ -23,6 +23,7 @@ def loader(
     unique_key: str | Sequence[str] | None = None,
     columns: Sequence[LoaderColumnSpec | SourceColumnEntry] = (),
     contract: str | None = None,
+    description: str | None = None,
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild source loader."""
 
@@ -36,6 +37,7 @@ def loader(
         unique_key=unique_key,
         columns=columns,
         contract=contract,
+        description=description,
     )
 
 

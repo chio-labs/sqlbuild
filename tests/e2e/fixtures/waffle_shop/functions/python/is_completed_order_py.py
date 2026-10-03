@@ -7,4 +7,5 @@ from sqlbuild.functions import udf
     runtime_version="3.11",
 )
 def main(order_status: str | None) -> bool:
+    """Test function main."""
     return order_status == "completed"

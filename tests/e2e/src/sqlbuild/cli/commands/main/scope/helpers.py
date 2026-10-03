@@ -78,7 +78,7 @@ def write_scope_performance_project(
 
 def _write_scope_model(*, model_dir: Path, model_index: int, macro_name: str) -> None:
     (model_dir / f"model_{model_index:05d}.sql").write_text(
-        f'MODEL();\nSELECT @{macro_name}("id") AS id\n', encoding="utf-8"
+        f'MODEL(description "Test model.");\nSELECT @{macro_name}("id") AS id\n', encoding="utf-8"
     )
 
 

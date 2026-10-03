@@ -78,6 +78,7 @@ def test_given_sequential_microbatch_when_repeated_then_uses_only_physical_water
             """
             sources:
               - name: raw_events
+                description: Test source raw_events.
                 schema: main
                 table: raw_events
             """
@@ -85,7 +86,7 @@ def test_given_sequential_microbatch_when_repeated_then_uses_only_physical_water
         + "\n",
         "models/orders.sql": dedent(
             f"""
-            MODEL (
+            MODEL (description "Test model orders.",
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,

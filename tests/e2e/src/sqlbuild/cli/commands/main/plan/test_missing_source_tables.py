@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "error[S405]",
                 "1 source table read by selected resources does not exist in the warehouse",
                 "source 'raw_payments' (raw.payments), read by payments",
-                "'raw_payments' at sources/raw.yml:16",
+                "'raw_payments' at sources/raw.yml:18",
             ),
         )
     ],

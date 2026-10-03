@@ -258,7 +258,7 @@ def prepare_bigquery_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     models_dir: Path = project_dir / "models" / "staging"
     models_dir.mkdir(parents=True, exist_ok=True)
     (models_dir / "stg_orders.sql").write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model stg_orders.',\n"
         "  materialized table,\n"
         "  unique_key [order_id],\n"
         "  cursor order_id,\n"

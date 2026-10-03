@@ -104,7 +104,7 @@ def test_given_empty_typed_seed_fields_when_loading_then_persists_nulls(
             ),
             "seeds/schema.yml": (
                 "seeds:\n"
-                "  - name: nullable_mappings\n"
+                "  - name: nullable_mappings\n    description: Test seed nullable_mappings.\n"
                 "    columns:\n"
                 "      - name: mapping_id\n"
                 "        type: INTEGER\n"
@@ -161,11 +161,11 @@ def test_given_standalone_seeds_when_writing_json_file_then_assets_are_complete_
             ),
             "seeds/schema.yml": (
                 "seeds:\n"
-                "  - name: first_seed\n"
+                "  - name: first_seed\n    description: Test seed first_seed.\n"
                 "    columns:\n"
                 "      - name: id\n"
                 "        type: INTEGER\n"
-                "  - name: second_seed\n"
+                "  - name: second_seed\n    description: Test seed second_seed.\n"
                 "    columns:\n"
                 "      - name: id\n"
                 "        type: INTEGER\n"
@@ -225,7 +225,7 @@ def test_given_failing_standalone_seed_when_writing_json_file_then_failure_is_ho
             ),
             "seeds/schema.yml": (
                 "seeds:\n"
-                "  - name: invalid_seed\n"
+                "  - name: invalid_seed\n    description: Test seed invalid_seed.\n"
                 "    columns:\n"
                 "      - name: id\n"
                 "        type: INTEGER\n"

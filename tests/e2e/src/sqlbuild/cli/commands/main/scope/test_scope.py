@@ -24,7 +24,7 @@ def test_given_minimal_project_when_running_scope_aliases_then_outputs_are_offli
         'name = "scope_e2e"\nadapter = "duckdb"\n', encoding="utf-8"
     )
     (project_dir / "models" / "orders.sql").write_text(
-        "MODEL();\nSELECT 1 AS id\n", encoding="utf-8"
+        "MODEL(description 'Test model orders.');\nSELECT 1 AS id\n", encoding="utf-8"
     )
 
     first: subprocess.CompletedProcess[str] = run_scope_alias(

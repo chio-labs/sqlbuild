@@ -357,13 +357,15 @@ class FormatScopeIntegrationTestCase:
 
 
 @dataclass(frozen=True)
-class FormatWarningIntegrationTestCase:
-    """One non-failing format warning expectation."""
+class FormatDescriptionFaultIntegrationTestCase:
+    """A missing description faults format check and write mode alike."""
 
     description: str
+    authored_sql: str
     expected_exit_code: int
     expected_code: str
     expected_severity: str
+    expected_formatted_sql: str
 
 
 @dataclass(frozen=True)

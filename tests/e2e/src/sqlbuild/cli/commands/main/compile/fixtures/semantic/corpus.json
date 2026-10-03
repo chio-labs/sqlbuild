@@ -7,7 +7,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -17,7 +17,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity AS q, q + 1 AS q2 FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity AS q, q + 1 AS q2 FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -27,7 +27,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at > '2026-01-01'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at > '2026-01-01'\n"
       }
     },
     {
@@ -37,7 +37,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY ALL\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY ALL\n"
       }
     },
     {
@@ -47,7 +47,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT * EXCLUDE (status) FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT * EXCLUDE (status) FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -57,7 +57,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity * 2.5 AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity * 2.5 AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -67,7 +67,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.order_id, p.amount_cents FROM __ref(\"stg_orders_typed\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.order_id, p.amount_cents FROM __ref(\"stg_orders_typed\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     },
     {
@@ -77,7 +77,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity AS q FROM __source(\"raw__orders\") ORDER BY q\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity AS q FROM __source(\"raw__orders\") ORDER BY q\n"
       }
     },
     {
@@ -87,7 +87,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o WHERE EXISTS (SELECT 1 FROM __source(\"raw__customers\") c WHERE c.id = o.customer_id)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o WHERE EXISTS (SELECT 1 FROM __source(\"raw__customers\") c WHERE c.id = o.customer_id)\n"
       }
     },
     {
@@ -97,7 +97,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY ordered_at) = 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY ordered_at) = 1\n"
       }
     },
     {
@@ -107,7 +107,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT AVG(ordered_at) AS a FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT AVG(ordered_at) AS a FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -117,7 +117,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity\n"
       }
     },
     {
@@ -127,7 +127,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT NOT quantity AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT NOT quantity AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -137,7 +137,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ordered_at AS x FROM __source(\"raw__orders\") UNION ALL SELECT email FROM __source(\"raw__customers\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ordered_at AS x FROM __source(\"raw__orders\") UNION ALL SELECT email FROM __source(\"raw__customers\")\n"
       }
     },
     {
@@ -147,7 +147,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity AS x FROM __source(\"raw__orders\") UNION ALL SELECT TRUE FROM __source(\"raw__customers\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity AS x FROM __source(\"raw__orders\") UNION ALL SELECT TRUE FROM __source(\"raw__customers\")\n"
       }
     },
     {
@@ -157,7 +157,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id, id FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id, id FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -167,7 +167,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH c(a, b) AS (SELECT id FROM __source(\"raw__orders\")) SELECT a FROM c\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH c(a, b) AS (SELECT id FROM __source(\"raw__orders\")) SELECT a FROM c\n"
       }
     },
     {
@@ -177,7 +177,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity + 1 FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity + 1 FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -187,7 +187,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(status = 'x') AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(status = 'x') AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -197,7 +197,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity AND status = 'x'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity AND status = 'x'\n"
       }
     },
     {
@@ -207,7 +207,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer_id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer_id\n"
       }
     },
     {
@@ -217,7 +217,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH c(a, b, d) AS (SELECT id, status FROM __source(\"raw__orders\")) SELECT a FROM c\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH c(a, b, d) AS (SELECT id, status FROM __source(\"raw__orders\")) SELECT a FROM c\n"
       }
     },
     {
@@ -227,7 +227,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT * FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer_id = c.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT * FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer_id = c.id\n"
       }
     },
     {
@@ -237,14 +237,14 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT DISTINCT status FROM __source(\"raw__orders\") ORDER BY quantity\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT DISTINCT status FROM __source(\"raw__orders\") ORDER BY quantity\n"
       }
     },
     {
       "description": "control: declared scalar UDF return type",
       "category": "control",
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table, contract enforced, columns (valid (type BOOLEAN)));\nSELECT __udf(\"udf__is_completed_order\")(status) AS valid FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table, contract enforced, columns (valid (type BOOLEAN)));\nSELECT __udf(\"udf__is_completed_order\")(status) AS valid FROM __source(\"raw__orders\")\n"
       },
       "expected_exit_code": 0,
       "expected_codes": [],
@@ -257,7 +257,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH o AS (SELECT * FROM __source(\"raw__orders\")), c AS (SELECT * FROM __source(\"raw__customers\")) SELECT o.id FROM o JOIN c ON o.id = c.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH o AS (SELECT * FROM __source(\"raw__orders\")), c AS (SELECT * FROM __source(\"raw__customers\")) SELECT o.id FROM o JOIN c ON o.id = c.id\n"
       }
     }
   ],
@@ -271,7 +271,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT qty FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT qty FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -283,7 +283,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.qty FROM __source(\"raw__orders\") o\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.qty FROM __source(\"raw__orders\") o\n"
       }
     },
     {
@@ -295,7 +295,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT qty FROM __ref(\"stg_orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT qty FROM __ref(\"stg_orders\")\n"
       }
     },
     {
@@ -307,7 +307,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.qty FROM __ref(\"stg_orders_typed\") o\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.qty FROM __ref(\"stg_orders_typed\") o\n"
       }
     },
     {
@@ -319,7 +319,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT amount_usd FROM __source(\"raw__payments\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT amount_usd FROM __source(\"raw__payments\")\n"
       }
     },
     {
@@ -331,7 +331,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT price_usd FROM __seed(\"waffle_types\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT price_usd FROM __seed(\"waffle_types\")\n"
       }
     },
     {
@@ -343,7 +343,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE qty > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE qty > 1\n"
       }
     },
     {
@@ -355,7 +355,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY stat\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY stat\n"
       }
     },
     {
@@ -367,7 +367,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") ORDER BY qty\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") ORDER BY qty\n"
       }
     },
     {
@@ -379,7 +379,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer = c.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer = c.id\n"
       }
     },
     {
@@ -391,7 +391,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id, ROW_NUMBER() OVER (PARTITION BY cust ORDER BY ordered_at) AS rn FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id, ROW_NUMBER() OVER (PARTITION BY cust ORDER BY ordered_at) AS rn FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -403,7 +403,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") QUALIFY ROW_NUMBER() OVER (PARTITION BY cust ORDER BY ordered_at) = 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") QUALIFY ROW_NUMBER() OVER (PARTITION BY cust ORDER BY ordered_at) = 1\n"
       }
     },
     {
@@ -415,7 +415,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY status HAVING SUM(qty) > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY status HAVING SUM(qty) > 1\n"
       }
     },
     {
@@ -427,7 +427,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CASE WHEN qty > 1 THEN 'a' END AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CASE WHEN qty > 1 THEN 'a' END AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -439,7 +439,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT UPPER(stat) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT UPPER(stat) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -451,7 +451,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH x AS (SELECT id FROM __source(\"raw__orders\")) SELECT quantity FROM x\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH x AS (SELECT id FROM __source(\"raw__orders\")) SELECT quantity FROM x\n"
       }
     },
     {
@@ -463,7 +463,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT s.quantity FROM (SELECT id FROM __source(\"raw__orders\")) s\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT s.quantity FROM (SELECT id FROM __source(\"raw__orders\")) s\n"
       }
     },
     {
@@ -475,7 +475,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT z.id FROM __source(\"raw__orders\") o\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT z.id FROM __source(\"raw__orders\") o\n"
       }
     },
     {
@@ -487,7 +487,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o WHERE EXISTS (SELECT 1 FROM __source(\"raw__customers\") c WHERE c.id = o.cust)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o WHERE EXISTS (SELECT 1 FROM __source(\"raw__customers\") c WHERE c.id = o.cust)\n"
       }
     },
     {
@@ -499,7 +499,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE customer_id IN (SELECT cust_id FROM __source(\"raw__customers\"))\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE customer_id IN (SELECT cust_id FROM __source(\"raw__customers\"))\n"
       }
     },
     {
@@ -511,7 +511,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id WHERE p.amount > 0\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id WHERE p.amount > 0\n"
       }
     },
     {
@@ -523,7 +523,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c USING (cust_id)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c USING (cust_id)\n"
       }
     },
     {
@@ -535,7 +535,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/probe.sql": "MODEL (materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
+        "models/marts/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
       }
     },
     {
@@ -547,7 +547,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(stat) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(stat) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -559,7 +559,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT order_id FROM __ref(\"stg_orders\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT order_id FROM __ref(\"stg_orders\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     },
     {
@@ -571,7 +571,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer_id = c.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.customer_id = c.id\n"
       }
     },
     {
@@ -583,7 +583,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON id = c.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON id = c.id\n"
       }
     },
     {
@@ -595,7 +595,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id WHERE order_id > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id WHERE order_id > 1\n"
       }
     },
     {
@@ -607,7 +607,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(quantity) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(quantity) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -619,7 +619,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status, quantity, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY status\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status, quantity, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY status\n"
       }
     },
     {
@@ -631,7 +631,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE SUM(quantity) > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE SUM(quantity) > 1\n"
       }
     },
     {
@@ -643,7 +643,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(COUNT(*)) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(COUNT(*)) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -655,7 +655,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ROW_NUMBER() OVER () = 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ROW_NUMBER() OVER () = 1\n"
       }
     },
     {
@@ -667,7 +667,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id, COUNT(*) AS n FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id, COUNT(*) AS n FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -679,7 +679,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status FROM __source(\"raw__orders\") GROUP BY status HAVING quantity > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status FROM __source(\"raw__orders\") GROUP BY status HAVING quantity > 1\n"
       }
     },
     {
@@ -691,7 +691,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status FROM __source(\"raw__orders\") GROUP BY 3\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status FROM __source(\"raw__orders\") GROUP BY 3\n"
       }
     },
     {
@@ -703,7 +703,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(status, id) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(status, id) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -715,7 +715,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH x AS (SELECT 1 AS id) SELECT quantity FROM x\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH x AS (SELECT 1 AS id) SELECT quantity FROM x\n"
       }
     },
     {
@@ -727,7 +727,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT order_id FROM __ref(\"stg_orders_typed\") WHERE qty > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT order_id FROM __ref(\"stg_orders_typed\") WHERE qty > 1\n"
       }
     },
     {
@@ -739,7 +739,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders_typed\") o JOIN __seed(\"waffle_types\") w ON o.waffle = w.waffle_type_id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders_typed\") o JOIN __seed(\"waffle_types\") w ON o.waffle = w.waffle_type_id\n"
       }
     },
     {
@@ -751,7 +751,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT waffle_type_id FROM __ref(\"stg_orders_typed\") o JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT waffle_type_id FROM __ref(\"stg_orders_typed\") o JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\n"
       }
     },
     {
@@ -763,7 +763,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH x AS (SELECT order_id FROM __ref(\"stg_orders_typed\")) SELECT quantity FROM x\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH x AS (SELECT order_id FROM __ref(\"stg_orders_typed\")) SELECT quantity FROM x\n"
       }
     },
     {
@@ -775,7 +775,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT qty FROM __ref(\"stg_orders_typed\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT qty FROM __ref(\"stg_orders_typed\")\n"
       }
     },
     {
@@ -787,7 +787,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT w.price_usd FROM __source(\"raw__orders\") o JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT w.price_usd FROM __source(\"raw__orders\") o JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\n"
       }
     },
     {
@@ -799,7 +799,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/probe_m.sql": "MODEL (materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
+        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
       }
     },
     {
@@ -823,7 +823,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/staging/stg_orders_typed.sql": "MODEL (\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    quantity (type VARCHAR),\n    ordered_at (type TIMESTAMP),\n    status (type VARCHAR),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n"
+        "models/staging/stg_orders_typed.sql": "MODEL (description \"Test model stg_orders_typed.\",\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    quantity (type VARCHAR),\n    ordered_at (type TIMESTAMP),\n    status (type VARCHAR),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -848,8 +848,8 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/staging/stg_orders_typed.sql": "MODEL (\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    qty (type INTEGER),\n    ordered_at (type TIMESTAMP),\n    status (type VARCHAR),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity AS qty,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n",
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity FROM __ref(\"stg_orders_typed\")\n"
+        "models/staging/stg_orders_typed.sql": "MODEL (description \"Test model stg_orders_typed.\",\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    qty (type INTEGER),\n    ordered_at (type TIMESTAMP),\n    status (type VARCHAR),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity AS qty,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n",
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity FROM __ref(\"stg_orders_typed\")\n"
       }
     },
     {
@@ -885,7 +885,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY SUM(quantity)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY SUM(quantity)\n"
       }
     },
     {
@@ -897,7 +897,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COUNT(*) FILTER (WHERE qty > 1) AS n FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COUNT(*) FILTER (WHERE qty > 1) AS n FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -909,7 +909,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON SUM(o.customer_id) = c.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON SUM(o.customer_id) = c.id\n"
       }
     },
     {
@@ -921,7 +921,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(ROW_NUMBER() OVER ()) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(ROW_NUMBER() OVER ()) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -933,7 +933,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY ROW_NUMBER() OVER ()\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY ROW_NUMBER() OVER ()\n"
       }
     },
     {
@@ -945,7 +945,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT LAG(quantity) OVER (ORDER BY ordered) AS l FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT LAG(quantity) OVER (ORDER BY ordered) AS l FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -955,7 +955,7 @@
       "expected_codes": [],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT UPPER(status, status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT UPPER(status, status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -967,7 +967,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT x.id FROM (SELECT id FROM __source(\"raw__orders\"))\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT x.id FROM (SELECT id FROM __source(\"raw__orders\"))\n"
       }
     },
     {
@@ -979,7 +979,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") o WHERE EXISTS (SELECT 1 FROM __source(\"raw__customers\") c WHERE c.id = z.customer_id)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") o WHERE EXISTS (SELECT 1 FROM __source(\"raw__customers\") c WHERE c.id = z.customer_id)\n"
       }
     },
     {
@@ -991,7 +991,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id, l.x FROM __source(\"raw__orders\") o, LATERAL (SELECT o.qty AS x) l\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id, l.x FROM __source(\"raw__orders\") o, LATERAL (SELECT o.qty AS x) l\n"
       }
     },
     {
@@ -1003,7 +1003,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT a.id FROM (SELECT id, status FROM __source(\"raw__orders\")) a JOIN (SELECT id FROM __source(\"raw__customers\")) b USING (status)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT a.id FROM (SELECT id, status FROM __source(\"raw__orders\")) a JOIN (SELECT id FROM __source(\"raw__customers\")) b USING (status)\n"
       }
     },
     {
@@ -1015,7 +1015,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT z FROM (SELECT id FROM __source(\"raw__orders\") UNION ALL BY NAME SELECT id FROM __source(\"raw__customers\")) u\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT z FROM (SELECT id FROM __source(\"raw__orders\") UNION ALL BY NAME SELECT id FROM __source(\"raw__customers\")) u\n"
       }
     },
     {
@@ -1027,7 +1027,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY status ORDER BY quantity\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status, COUNT(*) AS n FROM __source(\"raw__orders\") GROUP BY status ORDER BY quantity\n"
       }
     },
     {
@@ -1039,7 +1039,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")() AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")() AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1051,7 +1051,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT t.amount FROM __table_fn(\"table_fn__customer_orders\")(1) t\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT t.amount FROM __table_fn(\"table_fn__customer_orders\")(1) t\n"
       }
     },
     {
@@ -1063,7 +1063,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT t.order_id FROM __table_fn(\"table_fn__customer_orders\")(1, 2) t\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT t.order_id FROM __table_fn(\"table_fn__customer_orders\")(1, 2) t\n"
       }
     },
     {
@@ -1075,7 +1075,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/probe_m.sql": "MODEL (materialized table);\n\nSELECT @cents_to_dollars('SUM(p.amount_usd)') AS d FROM __ref(\"stg_payments\") p\n"
+        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT @cents_to_dollars('SUM(p.amount_usd)') AS d FROM __ref(\"stg_payments\") p\n"
       }
     },
     {
@@ -1267,7 +1267,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/staging/stg_orders_typed.sql": "MODEL (\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    quantity (type INTEGER),\n    ordered_at (type TIMESTAMP),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n"
+        "models/staging/stg_orders_typed.sql": "MODEL (description \"Test model stg_orders_typed.\",\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    quantity (type INTEGER),\n    ordered_at (type TIMESTAMP),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1279,7 +1279,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/staging/stg_orders_typed.sql": "MODEL (\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    quantity (type INTEGER),\n    ordered_at (type TIMESTAMP),\n    status (type STRINGY),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n"
+        "models/staging/stg_orders_typed.sql": "MODEL (description \"Test model stg_orders_typed.\",\n  materialized view,\n  contract enforced,\n  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n    waffle_type_id (type INTEGER),\n    quantity (type INTEGER),\n    ordered_at (type TIMESTAMP),\n    status (type STRINGY),\n  ),\n);\n\nSELECT\n  id AS order_id,\n  customer_id,\n  waffle_type_id,\n  quantity,\n  ordered_at,\n  status\nFROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1394,7 +1394,7 @@
       "description": "metadata-udf: scalar UDF declared argument type",
       "category": "udf",
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\nSELECT __udf(\"udf__is_completed_order\")(quantity) AS valid FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\nSELECT __udf(\"udf__is_completed_order\")(quantity) AS valid FROM __source(\"raw__orders\")\n"
       },
       "expected_exit_code": 1,
       "expected_codes": [
@@ -1411,7 +1411,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH o AS (SELECT * FROM __source(\"raw__orders\")), c AS (SELECT * FROM __source(\"raw__customers\")) SELECT o.id FROM o JOIN c ON o.id = c.email\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH o AS (SELECT * FROM __source(\"raw__orders\")), c AS (SELECT * FROM __source(\"raw__customers\")) SELECT o.id FROM o JOIN c ON o.id = c.email\n"
       }
     },
     {
@@ -1423,7 +1423,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM (SELECT * FROM __source(\"raw__orders\")) AS o JOIN __source(\"raw__customers\") AS c ON o.id = c.email\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM (SELECT * FROM __source(\"raw__orders\")) AS o JOIN __source(\"raw__customers\") AS c ON o.id = c.email\n"
       }
     }
   ],
@@ -1435,7 +1435,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH x AS (SELECT * FROM __source(\"raw__orders\")) SELECT qty FROM x\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH x AS (SELECT * FROM __source(\"raw__orders\")) SELECT qty FROM x\n"
       }
     },
     {
@@ -1445,7 +1445,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT * EXCLUDE (qty) FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT * EXCLUDE (qty) FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1455,7 +1455,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at > 5\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at > 5\n"
       }
     },
     {
@@ -1465,7 +1465,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity * status AS q FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity * status AS q FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1475,7 +1475,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.id = c.email\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON o.id = c.email\n"
       }
     },
     {
@@ -1485,7 +1485,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(status) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(status) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1495,7 +1495,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status > 5\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status > 5\n"
       }
     },
     {
@@ -1505,7 +1505,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status\n"
       }
     },
     {
@@ -1515,7 +1515,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CASE WHEN quantity > 1 THEN quantity ELSE status END AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CASE WHEN quantity > 1 THEN quantity ELSE status END AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1525,7 +1525,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COALESCE(quantity, status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COALESCE(quantity, status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1535,7 +1535,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity IN ('a', 'b')\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity IN ('a', 'b')\n"
       }
     },
     {
@@ -1545,7 +1545,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity LIKE '1%'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity LIKE '1%'\n"
       }
     },
     {
@@ -1555,7 +1555,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT DATE_TRUNC('day', status) AS d FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT DATE_TRUNC('day', status) AS d FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1565,7 +1565,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ordered_at + status AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ordered_at + status AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1575,7 +1575,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT LENGTH(quantity) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT LENGTH(quantity) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1585,7 +1585,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at = 'not a date'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at = 'not a date'\n"
       }
     },
     {
@@ -1595,7 +1595,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity - ordered_at AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity - ordered_at AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1605,7 +1605,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at BETWEEN 1 AND 5\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at BETWEEN 1 AND 5\n"
       }
     },
     {
@@ -1615,7 +1615,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o WHERE o.ordered_at > (SELECT MAX(email) FROM __source(\"raw__customers\"))\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o WHERE o.ordered_at > (SELECT MAX(email) FROM __source(\"raw__customers\"))\n"
       }
     },
     {
@@ -1625,7 +1625,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders_typed\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.payment_method\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.order_id FROM __ref(\"stg_orders_typed\") o JOIN __ref(\"stg_payments\") p ON o.order_id = p.payment_method\n"
       }
     },
     {
@@ -1635,7 +1635,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(p.payment_method) OVER () AS s FROM __ref(\"stg_payments\") p\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(p.payment_method) OVER () AS s FROM __ref(\"stg_payments\") p\n"
       }
     },
     {
@@ -1645,7 +1645,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT UPPER(quantity) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT UPPER(quantity) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1655,7 +1655,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status = TRUE\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status = TRUE\n"
       }
     },
     {
@@ -1665,7 +1665,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CAST(ordered_at AS INTEGER) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CAST(ordered_at AS INTEGER) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1675,7 +1675,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT order_id FROM __ref(\"stg_orders_typed\") WHERE ordered_at > 5\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT order_id FROM __ref(\"stg_orders_typed\") WHERE ordered_at > 5\n"
       }
     },
     {
@@ -1685,7 +1685,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity * status AS q FROM __ref(\"stg_orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity * status AS q FROM __ref(\"stg_orders\")\n"
       }
     },
     {
@@ -1695,7 +1695,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id, status FROM __source(\"raw__orders\") UNION ALL SELECT id FROM __source(\"raw__customers\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id, status FROM __source(\"raw__orders\") UNION ALL SELECT id FROM __source(\"raw__customers\")\n"
       }
     },
     {
@@ -1705,7 +1705,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") INTERSECT SELECT id, email FROM __source(\"raw__customers\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") INTERSECT SELECT id, email FROM __source(\"raw__customers\")\n"
       }
     },
     {
@@ -1715,7 +1715,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT not_a_function(id) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT not_a_function(id) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1725,7 +1725,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT DATE_TRUNC('day') AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT DATE_TRUNC('day') AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1735,7 +1735,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ROUND(status, 2) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ROUND(status, 2) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1745,7 +1745,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUBSTRING(status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUBSTRING(status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1755,7 +1755,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") ORDER BY 5\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") ORDER BY 5\n"
       }
     },
     {
@@ -1765,7 +1765,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH a AS (SELECT id FROM __source(\"raw__orders\")) SELECT * FROM b\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH a AS (SELECT id FROM __source(\"raw__orders\")) SELECT * FROM b\n"
       }
     },
     {
@@ -1775,7 +1775,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM raw_orders\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM raw_orders\n"
       }
     },
     {
@@ -1785,7 +1785,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CAST('2020-01-01' AS TIMESTAMP) > 5 AS x\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CAST('2020-01-01' AS TIMESTAMP) > 5 AS x\n"
       }
     },
     {
@@ -1795,7 +1795,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity * status AS q FROM __ref(\"stg_orders_typed\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity * status AS q FROM __ref(\"stg_orders_typed\")\n"
       }
     },
     {
@@ -1815,7 +1815,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(ordered_at) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(ordered_at) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1825,7 +1825,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT AVG(status) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT AVG(status) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1835,7 +1835,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(CAST(ordered_at AS DATE)) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(CAST(ordered_at AS DATE)) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1845,7 +1845,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(quantity, id) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(quantity, id) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1855,7 +1855,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT STDDEV(status) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT STDDEV(status) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1865,7 +1865,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(status) AS s FROM __ref(\"stg_orders_typed\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(status) AS s FROM __ref(\"stg_orders_typed\")\n"
       }
     },
     {
@@ -1875,7 +1875,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(waffle_name) AS s FROM __seed(\"waffle_types\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(waffle_name) AS s FROM __seed(\"waffle_types\")\n"
       }
     },
     {
@@ -1885,7 +1885,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COUNT(*) FILTER (WHERE status) AS n FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COUNT(*) FILTER (WHERE status) AS n FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1895,7 +1895,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ROW_NUMBER() AS rn FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ROW_NUMBER() AS rn FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1905,7 +1905,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT LAG(quantity, status) OVER (ORDER BY id) AS l FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT LAG(quantity, status) OVER (ORDER BY id) AS l FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1915,7 +1915,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT NTILE('a') OVER (ORDER BY id) AS t FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT NTILE('a') OVER (ORDER BY id) AS t FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1925,7 +1925,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(quantity) OVER (ORDER BY status RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(quantity) OVER (ORDER BY status RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1935,7 +1935,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(quantity) OVER w AS s FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(quantity) OVER w AS s FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1945,7 +1945,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") QUALIFY quantity > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") QUALIFY quantity > 1\n"
       }
     },
     {
@@ -1955,7 +1955,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ABS(status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ABS(status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1965,7 +1965,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ROUND(ordered_at) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ROUND(ordered_at) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1975,7 +1975,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT EXTRACT(year FROM status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT EXTRACT(year FROM status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1985,7 +1985,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT DATE_DIFF('day', status, ordered_at) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT DATE_DIFF('day', status, ordered_at) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -1995,7 +1995,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SPLIT_PART(quantity, ',', 1) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SPLIT_PART(quantity, ',', 1) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2005,7 +2005,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT REGEXP_MATCHES(quantity, 'a') AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT REGEXP_MATCHES(quantity, 'a') AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2015,7 +2015,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SQRT(status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SQRT(status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2025,7 +2025,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT GREATEST(quantity, status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT GREATEST(quantity, status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2035,7 +2035,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT LEAST(ordered_at, quantity) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT LEAST(ordered_at, quantity) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2045,7 +2045,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT NULLIF(quantity, status) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT NULLIF(quantity, status) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2055,7 +2055,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT IFNULL(ordered_at, quantity) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT IFNULL(ordered_at, quantity) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2065,7 +2065,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT STRFTIME(quantity, '%Y') AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT STRFTIME(quantity, '%Y') AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2075,7 +2075,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT LOWER(ordered_at) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT LOWER(ordered_at) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2085,7 +2085,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT LEFT(quantity, 2) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT LEFT(quantity, 2) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2095,7 +2095,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COALESCE() AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COALESCE() AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2105,7 +2105,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE is_valid(status)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE is_valid(status)\n"
       }
     },
     {
@@ -2115,7 +2115,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT not_an_agg(quantity) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT not_an_agg(quantity) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2125,7 +2125,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status OR quantity > 1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status OR quantity > 1\n"
       }
     },
     {
@@ -2135,7 +2135,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ordered_at * 2 AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ordered_at * 2 AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2145,7 +2145,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status % 2 AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status % 2 AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2155,7 +2155,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status IS TRUE\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE status IS TRUE\n"
       }
     },
     {
@@ -2165,7 +2165,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at LIKE '2026%'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at LIKE '2026%'\n"
       }
     },
     {
@@ -2175,7 +2175,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity BETWEEN 'a' AND 'b'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE quantity BETWEEN 'a' AND 'b'\n"
       }
     },
     {
@@ -2185,7 +2185,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CASE WHEN status THEN 1 END AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CASE WHEN status THEN 1 END AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2195,7 +2195,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT -status AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT -status AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2205,7 +2205,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ordered_at - status AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ordered_at - status AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2215,7 +2215,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT status FROM __source(\"raw__orders\") GROUP BY status HAVING status\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT status FROM __source(\"raw__orders\") GROUP BY status HAVING status\n"
       }
     },
     {
@@ -2225,7 +2225,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CAST(quantity AS NOT_A_TYPE) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CAST(quantity AS NOT_A_TYPE) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2235,7 +2235,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CAST(status = 'x' AS TIMESTAMP) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CAST(status = 'x' AS TIMESTAMP) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2245,7 +2245,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT CAST(ordered_at AS BOOLEAN) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT CAST(ordered_at AS BOOLEAN) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2255,7 +2255,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at > DATE '2026-13-45'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at > DATE '2026-13-45'\n"
       }
     },
     {
@@ -2265,7 +2265,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT ordered_at + INTERVAL 'banana' AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT ordered_at + INTERVAL 'banana' AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2275,7 +2275,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE customer_id IN (SELECT id, email FROM __source(\"raw__customers\"))\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE customer_id IN (SELECT id, email FROM __source(\"raw__customers\"))\n"
       }
     },
     {
@@ -2285,7 +2285,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT (SELECT id, email FROM __source(\"raw__customers\") LIMIT 1) AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT (SELECT id, email FROM __source(\"raw__customers\") LIMIT 1) AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2295,7 +2295,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at IN (SELECT email FROM __source(\"raw__customers\"))\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE ordered_at IN (SELECT email FROM __source(\"raw__customers\"))\n"
       }
     },
     {
@@ -2305,7 +2305,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE (id, customer_id) = (1, 2, 3)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") WHERE (id, customer_id) = (1, 2, 3)\n"
       }
     },
     {
@@ -2315,7 +2315,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") o ON o.id = o.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") o ON o.id = o.id\n"
       }
     },
     {
@@ -2325,7 +2325,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT * FROM (SELECT id FROM __source(\"raw__orders\")) a JOIN (SELECT email AS id FROM __source(\"raw__customers\")) b USING (id)\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT * FROM (SELECT id FROM __source(\"raw__orders\")) a JOIN (SELECT email AS id FROM __source(\"raw__customers\")) b USING (id)\n"
       }
     },
     {
@@ -2335,7 +2335,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") JOIN __source(\"raw__orders\") ON id = id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") JOIN __source(\"raw__orders\") ON id = id\n"
       }
     },
     {
@@ -2345,7 +2345,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON c.id = p.order_id JOIN __source(\"raw__payments\") p ON p.order_id = o.id\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT o.id FROM __source(\"raw__orders\") o JOIN __source(\"raw__customers\") c ON c.id = p.order_id JOIN __source(\"raw__payments\") p ON p.order_id = o.id\n"
       }
     },
     {
@@ -2355,7 +2355,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH a AS (SELECT id FROM __source(\"raw__orders\")), a AS (SELECT id FROM __source(\"raw__customers\")) SELECT id FROM a\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH a AS (SELECT id FROM __source(\"raw__orders\")), a AS (SELECT id FROM __source(\"raw__customers\")) SELECT id FROM a\n"
       }
     },
     {
@@ -2365,7 +2365,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT 'x' FROM r WHERE n < 3) SELECT n FROM r\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT 'x' FROM r WHERE n < 3) SELECT n FROM r\n"
       }
     },
     {
@@ -2375,7 +2375,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nWITH a AS (SELECT id FROM b), b AS (SELECT id FROM __source(\"raw__orders\")) SELECT id FROM a\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nWITH a AS (SELECT id FROM b), b AS (SELECT id FROM __source(\"raw__orders\")) SELECT id FROM a\n"
       }
     },
     {
@@ -2385,7 +2385,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") UNION ALL SELECT id FROM __source(\"raw__customers\") ORDER BY status\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") UNION ALL SELECT id FROM __source(\"raw__customers\") ORDER BY status\n"
       }
     },
     {
@@ -2395,7 +2395,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id, status FROM __source(\"raw__orders\") EXCEPT SELECT id FROM __source(\"raw__customers\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id, status FROM __source(\"raw__orders\") EXCEPT SELECT id FROM __source(\"raw__customers\")\n"
       }
     },
     {
@@ -2405,7 +2405,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT quantity AS x FROM __source(\"raw__orders\") UNION ALL SELECT created_at FROM __source(\"raw__customers\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT quantity AS x FROM __source(\"raw__orders\") UNION ALL SELECT created_at FROM __source(\"raw__customers\")\n"
       }
     },
     {
@@ -2415,7 +2415,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT z.* FROM __source(\"raw__orders\") o\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT z.* FROM __source(\"raw__orders\") o\n"
       }
     },
     {
@@ -2425,7 +2425,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT * REPLACE (1 AS qty) FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT * REPLACE (1 AS qty) FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2435,7 +2435,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT COLUMNS('^nothing_') FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT COLUMNS('^nothing_') FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2445,7 +2445,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT x.qty FROM (SELECT * FROM __ref(\"stg_orders\")) x\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT x.qty FROM (SELECT * FROM __ref(\"stg_orders\")) x\n"
       }
     },
     {
@@ -2455,7 +2455,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") LIMIT 'x'\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") LIMIT 'x'\n"
       }
     },
     {
@@ -2465,7 +2465,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") LIMIT -1\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") LIMIT -1\n"
       }
     },
     {
@@ -2475,7 +2475,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT id FROM __source(\"raw__orders\") LIMIT quantity\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT id FROM __source(\"raw__orders\") LIMIT quantity\n"
       }
     },
     {
@@ -2485,7 +2485,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(status) + 1 AS x FROM __source(\"raw__orders\")\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT __udf(\"udf__is_completed_order\")(status) + 1 AS x FROM __source(\"raw__orders\")\n"
       }
     },
     {
@@ -2495,7 +2495,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT t.order_id FROM __table_fn(\"table_fn__customer_orders\")('abc') t\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT t.order_id FROM __table_fn(\"table_fn__customer_orders\")('abc') t\n"
       }
     },
     {
@@ -2505,7 +2505,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT SUM(t.waffle_name) AS s FROM __table_fn(\"table_fn__customer_orders\")(1) t\n"
+        "models/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT SUM(t.waffle_name) AS s FROM __table_fn(\"table_fn__customer_orders\")(1) t\n"
       }
     },
     {
@@ -2515,7 +2515,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/marts/probe_m.sql": "MODEL (materialized table);\n\nSELECT UPPER(@cents_to_dollars('p.amount_cents')) AS d FROM __ref(\"stg_payments\") p\n"
+        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT UPPER(@cents_to_dollars('p.amount_cents')) AS d FROM __ref(\"stg_payments\") p\n"
       }
     },
     {

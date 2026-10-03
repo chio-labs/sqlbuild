@@ -1,4 +1,5 @@
 FUNCTION (
+  description "Test function customer_orders.",
   arguments (p_customer_id INTEGER),
   returns table (
     order_id INTEGER,

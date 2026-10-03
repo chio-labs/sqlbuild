@@ -1,4 +1,5 @@
 MODEL (
+  description "Test model event_time_orders.",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor ordered_at,

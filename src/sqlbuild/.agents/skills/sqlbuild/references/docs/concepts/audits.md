@@ -67,6 +67,7 @@ Attach threshold and sample policy where the audit is used:
 
 ```sql
 MODEL (
+  description "Valid order rate",
   audits [
     valid_order_rate (
       condition "order_id IS NOT NULL",
@@ -130,6 +131,7 @@ Attach them in the `MODEL()` header like any generic audit:
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized view,
   tags [staging],
   columns (
@@ -212,6 +214,7 @@ that is not visible from there is a compile error. See
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   audits [
     expression_is_true (
@@ -320,6 +323,7 @@ Sources support the same audit system as models. Audits attached to sources run 
 ```yaml
 sources:
   - name: raw__orders
+    description: Orders
     columns:
       - name: id
         audits:
@@ -344,6 +348,7 @@ Seeds use the same YAML audit syntax as sources, at table and column level:
 ```yaml
 seeds:
   - name: waffle_types
+    description: Waffle types
     columns:
       - name: waffle_type_id
         type: INTEGER
@@ -397,6 +402,7 @@ Audits on incremental models can run at different lifecycle phases:
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   ...
   columns (

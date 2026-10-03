@@ -57,7 +57,8 @@ def test_given_mixed_branch_types_when_compiling_then_known_types_match_duckdb(
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "orders.sql").write_text(
-        f"MODEL (materialized table);\n{test_case.query_sql}", encoding="utf-8"
+        f"MODEL (description 'Test model orders.', materialized table);\n{test_case.query_sql}",
+        encoding="utf-8",
     )
 
     project: CompiledProject = compile_project(
@@ -95,19 +96,19 @@ def test_given_union_type_recovery_when_compiling_then_cte_lineage_is_preserved(
     models: Path = tmp_path / "models"
     models.mkdir()
     (models / "orders.sql").write_text(
-        "MODEL (materialized table, contract enforced, columns (amount (type DOUBLE)));\n"
+        "MODEL (description 'Test model orders.', materialized table, contract enforced, columns (amount (type DOUBLE)));\n"
         "SELECT CAST(2.5 AS DOUBLE) AS amount",
         encoding="utf-8",
     )
     (models / "combined_orders.sql").write_text(
-        "MODEL (materialized table, contract enforced, columns (amount (type DOUBLE)));\n"
+        "MODEL (description 'Test model combined_orders.', materialized table, contract enforced, columns (amount (type DOUBLE)));\n"
         'WITH combined AS (SELECT CAST(amount AS DOUBLE) AS amount FROM __ref("orders") '
         'UNION ALL SELECT list_extract([amount], 1) AS amount FROM __ref("refunds")) '
         "SELECT amount FROM combined",
         encoding="utf-8",
     )
     (models / "refunds.sql").write_text(
-        "MODEL (materialized table, contract enforced, columns (amount (type DOUBLE)));\n"
+        "MODEL (description 'Test model refunds.', materialized table, contract enforced, columns (amount (type DOUBLE)));\n"
         "SELECT CAST(1.25 AS DOUBLE) AS amount",
         encoding="utf-8",
     )

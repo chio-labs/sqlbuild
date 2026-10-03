@@ -118,6 +118,7 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
             """
             sources:
               - name: raw_events
+                description: Test source raw_events.
                 schema: main
                 table: raw_events
             """
@@ -125,7 +126,7 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
         + "\n",
         "models/orders.sql": dedent(
             """
-            MODEL (
+            MODEL (description "Test model orders.",
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,
@@ -150,7 +151,7 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
         + "\n",
         "models/shipments.sql": dedent(
             """
-            MODEL (
+            MODEL (description "Test model shipments.",
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,

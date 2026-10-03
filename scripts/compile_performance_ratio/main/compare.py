@@ -10,6 +10,7 @@ from pathlib import Path
 
 from scripts.compile_performance_ratio._helpers.measure import (
     compare_builds,
+    write_base_benchmark_project,
     write_benchmark_project,
 )
 from scripts.compile_performance_ratio._helpers.report import append_summary, comparison_markdown
@@ -26,21 +27,39 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
 
     args: argparse.Namespace = _parse_args(argv)
     summary_value: str | None = os.environ.get("GITHUB_STEP_SUMMARY")
+    per_side_projects: bool = args.base_root is not None
     with tempfile.TemporaryDirectory(prefix="sqlbuild-ratio-") as root:
-        project_dir: Path = Path(root) / f"{args.kind}_{args.models}"
+        project_name: str = f"{args.kind}_{args.models}"
+        head_project_dir: Path = Path(root) / "head" / project_name
+        base_project_dir: Path = (
+            Path(root) / "base" / project_name if per_side_projects else head_project_dir
+        )
         print(f"Generating {args.kind} project with {args.models} models", file=sys.stderr)
-        write_benchmark_project(kind=args.kind, project_dir=project_dir, models=args.models)
+        write_benchmark_project(kind=args.kind, project_dir=head_project_dir, models=args.models)
+        if args.base_root is not None:
+            print(f"Generating the base project with {args.base_root}'s generator", file=sys.stderr)
+            write_base_benchmark_project(
+                base_root=args.base_root.absolute(),
+                python=args.head_python.absolute(),
+                kind=args.kind,
+                project_dir=base_project_dir,
+                models=args.models,
+            )
         print(f"Comparing base and head over {args.runs} alternating runs", file=sys.stderr)
         comparison: CompileComparison = compare_builds(
             kind=args.kind,
             models=args.models,
-            project_dir=project_dir,
+            base_project_dir=base_project_dir,
+            head_project_dir=head_project_dir,
             base_python=args.base_python,
             head_python=args.head_python,
             runs=args.runs,
         )
     markdown: str = comparison_markdown(
-        comparison=comparison, runs=args.runs, max_ratio=args.max_ratio
+        comparison=comparison,
+        runs=args.runs,
+        max_ratio=args.max_ratio,
+        per_side_projects=per_side_projects,
     )
     print(markdown)
     _ = append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
@@ -64,6 +83,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--models", type=int, required=True)
     parser.add_argument("--base-python", type=Path, required=True)
     parser.add_argument("--head-python", type=Path, required=True)
+    parser.add_argument(
+        "--base-root",
+        type=Path,
+        default=None,
+        help="Base checkout whose own generator writes the project the base build compiles.",
+    )
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS)
     parser.add_argument("--max-ratio", type=float, default=DEFAULT_MAX_RATIO)
     return parser.parse_args(argv)

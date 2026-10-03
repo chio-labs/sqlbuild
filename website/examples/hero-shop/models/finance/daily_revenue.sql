@@ -1,4 +1,5 @@
 MODEL (
+  description "Daily revenue from successful payments",
   materialized incremental,
   incremental_strategy delete_insert,
   cursor revenue_date,

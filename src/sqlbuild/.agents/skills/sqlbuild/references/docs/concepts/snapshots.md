@@ -40,6 +40,7 @@ Use when your source has a reliable column recording when the entity changed.
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy timestamp,
@@ -63,6 +64,7 @@ Use when the source does not have a reliable update timestamp.
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy check,
@@ -91,6 +93,7 @@ Use for daily full exports or periodic snapshots without a business update times
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy check,
@@ -114,6 +117,7 @@ Use for historical observations that include a business update timestamp.
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy timestamp,
@@ -139,6 +143,7 @@ Use for CDC tables, audit logs, or historical backfills where rows are individua
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy timestamp,
@@ -244,6 +249,7 @@ The model `snapshot_full_refresh` field can only make the policy **stricter** th
 
 ```sql
 MODEL (
+  description "Example model",
   materialized snapshot,
   ...
   snapshot_full_refresh deny,
@@ -266,6 +272,7 @@ Snapshot models support the same audit system as other materializations. Audits 
 
 ```sql
 MODEL (
+  description "One row per customer",
   materialized snapshot,
   unique_key [customer_id],
   snapshot_strategy timestamp,
@@ -340,6 +347,7 @@ JOIN customer_snapshot c
 
 ```sql
 MODEL (
+  description "One row per product",
   materialized snapshot,
   unique_key [user_id, role_id],
   snapshot_strategy check,
@@ -357,6 +365,7 @@ FROM __source("user_role_daily")
 
 ```sql
 MODEL (
+  description "One row per product",
   materialized snapshot,
   unique_key [product_id],
   snapshot_strategy timestamp,

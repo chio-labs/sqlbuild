@@ -30,7 +30,10 @@ def assert_source_only_ingress_dependency_case(
         project_name="source_loader_schema_behavior",
         repo_files={
             **build_schema_behavior_project_files(
-                source_yaml=("sources:\n  - name: raw_events\n    managed: true\n"),
+                source_yaml=(
+                    "sources:\n  - name: raw_events\n    description: Test source raw_events.\n"
+                    "    managed: true\n"
+                ),
                 loader_py=(
                     "from sqlbuild.loaders import loader\n"
                     "from python.tasks.prepare import prepare_events\n\n"
@@ -39,13 +42,13 @@ def assert_source_only_ingress_dependency_case(
                     "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                     "])\n"
                     "def fetch_events(ctx):\n"
-                    "    return [\n"
+                    "    '''Test loader fetch_events.'''\n    return [\n"
                     "        {'event_id': 1, 'load_seq': 1},\n"
                     "        {'event_id': 2, 'load_seq': 1},\n"
                     "    ]\n\n"
                     "@loader(depends_on=[fetch_events])\n"
                     "def raw_events(ctx):\n"
-                    "    events = ctx.loader(fetch_events)\n"
+                    "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                     "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
                     "SELECT event_id FROM {events.destination}')\n"
                 ),
@@ -55,6 +58,7 @@ def assert_source_only_ingress_dependency_case(
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_events(ctx):\n"
+                "    '''Test task prepare_events.'''\n"
                 "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('prepared')\n"
                 "    return ctx.result()\n"
             ),
@@ -233,7 +237,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
         ),
         "sources/raw.yml": (
             "sources:\n"
-            "  - name: raw_orders\n"
+            "  - name: raw_orders\n    description: Test source raw_orders.\n"
             "    managed: true\n"
             "    write_strategy: table\n"
             "    columns:\n"
@@ -249,7 +253,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "        type: INTEGER\n"
             "      - name: load_seq\n"
             "        type: INTEGER\n"
-            "  - name: raw_customers\n"
+            "  - name: raw_customers\n    description: Test source raw_customers.\n"
             "    managed: true\n"
             "    write_strategy: table\n"
             "    columns:\n"
@@ -270,7 +274,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
             "])\n"
             "def fetch_order_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
+            "    '''Test loader fetch_order_events.'''\n    if ctx.current_cursor_value is None:\n"
             "        next_seq = 1\n"
             "    else:\n"
             "        next_seq = ctx.current_cursor_value + 1\n"
@@ -301,7 +305,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
             "])\n"
             "def fetch_customers(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
+            "    '''Test loader fetch_customers.'''\n    if ctx.current_cursor_value is None:\n"
             "        return [\n"
             "            {'customer_id': 1, 'plan_name': 'basic', 'load_seq': 1},\n"
             "            {'customer_id': 2, 'plan_name': 'plus', 'load_seq': 1},\n"
@@ -316,6 +320,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
             "])\n"
             "def fetch_prices(ctx):\n"
+            "    '''Test loader fetch_prices.'''\n"
             "    classic_price = 600 if ctx.current_cursor_value is None else 650\n"
             "    return [\n"
             "        {'waffle_type': 'classic', 'price_cents': classic_price, 'load_seq': 1},\n"
@@ -323,7 +328,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    ]\n\n"
             "@loader(depends_on=[fetch_order_events, fetch_prices])\n"
             "def raw_orders(ctx):\n"
-            "    events = ctx.loader(fetch_order_events)\n"
+            "    '''Test loader raw_orders.'''\n    events = ctx.loader(fetch_order_events)\n"
             "    prices = ctx.loader(fetch_prices)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT e.order_id, e.customer_id, e.waffle_type, e.quantity, '\n"
@@ -344,7 +349,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    ]\n\n"
             "@loader(depends_on=[fetch_customers])\n"
             "def raw_customers(ctx):\n"
-            "    customers = ctx.loader(fetch_customers)\n"
+            "    '''Test loader raw_customers.'''\n    customers = ctx.loader(fetch_customers)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT customer_id, plan_name, load_seq FROM {customers.destination} '\n"
             "        f'ORDER BY customer_id'\n"
@@ -355,7 +360,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    ]\n"
         ),
         "models/fact_waffle_orders.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model fact_waffle_orders.', materialized table);\n\n"
             "SELECT\n"
             "  o.order_id,\n"
             "  o.customer_id,\n"
@@ -369,7 +374,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             'LEFT JOIN __source("raw_customers") c ON o.customer_id = c.customer_id\n'
         ),
         "models/customer_revenue.sql": (
-            "MODEL (materialized table);\n\n"
+            "MODEL (description 'Test model customer_revenue.', materialized table);\n\n"
             "SELECT\n"
             "  customer_id,\n"
             "  COALESCE(plan_name, 'unknown') AS plan_name,\n"

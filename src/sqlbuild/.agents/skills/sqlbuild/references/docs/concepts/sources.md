@@ -25,6 +25,7 @@ Point at an existing table or view in your warehouse:
 ```yaml
 sources:
   - name: raw_events
+    description: Events
     database: analytics
     schema: raw
     table: events
@@ -39,6 +40,7 @@ Define source data inline as a SQL expression. No external tables or setup scrip
 ```yaml
 sources:
   - name: raw__customers
+    description: Customers
     expression: |
       SELECT * FROM (VALUES
         (1, 'Leslie', 'Knope', 'leslie@pawnee.gov', TIMESTAMP '2026-01-15 09:00:00'),
@@ -59,6 +61,7 @@ Sources support the same audit system as models. Audits attached to sources run 
 ```yaml
 sources:
   - name: raw_orders
+    description: Orders
     columns:
       - name: id
         audits:
@@ -82,6 +85,7 @@ Type enforcement is implicit for sources. If any column declares a `type`, SQLBu
 ```yaml
 sources:
   - name: raw__customers
+    description: Customers
     expression: |
       SELECT 1 AS id, 'Leslie' AS first_name, 'Knope' AS last_name
     columns:
@@ -104,6 +108,7 @@ Sources can be loaded by Python functions instead of pointing at existing tables
 ```yaml
 sources:
   - name: raw_customers
+    description: Customers
     managed: true
     write_strategy: table
     columns:
@@ -135,6 +140,7 @@ Configure freshness per source with a `freshness:` block:
 ```yaml
 sources:
   - name: raw_events
+    description: Events
     schema: raw
     table: events
     freshness:
@@ -245,7 +251,7 @@ Use [`sqb freshness`](../cli/freshness.md) to observe source freshness on demand
 | `cursor_column` | Column for incremental cursor tracking (required for `delete_insert` and `merge`) |
 | `unique_key` | Merge key column(s) (required for `merge`) |
 | `freshness` | Source freshness observation config (see [Source freshness](#source-freshness)) |
-| `description` | Human-readable description |
+| `description` | Required human-readable description ([Descriptions](models/configuration.md#descriptions)) |
 | `type_enforcement` | Override implicit type enforcement (`true`/`false`). Defaults to `true` when any column declares a type. |
 | `contract` | `enforced` or `none`. When enforced, downstream models validate configured column references against source columns. |
 | `columns` | Column declarations with `name`, `type`, `nullable`, `description`, `meta`, and `audits` |

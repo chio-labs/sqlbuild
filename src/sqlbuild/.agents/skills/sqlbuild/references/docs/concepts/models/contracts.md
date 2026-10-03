@@ -34,6 +34,7 @@ Under explicit mode, a model must declare `contract enforced` to activate shape 
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized table,
   contract enforced,
   columns (
@@ -108,6 +109,7 @@ A column may use a declared enum as a portable logical domain type:
 
 ```sql
 MODEL (
+  description "Example model",
   contract enforced,
   columns (
     fulfillment_method (type fulfillment_method),

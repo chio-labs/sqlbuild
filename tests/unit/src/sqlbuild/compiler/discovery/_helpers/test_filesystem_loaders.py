@@ -227,3 +227,53 @@ def test_given_loader_import_error_when_discovering_loaders_then_raises_clear_er
 
     with pytest.raises(PythonNodeDiscoveryError, match=test_case.expected_error_fragment):
         discover_python_node_functions(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverLoaderFunctionsTestCase(
+            description="loader descriptions come from the decorator or the docstring",
+            files={
+                "python/loaders/orders.py": '''
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    """Orders from the storefront export."""
+    return []
+
+@loader(description="Refunds from the payments export")
+def raw_refunds(ctx):
+    """Ignored because the decorator wins."""
+    return []
+
+@loader
+def raw_returns(ctx):
+    return []
+''',
+            },
+            expected_names=("raw_orders", "raw_refunds", "raw_returns"),
+            expected_descriptions=(
+                "Orders from the storefront export.",
+                "Refunds from the payments export",
+                None,
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_loader_descriptions_when_discovering_then_decorator_wins_over_docstring(
+    test_case: DiscoverLoaderFunctionsTestCase, tmp_path: Path
+) -> None:
+    for relative_path, contents in test_case.files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+
+    result: tuple[DiscoveredLoaderFunction, ...] = tuple(
+        sorted(discover_python_node_functions(project_dir=tmp_path).loaders, key=lambda x: x.name)
+    )
+
+    assert tuple(loader.name for loader in result) == test_case.expected_names
+    assert tuple(loader.description for loader in result) == test_case.expected_descriptions

@@ -28,6 +28,7 @@ from sqlbuild.tasks import task, TaskContext
 
 @task
 def export_orders(ctx: TaskContext):
+    """Export orders."""
     rows = fetch_orders()
     return ctx.result(payload={"rows": len(rows)}, metadata={"rows": len(rows)})
 ```
@@ -41,10 +42,12 @@ Tasks declare dependencies with `depends_on`, accepting a single function, a tup
 ```python
 @task
 def fetch_orders(ctx: TaskContext):
+    """Fetch orders."""
     return ctx.result(payload=download_orders())
 
 @task(depends_on=fetch_orders)
 def summarize_orders(ctx: TaskContext):
+    """Summarize orders."""
     result = ctx.result_of(fetch_orders)
     return ctx.result(metadata={"count": len(result.payload)})
 ```
@@ -58,6 +61,7 @@ Tasks may depend on other tasks, assets, and loaders. They may **not** depend on
 ```python
 @task
 def build_export(ctx: TaskContext):
+    """Build export."""
     return ctx.result(
         payload={"path": "/exports/orders.csv"},
         metadata={"rows": 1200},
@@ -75,6 +79,7 @@ Return `ctx.skip(...)` to skip a task:
 ```python
 @task
 def export_if_present(ctx: TaskContext):
+    """Export if present."""
     if not new_files_available():
         return ctx.skip("no new files")
     return ctx.result(payload=do_export())
@@ -90,6 +95,7 @@ from sqlbuild.tasks import task, SkipMode
 
 @task
 def optional_step(ctx):
+    """Optional step."""
     return ctx.skip("nothing to do", mode=SkipMode.HARD)  # or mode="hard"
 ```
 
@@ -103,6 +109,7 @@ from sqlbuild.tasks import task
 
 @task(retry=RetryPolicy(max_attempts=3, retry_on=(ConnectionError,)))
 def call_api(ctx):
+    """Call api."""
     return ctx.result(payload=fetch_from_flaky_api())
 ```
 

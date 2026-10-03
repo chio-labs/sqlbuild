@@ -252,7 +252,8 @@ def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     staging_dir: Path = models_dir / "staging"
     staging_dir.mkdir(parents=True, exist_ok=True)
     (staging_dir / "stg_orders.sql").write_text(
-        "MODEL (materialized table, unique_key [order_id]);\n\n"
+        "MODEL (description 'Test model stg_orders.', "
+        "materialized table, unique_key [order_id]);\n\n"
         "SELECT * FROM ("
         "SELECT 1 AS order_id, 1 AS customer_id, 100 AS amount_cents UNION ALL "
         "SELECT 2 AS order_id, 2 AS customer_id, 200 AS amount_cents"

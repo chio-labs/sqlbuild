@@ -28,7 +28,7 @@ _FAIL_HOOK_SOURCE: str = (
     "from sqlbuild.hooks import hook\n\n\n"
     "@hook\n"
     "def fail_hook(ctx, message):\n"
-    "    raise RuntimeError(message)\n"
+    "    '''Test hook fail_hook.'''\n    raise RuntimeError(message)\n"
 )
 
 
@@ -74,13 +74,14 @@ def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstr
 
                 @hook
                 def skip_model(ctx):
+                    '''Test hook skip_model.'''
                     return ctx.skip(reason="source disabled")
                 """
             ).strip()
             + "\n",
             "models/upstream_orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model upstream_orders.",
                   materialized table,
                   pre_hooks [python("skip_model")]
                 );
@@ -91,7 +92,7 @@ def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstr
             + "\n",
             "models/downstream_orders.sql": dedent(
                 """
-                MODEL (materialized table);
+                MODEL (description "Test model downstream_orders.", materialized table);
 
                 SELECT order_id FROM __ref("upstream_orders")
                 """
@@ -158,13 +159,14 @@ def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips
 
                 @hook
                 def skip_downstream(ctx):
+                    '''Test hook skip_downstream.'''
                     return ctx.skip(reason="publish disabled")
                 """
             ).strip()
             + "\n",
             "models/upstream_orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model upstream_orders.",
                   materialized table,
                   post_hooks [python("skip_downstream")]
                 );
@@ -175,7 +177,7 @@ def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips
             + "\n",
             "models/downstream_orders.sql": dedent(
                 """
-                MODEL (materialized table);
+                MODEL (description "Test model downstream_orders.", materialized table);
 
                 SELECT order_id FROM __ref("upstream_orders")
                 """
@@ -245,6 +247,7 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
 
                 @hook
                 def create_hook_data(ctx, value):
+                    '''Test hook create_hook_data.'''
                     ctx.execute_sql(
                         f"CREATE TABLE {ctx.destination.schema}.hook_data AS "
                         f"SELECT {value} AS id, 'created by hook' AS label"
@@ -253,6 +256,7 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
 
                 @hook
                 def record_hook_completion(ctx, phase):
+                    '''Test hook record_hook_completion.'''
                     ctx.execute_sql(
                         f"CREATE TABLE {ctx.destination.schema}.hook_log AS "
                         f"SELECT '{ctx.model_name}' AS model_name, "
@@ -272,7 +276,7 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [sql("select_one", value: 1), python("create_hook_data", value: 42)],
                   post_hooks [python("record_hook_completion", phase: "post"), inline_sql("SELECT 1")]
@@ -426,9 +430,11 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
                 """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     schema: main
                     table: raw_orders
                   - name: raw_customers
+                    description: Test source raw_customers.
                     schema: main
                     table: raw_customers
                 """
@@ -441,6 +447,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
 
                 @hook
                 def log_hook(ctx):
+                    '''Test hook log_hook.'''
                     ctx.execute_sql(
                         f"INSERT INTO {ctx.destination.schema}.hook_log VALUES "
                         f"('{ctx.model_name}', '{ctx.phase}')"
@@ -464,7 +471,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             + "\n",
             "models/staging/stg_orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model stg_orders.",
                   materialized view,
                   pre_hooks [python("log_hook")],
                   post_hooks [python("log_hook")]
@@ -483,7 +490,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             + "\n",
             "models/marts/fact_orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model fact_orders.",
                   materialized table,
                   pre_hooks [python("log_hook")],
                   post_hooks [python("log_hook")]
@@ -502,7 +509,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             + "\n",
             "models/intermediate/order_status_index.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model order_status_index.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor order_id,
@@ -526,7 +533,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             + "\n",
             "models/marts/hourly_order_activity.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model hourly_order_activity.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_hour,
@@ -555,7 +562,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             + "\n",
             "models/snapshots/customer_snapshot.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -571,7 +578,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             + "\n",
             "models/custom/custom_orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model custom_orders.",
                   materialized copy_table,
                   pre_hooks [python("log_hook")],
                   post_hooks [python("log_hook")]
@@ -652,13 +659,14 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
 
                 @hook
                 def fail_hook(ctx, message):
+                    '''Test hook fail_hook.'''
                     raise RuntimeError(message)
                 """
             ).strip()
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   post_hooks [python("fail_hook", message: "intentional post failure")]
                 );
@@ -669,7 +677,7 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
             + "\n",
             "models/downstream_orders.sql": dedent(
                 """
-                MODEL (materialized table);
+                MODEL (description "Test model downstream_orders.", materialized table);
 
                 SELECT id FROM __ref("orders")
                 """
@@ -700,7 +708,7 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
             description="pre hook failure shows failing Python hook row",
             model_sql=dedent(
                 """
-            MODEL (
+            MODEL (description "Test model.",
               materialized table,
               pre_hooks [python("fail_hook", message: "intentional pre failure")]
             );
@@ -722,7 +730,7 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
             description="pre hook failure shows failing SQL hook row",
             model_sql=dedent(
                 """
-            MODEL (
+            MODEL (description "Test model lifecycle.",
               materialized table,
               pre_hooks [inline_sql("SELECT * FROM missing_hook_table")]
             );
@@ -820,10 +828,10 @@ def test_given_long_python_hook_name_when_building_then_cli_truncates_label_at_c
                 "@hook\n"
                 "def publish_customer_metadata_to_external_catalog_after_successful_"
                 "materialization(ctx):\n"
-                '    ctx.log("long hook ran")\n'
+                '    """Test hook publish_customer_metadata_to_external_catalog_after_successful_materialization."""\n    ctx.log("long hook ran")\n'
             ),
             "models/orders.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model orders.',\n"
                 "  materialized table,\n"
                 '  pre_hooks [python("publish_customer_metadata_to_external_catalog_after_'
                 'successful_materialization")]\n'
@@ -882,6 +890,7 @@ def test_given_snapshot_with_python_hooks_when_building_then_hooks_execute(
 
                 @hook
                 def create_snapshot_source(ctx):
+                    '''Test hook create_snapshot_source.'''
                     ctx.execute_sql(
                         "CREATE TABLE main.raw_customers AS "
                         "SELECT 1 AS customer_id, 'basic' AS plan, "
@@ -891,6 +900,7 @@ def test_given_snapshot_with_python_hooks_when_building_then_hooks_execute(
 
                 @hook
                 def log_snapshot_hook(ctx):
+                    '''Test hook log_snapshot_hook.'''
                     ctx.execute_sql(
                         f"CREATE TABLE {ctx.destination.schema}.snapshot_hook_log AS "
                         f"SELECT '{ctx.model_name}' AS model_name, '{ctx.phase}' AS phase"
@@ -900,7 +910,7 @@ def test_given_snapshot_with_python_hooks_when_building_then_hooks_execute(
             + "\n",
             "models/customer_snapshot.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,

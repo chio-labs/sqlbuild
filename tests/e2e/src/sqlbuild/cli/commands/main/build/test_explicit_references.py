@@ -40,7 +40,7 @@ _EMITTING_MACROS: str = (
     EXPLICIT_REFERENCE_MACROS
     + "\n\ndef orders_base():\n    return 'SELECT * FROM __ref(\"stg_orders_eu\")'\n"
 )
-_EMITTING_MODEL: str = "MODEL (materialized table);\n@orders_base()\n"
+_EMITTING_MODEL: str = "MODEL (description 'Test model.', materialized table);\n@orders_base()\n"
 _SECOND_EMITTING_MACROS: str = (
     "def customers_base():\n    return 'SELECT * FROM __ref(\"stg_customers\")'\n"
 )
@@ -50,8 +50,10 @@ _AUDIT_READING: str = (
     "AUDIT ();\nSELECT s.order_id FROM @relation s\n"
     'LEFT JOIN __ref("{read}") a USING (order_id) WHERE a.order_id IS NULL\n'
 )
-_AUDITED_MODEL: str = "MODEL (materialized table, audits [{audit}]);\nSELECT 1 AS order_id\n"
-_SUMMARY_MODEL: str = 'MODEL (materialized table);\nSELECT * FROM __ref("{read}")\n'
+_AUDITED_MODEL: str = "MODEL (description 'Test model.', materialized table, audits [{audit}]);\nSELECT 1 AS order_id\n"
+_SUMMARY_MODEL: str = (
+    'MODEL (description "Test model.", materialized table);\nSELECT * FROM __ref("{read}")\n'
+)
 _ONE_MODEL_AUDIT: str = 'AUDIT ();\nSELECT * FROM __ref("{read}") WHERE order_id IS NULL\n'
 _NULL_AUDIT: str = 'AUDIT ();\nSELECT * FROM __ref("@model") WHERE order_id IS NULL\n'
 _LITERAL_TASK: str = (
@@ -59,14 +61,14 @@ _LITERAL_TASK: str = (
     "from sqlbuild.tasks import task\n\n\n"
     '@task(depends_on=model("all_orders"))\n'
     "def export_orders(ctx):\n"
-    '    ctx.query("SELECT count(*) FROM stg_customers")\n'
+    '    """Test task export_orders."""\n    ctx.query("SELECT count(*) FROM stg_customers")\n'
 )
 _RUNTIME_TASK: str = (
     "from sqlbuild.refs import model\n"
     "from sqlbuild.tasks import task\n\n\n"
     '@task(depends_on=model("all_orders"))\n'
     "def export_orders(ctx):\n"
-    '    orders = ctx.relation(model("all_orders"))\n'
+    '    """Test task export_orders."""\n    orders = ctx.relation(model("all_orders"))\n'
     '    ctx.query(f"SELECT count(*) FROM {orders}")\n'
     '    customers = "stg_" + "customers"\n'
     '    ctx.query(f"SELECT count(*) FROM {customers}")\n'
@@ -75,7 +77,7 @@ _RUNTIME_TASK: str = (
 
 _COUNTRY_SEED_FILES: dict[str, str] = {
     "seeds/countries.yml": (
-        "seeds:\n  - name: countries\n    columns:\n      - name: code\n        type: VARCHAR\n"
+        "seeds:\n  - name: countries\n    description: Test seed countries.\n    columns:\n      - name: code\n        type: VARCHAR\n"
     ),
     "seeds/countries.csv": "code\nGB\nFR\n",
 }
@@ -84,7 +86,7 @@ _SEED_TASK: str = (
     "from sqlbuild.tasks import task\n\n\n"
     '@task(depends_on=seed("countries"))\n'
     "def count_countries(ctx):\n"
-    '    countries = ctx.relation(seed("countries"))\n'
+    '    """Test task count_countries."""\n    countries = ctx.relation(seed("countries"))\n'
     "    ctx.execute_sql(\n"
     '        f"CREATE OR REPLACE TABLE country_counts AS SELECT count(*) AS n FROM {countries}"\n'
     "    )\n"
@@ -94,7 +96,7 @@ _MODEL_CHECK: str = (
     "from sqlbuild.refs import model\n\n\n"
     '@check(depends_on=model("all_orders"))\n'
     "def orders_present(ctx):\n"
-    '    orders = ctx.relation(model("all_orders"))\n'
+    '    """Test check orders_present."""\n    orders = ctx.relation(model("all_orders"))\n'
     '    count = ctx.query(f"SELECT count(*) FROM {orders}").fetchone()[0]\n'
     '    return ctx.pass_() if count else ctx.fail(message="no orders")\n'
 )
@@ -109,9 +111,9 @@ _RUNTIME_CHECK: str = _MODEL_CHECK.replace(
 )
 _RAW_SOURCES: str = (
     "sources:\n"
-    "  - name: raw_regions\n    managed: true\n    write_strategy: table\n"
+    "  - name: raw_regions\n    description: Test source raw_regions.\n    managed: true\n    write_strategy: table\n"
     "    columns:\n      - name: id\n        type: INTEGER\n"
-    "  - name: raw_customers\n    managed: true\n    write_strategy: table\n"
+    "  - name: raw_customers\n    description: Test source raw_customers.\n    managed: true\n    write_strategy: table\n"
     "    columns:\n      - name: id\n        type: INTEGER\n"
 )
 
@@ -124,10 +126,10 @@ _SIBLING_TASKS: str = (
     "from sqlbuild.tasks import task\n\n\n"
     '@task(depends_on=model("all_orders"))\n'
     "def export_summary(ctx):\n"
-    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_summary_ran AS SELECT 1 AS n")\n\n\n'
+    '    """Test task export_summary."""\n    ctx.execute_sql("CREATE OR REPLACE TABLE export_summary_ran AS SELECT 1 AS n")\n\n\n'
     '@task(depends_on=model("stg_orders_eu"))\n'
     "def export_eu(ctx):\n"
-    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_eu_ran AS SELECT 1 AS n")\n'
+    '    """Test task export_eu."""\n    ctx.execute_sql("CREATE OR REPLACE TABLE export_eu_ran AS SELECT 1 AS n")\n'
 )
 
 
@@ -205,7 +207,7 @@ def test_given_python_seed_and_model_dependencies_when_building_then_graph_selec
         UnrenderedMacroArgumentE2ETestCase(
             description="unchosen dictionary entry is a dependency the build selects",
             model_sql=(
-                "MODEL (materialized table);\n"
+                "MODEL (description 'Test model.', materialized table);\n"
                 '@pick({"eu": __ref("stg_orders_eu"), "us": __ref("stg_orders_us")}, key="eu")\n'
             ),
             expected_dag_edges=(
@@ -385,7 +387,7 @@ def test_given_typed_macro_references_and_hook_reads_when_building_then_graph_an
             expected_exit_code=1,
             expected_output_fragments=(
                 "error[P008]: task:export_orders names model:stg_customers as 'stg_customers'",
-                "--> python/tasks/export.py:7",
+                "--> python/tasks/export.py:8",
                 "[references]\n            enforce_explicit = false",
             ),
         ),
@@ -396,7 +398,7 @@ def test_given_typed_macro_references_and_hook_reads_when_building_then_graph_an
             expected_exit_code=1,
             expected_output_fragments=(
                 "error[P008]: check:orders_present names model:stg_customers as 'stg_customers'",
-                "--> python/checks/orders.py:8",
+                "--> python/checks/orders.py:9",
                 'declare it with depends_on=model("stg_customers")',
             ),
         ),
@@ -570,7 +572,7 @@ def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_wit
                 "models/sales/_sqlbuild/_macros/customers.py": _SECOND_EMITTING_MACROS,
                 f"{EXPLICIT_REFERENCE_MODELS}/hidden.sql": _EMITTING_MODEL,
                 f"{EXPLICIT_REFERENCE_MODELS}/hidden_customers.sql": (
-                    "MODEL (materialized table);\n@customers_base()\n"
+                    "MODEL (description 'Test model hidden_customers.', materialized table);\n@customers_base()\n"
                 ),
                 "python/tasks/export.py": _LITERAL_TASK,
             },
@@ -649,11 +651,11 @@ def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_wit
                 "audits/generic/us_check.sql": _NULL_AUDIT,
                 f"{_AUDITS}/audits/generic/unused_check.sql": _NULL_AUDIT,
                 f"{EXPLICIT_REFERENCE_MODELS}/stg_orders_eu.sql": (
-                    "MODEL (materialized table, audits [eu_check]);\n"
+                    "MODEL (description 'Test model stg_orders_eu.', materialized table, audits [eu_check]);\n"
                     "SELECT 1 AS order_id, 10 AS amount\n"
                 ),
                 f"{EXPLICIT_REFERENCE_MODELS}/stg_orders_us.sql": (
-                    "MODEL (materialized table, audits [us_check]);\n"
+                    "MODEL (description 'Test model stg_orders_us.', materialized table, audits [us_check]);\n"
                     "SELECT 2 AS order_id, 20 AS amount\n"
                 ),
             },

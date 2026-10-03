@@ -1162,7 +1162,7 @@ SELECT
 def _base_model_sql() -> str:
     return "\n".join(
         (
-            "MODEL (materialized view);",
+            "MODEL (description 'Test model.', materialized view);",
             "",
             "SELECT",
             "  0 AS id,",
@@ -1178,7 +1178,7 @@ def _base_model_sql() -> str:
 
 def _chain_model_sql(*, index: int) -> str:
     previous_model: str = f"model_{index - 1:05d}"
-    return f'''MODEL (materialized view);
+    return f'''MODEL (description "Test model.", materialized view);
 
 WITH base AS (
   SELECT
@@ -1242,7 +1242,7 @@ FROM joined
 
 
 def _test_heavy_base_model_sql(*, index: int) -> str:
-    return f"""MODEL (materialized view);
+    return f"""MODEL (description "Test model.", materialized view);
 
 SELECT
   {index} AS id,
@@ -1253,7 +1253,7 @@ SELECT
 
 def _test_heavy_chain_model_sql(*, index: int) -> str:
     previous_model: str = f"model_{index - 1:05d}"
-    return f'''MODEL (materialized view);
+    return f'''MODEL (description "Test model.", materialized view);
 
 WITH transformed AS (
   SELECT
@@ -1459,6 +1459,7 @@ def _layered_write_sources(*, project_dir: Path, source_count: int) -> None:
     sources_dir.mkdir()
     entries: str = "\n".join(
         f"""  - name: source_{index:05d}
+    description: Test source source_{index:05d}.
     expression: "(SELECT {index} AS id, CAST({index} AS DOUBLE) AS amount, 'source' AS status)"
     columns:
       - name: id
@@ -1477,6 +1478,7 @@ def _layered_write_seeds(*, project_dir: Path, seed_count: int) -> None:
     seeds_dir.mkdir()
     schema_entries: str = "\n".join(
         f"""  - name: seed_{index:05d}
+    description: Test seed seed_{index:05d}.
     columns:
       - name: id
         type: INTEGER
@@ -1497,7 +1499,7 @@ def _layered_write_functions(*, project_dir: Path, function_count: int) -> None:
     functions_dir.mkdir(parents=True)
     for index in range(function_count):
         (functions_dir / f"fn_{index:05d}.sql").write_text(
-            """FUNCTION (
+            """FUNCTION (description "Test function.",
   arguments (input_value DOUBLE),
   returns DOUBLE,
 );
@@ -1566,7 +1568,7 @@ def _layered_write_schemas(*, project_dir: Path) -> None:
     )
     schemas_dir.mkdir(parents=True)
     (schemas_dir / "benchmark_row.sql").write_text(
-        """SCHEMA (
+        """SCHEMA (description "Test schema.",
   name benchmark_row,
   columns (
     id (type INTEGER, nullable false),
@@ -1626,14 +1628,14 @@ def _layered_model_header(*, index: int, audit_count: int) -> str:
     id (audits [not_null]),
   ),
 );"""
-    audit_header: str = """MODEL (
+    audit_header: str = """MODEL (description "Test model.",
   columns (
     id (nullable false, audits [not_null]),
   ),
 );"""
     return {
         (True, False): contract_header,
-        (False, True): "MODEL ();",
+        (False, True): "MODEL (description 'Test model.');",
         (False, False): audit_header,
     }[(index == 0, index >= audit_count)]
 
@@ -1838,7 +1840,11 @@ def _semantic_model_header(
         audit_sql: str = {False: "", True: ", audits [not_null]"}[column_index < model_audit_count]
         nullable_sql: str = {False: "", True: ", nullable false"}[column_index == 0]
         declarations.append(f"    {name} (type {data_type}{nullable_sql}{audit_sql})")
-    return "MODEL (\n  columns (\n" + ",\n".join(declarations) + "\n  ),\n);"
+    return (
+        'MODEL (\n  description "Generated benchmark model.",\n  columns (\n'
+        + ",\n".join(declarations)
+        + "\n  ),\n);"
+    )
 
 
 def _semantic_regular_model_sql(
@@ -1958,7 +1964,7 @@ SHARED_DIAMOND_HUB: str = "shared_orders_hub"
 SHARED_DIAMOND_ROLLUP: str = "shared_orders_rollup"
 _SHARED_DIAMOND_FOLDER: str = "intermediate/shared_orders"
 _SHARED_DIAMOND_UPSTREAM_MODEL: str = f"model_{_SPINE_DEPTH - 1:05d}"
-_SHARED_DIAMOND_HEADER: str = """MODEL (
+_SHARED_DIAMOND_HEADER: str = """MODEL (description "Test model.",
   columns (
     id (type INTEGER, nullable false),
     amount (type DOUBLE),
@@ -2178,16 +2184,19 @@ def build_rule_gated_test_project_files(*, filler_model_count: int) -> dict[str,
         ),
         "sources/raw.yml": (
             "sources:\n"
-            "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
-            "  - name: raw_refunds\n    schema: main\n    table: raw_refunds\n"
+            "  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
+            "  - name: raw_refunds\n    description: Test source raw_refunds.\n"
+            "    schema: main\n    table: raw_refunds\n"
         ),
         "models/orders.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model orders.', materialized view);\n\n"
             'SELECT o.order_id, r.refund_id FROM __source("raw_orders") AS o\n'
             'LEFT JOIN __source("raw_refunds") AS r ON r.order_id = o.order_id\n'
         ),
         "models/bad_star.sql": (
-            'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n'
+            'MODEL (description "Test model bad_star.", '
+            'materialized view);\n\nSELECT * FROM __source("raw_orders")\n'
         ),
         "tests/unit/orders_case.sql": (
             'TEST (name "orders_case");\n'
@@ -2199,7 +2208,8 @@ def build_rule_gated_test_project_files(*, filler_model_count: int) -> dict[str,
     }
     for index in range(filler_model_count):
         files[f"models/filler/filler_{index:03d}.sql"] = (
-            f"MODEL (materialized view);\n\nSELECT {index} AS filler_id\n"
+            "MODEL (description 'Test model.', "
+            f"materialized view);\n\nSELECT {index} AS filler_id\n"
         )
     return files
 
@@ -2224,23 +2234,24 @@ def build_empty_input_test_project_files(
             f"[rules.rule_options.SQBRTEST203]\nallowed_tests = {allowed_tests_toml}\n"
         ),
         "sources/raw.yml": (
-            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
         ),
         "models/orders.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model orders.', materialized view);\n\n"
             "SELECT order_id, amount * 2 AS doubled_amount\n"
             'FROM __source("raw_orders")\nWHERE amount > 0\n'
         ),
         "models/large_orders.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model large_orders.', materialized view);\n\n"
             'SELECT order_id FROM __source("raw_orders") WHERE amount > 100\n'
         ),
         "models/customers.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model customers.', materialized view);\n\n"
             'SELECT order_id AS customer_id FROM __source("raw_orders") WHERE amount > 10\n'
         ),
         "models/order_summary.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model order_summary.', materialized view);\n\n"
             "SELECT COUNT(*) AS order_count, COALESCE(SUM(amount), 0) AS total_amount\n"
             'FROM __source("raw_orders")\n'
         ),
@@ -2389,17 +2400,18 @@ def write_relation_stub_project(
                 'schema = "main"\n'
             ),
             "models/orders.sql": (
-                "MODEL (materialized table);\n\nSELECT CAST(7 AS INTEGER) AS order_id\n"
+                "MODEL (description 'Test model orders.', "
+                "materialized table);\n\nSELECT CAST(7 AS INTEGER) AS order_id\n"
             ),
             "models/order_status.sql": (
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model order_status.', materialized table);\n\n"
                 f"WITH {stub_cte_name} AS (\n"
                 "  SELECT 'pending' AS order_id, 'pending' AS ghost_status\n"
                 ")\n"
                 f'SELECT {selected_column} FROM __ref("orders")\n'
             ),
             "models/next_order.sql": (
-                "MODEL (\n"
+                "MODEL (description 'Test model next_order.',\n"
                 "  materialized table,\n"
                 "  contract enforced,\n"
                 "  columns (order_id (type INTEGER), next_order_id (type INTEGER)),\n"
@@ -2423,7 +2435,7 @@ _COMPILE_CACHE_EXTRA_PROJECT_FILES: dict[str, str] = {
         "CONSTANT (name min_quantity, value 1);\n"
     ),
     "models/marts/channel_orders.sql": (
-        "MODEL (\n"
+        "MODEL (description 'Test model channel_orders.',\n"
         "  materialized table,\n"
         "  columns (\n"
         "    order_id (nullable false, audits [not_null]),\n"
@@ -2686,7 +2698,8 @@ def write_set_operation_project(
     }
     for model in models:
         files[f"models/{model.name}.sql"] = (
-            f"MODEL (materialized view, schema analytics);\n\n{model.query_sql}\n"
+            "MODEL (description 'Test model.', materialized view, schema analytics);\n\n"
+            f"{model.query_sql}\n"
         )
     prepare_inline_project(
         tmp_path=project_dir.parent, project_name=project_dir.name, repo_files=files
@@ -2776,11 +2789,11 @@ def write_union_fixture_test_project(
             f'database = "{project_dir / "orders.duckdb"}"\n[rules]\nselect = []\n'
         ),
         "models/base_orders.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model base_orders.', materialized view);\n\n"
             "SELECT 1 AS order_id, CAST(1 AS DOUBLE) AS amount, 'open' AS status\n"
         ),
         "models/orders.sql": (
-            "MODEL (materialized view);\n\n"
+            "MODEL (description 'Test model orders.', materialized view);\n\n"
             'SELECT b.order_id, b.amount, b.status FROM __ref("base_orders") AS b\n'
         ),
     }
@@ -2823,3 +2836,55 @@ def measure_union_fixture_compile(
             )
         )
     return min(measurements)
+
+
+REQUIRED_DESCRIPTIONS_PROJECT: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
+)
+_REQUIRED_DESCRIPTIONS_ORDERS_MODEL: str = (
+    'MODEL (description "One row per order");\n\nSELECT 1 AS order_id\n'
+)
+_REQUIRED_DESCRIPTIONS_COMPILE: tuple[str, ...] = ("--no-color", "compile", "--json", "--no-cache")
+
+
+def hooked_model_file(*, model_name: str, hook: str) -> tuple[str, str]:
+    """Return a described model file whose post hook references ``hook``."""
+
+    return (
+        f"models/{model_name}.sql",
+        f'MODEL (description "Orders with a hook", post_hooks [{hook}]);\n\nSELECT 1 AS order_id\n',
+    )
+
+
+def python_node_source(
+    *,
+    module: str,
+    decorator: str,
+    name: str,
+    docstring_line: str = "",
+    extra_import: str = "",
+    decorator_arguments: str = "",
+) -> str:
+    """Render one decorated Python node module for required-description E2Es."""
+
+    return (
+        f"from sqlbuild.{module} import {decorator}\n{extra_import}\n\n"
+        f"@{decorator}{decorator_arguments}\ndef {name}(ctx):\n{docstring_line}    return None\n"
+    )
+
+
+def compile_inline_files(
+    *, tmp_path: Path, files: tuple[tuple[str, str], ...]
+) -> subprocess.CompletedProcess[str]:
+    """Compile a described orders project extended with ``files``."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="orders",
+        repo_files={
+            "sqlbuild_project.toml": REQUIRED_DESCRIPTIONS_PROJECT,
+            "models/orders.sql": _REQUIRED_DESCRIPTIONS_ORDERS_MODEL,
+            **dict(files),
+        },
+    )
+    return run_sqb(project_dir=project_dir, command=_REQUIRED_DESCRIPTIONS_COMPILE)

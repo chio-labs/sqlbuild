@@ -31,12 +31,12 @@ def test_given_equal_source_expressions_when_compiling_then_infers_once_and_inva
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        'MODEL (materialized view); SELECT id FROM __source("raw_orders")'
+        'MODEL (description "Test model orders.", materialized view); SELECT id FROM __source("raw_orders")'
     )
     (tmp_path / "sources").mkdir()
     source: Path = tmp_path / "sources/orders.yml"
     source.write_text(
-        f"sources:\n  - name: raw_orders\n    expression: {test_case.expression}\n  - name: raw_customers\n    expression: {test_case.expression}\n"
+        f"sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: {test_case.expression}\n  - name: raw_customers\n    description: Test source raw_customers.\n    expression: {test_case.expression}\n"
     )
     original: Callable[..., Any] = semantic_shapes.analyze_queries_with_compact_polyglot_batch
     calls: list[object] = []
@@ -81,13 +81,13 @@ def test_given_distinct_source_expressions_when_compiling_then_infers_them_in_on
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        'MODEL (materialized view); SELECT id FROM __source("raw_orders")'
+        'MODEL (description "Test model orders.", materialized view); SELECT id FROM __source("raw_orders")'
     )
     (tmp_path / "sources").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
         "sources:\n"
-        f"  - name: raw_orders\n    expression: {test_case.orders_expression}\n"
-        f"  - name: raw_customers\n    expression: {test_case.customers_expression}\n"
+        f"  - name: raw_orders\n    description: Test source raw_orders.\n    expression: {test_case.orders_expression}\n"
+        f"  - name: raw_customers\n    description: Test source raw_customers.\n    expression: {test_case.customers_expression}\n"
     )
     original: Callable[..., Any] = semantic_shapes.analyze_queries_with_compact_polyglot_batch
     batches: list[tuple[str, ...]] = []

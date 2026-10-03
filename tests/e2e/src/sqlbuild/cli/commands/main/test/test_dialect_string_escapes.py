@@ -15,9 +15,9 @@ _PROJECT_FILES: dict[str, str] = {
         'name = "escape_strings"\nadapter = "duckdb"\n\n'
         '[connection]\ndatabase = "escape_strings.duckdb"\n'
     ),
-    "models/stg_orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+    "models/stg_orders.sql": "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT 1 AS order_id\n",
     "models/order_names.sql": (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model order_names.', materialized table);\n\n"
         "SELECT E'O\\'Brien' AS customer_name, order_id\n"
         'FROM __ref("stg_orders")\n'
     ),

@@ -595,11 +595,13 @@ def plan_source_reading_project(
     project_files: dict[str, str] = {
         "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
         "sources/raw.yml": (
-            f"sources:\n  - name: raw_orders\n    schema: {source_schema}\n"
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            f"    schema: {source_schema}\n"
             f"    table: {source_table}\n"
         ),
         "models/orders.sql": (
-            'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            'MODEL (description "Test model orders.", '
+            'materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
         ),
     }
     relative_path: str

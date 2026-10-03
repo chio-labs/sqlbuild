@@ -27,7 +27,7 @@ _PROJECT_FILES: dict[str, str] = {
     ),
     "sources/raw_orders.yml": (
         "sources:\n"
-        "  - name: raw_orders\n"
+        "  - name: raw_orders\n    description: Test source raw_orders.\n"
         "    schema: main\n"
         "    table: raw_orders\n"
         "    columns:\n"
@@ -35,7 +35,7 @@ _PROJECT_FILES: dict[str, str] = {
         "      - name: status\n        type: VARCHAR\n"
     ),
     "models/orders.sql": (
-        "MODEL ();\n\n"
+        "MODEL (description 'Test model orders.');\n\n"
         'SELECT order_id, @normalize_status("status") AS status FROM __source("raw_orders")\n'
     ),
 }

@@ -46,7 +46,8 @@ def test_given_quoted_case_semantics_when_compiling_then_resolves_native_aliases
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        "MODEL (database warehouse, schema analytics);\n" + test_case.sql
+        "MODEL (description 'Test model orders.', database warehouse, schema analytics);\n"
+        + test_case.sql
     )
     main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
@@ -77,7 +78,9 @@ def test_given_quoted_typo_when_validating_then_keeps_authored_spelling_and_span
         'name = "orders"\nadapter = "snowflake"\n[rules]\nselect = []\n[connection]\nsession_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }\n'
     )
     (tmp_path / "models").mkdir()
-    sql: str = "MODEL (database warehouse, schema analytics);\n" + test_case.sql
+    sql: str = (
+        "MODEL (description 'Test model.', database warehouse, schema analytics);\n" + test_case.sql
+    )
     (tmp_path / "models/orders.sql").write_text(sql)
     assert main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"]) == 1
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
@@ -105,9 +108,12 @@ def test_given_catalog_when_rebinding_physical_shapes_then_does_not_reuse_stale_
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "sources").mkdir()
-    (tmp_path / "sources/orders.yml").write_text("sources:\n  - name: orders\n    table: orders\n")
+    (tmp_path / "sources/orders.yml").write_text(
+        "sources:\n  - name: orders\n    description: Test source orders.\n    table: orders\n"
+    )
     (tmp_path / "models/report.sql").write_text(
-        "MODEL (database warehouse, schema analytics);\n" + test_case.sql
+        "MODEL (description 'Test model report.', database warehouse, schema analytics);\n"
+        + test_case.sql
     )
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path), adapter=SnowflakeAdapter()
@@ -164,7 +170,8 @@ def test_given_sql_when_case_policy_enabled_then_fused_validation_is_reused(
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        "MODEL (database warehouse, schema analytics);\n" + test_case.sql
+        "MODEL (description 'Test model orders.', database warehouse, schema analytics);\n"
+        + test_case.sql
     )
 
     def repeated_binding(**kwargs: Any) -> None:
@@ -211,7 +218,7 @@ def test_given_target_cache_policy_when_compiling_twice_then_reuses_only_enabled
     (tmp_path / "models").mkdir()
     model: Path = tmp_path / "models/orders.sql"
     model.write_text(
-        'MODEL (database warehouse, schema analytics);\nSELECT SUM("Active") FROM (SELECT TRUE AS "Active") q'
+        'MODEL (description "Test model orders.", database warehouse, schema analytics);\nSELECT SUM("Active") FROM (SELECT TRUE AS "Active") q'
     )
     args: list[str] = [
         "--project-dir",
@@ -261,11 +268,12 @@ def test_given_quoted_catalog_binding_when_compiling_then_preserves_bound_expres
     )
     (tmp_path / "sources").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
-        "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS id, 2 AS amount\n"
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: SELECT 1 AS id, 2 AS amount\n"
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        "MODEL (database warehouse, schema analytics); " + test_case.sql
+        "MODEL (description 'Test model orders.', database warehouse, schema analytics); "
+        + test_case.sql
     )
     assert (
         main(

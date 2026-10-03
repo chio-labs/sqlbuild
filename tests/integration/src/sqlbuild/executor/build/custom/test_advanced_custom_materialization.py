@@ -302,10 +302,10 @@ def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_bloc
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/regular.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'regular' AS name"
+                    "MODEL (description 'Test model regular.', materialized table);\n\nSELECT 1 AS id, 'regular' AS name"
                 ),
                 "models/custom_model.sql": (
-                    "MODEL (materialized test_custom);\n\nSELECT 2 AS id, 'custom' AS name"
+                    "MODEL (description 'Test model custom_model.', materialized test_custom);\n\nSELECT 2 AS id, 'custom' AS name"
                 ),
             },
             expected_status=BuildStatus.SUCCESS,
@@ -323,10 +323,10 @@ def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_bloc
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/upstream.sql": (
-                    "MODEL (materialized table);\n\nSELECT 10 AS id, 'upstream' AS origin"
+                    "MODEL (description 'Test model upstream.', materialized table);\n\nSELECT 10 AS id, 'upstream' AS origin"
                 ),
                 "models/downstream_custom.sql": (
-                    'MODEL (materialized test_custom);\n\nSELECT id, origin FROM __ref("upstream")'
+                    'MODEL (description "Test model downstream_custom.", materialized test_custom);\n\nSELECT id, origin FROM __ref("upstream")'
                 ),
             },
             expected_status=BuildStatus.SUCCESS,

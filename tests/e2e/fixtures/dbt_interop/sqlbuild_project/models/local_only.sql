@@ -1,4 +1,5 @@
 MODEL (
+  description "Test model local_only.",
   tags [sqb_only],
   columns (order_id (audits [not_null])),
 );

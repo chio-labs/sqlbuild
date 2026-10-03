@@ -12,6 +12,7 @@ from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from tests.unit.src.sqlbuild.lint._test_types import (
+    FormatDescriptionResolutionTestCase,
     FormatNewlineTestCase,
     FormatProjectTestCase,
     LintBehaviorTestCase,
@@ -90,10 +91,10 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
             expected_formatted_count=1,
         ),
         FormatProjectTestCase(
-            description="missing description remains a non-failing format warning",
+            description="missing description is a fault and the file is still formatted",
             files={"models/no_description.sql": NO_DESCRIPTION_MODEL},
             expected_written_fragments={},
-            expected_fault_codes=(),
+            expected_fault_codes=("description-present",),
             expected_formatted_count=1,
         ),
         FormatProjectTestCase(
@@ -147,6 +148,64 @@ def test_given_synthetic_project_when_formatting_then_results_match_expected(
     for relative_path, fragment in test_case.expected_written_fragments.items():
         written: str = (tmp_path / relative_path).read_text(encoding="utf-8")
         assert fragment in written
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatDescriptionResolutionTestCase(
+            description="path default describes only the models under its path",
+            project_toml=PROJECT_TOML + '\n[path_defaults.marts]\ndescription = "Mart model"\n',
+            files={
+                "models/marts/orders.sql": "MODEL ();\nSELECT 1 AS x\n",
+                "models/staging/stg_orders.sql": "MODEL ();\nSELECT 1 AS x\n",
+            },
+            expected_description_faults=(("stg_orders.sql", "description-present"),),
+        ),
+        FormatDescriptionResolutionTestCase(
+            description="description resolution never imports project Python",
+            project_toml=PROJECT_TOML + '\n[path_defaults.marts]\ndescription = "Mart model"\n',
+            files={
+                "providers/orders_api.py": 'raise RuntimeError("project Python was imported")\n',
+                "python/tasks/refresh.py": 'raise RuntimeError("project Python was imported")\n',
+                "models/marts/orders.sql": "MODEL ();\nSELECT 1 AS x\n",
+                "models/staging/stg_orders.sql": "MODEL ();\nSELECT 1 AS x\n",
+            },
+            expected_description_faults=(("stg_orders.sql", "description-present"),),
+        ),
+        FormatDescriptionResolutionTestCase(
+            description="model schema description satisfies the header only when present",
+            project_toml=PROJECT_TOML,
+            files={
+                "schemas/orders.sql": (
+                    'SCHEMA (name order_shape, description "One row per order", '
+                    "columns (id (type INTEGER)));\n"
+                    "SCHEMA (name bare_shape, columns (id (type INTEGER)));\n"
+                ),
+                "models/orders.sql": "MODEL (model_schema order_shape);\nSELECT 1 AS id\n",
+                "models/returns.sql": "MODEL (model_schema bare_shape);\nSELECT 1 AS id\n",
+            },
+            expected_description_faults=(("returns.sql", "description-present"),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_inherited_descriptions_when_formatting_then_faults_match_compile_resolution(
+    test_case: FormatDescriptionResolutionTestCase, tmp_path: Path
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(test_case.project_toml, encoding="utf-8")
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.files.items():
+        target: Path = tmp_path / relative_path
+        _ = target.parent.mkdir(parents=True, exist_ok=True)
+        _ = target.write_text(contents, encoding="utf-8")
+
+    result: LintRunResult = run_format(project_dir=tmp_path, config=LintConfig(), write=False)
+
+    assert tuple(sorted((fault.file_path.name, fault.code) for fault in result.faults)) == (
+        test_case.expected_description_faults
+    )
 
 
 @pytest.mark.parametrize(

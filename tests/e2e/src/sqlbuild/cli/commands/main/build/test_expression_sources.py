@@ -42,6 +42,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         expression: |
                           SELECT * FROM (VALUES
                             (1, '1', '2026-01-01 00:30:00', 100, 'web'),
@@ -64,7 +65,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/fact_orders.sql": dedent(
                     """
-                    MODEL (materialized table);
+                    MODEL (description "Test model fact_orders.", materialized table);
 
                     SELECT
                       order_id,

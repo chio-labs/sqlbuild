@@ -94,7 +94,7 @@ Every decorator accepts the same organizational metadata:
 | `depends_on` | A single function, tuple, or list of upstream nodes (and, where allowed, `model()`/`source()`/`seed()` references) |
 | `tags` | Labels for selection, filtering, and catalog grouping |
 | `group` | A display/catalog grouping string |
-| `description` | Human-readable docs (defaults to the function docstring) |
+| `description` | Required human-readable docs; defaults to the function docstring ([Descriptions](../models/configuration.md#descriptions)) |
 | `meta` | Freeform JSON metadata for catalogs and integrations |
 
 `@task` and `@asset` also accept a `retry` policy. `@asset` additionally accepts `columns` and `column_lineage`. Node kind is inferred from the decorator - you never pass `kind=`.
@@ -135,6 +135,7 @@ Tasks and assets return through `ctx.result(...)`:
 ```python
 @task
 def export_orders(ctx):
+    """Export orders."""
     return ctx.result(payload={"rows": 120}, metadata={"rows": 120})
 ```
 

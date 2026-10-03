@@ -39,10 +39,10 @@ _PROJECT_YML: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/alpha.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'alpha' AS name"
+                    "MODEL (description 'Test model alpha.', materialized table);\n\nSELECT 1 AS id, 'alpha' AS name"
                 ),
                 "models/beta.sql": (
-                    "MODEL (materialized table);\n\nSELECT 2 AS id, 'beta' AS name"
+                    "MODEL (description 'Test model beta.', materialized table);\n\nSELECT 2 AS id, 'beta' AS name"
                 ),
             },
             expected_status=BuildStatus.SUCCESS,
@@ -64,18 +64,18 @@ _PROJECT_YML: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/staging/stg_raw.sql": (
-                    "MODEL (materialized view);\n\nSELECT 10 AS id, 'row' AS val"
+                    "MODEL (description 'Test model stg_raw.', materialized view);\n\nSELECT 10 AS id, 'row' AS val"
                 ),
                 "models/branch_a.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model branch_a.', materialized table);\n\n"
                     "SELECT id, val || '_a' AS val FROM __ref(\"stg_raw\")"
                 ),
                 "models/branch_b.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model branch_b.', materialized table);\n\n"
                     "SELECT id, val || '_b' AS val FROM __ref(\"stg_raw\")"
                 ),
                 "models/merged.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model merged.', materialized table);\n\n"
                     "SELECT a.id, a.val AS a_val, b.val AS b_val "
                     'FROM __ref("branch_a") a '
                     'JOIN __ref("branch_b") b ON a.id = b.id'
@@ -95,12 +95,14 @@ _PROJECT_YML: str = (
             max_concurrency=2,
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
-                "models/layer_1.sql": ("MODEL (materialized table);\n\nSELECT 100 AS val"),
+                "models/layer_1.sql": (
+                    "MODEL (description 'Test model layer_1.', materialized table);\n\nSELECT 100 AS val"
+                ),
                 "models/layer_2.sql": (
-                    'MODEL (materialized table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
+                    'MODEL (description "Test model layer_2.", materialized table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
                 ),
                 "models/layer_3.sql": (
-                    'MODEL (materialized table);\n\nSELECT val + 1 AS val FROM __ref("layer_2")'
+                    'MODEL (description "Test model layer_3.", materialized table);\n\nSELECT val + 1 AS val FROM __ref("layer_2")'
                 ),
             },
             expected_status=BuildStatus.SUCCESS,
@@ -170,6 +172,7 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
 
 
                 class ConcurrentMarkerProvider(Provider):
+                    '''Test provider ConcurrentMarkerProvider.'''
                     marker_path: str = {str(marker_path)!r}
 
                     @property
@@ -197,12 +200,14 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
 
                 @loader
                 def raw_alpha(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    '''Test loader raw_alpha.'''
                     concurrent_marker_provider.mark("alpha")
                     return [{"event_id": 1}]
 
 
                 @loader
                 def raw_beta(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    '''Test loader raw_beta.'''
                     concurrent_marker_provider.mark("beta")
                     return [{"event_id": 2}]
                 """
@@ -212,12 +217,14 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
                 """
                 sources:
                   - name: raw_alpha
+                    description: Test source raw_alpha.
                     managed: true
                     write_strategy: table
                     columns:
                       - name: event_id
                         type: INTEGER
                   - name: raw_beta
+                    description: Test source raw_beta.
                     managed: true
                     write_strategy: table
                     columns:
@@ -227,10 +234,10 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
             ).strip()
             + "\n",
             "models/fact_alpha.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_alpha")\n'
+                'MODEL (description "Test model fact_alpha.", materialized table);\n\nSELECT * FROM __source("raw_alpha")\n'
             ),
             "models/fact_beta.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_beta")\n'
+                'MODEL (description "Test model fact_beta.", materialized table);\n\nSELECT * FROM __source("raw_beta")\n'
             ),
         },
     )
@@ -269,9 +276,11 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/broken.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                    "MODEL (description 'Test model broken.', materialized table);\n\nSELECT * FROM nonexistent_table"
                 ),
-                "models/healthy.sql": ("MODEL (materialized table);\n\nSELECT 42 AS val"),
+                "models/healthy.sql": (
+                    "MODEL (description 'Test model healthy.', materialized table);\n\nSELECT 42 AS val"
+                ),
             },
             expected_status=BuildStatus.FAILED,
             expected_success_count=1,
@@ -291,12 +300,14 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/broken.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                    "MODEL (description 'Test model broken.', materialized table);\n\nSELECT * FROM nonexistent_table"
                 ),
                 "models/downstream.sql": (
-                    'MODEL (materialized table);\n\nSELECT 1 AS id FROM __ref("broken")'
+                    'MODEL (description "Test model downstream.", materialized table);\n\nSELECT 1 AS id FROM __ref("broken")'
                 ),
-                "models/independent.sql": ("MODEL (materialized table);\n\nSELECT 99 AS val"),
+                "models/independent.sql": (
+                    "MODEL (description 'Test model independent.', materialized table);\n\nSELECT 99 AS val"
+                ),
             },
             expected_status=BuildStatus.FAILED,
             expected_success_count=1,
@@ -319,9 +330,11 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/aaa_broken.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                    "MODEL (description 'Test model aaa_broken.', materialized table);\n\nSELECT * FROM nonexistent_table"
                 ),
-                "models/zzz_independent.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
+                "models/zzz_independent.sql": (
+                    "MODEL (description 'Test model zzz_independent.', materialized table);\n\nSELECT 1 AS id"
+                ),
             },
             fail_fast=True,
             expected_status=BuildStatus.FAILED,

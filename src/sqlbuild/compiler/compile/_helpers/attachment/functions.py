@@ -262,6 +262,11 @@ def build_sql_function_inputs(
                     relative_path=function_file.relative_path,
                     language="SQL",
                 ),
+                description=_parse_function_description(
+                    header_values=header_values,
+                    relative_path=function_file.relative_path,
+                    language="SQL",
+                ),
                 declaration_usages=expansion.usages,
             )
         )
@@ -442,6 +447,11 @@ def _build_python_function_input(
             relative_path=python_function_file.relative_path,
             language="Python",
         ),
+        description=_parse_function_description(
+            header_values=header_values,
+            relative_path=python_function_file.relative_path,
+            language="Python",
+        ),
     )
 
 
@@ -588,6 +598,19 @@ def _parse_python_packages(*, raw_packages: object | None, relative_path: Path) 
             )
         packages.append(package.strip())
     return tuple(packages)
+
+
+def _parse_function_description(
+    *, header_values: dict[str, object], relative_path: Path, language: str
+) -> str | None:
+    raw_description: object | None = header_values.get("description")
+    if raw_description is None:
+        return None
+    if not isinstance(raw_description, str):
+        raise CompileInputError(
+            f"{language} function file {relative_path} description must be a string"
+        )
+    return raw_description.strip()
 
 
 def _parse_function_tags(

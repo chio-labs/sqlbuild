@@ -77,11 +77,13 @@ def test_given_built_python_nodes_when_editing_decorator_inputs_then_identity_tr
 
                 @loader(write_strategy="table", columns=STAGED_ORDER_COLUMNS)
                 def staged_orders(ctx):
+                    '''Test loader staged_orders.'''
                     return [{{"order_id": 1}}]
 
 
                 @loader(depends_on=[staged_orders])
                 def raw_orders(ctx):
+                    '''Test loader raw_orders.'''
                     staged = ctx.loader(staged_orders).destination
                     rows = ctx.query(f"SELECT order_id FROM {{staged}}")
                     return [{{"order_id": row[0]}} for row in rows]
@@ -91,6 +93,7 @@ def test_given_built_python_nodes_when_editing_decorator_inputs_then_identity_tr
                 """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     managed: true
                     write_strategy: table
                     columns:
@@ -108,6 +111,7 @@ def test_given_built_python_nodes_when_editing_decorator_inputs_then_identity_tr
 
                 @asset(retry=EXPORT_RETRY)
                 def export_orders(ctx):
+                    '''Test asset export_orders.'''
                     return None
                 """
             ).lstrip(),
@@ -197,6 +201,7 @@ def test_given_helper_package_with_relative_imports_when_editing_helper_then_tas
 
                 @task
                 def orders(ctx):
+                    '''Test task orders.'''
                     return ctx.result(
                         payload={"status": python.helpers.clean.normalize_status(" Shipped ")}
                     )

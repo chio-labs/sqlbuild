@@ -24,11 +24,12 @@ Scalar UDFs return a single value per row. They can be written in SQL or Python.
 
 ### SQL UDFs
 
-Place SQL function files under `functions/sql/`. Each file has a `FUNCTION()` header declaring arguments and return type, followed by a SQL expression body. The header accepts `arguments`, `returns`, `database`, `schema`, and `tags`; any other key fails compilation with `D002`, naming the key and its file and line:
+Place SQL function files under `functions/sql/`. Each file has a `FUNCTION()` header declaring arguments and return type, followed by a SQL expression body. The header accepts `description`, `arguments`, `returns`, `database`, `schema`, and `tags`; any other key fails compilation with `D002`, naming the key and its file and line. `description` is required: a function without one fails compilation with `P010` (see [Descriptions](models/configuration.md#descriptions)):
 
 ```sql
 -- functions/sql/udf__is_completed_order.sql
 FUNCTION (
+  description "Whether an order status counts as completed",
   arguments (order_status STRING),
   returns BOOLEAN,
 );
@@ -50,8 +51,11 @@ from sqlbuild.functions import udf
     runtime_version="3.11",
 )
 def main(order_status: str | None) -> bool:
+    """Whether an order status counts as completed."""
     return order_status == "completed"
 ```
+
+The function docstring is its description; `@udf(description="...")` overrides it. One of them is required, or compilation fails with `P010`. The docstring is deployed with the function body, so editing it redeploys the function; a `description=` value does not.
 
 Python UDFs are deployed as warehouse-native functions (Snowflake Python UDFs, BigQuery remote functions, etc.). The `@udf` decorator is used for static discovery only - SQLBuild parses the AST without importing your code.
 
@@ -75,6 +79,7 @@ Table functions return multiple rows and columns. They are written in SQL under 
 ```sql
 -- functions/sql/table_fn__customer_orders.sql
 FUNCTION (
+  description "Customer orders",
   arguments (p_customer_id INTEGER),
   returns table (
     order_id INTEGER,
@@ -165,6 +170,7 @@ The `@udf` decorator accepts these keyword arguments:
 
 | Argument | Required | Description |
 |----------|----------|-------------|
+| `description` | Yes, unless the function has a docstring | What the function returns; overrides the docstring |
 | `arguments` | Yes | Dict mapping argument names to SQL types |
 | `returns` | Yes | SQL return type string |
 | `runtime_version` | No | Python runtime version (e.g. `"3.11"`) |

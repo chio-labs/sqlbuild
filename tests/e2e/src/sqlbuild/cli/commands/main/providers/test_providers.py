@@ -53,6 +53,7 @@ PROVIDER_MARKER_FILE: str = (
 
 
     class MarkerProvider(Provider):
+        '''Test provider MarkerProvider.'''
         marker_path: str = Field(validation_alias="MARKER_PATH")
 
         def setup(self, ctx):
@@ -124,6 +125,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
 
 
                 class MarkerProvider(Provider):
+                    '''Test provider MarkerProvider.'''
                     label: str = "plan-output"
                 """
             ).strip()
@@ -136,6 +138,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
 
                 @loader
                 def raw_orders(marker_provider: MarkerProvider):
+                    '''Test loader raw_orders.'''
                     return [{"order_id": 1, "amount": 10}]
                 """
             ).strip()
@@ -148,6 +151,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
 
                 @task
                 def publish_orders(marker_provider: MarkerProvider):
+                    '''Test task publish_orders.'''
                     marker_provider.label
                 """
             ).strip()
@@ -160,6 +164,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
 
                 @hook
                 def mark_pre(marker_provider: MarkerProvider):
+                    '''Test hook mark_pre.'''
                     marker_provider.label
                 """
             ).strip()
@@ -187,6 +192,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
                 """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     managed: true
                     write_strategy: table
                     columns:
@@ -199,7 +205,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
             + "\n",
             "models/stg_orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model stg_orders.",
                   materialized copy_table,
                   pre_hooks [python("mark_pre")]
                 );
@@ -300,6 +306,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
 
                 class MarkerProvider(Provider):
+                    '''Test provider MarkerProvider.'''
                     marker_path: str = Field(validation_alias="MARKER_PATH")
                     label: str = "provider-e2e"
 
@@ -324,6 +331,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                 @task
                 def provider_task(ctx, marker_provider: MarkerProvider):
+                    '''Test task provider_task.'''
                     marker_provider.mark(f"run_task:{marker_provider.label}")
                 """
             ).strip()
@@ -336,6 +344,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                 @asset
                 def provider_asset(ctx, marker_provider: MarkerProvider):
+                    '''Test asset provider_asset.'''
                     marker_provider.mark(f"build_asset:{marker_provider.label}")
                 """
             ).strip()
@@ -348,6 +357,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                 @check(depends_on=())
                 def provider_check(ctx, marker_provider: MarkerProvider):
+                    '''Test check provider_check.'''
                     marker_provider.mark(f"check:{marker_provider.label}")
                     return True
                 """
@@ -361,6 +371,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                 @loader
                 def raw_provider_events(ctx, marker_provider: MarkerProvider):
+                    '''Test loader raw_provider_events.'''
                     marker_provider.mark(f"load:{marker_provider.label}")
                     return [{"event_id": 1, "label": marker_provider.label}]
                 """
@@ -370,6 +381,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
                 """
                 sources:
                   - name: raw_provider_events
+                    description: Test source raw_provider_events.
                     managed: true
                     write_strategy: table
                     columns:
@@ -441,6 +453,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                     @task
                     def failing_task(ctx, marker_provider: MarkerProvider):
+                        '''Test task failing_task.'''
                         marker_provider.mark("task")
                         raise RuntimeError("intentional provider failure")
                     """
@@ -463,6 +476,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                     @asset
                     def failing_asset(ctx, marker_provider: MarkerProvider):
+                        '''Test asset failing_asset.'''
                         marker_provider.mark("asset")
                         raise RuntimeError("intentional provider failure")
                     """
@@ -485,6 +499,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                     @check(depends_on=())
                     def failing_check(ctx, marker_provider: MarkerProvider):
+                        '''Test check failing_check.'''
                         marker_provider.mark("check")
                         raise RuntimeError("intentional provider failure")
                     """
@@ -507,6 +522,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 
                     @loader
                     def raw_provider_events(ctx, marker_provider: MarkerProvider):
+                        '''Test loader raw_provider_events.'''
                         marker_provider.mark("load")
                         raise RuntimeError("intentional provider failure")
                     """
@@ -516,6 +532,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
                     """
                     sources:
                       - name: raw_provider_events
+                        description: Test source raw_provider_events.
                         managed: true
                         write_strategy: table
                         columns:
@@ -587,11 +604,12 @@ def test_given_provider_project_when_running_compile_or_plan_then_provider_setup
 
                 @task
                 def provider_task(ctx, marker_provider: MarkerProvider):
+                    '''Test task provider_task.'''
                     marker_provider.mark("task")
                 """
             ).strip()
             + "\n",
-            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            "models/orders.sql": "MODEL (description 'Test model orders.');\n\nSELECT 1 AS id\n",
         },
     )
 
@@ -648,6 +666,7 @@ def test_given_alias_imported_provider_annotation_when_running_command_then_cli_
 
                 @task
                 def alias_task(ctx, marker_provider: AliasMarkerProvider):
+                    '''Test task alias_task.'''
                     marker_provider.mark("task")
                 """
             ).strip()
@@ -704,7 +723,7 @@ def test_given_custom_materialization_with_provider_when_it_fails_then_provider_
                 """
             ).strip()
             + "\n",
-            "models/orders.sql": "MODEL (materialized marker_mat);\n\nSELECT 1 AS id\n",
+            "models/orders.sql": "MODEL (description 'Test model orders.', materialized marker_mat);\n\nSELECT 1 AS id\n",
         },
     )
 
@@ -759,6 +778,7 @@ def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_
 
 
                 class ConcurrentMarkerProvider(Provider):
+                    '''Test provider ConcurrentMarkerProvider.'''
                     marker_path: str = {str(marker_path)!r}
 
                     @property
@@ -786,12 +806,14 @@ def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_
 
                 @loader
                 def raw_alpha(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    '''Test loader raw_alpha.'''
                     concurrent_marker_provider.mark("alpha")
                     return [{"event_id": 1}]
 
 
                 @loader
                 def raw_beta(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    '''Test loader raw_beta.'''
                     concurrent_marker_provider.mark("beta")
                     return [{"event_id": 2}]
                 """
@@ -801,12 +823,14 @@ def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_
                 """
                 sources:
                   - name: raw_alpha
+                    description: Test source raw_alpha.
                     managed: true
                     write_strategy: table
                     columns:
                       - name: event_id
                         type: INTEGER
                   - name: raw_beta
+                    description: Test source raw_beta.
                     managed: true
                     write_strategy: table
                     columns:
@@ -816,10 +840,10 @@ def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_
             ).strip()
             + "\n",
             "models/fact_alpha.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_alpha")\n'
+                'MODEL (description "Test model fact_alpha.", materialized table);\n\nSELECT * FROM __source("raw_alpha")\n'
             ),
             "models/fact_beta.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_beta")\n'
+                'MODEL (description "Test model fact_beta.", materialized table);\n\nSELECT * FROM __source("raw_beta")\n'
             ),
         },
     )
@@ -880,12 +904,14 @@ def test_given_python_hooks_with_provider_when_building_then_hooks_use_provider_
 
                 @hook
                 def mark_pre(ctx, marker_provider: MarkerProvider):
+                    '''Test hook mark_pre.'''
                     ctx.providers.marker_provider.mark("pre_ctx")
                     marker_provider.mark("pre_injected")
 
 
                 @hook
                 def mark_post(hook_context, marker_provider: MarkerProvider):
+                    '''Test hook mark_post.'''
                     hook_context.providers["marker_provider"].mark("post_ctx")
                     marker_provider.mark("post_injected")
                 """
@@ -893,7 +919,7 @@ def test_given_python_hooks_with_provider_when_building_then_hooks_use_provider_
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("mark_pre")],
                   post_hooks [python("mark_post")]
@@ -948,18 +974,20 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
 
                 @hook
                 def mark_pre(ctx, marker_provider: MarkerProvider):
+                    '''Test hook mark_pre.'''
                     marker_provider.mark("view_pre")
 
 
                 @hook
                 def mark_post(ctx, marker_provider: MarkerProvider):
+                    '''Test hook mark_post.'''
                     marker_provider.mark("view_post")
                 """
             ).strip()
             + "\n",
             "models/orders_view.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders_view.",
                   materialized view,
                   pre_hooks [python("mark_pre")],
                   post_hooks [python("mark_post")]
@@ -992,7 +1020,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
             model_relative_path="models/incremental_orders.sql",
             model_sql=dedent(
                 """
-                MODEL (
+                MODEL (description "Test model incremental_orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor order_id,
@@ -1020,7 +1048,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
             model_relative_path="models/hourly_activity.sql",
             model_sql=dedent(
                 """
-                MODEL (
+                MODEL (description "Test model hourly_activity.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_hour,
@@ -1046,7 +1074,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
             extra_repo_files={
                 "models/fact_orders.sql": dedent(
                     """
-                    MODEL (materialized table);
+                    MODEL (description "Test model fact_orders.", materialized table);
 
                     SELECT 1 AS order_id, TIMESTAMP '2026-01-01 00:00:00' AS ordered_at
                     """
@@ -1067,7 +1095,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
             model_relative_path="models/customer_snapshot.sql",
             model_sql=dedent(
                 """
-                MODEL (
+                MODEL (description "Test model customer_snapshot.",
                   materialized snapshot,
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
@@ -1096,7 +1124,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
             model_relative_path="models/custom_orders.sql",
             model_sql=dedent(
                 """
-                MODEL (
+                MODEL (description "Test model custom_orders.",
                   materialized copy_table,
                   pre_hooks [python("mark_hook")],
                   post_hooks [python("mark_hook")]
@@ -1149,6 +1177,7 @@ def test_given_materialization_hooks_with_provider_when_building_then_hooks_use_
 
             @hook
             def mark_hook(ctx, marker_provider: MarkerProvider):
+                '''Test hook mark_hook.'''
                 marker_provider.mark(f"{ctx.model_name}:{ctx.phase}")
             """
         ).strip()
@@ -1203,13 +1232,14 @@ def test_given_untyped_python_hook_provider_parameter_when_building_then_provide
 
                 @hook
                 def mark_pre(ctx, marker_provider):
+                    '''Test hook mark_pre.'''
                     marker_provider.mark("untyped")
                 """
             ).strip()
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("mark_pre")]
                 );
@@ -1263,6 +1293,7 @@ def test_given_python_hook_with_provider_when_hook_fails_then_provider_tears_dow
 
                 @hook
                 def failing_pre_hook(ctx, marker_provider: MarkerProvider):
+                    '''Test hook failing_pre_hook.'''
                     marker_provider.mark("pre")
                     raise RuntimeError("intentional provider hook failure")
                 """
@@ -1270,7 +1301,7 @@ def test_given_python_hook_with_provider_when_hook_fails_then_provider_tears_dow
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("failing_pre_hook")]
                 );
@@ -1324,6 +1355,7 @@ def test_given_python_post_hook_with_provider_when_hook_fails_then_provider_tear
 
                 @hook
                 def failing_post_hook(ctx, marker_provider: MarkerProvider):
+                    '''Test hook failing_post_hook.'''
                     marker_provider.mark("post")
                     raise RuntimeError("intentional provider post hook failure")
                 """
@@ -1331,7 +1363,7 @@ def test_given_python_post_hook_with_provider_when_hook_fails_then_provider_tear
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   post_hooks [python("failing_post_hook")]
                 );
@@ -1395,13 +1427,14 @@ def test_given_alias_imported_provider_annotation_on_hook_when_building_then_cli
 
                 @hook
                 def mark_pre(ctx, marker_provider: AliasMarkerProvider):
+                    '''Test hook mark_pre.'''
                     marker_provider.mark("pre")
                 """
             ).strip()
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("mark_pre")]
                 );
@@ -1451,6 +1484,7 @@ def test_given_provider_annotation_mismatch_on_hook_when_building_then_cli_print
 
 
                 class OtherProvider(Provider):
+                    '''Test provider OtherProvider.'''
                     pass
                 """
             ).strip()
@@ -1463,13 +1497,14 @@ def test_given_provider_annotation_mismatch_on_hook_when_building_then_cli_print
 
                 @hook
                 def mark_pre(ctx, marker_provider: OtherProvider):
+                    '''Test hook mark_pre.'''
                     marker_provider.mark("pre")
                 """
             ).strip()
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("mark_pre")]
                 );
@@ -1524,13 +1559,14 @@ def test_given_python_hook_kwarg_matches_provider_when_building_then_cli_prints_
 
                 @hook
                 def mark_pre(ctx, marker_provider: MarkerProvider):
+                    '''Test hook mark_pre.'''
                     marker_provider.mark("pre")
                 """
             ).strip()
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("mark_pre", marker_provider: "literal")]
                 );
@@ -1609,13 +1645,14 @@ def test_given_python_hook_kwarg_matches_context_when_building_then_cli_prints_c
 
                 @hook
                 def mark_pre(ctx, marker_provider: MarkerProvider):
+                    '''Test hook mark_pre.'''
                     marker_provider.mark("pre")
                 """
             ).strip()
             + "\n",
             "models/orders.sql": dedent(
                 f"""
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [python("mark_pre", {test_case.context_parameter_name}: "literal")]
                 );

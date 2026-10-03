@@ -89,7 +89,7 @@ _SNAPSHOT_HEADER: str = (
 )
 _KEYED_SOURCE_YML: str = (
     "sources:\n"
-    "  - name: landing_orders\n"
+    "  - name: landing_orders\n    description: Test source landing_orders.\n"
     "    schema: landing\n"
     "    columns:\n"
     "      - name: order_id\n"

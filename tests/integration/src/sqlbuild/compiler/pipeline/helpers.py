@@ -156,9 +156,12 @@ def compile_reshaped_star_model(
     models: Path = project_dir / "models"
     models.mkdir()
     for name, sql in RESHAPED_STAR_UPSTREAM_MODELS.items():
-        (models / f"{name}.sql").write_text(f"MODEL (materialized table);\n{sql}", encoding="utf-8")
+        (models / f"{name}.sql").write_text(
+            f"MODEL (description 'Test model.', materialized table);\n{sql}", encoding="utf-8"
+        )
     (models / "reshaped_orders.sql").write_text(
-        f"MODEL (materialized table);\n{query_sql}", encoding="utf-8"
+        f"MODEL (description 'Test model reshaped_orders.', materialized table);\n{query_sql}",
+        encoding="utf-8",
     )
     project: CompiledProject = compile_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
@@ -176,7 +179,9 @@ def lineage_source_pairs(column: CompiledLineageColumnFact) -> frozenset[tuple[s
     )
 
 
-_SHARED_BINDING_UPSTREAM_SQL: str = "MODEL (materialized view); SELECT 1 AS id, 2.5 AS amount"
+_SHARED_BINDING_UPSTREAM_SQL: str = (
+    "MODEL (description 'Test model.', materialized view); SELECT 1 AS id, 2.5 AS amount"
+)
 
 
 def write_shared_binding_project(*, project_dir: Path, test_case: SharedBindingQueryCase) -> None:

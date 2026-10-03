@@ -28,18 +28,14 @@ adapter = "duckdb"
 sql_analysis = false
 sql_validation = false
 """
-_SOURCES_WITH_AUDIT: str = (
-    "sources:\n  - name: raw_orders\n    table: orders\n    audits:\n      - code_check\n"
-)
+_SOURCES_WITH_AUDIT: str = "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    table: orders\n    audits:\n      - code_check\n"
 _SEED_WITH_AUDIT: str = (
-    "seeds:\n  - name: order_codes\n    columns:\n      - name: code\n        type: VARCHAR\n"
+    "seeds:\n  - name: order_codes\n    description: Test seed order_codes.\n    columns:\n      - name: code\n        type: VARCHAR\n"
     "    audits:\n      - code_check\n"
 )
-_AUDITED_HEADER: str = "MODEL (audits [code_check]);"
-_ORDER_CHECK_HEADER: str = "MODEL (audits [order_check]);"
-_ALLOWED_SEED: str = (
-    "seeds:\n  - name: allowed_codes\n    columns:\n      - name: code\n        type: VARCHAR\n"
-)
+_AUDITED_HEADER: str = "MODEL (description 'Test model.', audits [code_check]);"
+_ORDER_CHECK_HEADER: str = "MODEL (description 'Test model.', audits [order_check]);"
+_ALLOWED_SEED: str = "seeds:\n  - name: allowed_codes\n    description: Test seed allowed_codes.\n    columns:\n      - name: code\n        type: VARCHAR\n"
 
 
 @pytest.mark.parametrize(

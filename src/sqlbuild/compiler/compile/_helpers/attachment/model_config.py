@@ -53,6 +53,8 @@ from sqlbuild.spec.contracts.models import (
 )
 
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
+_MODEL_DESCRIPTION_KEY: str = "description"
+_MODEL_SCHEMA_KEY: str = "model_schema"
 
 
 def _contains_template_data_cached(*, value: object, cache: IdentityPresenceCache | None) -> bool:
@@ -529,6 +531,36 @@ def _resolve_model_schema(
             f"available schemas: {available}"
         )
     return declaration
+
+
+def has_resolved_model_description(
+    *,
+    model_file: DiscoveredSqlModelFile,
+    defaults: DefaultsConfig,
+    path_defaults: dict[str, dict[str, object]],
+    model_schemas: dict[str, ModelSchemaDeclaration],
+) -> bool:
+    """Return whether layered config or the model schema gives the model a description."""
+
+    values: dict[str, object] = build_layered_model_values(
+        defaults=defaults,
+        path_defaults=path_defaults,
+        matched_path_default=find_matching_path_default(
+            model_file=model_file, path_defaults=path_defaults
+        ),
+        model_header_values=model_file.header_values,
+    )
+    schema_name: object | None = values.get(_MODEL_SCHEMA_KEY)
+    schema: ModelSchemaDeclaration | None = (
+        model_schemas.get(schema_name) if isinstance(schema_name, str) else None
+    )
+    return _is_non_empty_text(values.get(_MODEL_DESCRIPTION_KEY)) or _is_non_empty_text(
+        schema.description if schema is not None else None
+    )
+
+
+def _is_non_empty_text(value: object | None) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def find_matching_path_default(

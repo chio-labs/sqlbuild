@@ -129,7 +129,7 @@ def test_given_duckdb_dbt_project_when_running_dbt_init_then_generated_project_b
 
     (sqlbuild_project_dir / "models").mkdir()
     (sqlbuild_project_dir / "models" / "local_profile_orders.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 2 AS order_id\n",
+        "MODEL (description 'Test model local_profile_orders.', materialized table);\n\nSELECT 2 AS order_id\n",
         encoding="utf-8",
     )
 
@@ -146,7 +146,7 @@ def test_given_duckdb_dbt_project_when_running_dbt_init_then_generated_project_b
     ) == [(2,)]
 
     (sqlbuild_project_dir / "models" / "downstream_orders.sql").write_text(
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model downstream_orders.', materialized table);\n\n"
         'SELECT order_id FROM __dbt_ref("analytics", "dbt_orders")\n',
         encoding="utf-8",
     )

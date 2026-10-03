@@ -262,14 +262,14 @@ def test_given_python_result_when_running_check_on_postgres_then_persists_node_r
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def produce_result(ctx):\n"
-                "    return ctx.result(payload={'value': 42}, metadata={'source': 'postgres'})\n"
+                "    '''Test task produce_result.'''\n    return ctx.result(payload={'value': 42}, metadata={'source': 'postgres'})\n"
             ),
             "python/checks/results.py": (
                 "from sqlbuild.checks import check\n"
                 "from python.tasks.results import produce_result\n\n"
                 "@check(depends_on=produce_result)\n"
                 "def check_produce_result(ctx):\n"
-                "    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
+                "    '''Test check check_produce_result.'''\n    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
             ),
         },
     )
@@ -390,7 +390,7 @@ def test_given_source_deferral_env_when_building_on_postgres_then_reads_prod_and
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
@@ -403,10 +403,10 @@ def test_given_source_deferral_env_when_building_on_postgres_then_reads_prod_and
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"
-                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+                "    '''Test loader raw_orders.'''\n    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
             ),
             "models/stg_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+                'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
             ),
         },
     )
@@ -485,7 +485,7 @@ def test_given_partial_source_type_enforcement_when_building_on_postgres_then_ca
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 f"    schema: {schema_name}\n"
                 "    type_enforcement: true\n"
                 "    columns:\n"
@@ -493,7 +493,7 @@ def test_given_partial_source_type_enforcement_when_building_on_postgres_then_ca
                 "        type: INTEGER\n"
             ),
             "models/stg_orders.sql": (
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model stg_orders.', materialized table);\n\n"
                 'SELECT order_id, status, amount_cents FROM __source("raw_orders")'
             ),
         },
@@ -709,7 +709,7 @@ def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write
         PostgresScenarioLocalReplayE2ETestCase(
             description="captures postgres fixtures and replays transpilable SQL locally",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT\n"
                 "  customer_id,\n"
                 "  DATE_TRUNC('day', event_ts) AS event_day,\n"
@@ -720,7 +720,7 @@ def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write
                 "GROUP BY customer_id, DATE_TRUNC('day', event_ts)\n"
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS TIMESTAMP)"
@@ -751,12 +751,12 @@ def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write
             description="reports postgres local transpilation failures as X607",
             scenario_name="local_transpile_error",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT customer_id, amount_cents\n"
                 'FROM __source("raw_events")\n'
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
@@ -855,7 +855,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
         repo_files=build_schema_behavior_project_files(
             source_yaml=(
                 "sources:\n"
-                "  - name: raw_events\n"
+                "  - name: raw_events\n    description: Test source raw_events.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
@@ -870,10 +870,10 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    {'name': 'event_id', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    return [{'event_id': 1}, {'event_id': 2}]\n\n"
+                "    '''Test loader fetch_events.'''\n    return [{'event_id': 1}, {'event_id': 2}]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id FROM {events.destination} ORDER BY event_id'\n"
                 "    )\n"
@@ -933,7 +933,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        next_seq = 1\n"
                 "    else:\n"
                 "        next_seq = ctx.current_cursor_value + 1\n"
@@ -942,7 +942,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -968,7 +968,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    ],\n"
                 ")\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [\n"
                 "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
                 "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
@@ -979,7 +979,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -1000,7 +1000,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [\n"
                 "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
                 "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
@@ -1011,7 +1011,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -1037,7 +1037,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
         repo_files=build_schema_behavior_project_files(
             source_yaml=(
                 "sources:\n"
-                "  - name: raw_events\n"
+                "  - name: raw_events\n    description: Test source raw_events.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"

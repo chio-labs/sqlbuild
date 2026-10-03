@@ -56,6 +56,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     schema: main
                     table: raw_orders
                 """
@@ -63,7 +64,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                MODEL (materialized view);
+                MODEL (description "Test model stg_orders.", materialized view);
 
                 SELECT id AS order_id, ordered_at, amount_cents FROM __source("raw_orders")
                 """
@@ -71,7 +72,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                MODEL (materialized table);
+                MODEL (description "Test model fact_orders.", materialized table);
 
                 SELECT order_id, ordered_at, amount_cents AS line_total_cents
                 FROM __ref("stg_orders")
@@ -80,7 +81,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/hourly_order_activity.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model hourly_order_activity.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_hour,
@@ -106,7 +107,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/daily_activity_rollup.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model daily_activity_rollup.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_day,
@@ -179,6 +180,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     schema: main
                     table: raw_orders
                 """
@@ -186,7 +188,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "functions/sql/is_high_value_order.sql": dedent(
                     """
-                FUNCTION (
+                FUNCTION (description "Test function is_high_value_order.",
                   arguments (amount_cents INTEGER),
                   returns BOOLEAN,
                 );
@@ -197,7 +199,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/fact_orders.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model fact_orders.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor order_id,
@@ -262,6 +264,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     schema: main
                     table: raw_orders
                 """
@@ -269,7 +272,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                MODEL (materialized view);
+                MODEL (description "Test model stg_orders.", materialized view);
 
                 SELECT id AS order_id, ordered_at, amount_cents FROM __source("raw_orders")
                 """
@@ -277,7 +280,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                MODEL (materialized table);
+                MODEL (description "Test model fact_orders.", materialized table);
 
                 SELECT order_id, ordered_at, amount_cents AS line_total_cents
                 FROM __ref("stg_orders")
@@ -286,7 +289,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/hourly_order_activity.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model hourly_order_activity.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_hour,
@@ -313,7 +316,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/daily_activity_rollup.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model daily_activity_rollup.",
                   materialized incremental,
                   incremental_strategy delete_insert,
                   cursor activity_day,

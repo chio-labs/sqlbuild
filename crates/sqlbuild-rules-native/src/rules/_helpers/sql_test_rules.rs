@@ -90,9 +90,6 @@ pub(crate) fn evaluate_project(
     if let Some(rule) = evaluation.selected.get("SQBRTEST104") {
         faults.extend(structured_names(rule, &evaluation, &tests));
     }
-    if let Some(rule) = evaluation.selected.get("SQBRTEST105") {
-        faults.extend(scenario_descriptions(rule, &scenarios));
-    }
     if let Some(rule) = evaluation.selected.get(EMPTY_INPUT_RULE_CODE) {
         faults.extend(empty_input_only_faults(
             rule,
@@ -264,27 +261,6 @@ fn structured_names(
                     allowed.join(" or ")
                 ),
                 allowed.first().map(String::as_str),
-            ));
-        }
-    }
-    faults
-}
-
-fn scenario_descriptions(rule: &RuleMetadata, scenarios: &[&SqlScenarioFact]) -> Vec<Fault> {
-    let mut faults: Vec<Fault> = Vec::new();
-    for scenario in scenarios {
-        let description = scenario.description.as_deref().unwrap_or("").trim();
-        let behavior = file_stem(&scenario.source_path)
-            .split_once("__")
-            .map(|(_, value)| value)
-            .unwrap_or("");
-        if description.is_empty() || generic(description) || generic(behavior) {
-            faults.push(path_fault(
-                rule,
-                &scenario.source_path,
-                "scenario description or filename uses a generic case label".into(),
-                "Write a concrete business description and a <subject>__<behavior>.sql filename."
-                    .into(),
             ));
         }
     }

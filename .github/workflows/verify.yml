@@ -460,6 +460,7 @@ jobs:
             --kind "${KIND}" \
             --max-ratio "${MAX_RATIO}" \
             --models 3000 \
+            --base-root base \
             --base-python base/.venv/bin/python \
             --head-python .venv/bin/python
 

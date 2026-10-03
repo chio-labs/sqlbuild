@@ -166,14 +166,14 @@ def test_given_python_result_when_running_check_on_databricks_then_persists_node
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def produce_result(ctx):\n"
-                "    return ctx.result(payload={'value': 42}, metadata={'source': 'databricks'})\n"
+                "    '''Test task produce_result.'''\n    return ctx.result(payload={'value': 42}, metadata={'source': 'databricks'})\n"
             ),
             "python/checks/results.py": (
                 "from sqlbuild.checks import check\n"
                 "from python.tasks.results import produce_result\n\n"
                 "@check(depends_on=produce_result)\n"
                 "def check_produce_result(ctx):\n"
-                "    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
+                "    '''Test check check_produce_result.'''\n    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
             ),
         },
     )
@@ -248,13 +248,13 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
             ),
             "sources/raw.yml": (
                 "sources:\n"
-                "  - name: raw_orders\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
                 f"    database: {catalog_name}\n"
                 f"    schema: {schema_name}\n"
                 "    table: raw_orders\n"
             ),
             "models/orders.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
             ),
         },
     )
@@ -292,7 +292,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
                 "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        next_seq = 1\n"
                 "    else:\n"
                 "        next_seq = ctx.current_cursor_value + 1\n"
@@ -301,7 +301,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -327,7 +327,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
                 "    ],\n"
                 ")\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [\n"
                 "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
                 "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
@@ -338,7 +338,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -359,7 +359,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
                 "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
                 "])\n"
                 "def fetch_events(ctx):\n"
-                "    if ctx.current_cursor_value is None:\n"
+                "    '''Test loader fetch_events.'''\n    if ctx.current_cursor_value is None:\n"
                 "        return [\n"
                 "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
                 "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
@@ -370,7 +370,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
                 "    ]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
+                "    '''Test loader raw_events.'''\n    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id, amount FROM {events.destination} '\n"
                 "        'ORDER BY event_id, amount'\n"
@@ -395,7 +395,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_databricks_th
         repo_files=build_schema_behavior_project_files(
             source_yaml=(
                 "sources:\n"
-                "  - name: raw_events\n"
+                "  - name: raw_events\n    description: Test source raw_events.\n"
                 "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
@@ -606,7 +606,7 @@ def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_
         DatabricksScenarioLocalReplayE2ETestCase(
             description="captures databricks fixtures and replays transpilable SQL locally",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT\n"
                 "  customer_id,\n"
                 "  date_trunc('DAY', event_ts) AS event_day,\n"
@@ -616,7 +616,7 @@ def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_
                 "GROUP BY customer_id, date_trunc('DAY', event_ts)\n"
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, TIMESTAMP '2026-01-01 08:15:00' "
@@ -647,12 +647,12 @@ def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_
             description="reports databricks local transpilation failures as X607",
             scenario_name="local_transpile_error",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT customer_id, amount_cents\n"
                 'FROM __source("raw_events")\n'
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
@@ -675,14 +675,14 @@ def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_
             description="reports databricks local DuckDB execution failures as X608",
             scenario_name="local_execution_error",
             model_sql=(
-                "MODEL (materialized table);\n\n"
+                "MODEL (description 'Test model.', materialized table);\n\n"
                 "SELECT\n"
                 "  customer_id,\n"
                 "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
                 'FROM __source("raw_events")\n'
             ),
             scenario_sql=(
-                "SCENARIO ();\n\n"
+                "SCENARIO (description 'Test scenario.');\n\n"
                 "WITH\n"
                 "__source__raw_events AS (\n"
                 "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
@@ -1391,7 +1391,7 @@ def test_given_databricks_invalid_model_when_building_then_underlying_error_is_p
     project_dir, schema_name = prepare_databricks_waffle_shop(tmp_path=tmp_path)
     broken_model: Path = project_dir / "models" / "marts" / "databricks_broken_model.sql"
     broken_model.write_text(
-        "MODEL (materialized table);\n\nSELECT missing_column FROM (SELECT 1 AS id)",
+        "MODEL (description 'Test model databricks_broken_model.', materialized table);\n\nSELECT missing_column FROM (SELECT 1 AS id)",
         encoding="utf-8",
     )
 

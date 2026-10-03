@@ -14,7 +14,7 @@ _PROJECT_FILES: dict[str, str] = {
         'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
     ),
     "models/orders.sql": (
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         "  materialized table,\n"
         "  contract enforced,\n"
         "  columns (\n"
@@ -25,7 +25,7 @@ _PROJECT_FILES: dict[str, str] = {
         "SELECT 1 AS order_id, 5 AS amount\n"
     ),
     "models/order_totals.sql": (
-        'MODEL (materialized table);\n\nSELECT order_id, amount * 2 AS doubled FROM __ref("orders")\n'
+        'MODEL (description "Test model order_totals.", materialized table);\n\nSELECT order_id, amount * 2 AS doubled FROM __ref("orders")\n'
     ),
     "tests/unit/test_order_totals.sql": (
         "TEST ();\nWITH\n"

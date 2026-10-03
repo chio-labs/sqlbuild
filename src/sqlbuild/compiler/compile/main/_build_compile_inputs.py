@@ -5,11 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild.compiler.auditing.main._builtins import build_builtin_audit_resolution
-from sqlbuild.compiler.compile._helpers.attachment.audits import (
-    build_audit_inputs,
-    index_generic_audit_definitions,
-)
+from sqlbuild.compiler.compile._helpers.attachment.audits import build_project_audit_inputs
 from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_connection,
     build_effective_settings,
@@ -33,6 +29,9 @@ from sqlbuild.compiler.compile._helpers.audit_factories.core import (
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     with_collected_compile_diagnostics,
+)
+from sqlbuild.compiler.compile._helpers.diagnostics.descriptions import (
+    missing_description_diagnostics,
 )
 from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.compile._helpers.render.declarations import (
@@ -61,8 +60,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
     DiscoveredProjectInputs,
     EnumDeclaration,
     ModelSchemaDeclaration,
@@ -191,22 +188,25 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_lexical_syntax=adapter_context.sql_lexical_syntax,
     )
-    project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
-        index_generic_audit_definitions(discovered_inputs.audit_files)
-    )
-    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
-    diagnostics: tuple[CompilerDiagnostic, ...]
-    generic_audit_definitions, diagnostics = build_builtin_audit_resolution(
-        project_audit_definitions
-    )
-    diagnostics = (*diagnostics, *model_build.diagnostics)
-    audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
+    audit_inputs: tuple[CompileAuditInput, ...]
+    audit_diagnostics: tuple[CompilerDiagnostic, ...]
+    audit_inputs, audit_diagnostics = build_project_audit_inputs(
         discovered_inputs=discovered_inputs,
         context=model_context,
         model_inputs=model_build.inputs,
         source_inputs=source_inputs,
-        generic_audit_definitions=generic_audit_definitions,
         seed_inputs=seed_inputs,
+    )
+    diagnostics: tuple[CompilerDiagnostic, ...] = (
+        *audit_diagnostics,
+        *model_build.diagnostics,
+        *missing_description_diagnostics(
+            discovered_inputs=discovered_inputs,
+            model_inputs=model_build.inputs,
+            seed_inputs=seed_inputs,
+            source_inputs=source_inputs,
+            function_inputs=sql_function_inputs,
+        ),
     )
     return CompileProjectInputs(
         project_config=discovered_inputs.project_config,

@@ -69,7 +69,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
             extra_files=(
                 (
                     "models/independent.sql",
-                    'MODEL (materialized view);\nSELECT w.missing FROM __seed("waffle_types") w CROSS JOIN __ref("fact_orders") o\n',
+                    'MODEL (description "Test model independent.", materialized view);\nSELECT w.missing FROM __seed("waffle_types") w CROSS JOIN __ref("fact_orders") o\n',
                 ),
             ),
             expected_errors=2,
@@ -88,14 +88,17 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
             "predicate error does not poison another input projection",
             (),
             extra_files=(
-                ("models/available.sql", "MODEL (materialized view); SELECT 1 AS qty"),
+                (
+                    "models/available.sql",
+                    "MODEL (description 'Test model available.', materialized view); SELECT 1 AS qty",
+                ),
                 (
                     "models/predicate_bad.sql",
-                    'MODEL (materialized view); SELECT a.qty FROM __ref("available") a CROSS JOIN __ref("stg_orders") o WHERE o.qty > 5',
+                    'MODEL (description "Test model predicate_bad.", materialized view); SELECT a.qty FROM __ref("available") a CROSS JOIN __ref("stg_orders") o WHERE o.qty > 5',
                 ),
                 (
                     "models/independent_use.sql",
-                    'MODEL (materialized view); SELECT quantity FROM __ref("predicate_bad")',
+                    'MODEL (description "Test model independent_use.", materialized view); SELECT quantity FROM __ref("predicate_bad")',
                 ),
             ),
             expected_errors=2,
@@ -110,11 +113,11 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
             extra_files=(
                 (
                     "sources/optional.yml",
-                    "sources:\n  - name: external_orders\n    table: external_orders\n",
+                    "sources:\n  - name: external_orders\n    description: Test source external_orders.\n    table: external_orders\n",
                 ),
                 (
                     "models/open_read.sql",
-                    'MODEL (materialized view);\nSELECT id FROM __source("external_orders")\n',
+                    'MODEL (description "Test model open_read.", materialized view);\nSELECT id FROM __source("external_orders")\n',
                 ),
             ),
             expected_fragments=(
@@ -139,12 +142,12 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
             extra_files=(
                 (
                     "models/wide.sql",
-                    "MODEL (materialized view);\nSELECT 1 AS quantity, "
+                    "MODEL (description 'Test model wide.', materialized view);\nSELECT 1 AS quantity, "
                     + ", ".join(f"1 AS field_{index}" for index in range(20)),
                 ),
                 (
                     "models/wide_bad.sql",
-                    'MODEL (materialized view);\nSELECT w.qty FROM __ref("wide") w',
+                    'MODEL (description "Test model wide_bad.", materialized view);\nSELECT w.qty FROM __ref("wide") w',
                 ),
             ),
             expected_fragments=("wide has: quantity", "and 11 more", "did you mean 'quantity'?"),

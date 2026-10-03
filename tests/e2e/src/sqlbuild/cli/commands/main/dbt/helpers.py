@@ -120,11 +120,13 @@ def write_sqlbuild_defer_target_models(*, project_dir: Path) -> None:
         encoding="utf-8",
     )
     project_dir.joinpath("models", "deferred_upstream.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 42 AS order_id\n",
+        "MODEL (description 'Test model deferred_upstream.', "
+        "materialized table);\n\nSELECT 42 AS order_id\n",
         encoding="utf-8",
     )
     project_dir.joinpath("models", "deferred_consumer.sql").write_text(
-        'MODEL (materialized table);\n\nSELECT order_id FROM __ref("deferred_upstream")\n',
+        'MODEL (description "Test model deferred_consumer.", '
+        'materialized table);\n\nSELECT order_id FROM __ref("deferred_upstream")\n',
         encoding="utf-8",
     )
 
@@ -233,7 +235,8 @@ def write_sqlbuild_order_status_snapshot(*, project_dir: Path) -> None:
         encoding="utf-8",
     )
     project_dir.joinpath("models", "order_status_history.sql").write_text(
-        "MODEL (\n  materialized snapshot,\n  unique_key [order_id],\n"
+        "MODEL (description 'Test model order_status_history.',"
+        "\n  materialized snapshot,\n  unique_key [order_id],\n"
         "  snapshot_strategy check,\n  check_columns [status],\n);\n\n"
         "SELECT 10 AS order_id, 'open' AS status\n",
         encoding="utf-8",

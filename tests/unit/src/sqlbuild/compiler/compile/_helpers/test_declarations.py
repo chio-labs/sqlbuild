@@ -81,7 +81,7 @@ CONSTANT (name min_items, value 7);
 CONSTANT (name source_name, value "O'Brien");
 """,
             "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   contract enforced,
   pre_hooks [inline_sql('SELECT @const("min_items") + @const("_offset")')],
   enums (
@@ -107,7 +107,7 @@ SELECT
   @const("source_name") AS source_name
 """,
             "functions/sql/add_threshold.sql": """
-FUNCTION (
+FUNCTION (description "Test function add_threshold.",
   arguments (value INTEGER),
   returns INTEGER,
 );
@@ -117,6 +117,7 @@ value + @const("min_items")
             "sources/inline.yml": """
 sources:
   - name: inline_values
+    description: Test source inline_values.
     expression: |
       SELECT @const("min_items") AS value
 """,
@@ -132,7 +133,7 @@ __expected__orders AS (
 SELECT 1
 """,
             "tests/scenarios/orders.sql": """
-SCENARIO ();
+SCENARIO (description "Test scenario orders.");
 
 WITH __ref__orders AS (
   SELECT @const("min_items") AS threshold
@@ -321,7 +322,7 @@ CONSTANT (name country_array, value ["GB", "FR"], render_as array);
 CONSTANT (name labels, value (GB "Great Britain", FR "France"));
 """,
             "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   pre_hooks [inline_sql("SELECT 'GB' IN @const('countries')")],
   post_hooks [sql("typed_hook")],
   audits [typed_audit],
@@ -338,7 +339,7 @@ SELECT @const("enabled") AS enabled, @const("ratio") AS ratio,
   @const("_local_values") AS local_values
 """,
             "functions/sql/is_supported.sql": """
-FUNCTION (arguments (value VARCHAR), returns BOOLEAN);
+FUNCTION (description "Test function is_supported.", arguments (value VARCHAR), returns BOOLEAN);
 value IN @const("countries")
 """,
             "hooks/sql/typed_hook.sql": """
@@ -348,6 +349,7 @@ SELECT 'FR' IN @const("countries")
             "sources/inline.yml": """
 sources:
   - name: supported_entries
+    description: Test source supported_entries.
     expression: |
       SELECT * FROM entries WHERE country IN @const("countries")
 """,
@@ -358,7 +360,7 @@ __expected__orders AS (SELECT true AS supported)
 SELECT 1
 """,
             "tests/scenarios/orders.sql": """
-SCENARIO ();
+SCENARIO (description "Test scenario orders.");
 WITH __ref__orders AS (SELECT @const("country_array") AS countries),
 __expected__orders AS (SELECT @const("country_array") AS countries)
 SELECT 1
@@ -405,7 +407,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/threshold.sql",
             initial_declaration="CONSTANT (name threshold, value 7);\n",
             changed_declaration="CONSTANT (name threshold, value 8);\n",
-            model_sql='MODEL ();\nSELECT @const("threshold") AS threshold\n',
+            model_sql='MODEL (description "Test model threshold.");\nSELECT @const("threshold") AS threshold\n',
             expected_query_hash_changed=True,
             expected_metadata_changed=False,
         ),
@@ -414,7 +416,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["FR", "GB"]);\n',
-            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            model_sql='MODEL (description "Test model countries.");\nSELECT @const("countries") AS countries\n',
             expected_query_hash_changed=True,
             expected_metadata_changed=False,
         ),
@@ -423,7 +425,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["GB", "FR", "FR"]);\n',
-            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            model_sql='MODEL (description "Test model countries.");\nSELECT @const("countries") AS countries\n',
             expected_query_hash_changed=True,
             expected_metadata_changed=False,
         ),
@@ -432,7 +434,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value {"GB", "FR"});\n',
             changed_declaration='CONSTANT (name countries, value {"FR", "GB"});\n',
-            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            model_sql='MODEL (description "Test model countries.");\nSELECT @const("countries") AS countries\n',
             expected_query_hash_changed=False,
             expected_metadata_changed=False,
         ),
@@ -445,7 +447,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             changed_declaration=(
                 'CONSTANT (name labels, value (FR "France", GB "Great Britain"));\n'
             ),
-            model_sql='MODEL ();\nSELECT @const("labels") AS labels\n',
+            model_sql='MODEL (description "Test model.");\nSELECT @const("labels") AS labels\n',
             expected_query_hash_changed=False,
             expected_metadata_changed=False,
         ),
@@ -454,7 +456,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value {"GB", "FR"});\n',
             changed_declaration='CONSTANT (name countries, value {"GB", "HK"});\n',
-            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            model_sql='MODEL (description "Test model countries.");\nSELECT @const("countries") AS countries\n',
             expected_query_hash_changed=True,
             expected_metadata_changed=False,
         ),
@@ -463,7 +465,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/labels.sql",
             initial_declaration='CONSTANT (name labels, value (GB "Great Britain"));\n',
             changed_declaration='CONSTANT (name labels, value (GB "Britain"));\n',
-            model_sql='MODEL ();\nSELECT @const("labels") AS labels\n',
+            model_sql='MODEL (description "Test model labels.");\nSELECT @const("labels") AS labels\n',
             expected_query_hash_changed=True,
             expected_metadata_changed=False,
         ),
@@ -474,7 +476,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             changed_declaration=(
                 'CONSTANT (name countries, value ["GB", "FR"], render_as array);\n'
             ),
-            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            model_sql='MODEL (description "Test model.");\nSELECT @const("countries") AS countries\n',
             expected_query_hash_changed=True,
             expected_metadata_changed=False,
         ),
@@ -483,11 +485,13 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["GB", "HK"]);\n',
-            model_sql="MODEL ();\nSELECT 1 AS value\n",
+            model_sql="MODEL (description 'Test model countries.');\nSELECT 1 AS value\n",
             expected_query_hash_changed=False,
             expected_metadata_changed=False,
             additional_files={
-                "models/z_consumer.sql": ('MODEL ();\nSELECT @const("countries") AS countries\n')
+                "models/z_consumer.sql": (
+                    'MODEL (description "Test model z_consumer.");\nSELECT @const("countries") AS countries\n'
+                )
             },
         ),
         DeclarationFingerprintTestCase(
@@ -496,7 +500,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             initial_declaration="ENUM (name state, members [OPEN]);\n",
             changed_declaration="ENUM (name state, members [OPEN, CLOSED]);\n",
             model_sql="""
-MODEL (
+MODEL (description "Test model state.",
   contract enforced,
   columns (state (type state)),
 );
@@ -547,7 +551,9 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             description="unknown enum member",
             repo_files={
                 "enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
-                "models/orders.sql": ('MODEL ();\nSELECT @enum("state").MISSING AS state\n'),
+                "models/orders.sql": (
+                    'MODEL (description "Test model orders.");\nSELECT @enum("state").MISSING AS state\n'
+                ),
             },
             expected_error_fragment="Unknown member 'MISSING' for enum 'state'",
         ),
@@ -555,29 +561,31 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             description="lowercase enum member access",
             repo_files={
                 "enums/state.sql": 'ENUM (name state, members (DELIVERY "active"));',
-                "models/orders.sql": ('MODEL ();\nSELECT @enum("state").active AS state\n'),
+                "models/orders.sql": (
+                    'MODEL (description "Test model orders.");\nSELECT @enum("state").active AS state\n'
+                ),
             },
             expected_error_fragment="Unknown member 'active' for enum 'state'",
         ),
         CompileDeclarationsErrorTestCase(
             description="unknown constant",
             repo_files={
-                "models/orders.sql": 'MODEL ();\nSELECT @const("missing") AS value\n',
+                "models/orders.sql": 'MODEL (description "Test model orders.");\nSELECT @const("missing") AS value\n',
             },
             expected_error_fragment="Unknown constant 'missing'",
         ),
         CompileDeclarationsErrorTestCase(
             description="foreign private constant",
             repo_files={
-                "models/a.sql": "MODEL (constants (_limit 7));\nSELECT 1 AS value\n",
-                "models/b.sql": 'MODEL ();\nSELECT @const("_limit") AS value\n',
+                "models/a.sql": "MODEL (description 'Test model a.', constants (_limit 7));\nSELECT 1 AS value\n",
+                "models/b.sql": 'MODEL (description "Test model b.");\nSELECT @const("_limit") AS value\n',
             },
             expected_error_fragment="Constant '_limit' is known but inaccessible",
         ),
         CompileDeclarationsErrorTestCase(
             description="non-private model constant name",
             repo_files={
-                "models/orders.sql": "MODEL (constants (limit 7));\nSELECT 1 AS value\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.', constants (limit 7));\nSELECT 1 AS value\n",
             },
             expected_error_fragment=(
                 "Invalid model-local constant identity 'limit'.*use snake_case '_limit'"
@@ -588,7 +596,7 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             repo_files={
                 "enums/one.sql": "ENUM (name state, members [OPEN]);",
                 "enums/nested/two.sql": "ENUM (name state, members [CLOSED]);",
-                "models/orders.sql": "MODEL ();\nSELECT 1 AS value\n",
+                "models/orders.sql": "MODEL (description 'Test model orders.');\nSELECT 1 AS value\n",
             },
             expected_error_fragment="Duplicate declaration 'enum:state'",
         ),
@@ -596,7 +604,7 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             description="nested collection cannot render as a portable value list",
             repo_files={
                 "constants/groups.sql": "CONSTANT (name groups, value [[1], [2]]);",
-                "models/orders.sql": 'MODEL ();\nSELECT @const("groups") AS groups\n',
+                "models/orders.sql": 'MODEL (description "Test model orders.");\nSELECT @const("groups") AS groups\n',
             },
             expected_error_fragment=(
                 "constants/groups.sql constant 'groups'.*adapter 'duckdb'.*value_list"

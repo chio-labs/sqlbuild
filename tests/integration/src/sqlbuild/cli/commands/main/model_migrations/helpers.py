@@ -96,6 +96,7 @@ RAW_SOURCES_YML: str = dedent(
     """
     sources:
       - name: raw_orders
+        description: Test source raw_orders.
         schema: main
         table: raw_orders
     """
@@ -104,7 +105,7 @@ RAW_SOURCES_YML: str = dedent(
 
 _FORCE_LINES: dict[bool, str] = {True: "  migrate_force true,\n", False: ""}
 _DAILY_TOTALS_HEADER: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized incremental,\n"
     "  incremental_strategy delete_insert,\n"
     "  unique_key order_date,\n"
@@ -116,7 +117,7 @@ _DAILY_TOTALS_HEADER: str = (
     ");\n\n"
 )
 _SNAPSHOT_SQL: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized snapshot,\n"
     "  unique_key [order_id],\n"
     "  snapshot_strategy timestamp,\n"
@@ -151,7 +152,7 @@ def incremental_orders_sql(
         migrate_from, f'  migrate_from "{migrate_from}",\n'
     ) + _FORCE_LINES.get(migrate_force, "")
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  unique_key order_id,\n"
@@ -529,7 +530,7 @@ def enriched_view_sql(*, upstream: str, alias: str, materialized: str = "view") 
     """Return a view or table that selects every order column through a table alias."""
 
     return (
-        f"MODEL (materialized {materialized});\n\n"
+        f"MODEL (description 'Test model.', materialized {materialized});\n\n"
         f"SELECT {alias}.order_id, {alias}.order_date, {alias}.amount_cents "
         f'FROM __ref("{upstream}") AS {alias}\n'
     )

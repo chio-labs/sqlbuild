@@ -1,4 +1,5 @@
 MODEL (
+  description "Test model typed_orders.",
   materialized view,
   contract enforced,
   columns (

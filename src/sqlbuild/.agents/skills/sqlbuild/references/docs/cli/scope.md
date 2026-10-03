@@ -150,7 +150,7 @@ def formatted_order_total(expression: str) -> str:
 
 ```sql
 -- models/commerce/orders.sql
-MODEL();
+MODEL(description "Orders");
 
 SELECT @formatted_order_total("subtotal") AS total
 ```

@@ -43,6 +43,7 @@ from sqlbuild.executor.load.models import LoaderContext
 
 @loader
 def raw_customers(ctx: LoaderContext) -> list[dict[str, object]]:
+    """Load customers from the CRM export."""
     return [
         {"id": 1, "name": "Leslie Knope", "email": "leslie@pawnee.gov"},
         {"id": 2, "name": "Ron Swanson", "email": "ron@pawnee.gov"},
@@ -58,6 +59,7 @@ Declare a managed source in `sources/*.yml`. A managed source is bound to the lo
 ```yaml
 sources:
   - name: raw_customers
+    description: Customers
     managed: true
     write_strategy: table
     columns:
@@ -88,6 +90,7 @@ Full replace. The target is dropped and recreated from the loader output on ever
 ```yaml
 sources:
   - name: raw_countries
+    description: Countries
     managed: true
     write_strategy: table
     columns:
@@ -104,6 +107,7 @@ Insert all returned rows into the target. No deduplication.
 ```yaml
 sources:
   - name: raw_webhook_events
+    description: Webhook events
     managed: true
     write_strategy: append
     columns:
@@ -120,6 +124,7 @@ Delete rows in the cursor range, then insert replacements. Requires `cursor_colu
 ```yaml
 sources:
   - name: raw_order_events
+    description: Order events
     managed: true
     write_strategy: delete_insert
     cursor_column: event_at
@@ -137,6 +142,7 @@ The loader receives `ctx.current_cursor_value` with the current `MAX(cursor_colu
 ```python
 @loader
 def raw_order_events(ctx: LoaderContext) -> list[dict[str, object]]:
+    """Order events."""
     if ctx.current_cursor_value is None:
         return fetch_all_events()
     return fetch_events_since(ctx.current_cursor_value)
@@ -149,6 +155,7 @@ Upsert based on `unique_key`. Requires both `unique_key` and `cursor_column`.
 ```yaml
 sources:
   - name: raw_customers
+    description: Customers
     managed: true
     write_strategy: merge
     unique_key: customer_id
@@ -171,6 +178,7 @@ If a loader returns `None`, SQLBuild skips its row-writing pipeline. The loader 
 ```python
 @loader
 def raw_status(ctx: LoaderContext) -> None:
+    """Load the order status lookup."""
     ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.destination}")
     ctx.execute_sql(
         f"CREATE TABLE {ctx.destination} AS "
@@ -183,6 +191,7 @@ The source is still declared as managed, just without a `write_strategy`:
 ```yaml
 sources:
   - name: raw_status
+    description: Order status lookup
     managed: true
     columns:
       - name: status_id
@@ -253,6 +262,7 @@ from sqlbuild.executor.load.models import LoaderContext
 
 @loader
 def raw_accounts(ctx: LoaderContext) -> list[dict[str, object]]:
+    """Load customer accounts."""
     return [
         {"account_id": 1, "account_name": "Pawnee Parks"},
         {"account_id": 2, "account_name": "Eagleton"},
@@ -260,6 +270,7 @@ def raw_accounts(ctx: LoaderContext) -> list[dict[str, object]]:
 
 @loader(depends_on=[raw_accounts])
 def raw_account_metrics(ctx: LoaderContext) -> list[dict[str, object]]:
+    """Account metrics."""
     accounts = ctx.loader(raw_accounts)
     rows = ctx.query(f"SELECT account_id FROM {accounts.destination}")
     return [
@@ -277,6 +288,7 @@ Intermediate loaders (those referenced only via `depends_on`, with no managed so
 ```python
 @loader(destination="staging.shared_accounts")
 def raw_accounts(ctx: LoaderContext):
+    """Load customer accounts."""
     ...
 ```
 
@@ -293,6 +305,7 @@ The `@loader` decorator accepts optional parameters that can also be set in the 
 | `unique_key` | Column(s) used as the merge key (string or list of strings) |
 | `columns` | Column specifications with name, type, nullable, and description |
 | `contract` | `enforced` or `none` |
+| `description` | What the loaded rows are; defaults to the function docstring. Required unless the source YAML entry has a `description` ([Descriptions](../models/configuration.md#descriptions)) |
 
 ## Auto-load during builds
 

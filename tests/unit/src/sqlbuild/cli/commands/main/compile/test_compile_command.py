@@ -280,7 +280,7 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
                 "  Wrote: target/compiled/",
             ),
             model_sql=(
-                "MODEL (\n"
+                "MODEL (description 'Test model.',\n"
                 "  materialized view,\n"
                 "  columns (\n"
                 "    order_id (),\n"
@@ -305,7 +305,7 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
                 "  = help: change the declared type or cast the expression explicitly",
             ),
             model_sql=(
-                "MODEL (\n"
+                "MODEL (description 'Test model.',\n"
                 "  materialized view,\n"
                 "  columns (\n"
                 "    amount_cents (type INTEGER),\n"
@@ -327,7 +327,7 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
                 "  = help: add the column to MODEL(columns) or remove it from the SELECT list",
             ),
             model_sql=(
-                "MODEL (\n"
+                "MODEL (description 'Test model.',\n"
                 "  materialized view,\n"
                 "  contract enforced,\n"
                 "  columns (\n"
@@ -385,7 +385,7 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
             expected_line=5,
             expected_column=5,
             model_sql=(
-                "MODEL (\n"
+                "MODEL (description 'Test model.',\n"
                 "  materialized view,\n"
                 "  columns (\n"
                 "    order_id (),\n"
@@ -468,7 +468,7 @@ def test_given_explicit_column_contract_mode_when_compiling_column_audit_then_au
         encoding="utf-8",
     )
     (project_dir / "models" / "orders.sql").write_text(
-        "MODEL (\n"
+        "MODEL (description 'Test model orders.',\n"
         "  materialized view,\n"
         "  columns (\n"
         "    customer_id (audits [not_null]),\n"

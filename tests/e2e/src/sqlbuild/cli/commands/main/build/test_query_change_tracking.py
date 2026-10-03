@@ -58,6 +58,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         schema: main
                         table: raw_orders
                     """
@@ -65,7 +66,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model stg_orders.",
                       materialized view
                     );
 
@@ -80,7 +81,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model fact_orders.",
                       materialized table
                     );
 

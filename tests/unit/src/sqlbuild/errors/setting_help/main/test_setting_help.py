@@ -15,6 +15,7 @@ from sqlbuild.errors.setting_help.main.join_helps import join_helps
 from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
 from sqlbuild.errors.setting_help.main.setting_help import setting_help
 from sqlbuild.errors.setting_help.main.setting_note import setting_note
+from sqlbuild.errors.setting_help.main.snippet_help import snippet_help
 from tests.unit.src.sqlbuild.errors.setting_help.main._test_types import (
     SettingCatalogueTestCase,
     SettingHelpTestCase,
@@ -77,6 +78,17 @@ from tests.unit.src.sqlbuild.errors.setting_help.main._test_types import (
             model_header_help(purpose="to skip it", entry="sql_analysis false"),
             "to skip it, add this to the MODEL header:\n            MODEL (\n"
             "              sql_analysis false,\n              ...\n            );",
+        ),
+        SettingHelpTestCase(
+            "a snippet help shows every line to write",
+            snippet_help(
+                purpose="to describe it",
+                target="add this to seeds/lookups.yml",
+                lines=("- name: product_types", "  description: Product type catalogue"),
+            ),
+            "to describe it, add this to seeds/lookups.yml:\n"
+            "            - name: product_types\n"
+            "              description: Product type catalogue",
         ),
         SettingHelpTestCase(
             "several helps keep one label each",

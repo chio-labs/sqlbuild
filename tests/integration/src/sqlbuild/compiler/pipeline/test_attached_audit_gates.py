@@ -25,7 +25,7 @@ _PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "gate_demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
     ),
-    "models/valid_codes.sql": "MODEL (materialized table);\nSELECT 'A' AS code\n",
+    "models/valid_codes.sql": "MODEL (description 'Test model valid_codes.', materialized table);\nSELECT 'A' AS code\n",
     "audits/singular/reconcile.sql": (
         'AUDIT ();\nSELECT o.* FROM __ref("orders") o JOIN __ref("valid_codes") v USING (code)\n'
     ),
@@ -37,13 +37,13 @@ _PROJECT_FILES: dict[str, str] = {
     [
         SingularAuditAttachmentIntegrationTestCase(
             description="unrelated models without a gate edge run the singular audit at the end",
-            orders_header="MODEL (materialized table);",
+            orders_header="MODEL (description 'Test model.', materialized table);",
             generic_audit_files={},
             expected_attachment=("end", None),
         ),
         SingularAuditAttachmentIntegrationTestCase(
             description="an attached audit's gate edge does not move the singular audit",
-            orders_header="MODEL (materialized table, audits [order_check]);",
+            orders_header="MODEL (description 'Test model.', materialized table, audits [order_check]);",
             generic_audit_files=_ORDER_CHECK,
             expected_attachment=("end", None),
         ),

@@ -53,7 +53,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             edit=lambda root: write_project_file(
                 root,
                 "models/marts/order_quantities.sql",
-                'MODEL ();\n\nSELECT order_id, quantity FROM __ref("stg_orders")\n',
+                'MODEL (description "Test model order_quantities.");\n\nSELECT order_id, quantity FROM __ref("stg_orders")\n',
             ),
         ),
         CompileCacheInvalidationTestCase(

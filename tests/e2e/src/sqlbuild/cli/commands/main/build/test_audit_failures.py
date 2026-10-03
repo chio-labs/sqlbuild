@@ -61,7 +61,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/orders.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy merge,
                   unique_key [id],
@@ -135,7 +135,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/orders.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized incremental,
                   incremental_strategy merge,
                   unique_key [id],
@@ -210,7 +210,7 @@ def test_given_audit_failure_projects_when_running_build_then_cli_reports_failur
                     '[connection]\ndatabase = "measurement.duckdb"\n'
                 ),
                 "models/orders.sql": (
-                    "MODEL (materialized table, audits [row_rate ("
+                    "MODEL (description 'Test model orders.', materialized table, audits [row_rate ("
                     "thresholds (error (below 90)))]) ; SELECT 1 AS order_id"
                 ),
                 "audits/generic/row_rate.sql": (
@@ -229,8 +229,12 @@ def test_given_audit_failure_projects_when_running_build_then_cli_reports_failur
                     'name = "measurement_audit"\nadapter = "duckdb"\n'
                     '[connection]\ndatabase = "measurement.duckdb"\n'
                 ),
-                "models/orders.sql": ("MODEL (materialized table); SELECT 1 AS order_id"),
-                "models/customers.sql": ("MODEL (materialized table); SELECT 1 AS order_id"),
+                "models/orders.sql": (
+                    "MODEL (description 'Test model orders.', materialized table); SELECT 1 AS order_id"
+                ),
+                "models/customers.sql": (
+                    "MODEL (description 'Test model customers.', materialized table); SELECT 1 AS order_id"
+                ),
                 "audits/singular/rate.sql": (
                     "AUDIT (evaluation measurement, value rate, "
                     "thresholds (error (below 90))); "

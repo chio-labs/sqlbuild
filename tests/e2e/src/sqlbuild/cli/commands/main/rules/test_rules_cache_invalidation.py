@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import RulesCacheEditCase
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
     INCREMENTAL_RULES_PROJECT,
+    move_order_totals_description_to_path_defaults,
     rule_cache_counts,
     rules_compile_outcome,
     write_project_files,
@@ -37,11 +38,34 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             ),
         ),
         RulesCacheEditCase(
+            "model_description_edited",
+            lambda root: replace_project_text(
+                root,
+                "models/staging/stg_orders.sql",
+                "Test model stg_orders.",
+                "Staged order rows.",
+            ),
+        ),
+        RulesCacheEditCase(
+            "model_description_removed",
+            lambda root: replace_project_text(
+                root,
+                "models/marts/order_totals.sql",
+                "MODEL (description 'Test model order_totals.',\n",
+                "MODEL (\n",
+            ),
+            expected_diagnostics_fragment='"code": "P010"',
+        ),
+        RulesCacheEditCase(
+            "model_description_moved_to_path_defaults",
+            move_order_totals_description_to_path_defaults,
+        ),
+        RulesCacheEditCase(
             "model_added",
             lambda root: write_project_file(
                 root,
                 "models/marts/order_counts.sql",
-                'MODEL ();\n\nSELECT order_id FROM __ref("stg_orders")\n',
+                'MODEL (description "Test model order_counts.");\n\nSELECT order_id FROM __ref("stg_orders")\n',
             ),
         ),
         RulesCacheEditCase(
@@ -131,6 +155,7 @@ def test_given_warm_rules_cache_when_one_input_changes_then_compile_equals_uncac
     rewarmed: tuple[int, str, str] = rules_compile_outcome(project_dir)
 
     assert edited[0] == test_case.expected_exit_code
+    assert test_case.expected_diagnostics_fragment in edited[1]
     assert edited == oracle
     assert rewarmed == oracle
     assert rule_cache_counts(project_dir)[1] == 0

@@ -46,7 +46,7 @@ def order_quality():
     ]
 """,
             "models/orders.sql": """
-MODEL (audit_factories [order_quality]);
+MODEL (description "Test model orders.", audit_factories [order_quality]);
 SELECT 10 AS amount
 """,
         },
@@ -57,7 +57,7 @@ SELECT 10 AS amount
         tmp_path,
         {
             "models/orders.sql": """
-MODEL (
+MODEL (description "Test model orders.",
   audits [
     expression_is_true (name "positive_amount", expression "amount > 0", severity error),
     expression_is_true (name "bounded_amount", expression "amount < 1000", severity warn),

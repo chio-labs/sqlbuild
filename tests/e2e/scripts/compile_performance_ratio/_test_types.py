@@ -13,3 +13,13 @@ class CompilePerformanceRatioTestCase:
     max_ratio: str
     expected_return_code: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PerSideCompilePerformanceRatioTestCase:
+    description: str
+    base_generator: str
+    expected_return_code: int
+    expected_fragments: tuple[str, ...]
+    expected_base_projects: tuple[str, ...]
+    expected_head_projects: tuple[str, ...]

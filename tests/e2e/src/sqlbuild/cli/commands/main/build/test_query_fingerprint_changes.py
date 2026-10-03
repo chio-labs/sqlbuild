@@ -26,18 +26,18 @@ _PROJECT_FILES: dict[str, str] = {
         '[defaults]\nmaterialized = "table"\n'
     ),
     "sources/raw.yml": (
-        "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    schema: main\n    table: raw_orders\n"
     ),
     "functions/sql/is_large_order.sql": (
-        "FUNCTION (arguments (amount_cents INTEGER), returns BOOLEAN);\n\namount_cents > 100\n"
+        "FUNCTION (description 'Test function is_large_order.', arguments (amount_cents INTEGER), returns BOOLEAN);\n\namount_cents > 100\n"
     ),
     "models/stg_orders.sql": (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model stg_orders.', materialized table);\n\n"
         "SELECT id AS order_id, amount_cents, 'web  order' AS channel\n"
         'FROM __source("raw_orders")\n'
     ),
     "models/large_orders.sql": (
-        "MODEL (materialized table);\n\n"
+        "MODEL (description 'Test model large_orders.', materialized table);\n\n"
         "SELECT order_id, is_large_order(amount_cents) AS is_large\n"
         'FROM __ref("stg_orders")\n'
     ),

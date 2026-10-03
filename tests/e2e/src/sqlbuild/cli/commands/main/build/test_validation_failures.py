@@ -36,7 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "seed_raw_data.sql": "",
                 "models/orders.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model orders.",
                   materialized table,
                   pre_hooks [inline_sql('THIS IS NOT VALID SQL')]
                 );
@@ -89,6 +89,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     schema: main
                     table: raw_orders
                 """
@@ -96,7 +97,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                MODEL (materialized view);
+                MODEL (description "Test model stg_orders.", materialized view);
 
                 SELECT
                   id AS order_id,
@@ -107,7 +108,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                MODEL (materialized table);
+                MODEL (description "Test model fact_orders.", materialized table);
 
                 SELECT order_id, ordered_at FROM __ref("stg_orders")
                 """
@@ -115,7 +116,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/customer_status_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_status_snapshot.",
                   materialized incremental,
                   incremental_strategy merge,
                   unique_key [order_id],
@@ -157,13 +158,14 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 sources:
                   - name: raw_orders
+                    description: Test source raw_orders.
                     expression: SELECT FROM
                 """
                 ).strip()
                 + "\n",
                 "models/orders.sql": dedent(
                     """
-                MODEL (materialized table);
+                MODEL (description "Test model orders.", materialized table);
 
                 SELECT * FROM __source("raw_orders")
                 """

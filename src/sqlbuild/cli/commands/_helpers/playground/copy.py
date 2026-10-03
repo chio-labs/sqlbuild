@@ -56,6 +56,7 @@ The project includes a task feeding a loader, a model feeding Python assets thro
 
 _PYTHON_NODES_SOURCES_YML: str = """sources:
   - name: raw_orders
+    description: Raw orders loaded by the raw_orders Python loader
     managed: true
     write_strategy: table
     columns:
@@ -70,6 +71,7 @@ _PYTHON_NODES_SOURCES_YML: str = """sources:
 """
 
 _PYTHON_NODES_FACT_ORDERS_SQL: str = """MODEL (
+  description "One row per order with its customer and amount",
   materialized table,
   columns (
     order_id (nullable false, audits [not_null, unique]),

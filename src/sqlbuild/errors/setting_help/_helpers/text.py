@@ -61,5 +61,10 @@ def model_header_help(*, purpose: str, entry: str, follow_up: str | None) -> str
     return "\n".join(lines)
 
 
+def snippet_help(*, purpose: str, target: str, lines: tuple[str, ...]) -> str:
+    snippet: str = "\n".join(f"{SETTING_SNIPPET_INDENT}{line}" for line in lines)
+    return f"{purpose}, {target}:\n{snippet}"
+
+
 def join_helps(helps: tuple[str, ...]) -> str:
     return ADDITIONAL_HELP_SEPARATOR.join(helps)

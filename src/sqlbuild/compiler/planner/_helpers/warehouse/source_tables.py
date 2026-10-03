@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -13,6 +12,7 @@ from sqlbuild.adapter.contract.types import RelationReadStatus
 from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.main._yaml_entry_line import yaml_entry_line
 from sqlbuild.compiler.planner._helpers.resolve.sources import render_source_read_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
@@ -172,22 +172,5 @@ def _missing_source_tables_help(*, missing: tuple[_MissingSourceTable, ...]) -> 
 
 def _declaration_location(source: CompiledSource) -> str:
     path: str = source.source_file.relative_path.as_posix()
-    line: int | None = _declaration_line(contents=source.source_file.contents, name=source.name)
+    line: int | None = yaml_entry_line(contents=source.source_file.contents, name=source.name)
     return path if line is None else f"{path}:{line}"
-
-
-def _declaration_line(*, contents: str, name: str) -> int | None:
-    pattern: re.Pattern[str] = re.compile(
-        rf"^(?P<indent>\s*)-\s*name:\s*(?P<quote>['\"]?){re.escape(name)}(?P=quote)\s*(#.*)?$"
-    )
-    best: tuple[int, int] | None = None
-    index: int
-    line: str
-    for index, line in enumerate(contents.splitlines(), start=1):
-        match: re.Match[str] | None = pattern.match(line)
-        if match is None:
-            continue
-        indent: int = len(match.group("indent"))
-        if best is None or indent < best[0]:
-            best = (indent, index)
-    return None if best is None else best[1]

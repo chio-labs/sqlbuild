@@ -15,6 +15,7 @@ To declare a migration by hand, add `migrate_from` to the renamed model's header
 
 ```sql
 MODEL (
+  description "One row per order",
   materialized incremental,
   migrate_from stg_orders,
   cursor order_date,

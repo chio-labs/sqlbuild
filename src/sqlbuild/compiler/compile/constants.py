@@ -15,6 +15,39 @@ MACRO_GENERATED_REFERENCE_CODE: str = "P006"
 HOOK_READS_OWN_DEPENDANT_CODE: str = "P007"
 HARD_CODED_PROJECT_RELATION_CODE: str = "P008"
 UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: str = "P009"
+MISSING_DESCRIPTION_CODE: str = "P010"
+DESCRIPTION_REQUIRED_INPUT_KINDS: dict[str, str] = {
+    "model_files": "model",
+    "scenario_files": "scenario",
+    "seed_files": "seed",
+    "source_files": "source",
+    "sql_function_files": "function",
+    "python_function_files": "function",
+    "sql_hook_files": "hook",
+    "hook_functions": "hook",
+    "loader_functions": "loader",
+    "task_functions": "task",
+    "asset_functions": "asset",
+    "check_functions": "check",
+    "providers": "provider",
+}
+DESCRIPTION_EXEMPT_INPUTS: dict[str, str] = {
+    "project_config": "project configuration, not a named resource",
+    "local_config": "local configuration, not a named resource",
+    "project_dir": "project location, not a named resource",
+    "adapter_file": "project adapter override, not a named resource",
+    "enum_files": "typed value declarations used inside SQL, not graph resources",
+    "constant_files": "typed value declarations used inside SQL, not graph resources",
+    "macro_files": "SQL helpers expanded inline, not graph resources",
+    "model_schema_files": "shared column schemas; models that use one are checked",
+    "schema_files": "seed YAML declarations; each declared seed is checked",
+    "test_files": "SQL unit tests are named by their subject and expected behaviour",
+    "audit_files": "audits are assertions named by what they check",
+    "audit_factories": "generate audits, which are assertions",
+    "materialization_files": "materialization strategies, not graph resources",
+    "event_exporters": "runtime event outputs, not graph resources",
+    "command_output_sinks": "runtime command outputs, not graph resources",
+}
 SQL_ANALYSIS_OPT_OUT_ENTRY: str = "sql_analysis false"
 HOOK_DIRECTORY_NAME: str = "hooks"
 MODEL_DIRECTORY_NAME: str = "models"

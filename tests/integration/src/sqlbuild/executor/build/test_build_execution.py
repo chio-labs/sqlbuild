@@ -54,7 +54,7 @@ _PROJECT_YML_IMMEDIATE: str = (
 
 _RAW_ORDERS_WITH_NOT_NULL_AUDIT: str = (
     "sources:\n"
-    "  - name: raw_orders\n"
+    "  - name: raw_orders\n    description: Test source raw_orders.\n"
     "    schema: main\n"
     "    table: raw_orders\n"
     "    columns:\n"
@@ -64,10 +64,10 @@ _RAW_ORDERS_WITH_NOT_NULL_AUDIT: str = (
 )
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
 _TABLE_WITH_ID_NOT_NULL_AUDIT: str = (
-    "MODEL (materialized table, columns (id (audits [not_null])));\n\n"
+    "MODEL (description 'Test model.', materialized table, columns (id (audits [not_null])));\n\n"
 )
 _VIEW_WITH_ID_NOT_NULL_AUDIT: str = (
-    "MODEL (materialized view, columns (id (audits [not_null])));\n\n"
+    "MODEL (description 'Test model.', materialized view, columns (id (audits [not_null])));\n\n"
 )
 
 
@@ -104,14 +104,14 @@ _FAILING_TEST_SQL: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "functions/sql/is_positive_int.sql": (
-                    "FUNCTION (\n"
+                    "FUNCTION (description 'Test function is_positive_int.',\n"
                     "  arguments (a_string VARCHAR),\n"
                     "  returns BOOLEAN\n"
                     ");\n\n"
                     "regexp_matches(a_string, '^[0-9]+$')"
                 ),
                 "models/validated_orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model validated_orders.', materialized table);\n\n"
                     'SELECT value, __udf("is_positive_int")(value) AS is_positive '
                     "FROM (VALUES ('123'), ('abc')) AS input(value)"
                 ),
@@ -143,10 +143,10 @@ _FAILING_TEST_SQL: str = (
                     "    runtime_version='3.11',\n"
                     ")\n"
                     "def main(a_string):\n"
-                    "    return bool(a_string and a_string.isdigit())\n"
+                    "    '''Test function main.'''\n    return bool(a_string and a_string.isdigit())\n"
                 ),
                 "models/validated_orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model validated_orders.', materialized table);\n\n"
                     'SELECT value, __udf("is_positive_int")(value) AS is_positive '
                     "FROM (VALUES ('123'), ('abc')) AS input(value)"
                 ),
@@ -181,10 +181,10 @@ _FAILING_TEST_SQL: str = (
                     "    runtime_version='3.11',\n"
                     ")\n"
                     "def main(a_string):\n"
-                    "    return bool(a_string and a_string.isdigit())\n"
+                    "    '''Test function main.'''\n    return bool(a_string and a_string.isdigit())\n"
                 ),
                 "models/validated_orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model validated_orders.', materialized table);\n\n"
                     'SELECT value, __udf("is_positive_int")(value) AS is_positive '
                     "FROM (VALUES ('123'), ('abc')) AS input(value)"
                 ),
@@ -209,9 +209,9 @@ _FAILING_TEST_SQL: str = (
             description="two independent models both succeed",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
-                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
+                "models/orders.sql": "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
                 "models/payments.sql": (
-                    "MODEL (materialized table);\n\nSELECT 10 AS payment_id, 500 AS amount"
+                    "MODEL (description 'Test model payments.', materialized table);\n\nSELECT 10 AS payment_id, 500 AS amount"
                 ),
             },
             expected_status=BuildStatus.SUCCESS,
@@ -230,10 +230,10 @@ _FAILING_TEST_SQL: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 42 AS id, 'bob' AS name"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT 42 AS id, 'bob' AS name"
                 ),
                 "models/orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model orders.', materialized table);\n\n"
                     'SELECT id, name FROM __ref("stg_orders") WHERE id = 42'
                 ),
             },
@@ -261,7 +261,7 @@ _FAILING_TEST_SQL: str = (
                     'schema = "dev_schema"\n'
                 ),
                 "sqlbuild_local.toml": 'target = "dev"\n',
-                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
+                "models/orders.sql": "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
             },
             expected_status=BuildStatus.SUCCESS,
             expected_success_count=1,
@@ -309,7 +309,7 @@ _FAILING_TEST_SQL: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (materialized table, columns (id (audits [unique])));\n\n"
+                    "MODEL (description 'Test model orders.', materialized table, columns (id (audits [unique])));\n\n"
                     "SELECT * FROM (VALUES (1), (NULL), (NULL)) AS input(id)"
                 ),
             },
@@ -325,7 +325,7 @@ _FAILING_TEST_SQL: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (materialized table, columns (status (audits [accepted_values "
+                    "MODEL (description 'Test model orders.', materialized table, columns (status (audits [accepted_values "
                     '(values ["placed", "completed"])])));\n\n'
                     "SELECT * FROM (VALUES ('placed'), ('completed'), (NULL)) AS input(status)"
                 ),
@@ -344,9 +344,9 @@ _FAILING_TEST_SQL: str = (
             description="built-in relationships audit allows matching referenced values",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
-                "models/customers.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
+                "models/customers.sql": "MODEL (description 'Test model customers.', materialized table);\n\nSELECT 1 AS id",
                 "models/orders.sql": (
-                    "MODEL (materialized table, columns (customer_id (audits [relationships "
+                    "MODEL (description 'Test model orders.', materialized table, columns (customer_id (audits [relationships "
                     '(to __ref("customers"), field id)])));\n\n'
                     'SELECT id AS customer_id FROM __ref("customers") UNION ALL SELECT NULL'
                 ),
@@ -379,7 +379,7 @@ _FAILING_TEST_SQL: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML_WARN,
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
                 "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
             },
@@ -394,8 +394,12 @@ _FAILING_TEST_SQL: str = (
             description="end audit warn succeeds build with warning",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML_WARN,
-                "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
-                "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 2 AS payment_id"),
+                "models/orders.sql": (
+                    "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS id"
+                ),
+                "models/payments.sql": (
+                    "MODEL (description 'Test model payments.', materialized table);\n\nSELECT 2 AS payment_id"
+                ),
                 "audits/singular/cross_check.sql": (
                     'AUDIT ();\n\nSELECT o.id FROM __ref("orders") o CROSS JOIN __ref("payments") p'
                 ),
@@ -414,9 +418,11 @@ _FAILING_TEST_SQL: str = (
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
-                "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
+                "models/payments.sql": (
+                    "MODEL (description 'Test model payments.', materialized table);\n\nSELECT 1 AS payment_id"
+                ),
                 "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
                 "audits/singular/cross_check.sql": (
                     'AUDIT ();\n\nSELECT o.id FROM __ref("orders") o CROSS JOIN __ref("payments") p'
@@ -459,7 +465,7 @@ _FAILING_TEST_SQL: str = (
             description="build writes fingerprints when query tracking is enabled",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
-                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
+                "models/orders.sql": "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS id",
             },
             expected_status=BuildStatus.SUCCESS,
             expected_success_count=1,
@@ -516,10 +522,10 @@ def test_given_build_plan_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
+                    "MODEL (description 'Test model stg_orders.', materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
                 ),
                 "models/dim_orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id, name FROM __ref("stg_orders")'
+                    'MODEL (description "Test model dim_orders.", materialized table);\n\nSELECT id, name FROM __ref("stg_orders")'
                 ),
             },
             expected_status=BuildStatus.SUCCESS,
@@ -573,10 +579,10 @@ def test_given_view_build_plan_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/bad_view.sql": (
-                    "MODEL (materialized view);\n\nSELECT * FROM nonexistent_source_table"
+                    "MODEL (description 'Test model bad_view.', materialized view);\n\nSELECT * FROM nonexistent_source_table"
                 ),
                 "models/downstream.sql": (
-                    'MODEL (materialized table);\n\nSELECT * FROM __ref("bad_view")'
+                    'MODEL (description "Test model downstream.", materialized table);\n\nSELECT * FROM __ref("bad_view")'
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -656,10 +662,10 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT * FROM nonexistent_table"
                 ),
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __ref("stg_orders")'
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -677,7 +683,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (\n"
+                    "MODEL (description 'Test model orders.',\n"
                     "  materialized table,\n"
                     "  contract enforced,\n"
                     "  columns (id (type INTEGER)),\n"
@@ -700,7 +706,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML_IMMEDIATE,
                 "models/orders.sql": (
-                    "MODEL (\n"
+                    "MODEL (description 'Test model orders.',\n"
                     "  materialized table,\n"
                     "  contract enforced,\n"
                     "  columns (id (type INTEGER)),\n"
@@ -720,7 +726,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/customer_snapshot.sql": (
-                    "MODEL (\n"
+                    "MODEL (description 'Test model customer_snapshot.',\n"
                     "  materialized snapshot,\n"
                     "  contract enforced,\n"
                     "  columns (\n"
@@ -752,7 +758,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (\n"
+                    "MODEL (description 'Test model orders.',\n"
                     "  materialized incremental,\n"
                     "  contract enforced,\n"
                     "  columns (\n"
@@ -799,10 +805,10 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
                     "    schema='udfs',\n"
                     ")\n"
                     "def main(a_string):\n"
-                    "    return bool(a_string and a_string.isdigit())\n"
+                    "    '''Test function main.'''\n    return bool(a_string and a_string.isdigit())\n"
                 ),
                 "models/validated_orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (description 'Test model validated_orders.', materialized table);\n\n"
                     'SELECT __udf("is_positive_int")('
                     "'123'"
                     ") AS is_positive"
@@ -827,13 +833,13 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT * FROM nonexistent_table"
                 ),
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __ref("stg_orders")'
                 ),
                 "models/payments.sql": (
-                    "MODEL (materialized table);\n\nSELECT 99 AS payment_id, 750 AS amount"
+                    "MODEL (description 'Test model payments.', materialized table);\n\nSELECT 99 AS payment_id, 750 AS amount"
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -868,7 +874,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (materialized table, columns (id (audits [unique])));\n\n"
+                    "MODEL (description 'Test model orders.', materialized table, columns (id (audits [unique])));\n\n"
                     "SELECT * FROM (VALUES (1), (1), (NULL)) AS input(id)"
                 ),
             },
@@ -883,7 +889,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (materialized table, columns (status (audits [accepted_values "
+                    "MODEL (description 'Test model orders.', materialized table, columns (status (audits [accepted_values "
                     '(values ["placed", "completed"])])));\n\n'
                     "SELECT 'cancelled' AS status"
                 ),
@@ -898,9 +904,9 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             description="built-in relationships audit blocks missing referenced values",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
-                "models/customers.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
+                "models/customers.sql": "MODEL (description 'Test model customers.', materialized table);\n\nSELECT 1 AS id",
                 "models/orders.sql": (
-                    "MODEL (materialized table, columns (customer_id (audits [relationships "
+                    "MODEL (description 'Test model orders.', materialized table, columns (customer_id (audits [relationships "
                     '(to __ref("customers"), field id)])));\n\n'
                     'SELECT 2 AS customer_id FROM __ref("customers")'
                 ),
@@ -920,9 +926,11 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 7 AS id, 'carol' AS name"
+                    "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 7 AS id, 'carol' AS name"
                 ),
-                "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
+                "models/payments.sql": (
+                    "MODEL (description 'Test model payments.', materialized table);\n\nSELECT 1 AS payment_id"
+                ),
                 "audits/singular/cross_check.sql": (
                     'AUDIT ();\n\nSELECT o.id FROM __ref("orders") o CROSS JOIN __ref("payments") p'
                 ),
@@ -940,9 +948,11 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/aaa_broken.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                    "MODEL (description 'Test model aaa_broken.', materialized table);\n\nSELECT * FROM nonexistent_table"
                 ),
-                "models/zzz_healthy.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
+                "models/zzz_healthy.sql": (
+                    "MODEL (description 'Test model zzz_healthy.', materialized table);\n\nSELECT 1 AS id"
+                ),
             },
             fail_fast=True,
             expected_status=BuildStatus.FAILED,
@@ -956,7 +966,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
                 "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
             },
@@ -973,10 +983,10 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
+                    'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __ref("stg_orders")'
                 ),
                 "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
             },
@@ -1009,12 +1019,12 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (\n  materialized table\n"
+                    "MODEL (description 'Test model stg_orders.',\n  materialized table\n"
                     "  pre_hooks [inline_sql('SELECT * FROM missing_hook_table')]\n);\n\n"
                     "SELECT 1 AS id"
                 ),
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __ref("stg_orders")'
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -1031,12 +1041,12 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (\n  materialized table\n"
+                    "MODEL (description 'Test model stg_orders.',\n  materialized table\n"
                     "  post_hooks [inline_sql('SELECT * FROM missing_hook_table')]\n);\n\n"
                     "SELECT 88 AS id"
                 ),
                 "models/orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
+                    'MODEL (description "Test model orders.", materialized table);\n\nSELECT id FROM __ref("stg_orders")'
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -1054,10 +1064,10 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/broken_a.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_a"
+                    "MODEL (description 'Test model broken_a.', materialized table);\n\nSELECT * FROM nonexistent_a"
                 ),
                 "models/broken_b.sql": (
-                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_b"
+                    "MODEL (description 'Test model broken_b.', materialized table);\n\nSELECT * FROM nonexistent_b"
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -1115,7 +1125,7 @@ def test_given_build_plan_when_executing_then_fails(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
                 ),
                 "tests/unit/test_stg_orders.sql": _PASSING_TEST_SQL,
             },
@@ -1130,7 +1140,7 @@ def test_given_build_plan_when_executing_then_fails(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
                 ),
                 "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
             },
@@ -1147,7 +1157,7 @@ def test_given_build_plan_when_executing_then_fails(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
                 ),
                 "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
             },
@@ -1163,10 +1173,10 @@ def test_given_build_plan_when_executing_then_fails(
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
+                    "MODEL (description 'Test model stg_orders.', materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
                 ),
                 "models/dim_orders.sql": (
-                    'MODEL (materialized table);\n\nSELECT id, name FROM __ref("stg_orders")'
+                    'MODEL (description "Test model dim_orders.", materialized table);\n\nSELECT id, name FROM __ref("stg_orders")'
                 ),
                 "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
             },

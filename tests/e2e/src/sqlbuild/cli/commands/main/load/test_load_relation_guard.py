@@ -16,17 +16,17 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
 
 _SOURCES: str = (
     "sources:\n"
-    "  - name: raw_regions\n    managed: true\n    write_strategy: table\n"
-    "  - name: raw_customers\n    managed: true\n    write_strategy: table\n"
+    "  - name: raw_regions\n    description: Test source raw_regions.\n    managed: true\n    write_strategy: table\n"
+    "  - name: raw_customers\n    description: Test source raw_customers.\n    managed: true\n    write_strategy: table\n"
 )
 _LOADERS: str = (
     "from sqlbuild.loaders import loader\n\n\n"
     "@loader\n"
     "def raw_regions(ctx):\n"
-    "    return [{'id': 1}]\n\n\n"
+    "    '''Test loader raw_regions.'''\n    return [{'id': 1}]\n\n\n"
     "@loader(depends_on=[raw_regions])\n"
     "def raw_customers(ctx):\n"
-    "    table = 'raw_' + 'regions'\n"
+    "    '''Test loader raw_customers.'''\n    table = 'raw_' + 'regions'\n"
     "    ctx.query(f'SELECT count(*) FROM {table}')\n"
     "    return [{'id': 1}]\n"
 )

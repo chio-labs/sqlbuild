@@ -44,11 +44,11 @@ def test_given_cursor_families_when_compiling_then_accepts_temporal_pairs_only(
     (tmp_path / "sources").mkdir()
     (tmp_path / "models").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
-        "sources:\n  - name: orders\n    table: orders\n    contract: enforced\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    table: orders\n    contract: enforced\n"
         f"    columns:\n      - name: ordered_at\n        type: {test_case.column_type}\n"
     )
     (tmp_path / "models/recent_orders.sql").write_text(
-        "MODEL (materialized incremental, database warehouse, schema analytics, "
+        "MODEL (description 'Test model recent_orders.', materialized incremental, database warehouse, schema analytics, "
         f"incremental_strategy append, cursor ordered_at, cursor_type {test_case.cursor_type}, "
         'cursor_grain day);\nSELECT ordered_at FROM __source("orders")'
     )
@@ -83,11 +83,11 @@ def test_given_effective_target_when_binding_quotes_then_honours_session_setting
     (tmp_path / "sources").mkdir()
     (tmp_path / "models").mkdir()
     (tmp_path / "sources/orders.yml").write_text(
-        "sources:\n  - name: orders\n    table: orders\n    contract: enforced\n"
+        "sources:\n  - name: orders\n    description: Test source orders.\n    table: orders\n    contract: enforced\n"
         "    columns:\n      - name: customer\n        type: VARCHAR\n"
     )
     (tmp_path / "models/quoted_orders.sql").write_text(
-        "MODEL (materialized view, database warehouse, schema analytics);\n"
+        "MODEL (description 'Test model quoted_orders.', materialized view, database warehouse, schema analytics);\n"
         'SELECT o."customer" FROM __source("orders") o'
     )
     for _ in range(2):
@@ -138,21 +138,21 @@ def test_given_type_error_root_when_binding_dependants_then_recovers_only_poison
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        "MODEL (materialized view, contract enforced, columns (quantity (type INTEGER), "
+        "MODEL (description 'Test model orders.', materialized view, contract enforced, columns (quantity (type INTEGER), "
         "ordered_at (type TIMESTAMP)));\nSELECT CAST(1 AS INTEGER) AS quantity, "
         "CAST('2026-04-01' AS TIMESTAMP) AS ordered_at"
     )
     (tmp_path / "models/broken.sql").write_text(
-        f"MODEL (materialized view{test_case.root_contract});\nSELECT quantity + ordered_at AS total, "
+        f"MODEL (description 'Test model broken.', materialized view{test_case.root_contract});\nSELECT quantity + ordered_at AS total, "
         'ordered_at FROM __ref("orders")'
     )
     (tmp_path / "models/downstream.sql").write_text(
-        "MODEL (materialized view);\nSELECT total > ordered_at AS compared"
+        "MODEL (description 'Test model downstream.', materialized view);\nSELECT total > ordered_at AS compared"
         + test_case.independent_sql
         + ' FROM __ref("broken")'
     )
     (tmp_path / "models/final_orders.sql").write_text(
-        'MODEL (materialized view);\nSELECT compared AS final_value FROM __ref("downstream")'
+        'MODEL (description "Test model final_orders.", materialized view);\nSELECT compared AS final_value FROM __ref("downstream")'
     )
     main(["--project-dir", str(tmp_path), "compile", "--json"])
     result: dict[str, Any] = json.loads(capsys.readouterr().out)
@@ -181,11 +181,11 @@ def test_given_repetitive_sql_when_mapping_diagnostic_then_preserves_authored_sp
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
     (tmp_path / "models").mkdir()
     (tmp_path / "models/orders.sql").write_text(
-        "MODEL (materialized view);\nSELECT CAST(1 AS INTEGER) AS quantity"
+        "MODEL (description 'Test model orders.', materialized view);\nSELECT CAST(1 AS INTEGER) AS quantity"
     )
     projections: str = ",\n".join(f"quantity + {index} AS amount_{index}" for index in range(300))
     sql: str = (
-        "MODEL (materialized view);\nSELECT\n"
+        "MODEL (description 'Test model s.', materialized view);\nSELECT\n"
         + projections
         + "\nFROM __ref(\"orders\")\nWHERE quantity > TIMESTAMP '2026-04-01'"
     )
@@ -216,10 +216,10 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
     (tmp_path / "sources").mkdir()
     (tmp_path / "models").mkdir()
     source: Path = tmp_path / "sources/orders.yml"
-    declaration: str = "sources:\n  - name: orders\n    table: orders\n    contract: enforced\n    columns:\n      - name: quantity\n        type: INTEGER\n"
+    declaration: str = "sources:\n  - name: orders\n    description: Test source orders.\n    table: orders\n    contract: enforced\n    columns:\n      - name: quantity\n        type: INTEGER\n"
     source.write_text(declaration)
     (tmp_path / "models/totals.sql").write_text(
-        'MODEL (materialized view);\nSELECT quantity + 1 AS total FROM __source("orders")'
+        'MODEL (description "Test model totals.", materialized view);\nSELECT quantity + 1 AS total FROM __source("orders")'
     )
     args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
     with monkeypatch.context() as patch:
@@ -258,10 +258,10 @@ def test_given_repeated_root_messages_when_recovering_then_preserves_each_output
     )
     (tmp_path / "models").mkdir()
     files: dict[str, str] = {
-        "orders": "MODEL (materialized view, contract enforced, columns (quantity (type INTEGER), ordered_at (type TIMESTAMP)));\nSELECT CAST(1 AS INTEGER) AS quantity, CAST('2026-04-01' AS TIMESTAMP) AS ordered_at",
-        "broken": 'MODEL (materialized view, contract enforced, columns (total_a (type INTEGER), total_b (type INTEGER), ordered_at (type TIMESTAMP)));\nSELECT quantity + ordered_at AS total_a, quantity + ordered_at AS total_b, ordered_at FROM __ref("orders")',
-        "downstream": 'MODEL (materialized view);\nSELECT total_a > ordered_at AS a, total_b > ordered_at AS b FROM __ref("broken")',
-        "final_orders": 'MODEL (materialized view);\nSELECT a, b FROM __ref("downstream")',
+        "orders": "MODEL (description 'Test model.', materialized view, contract enforced, columns (quantity (type INTEGER), ordered_at (type TIMESTAMP)));\nSELECT CAST(1 AS INTEGER) AS quantity, CAST('2026-04-01' AS TIMESTAMP) AS ordered_at",
+        "broken": 'MODEL (description "Test model.", materialized view, contract enforced, columns (total_a (type INTEGER), total_b (type INTEGER), ordered_at (type TIMESTAMP)));\nSELECT quantity + ordered_at AS total_a, quantity + ordered_at AS total_b, ordered_at FROM __ref("orders")',
+        "downstream": 'MODEL (description "Test model.", materialized view);\nSELECT total_a > ordered_at AS a, total_b > ordered_at AS b FROM __ref("broken")',
+        "final_orders": 'MODEL (description "Test model.", materialized view);\nSELECT a, b FROM __ref("downstream")',
     }
     for name, sql in files.items():
         (tmp_path / "models" / f"{name}.sql").write_text(sql)
@@ -322,20 +322,20 @@ def test_given_udf_argument_columns_when_compiling_then_checks_declared_argument
     (tmp_path / "functions/sql").mkdir(parents=True)
     (tmp_path / "sources/raw.yml").write_text(
         "sources:\n"
-        "  - name: orders\n    table: orders\n    contract: enforced\n    columns:\n"
+        "  - name: orders\n    description: Test source orders.\n    table: orders\n    contract: enforced\n    columns:\n"
         "      - name: id\n        type: INTEGER\n"
         "      - name: customer_id\n        type: INTEGER\n"
         "      - name: status\n        type: VARCHAR\n"
         "      - name: amount\n        type: DOUBLE\n"
-        "  - name: customers\n    table: customers\n    contract: enforced\n    columns:\n"
+        "  - name: customers\n    description: Test source customers.\n    table: customers\n    contract: enforced\n    columns:\n"
         "      - name: id\n        type: INTEGER\n"
         "      - name: customer_name\n        type: VARCHAR\n"
     )
     (tmp_path / "functions/sql/add_one.sql").write_text(
-        "FUNCTION (\n  arguments (input_value DOUBLE),\n  returns DOUBLE,\n);\n\ninput_value + 1\n"
+        "FUNCTION (description 'Test function add_one.',\n  arguments (input_value DOUBLE),\n  returns DOUBLE,\n);\n\ninput_value + 1\n"
     )
     (tmp_path / "models/order_totals.sql").write_text(
-        f"MODEL (materialized table);\n\nSELECT {test_case.projection}\n"
+        f"MODEL (description 'Test model order_totals.', materialized table);\n\nSELECT {test_case.projection}\n"
         'FROM __source("orders") o JOIN __source("customers") c ON o.customer_id = c.id\n'
     )
     main(["--project-dir", str(tmp_path), "compile", "--no-cache", "--json"])

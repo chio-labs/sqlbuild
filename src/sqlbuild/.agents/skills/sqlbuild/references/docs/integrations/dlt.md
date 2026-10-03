@@ -49,6 +49,7 @@ dlt_sources:
           type: header_link
     resources:
       - name: raw_github_issues
+        description: Issues from the GitHub API
         write_disposition: append
         endpoint:
           path: "repos/${github_owner}/${github_repo}/issues"
@@ -69,6 +70,7 @@ dlt_sources:
       credentials: "${postgres_connection_string}"
     resources:
       - name: raw_customers
+        description: Customers from the CRM database
         table: customers
         write_disposition: merge
         primary_key: id
@@ -86,6 +88,7 @@ dlt_sources:
       bucket_url: "s3://my-bucket/events/"
     resources:
       - name: raw_events
+        description: Events from the event export files
         reader: csv
         write_disposition: append
 ```
@@ -97,6 +100,7 @@ dlt_sources:
 | Key | Description |
 |-----|-------------|
 | `name` | Source name SQLBuild exposes (referenced via `__source("name")`). Required. |
+| `description` | What the loaded rows are. Required ([Descriptions](../concepts/models/configuration.md#descriptions)). |
 | `table` | Source table to replicate (`sql_database` only). Required for that type. |
 | `endpoint` | Endpoint mapping (`rest_api` only). Required for that type. |
 | `reader` | File reader: `csv`, `jsonl`, or `parquet` (`filesystem` only). Required for that type. |
@@ -148,6 +152,7 @@ from sqlbuild.executor.load.models import LoaderContext
 
 @loader
 def raw_github_issues(ctx: LoaderContext):
+    """Github issues."""
     source = rest_api_source({
         "client": {
             "base_url": "https://api.github.com/",
@@ -182,6 +187,7 @@ Bind it to a source with `managed: true` in `sources/*.yml`:
 # sources/github.yml
 sources:
   - name: raw_github_issues
+    description: Github issues
     managed: true
     table: issues
     columns:

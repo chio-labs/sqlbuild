@@ -28,6 +28,7 @@ from sqlbuild.assets import asset, AssetContext
 
 @asset
 def orders_export(ctx: AssetContext):
+    """Orders export."""
     path = write_orders_csv()
     return ctx.result(metadata={"path": path, "rows": 1200}, materialized=True)
 ```
@@ -41,6 +42,7 @@ Assets record whether they actually produced an artifact via `materialized`:
 ```python
 @asset
 def orders_export(ctx: AssetContext):
+    """Orders export."""
     if nothing_changed():
         return ctx.result(metadata={"status": "unchanged"}, materialized=False)
     return ctx.result(metadata={"path": export()}, materialized=True)
@@ -61,6 +63,7 @@ from python.tasks.orders import export_orders
 
 @asset(depends_on=export_orders)
 def orders_dashboard(ctx):
+    """Orders dashboard."""
     result = ctx.result_of(export_orders)
     return ctx.result(metadata={"rows": result.payload["rows"]}, materialized=True)
 ```
@@ -73,6 +76,7 @@ from sqlbuild.refs import model
 
 @asset(depends_on=model("fact_orders"))
 def orders_extract(ctx):
+    """Orders extract."""
     relation = ctx.relation(model("fact_orders"))
     rows = ctx.query(f"SELECT count(*) FROM {relation}").fetchone()[0]
     return ctx.result(metadata={"rows": rows}, materialized=True)
@@ -94,6 +98,7 @@ Assets can declare a schema for catalog and lineage purposes. This does not enfo
     },
 )
 def orders_export(ctx):
+    """Orders export."""
     ...
 ```
 
@@ -112,6 +117,7 @@ from sqlbuild.retries import RetryPolicy
 
 @asset(retry=RetryPolicy(max_attempts=3, retry_on=(IOError,)))
 def export(ctx):
+    """Export the order summary."""
     if not ready():
         return ctx.skip("upstream not ready", mode="soft")  # or SkipMode.SOFT
     return ctx.result(metadata={"path": do_export()}, materialized=True)

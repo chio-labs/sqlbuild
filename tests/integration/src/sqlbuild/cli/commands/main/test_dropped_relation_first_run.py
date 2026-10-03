@@ -28,7 +28,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
 )
 
 _INCREMENTAL_SQL: str = (
-    "MODEL (\n"
+    "MODEL (description 'Test model.',\n"
     "  materialized incremental,\n"
     "  incremental_strategy delete_insert,\n"
     "  unique_key id,\n"
@@ -39,7 +39,7 @@ _INCREMENTAL_SQL: str = (
     ");\n\n"
     'SELECT id, ordered_at FROM __source("raw_orders")\n'
 )
-_TABLE_SQL: str = 'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+_TABLE_SQL: str = 'MODEL (description "Test model.", materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
 _MICROBATCH_CONCURRENCY_SETTINGS: str = (
     "\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"
 )
@@ -69,7 +69,7 @@ _BUILD_ARTIFACTS_SQL: str = (
         ),
         DroppedRelationRecoveryTestCase(
             description="view",
-            model_sql='MODEL (materialized view);\n\nSELECT id FROM __source("raw_orders")\n',
+            model_sql='MODEL (description "Test model.", materialized view);\n\nSELECT id FROM __source("raw_orders")\n',
             drop_sql="DROP VIEW main.orders",
             expected_action="create_view",
             expected_rows=((1,), (2,), (3,)),
@@ -77,7 +77,7 @@ _BUILD_ARTIFACTS_SQL: str = (
         DroppedRelationRecoveryTestCase(
             description="snapshot",
             model_sql=(
-                "MODEL (\n"
+                "MODEL (description 'Test model.',\n"
                 "  materialized snapshot,\n"
                 "  unique_key [id],\n"
                 "  snapshot_strategy timestamp,\n"

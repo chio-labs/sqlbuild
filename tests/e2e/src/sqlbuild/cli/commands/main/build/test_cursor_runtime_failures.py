@@ -36,11 +36,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     "(customer_id INTEGER, last_ordered_at TIMESTAMP);\n"
                 ),
                 "models/stg_orders.sql": (
-                    "MODEL (materialized view);\n\n"
+                    "MODEL (description 'Test model stg_orders.', materialized view);\n\n"
                     "SELECT id AS order_id, ordered_at FROM main.raw_orders\n"
                 ),
                 "models/fact_orders.sql": (
-                    "MODEL (\n"
+                    "MODEL (description 'Test model fact_orders.',\n"
                     "  materialized table,\n"
                     "  contract enforced,\n"
                     "  columns (\n"
@@ -52,7 +52,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 ),
                 "models/customer_status_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_status_snapshot.",
                   materialized incremental,
                   incremental_strategy merge,
                   unique_key [customer_id],
@@ -94,7 +94,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 ),
                 "models/customer_status_snapshot.sql": dedent(
                     """
-                MODEL (
+                MODEL (description "Test model customer_status_snapshot.",
                   materialized incremental,
                   incremental_strategy merge,
                   unique_key [customer_id],

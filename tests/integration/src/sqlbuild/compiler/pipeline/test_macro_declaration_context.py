@@ -64,7 +64,7 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
                 "def region_array(ctx) -> str:\n    return ctx.render_constant('regions')\n"
             ),
             "models/summary.sql": (
-                "MODEL (materialized view, database warehouse, schema analytics);\n\n"
+                "MODEL (description 'Test model summary.', materialized view, database warehouse, schema analytics);\n\n"
                 "SELECT @region_array() AS regions"
             ),
         },
@@ -328,7 +328,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 "    return str(ctx.constants['minimum_quantity'])\n"
             ),
             "models/summary.sql": (
-                "MODEL (materialized view, audits [minimum_quantity]);\n\n"
+                "MODEL (description 'Test model summary.', materialized view, audits [minimum_quantity]);\n\n"
                 "SELECT @minimum_quantity() AS minimum_quantity"
             ),
             "tests/unit/summary.sql": (
@@ -367,7 +367,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                     "    return str(ctx.constants['minimum_quantity'])\n"
                 ),
                 "models/products/summary.sql": (
-                    "MODEL (materialized view);\n\nSELECT @minimum_quantity() AS minimum_quantity"
+                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @minimum_quantity() AS minimum_quantity"
                 ),
             },
             expected_error_fragment="Constant 'minimum_quantity'.*is inaccessible",
@@ -424,7 +424,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                     "    return ctx.render_constant('maximum_quantity')\n"
                 ),
                 "models/summary.sql": (
-                    "MODEL (materialized view);\n\nSELECT @missing_quantity() AS maximum_quantity"
+                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @missing_quantity() AS maximum_quantity"
                 ),
             },
             expected_error_fragment=(
@@ -445,7 +445,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                     "    )\n"
                 ),
                 "models/summary.sql": (
-                    "MODEL (materialized view);\n\nSELECT @missing_status() AS status"
+                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @missing_status() AS status"
                 ),
             },
             expected_error_fragment=(

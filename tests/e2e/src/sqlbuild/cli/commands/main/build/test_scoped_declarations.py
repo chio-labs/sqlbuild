@@ -40,7 +40,7 @@ _SCOPED_PROJECT_FILES: dict[str, str] = {
     "models/marts/daily/orders.sql": _MART_MODEL,
     "models/marts/weekly/orders_weekly.sql": _MART_MODEL,
     "models/marts/_sqlbuild/schemas/order_shape.sql": (
-        "SCHEMA (name order_shape, columns (order_id (type INTEGER, nullable false)));\n"
+        "SCHEMA (description 'Test schema.', name order_shape, columns (order_id (type INTEGER, nullable false)));\n"
     ),
     "models/marts/_sqlbuild/audits/generic/order_check.sql": (
         'AUDIT ();\n\nSELECT order_id FROM __ref("@model") WHERE order_id IS NULL\n'
@@ -52,18 +52,18 @@ _SCOPED_PROJECT_FILES: dict[str, str] = {
         "WHERE w.order_id IS NULL\n"
     ),
     "models/marts/_sqlbuild/hooks/sql/record_start.sql": (
-        "HOOK ();\n\nINSERT INTO main.hook_log VALUES ('sql')\n"
+        "HOOK (description 'Test hook record_start.');\n\nINSERT INTO main.hook_log VALUES ('sql')\n"
     ),
     "models/marts/_sqlbuild/hooks/python/lifecycle.py": (
         "from sqlbuild.hooks import hook\n\n\n"
         "@hook\n"
         "def record_finish(ctx):\n"
-        "    ctx.execute_sql(\"INSERT INTO main.hook_log VALUES ('python')\")\n"
+        "    '''Test hook record_finish.'''\n    ctx.execute_sql(\"INSERT INTO main.hook_log VALUES ('python')\")\n"
     ),
 }
 _SEED_YAML: str = (
     "seeds:\n"
-    "  - name: order_codes\n"
+    "  - name: order_codes\n    description: Test seed order_codes.\n"
     "    columns:\n"
     "      - name: order_id\n"
     "        type: INTEGER\n"
@@ -192,7 +192,7 @@ def test_given_seed_audit_when_building_then_it_runs_after_load_and_gates_depend
             "seeds/order_codes.yml": _SEED_YAML,
             "seeds/order_codes.csv": test_case.seed_csv,
             "models/coded_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT order_id, label FROM __seed("order_codes")\n'
+                'MODEL (description "Test model coded_orders.", materialized table);\n\nSELECT order_id, label FROM __seed("order_codes")\n'
             ),
         },
     )

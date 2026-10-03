@@ -61,7 +61,7 @@ def test_given_nested_type_key_when_locating_declared_type_then_returns_top_leve
 def test_given_dynamic_family_when_generating_contract_then_does_not_freeze_runtime_members(
     test_case: DynamicContractAdoptionTestCase,
 ) -> None:
-    authored_sql: str = """MODEL (
+    authored_sql: str = """MODEL (description "Test model.",
   contract enforced,
   columns (customer_id (type INTEGER)),
   dynamic_columns (

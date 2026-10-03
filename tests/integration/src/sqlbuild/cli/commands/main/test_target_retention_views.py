@@ -23,13 +23,13 @@ _PROJECT_TOML: str = (
     [
         TargetRetentionViewsTestCase(
             description="view skips inherited target retention",
-            view_header="MODEL (materialized view);",
+            view_header="MODEL (description 'Test model.', materialized view);",
             expected_exit_code=0,
             expected_fragment="Project compiled",
         ),
         TargetRetentionViewsTestCase(
             description="explicit view retention is still rejected",
-            view_header="MODEL (materialized view, time_travel_retention 7d);",
+            view_header="MODEL (description 'Test model.', materialized view, time_travel_retention 7d);",
             expected_exit_code=1,
             expected_fragment="managed time_travel_retention is not valid for views",
         ),
@@ -44,7 +44,8 @@ def test_given_target_retention_default_when_compiling_views_then_only_explicit_
     (tmp_path / "models").mkdir()
     (tmp_path / "sqlbuild_project.toml").write_text(_PROJECT_TOML, encoding="utf-8")
     (tmp_path / "models" / "orders.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 1 AS order_id\n", encoding="utf-8"
+        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
     )
     (tmp_path / "models" / "order_view.sql").write_text(
         f'{test_case.view_header}\n\nSELECT order_id FROM __ref("orders")\n', encoding="utf-8"

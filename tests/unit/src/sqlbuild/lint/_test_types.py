@@ -38,6 +38,16 @@ class FormatProjectTestCase:
 
 
 @dataclass(frozen=True)
+class FormatDescriptionResolutionTestCase:
+    """Header description faults agree with the descriptions compile resolves."""
+
+    description: str
+    project_toml: str
+    files: dict[str, str]
+    expected_description_faults: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class FormatNewlineTestCase:
     """Test case for preserving newline conventions while formatting."""
 

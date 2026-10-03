@@ -66,6 +66,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         schema: main
                         table: raw_orders
                     """
@@ -73,7 +74,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model orders.",
                       cursor ordered_at,
                       cursor_type timestamp,
                       cursor_grain second,

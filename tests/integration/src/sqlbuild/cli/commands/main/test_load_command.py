@@ -83,6 +83,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     return [{"order_id": 1, "status": "loaded"}]
 """
 
@@ -91,6 +92,7 @@ _BUILD_RUN_AUTO_LOAD_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -105,10 +107,11 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     return [{"order_id": 7, "status": "loaded"}]
 """,
     "models/stg_orders.sql": (
-        'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+        'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
     ),
 }
 
@@ -225,6 +228,7 @@ schema = "dev"
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     columns:
       - name: order_id
         type: INTEGER
@@ -238,7 +242,7 @@ sources:
 _SOURCE_DEFERRAL_UNSELECTED_MANAGED_PROJECT_FILES: dict[str, str] = {
     **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
     "models/fact_orders.sql": (
-        'MODEL (materialized table);\n\nSELECT order_id, status FROM __ref("stg_orders")'
+        'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT order_id, status FROM __ref("stg_orders")'
     ),
 }
 
@@ -270,6 +274,7 @@ _SOURCE_DEFERRAL_LOADER_DAG_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -290,10 +295,12 @@ from sqlbuild.loaders import loader
     ],
 )
 def fetch_orders(ctx):
+    '''Test loader fetch_orders.'''
     return [{"order_id": 7, "status": "intermediate"}]
 
 @loader(depends_on=[fetch_orders])
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     rows = ctx.query(
         f"SELECT order_id, status FROM {ctx.loader(fetch_orders).destination}"
     ).fetchall()
@@ -319,6 +326,7 @@ loader_schema = "raw_dev"
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     schema: external_raw
     table: raw_orders
     managed: true
@@ -362,6 +370,7 @@ _SOURCE_DEFERRAL_EXPRESSION_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     expression: |
@@ -382,7 +391,7 @@ sources:
 _SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES: dict[str, str] = {
     **_SOURCE_DEFERRAL_PROJECT_FILES,
     "functions/sql/order_statuses.sql": """
-FUNCTION (
+FUNCTION (description "Test function order_statuses.",
   returns table (
     order_id INTEGER,
     status VARCHAR
@@ -422,6 +431,7 @@ _SOURCE_DEFERRAL_AUDIT_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     audits: [source_status]
@@ -443,7 +453,7 @@ SELECT order_id FROM @relation WHERE status != 'prod-audit'
 _SOURCE_DEFERRAL_BUILD_WITH_FUNCTION_PROJECT_FILES: dict[str, str] = {
     **_SOURCE_DEFERRAL_PROJECT_FILES,
     "functions/sql/order_statuses.sql": """
-FUNCTION (
+FUNCTION (description "Test function order_statuses.",
   returns table (
     order_id INTEGER,
     status VARCHAR
@@ -475,7 +485,7 @@ SELECT 1
 _SOURCE_DEFERRAL_SCENARIO_PROJECT_FILES: dict[str, str] = {
     **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
     "tests/scenarios/source_mock_pass.sql": """
-SCENARIO ();
+SCENARIO (description "Test scenario source_mock_pass.");
 
 WITH
 __source__raw_orders AS (
@@ -492,7 +502,7 @@ SELECT 1
 _BUILD_RUN_AUTO_LOAD_SELECTION_PROJECT_FILES: dict[str, str] = {
     **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
     "models/fact_orders.sql": (
-        'MODEL (materialized table);\n\nSELECT order_id, status FROM __ref("stg_orders")'
+        'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT order_id, status FROM __ref("stg_orders")'
     ),
 }
 
@@ -503,6 +513,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     raise RuntimeError("loader exploded")
 """,
 }
@@ -514,6 +525,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     status = "reload" if ctx.is_reload else "incremental"
     return [{"order_id": 7, "status": status}]
 """,
@@ -524,6 +536,7 @@ _BUILD_RUN_AUTO_LOAD_TWO_SOURCE_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -532,6 +545,7 @@ sources:
       - name: status
         type: VARCHAR
   - name: raw_customers
+    description: Test source raw_customers.
     managed: true
     write_strategy: table
     columns:
@@ -546,10 +560,11 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_customers(ctx):
+    '''Test loader raw_customers.'''
     return [{"customer_id": 10, "name": "Ada"}]
 """,
     "models/stg_customers.sql": (
-        'MODEL (materialized table);\n\nSELECT customer_id, name FROM __source("raw_customers")'
+        'MODEL (description "Test model stg_customers.", materialized table);\n\nSELECT customer_id, name FROM __source("raw_customers")'
     ),
 }
 
@@ -558,6 +573,7 @@ _BUILD_RUN_AUTO_LOAD_SELF_MANAGED_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     columns:
       - name: order_id
@@ -571,13 +587,14 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     ctx.execute_sql(
         "CREATE OR REPLACE TABLE raw_orders AS "
         "SELECT 7 AS order_id, 'self-managed' AS status"
     )
 """,
     "models/stg_orders.sql": (
-        'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+        'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
     ),
 }
 
@@ -591,6 +608,7 @@ LOAD_COMMAND_CASE_FIXTURES: list[LoadCommandIntegrationTestCase] = [
             "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -605,6 +623,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     ctx.log("loading raw orders")
     return [
         {"order_id": 1, "status": "placed"},
@@ -641,6 +660,7 @@ def raw_orders(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -649,6 +669,7 @@ sources:
       - name: status
         type: VARCHAR
   - name: raw_events
+    description: Test source raw_events.
     managed: true
     write_strategy: table
 """.strip()
@@ -658,6 +679,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     return [{"order_id": 3, "status": "selected"}]
 """,
             "python/loaders/raw_events.py": """
@@ -665,6 +687,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_events(ctx):
+    '''Test loader raw_events.'''
     return [{"event_id": 99}]
 """,
         },
@@ -699,6 +722,7 @@ def raw_events(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -713,6 +737,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     status = ":".join([
         str(ctx.target),
         str(ctx.vars["tier"]),
@@ -1859,6 +1884,7 @@ def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_aut
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -1873,6 +1899,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     ctx.log("loading raw orders")
     return [
         {"order_id": 1, "status": "placed"},
@@ -1909,6 +1936,7 @@ def raw_orders(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -1917,6 +1945,7 @@ sources:
       - name: status
         type: VARCHAR
   - name: raw_events
+    description: Test source raw_events.
     managed: true
     write_strategy: table
 """.strip()
@@ -1926,6 +1955,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     return [{"order_id": 3, "status": "selected"}]
 """,
                 "python/loaders/raw_events.py": """
@@ -1933,6 +1963,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_events(ctx):
+    '''Test loader raw_events.'''
     return [{"event_id": 99}]
 """,
             },
@@ -1967,6 +1998,7 @@ def raw_events(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -1981,6 +2013,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     status = ":".join([
         str(ctx.target),
         str(ctx.vars["tier"]),
@@ -2071,6 +2104,7 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -2085,6 +2119,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     ctx.log("loading raw orders")
     return [
         {"order_id": 1, "status": "placed"},
@@ -2121,6 +2156,7 @@ def raw_orders(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -2129,6 +2165,7 @@ sources:
       - name: status
         type: VARCHAR
   - name: raw_events
+    description: Test source raw_events.
     managed: true
     write_strategy: table
 """.strip()
@@ -2138,6 +2175,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     return [{"order_id": 3, "status": "selected"}]
 """,
                 "python/loaders/raw_events.py": """
@@ -2145,6 +2183,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_events(ctx):
+    '''Test loader raw_events.'''
     return [{"event_id": 99}]
 """,
             },
@@ -2179,6 +2218,7 @@ def raw_events(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
     columns:
@@ -2193,6 +2233,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    '''Test loader raw_orders.'''
     status = ":".join([
         str(ctx.target),
         str(ctx.vars["tier"]),
@@ -2320,6 +2361,7 @@ WRITE_STRATEGY_CASE_FIXTURES: list[LoadCommandWriteStrategyTestCase] = [
             "sources/raw.yml": """
 sources:
   - name: raw_append_events
+    description: Test source raw_append_events.
     managed: true
     write_strategy: append
     cursor_column: event_id
@@ -2335,6 +2377,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_append_events(ctx):
+    '''Test loader raw_append_events.'''
     if ctx.current_cursor_value is None:
         return [{"event_id": 1, "cursor_seen": "none"}]
     next_id = int(ctx.current_cursor_value) + 1
@@ -2351,6 +2394,7 @@ def raw_append_events(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_merge_customers
+    description: Test source raw_merge_customers.
     managed: true
     write_strategy: merge
     unique_key: customer_id
@@ -2369,6 +2413,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_merge_customers(ctx):
+    '''Test loader raw_merge_customers.'''
     if ctx.current_cursor_value is None:
         return [
             {"customer_id": 1, "name": "old", "updated_at": 1},
@@ -2392,6 +2437,7 @@ def raw_merge_customers(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_merge_composite
+    description: Test source raw_merge_composite.
     managed: true
     write_strategy: merge
     unique_key: [entity_id, source]
@@ -2412,6 +2458,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_merge_composite(ctx):
+    '''Test loader raw_merge_composite.'''
     if ctx.current_cursor_value is None:
         return [{"entity_id": 1, "source": "api", "value": "old", "version": 1}]
     return [
@@ -2432,6 +2479,7 @@ def raw_merge_composite(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_events
+    description: Test source raw_delete_insert_events.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_id
@@ -2447,6 +2495,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_events(ctx):
+    '''Test loader raw_delete_insert_events.'''
     if ctx.current_cursor_value is None:
         return [
             {"event_id": 1, "status": "old-outside-low"},
@@ -2477,6 +2526,7 @@ def raw_delete_insert_events(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_ts
+    description: Test source raw_delete_insert_ts.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_at
@@ -2494,6 +2544,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_ts(ctx):
+    '''Test loader raw_delete_insert_ts.'''
     if ctx.current_cursor_value is None:
         return [
             {"event_at": datetime(2026, 1, 1, 0, 0, 0), "status": "outside-low"},
@@ -2525,6 +2576,7 @@ def raw_delete_insert_ts(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_empty
+    description: Test source raw_delete_insert_empty.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_id
@@ -2540,6 +2592,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_empty(ctx):
+    '''Test loader raw_delete_insert_empty.'''
     if ctx.current_cursor_value is None:
         return [
             {"event_id": 1, "status": "existing"},
@@ -2561,6 +2614,7 @@ CURSOR_NONE_CASE_FIXTURES: list[LoadCommandCursorNoneTestCase] = [
             "sources/raw.yml": """
 sources:
   - name: raw_no_cursor
+    description: Test source raw_no_cursor.
     managed: true
     write_strategy: append
     columns:
@@ -2577,6 +2631,7 @@ run_count = 0
 
 @loader
 def raw_no_cursor(ctx):
+    '''Test loader raw_no_cursor.'''
     global run_count
     run_count += 1
     return [{"run_number": run_count, "cursor_seen": str(ctx.current_cursor_value)}]
@@ -2592,6 +2647,7 @@ def raw_no_cursor(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_empty_cursor
+    description: Test source raw_empty_cursor.
     managed: true
     write_strategy: append
     cursor_column: event_id
@@ -2607,6 +2663,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_empty_cursor(ctx):
+    '''Test loader raw_empty_cursor.'''
     return [{"event_id": 1, "cursor_seen": str(ctx.current_cursor_value)}]
 """,
         },
@@ -2622,6 +2679,7 @@ def raw_empty_cursor(ctx):
             "sources/raw.yml": """
 sources:
   - name: raw_missing_cursor_target
+    description: Test source raw_missing_cursor_target.
     managed: true
     write_strategy: append
     cursor_column: event_id
@@ -2637,6 +2695,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_missing_cursor_target(ctx):
+    '''Test loader raw_missing_cursor_target.'''
     return [{"event_id": 1, "cursor_seen": str(ctx.current_cursor_value)}]
 """,
         },
@@ -2653,6 +2712,7 @@ RELOAD_CONTEXT_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_reload_context
+    description: Test source raw_reload_context.
     managed: true
     write_strategy: table
     columns:
@@ -2665,6 +2725,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_reload_context(ctx):
+    '''Test loader raw_reload_context.'''
     return [{"is_reload": ctx.is_reload}]
 """,
 }
@@ -2674,6 +2735,7 @@ CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_cursor_overrides
+    description: Test source raw_cursor_overrides.
     managed: true
     write_strategy: table
     columns:
@@ -2692,6 +2754,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_cursor_overrides(ctx):
+    '''Test loader raw_cursor_overrides.'''
     return [{
         "start_ts": None if ctx.start_cursor_ts is None else ctx.start_cursor_ts.isoformat(),
         "end_ts": None if ctx.end_cursor_ts is None else ctx.end_cursor_ts.isoformat(),
@@ -2712,6 +2775,7 @@ def raw_cursor_overrides(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_append_events
+    description: Test source raw_append_events.
     managed: true
     write_strategy: append
     cursor_column: event_id
@@ -2727,6 +2791,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_append_events(ctx):
+    '''Test loader raw_append_events.'''
     if ctx.current_cursor_value is None:
         return [{"event_id": 1, "cursor_seen": "none"}]
     next_id = int(ctx.current_cursor_value) + 1
@@ -2743,6 +2808,7 @@ def raw_append_events(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_merge_customers
+    description: Test source raw_merge_customers.
     managed: true
     write_strategy: merge
     unique_key: customer_id
@@ -2761,6 +2827,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_merge_customers(ctx):
+    '''Test loader raw_merge_customers.'''
     if ctx.current_cursor_value is None:
         return [
             {"customer_id": 1, "name": "old", "updated_at": 1},
@@ -2784,6 +2851,7 @@ def raw_merge_customers(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_merge_composite
+    description: Test source raw_merge_composite.
     managed: true
     write_strategy: merge
     unique_key: [entity_id, source]
@@ -2804,6 +2872,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_merge_composite(ctx):
+    '''Test loader raw_merge_composite.'''
     if ctx.current_cursor_value is None:
         return [{"entity_id": 1, "source": "api", "value": "old", "version": 1}]
     return [
@@ -2824,6 +2893,7 @@ def raw_merge_composite(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_events
+    description: Test source raw_delete_insert_events.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_id
@@ -2839,6 +2909,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_events(ctx):
+    '''Test loader raw_delete_insert_events.'''
     if ctx.current_cursor_value is None:
         return [
             {"event_id": 1, "status": "old-outside-low"},
@@ -2869,6 +2940,7 @@ def raw_delete_insert_events(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_ts
+    description: Test source raw_delete_insert_ts.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_at
@@ -2886,6 +2958,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_ts(ctx):
+    '''Test loader raw_delete_insert_ts.'''
     if ctx.current_cursor_value is None:
         return [
             {"event_at": datetime(2026, 1, 1, 0, 0, 0), "status": "outside-low"},
@@ -2917,6 +2990,7 @@ def raw_delete_insert_ts(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_empty
+    description: Test source raw_delete_insert_empty.
     managed: true
     write_strategy: delete_insert
     cursor_column: event_id
@@ -2932,6 +3006,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_empty(ctx):
+    '''Test loader raw_delete_insert_empty.'''
     if ctx.current_cursor_value is None:
         return [
             {"event_id": 1, "status": "existing"},
@@ -3220,6 +3295,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
                 "sources/raw.yml": """
 sources:
   - name: raw_no_cursor
+    description: Test source raw_no_cursor.
     managed: true
     write_strategy: append
     columns:
@@ -3236,6 +3312,7 @@ run_count = 0
 
 @loader
 def raw_no_cursor(ctx):
+    '''Test loader raw_no_cursor.'''
     global run_count
     run_count += 1
     return [{"run_number": run_count, "cursor_seen": str(ctx.current_cursor_value)}]
@@ -3251,6 +3328,7 @@ def raw_no_cursor(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_empty_cursor
+    description: Test source raw_empty_cursor.
     managed: true
     write_strategy: append
     cursor_column: event_id
@@ -3266,6 +3344,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_empty_cursor(ctx):
+    '''Test loader raw_empty_cursor.'''
     return [{"event_id": 1, "cursor_seen": str(ctx.current_cursor_value)}]
 """,
             },
@@ -3281,6 +3360,7 @@ def raw_empty_cursor(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_missing_cursor_target
+    description: Test source raw_missing_cursor_target.
     managed: true
     write_strategy: append
     cursor_column: event_id
@@ -3296,6 +3376,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_missing_cursor_target(ctx):
+    '''Test loader raw_missing_cursor_target.'''
     return [{"event_id": 1, "cursor_seen": str(ctx.current_cursor_value)}]
 """,
             },
@@ -3498,6 +3579,7 @@ def test_given_cursor_override_flags_when_running_load_then_passes_typed_context
                 "sources/raw.yml": """
 sources:
   - name: raw_a
+    description: Test source raw_a.
     managed: true
     write_strategy: table
     columns:
@@ -3506,6 +3588,7 @@ sources:
       - name: connection_id
         type: BIGINT
   - name: raw_b
+    description: Test source raw_b.
     managed: true
     write_strategy: table
     columns:
@@ -3514,6 +3597,7 @@ sources:
       - name: connection_id
         type: BIGINT
   - name: raw_c
+    description: Test source raw_c.
     managed: true
     write_strategy: table
     columns:
@@ -3533,17 +3617,20 @@ barrier = threading.Barrier(2)
 
 @loader
 def raw_a(ctx):
+    '''Test loader raw_a.'''
     barrier.wait(timeout=1)
     time.sleep(0.05)
     return [{"source_name": "raw_a", "connection_id": id(ctx.connection)}]
 
 @loader
 def raw_b(ctx):
+    '''Test loader raw_b.'''
     barrier.wait(timeout=1)
     return [{"source_name": "raw_b", "connection_id": id(ctx.connection)}]
 
 @loader
 def raw_c(ctx):
+    '''Test loader raw_c.'''
     return [{"source_name": "raw_c", "connection_id": id(ctx.connection)}]
 """,
             },
@@ -3617,6 +3704,7 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
                 "sources/raw.yml": """
 sources:
   - name: raw_join
+    description: Test source raw_join.
     managed: true
     write_strategy: table
     columns:
@@ -3636,6 +3724,7 @@ lock = threading.Lock()
 
 @loader(write_strategy='table', columns=[{'name': 'id', 'type': 'INTEGER'}])
 def fetch_a(ctx):
+    '''Test loader fetch_a.'''
     barrier.wait(timeout=1)
     time.sleep(0.05)
     with lock:
@@ -3644,6 +3733,7 @@ def fetch_a(ctx):
 
 @loader(write_strategy='table', columns=[{'name': 'id', 'type': 'INTEGER'}])
 def fetch_b(ctx):
+    '''Test loader fetch_b.'''
     barrier.wait(timeout=1)
     with lock:
         finished.add('b')
@@ -3651,6 +3741,7 @@ def fetch_b(ctx):
 
 @loader(depends_on=[fetch_a, fetch_b])
 def raw_join(ctx):
+    '''Test loader raw_join.'''
     return [{'upstream_count': len(finished)}]
 """,
             },
@@ -3738,6 +3829,7 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
                 "sources/raw.yml": """
 sources:
   - name: raw_inferred
+    description: Test source raw_inferred.
     managed: true
     write_strategy: table
     columns:
@@ -3754,6 +3846,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_inferred(ctx):
+    '''Test loader raw_inferred.'''
     yield {
         "id": 1,
         "flag": True,
@@ -3832,6 +3925,7 @@ def test_given_generator_loader_with_inferred_columns_when_running_load_then_wri
                 "sources/raw.yml": """
 sources:
   - name: raw_multi_yield
+    description: Test source raw_multi_yield.
     managed: true
     write_strategy: table
     columns:
@@ -3846,6 +3940,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_multi_yield(ctx):
+    '''Test loader raw_multi_yield.'''
     yield {"id": 1, "status": "first"}
     yield {"id": 2, "status": "second"}
 """,
@@ -3885,6 +3980,7 @@ def test_given_generator_loader_yields_multiple_rows_when_running_load_then_writ
                 "sources/raw.yml": """
 sources:
   - name: raw_batched_yield
+    description: Test source raw_batched_yield.
     managed: true
     write_strategy: table
     load_batch_size: 1
@@ -3900,6 +3996,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_batched_yield(ctx):
+    '''Test loader raw_batched_yield.'''
     yield {"id": 1, "status": "first"}
     yield {"id": 2, "status": "second", "late_flag": True}
     yield {"id": 3, "status": "third", "late_flag": False}
@@ -3979,6 +4076,7 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
                 "sources/raw.yml": """
 sources:
   - name: raw_missing_known
+    description: Test source raw_missing_known.
     managed: true
     write_strategy: table
     load_batch_size: 1
@@ -3994,6 +4092,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_missing_known(ctx):
+    '''Test loader raw_missing_known.'''
     yield {"id": 1, "status": "first"}
     yield {"id": 2}
 """,
@@ -4011,6 +4110,7 @@ def raw_missing_known(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_empty_generator
+    description: Test source raw_empty_generator.
     managed: true
     write_strategy: table
     load_batch_size: 1
@@ -4026,6 +4126,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_empty_generator(ctx):
+    '''Test loader raw_empty_generator.'''
     if False:
         yield {"id": 1, "status": "unreachable"}
 """,
@@ -4043,6 +4144,7 @@ def raw_empty_generator(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_late_null
+    description: Test source raw_late_null.
     managed: true
     write_strategy: table
     load_batch_size: 1
@@ -4056,6 +4158,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_late_null(ctx):
+    '''Test loader raw_late_null.'''
     yield {"id": 1, "late_note": None}
     yield {"id": 2, "late_note": "filled"}
 """,
@@ -4073,6 +4176,7 @@ def raw_late_null(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_batch_size_two
+    description: Test source raw_batch_size_two.
     managed: true
     write_strategy: table
     load_batch_size: 2
@@ -4086,6 +4190,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_batch_size_two(ctx):
+    '''Test loader raw_batch_size_two.'''
     yield {"id": 1}
     yield {"id": 2}
     yield {"id": 3}
@@ -4105,6 +4210,7 @@ def raw_batch_size_two(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_default_batch
+    description: Test source raw_default_batch.
     managed: true
     write_strategy: table
     columns:
@@ -4117,6 +4223,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_default_batch(ctx):
+    '''Test loader raw_default_batch.'''
     yield {"id": 1}
     yield {"id": 2}
     yield {"id": 3}
@@ -4194,6 +4301,7 @@ def test_given_batched_loader_variants_when_running_pipeline_then_writes_expecte
                 "sources/raw.yml": """
 sources:
   - name: raw_many_rows
+    description: Test source raw_many_rows.
     managed: true
     write_strategy: table
     columns:
@@ -4206,6 +4314,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_many_rows(ctx):
+    '''Test loader raw_many_rows.'''
     for value in range(1001):
         yield {"id": value}
 """,
@@ -4255,6 +4364,7 @@ def test_given_loader_writes_many_rows_when_running_load_then_formats_human_row_
                 "sources/raw.yml": """
 sources:
   - name: raw_empty
+    description: Test source raw_empty.
     managed: true
     write_strategy: table
     columns:
@@ -4269,6 +4379,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_empty(ctx):
+    '''Test loader raw_empty.'''
     return []
 """,
             },
@@ -4314,6 +4425,7 @@ def test_given_loader_returns_empty_rows_when_running_load_then_writes_empty_dec
                 "sources/raw.yml": """
 sources:
   - name: raw_self_managed
+    description: Test source raw_self_managed.
     managed: true
     columns:
       - name: id
@@ -4325,6 +4437,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_self_managed(ctx):
+    '''Test loader raw_self_managed.'''
     ctx.execute_sql("CREATE OR REPLACE TABLE raw_self_managed AS SELECT 1 AS id")
 """,
             },
@@ -4366,6 +4479,7 @@ def test_given_self_managed_loader_when_running_load_then_uses_loader_written_ta
                 "sources/raw.yml": """
 sources:
   - name: raw_conflict
+    description: Test source raw_conflict.
     managed: true
     write_strategy: table
 """.strip()
@@ -4375,6 +4489,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_conflict(ctx):
+    '''Test loader raw_conflict.'''
     return [
         {"id": 1},
         {"id": "two"},
@@ -4391,6 +4506,7 @@ def raw_conflict(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_missing_strategy
+    description: Test source raw_missing_strategy.
     managed: true
 """.strip()
                 + "\n",
@@ -4399,6 +4515,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_missing_strategy(ctx):
+    '''Test loader raw_missing_strategy.'''
     return [{"id": 1}]
 """,
             },
@@ -4412,6 +4529,7 @@ def raw_missing_strategy(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_unexpected_none
+    description: Test source raw_unexpected_none.
     managed: true
     write_strategy: table
 """.strip()
@@ -4421,6 +4539,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_unexpected_none(ctx):
+    '''Test loader raw_unexpected_none.'''
     return None
 """,
             },
@@ -4457,6 +4576,7 @@ def test_given_loader_returns_conflicting_types_when_running_load_then_fails_cle
                 "sources/raw.yml": """
 sources:
   - name: raw_batched_conflict
+    description: Test source raw_batched_conflict.
     managed: true
     write_strategy: table
     load_batch_size: 1
@@ -4467,6 +4587,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_batched_conflict(ctx):
+    '''Test loader raw_batched_conflict.'''
     yield {"id": 1}
     yield {"id": "two"}
 """,
@@ -4487,6 +4608,7 @@ def raw_batched_conflict(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_batched_non_dict
+    description: Test source raw_batched_non_dict.
     managed: true
     write_strategy: table
     load_batch_size: 1
@@ -4497,6 +4619,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_batched_non_dict(ctx):
+    '''Test loader raw_batched_non_dict.'''
     yield {"id": 1}
     yield ("id", 2)
 """,
@@ -4512,6 +4635,7 @@ def raw_batched_non_dict(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_append_failure
+    description: Test source raw_append_failure.
     managed: true
     write_strategy: append
     load_batch_size: 1
@@ -4525,6 +4649,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_append_failure(ctx):
+    '''Test loader raw_append_failure.'''
     yield {"id": 1}
     yield {"id": "two"}
 """,
@@ -4545,6 +4670,7 @@ def raw_append_failure(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_merge_failure
+    description: Test source raw_merge_failure.
     managed: true
     write_strategy: merge
     unique_key: id
@@ -4561,6 +4687,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_merge_failure(ctx):
+    '''Test loader raw_merge_failure.'''
     yield {"id": 1, "status": "new"}
     yield {"id": "two", "status": "bad"}
 """,
@@ -4581,6 +4708,7 @@ def raw_merge_failure(ctx):
                 "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_failure
+    description: Test source raw_delete_insert_failure.
     managed: true
     write_strategy: delete_insert
     cursor_column: id
@@ -4597,6 +4725,7 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_delete_insert_failure(ctx):
+    '''Test loader raw_delete_insert_failure.'''
     yield {"id": 1, "status": "new"}
     yield {"id": "two", "status": "bad"}
 """,
@@ -4671,6 +4800,7 @@ def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
 """.strip()
@@ -4690,6 +4820,7 @@ sources:
                 "sources/raw.yml": """
 sources:
   - name: raw_customers
+    description: Test source raw_customers.
     expression: SELECT 1 AS customer_id
 """.strip()
                 + "\n",
@@ -4707,6 +4838,7 @@ sources:
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
 """.strip()
@@ -4726,9 +4858,11 @@ sources:
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
   - name: raw_customers
+    description: Test source raw_customers.
     expression: SELECT 1 AS customer_id
 """.strip()
                 + "\n",
@@ -4773,6 +4907,7 @@ def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_err
                 "sources/raw.yml": """
 sources:
   - name: raw_customers
+    description: Test source raw_customers.
     expression: SELECT 1 AS customer_id
 """.strip()
                 + "\n",
@@ -4794,6 +4929,7 @@ sources:
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    description: Test source raw_orders.
     managed: true
     write_strategy: table
 """.strip()

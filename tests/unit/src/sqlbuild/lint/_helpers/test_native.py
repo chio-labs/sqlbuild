@@ -36,9 +36,24 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
             expected_codes=(),
         ),
         LintNativeTestCase(
-            description="scenario without description does not fault",
+            description="scenario without description faults",
             contents='SCENARIO (tags ["x"]);\nSELECT 1\n',
-            expected_codes=(),
+            expected_codes=("description-present",),
+        ),
+        LintNativeTestCase(
+            description="function without description faults",
+            contents="FUNCTION (\n  arguments (amount INTEGER),\n  returns BOOLEAN,\n);\namount > 1\n",
+            expected_codes=("description-present",),
+        ),
+        LintNativeTestCase(
+            description="named hook without description faults",
+            contents="HOOK ();\nSELECT 1\n",
+            expected_codes=("description-present",),
+        ),
+        LintNativeTestCase(
+            description="header-only check flags a model_schema model for project resolution",
+            contents="MODEL (model_schema order_columns);\nSELECT 1 AS order_id\n",
+            expected_codes=("description-present",),
         ),
         LintNativeTestCase(
             description="long single-line scenario description faults by formatted length",

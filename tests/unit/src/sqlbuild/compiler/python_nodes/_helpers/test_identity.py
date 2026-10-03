@@ -323,6 +323,7 @@ def audit_message():
 
 @hook(name="before_orders")
 def before_orders(ctx):
+    '''Test hook before_orders.'''
     return audit_message()
 """.strip()
                 + "\n",

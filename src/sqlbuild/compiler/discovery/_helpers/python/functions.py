@@ -13,6 +13,8 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 
+_UDF_DESCRIPTION_KEY: str = "description"
+
 
 def parse_python_function(*, contents: str, file_path: Path) -> tuple[dict[str, object], str, str]:
     """Parse one @udf-decorated Python function without importing project code."""
@@ -75,6 +77,9 @@ def parse_python_function(*, contents: str, file_path: Path) -> tuple[dict[str, 
             error_class=ModelSqlParseError,
         )
 
+    docstring: str | None = ast.get_docstring(function_node)
+    if _UDF_DESCRIPTION_KEY not in values and docstring is not None:
+        values[_UDF_DESCRIPTION_KEY] = docstring
     entry_point: object | None = values.get("entry_point")
     if entry_point is None:
         values["entry_point"] = function_node.name

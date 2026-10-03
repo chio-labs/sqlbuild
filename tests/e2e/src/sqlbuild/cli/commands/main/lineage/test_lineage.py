@@ -105,7 +105,7 @@ def test_given_directional_selectors_when_expanding_then_depth_and_exclusions_ar
     for name in ("stg_orders.sql", "stg_customers.sql"):
         (project_dir / "models" / name).rename(staging_dir / name)
     (project_dir / "models" / "fact_orders.sql").write_text(
-        'MODEL (materialized view, tags [finance]);\nSELECT * FROM __ref("stg_orders")\n',
+        'MODEL (description "Test model fact_orders.", materialized view, tags [finance]);\nSELECT * FROM __ref("stg_orders")\n',
         encoding="utf-8",
     )
 
@@ -336,7 +336,7 @@ def test_given_authored_dependency_change_when_lineage_runs_then_rebuilds_struct
     )
     assert first.returncode == 0, first.stdout + first.stderr
     (project_dir / "models/fact_orders.sql").write_text(
-        "MODEL (materialized view);\n\n"
+        "MODEL (description 'Test model fact_orders.', materialized view);\n\n"
         'SELECT orders.order_id FROM __ref("stg_orders") AS orders\n'
         'JOIN __ref("stg_customers") AS customers USING (customer_id)\n',
         encoding="utf-8",

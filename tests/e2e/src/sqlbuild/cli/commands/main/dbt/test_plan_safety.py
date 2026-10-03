@@ -46,7 +46,8 @@ def test_given_target_model_limit_when_running_dbt_interop_then_refuses_sqlbuild
         target_settings="\n[targets.main.execution_limits]\nmax_models = 1\n",
     )
     project_dir.joinpath("models", "local_order_ids.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 11 AS order_id\n", encoding="utf-8"
+        "MODEL (description 'Test model local_order_ids.', materialized table);\n\nSELECT 11 AS order_id\n",
+        encoding="utf-8",
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

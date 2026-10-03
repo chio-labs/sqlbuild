@@ -16,7 +16,8 @@ def write_diagnostic_project(
     columns: list[str] = [f"amount_{index:03}" for index in range(width)]
     declarations: str = ", ".join(f"{column} (type INTEGER)" for column in columns)
     (models / "orders.sql").write_text(
-        f"MODEL (materialized view, contract enforced, columns ({declarations}));\nSELECT "
+        "MODEL (description 'Test model orders.', "
+        f"materialized view, contract enforced, columns ({declarations}));\nSELECT "
         + ", ".join(f"CAST(1 AS INTEGER) AS {column}" for column in columns)
     )
     for model_index in range(model_count):
@@ -31,12 +32,14 @@ def write_diagnostic_project(
         conversions: list[str] = [
             f"{columns[index % width]} = 'shipped' AS risky_{index:03}" for index in range(50)
         ]
-        sql: str = "MODEL (materialized view);\nWITH\n" + ",\n".join(ctes)
+        sql: str = "MODEL (description 'Test model.', materialized view);\nWITH\n" + ",\n".join(
+            ctes
+        )
         sql += "\nSELECT\n" + ",\n".join((*errors, *conversions)) + f"\nFROM {previous}\n"
         name = f"large_orders_{model_index}"
         (models / f"{name}.sql").write_text(sql)
         (models / f"downstream_orders_{model_index}.sql").write_text(
-            "MODEL (materialized view);\nSELECT "
+            "MODEL (description 'Test model.', materialized view);\nSELECT "
             + ", ".join(f"broken_{index:03} + 1 AS result_{index:03}" for index in range(50))
             + f' FROM __ref("{name}")'
         )
@@ -52,9 +55,13 @@ def write_cascade_project(*, project_dir: Path, depth: int, width: int = 50) -> 
     )
     columns: list[str] = [f"amount_{index:03}" for index in range(width)]
     declarations: str = ", ".join(f"{column} (type INTEGER)" for column in columns)
-    header: str = f"MODEL (materialized view, contract enforced, columns ({declarations}));\n"
+    header: str = (
+        "MODEL (description 'Test model.', "
+        f"materialized view, contract enforced, columns ({declarations}));\n"
+    )
     (models / "input_orders.sql").write_text(
-        f"MODEL (materialized view, contract enforced, columns ({declarations}, "
+        "MODEL (description 'Test model input_orders.', "
+        f"materialized view, contract enforced, columns ({declarations}, "
         "ordered_at (type TIMESTAMP)));\nSELECT "
         + ", ".join(f"CAST(1 AS INTEGER) AS {column}" for column in columns)
         + ", CAST('2026-04-01' AS TIMESTAMP) AS ordered_at"
@@ -94,7 +101,7 @@ def write_function_name_project(*, project_dir: Path, model_count: int, calls: i
                 )
             )
         (models / f"wide_products_{model_index}.sql").write_text(
-            "MODEL (database warehouse, schema analytics);\nSELECT\n"
+            "MODEL (description 'Test model.', database warehouse, schema analytics);\nSELECT\n"
             + ",\n".join(projections)
             + "\nFROM (SELECT 'anvil' AS sku) AS products\nWHERE NOT (sku IN ('a', 'b'))\n"
         )
@@ -109,7 +116,8 @@ def write_single_model_diagnostic_project(*, project_dir: Path, diagnostics: int
         'name = "dense_diagnostic_orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
     )
     (models / "orders.sql").write_text(
-        "MODEL (materialized view, contract enforced, columns (order_id (type INTEGER), "
+        "MODEL (description 'Test model orders.', "
+        "materialized view, contract enforced, columns (order_id (type INTEGER), "
         "status (type VARCHAR)));\nSELECT CAST(1 AS INTEGER) AS order_id, "
         "CAST('open' AS VARCHAR) AS status"
     )
@@ -120,7 +128,7 @@ def write_single_model_diagnostic_project(*, project_dir: Path, diagnostics: int
         for index in range(diagnostics)
     ]
     (models / "order_diagnostics.sql").write_text(
-        "MODEL (materialized view);\nSELECT\n"
+        "MODEL (description 'Test model order_diagnostics.', materialized view);\nSELECT\n"
         + ",\n".join(projections)
         + '\nFROM __ref("orders") AS o\n'
     )

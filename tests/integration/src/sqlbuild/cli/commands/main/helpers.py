@@ -38,7 +38,8 @@ def write_compile_startup_project(project_dir: Path) -> None:
     models_dir: Path = project_dir / "models"
     models_dir.mkdir()
     (models_dir / "orders.sql").write_text(
-        "MODEL (materialized table);\nSELECT 1 AS order_id\n", encoding="utf-8"
+        "MODEL (description 'Test model orders.', materialized table);\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
     )
 
 
@@ -110,7 +111,7 @@ def prepare_contract_project(tmp_path: Path, *, prod_connection_toml: str = "") 
     models.mkdir()
     sources.mkdir()
     _ = (models / "orders.sql").write_text(
-        """MODEL (
+        """MODEL (description "Test model orders.",
   materialized table
   -- keep model metadata
   columns (
@@ -240,10 +241,13 @@ def write_retention_policy_project(*, project_dir: Path, target_lines: tuple[str
         encoding="utf-8",
     )
     _ = (project_dir / "models" / "orders.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 1 AS order_id\n", encoding="utf-8"
+        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
     )
     _ = (project_dir / "models" / "order_view.sql").write_text(
-        'MODEL (materialized view);\n\nSELECT order_id FROM __ref("orders")\n', encoding="utf-8"
+        'MODEL (description "Test model order_view.", '
+        'materialized view);\n\nSELECT order_id FROM __ref("orders")\n',
+        encoding="utf-8",
     )
 
 
@@ -292,10 +296,10 @@ def write_dropped_relation_project(
     )
     _ = (project_dir / "sources" / "raw.yml").write_text(
         "sources:\n"
-        "  - name: raw_orders\n"
+        "  - name: raw_orders\n    description: Test source raw_orders.\n"
         "    schema: main\n"
         "    table: raw_orders\n"
-        "  - name: raw_customers\n"
+        "  - name: raw_customers\n    description: Test source raw_customers.\n"
         "    schema: main\n"
         "    table: raw_customers\n",
         encoding="utf-8",
@@ -305,7 +309,7 @@ def write_dropped_relation_project(
     )
     _ = (project_dir / "seeds" / "lookups.yml").write_text(
         "seeds:\n"
-        "  - name: order_statuses\n"
+        "  - name: order_statuses\n    description: Test seed order_statuses.\n"
         "    columns:\n"
         "      - name: status_code\n"
         "        type: INTEGER\n"
@@ -394,7 +398,7 @@ def dropped_relation_microbatch_sql(*, batch_concurrency: int) -> str:
     """Render an integer-cursor microbatch model over the raw order source."""
 
     return (
-        "MODEL (\n"
+        "MODEL (description 'Test model.',\n"
         "  materialized incremental,\n"
         "  incremental_strategy delete_insert,\n"
         "  incremental_mode microbatch,\n"
@@ -419,7 +423,9 @@ def compile_duckdb_projection(
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
     models: Path = tmp_path / "models"
     models.mkdir()
-    (models / "orders.sql").write_text(f"MODEL ();\nSELECT {projection}")
+    (models / "orders.sql").write_text(
+        f"MODEL (description 'Test model orders.');\nSELECT {projection}"
+    )
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
     diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
@@ -439,7 +445,7 @@ def write_expression_source_project(
     )
     (project_dir / "sources" / "orders.yml").write_text(
         "sources:\n"
-        "  - name: typed_orders\n"
+        "  - name: typed_orders\n    description: Test source typed_orders.\n"
         f'    expression: "{source_expression}"\n'
         "    columns:\n"
         "      - name: order_id\n"

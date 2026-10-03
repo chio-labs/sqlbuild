@@ -59,6 +59,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                     sources:
                       - name: raw_orders
+                        description: Test source raw_orders.
                         schema: main
                         table: raw_orders
                     """
@@ -66,7 +67,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model stg_orders.",
                       materialized view
                     );
 
@@ -83,7 +84,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model fact_orders.",
                       materialized table
                     );
 
@@ -100,7 +101,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/intermediate/order_status_index.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model order_status_index.",
                       materialized incremental,
                       incremental_strategy delete_insert,
                       cursor order_id,
@@ -124,7 +125,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/hourly_order_activity.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model hourly_order_activity.",
                       materialized incremental,
                       incremental_strategy delete_insert,
                       cursor activity_hour,
@@ -154,7 +155,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders_view.sql": dedent(
                     """
-                    MODEL (
+                    MODEL (description "Test model fact_orders_view.",
                       materialized view
                     );
 

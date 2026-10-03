@@ -9,6 +9,7 @@ from sqlbuild.compiler.auditing.constants import (
     MEASUREMENT_MINIMUM_SAMPLES_HEADER_KEY,
     MEASUREMENT_THRESHOLDS_HEADER_KEY,
 )
+from sqlbuild.compiler.auditing.main._builtins import build_builtin_audit_resolution
 from sqlbuild.compiler.auditing.main._parse_audit_instance import (
     parse_measurement_thresholds,
     parse_minimum_samples,
@@ -117,6 +118,32 @@ class _AuditAttachmentContext:
         """Retain one resolved audit scope for reuse in this compile invocation."""
 
         self.scoped_declarations[key] = declarations
+
+
+def build_project_audit_inputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    context: ModelInputBuildContext,
+    model_inputs: tuple[CompileModelInput, ...],
+    source_inputs: tuple[CompileSourceInput, ...],
+    seed_inputs: tuple[CompileSeedInput, ...],
+) -> tuple[tuple[CompileAuditInput, ...], tuple[CompilerDiagnostic, ...]]:
+    """Resolve built-in-aware generic audits and build every project audit input."""
+
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    generic_audit_definitions, diagnostics = build_builtin_audit_resolution(
+        index_generic_audit_definitions(discovered_inputs.audit_files)
+    )
+    audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
+        discovered_inputs=discovered_inputs,
+        context=context,
+        model_inputs=model_inputs,
+        source_inputs=source_inputs,
+        generic_audit_definitions=generic_audit_definitions,
+        seed_inputs=seed_inputs,
+    )
+    return audit_inputs, diagnostics
 
 
 def build_audit_inputs(

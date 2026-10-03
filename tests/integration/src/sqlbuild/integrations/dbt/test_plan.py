@@ -25,7 +25,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="plans dbt-only tag selector and skips SQLBuild work",
             args=("--select", "tag:nightly"),
             sqlbuild_model_contents_by_relative_path={
-                "local_only.sql": "MODEL ();\n\nselect 1 as order_id\n",
+                "local_only.sql": "MODEL (description 'Test model local_only.');\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=(),
             expected_sqlbuild_command_argvs=(),
@@ -42,7 +42,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="plans mixed dbt and SQLBuild tag selector matches",
             args=("--select", "tag:nightly"),
             sqlbuild_model_contents_by_relative_path={
-                "tagged_orders.sql": "MODEL (tags [nightly]);\n\nselect 1 as order_id\n",
+                "tagged_orders.sql": "MODEL (description 'Test model tagged_orders.', tags [nightly]);\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=("tagged_orders",),
             expected_sqlbuild_command_argvs=(("sqb", "plan", "--select", "tagged_orders"),),
@@ -60,10 +60,10 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             args=("--select", "tag:nightly+"),
             sqlbuild_model_contents_by_relative_path={
                 "downstream_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __dbt_ref("fact_orders")\n'
+                    'MODEL (description "Test model downstream_orders.");\n\nselect order_id from __dbt_ref("fact_orders")\n'
                 ),
                 "mart_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __ref("downstream_orders")\n'
+                    'MODEL (description "Test model mart_orders.");\n\nselect order_id from __ref("downstream_orders")\n'
                 ),
             },
             expected_sqlbuild_model_names=("downstream_orders", "mart_orders"),
@@ -104,7 +104,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="plans SQLBuild-only tag selector and skips dbt work",
             args=("--select", "tag:sqb_only"),
             sqlbuild_model_contents_by_relative_path={
-                "sqb_only.sql": "MODEL (tags [sqb_only]);\n\nselect 1 as order_id\n",
+                "sqb_only.sql": "MODEL (description 'Test model sqb_only.', tags [sqb_only]);\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=("sqb_only",),
             expected_sqlbuild_command_argvs=(("sqb", "plan", "--select", "sqb_only"),),
@@ -121,9 +121,9 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="applies SQLBuild tag excludes after selection",
             args=("--select", "tag:sqb_only", "--exclude", "tag:deprecated"),
             sqlbuild_model_contents_by_relative_path={
-                "sqb_only.sql": "MODEL (tags [sqb_only]);\n\nselect 1 as order_id\n",
+                "sqb_only.sql": "MODEL (description 'Test model sqb_only.', tags [sqb_only]);\n\nselect 1 as order_id\n",
                 "deprecated_orders.sql": (
-                    "MODEL (tags [sqb_only, deprecated]);\n\nselect 2 as order_id\n"
+                    "MODEL (description 'Test model deprecated_orders.', tags [sqb_only, deprecated]);\n\nselect 2 as order_id\n"
                 ),
             },
             expected_sqlbuild_model_names=("sqb_only",),
@@ -141,7 +141,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="plans SQLBuild-only model and skips dbt command work",
             args=("--select", "local_only"),
             sqlbuild_model_contents_by_relative_path={
-                "local_only.sql": "MODEL ();\n\nselect 1 as order_id\n",
+                "local_only.sql": "MODEL (description 'Test model local_only.');\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=("local_only",),
             expected_sqlbuild_command_argvs=(("sqb", "plan", "--select", "local_only"),),
@@ -159,10 +159,10 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             args=("--select", "+downstream_orders"),
             sqlbuild_model_contents_by_relative_path={
                 "downstream_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __dbt_ref("fact_orders")\n'
+                    'MODEL (description "Test model downstream_orders.");\n\nselect order_id from __dbt_ref("fact_orders")\n'
                 ),
                 "mart_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __ref("downstream_orders")\n'
+                    'MODEL (description "Test model mart_orders.");\n\nselect order_id from __ref("downstream_orders")\n'
                 ),
             },
             expected_sqlbuild_model_names=("downstream_orders",),
@@ -197,10 +197,10 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             args=("--select", "fact_orders+"),
             sqlbuild_model_contents_by_relative_path={
                 "downstream_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __dbt_ref("fact_orders")\n'
+                    'MODEL (description "Test model downstream_orders.");\n\nselect order_id from __dbt_ref("fact_orders")\n'
                 ),
                 "mart_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __ref("downstream_orders")\n'
+                    'MODEL (description "Test model mart_orders.");\n\nselect order_id from __ref("downstream_orders")\n'
                 ),
             },
             expected_sqlbuild_model_names=("downstream_orders", "mart_orders"),
@@ -223,10 +223,10 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             args=("--select", "fact_orders+", "--exclude", "mart_orders"),
             sqlbuild_model_contents_by_relative_path={
                 "downstream_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __dbt_ref("fact_orders")\n'
+                    'MODEL (description "Test model downstream_orders.");\n\nselect order_id from __dbt_ref("fact_orders")\n'
                 ),
                 "mart_orders.sql": (
-                    'MODEL ();\n\nselect order_id from __ref("downstream_orders")\n'
+                    'MODEL (description "Test model mart_orders.");\n\nselect order_id from __ref("downstream_orders")\n'
                 ),
             },
             expected_sqlbuild_model_names=("downstream_orders",),
@@ -246,7 +246,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="routes explicit model path selector for real SQLBuild project",
             args=("--select", "path:models/marts"),
             sqlbuild_model_contents_by_relative_path={
-                "marts/mart_orders.sql": "MODEL ();\n\nselect 1 as order_id\n",
+                "marts/mart_orders.sql": "MODEL (description 'Test model mart_orders.');\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=("mart_orders",),
             expected_sqlbuild_command_argvs=(("sqb", "plan", "--select", "mart_orders"),),
@@ -264,7 +264,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="preserves routed SQLBuild cursor args in real plan argv",
             args=("--select", "local_only", "--start-cursor-int", "10"),
             sqlbuild_model_contents_by_relative_path={
-                "local_only.sql": "MODEL ();\n\nselect 1 as order_id\n",
+                "local_only.sql": "MODEL (description 'Test model local_only.');\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=("local_only",),
             expected_sqlbuild_command_argvs=(
@@ -283,7 +283,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="returns stable no-work plan for unmatched selectors",
             args=("--select", "does_not_exist"),
             sqlbuild_model_contents_by_relative_path={
-                "local_only.sql": "MODEL ();\n\nselect 1 as order_id\n",
+                "local_only.sql": "MODEL (description 'Test model local_only.');\n\nselect 1 as order_id\n",
             },
             expected_sqlbuild_model_names=(),
             expected_sqlbuild_command_argvs=(),
