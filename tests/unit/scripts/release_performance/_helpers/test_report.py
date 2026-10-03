@@ -31,6 +31,8 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
                 "### Release performance: 0.126.2 (candidate) vs 0.126.1 (baseline)",
                 "Same runner: Example CPU, 4 CPUs; load average 0.50/0.40/0.30 before",
                 "3 interleaved runs per version",
+                "Benchmark projects are generated per side: the baseline runs projects from its "
+                "own generator (v0.126.1), the candidate from the candidate's.",
                 "Limits: wall +25% (ignored under 0.5 s), CPU +25% (ignored under 0.5 s), "
                 "peak RSS +25% (ignored under 32 MiB).",
                 "| `compile (warm cache)` | 6.00 → 6.10 | 1.017x | 6.50 → 6.40 | 0.985x "
@@ -82,6 +84,7 @@ def test_given_release_comparison_when_rendering_summary_then_reports_each_comma
     release: ReleaseComparison = ReleaseComparison(
         baseline_version="0.126.1",
         candidate_version="0.126.2",
+        baseline_generator="v0.126.1",
         runs=3,
         runner=RunnerContext(
             cpu_model="Example CPU",

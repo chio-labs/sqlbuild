@@ -60,3 +60,20 @@ class ChooseBaselineTestCase:
     files: tuple[dict[str, object], ...]
     tags: tuple[str, ...]
     expected_baseline: str | None
+
+
+@dataclass(frozen=True)
+class BaselineGeneratorTestCase:
+    description: str
+    generator: str
+    expected_projects: tuple[str, ...]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReleaseSourceTestCase:
+    description: str
+    tag: str
+    requested_version: str
+    expected_files: tuple[str, ...]
+    expected_error_fragments: tuple[str, ...]

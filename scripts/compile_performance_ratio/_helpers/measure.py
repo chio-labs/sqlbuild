@@ -55,18 +55,37 @@ def write_benchmark_project(*, kind: str, project_dir: Path, models: int) -> Non
     )
 
 
+def run_checkout_generator(
+    *,
+    checkout: Path,
+    python: Path,
+    entry: str,
+    arguments: tuple[str, ...],
+    environment: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Run generator code from another checkout's source tree with this `python`."""
+
+    return subprocess.run(
+        [str(python), "-c", entry, *arguments],
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        env={**environment, PYTHONPATH_KEY: str(checkout)},
+        check=False,
+    )
+
+
 def write_base_benchmark_project(
     *, base_root: Path, python: Path, kind: str, project_dir: Path, models: int
 ) -> None:
     """Write the base project with the base checkout's own generator, run by `python`."""
 
-    completed: subprocess.CompletedProcess[str] = subprocess.run(
-        [str(python), "-c", BASE_GENERATOR_ENTRY, kind, str(project_dir), str(models)],
-        cwd=base_root,
-        capture_output=True,
-        text=True,
-        env={**_compile_environment(), PYTHONPATH_KEY: str(base_root)},
-        check=False,
+    completed: subprocess.CompletedProcess[str] = run_checkout_generator(
+        checkout=base_root,
+        python=python,
+        entry=BASE_GENERATOR_ENTRY,
+        arguments=(kind, str(project_dir), str(models)),
+        environment=_compile_environment(),
     )
     if completed.returncode != 0:
         raise CompileComparisonError(

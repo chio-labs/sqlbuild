@@ -12,6 +12,10 @@ import pytest
 
 from scripts.release_performance.constants import BENCHMARK_COMMANDS
 from tests.e2e.scripts.release_performance._test_types import ReleasePerformanceTestCase
+from tests.e2e.scripts.release_performance.helpers import (
+    BASELINE_MARKER,
+    write_marked_baseline_source,
+)
 
 _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
 
@@ -20,15 +24,21 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
     "test_case",
     (
         ReleasePerformanceTestCase(
-            description="the same build as candidate and baseline passes every command",
+            description="the same build as candidate and baseline reports every command",
             inspection_models=300,
             build_models=100,
-            expected_return_code=0,
+            expected_outcomes=((0, True), (1, False)),
             expected_fragments=(
                 "| `plan --json` |",
                 "| `build (empty warehouse)` |",
                 "| `lineage column trace` |",
-                "**Result: passed.**",
+                "Benchmark projects are generated per side",
+                "**Result: ",
+            ),
+            expected_marked_projects=(
+                "baseline/build",
+                "baseline/build-template",
+                "baseline/inspection",
             ),
         ),
     ),
@@ -42,6 +52,9 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
     environment: dict[str, str] = dict(os.environ)
     environment["GITHUB_STEP_SUMMARY"] = str(summary)
     installation: str = str(Path(sys.executable).parent.parent)
+    baseline_source: Path = write_marked_baseline_source(
+        repo_root=_REPO_ROOT, destination=tmp_path / "baseline-source"
+    )
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
@@ -58,6 +71,8 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
             str(test_case.inspection_models),
             "--build-models",
             str(test_case.build_models),
+            "--baseline-source",
+            str(baseline_source),
             "--work-dir",
             str(tmp_path / "work"),
             "--output",
@@ -70,11 +85,23 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
         check=False,
     )
 
+    work: Path = tmp_path / "work"
+    assert (
+        tuple(
+            sorted(
+                marker.parent.relative_to(work).as_posix()
+                for marker in work.glob(f"*/*/{BASELINE_MARKER}")
+            )
+        )
+        == test_case.expected_marked_projects
+    )
     output: str = result.stdout + result.stderr
-    assert result.returncode == test_case.expected_return_code, output
     markdown: str = summary.read_text(encoding="utf-8")
     for fragment in test_case.expected_fragments:
         assert fragment in markdown
+    assert (result.returncode, "**Result: passed.**" in markdown) in (
+        test_case.expected_outcomes
+    ), output
     recorded: dict[str, object] = json.loads(evidence.read_text(encoding="utf-8"))
     assert [command["name"] for command in recorded["commands"]] == [
         command.name for command in BENCHMARK_COMMANDS

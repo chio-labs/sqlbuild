@@ -42,6 +42,16 @@ EXCLUDED_ENVIRONMENT_PREFIX: str = "DBT_"
 TIME_FORMAT: str = "%e %M %U %S"
 COMPILE_COMMAND: str = "compile"
 STDERR_TAIL_CHARACTERS: int = 2_000
+PRISTINE_DIRECTORY: str = "pristine"
+BASELINE_GENERATED_DIRECTORY: str = "baseline-generated"
+BASELINE_SOURCE_DIRECTORY: str = "baseline-source"
+RELEASE_TAG_PREFIX: str = "v"
+BASELINE_GENERATOR_ENTRY: str = (
+    "import sys; from pathlib import Path; "
+    "from scripts.release_performance._helpers.benchmark import write_pristine_projects; "
+    "write_pristine_projects("
+    "root=Path(sys.argv[1]), inspection_models=int(sys.argv[2]), build_models=int(sys.argv[3]))"
+)
 
 BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
     BenchmarkCommand(
