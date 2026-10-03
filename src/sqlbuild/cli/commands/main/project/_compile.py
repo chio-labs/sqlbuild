@@ -7,6 +7,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild.cli.commands._helpers.compile.collection import paused_cyclic_collection
 from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
@@ -49,6 +50,7 @@ def run_compile(request: CompileCommandRequest) -> int:
     )
     try:
         with (
+            paused_cyclic_collection(),
             collect_compile_timings() as detailed_timings,
             PreparedCompileArtifacts(
                 enabled=not request.profile_flags.skip_write

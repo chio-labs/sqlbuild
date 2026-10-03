@@ -189,3 +189,11 @@ class StagingInterleavingTestCase:
     description: str
     existing_files: dict[str, str]
     expected_files: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CompileCyclicCollectionTestCase:
+    description: str
+    collection_enabled_before: bool
+    expected_enabled_during: bool
+    expected_enabled_after: bool
