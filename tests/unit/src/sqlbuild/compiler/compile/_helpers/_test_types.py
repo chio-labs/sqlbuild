@@ -1129,3 +1129,11 @@ class RequiredDescriptionLocationCase:
     description: str
     build: Callable[[], RequiredDescriptionInputs]
     expected_location: tuple[str, int, int]
+
+
+@dataclass(frozen=True)
+class DialectSetOperationSplitTestCase:
+    description: str
+    sql: str
+    syntax: SqlLexicalSyntax | None
+    expected_branches: tuple[str, ...]

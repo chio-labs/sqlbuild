@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     PathDefaultDescriptionCase,
     RequiredDescriptionAggregateCase,
     RequiredDescriptionCase,
+    RequiredDescriptionExactOutputCase,
     RequiredDescriptionPlanCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
@@ -40,6 +41,27 @@ _ORDER_TOTALS_MODEL: tuple[str, str] = (
 _SCENARIO_BODY: str = (
     "WITH\n__ref__orders AS (\n  SELECT 1 AS order_id\n),\n"
     "__expected__order_totals AS (\n  SELECT 1 AS order_count\n)\nSELECT 1\n"
+)
+
+
+_SHADOWED_SOURCES_YAML: str = (
+    "sources:\n"
+    "  - name: raw_orders\n"
+    "    schema: main\n"
+    "    table: orders\n"
+    "    columns:\n"
+    "      - name: raw_refunds\n"
+    "        type: INTEGER\n"
+    '  - name: "raw_refunds"  # refunds feed\n'
+    "    schema: main\n"
+    "    table: refunds\n"
+    "  - name: 'raw_customers'\n"
+    "    schema: main\n"
+    "    table: customers\n"
+)
+_TWO_SEEDS_YAML: str = (
+    "seeds:\n"
+    "  - name: product_types\n" + _SEED_COLUMNS + "  - name: product_labels\n" + _SEED_COLUMNS
 )
 
 
@@ -532,6 +554,89 @@ def test_given_every_resource_kind_undescribed_when_compiling_then_one_run_repor
     assert result.returncode == 1, result.stdout + result.stderr
     assert codes == test_case.expected_codes
     assert kinds == test_case.expected_kinds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RequiredDescriptionExactOutputCase(
+            description="seed and source entries located at their outermost declarations",
+            files=(
+                ("models/order_summary.sql", "MODEL ();\nSELECT 1 AS order_count\n"),
+                ("seeds/product_types.csv", _SEED_CSV),
+                ("seeds/product_labels.csv", _SEED_CSV),
+                ("seeds/products.yml", _TWO_SEEDS_YAML),
+                ("sources/raw.yml", _SHADOWED_SOURCES_YAML),
+            ),
+            expected_diagnostics=(
+                (
+                    "P010",
+                    "model 'order_summary' has no description",
+                    "models/order_summary.sql",
+                    1,
+                    1,
+                ),
+                ("P010", "seed 'product_types' has no description", "seeds/products.yml", 2, 1),
+                ("P010", "seed 'product_labels' has no description", "seeds/products.yml", 8, 1),
+                ("P010", "source 'raw_orders' has no description", "sources/raw.yml", 2, 1),
+                ("P010", "source 'raw_refunds' has no description", "sources/raw.yml", 8, 1),
+                ("P010", "source 'raw_customers' has no description", "sources/raw.yml", 11, 1),
+            ),
+            expected_help=(
+                "to describe model 'order_summary', add this to the MODEL header in "
+                "models/order_summary.sql:\n"
+                "            MODEL (\n"
+                '              description "What one row of order_summary represents",\n'
+                "              ...\n"
+                "            );",
+                (
+                    "to describe seed 'product_types', add `description` to its entry in seeds/products.yml:\n"
+                    "            - name: product_types\n"
+                    "              description: What one row of product_types represents"
+                ),
+                (
+                    "to describe seed 'product_labels', add `description` to its entry in seeds/products.yml:\n"
+                    "            - name: product_labels\n"
+                    "              description: What one row of product_labels represents"
+                ),
+                (
+                    "to describe source 'raw_orders', add `description` to its entry in sources/raw.yml:\n"
+                    "            - name: raw_orders\n"
+                    "              description: What one row of raw_orders represents"
+                ),
+                (
+                    "to describe source 'raw_refunds', add `description` to its entry in sources/raw.yml:\n"
+                    "            - name: raw_refunds\n"
+                    "              description: What one row of raw_refunds represents"
+                ),
+                (
+                    "to describe source 'raw_customers', add `description` to its entry in sources/raw.yml:\n"
+                    "            - name: raw_customers\n"
+                    "              description: What one row of raw_customers represents"
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_undescribed_yaml_entries_when_compiling_then_reports_exact_ordered_diagnostics(
+    test_case: RequiredDescriptionExactOutputCase, tmp_path: Path
+) -> None:
+    result: subprocess.CompletedProcess[str] = compile_inline_files(
+        tmp_path=tmp_path, files=test_case.files
+    )
+
+    payload: dict[str, Any] = json.loads(result.stdout)
+    diagnostics: list[dict[str, Any]] = payload["diagnostics"]
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (
+        tuple(
+            (item["code"], item["message"], item["path"], item["line"], item["column"])
+            for item in diagnostics
+        )
+        == test_case.expected_diagnostics
+    )
+    assert tuple(item["help"] for item in diagnostics) == test_case.expected_help
 
 
 @pytest.mark.parametrize(

@@ -518,6 +518,14 @@ class RequiredDescriptionAggregateCase:
 
 
 @dataclass(frozen=True)
+class RequiredDescriptionExactOutputCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    expected_diagnostics: tuple[tuple[str, str, str, int, int], ...]
+    expected_help: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RequiredDescriptionPlanCase:
     description: str
     model_sql: str

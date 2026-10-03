@@ -5,9 +5,10 @@ from __future__ import annotations
 from sqlbuild.compiler.sql_analysis._helpers.scanning import (
     is_identifier_character_impl,
     iter_code_positions_impl,
-    skip_block_comment_impl,
-    skip_line_comment_impl,
+    skip_ignorable_impl,
+    strip_ignorable_impl,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _SET_OPERATOR_KEYWORDS: tuple[str, ...] = ("UNION", "INTERSECT")
 _EXCEPT_KEYWORD: str = "EXCEPT"
@@ -16,8 +17,10 @@ _DISTINCT_KEYWORD: str = "DISTINCT"
 _STAR_CHARACTER: str = "*"
 
 
-def split_set_operation_branches_impl(*, sql: str, context: str) -> tuple[str, ...]:
-    """Split SQL on top-level `UNION`, `INTERSECT` and `EXCEPT` with optional quantifiers."""
+def split_set_operation_branches_impl(
+    *, sql: str, context: str, syntax: SqlLexicalSyntax | None = None
+) -> tuple[str, ...]:
+    """Split SQL on top-level set operators; branches exclude surrounding comments."""
 
     branches: list[str] = []
     branch_start: int = 0
@@ -26,7 +29,7 @@ def split_set_operation_branches_impl(*, sql: str, context: str) -> tuple[str, .
     previous_depth: int = 0
     index: int
     depth: int
-    for index, depth in iter_code_positions_impl(sql=sql, context=context):
+    for index, depth in iter_code_positions_impl(sql=sql, context=context, syntax=syntax):
         if depth != previous_depth:
             previous_code = None
         previous_depth = depth
@@ -39,17 +42,23 @@ def split_set_operation_branches_impl(*, sql: str, context: str) -> tuple[str, .
             previous_code = sql[index]
         if operator_end is None:
             continue
-        branch_sql: str = sql[branch_start:index].strip()
+        branch_sql: str = strip_ignorable_impl(
+            sql=sql[branch_start:index], context=context, syntax=syntax
+        )
         if branch_sql:
             branches.append(branch_sql)
-        resume = _skip_ignorable(sql=sql, start=operator_end, context=context)
+        resume = skip_ignorable_impl(sql=sql, start=operator_end, context=context, syntax=syntax)
         quantifier_end: int | None = _keyword_end(
             sql=sql, start=resume, keyword=_ALL_KEYWORD
         ) or _keyword_end(sql=sql, start=resume, keyword=_DISTINCT_KEYWORD)
         if quantifier_end is not None:
-            resume = _skip_ignorable(sql=sql, start=quantifier_end, context=context)
+            resume = skip_ignorable_impl(
+                sql=sql, start=quantifier_end, context=context, syntax=syntax
+            )
         branch_start = resume
-    final_branch_sql: str = sql[branch_start:].strip()
+    final_branch_sql: str = strip_ignorable_impl(
+        sql=sql[branch_start:], context=context, syntax=syntax
+    )
     if final_branch_sql:
         branches.append(final_branch_sql)
     return tuple(branches)
@@ -77,19 +86,3 @@ def _keyword_end(*, sql: str, start: int, keyword: str) -> int | None:
     if start > 0 and is_identifier_character_impl(sql[start - 1]):
         return None
     return keyword_end
-
-
-def _skip_ignorable(*, sql: str, start: int, context: str) -> int:
-    index: int = start
-    while index < len(sql):
-        if sql[index].isspace():
-            index += 1
-            continue
-        if sql.startswith("--", index):
-            index = skip_line_comment_impl(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment_impl(sql=sql, start=index, context=context)
-            continue
-        return index
-    return index
