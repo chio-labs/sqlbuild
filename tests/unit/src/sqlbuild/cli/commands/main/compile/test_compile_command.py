@@ -551,12 +551,12 @@ def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyze
     "test_case",
     [
         RuleGatedTestPlanningTestCase(
-            description="inline writer plans once for withheld artifacts",
+            description="background test planning is reused for withheld artifacts",
             min_prepared_models=128,
             test_header='name "orders_case"',
             expected_codes=("SQBRMODEL102", "S000"),
             expected_message_fragment="references __source('raw_refunds') which has no mock",
-            expected_inline_planning_calls=1,
+            expected_inline_planning_calls=0,
         ),
         RuleGatedTestPlanningTestCase(
             description="background preparation reuses staged planning",
@@ -567,12 +567,12 @@ def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyze
             expected_inline_planning_calls=0,
         ),
         RuleGatedTestPlanningTestCase(
-            description="inline planning input error becomes a diagnostic",
+            description="background test planning input error becomes a diagnostic",
             min_prepared_models=128,
             test_header='name "orders_case", cursor_start "2026-02-01"',
             expected_codes=("SQBRMODEL102", "P001"),
             expected_message_fragment="declares cursor_start or cursor_end",
-            expected_inline_planning_calls=1,
+            expected_inline_planning_calls=0,
         ),
         RuleGatedTestPlanningTestCase(
             description="background planning input error becomes a diagnostic",

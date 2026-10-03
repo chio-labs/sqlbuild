@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 
+use polyglot_sql::Dialect;
 use serde_json::{Value, json};
 
 use crate::compiler::_helpers::model_headers::tokenization::{
@@ -11,6 +12,7 @@ use crate::compiler::_helpers::sql_interpolation::substitution::{
     FALLBACK, SUBSTITUTED, UNCHANGED, substitute_batch,
 };
 use crate::compiler::_helpers::sql_references::extraction::extract;
+use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::main::sql_test_extraction::extract_batch_json;
 use crate::compiler::models::AuthoredValue;
 
@@ -1656,4 +1658,134 @@ fn generic_lexical_syntax() -> Value {
         "nestedBlockComments": false,
         "lineCommentPrefixes": ["--"]
     })
+}
+
+type MarkerCalls = Option<Vec<(String, String)>>;
+
+/// The previous JSON-tree walk, kept as the oracle the streaming collector must match.
+fn json_relation_marker_calls(value: &Value) -> Vec<(String, String)> {
+    let from_markers = value
+        .get("from")
+        .and_then(|from| from.get("expressions"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(json_marker);
+    let join_markers = value
+        .get("joins")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|join| join.get("this"))
+        .filter_map(json_marker);
+    let children: Vec<&Value> = value
+        .as_object()
+        .map(|object| object.values().collect())
+        .or_else(|| value.as_array().map(|values| values.iter().collect()))
+        .unwrap_or_default();
+    from_markers
+        .chain(join_markers)
+        .chain(children.into_iter().flat_map(json_relation_marker_calls))
+        .collect()
+}
+
+fn json_marker(expression: &Value) -> Option<(String, String)> {
+    let object = expression.as_object()?;
+    object.get("alias").map_or_else(
+        || json_function_marker(object),
+        |alias| alias.get("this").and_then(json_marker),
+    )
+}
+
+fn json_function_marker(object: &serde_json::Map<String, Value>) -> Option<(String, String)> {
+    let function = object.get("function")?.as_object()?;
+    let function_name = function.get("name")?.as_str()?.to_ascii_lowercase();
+    let names: Vec<String> = function
+        .get("args")?
+        .as_array()?
+        .iter()
+        .map(|arg| {
+            arg.get("column")?
+                .get("name")?
+                .get("name")?
+                .as_str()
+                .map(str::to_string)
+        })
+        .collect::<Option<_>>()?;
+    let referenced_name = (function_name == "__dbt_ref" && names.len() == 2)
+        .then(|| names.join("__"))
+        .or_else(|| (names.len() == 1).then(|| names[0].clone()))?;
+    Some((function_name, referenced_name))
+}
+
+/// Owned marker calls for comparison with collected calls.
+pub(crate) fn owned_marker_calls(calls: &[(&str, &str)]) -> MarkerCalls {
+    Some(
+        calls
+            .iter()
+            .map(|(function, name)| ((*function).to_string(), (*name).to_string()))
+            .collect(),
+    )
+}
+
+/// Parse one statement and return the streaming collector's and the JSON oracle's marker calls.
+pub(crate) fn relation_markers_and_json_oracle(
+    dialect: &str,
+    sql: &str,
+) -> (MarkerCalls, MarkerCalls) {
+    let mut statements = Dialect::get_by_name(dialect)
+        .expect("test dialect must exist")
+        .parse(sql)
+        .expect("test SQL must parse");
+    assert_eq!(statements.len(), 1, "{sql}");
+    let expression = statements.remove(0);
+    (
+        relation_marker_calls(&expression).ok(),
+        serde_json::to_value(&expression)
+            .ok()
+            .map(|value| json_relation_marker_calls(&value)),
+    )
+}
+
+/// Return every generated relation shape whose collected markers differ from the JSON oracle.
+pub(crate) fn relation_marker_oracle_mismatches(dialect: &str) -> Vec<String> {
+    let relations: &[&str] = &[
+        "__ref(\"orders\")",
+        "__source(\"raw_orders\") AS s",
+        "__dbt_ref(\"shop\", \"customers\") c",
+        "(SELECT * FROM __seed(\"regions\") JOIN __ref(\"stores\") ON TRUE) AS d",
+        "LATERAL (SELECT * FROM __ref(\"items\")) AS l",
+        "__udf(\"fn_orders\")",
+        "plain_table",
+    ];
+    let wrappers = [
+        "SELECT * FROM {a} JOIN {b} ON TRUE",
+        "WITH x AS (SELECT * FROM {a}) SELECT (SELECT 1 FROM {b}) AS v FROM x",
+        "SELECT * FROM {a} WHERE EXISTS (SELECT 1 FROM {b})",
+        "SELECT * FROM {a} UNION SELECT * FROM {b}",
+        "SELECT * FROM {a}, {b}",
+    ];
+    let parser = Dialect::get_by_name(dialect).expect("test dialect must exist");
+    wrappers
+        .iter()
+        .flat_map(|wrapper| {
+            relations.iter().flat_map(move |first| {
+                relations
+                    .iter()
+                    .map(move |second| wrapper.replace("{a}", first).replace("{b}", second))
+            })
+        })
+        .filter(|sql| {
+            parser
+                .parse(sql)
+                .unwrap_or_default()
+                .iter()
+                .any(|expression| {
+                    relation_marker_calls(expression).ok()
+                        != serde_json::to_value(expression)
+                            .ok()
+                            .map(|value| json_relation_marker_calls(&value))
+                })
+        })
+        .collect()
 }

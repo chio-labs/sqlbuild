@@ -32,6 +32,25 @@ class PreparedArtifactsCompileTestCase:
 
 
 @dataclass(frozen=True)
+class BackgroundTestPlanningCompileTestCase:
+    description: str
+    compile_args: tuple[str, ...]
+    rules_config: str
+    prepare_project: Callable[..., None]
+    max_prepared_models: int = 5000
+    expected_background_plans: tuple[str, ...] = ("sqlbuild-tests",)
+
+
+@dataclass(frozen=True)
+class BackgroundTestPlanningFailureTestCase:
+    description: str
+    compile_args: tuple[str, ...]
+    test_options: str
+    patch_native_planner: Callable[..., None]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class AbandonedStagingCompileTestCase:
     description: str
     model_count: int

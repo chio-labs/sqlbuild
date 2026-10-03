@@ -18,6 +18,8 @@ mod sql_test_extraction;
 mod sql_test_markers;
 #[path = "tests/test_sql_test_planning.rs"]
 mod sql_test_planning;
+#[path = "tests/test_sql_test_relation_markers.rs"]
+mod sql_test_relation_markers;
 #[path = "tests/test_sql_test_rendering.rs"]
 mod sql_test_rendering;
 #[path = "tests/test_types.rs"]

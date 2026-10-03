@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -17,12 +18,18 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.commands._helpers.compile import target_writer
+from sqlbuild.cli.commands.classes import prepared_compile_artifacts
+from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
 from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
 from sqlbuild.compiler.discovery._helpers.filesystem import (
     model_files as discovery_model_files_module,
 )
+from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
+from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.spec.contracts.models import SourceLocation
 
 
@@ -57,6 +64,127 @@ def write_prepared_artifacts_project(*, project_dir: Path, model_count: int) -> 
             f"SELECT CAST({index} AS INTEGER) AS order_id\n",
             encoding="utf-8",
         )
+
+
+SELECTED_RULES_CONFIG: str = '[rules]\nselect = ["SQBRSQL021"]\n'
+TEST_PLANNING_MODELS: int = 6
+
+
+def write_test_planning_project(
+    *, project_dir: Path, model_count: int, rules_config: str, test_options: str = ""
+) -> None:
+    """Write a chain of DuckDB models with one SQL test per downstream model."""
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n{rules_config}', encoding="utf-8"
+    )
+    models: Path = project_dir / "models"
+    tests: Path = project_dir / "tests" / "unit"
+    models.mkdir()
+    tests.mkdir(parents=True)
+    header: str = (
+        "MODEL (description 'Test model.', materialized table, contract enforced, "
+        "columns (order_id (type INTEGER)));\n"
+    )
+    (models / "orders_000.sql").write_text(
+        header + "SELECT CAST(0 AS INTEGER) AS order_id\n", encoding="utf-8"
+    )
+    for index in range(1, model_count):
+        upstream: str = f"orders_{index - 1:03}"
+        (models / f"orders_{index:03}.sql").write_text(
+            header + f'SELECT CAST(order_id + 1 AS INTEGER) AS order_id FROM __ref("{upstream}")\n',
+            encoding="utf-8",
+        )
+        write_order_test(
+            tests_dir=tests, index=index, expected_order_id=2, test_options=test_options
+        )
+
+
+def write_order_test(
+    *, tests_dir: Path, index: int, expected_order_id: int, test_options: str = ""
+) -> None:
+    """Write the SQL test for one chained order model with a mocked upstream model."""
+
+    (tests_dir / f"orders_{index:03}.sql").write_text(
+        f'TEST (name "orders_{index:03}_case"{test_options});\n'
+        "WITH\n"
+        f"__ref__orders_{index - 1:03} AS (SELECT CAST(1 AS INTEGER) AS order_id),\n"
+        f"__expected__orders_{index:03} AS "
+        f"(SELECT CAST({expected_order_id} AS INTEGER) AS order_id)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def compiled_files(project_dir: Path) -> dict[str, bytes]:
+    """Return every compiled artifact under target/compiled keyed by relative path."""
+
+    compiled: Path = project_dir / "target" / "compiled"
+    return {
+        str(path.relative_to(compiled)): path.read_bytes()
+        for path in sorted(compiled.rglob("*.sql"))
+    }
+
+
+def semantic_compile_payload(output: str) -> dict[str, object]:
+    """Return compile JSON without its timings and version, which vary between runs."""
+
+    payload: dict[str, object] = json.loads(output)
+    payload.pop("compile_timings", None)
+    payload.pop("version", None)
+    return payload
+
+
+def compile_project_json(
+    *, project_dir: Path, compile_args: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> tuple[int, dict[str, object]]:
+    """Compile through the CLI and return the exit code with the semantic JSON payload."""
+
+    exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json", *compile_args])
+    return exit_code, semantic_compile_payload(capsys.readouterr().out)
+
+
+def keep_project_unchanged(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Leave a freshly written project cold, with no target directory."""
+
+
+def compile_then_edit_one_test(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Warm the compile cache, then change one SQL test so only it must be planned again."""
+
+    assert compile_project_json(project_dir=project_dir, compile_args=(), capsys=capsys)[0] == 0
+    write_order_test(tests_dir=project_dir / "tests" / "unit", index=2, expected_order_id=3)
+
+
+def keep_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave the real native SQL-test planner in place."""
+
+
+def fail_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the native SQL-test planner fail as an unexpected internal error would."""
+
+    def fail(**kwargs: object) -> tuple[NativeSqlTestArtifact, ...]:
+        raise NativeSqlTestPlanningError("native SQL-test planning failed: worker stopped")
+
+    monkeypatch.setattr(target_writer, "plan_and_render_sql_test_artifacts", fail)
+
+
+def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record the thread-name prefix of every background SQL-test planning task."""
+
+    threads: list[str] = []
+    plan: Callable[..., PlannedStaticSqlTests] = prepared_compile_artifacts.plan_static_sql_tests
+
+    def recorded_plan(**kwargs: Any) -> PlannedStaticSqlTests:
+        threads.append(threading.current_thread().name.rpartition("_")[0])
+        return plan(**kwargs)
+
+    monkeypatch.setattr(prepared_compile_artifacts, "plan_static_sql_tests", recorded_plan)
+    return threads
+
+
+def skip_artifact_preparation(self: PreparedCompileArtifacts, **kwargs: object) -> None:
+    """Disable background preparation so the write phase plans SQL tests inline."""
 
 
 def has_second_filesystem(root: Path) -> bool:
