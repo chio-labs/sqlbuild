@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from bisect import bisect_right
 from pathlib import Path
 from threading import Event
 from typing import Any, cast
@@ -28,6 +27,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import MappedOffset
+from sqlbuild.lint._helpers.native import source_line_starts, source_position
 from sqlbuild.lint._helpers.sqlbuild_tokens import interpolation_text_at
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
@@ -41,7 +41,6 @@ from sqlbuild.lint.exceptions import LintStoppedError, NativeLintError
 from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 
 _NATIVE_LINT_API_VERSION: int = 1
-_NEWLINE_CHARACTER: str = "\n"
 _UNUSED_CTE_CODE: str = "SQBRSQL005"
 _LONG_LITERAL_CODE: str = "SQBRSQL044"
 _PARSE_ERROR_POSITION_PATTERN: re.Pattern[str] = re.compile(
@@ -130,7 +129,7 @@ def run_native_sql_lint(
         contents: str = contents_by_path[body.file_path]
         line_starts: tuple[int, ...] | None = line_starts_by_path.get(body.file_path)
         if line_starts is None:
-            line_starts = _line_starts(contents)
+            line_starts = source_line_starts(contents)
             line_starts_by_path[body.file_path] = line_starts
         if isinstance(response, NativeLintError):
             parse_violation: LintViolation | None = _parse_failure_violation(
@@ -254,7 +253,7 @@ def _parse_failure_violation(
         expanded_offset += min(expanded_column - 1, len(expanded_lines[expanded_line - 1]))
     mapped: MappedOffset = map_expanded_offset(offset=expanded_offset, passes=body.passes)
     absolute_offset: int = body.body_start + mapped.offset
-    line, column = _offset_position(offset=absolute_offset, line_starts=line_starts)
+    line, column = source_position(offset=absolute_offset, line_starts=line_starts)
     return LintViolation(
         file_path=body.file_path,
         line=line,
@@ -308,7 +307,7 @@ def _authored_violation(
         _SQLBUILD_HARNESS_CTE_PREFIXES, absolute_offset
     ):
         return None
-    line, column = _offset_position(offset=absolute_offset, line_starts=line_starts)
+    line, column = source_position(offset=absolute_offset, line_starts=line_starts)
     end_position: tuple[int, int] | None = _authored_end_position(
         start=start,
         end=end,
@@ -422,14 +421,14 @@ def _authored_end_position(
         )
         if token is None:
             return None
-        return _offset_position(offset=absolute_start + len(token), line_starts=line_starts)
+        return source_position(offset=absolute_start + len(token), line_starts=line_starts)
     if end <= start:
         return None
     mapped_last: MappedOffset = map_expanded_offset(offset=end - 1, passes=body.passes)
     if mapped_last.generated or mapped_last.offset - mapped_start.offset != end - start - 1:
         return None
     absolute_end: int = body.body_start + mapped_last.offset + 1
-    return _offset_position(offset=absolute_end, line_starts=line_starts)
+    return source_position(offset=absolute_end, line_starts=line_starts)
 
 
 def _violation_message(
@@ -441,15 +440,3 @@ def _violation_message(
     if token is None:
         return f"{message} {GENERATED_SQL_MESSAGE_SUFFIX}"
     return f"{message} {GENERATED_SQL_MESSAGE_TEMPLATE.format(token=token)}"
-
-
-def _line_starts(value: str) -> tuple[int, ...]:
-    return (
-        0,
-        *(index + 1 for index, character in enumerate(value) if character == _NEWLINE_CHARACTER),
-    )
-
-
-def _offset_position(*, offset: int, line_starts: tuple[int, ...]) -> tuple[int, int]:
-    line_index: int = bisect_right(line_starts, offset) - 1
-    return line_index + 1, offset - line_starts[line_index] + 1
