@@ -8,6 +8,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
+from sqlbuild.compiler.compile._helpers.render.volatile_reads import (
+    note_context_read,
+    note_environment_read,
+)
 from sqlbuild.compiler.compile.constants import (
     MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
     MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
@@ -521,6 +525,7 @@ def _lookup_variable(*, name: str, variables: dict[str, object], context_label: 
 
 
 def _lookup_environment_variable(*, name: str, context_label: str) -> str:
+    note_environment_read(name)
     if name not in os.environ:
         raise CompileInputError(f"{context_label} references missing ENV variable '{name}'")
     return os.environ[name]
@@ -537,6 +542,7 @@ def _lookup_context_value(
         if preserve_unknown_context:
             return f"${{{TemplateNamespace.CTX}:{name}}}"
         raise CompileInputError(f"{context_label} references unknown CTX key '{name}'")
+    note_context_read(name)
     context_value: str | None = context_values.get(name)
     if context_value is None:
         raise CompileInputError(

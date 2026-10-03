@@ -24,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     FreshProcessCompileBenchmarkResult,
     _run_fresh_process_compile_benchmark,
+    attachment_cache_counts,
     fresh_process_compile_cache_metrics,
     measure_model_sql_bytes,
     run_dense_warm_edit_benchmark,
@@ -203,14 +204,17 @@ def test_given_dense_project_when_compiling_warm_and_after_one_edit_then_matches
     batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(warm)
     assert (batch_hits + entry_hits, misses, bypasses) == (test_case.model_count, 0, 0)
     assert warm_timings["rule_cache_misses"] == 0
+    assert attachment_cache_counts(warm_timings) == (test_case.model_count, 0, 0)
     batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(edit)
     assert 0 < misses < test_case.model_count
     assert batch_hits + entry_hits + misses == test_case.model_count
     assert edit_timings["rule_cache_misses"] == test_case.expected_edit_rule_cache_misses
+    assert attachment_cache_counts(edit_timings) == (test_case.model_count - 1, 1, 0)
     oracle_timings: dict[str, int] = cast(
         dict[str, int], measurements["oracle"].payload["compile_timings"]
     )
     assert oracle_timings["rule_cache_hits"] == 0
+    assert attachment_cache_counts(oracle_timings) == (0, 0, 0)
     assert warm.elapsed_seconds < test_case.expected_warm_max_seconds
     assert edit.elapsed_seconds < test_case.expected_edit_max_seconds
 

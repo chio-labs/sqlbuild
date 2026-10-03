@@ -17,6 +17,12 @@ class CollectedCompileDiagnostics:
         self._by_key.setdefault(key, diagnostic)
 
     @property
+    def entries(self) -> tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]:
+        """Return each recorded key and diagnostic in report order."""
+
+        return tuple(self._by_key.items())
+
+    @property
     def diagnostics(self) -> tuple[CompilerDiagnostic, ...]:
         """Return the recorded diagnostics in deterministic key order."""
 

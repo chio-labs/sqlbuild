@@ -90,6 +90,9 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         "analysis_cache_bypasses",
         "fact_cache_hits",
         "fact_cache_misses",
+        "attachment_cache_hits",
+        "attachment_cache_misses",
+        "attachment_cache_bypasses",
         "total_ms",
     }
     assert all(isinstance(value, int) and value >= 0 for value in timings.values())

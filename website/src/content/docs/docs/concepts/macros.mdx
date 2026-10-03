@@ -145,6 +145,27 @@ Python implementation details.
 
 Imported functions are not re-exported as new macros from the importing file.
 
+## Keep macros deterministic
+
+A macro must return the same SQL every time it receives the same arguments and macro context. Do
+not read environment variables, the clock, random values, files, or network services inside a
+macro. Pass such values in through [project variables](/docs/concepts/interpolation#project-variables)
+or the macro context instead.
+
+SQLBuild relies on this when it reuses compiled models between compile runs. A model is compiled
+again when its file, its configuration and defaults, project variables, the target, the adapter,
+any project macro or declaration, or the installed SQLBuild version changes. Models whose
+configuration, hooks, or SQL read an environment variable or `run.id` are compiled again on every
+run. `sqb compile --no-cache` compiles everything from scratch.
+
+The reuse check covers model files, project and local configuration, macro, enum, constant, schema,
+and SQL hook files, the source files that define Python hooks and audit factories, and custom
+adapter files under `adapters/`, along with the target, project variables, and command-line flags.
+It does not cover code those files import from elsewhere: third-party libraries, and project
+modules outside those locations that a hook or adapter imports. Keep macro, hook, and adapter code
+independent of such modules, or run `sqb compile --no-cache` (or delete `target/cache/compiler/`)
+after upgrading or editing one that changes their output.
+
 ## Use macros in tests
 
 Tests are SQL, so they can use macros as reusable fixture generators:

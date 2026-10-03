@@ -764,6 +764,25 @@ class CompileModelInput:
 
 
 @dataclass(frozen=True)
+class ModelAttachmentFact:
+    """One model's reusable attachment result, or None when it read per-run values."""
+
+    model_input: CompileModelInput | None
+    hook_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
+    diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...] = field(
+        default_factory=tuple
+    )
+
+
+@dataclass(frozen=True)
+class ModelAttachmentEnvironment:
+    """Project-wide identity shared by every model attachment cache key."""
+
+    digest: str
+    keyed_reads: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class ModelSqlAnalysis:
     """Completed model analysis and its in-memory binding proof."""
 

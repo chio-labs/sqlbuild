@@ -24,4 +24,7 @@ type CompileMetric = Literal[
     "analysis_cache_bypasses",
     "fact_cache_hits",
     "fact_cache_misses",
+    "attachment_cache_hits",
+    "attachment_cache_misses",
+    "attachment_cache_bypasses",
 ]
