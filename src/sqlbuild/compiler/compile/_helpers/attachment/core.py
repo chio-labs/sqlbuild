@@ -598,6 +598,9 @@ def _attach_models(
                 hook_references=hook_references,
                 reads=reads,
                 diagnostics=diagnostics,
+                expanded=_attachment_expanded(
+                    model_input=model_input, hook_references=hook_references
+                ),
             )
         model_inputs.append(model_input)
 
@@ -606,6 +609,19 @@ def _attach_models(
         schema_files=state.discovered_inputs.schema_files,
     )
     return tuple(model_inputs)
+
+
+def _attachment_expanded(
+    *, model_input: CompileModelInput, hook_references: tuple[CompileSqlReference, ...]
+) -> bool:
+    """Return whether attachment expanded macros, hooks, or declarations worth reusing."""
+
+    return bool(
+        model_input.macro_deps
+        or model_input.declaration_usages
+        or hook_references
+        or any(model_input.config.values.get(key) for key in _MODEL_HOOK_KEYS)
+    )
 
 
 def _replay_model_attachment(

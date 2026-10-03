@@ -51,6 +51,13 @@ class AttachedAuditTargetKind(StrEnum):
         return CompiledResourceType(self.value)
 
 
+class ModelAttachmentBypass(StrEnum):
+    """Why a model's attachment is recomputed on every compile instead of reused."""
+
+    PER_RUN_VALUES = "per_run_values"
+    UNEXPANDED = "unexpanded"
+
+
 class CompileContextKey(StrEnum):
     RUN_ID = "run.id"
     RUN_TARGET = "run.target"

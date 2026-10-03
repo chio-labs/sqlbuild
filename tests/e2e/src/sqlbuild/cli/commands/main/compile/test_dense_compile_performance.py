@@ -145,6 +145,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             "3d26ef1a4d30ea96dd97d60b2e2f6c93473e354099138a01d74b136700c9f022",
             "f7f8a3d881496664ec7e293144d93b8b8e486a04eba830d9cc6500d1b28147f3",
             3,
+            900,
         ),
         DenseWarmEditCompileGuardTestCase(
             "dense_models_5000_warm_and_one_edit",
@@ -156,6 +157,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             "bc6b60e90118d66f3217a5f04f104ae91f657a6356f4d19844614d1ba48b0012",
             "571fe58493234057c7128b4929d3518532731192f6fef85da0496788826bb172",
             3,
+            1500,
         ),
     ),
     ids=lambda case: case.description,
@@ -204,17 +206,28 @@ def test_given_dense_project_when_compiling_warm_and_after_one_edit_then_matches
     batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(warm)
     assert (batch_hits + entry_hits, misses, bypasses) == (test_case.model_count, 0, 0)
     assert warm_timings["rule_cache_misses"] == 0
-    assert attachment_cache_counts(warm_timings) == (test_case.model_count, 0, 0)
+    cached: int = test_case.expected_cached_attachment_count
+    assert attachment_cache_counts(warm_timings) == (
+        cached,
+        0,
+        0,
+        test_case.model_count - cached,
+    )
     batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(edit)
     assert 0 < misses < test_case.model_count
     assert batch_hits + entry_hits + misses == test_case.model_count
     assert edit_timings["rule_cache_misses"] == test_case.expected_edit_rule_cache_misses
-    assert attachment_cache_counts(edit_timings) == (test_case.model_count - 1, 1, 0)
+    assert attachment_cache_counts(edit_timings) == (
+        cached - 1,
+        1,
+        0,
+        test_case.model_count - cached,
+    )
     oracle_timings: dict[str, int] = cast(
         dict[str, int], measurements["oracle"].payload["compile_timings"]
     )
     assert oracle_timings["rule_cache_hits"] == 0
-    assert attachment_cache_counts(oracle_timings) == (0, 0, 0)
+    assert attachment_cache_counts(oracle_timings) == (0, 0, 0, 0)
     assert warm.elapsed_seconds < test_case.expected_warm_max_seconds
     assert edit.elapsed_seconds < test_case.expected_edit_max_seconds
 

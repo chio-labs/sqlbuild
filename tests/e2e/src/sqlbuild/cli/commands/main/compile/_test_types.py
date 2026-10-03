@@ -251,6 +251,7 @@ class DenseWarmEditCompileGuardTestCase:
     expected_cold_fingerprint: str
     expected_edit_fingerprint: str
     expected_edit_rule_cache_misses: int
+    expected_cached_attachment_count: int
 
 
 @dataclass(frozen=True)
@@ -392,7 +393,7 @@ class AttachmentCacheReuseTestCase:
 
     description: str
     edit: Callable[[Path], None]
-    expected_attachment_counts: tuple[int, int, int]
+    expected_attachment_counts: tuple[int, int, int, int]
     setup: Callable[[Path], None] = lambda _root: None
     initial_env: dict[str, str] = field(default_factory=dict)
     edited_env: dict[str, str] = field(default_factory=dict)
@@ -406,7 +407,7 @@ class AttachmentRunIdTestCase:
     description: str
     model_path: str
     model_sql: str
-    expected_warm_attachment_counts: tuple[int, int, int]
+    expected_warm_attachment_counts: tuple[int, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -416,7 +417,7 @@ class AttachmentDiagnosticReplayTestCase:
     description: str
     files: dict[str, str]
     expected_diagnostic_codes: tuple[str, ...]
-    expected_warm_attachment_counts: tuple[int, int, int]
+    expected_warm_attachment_counts: tuple[int, int, int, int]
 
 
 @dataclass(frozen=True)

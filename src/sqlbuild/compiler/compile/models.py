@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
+    ModelAttachmentBypass,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -765,9 +766,10 @@ class CompileModelInput:
 
 @dataclass(frozen=True)
 class ModelAttachmentFact:
-    """One model's reusable attachment result, or None when it read per-run values."""
+    """One model's reusable attachment result, or a marker saying why it is always recomputed."""
 
     model_input: CompileModelInput | None
+    bypass: ModelAttachmentBypass | None = None
     hook_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...] = field(
         default_factory=tuple

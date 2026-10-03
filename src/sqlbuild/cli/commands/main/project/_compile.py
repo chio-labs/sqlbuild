@@ -7,7 +7,6 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.compile.collection import paused_cyclic_collection
 from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
@@ -31,6 +30,7 @@ from sqlbuild.cli.compile.models import (
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
+from sqlbuild.compiler.profiling.main.paused_cyclic_collection import paused_cyclic_collection
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import gc
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import TracebackType
@@ -22,9 +20,11 @@ from sqlbuild.compiler.compile.models import (
     ModelAttachmentEnvironment,
     ModelAttachmentFact,
 )
+from sqlbuild.compiler.compile.types import ModelAttachmentBypass
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
+from sqlbuild.compiler.profiling.main.paused_cyclic_collection import paused_cyclic_collection
 
 _DETACHED_MODEL_FILE: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
     file_path=Path(),
@@ -37,21 +37,8 @@ _DETACHED_MODEL_FILE: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
 )
 
 
-@contextmanager
-def _collection_paused() -> Iterator[None]:
-    """Pause cyclic garbage collection while thousands of acyclic cached facts are unpickled."""
-
-    collecting: bool = gc.isenabled()
-    gc.disable()
-    try:
-        yield
-    finally:
-        if collecting:
-            gc.enable()
-
-
 class ModelAttachmentCache:
-    """Store one attachment fact per model; models that read per-run values are recomputed."""
+    """Reuse models that expanded macros, hooks, or declarations; mark the rest for recompute."""
 
     def __init__(
         self, *, root: Path | None, environment: ModelAttachmentEnvironment | None
@@ -64,7 +51,7 @@ class ModelAttachmentCache:
         )
         self._hits: int = 0
         self._misses: int = 0
-        self._bypasses: int = 0
+        self._bypasses: dict[ModelAttachmentBypass, int] = dict.fromkeys(ModelAttachmentBypass, 0)
 
     def __enter__(self) -> ModelAttachmentCache:
         _ = self.store.__enter__()
@@ -82,12 +69,19 @@ class ModelAttachmentCache:
             if self.store.enabled:
                 record_compile_metric(metric="attachment_cache_hits", value=self._hits)
                 record_compile_metric(metric="attachment_cache_misses", value=self._misses)
-                record_compile_metric(metric="attachment_cache_bypasses", value=self._bypasses)
+                record_compile_metric(
+                    metric="attachment_cache_bypasses",
+                    value=self._bypasses[ModelAttachmentBypass.PER_RUN_VALUES],
+                )
+                record_compile_metric(
+                    metric="attachment_cache_unexpanded_bypasses",
+                    value=self._bypasses[ModelAttachmentBypass.UNEXPANDED],
+                )
 
     def read(self, entries: Sequence[tuple[str, str]]) -> dict[str, ModelAttachmentFact]:
         """Return verified facts by key for requested (slot, key) pairs."""
 
-        with _collection_paused():
+        with paused_cyclic_collection():
             found: dict[str, object] = self.store.read_many(entries)
         return {
             key: value for key, value in found.items() if isinstance(value, ModelAttachmentFact)
@@ -100,7 +94,7 @@ class ModelAttachmentCache:
 
         if fact is None or fact.model_input is None:
             if fact is not None:
-                self._bypasses += 1
+                self._bypasses[fact.bypass or ModelAttachmentBypass.PER_RUN_VALUES] += 1
             elif self.store.enabled:
                 self._misses += 1
             return None
@@ -116,18 +110,25 @@ class ModelAttachmentCache:
         hook_references: tuple[CompileSqlReference, ...],
         reads: set[str],
         diagnostics: CollectedCompileDiagnostics | None,
+        expanded: bool,
     ) -> None:
         """Queue one freshly attached model for publication after a successful compile."""
 
         if self.environment is None:
             return
-        volatile: bool = not reads <= self.environment.keyed_reads
+        bypass: ModelAttachmentBypass | None = (
+            ModelAttachmentBypass.PER_RUN_VALUES
+            if not reads <= self.environment.keyed_reads
+            else None
+            if expanded
+            else ModelAttachmentBypass.UNEXPANDED
+        )
         self.store.stage(
             key=key,
             slot=slot,
             value=(
-                ModelAttachmentFact(model_input=None)
-                if volatile
+                ModelAttachmentFact(model_input=None, bypass=bypass)
+                if bypass is not None
                 else ModelAttachmentFact(
                     model_input=replace(model_input, model_file=_DETACHED_MODEL_FILE),
                     hook_references=hook_references,

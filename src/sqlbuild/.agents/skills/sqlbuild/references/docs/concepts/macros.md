@@ -162,11 +162,12 @@ not read environment variables, the clock, random values, files, or network serv
 macro. Pass such values in through [project variables](interpolation.md#project-variables)
 or the macro context instead.
 
-SQLBuild relies on this when it reuses compiled models between compile runs. A model is compiled
-again when its file, its configuration and defaults, project variables, the target, the adapter,
-any project macro or declaration, or the installed SQLBuild version changes. Models whose
-configuration, hooks, or SQL read an environment variable or `run.id` are compiled again on every
-run. `sqb compile --no-cache` compiles everything from scratch.
+SQLBuild relies on this when it reuses compiled models between compile runs. It reuses models
+that use macros, hooks, or declarations such as enums, constants, and model schemas; other models
+are cheaper to compile again than to read back. A reused model is compiled again when its file,
+its configuration and defaults, project variables, the target, the adapter, any project macro or
+declaration, or the installed SQLBuild version changes. Models whose configuration, hooks, or SQL
+read an environment variable or `run.id` are compiled again on every run. `sqb compile --no-cache` compiles everything from scratch.
 
 The reuse check covers model files, project and local configuration, macro, enum, constant, schema,
 and SQL hook files, the source files that define Python hooks and audit factories, and custom

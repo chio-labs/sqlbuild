@@ -39,17 +39,27 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 'MODEL (description "Order quantities");\n\n'
                 'SELECT order_id, quantity FROM __ref("stg_orders")\n',
             ),
-            expected_attachment_counts=(13, 1, 1),
+            expected_attachment_counts=(9, 1, 1, 4),
         ),
         AttachmentCacheReuseTestCase(
             description="unreferenced_model_removed_reuses_the_rest",
             edit=lambda root: (root / "models/marts/dim_customers.sql").unlink(),
-            expected_attachment_counts=(12, 0, 1),
+            expected_attachment_counts=(9, 0, 1, 3),
+        ),
+        AttachmentCacheReuseTestCase(
+            description="unexpanded_model_edit_misses_only_that_model",
+            edit=lambda root: replace_project_text(
+                root,
+                "models/marts/dim_customers.sql",
+                "  c.email,\n",
+                "  LOWER(c.email) AS email,\n",
+            ),
+            expected_attachment_counts=(9, 1, 1, 3),
         ),
         AttachmentCacheReuseTestCase(
             description="referenced_model_removed_fails_after_reuse",
             edit=lambda root: (root / "models/staging/stg_orders.sql").unlink(),
-            expected_attachment_counts=(0, 0, 0),
+            expected_attachment_counts=(0, 0, 0, 0),
             expected_failure=True,
         ),
         AttachmentCacheReuseTestCase(
@@ -60,7 +70,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 'return f"{price_cents} * {quantity}"',
                 'return f"({price_cents}) * ({quantity})"',
             ),
-            expected_attachment_counts=(0, 14, 0),
+            expected_attachment_counts=(0, 14, 0, 0),
         ),
         AttachmentCacheReuseTestCase(
             description="target_schema_environment_value_unchanged",
@@ -72,7 +82,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             ),
             edit=lambda root: None,
             initial_env={COMPILE_CACHE_SCHEMA_ENV_VAR: "analytics_east"},
-            expected_attachment_counts=(13, 0, 1),
+            expected_attachment_counts=(9, 0, 1, 4),
         ),
         AttachmentCacheReuseTestCase(
             description="target_schema_environment_value_changed",
@@ -85,7 +95,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             edit=lambda root: None,
             initial_env={COMPILE_CACHE_SCHEMA_ENV_VAR: "analytics_east"},
             edited_env={COMPILE_CACHE_SCHEMA_ENV_VAR: "analytics_west"},
-            expected_attachment_counts=(0, 14, 0),
+            expected_attachment_counts=(0, 14, 0, 0),
         ),
     ],
     ids=lambda case: case.description,
@@ -106,7 +116,7 @@ def test_given_warm_attachment_cache_when_project_changes_then_matches_uncached_
     )
 
     assert cold.returncode == 0
-    assert outcome_attachment_counts(cold) == (0, 14, 0)
+    assert outcome_attachment_counts(cold) == (0, 14, 0, 0)
     assert edited[:3] == reference[:3]
     assert (edited.returncode != 0) is test_case.expected_failure
     assert outcome_attachment_counts(edited) == test_case.expected_attachment_counts
@@ -127,7 +137,7 @@ def test_given_warm_attachment_cache_when_project_changes_then_matches_uncached_
                 ");\n\n"
                 "SELECT 1 AS order_id\n"
             ),
-            expected_warm_attachment_counts=(13, 0, 2),
+            expected_warm_attachment_counts=(9, 0, 2, 4),
         ),
     ],
     ids=lambda case: case.description,
@@ -163,7 +173,7 @@ def test_given_model_reading_run_id_when_compiling_warm_then_each_compile_render
                 ),
             },
             expected_diagnostic_codes=("P006",),
-            expected_warm_attachment_counts=(14, 0, 1),
+            expected_warm_attachment_counts=(10, 0, 1, 4),
         ),
     ],
     ids=lambda case: case.description,

@@ -2431,7 +2431,28 @@ _HOOK_RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"'(\d{8}T\d{6}Z_[0-9a-f]{12}
 _COMPILE_CACHE_DIAGNOSTIC_PATTERN: re.Pattern[str] = re.compile(
     r"^(?:error|warning)\[.*$", re.MULTILINE
 )
+# Staging models call a macro so the attachment cache stores them and edits to them, their path
+# defaults, and their folders exercise cached attachment keys. stg_payments uses a project macro
+# so it can still move into a subfolder. Other playground models expand
+# nothing and cover the recompute-without-storing path.
+# Playground models that expand no macros, hooks, or declarations and are recomputed every compile.
+COMPILE_CACHE_UNEXPANDED_MODEL_COUNT: int = 4
+_COMPILE_CACHE_MACRO_EXPANDED_STAGING_COLUMNS: dict[str, tuple[str, str, str]] = {
+    "models/staging/stg_orders.sql": ("status", "\nFROM", "trimmed('status')"),
+    "models/staging/stg_customers.sql": ("email", ",", "trimmed('email')"),
+    "models/staging/stg_payments.sql": (
+        "amount_cents",
+        ",",
+        "line_total_cents('amount_cents', '1')",
+    ),
+}
 _COMPILE_CACHE_EXTRA_PROJECT_FILES: dict[str, str] = {
+    "models/staging/_sqlbuild/_macros/text.py": (
+        '"""Staging text macros."""\n\n\n'
+        "def trimmed(column: str) -> str:\n"
+        '    """Trim surrounding whitespace from one text column."""\n'
+        '    return f"TRIM({column})"\n'
+    ),
     "models/marts/_sqlbuild/_enums/order_channel.sql": (
         'ENUM (\n  name order_channel,\n  members (WEB "web", PARTNER "partner"),\n);\n'
     ),
@@ -2561,6 +2582,7 @@ class CompileCacheOutcome(NamedTuple):
     attachment_cache_hits: int = 0
     attachment_cache_misses: int = 0
     attachment_cache_bypasses: int = 0
+    attachment_cache_unexpanded_bypasses: int = 0
 
 
 def run_installed_sqb(
@@ -2611,6 +2633,7 @@ def compile_cache_outcome(
         attachment_cache_hits=timings.get("attachment_cache_hits", 0),
         attachment_cache_misses=timings.get("attachment_cache_misses", 0),
         attachment_cache_bypasses=timings.get("attachment_cache_bypasses", 0),
+        attachment_cache_unexpanded_bypasses=timings.get("attachment_cache_unexpanded_bypasses", 0),
     )
 
 
@@ -2642,23 +2665,25 @@ def fresh_compile_json_payload(*, project_dir: Path, env: dict[str, str]) -> dic
     return cast(dict[str, Any], json.loads(result.stdout))
 
 
-def attachment_cache_counts(timings: dict[str, int]) -> tuple[int, int, int]:
-    """Return model attachment cache hits, misses, and bypasses from compile timings."""
+def attachment_cache_counts(timings: dict[str, int]) -> tuple[int, int, int, int]:
+    """Return attachment cache hits, misses, per-run bypasses, and unexpanded bypasses."""
 
     return (
         timings["attachment_cache_hits"],
         timings["attachment_cache_misses"],
         timings["attachment_cache_bypasses"],
+        timings["attachment_cache_unexpanded_bypasses"],
     )
 
 
-def outcome_attachment_counts(outcome: CompileCacheOutcome) -> tuple[int, int, int]:
-    """Return model attachment cache hits, misses, and bypasses from one compile outcome."""
+def outcome_attachment_counts(outcome: CompileCacheOutcome) -> tuple[int, int, int, int]:
+    """Return attachment cache hits, misses, per-run bypasses, and unexpanded bypasses."""
 
     return (
         outcome.attachment_cache_hits,
         outcome.attachment_cache_misses,
         outcome.attachment_cache_bypasses,
+        outcome.attachment_cache_unexpanded_bypasses,
     )
 
 
@@ -2752,6 +2777,14 @@ def prepare_compile_cache_invalidation_project(*, project_dir: Path) -> None:
         "[settings]",
         '[vars]\nquantity_multiplier = "2"\n\n[settings]',
     )
+    for relative_path, (
+        column,
+        after,
+        call,
+    ) in _COMPILE_CACHE_MACRO_EXPANDED_STAGING_COLUMNS.items():
+        replace_project_text(
+            project_dir, relative_path, f"  {column}{after}", f"  @{call} AS {column}{after}"
+        )
 
 
 RESOURCE_SQL_MODELS: str = "models/staging"

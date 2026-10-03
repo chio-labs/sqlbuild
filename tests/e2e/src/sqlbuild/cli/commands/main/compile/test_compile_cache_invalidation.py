@@ -14,6 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     COMPILE_CACHE_REGION_ENV_VAR,
+    COMPILE_CACHE_UNEXPANDED_MODEL_COUNT,
     DESCRIBED_HOOK_DECORATOR,
     CompileCacheOutcome,
     add_project_provider,
@@ -361,9 +362,12 @@ def test_given_warm_compile_cache_when_input_changes_then_output_matches_cache_d
         fingerprint=cold.fingerprint,
         fact_cache_hits=cold.fact_cache_misses,
         fact_cache_misses=0,
-        attachment_cache_hits=cold.attachment_cache_misses - 1,
+        attachment_cache_hits=cold.attachment_cache_misses
+        - 1
+        - COMPILE_CACHE_UNEXPANDED_MODEL_COUNT,
         attachment_cache_misses=0,
         attachment_cache_bypasses=1,
+        attachment_cache_unexpanded_bypasses=COMPILE_CACHE_UNEXPANDED_MODEL_COUNT,
     )
 
     test_case.edit(project_dir)
