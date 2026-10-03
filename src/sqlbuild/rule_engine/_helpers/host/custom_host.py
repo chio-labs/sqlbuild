@@ -145,7 +145,8 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
                 "reads": index,
             }
         )
-    if sum(map(len, readsets)) > CUSTOM_HOST_MAX_TRACKED_READS:
+    bounded: bool = sum(map(len, readsets)) > CUSTOM_HOST_MAX_TRACKED_READS
+    if bounded:
         untracked.update(str(item["code"]) for item in evaluations if item["reads"] is not None)
         readsets = {}
         for item in evaluations:
@@ -162,6 +163,7 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
         },
         "uncacheable": sorted(run.uncacheable_codes),
         "observed": sorted([list(key), digest] for key, digest in run.observed),
+        "bounded": bounded,
     }
 
 

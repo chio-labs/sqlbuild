@@ -22,6 +22,7 @@ from sqlbuild.rule_engine.classes.rule_context import (
     build_rule_fact_views,
 )
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
+from sqlbuild.rule_engine.constants import CUSTOM_RULE_PROJECT_SUBJECT
 from sqlbuild.rule_engine.exceptions import (
     NonHermeticRuleError,
     OpaqueModuleStateError,
@@ -211,6 +212,9 @@ def _evaluate_pass(
         (rule, context(rule), None if plan is None else plan.get(rule.code)) for rule in model_rules
     )
     for rule in project_rules:
+        planned_project: frozenset[str] | None = None if plan is None else plan.get(rule.code)
+        if planned_project is not None and CUSTOM_RULE_PROJECT_SUBJECT not in planned_project:
+            continue
         ctx: EvaluationRuleContext = context(rule)
         tracker.start()
         try:

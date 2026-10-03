@@ -10,6 +10,7 @@ RULES_NATIVE_API_VERSION: int = 1
 CUSTOM_HOST_PROTOCOL_VERSION: int = 1
 CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-rules-custom-v2"
 CUSTOM_HOST_MAX_TRACKED_READS: int = 100_000
+CUSTOM_RULE_PROJECT_SUBJECT: str = ""
 CUSTOM_RULES_CACHE_VERSION: str = "custom-rules-reads-v1"
 CUSTOM_RULES_CACHE_FILE: str = "target/rules-cache/bulk/custom-rules.json"
 NATIVE_RULES_MEMO_VERSION: str = "native-rules-response-v1"

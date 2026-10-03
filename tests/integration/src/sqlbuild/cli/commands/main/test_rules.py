@@ -11,10 +11,11 @@ from typing import Any, cast
 import pytest
 from _pytest.capture import CaptureResult
 
+import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.attachment.declaration_scope as declaration_scope_module
 import sqlbuild.compiler.compile.main._build_compile_inputs as compile_inputs_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
-import sqlbuild.rule_engine._helpers.engine.custom_rules as custom_rules_module
+import sqlbuild.rule_engine._helpers.host.custom_host_pool as custom_host_pool_module
 import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
@@ -23,6 +24,7 @@ from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.models import LintRunResult
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    CustomHostSplitIntegrationTestCase,
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
     ImplicitAliasRuleIntegrationTestCase,
@@ -1018,13 +1020,13 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
         encoding="utf-8",
     )
     host_runs: list[str] = []
-    original_host: Callable[[str], str] = custom_rules_module._native.run_custom_host_json
+    original_host: Callable[[str], str] = native_module.run_custom_host_json
 
     def recording_host(spec_json: str) -> str:
         host_runs.append(spec_json)
         return original_host(spec_json)
 
-    monkeypatch.setattr(custom_rules_module._native, "run_custom_host_json", recording_host)
+    monkeypatch.setattr(native_module, "run_custom_host_json", recording_host)
 
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
 
@@ -1036,6 +1038,78 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
         f"models/orders.sql:{test_case.expected_code}",
         "tests/unit/test_orders.sql:SQBRSQL004",
     } <= cold
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [CustomHostSplitIntegrationTestCase("custom rules split across hosts", 9, 3, "XSQBRARCH001")],
+    ids=lambda case: case.description,
+)
+def test_given_custom_rules_split_across_hosts_when_compiling_then_output_matches_one_host(
+    test_case: CustomHostSplitIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        f'[rules]\nselect = ["{test_case.expected_code}"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        encoding="utf-8",
+    )
+    for index in range(test_case.model_count):
+        folder: str = ("final", "staging", "staging")[index % 3]
+        model: Path = tmp_path / "models" / folder / f"orders_{index:02d}.sql"
+        model.parent.mkdir(parents=True, exist_ok=True)
+        model.write_text(
+            f'MODEL (description "Orders {index}");\nSELECT {index} AS order_id\n',
+            encoding="utf-8",
+        )
+    rule_file: Path = tmp_path / "rules" / "architecture.py"
+    rule_file.parent.mkdir()
+    rule_file.write_text(
+        """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+@rule(
+    code="XSQBRARCH001",
+    message="Final models must use the final directory",
+    remediation="Move this model beneath models/final/.",
+)
+def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    return [] if "final" in model.path.parts else [ctx.finding(subject=model)]
+""",
+        encoding="utf-8",
+    )
+    host_runs: list[str] = []
+    original_host: Callable[[str], str] = native_module.run_custom_host_json
+
+    def recording_host(spec_json: str) -> str:
+        host_runs.append(spec_json)
+        return original_host(spec_json)
+
+    def compile_payload(*, hosts: int) -> dict[str, Any]:
+        monkeypatch.setattr(custom_host_pool_module, "_MIN_INVOCATIONS_PER_HOST", 1)
+        monkeypatch.setattr(custom_host_pool_module, "_available_cores", lambda: hosts)
+        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+        assert exit_code == 1
+        return json.loads(capsys.readouterr().out)
+
+    monkeypatch.setattr(native_module, "run_custom_host_json", recording_host)
+    single: dict[str, Any] = compile_payload(hosts=1)
+    single_runs: int = len(host_runs)
+    (tmp_path / "target" / "rules-cache").rename(tmp_path / "single-rules-cache")
+    split: dict[str, Any] = compile_payload(hosts=test_case.hosts)
+    split_runs: int = len(host_runs) - single_runs
+    warm: dict[str, Any] = compile_payload(hosts=test_case.hosts)
+
+    assert (single_runs, split_runs, len(host_runs)) == (1, test_case.hosts, 1 + test_case.hosts)
+    assert split["diagnostics"] == single["diagnostics"]
+    assert len(split["diagnostics"]) == test_case.model_count - test_case.model_count // 3
+    assert warm["diagnostics"] == single["diagnostics"]
+    assert warm["compile_timings"]["rule_cache_hits"] >= test_case.model_count
+    assert (tmp_path / "single-rules-cache" / "bulk" / "custom-rules.json").read_bytes() == (
+        tmp_path / "target" / "rules-cache" / "bulk" / "custom-rules.json"
+    ).read_bytes()
 
 
 @pytest.mark.parametrize(

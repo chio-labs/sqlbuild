@@ -245,14 +245,14 @@ def test_given_file_edited_while_rules_run_when_rerunning_then_new_contents_are_
         module_import=test_case.module_prelude,
     )
     project: CompiledProject = two_model_project(customers_sql=_CUSTOMERS_SQL, customers_config={})
-    run_host: Callable[..., object] = custom_rules._run_host
+    run_host: Callable[..., object] = custom_rules.run_custom_hosts
 
     def run_host_then_edit(**kwargs: Any) -> object:
         result: object = run_host(**kwargs)
         owners.write_text(_OWNERS_AFTER, encoding="utf-8")
         return result
 
-    monkeypatch.setattr(custom_rules, "_run_host", run_host_then_edit)
+    monkeypatch.setattr(custom_rules, "run_custom_hosts", run_host_then_edit)
     during_edit: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True
     )

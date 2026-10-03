@@ -51,10 +51,12 @@ from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, sele
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.engine.native import (
+    custom_rule_payloads,
     decode_rule_finding,
     evaluate_native,
     finalize_native_findings,
     native_catalogue,
+    start_custom_rules,
 )
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine._helpers.run.literal_duplicates import with_duplicate_literal_hints
@@ -62,6 +64,7 @@ from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import (
+    CustomRulesOutcome,
     Finding,
     PreparedSqlLint,
     PreparedSqlLintResult,
@@ -114,8 +117,14 @@ def evaluate_rules(
         project_dir=resolved_project_dir,
         include_custom=include_custom,
     )
+    custom_payloads: list[dict[str, object]] = custom_rule_payloads(
+        catalogue=catalogue, project_dir=resolved_project_dir
+    )
     selected: tuple[Rule, ...] = select_rules(
-        catalogue=catalogue, config=effective_config, project_dir=resolved_project_dir
+        catalogue=catalogue,
+        config=effective_config,
+        project_dir=resolved_project_dir,
+        custom_payloads=custom_payloads,
     )
     skipped_type_proof_rules: tuple[str, ...] = ()
     if no_sql_analysis or not graph.project.settings.sql_analysis:
@@ -140,20 +149,19 @@ def evaluate_rules(
         select=tuple(rule.code for rule in selected),
         ignore=(),
     )
-    lint_config: LintConfig = sql_lint_config(
-        dialect=dialect,
-        codes=_sql_rule_codes(native_rules),
-        thresholds=effective_config.thresholds,
-        relation_keys=compiled_relation_keys(graph.project),
-    )
-    sql_rule_inputs: _SqlRuleInputs = _prepare_sql_rule_inputs(
-        rules=native_rules,
-        project=selected_project,
-        dialect=_lint_identity(lint_config),
-        project_dir=resolved_project_dir,
-        collect_files=prepared_sql is None and model_paths is None,
-    )
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-rules") as executor:
+    with (
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-rules") as custom,
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-rules") as executor,
+    ):
+        custom_outcome: Future[CustomRulesOutcome] | None = start_custom_rules(
+            executor=custom,
+            project=selected_project,
+            config=selected_config,
+            project_dir=resolved_project_dir,
+            catalogue=catalogue,
+            custom_payloads=custom_payloads,
+            dialect=dialect,
+        )
         native_result: Future[RulesResult] = executor.submit(
             evaluate_native,
             project=selected_project,
@@ -162,6 +170,21 @@ def evaluate_rules(
             catalogue=catalogue,
             dialect=dialect,
             defer_suppressions=True,
+            custom_payloads=custom_payloads,
+            custom_outcome=custom_outcome,
+        )
+        lint_config: LintConfig = sql_lint_config(
+            dialect=dialect,
+            codes=_sql_rule_codes(native_rules),
+            thresholds=effective_config.thresholds,
+            relation_keys=compiled_relation_keys(graph.project),
+        )
+        sql_rule_inputs: _SqlRuleInputs = _prepare_sql_rule_inputs(
+            rules=native_rules,
+            project=selected_project,
+            dialect=_lint_identity(lint_config),
+            project_dir=resolved_project_dir,
+            collect_files=prepared_sql is None and model_paths is None,
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
@@ -217,7 +240,7 @@ def _prepare_sql_rule_inputs(
     project_dir: Path,
     collect_files: bool,
 ) -> _SqlRuleInputs:
-    """Hash SQL and read files first so GIL-releasing work never waits on the native thread."""
+    """Hash SQL and read the project files on the caller while built-in rules evaluate natively."""
 
     identities: dict[str, str] = _sql_model_rule_identities(
         rules=rules, project=project, dialect=dialect
