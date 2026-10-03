@@ -1089,7 +1089,7 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
 
     def compile_payload(*, hosts: int) -> dict[str, Any]:
         monkeypatch.setattr(custom_host_pool_module, "_MIN_INVOCATIONS_PER_HOST", 1)
-        monkeypatch.setattr(custom_host_pool_module, "_available_cores", lambda: hosts)
+        monkeypatch.setattr(custom_host_pool_module, "available_cores", lambda: hosts)
         exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
         assert exit_code == 1
         return json.loads(capsys.readouterr().out)

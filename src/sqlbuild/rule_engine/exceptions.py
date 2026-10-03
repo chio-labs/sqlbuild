@@ -23,3 +23,7 @@ class FactDigestError(RulesError):
 
 class OpaqueModuleStateError(RulesError):
     """Raised when custom-rule module state holds a value whose mutations cannot be observed."""
+
+
+class HostCancelledError(RulesError):
+    """Raised in a custom-rule host that stops because another host already failed."""

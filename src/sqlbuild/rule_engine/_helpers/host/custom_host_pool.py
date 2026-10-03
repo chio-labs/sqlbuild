@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import pickle
+import shutil
 import sys
 import tempfile
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor, wait
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,7 +15,9 @@ import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
+    CUSTOM_HOST_CANCELLED_MARKER,
     CUSTOM_HOST_LAUNCH_MODULE,
     CUSTOM_HOST_MAX_TRACKED_READS,
     CUSTOM_HOST_RUNTIME_VERSION,
@@ -32,6 +35,7 @@ from sqlbuild.rule_engine.types import CustomHostPlan, FactKey, RuleSubject
 
 _HOST_TIMEOUT_MILLIS: int = 120_000
 _MIN_INVOCATIONS_PER_HOST: int = 64
+_MAX_HOSTS: int = 8
 
 
 def run_custom_hosts(
@@ -55,7 +59,7 @@ def run_custom_hosts(
         (plan,)
         if verify_determinism
         else partition_host_plan(
-            plan=plan, invocations=invocations, hosts=_host_count(len(invocations))
+            plan=plan, invocations=invocations, hosts=host_count(len(invocations))
         )
     )
     input_dir: Path = project_dir / "target" / "rules-cache" / "host-inputs"
@@ -77,7 +81,7 @@ def run_custom_hosts(
         responses: list[CustomHostSlice] = (
             [_run_host(payload={**payload, "plan": plan})]
             if len(plans) == 1
-            else _run_partitions(payload=payload, plan=plan, plans=plans)
+            else _run_partitions(payload=payload, plan=plan, plans=plans, input_dir=input_dir)
         )
     finally:
         if input_path is not None:
@@ -89,20 +93,72 @@ def run_custom_hosts(
 
 
 def _run_partitions(
-    *, payload: dict[str, object], plan: CustomHostPlan, plans: tuple[CustomHostPlan, ...]
+    *,
+    payload: dict[str, object],
+    plan: CustomHostPlan,
+    plans: tuple[CustomHostPlan, ...],
+    input_dir: Path,
 ) -> list[CustomHostSlice]:
-    """Run every partition; after any failure, one host reruns the whole plan to report it."""
+    """Run partitions; failures and rules with module state fall back to one host."""
 
-    with ThreadPoolExecutor(
-        max_workers=len(plans), thread_name_prefix="sqlbuild-custom-host"
-    ) as pool:
-        futures: list[Future[CustomHostSlice]] = [
-            pool.submit(_run_host, payload={**payload, "plan": partition}) for partition in plans
-        ]
-        failed: bool = any(future.exception() is not None for future in futures)
+    cancel_dir: Path = Path(tempfile.mkdtemp(dir=input_dir, prefix="hosts-"))
+    marker: Path = cancel_dir / CUSTOM_HOST_CANCELLED_MARKER
+    futures: list[Future[CustomHostSlice]] = []
+    failed: bool = False
+    try:
+        with ThreadPoolExecutor(
+            max_workers=len(plans), thread_name_prefix="sqlbuild-custom-host"
+        ) as pool:
+            futures = [
+                pool.submit(
+                    _run_host,
+                    payload={
+                        **payload,
+                        "plan": partition,
+                        "cancel_marker": str(marker.resolve()),
+                    },
+                )
+                for partition in plans
+            ]
+            done: set[Future[CustomHostSlice]] = wait(futures, return_when=FIRST_EXCEPTION).done
+            failed = any(future.exception() is not None for future in done)
+            if failed:
+                _cancel_hosts(marker)
+    finally:
+        shutil.rmtree(cancel_dir, ignore_errors=True)
     if failed:
         return [_run_host(payload={**payload, "plan": plan})]
-    return [future.result() for future in futures]
+    slices: list[CustomHostSlice] = [future.result() for future in futures]
+    stateful: frozenset[str] = frozenset().union(*(item.stateful for item in slices))
+    if not stateful:
+        return slices
+    single: CustomHostSlice = _run_host(
+        payload={
+            **payload,
+            "plan": {code: plan[code] if code in stateful else [] for code in plan},
+        },
+    )
+    return [*(_without_codes(response=item, codes=stateful) for item in slices), single]
+
+
+def _cancel_hosts(marker: Path) -> None:
+    """Stop hosts at their next invocation; a running invocation still ends or times out."""
+
+    marker.touch()
+
+
+def _without_codes(*, response: CustomHostSlice, codes: frozenset[str]) -> CustomHostSlice:
+    """Drop every result a host reported for the given rules."""
+
+    return replace(
+        response,
+        evaluations=tuple(item for item in response.evaluations if item[0] not in codes),
+        untracked_reads={
+            code: reads for code, reads in response.untracked_reads.items() if code not in codes
+        },
+        uncacheable=response.uncacheable - codes,
+        stateful=response.stateful - codes,
+    )
 
 
 def planned_invocations(
@@ -152,13 +208,10 @@ def partition_host_plan(
     return tuple(cast(CustomHostPlan, partition) for partition in partitions)
 
 
-def _host_count(invocations: int) -> int:
-    return max(1, min(_available_cores(), invocations // _MIN_INVOCATIONS_PER_HOST))
+def host_count(invocations: int) -> int:
+    """Hosts worth starting: one per 64 invocations, bounded by usable CPUs and eight."""
 
-
-def _available_cores() -> int:
-    affinity: Any = getattr(os, "sched_getaffinity", None)
-    return len(affinity(0)) if affinity is not None else os.cpu_count() or 1
+    return max(1, min(_MAX_HOSTS, available_cores(), invocations // _MIN_INVOCATIONS_PER_HOST))
 
 
 def _run_host(*, payload: dict[str, object]) -> CustomHostSlice:
@@ -231,6 +284,7 @@ def _decode_host_response(response: object) -> CustomHostSlice:
             for key, digest in raw_observed
         },
         bounded=payload.get("bounded") is True,
+        stateful=frozenset(str(code) for code in payload.get("stateful") or ()),
     )
 
 

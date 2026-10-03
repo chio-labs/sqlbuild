@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -401,6 +402,7 @@ class CustomRuleRun:
     untracked_codes: frozenset[str]
     uncacheable_codes: frozenset[str] = frozenset()
     observed: tuple[tuple[tuple[str, ...], str | None], ...] = ()
+    stateful_codes: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -440,3 +442,11 @@ class CustomHostSlice:
     uncacheable: frozenset[str]
     observed: dict[FactKey, str | None]
     bounded: bool
+    stateful: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CustomHostPartition:
+    """How one host of a split run detects module state and learns the run was cancelled."""
+
+    cancelled: Callable[[], bool]

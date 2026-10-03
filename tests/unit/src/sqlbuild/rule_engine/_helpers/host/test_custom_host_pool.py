@@ -1,5 +1,6 @@
 """Custom rules split across host processes report exactly what one host reports."""
 
+import time
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import CustomRulesOutcome
 from tests.unit.src.sqlbuild.rule_engine._helpers.host._test_types import (
+    HostCancellationTestCase,
     HostFailureTestCase,
     HostPartitionTestCase,
     HostPlanTestCase,
@@ -17,6 +19,7 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.host._test_types import (
 from tests.unit.src.sqlbuild.rule_engine._helpers.host.helpers import (
     evaluate_order_rules,
     orders_project,
+    record_signals,
     use_hosts,
     write_order_rules,
 )
@@ -32,11 +35,26 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.host.helpers import (
             description="more hosts than subjects", model_count=2, hosts=8, expected_host_runs=3
         ),
         HostPartitionTestCase(
-            description="module state makes the rule untracked on every host",
+            description="module state reruns the rule in one host",
             model_count=7,
             hosts=3,
-            expected_host_runs=3,
+            expected_host_runs=4,
             records_module_state=True,
+        ),
+        HostPartitionTestCase(
+            description="cross-model duplicate detector reruns in one host",
+            model_count=7,
+            hosts=3,
+            expected_host_runs=4,
+            detects_duplicates=True,
+        ),
+        HostPartitionTestCase(
+            description="uncached cross-model duplicate detector reruns in one host",
+            model_count=7,
+            hosts=3,
+            expected_host_runs=4,
+            detects_duplicates=True,
+            cache_enabled=False,
         ),
     ],
     ids=lambda case: case.description,
@@ -44,24 +62,48 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.host.helpers import (
 def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_one_host(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostPartitionTestCase
 ) -> None:
-    write_order_rules(root=tmp_path)
+    write_order_rules(
+        root=tmp_path,
+        records_module_state=test_case.records_module_state,
+        detects_duplicates=test_case.detects_duplicates,
+    )
     project: CompiledProject = orders_project(model_count=test_case.model_count)
     cache_path: Path = tmp_path / CUSTOM_RULES_CACHE_FILE
+    cache_glob: str = CUSTOM_RULES_CACHE_FILE
+    cache_enabled: bool = test_case.cache_enabled
 
     single_launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=1)
-    single: CustomRulesOutcome = evaluate_order_rules(project=project, root=tmp_path)
-    single_cache: bytes = cache_path.read_bytes()
-    cache_path.unlink()
+    single: CustomRulesOutcome = evaluate_order_rules(
+        project=project, root=tmp_path, cache_enabled=cache_enabled
+    )
+    single_warm: CustomRulesOutcome = evaluate_order_rules(
+        project=project, root=tmp_path, cache_enabled=cache_enabled
+    )
+    single_cache: bytes = b"".join(path.read_bytes() for path in tmp_path.glob(cache_glob))
+    cache_path.unlink(missing_ok=True)
     monkeypatch.undo()
     split_launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
-    split: CustomRulesOutcome = evaluate_order_rules(project=project, root=tmp_path)
+    split: CustomRulesOutcome = evaluate_order_rules(
+        project=project, root=tmp_path, cache_enabled=cache_enabled
+    )
+    split_cold_launches: int = len(split_launches)
+    split_cache: bytes = b"".join(path.read_bytes() for path in tmp_path.glob(cache_glob))
+    split_warm: CustomRulesOutcome = evaluate_order_rules(
+        project=project, root=tmp_path, cache_enabled=cache_enabled
+    )
 
-    assert len(single_launches) == 1
-    assert len(split_launches) == test_case.expected_host_runs
     assert split.findings == single.findings
+    assert split_warm.findings == single_warm.findings == single.findings
+    assert len(single_launches) == 1 + int(not cache_enabled)
+    assert split_cold_launches == test_case.expected_host_runs
     assert (split.cache_hits, split.cache_misses) == (single.cache_hits, single.cache_misses)
-    assert cache_path.read_bytes() == single_cache
-    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").glob("*.pickle"))
+    assert (split_warm.cache_hits, split_warm.cache_misses) == (
+        single_warm.cache_hits,
+        single_warm.cache_misses,
+    )
+    assert split_cache == single_cache
+    assert bool(single_cache) is cache_enabled
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
 
 
 @pytest.mark.parametrize(
@@ -173,6 +215,69 @@ def test_given_planned_invocations_when_partitioning_then_split_is_deterministic
     )
 
     assert plans == test_case.expected_plans
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HostCancellationTestCase(
+            description="busy hosts stop at their next invocation",
+            model_count=60,
+            hosts=3,
+            timeout_millis=120_000,
+            delay_seconds=2.0,
+            expected_error_fragment="cannot inspect orders_000",
+            expected_max_seconds=20.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_host_when_others_are_busy_then_they_stop_before_later_invocations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostCancellationTestCase
+) -> None:
+    write_order_rules(root=tmp_path, failing=("orders_000",), delay_seconds=test_case.delay_seconds)
+    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    monkeypatch.setattr(custom_host_pool, "_HOST_TIMEOUT_MILLIS", test_case.timeout_millis)
+    started: float = time.monotonic()
+
+    with pytest.raises(RulesError) as raised:
+        _ = evaluate_order_rules(project=project, root=tmp_path)
+
+    assert time.monotonic() - started < test_case.expected_max_seconds
+    assert test_case.expected_error_fragment in str(raised.value)
+    assert len(launches) == test_case.hosts + 1
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HostCancellationTestCase(
+            description="busy hosts stop at their next invocation",
+            model_count=60,
+            hosts=3,
+            timeout_millis=120_000,
+            delay_seconds=2.0,
+            expected_error_fragment="cannot inspect orders_000",
+            expected_max_seconds=20.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cancelled_hosts_when_failing_then_no_process_is_signalled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostCancellationTestCase
+) -> None:
+    write_order_rules(root=tmp_path, failing=("orders_000",), delay_seconds=test_case.delay_seconds)
+    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    _ = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    signals: list[tuple[int, int]] = record_signals(monkeypatch=monkeypatch)
+
+    with pytest.raises(RulesError) as raised:
+        _ = evaluate_order_rules(project=project, root=tmp_path)
+
+    assert signals == []
+    assert test_case.expected_error_fragment in str(raised.value)
 
 
 if __name__ == "__main__":
