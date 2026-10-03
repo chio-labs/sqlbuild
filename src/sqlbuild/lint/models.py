@@ -15,7 +15,13 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_FAULT,
     VIOLATION_SEVERITY_WARNING,
 )
-from sqlbuild.lint.types import DiagnosticIdentity, LintSeverity, RuleFixStatus
+from sqlbuild.lint.exceptions import ProjectCompileError
+from sqlbuild.lint.types import (
+    DiagnosticIdentity,
+    LintSeverity,
+    NativeLintPreparationRequest,
+    RuleFixStatus,
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +70,41 @@ class LintBody:
     allows_dynamic_output_star: bool = False
     allows_empty_fixture_star: bool = False
     dependency_relations: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class PendingLintBody:
+    """One expanded authored body awaiting its native lexical preparation."""
+
+    file_path: Path
+    body_start: int
+    body_end: int
+    expansion_input: str
+    expanded: str
+    expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
+    pre_expansion_sites: tuple[InterpolationSite, ...]
+    external_identifiers: tuple[str, ...]
+    allows_ceremonial_select: bool
+    allows_dynamic_output_star: bool
+    allows_empty_fixture_star: bool
+    request: NativeLintPreparationRequest
+
+
+@dataclass(frozen=True)
+class ExpandedLintFile:
+    """The expanded bodies of one file, up to the first body that could not be expanded."""
+
+    file_path: Path
+    bodies: tuple[PendingLintBody, ...]
+    failure: ProjectCompileError | None
+
+
+@dataclass(frozen=True)
+class PreparedLintFiles:
+    """Lint bodies of every expandable file, and why the skipped files could not expand."""
+
+    bodies: tuple[LintBody, ...]
+    unexpandable: dict[Path, str]
 
 
 @dataclass(frozen=True)
