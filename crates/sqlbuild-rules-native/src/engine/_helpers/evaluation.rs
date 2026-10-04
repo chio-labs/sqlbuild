@@ -2,7 +2,8 @@ use crate::configuration::main::validate as config;
 use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::engine::_helpers::cache::{Cache, RuleCacheEntry};
 use crate::models::{
-    EvaluateRequest, EvaluateResponse, Fault, Model, RuleMetadata, RulesCodeGrammar,
+    EvaluateRequest, EvaluateResponse, Fault, Model, RuleMetadata, RuleScope, RulesCodeGrammar,
+    RulesConfig,
 };
 use crate::rules::main::{
     assemble_catalogue, evaluate as rules, evaluate_project, fingerprint,
@@ -11,13 +12,11 @@ use crate::rules::main::{
 use crate::rules::models::{
     ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
-use fensu_policy::lifecycle::constants::ANALYSIS_BATCH_SCHEMA_VERSION;
+use fensu_policy::apply_suppressions;
 use fensu_policy::lifecycle::errors::LifecycleError;
 use fensu_policy::lifecycle::models::{
-    AnalysisBatchRequest, AnalysisInput, ApplySuppressionsRequest, ExactSuppression, Finding,
-    FindingSeverity, RuntimeIdentity, ScopedIgnore,
+    ApplySuppressionsRequest, ExactSuppression, Finding, FindingSeverity, ScopedIgnore,
 };
-use fensu_policy::{apply_suppressions, evaluate_batch};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -28,7 +27,7 @@ use std::time::Instant;
 
 const NATIVE_RULE_WORKERS: usize = 4;
 const NATIVE_RULE_STACK_BYTES: usize = 16 * 1024 * 1024;
-const COMPILER_FACTS_FINGERPRINT_SEED: &str = "compiler-owned-rules-facts-v2";
+const MODEL_RULES_IDENTITY_SEED: &[u8] = b"sqlbuild-rules-model-v2";
 
 struct PendingModelRule<'a> {
     index: usize,
@@ -51,8 +50,7 @@ struct ModelRuleBatchContext<'a> {
 struct NativeModelRuleRequest<'a> {
     context: ModelRuleBatchContext<'a>,
     cache: Option<&'a Cache>,
-    ruleset_fingerprint: &'a str,
-    project_fingerprint: Option<&'a str>,
+    model_rules_fingerprint: &'a str,
 }
 
 #[derive(Default)]
@@ -68,8 +66,7 @@ fn evaluate_native_models(
     let NativeModelRuleRequest {
         context,
         cache,
-        ruleset_fingerprint,
-        project_fingerprint,
+        model_rules_fingerprint,
     } = input;
     if !context
         .selected
@@ -90,7 +87,7 @@ fn evaluate_native_models(
     });
     let model_limit = if all_models_required { models.len() } else { 1 };
     let mut bucket = cache
-        .map(|store| store.native_rules_bucket(ruleset_fingerprint))
+        .map(|store| store.native_rules_bucket(model_rules_fingerprint))
         .transpose()?
         .unwrap_or_default();
     let mut bucket_changed = false;
@@ -98,14 +95,10 @@ fn evaluate_native_models(
     let mut model_results: Vec<Option<Vec<Fault>>> = vec![None; model_limit];
     let mut pending_models: Vec<PendingModelRule<'_>> = Vec::new();
     let mut identities = if cache.is_some() {
-        model_cache_identities(
-            &models[..model_limit],
-            ruleset_fingerprint,
-            project_fingerprint,
-        )?
-        .into_iter()
-        .map(Some)
-        .collect()
+        model_cache_identities(&models[..model_limit], model_rules_fingerprint)?
+            .into_iter()
+            .map(Some)
+            .collect()
     } else {
         vec![None; model_limit]
     };
@@ -128,6 +121,7 @@ fn evaluate_native_models(
             identity,
         });
     }
+    let project_dir = Path::new(&context.request.project_dir);
     let completed = evaluate_pending_models(pending_models, context)?;
     for completed_model in completed {
         let faults = completed_model.faults?;
@@ -145,7 +139,14 @@ fn evaluate_native_models(
     }
     result.faults = model_results.into_iter().flatten().flatten().collect();
     if bucket_changed && let Some(cache) = cache {
-        cache.put_native_rules_bucket(ruleset_fingerprint, &bucket)?;
+        let current: BTreeSet<&str> = models[..model_limit]
+            .iter()
+            .map(|model| model.relative_path.as_str())
+            .collect();
+        bucket
+            .entries
+            .retain(|path, _| current.contains(path.as_str()) || project_dir.join(path).is_file());
+        cache.put_native_rules_bucket(model_rules_fingerprint, &bucket)?;
     }
     Ok(result)
 }
@@ -163,17 +164,13 @@ fn evaluate_pending_models(
             selected: context.selected,
             request: context.request,
             threshold_overrides: context.threshold_overrides,
-        }),
+        })
+        .and_then(|faults| scoped_faults(context.selected, faults, RuleScope::evaluates_models)),
     };
     if pending_models.len() <= 1 {
         return Ok(pending_models.into_iter().map(evaluate_pending).collect());
     }
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(NATIVE_RULE_WORKERS.min(pending_models.len()))
-        .stack_size(NATIVE_RULE_STACK_BYTES)
-        .build()
-        .map_err(|error| error.to_string())?;
-    Ok(pool.install(|| {
+    Ok(native_rule_pool(pending_models.len())?.install(|| {
         pending_models
             .into_par_iter()
             .map(evaluate_pending)
@@ -184,6 +181,95 @@ fn evaluate_pending_models(
 pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     let request: EvaluateRequest = serde_json::from_str(request_json)
         .map_err(|error| format!("invalid rules request: {error}"))?;
+    evaluate_request(request)
+}
+
+/// Decode a request whose models arrive as separate payloads, each with its exact digest.
+pub(crate) fn parse_parts(
+    request_json: &[u8],
+    model_jsons: &[&[u8]],
+    model_digests: &[String],
+) -> Result<EvaluateRequest, String> {
+    let mut request: EvaluateRequest = serde_json::from_slice(request_json)
+        .map_err(|error| format!("invalid rules request: {error}"))?;
+    if !request.models.is_empty() {
+        return Err("invalid rules request: models must be sent as separate payloads".to_owned());
+    }
+    if model_jsons.len() != model_digests.len() {
+        return Err("invalid rules request: every model payload needs one digest".to_owned());
+    }
+    request.models = parse_model_payloads(model_jsons, model_digests)?;
+    Ok(request)
+}
+
+fn parse_model_payloads(
+    model_jsons: &[&[u8]],
+    model_digests: &[String],
+) -> Result<Vec<Model>, String> {
+    let parse = |(payload, digest): (&&[u8], &String)| -> Result<Model, String> {
+        let mut model: Model = serde_json::from_slice(payload)
+            .map_err(|error| format!("invalid rules request: {error}"))?;
+        model.payload_digest = Some(digest.clone());
+        Ok(model)
+    };
+    let results: Vec<Result<Model, String>> = if model_jsons.len() <= 1 {
+        model_jsons.iter().zip(model_digests).map(parse).collect()
+    } else {
+        native_rule_pool(model_jsons.len())?.install(|| {
+            model_jsons
+                .par_iter()
+                .zip(model_digests.par_iter())
+                .map(parse)
+                .collect()
+        })
+    };
+    results.into_iter().collect()
+}
+
+fn native_rule_pool(items: usize) -> Result<rayon::ThreadPool, String> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(NATIVE_RULE_WORKERS.min(items))
+        .stack_size(NATIVE_RULE_STACK_BYTES)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+/// Reject findings from a phase that the emitting rule's declared scope does not cover.
+fn scoped_faults(
+    selected: &BTreeMap<String, &RuleMetadata>,
+    faults: Vec<Fault>,
+    covers: fn(RuleScope) -> bool,
+) -> Result<Vec<Fault>, String> {
+    if let Some(fault) = faults.iter().find(|fault| {
+        selected
+            .get(&fault.code)
+            .is_some_and(|rule| !covers(rule.scope))
+    }) {
+        return Err(format!(
+            "rule {} emitted a finding outside its declared scope",
+            fault.code
+        ));
+    }
+    Ok(faults)
+}
+
+/// Fingerprint model-rule inputs; suppressions and graph-edge exceptions never reach model rules.
+fn model_rules_fingerprint(
+    selected: &[&RuleMetadata],
+    config: &RulesConfig,
+    dialect: &str,
+) -> Result<String, String> {
+    let model_config = RulesConfig {
+        rule_exceptions: Vec::new(),
+        rule_ignores: Vec::new(),
+        graph_edge_exceptions: Vec::new(),
+        cache: Default::default(),
+        ..config.clone()
+    };
+    fingerprint::fingerprint(selected, &model_config, dialect)
+}
+
+pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, String> {
     if request.version != API_VERSION {
         return Err(format!(
             "unsupported rules native API version {}; expected {API_VERSION}",
@@ -229,29 +315,22 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     }
 
     let cache_enabled = request.config.cache.enabled;
-    let project_aware = selected.iter().any(|rule| rule.project_wide || rule.custom);
-    let project_fingerprint = project_aware
-        .then(|| {
-            fingerprint_request_facts(
-                request
-                    .project_fingerprint
-                    .as_deref()
-                    .unwrap_or(COMPILER_FACTS_FINGERPRINT_SEED)
-                    .as_bytes(),
-                &request,
-            )
-        })
-        .transpose()?;
+    let model_rules_fingerprint = cache_enabled
+        .then(|| model_rules_fingerprint(&selected, &request.config, &request.dialect))
+        .transpose()?
+        .unwrap_or_default();
     let cache = cache_enabled
         .then(|| Cache::open(Path::new(&request.project_dir)))
         .transpose()?;
     let built_in_started = Instant::now();
     let mut raw_faults = request.initial_findings.clone();
-    raw_faults.extend(evaluate_project::evaluate_project(
-        ProjectEvaluationRequest {
+    raw_faults.extend(scoped_faults(
+        &selected_by_code,
+        evaluate_project::evaluate_project(ProjectEvaluationRequest {
             selected: &selected_by_code,
             request: &request,
-        },
+        })?,
+        RuleScope::evaluates_project,
     )?);
     let native = evaluate_native_models(NativeModelRuleRequest {
         context: ModelRuleBatchContext {
@@ -260,8 +339,7 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
             threshold_overrides: &threshold_overrides,
         },
         cache: cache.as_ref(),
-        ruleset_fingerprint: &ruleset_fingerprint,
-        project_fingerprint: project_fingerprint.as_deref(),
+        model_rules_fingerprint: &model_rules_fingerprint,
     })?;
     let cache_hits = native.hits;
     let cache_misses = native.misses;
@@ -288,66 +366,38 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
 
 fn model_cache_identities(
     models: &[&crate::models::Model],
-    ruleset: &str,
-    project: Option<&str>,
+    model_rules: &str,
 ) -> Result<Vec<String>, String> {
-    let identity = |(index, model): (usize, &&crate::models::Model)| {
-        model_cache_identity(model, ruleset, if index == 0 { project } else { None })
-    };
+    let identity = |model: &&crate::models::Model| model_cache_identity(model, model_rules);
     let results: Vec<Result<String, String>> = if models.len() <= 1 {
-        models.iter().enumerate().map(identity).collect()
+        models.iter().map(identity).collect()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(NATIVE_RULE_WORKERS.min(models.len()))
-            .stack_size(NATIVE_RULE_STACK_BYTES)
-            .build()
-            .map_err(|error| error.to_string())?;
-        pool.install(|| models.par_iter().enumerate().map(identity).collect())
+        native_rule_pool(models.len())?.install(|| models.par_iter().map(identity).collect())
     };
     results.into_iter().collect()
 }
 
-fn model_cache_identity(
-    model: &crate::models::Model,
-    ruleset: &str,
-    project: Option<&str>,
-) -> Result<String, String> {
-    let request = AnalysisBatchRequest {
-        schema_version: ANALYSIS_BATCH_SCHEMA_VERSION,
-        required_capabilities: Vec::new(),
-        identity: RuntimeIdentity {
-            producer: "sqlbuild-rules".to_owned(),
-            fact_schema: "sqlbuild-rules-model-v1".to_owned(),
-            runtime: NATIVE_BUILD_IDENTITY.to_owned(),
-            rule_pack: ruleset.to_owned(),
-            configuration: project.unwrap_or("model-local").to_owned(),
-        },
-        inputs: vec![AnalysisInput {
-            path: model.relative_path.clone(),
-            fingerprint: "compiled-model-v1".to_owned(),
-            facts: model,
-        }],
-    };
-    evaluate_batch(&request, &[], |_| Ok(Vec::new()))
-        .map(|response| response.cache_identity)
-        .map_err(lifecycle_error)
-}
-
-fn fingerprint_request_facts(seed: &[u8], request: &EvaluateRequest) -> Result<String, String> {
+/// Key one model's findings by payload, model-rules fingerprint, and derived test counts.
+fn model_cache_identity(model: &crate::models::Model, model_rules: &str) -> Result<String, String> {
     let mut digest = Sha256::new();
-    digest.update(seed);
-    digest.update(
-        serde_json::to_vec(&(
-            &request.models,
-            &request.public_enums,
-            &request.public_constants,
-            &request.sql_tests,
-            &request.sql_scenarios,
-            &request.scope_index,
-            &request.custom_rules,
-        ))
-        .map_err(|error| error.to_string())?,
-    );
+    digest.update(MODEL_RULES_IDENTITY_SEED);
+    digest.update([0]);
+    digest.update(NATIVE_BUILD_IDENTITY.as_bytes());
+    digest.update([0]);
+    digest.update(model_rules.as_bytes());
+    digest.update([0]);
+    match &model.payload_digest {
+        Some(payload) => {
+            digest.update(b"payload:");
+            digest.update(payload.as_bytes());
+        }
+        None => {
+            digest.update(b"model:");
+            digest.update(serde_json::to_vec(model).map_err(|error| error.to_string())?);
+        }
+    }
+    digest.update([0]);
+    digest.update(model.empty_input_only_test_count.to_le_bytes());
     Ok(format!("{:x}", digest.finalize()))
 }
 

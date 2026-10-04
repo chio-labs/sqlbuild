@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from collections.abc import Iterator
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from decimal import Decimal
@@ -34,6 +35,7 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
 )
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.run.native_memo import (
+    native_payload_digests,
     native_request_identity,
     read_native_response,
     write_native_response,
@@ -55,10 +57,17 @@ from sqlbuild.sql_values.types import SqlValueKind
 
 
 @dataclass(frozen=True)
+class _EncodedNativeRequest:
+    request_json: bytes
+    model_jsons: list[bytes]
+    model_digests: list[str]
+
+
+@dataclass(frozen=True)
 class _PreparedNativeRequest:
     identity: str | None
     reused: str | None
-    request_text: str | None
+    parsed: _native.ParsedRulesRequest | None
 
 
 def evaluate_native(
@@ -82,15 +91,13 @@ def evaluate_native(
         else custom_payloads
     )
     prepared: _PreparedNativeRequest = _prepare_native_request(
-        request_json=_serialise_native_request(
-            _native_request(
-                project=project,
-                config=config,
-                project_dir=project_dir,
-                dialect=dialect,
-                initial_findings=initial_findings,
-                custom_payloads=payloads,
-            )
+        encoded=_encode_native_request(
+            project=project,
+            config=config,
+            project_dir=project_dir,
+            dialect=dialect,
+            initial_findings=initial_findings,
+            custom_payloads=payloads,
         ),
         project_dir=project_dir,
         cache_enabled=config.cache.enabled,
@@ -154,6 +161,42 @@ def evaluate_native(
     )
 
 
+def _encode_native_request(
+    *,
+    project: CompiledProject,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    initial_findings: tuple[Finding, ...],
+    custom_payloads: list[dict[str, object]],
+) -> _EncodedNativeRequest:
+    """Encode each model separately so its digest keys cached findings without a second pass."""
+
+    include_type_proof: bool = any(
+        _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
+    )
+    model_jsons: list[bytes] = [
+        _serialise_native_request(payload)
+        for payload in _model_payloads(
+            project=project, dialect=dialect, include_type_proof=include_type_proof
+        )
+    ]
+    return _EncodedNativeRequest(
+        request_json=_serialise_native_request(
+            _native_request(
+                project=project,
+                config=config,
+                project_dir=project_dir,
+                dialect=dialect,
+                initial_findings=initial_findings,
+                custom_payloads=custom_payloads,
+            )
+        ),
+        model_jsons=model_jsons,
+        model_digests=native_payload_digests(model_jsons),
+    )
+
+
 def _native_request(
     *,
     project: CompiledProject,
@@ -168,13 +211,6 @@ def _native_request(
         "project_dir": str(project_dir.resolve()),
         "dialect": dialect,
         "config": _config_payload(config),
-        "models": _model_payloads(
-            project=project,
-            dialect=dialect,
-            include_type_proof=any(
-                _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
-            ),
-        ),
         "sql_tests": _sql_test_payloads(project),
         "sql_scenarios": _sql_scenario_payloads(project),
         "public_enums": [
@@ -238,7 +274,7 @@ def _selected_custom_rules(
 
 
 def _serialise_native_request(request: dict[str, object]) -> bytes:
-    """Encode the native request, reporting values the encoder rejects as rules errors."""
+    """Encode one native request part, reporting values the encoder rejects as rules errors."""
 
     try:
         return orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str)
@@ -247,11 +283,17 @@ def _serialise_native_request(request: dict[str, object]) -> bytes:
 
 
 def _prepare_native_request(
-    *, request_json: bytes, project_dir: Path, cache_enabled: bool
+    *, encoded: _EncodedNativeRequest, project_dir: Path, cache_enabled: bool
 ) -> _PreparedNativeRequest:
-    """Resolve the memo and decode once; the caller's bytes die when this returns."""
+    """Resolve the memo, else decode natively so the encoded payloads die when this returns."""
 
-    identity: str | None = native_request_identity(request_json) if cache_enabled else None
+    identity: str | None = (
+        native_request_identity(
+            request_json=encoded.request_json, model_digests=encoded.model_digests
+        )
+        if cache_enabled
+        else None
+    )
     reused: str | None = (
         read_native_response(project_dir=project_dir, identity=identity)
         if identity is not None
@@ -260,14 +302,23 @@ def _prepare_native_request(
     return _PreparedNativeRequest(
         identity=identity,
         reused=reused,
-        request_text=request_json.decode() if reused is None else None,
+        parsed=_parse_native_request(encoded) if reused is None else None,
     )
+
+
+def _parse_native_request(encoded: _EncodedNativeRequest) -> _native.ParsedRulesRequest:
+    try:
+        return _native.parse_rules_parts(
+            encoded.request_json, encoded.model_jsons, encoded.model_digests
+        )
+    except (ValueError, TypeError) as error:
+        raise RulesError(str(error)) from error
 
 
 def _evaluate_request(*, prepared: _PreparedNativeRequest, project_dir: Path) -> str:
     if prepared.reused is not None:
         return prepared.reused
-    response: str = _native.evaluate_json(cast(str, prepared.request_text))
+    response: str = _native.evaluate_parsed_rules(cast(_native.ParsedRulesRequest, prepared.parsed))
     if prepared.identity is not None:
         write_native_response(
             project_dir=project_dir, identity=prepared.identity, response=response
@@ -414,7 +465,7 @@ def _rule_selected(*, config: RulesConfig, code: str) -> bool:
 
 def _model_payloads(
     *, project: CompiledProject, dialect: str, include_type_proof: bool
-) -> list[dict[str, object]]:
+) -> Iterator[dict[str, object]]:
     audit_counts: dict[str, int] = {}
     for audit in project.audits:
         if audit.attached_target_name is not None:
@@ -427,7 +478,7 @@ def _model_payloads(
             continue
         for name in test.target_model_names:
             test_counts[name] = test_counts.get(name, 0) + 1
-    return [
+    return (
         dict(
             _model_payload(
                 model=model,
@@ -440,7 +491,7 @@ def _model_payloads(
             or model.config.values.get("sql_analysis") is False,
         )
         for model in project.models
-    ]
+    )
 
 
 def _sql_test_payloads(project: CompiledProject) -> list[dict[str, object]]:

@@ -1,7 +1,10 @@
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 use crate::engine::main::evaluate::evaluate_json;
+use crate::engine::main::evaluate_parsed::evaluate_parsed;
+use crate::engine::main::parse_parts::parse_parts;
 
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
     json!({
@@ -212,7 +215,6 @@ pub(crate) fn request_with_scope(scope: Value) -> Value {
         "public_enums": [],
         "public_constants": [],
         "custom_rules": [],
-        "project_fingerprint": null,
         "scope_index": scope
     })
 }
@@ -270,7 +272,6 @@ pub(crate) fn cached_sql_test_rules_request(project_dir: &TempDir, name: Option<
     json!({
         "version": 1,
         "project_dir": project_dir.path(),
-        "project_fingerprint": "compiler-project-v1",
         "config": {"select": ["SQBRTEST104"], "cache": {"enabled": true}},
         "models": [{
             "name": "orders", "relative_path": "models/orders.sql",
@@ -376,4 +377,106 @@ pub(crate) fn filler_test() -> Value {
 pub(crate) fn with_field(mut fact: Value, field: &str, value: Value) -> Value {
     fact[field] = value;
     fact
+}
+
+pub(crate) fn orders_model(path: &str, query: &str) -> Value {
+    let name = path
+        .rsplit('/')
+        .next()
+        .and_then(|file| file.strip_suffix(".sql"))
+        .unwrap_or("commerce__mart__orders");
+    json!({
+        "name": name,
+        "relative_path": path,
+        "query_sql": query,
+        "authored_sql": query,
+        "config": {"materialized": "table"},
+        "references": [{"ref_kind": "ref", "ref_name": "commerce__int_clean__orders"}],
+        "targeting_test_count": 0
+    })
+}
+
+pub(crate) fn orders_models() -> Vec<Value> {
+    vec![
+        orders_model(
+            "models/commerce/mart/commerce__mart__orders.sql",
+            "SELECT * FROM warehouse.raw.orders",
+        ),
+        orders_model(
+            "models/commerce/mart/commerce__mart__customers.sql",
+            "WITH customers AS (SELECT 1 AS customer_id) SELECT customer_id FROM customers",
+        ),
+        orders_model(
+            "models/commerce/staging/commerce__stg__products.sql",
+            "SELECT product_id, 1 AS quantity FROM products WHERE status = 3",
+        ),
+    ]
+}
+
+pub(crate) fn split_request(project_dir: &TempDir, config: &Value) -> Value {
+    json!({
+        "version": 1,
+        "project_dir": project_dir.path(),
+        "dialect": "duckdb",
+        "config": config,
+        "models": [],
+        "defer_suppressions": true
+    })
+}
+
+pub(crate) fn evaluate_split(rest: &Value, models: &[Value]) -> Result<Value, String> {
+    let encoded: Vec<Vec<u8>> = models
+        .iter()
+        .map(|model| serde_json::to_vec(model).map_err(|error| error.to_string()))
+        .collect::<Result<_, _>>()?;
+    let payloads: Vec<&[u8]> = encoded.iter().map(Vec::as_slice).collect();
+    let digests: Vec<String> = payloads
+        .iter()
+        .map(|payload| format!("{:x}", Sha256::digest(payload)))
+        .collect();
+    let rest_json = serde_json::to_vec(rest).map_err(|error| error.to_string())?;
+    serde_json::from_str(&evaluate_parsed(parse_parts(
+        &rest_json, &payloads, &digests,
+    )?)?)
+    .map_err(|error| error.to_string())
+}
+
+pub(crate) fn evaluate_whole(rest: &Value, models: &[Value]) -> Result<Value, String> {
+    let mut request = rest.clone();
+    request["models"] = Value::Array(models.to_vec());
+    serde_json::from_str(&evaluate_json(&request.to_string())?).map_err(|error| error.to_string())
+}
+
+pub(crate) fn uncached(rest: &Value) -> Value {
+    let mut request = rest.clone();
+    request["config"]["cache"] = json!({"enabled": false});
+    request
+}
+
+pub(crate) fn write_model_files(project_dir: &TempDir, models: &[Value]) -> Result<(), String> {
+    for model in models {
+        let path = project_dir
+            .path()
+            .join(model["relative_path"].as_str().unwrap_or_default());
+        let parent = path
+            .parent()
+            .ok_or_else(|| "model path has no parent".to_owned())?;
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        std::fs::write(&path, "SELECT 1").map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+pub(crate) fn cached_paths(project_dir: &TempDir) -> Result<Vec<String>, String> {
+    let bytes = std::fs::read(
+        project_dir
+            .path()
+            .join("target/rules-cache/bulk/native.json"),
+    )
+    .map_err(|error| error.to_string())?;
+    let bucket: Value = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    Ok(bucket["entries"]
+        .as_object()
+        .map(|entries| entries.keys().cloned().collect())
+        .unwrap_or_default())
 }

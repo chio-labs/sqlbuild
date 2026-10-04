@@ -41,13 +41,13 @@ def test_given_failing_request_builder_when_evaluating_native_then_error_propaga
     def record_custom_start(**_: object) -> None:
         started.append("custom")
 
-    def record_native_call(_: str) -> str:
+    def record_native_call(*_: object) -> str:
         started.append("native")
         return "{}"
 
     monkeypatch.setattr(native, "_model_payloads", failing_model_payloads)
     monkeypatch.setattr(native, "start_custom_rules", record_custom_start)
-    monkeypatch.setattr(native._native, "evaluate_json", record_native_call)
+    monkeypatch.setattr(native._native, "parse_rules_parts", record_native_call)
 
     with pytest.raises(type(test_case.expected_error)) as raised:
         native.evaluate_native(
@@ -86,13 +86,54 @@ def test_given_value_the_encoder_rejects_when_evaluating_native_then_rules_error
     def record_custom_start(**_: object) -> None:
         started.append("custom")
 
-    def record_native_call(_: str) -> str:
+    def record_native_call(*_: object) -> str:
         started.append("native")
         return "{}"
 
     monkeypatch.setattr(native, "_model_payloads", oversized_model_payloads)
     monkeypatch.setattr(native, "start_custom_rules", record_custom_start)
-    monkeypatch.setattr(native._native, "evaluate_json", record_native_call)
+    monkeypatch.setattr(native._native, "parse_rules_parts", record_native_call)
+
+    with pytest.raises(native.RulesError, match=test_case.expected_message):
+        native.evaluate_native(
+            project=project,
+            config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
+            project_dir=tmp_path,
+            catalogue=(),
+        )
+
+    assert started == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeRequestEncodeErrorTestCase(
+            description="model field the native engine rejects",
+            rejected_value=1,
+            expected_message="unknown field",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_payload_the_native_decoder_rejects_when_evaluating_native_then_rules_error_is_raised(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    test_case: NativeRequestEncodeErrorTestCase,
+) -> None:
+    project: CompiledProject = build_project(
+        name="orders", relative_path="models/orders.sql", sql="SELECT 1", config_values={}
+    )
+    started: list[str] = []
+
+    def unknown_field_payloads(**_: object) -> list[dict[str, object]]:
+        return [{"name": "orders", "priority": test_case.rejected_value}]
+
+    def record_custom_start(**_: object) -> None:
+        started.append("custom")
+
+    monkeypatch.setattr(native, "_model_payloads", unknown_field_payloads)
+    monkeypatch.setattr(native, "start_custom_rules", record_custom_start)
 
     with pytest.raises(native.RulesError, match=test_case.expected_message):
         native.evaluate_native(

@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from operator import attrgetter
 from pathlib import Path
 from typing import Any, cast
@@ -28,7 +28,10 @@ from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
+    Finding,
     Rule,
+    RuleExemption,
+    RuleIgnore,
     RulesCacheConfig,
     RulesConfig,
     RulesResult,
@@ -58,8 +61,14 @@ def captured_native_request(
 
     captured: dict[str, Any] = {}
 
-    def evaluate_json(request_json: str) -> str:
+    def parse_rules_parts(
+        request_json: bytes, model_jsons: list[bytes], model_digests: list[str]
+    ) -> object:
         captured.update(cast(dict[str, Any], json.loads(request_json)))
+        captured["models"] = [json.loads(model_json) for model_json in model_jsons]
+        return object()
+
+    def evaluate_parsed_rules(parsed: object) -> str:
         return json.dumps(
             {
                 "version": 1,
@@ -71,7 +80,8 @@ def captured_native_request(
             }
         )
 
-    monkeypatch.setattr(native._native, "evaluate_json", evaluate_json)
+    monkeypatch.setattr(native._native, "parse_rules_parts", parse_rules_parts)
+    monkeypatch.setattr(native._native, "evaluate_parsed_rules", evaluate_parsed_rules)
     native.evaluate_native(
         project=project,
         config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
@@ -303,15 +313,95 @@ def evaluate_contract_rule(
     return evaluate(project=project, config=config, project_dir=project_dir)
 
 
-def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[object]:
     """Count every request that reaches the native built-in rules engine."""
 
-    requests: list[str] = []
-    evaluate_json: Callable[[str], str] = native._native.evaluate_json
+    requests: list[object] = []
+    evaluate_parsed_rules: Callable[[Any], str] = native._native.evaluate_parsed_rules
 
-    def recording(request_json: str) -> str:
-        requests.append(request_json)
-        return evaluate_json(request_json)
+    def recording(parsed: Any) -> str:
+        requests.append(parsed)
+        return evaluate_parsed_rules(parsed)
 
-    monkeypatch.setattr(native._native, "evaluate_json", recording)
+    monkeypatch.setattr(native._native, "evaluate_parsed_rules", recording)
     return requests
+
+
+@dataclass(frozen=True)
+class IncrementalModelSpec:
+    """One synthetic compiled model in an incremental built-in rules step."""
+
+    name: str
+    relative_path: str
+    sql: str
+    config_values: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class IncrementalRulesStep:
+    """One project and configuration state evaluated after the previous step."""
+
+    description: str
+    models: tuple[IncrementalModelSpec, ...]
+    select: tuple[str, ...] = ("SQBR",)
+    ignore: tuple[str, ...] = ()
+    thresholds: dict[str, int] = field(default_factory=dict)
+    rule_ignores: tuple[RuleIgnore, ...] = ()
+    rule_exceptions: tuple[RuleExemption, ...] = ()
+    dialect: str = "duckdb"
+
+
+def evaluate_incremental_step(
+    *,
+    step: IncrementalRulesStep,
+    project_dir: Path,
+    cache_enabled: bool,
+    defer_suppressions: bool,
+    initial_codes: tuple[str, ...] = (),
+) -> RulesResult:
+    """Write the step's model files and evaluate built-in rules natively over its models."""
+
+    for model in step.models:
+        path: Path = project_dir / model.relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(model.sql, encoding="utf-8")
+    config: RulesConfig = RulesConfig(
+        select=step.select,
+        ignore=step.ignore,
+        thresholds=step.thresholds,
+        rule_ignores=step.rule_ignores,
+        rule_exceptions=step.rule_exceptions,
+        cache=RulesCacheConfig(enabled=cache_enabled),
+    )
+    return native.evaluate_native(
+        project=_incremental_project(step.models),
+        config=config,
+        project_dir=project_dir,
+        catalogue=build_catalogue(config=config, project_dir=project_dir, include_custom=False),
+        dialect=step.dialect,
+        initial_findings=tuple(
+            Finding(
+                code=code,
+                path=Path(step.models[0].relative_path),
+                line=1,
+                column=1,
+                message=f"{code} reported before built-in rules",
+                remediation="Review the authored SQL.",
+            )
+            for code in initial_codes
+        ),
+        defer_suppressions=defer_suppressions,
+    )
+
+
+def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledProject:
+    projects: list[CompiledProject] = [
+        build_project(
+            name=model.name,
+            relative_path=model.relative_path,
+            sql=model.sql,
+            config_values=model.config_values,
+        )
+        for model in models
+    ]
+    return replace(projects[0], models=tuple(project.models[0] for project in projects))

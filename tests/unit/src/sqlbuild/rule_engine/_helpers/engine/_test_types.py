@@ -228,3 +228,22 @@ class NativeRequestEncodeErrorTestCase:
     description: str
     rejected_value: object
     expected_message: str
+
+
+@dataclass(frozen=True)
+class IncrementalRulesModeTestCase:
+    """Evaluation options under which incremental results must equal full evaluation."""
+
+    description: str
+    defer_suppressions: bool
+    expected_observed_codes: tuple[str, ...]
+    initial_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IncrementalCacheCountsTestCase:
+    """One warm evaluation after editing a single model."""
+
+    description: str
+    expected_hits: int
+    expected_misses: int

@@ -6,6 +6,8 @@ mod empty_input_tests;
 mod evaluation;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_incremental_rules.rs"]
+mod incremental_rules;
 #[path = "tests/test_scope_facts.rs"]
 mod scope_facts;
 #[path = "tests/test_sql_scanning.rs"]

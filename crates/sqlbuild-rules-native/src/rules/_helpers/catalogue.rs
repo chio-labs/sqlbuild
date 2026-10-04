@@ -1,6 +1,6 @@
 use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::models::RulesCodeGrammar;
-use crate::models::{CustomRule, ResolveRulesRequest, RuleGuidance, RuleMetadata};
+use crate::models::{CustomRule, ResolveRulesRequest, RuleGuidance, RuleMetadata, RuleScope};
 use fensu_policy::policy::errors::PolicyError;
 use fensu_policy::policy::main::resolve_policy::resolve_policy;
 use fensu_policy::policy::models::PolicySelectors;
@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 const CUSTOM_RULE_COVERAGE_CODE: &str = "SQBRTEST301";
 
 macro_rules! rule {
-    ($code:expr, $family:expr, $slug:expr, $message:expr, $remediation:expr $(,)?) => {
+    ($code:expr, $scope:expr, $family:expr, $slug:expr, $message:expr, $remediation:expr $(,)?) => {
         RuleMetadata {
             code: $code.into(),
             family: $family.into(),
@@ -42,6 +42,7 @@ macro_rules! rule {
                     | "SQBRTEST301"
             ),
             custom: false,
+            scope: $scope,
         }
     };
 }
@@ -50,6 +51,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
     let mut rules = vec![
         rule!(
             "SQBRMODEL101",
+            RuleScope::Model,
             "structure",
             "dependency-import-ctes",
             "dependencies must be isolated in import CTEs",
@@ -57,6 +59,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRMODEL102",
+            RuleScope::Model,
             "structure",
             "select-star-discipline",
             "SELECT * is allowed only inside dependency import CTEs",
@@ -64,6 +67,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRMODEL103",
+            RuleScope::Model,
             "structure",
             "view-marker",
             "view materialization and model v marker must agree",
@@ -71,6 +75,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRMODEL104",
+            RuleScope::Model,
             "structure",
             "central-model-schema",
             "model schemas must come from central path defaults",
@@ -78,6 +83,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRGRAPH101",
+            RuleScope::Project,
             "graph",
             "forward-only-references",
             "model dependencies must flow forward through the layer order",
@@ -85,6 +91,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRGRAPH102",
+            RuleScope::Model,
             "graph",
             "declared-table-references",
             "table dependencies must use __ref or __source",
@@ -92,6 +99,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT101",
+            RuleScope::Model,
             "repository",
             "model-name-grammar",
             "model names must use the closed rule layer grammar",
@@ -99,6 +107,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT102",
+            RuleScope::Model,
             "repository",
             "folder-layer",
             "model layer segments must be contiguous in their folders",
@@ -106,6 +115,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT103",
+            RuleScope::Model,
             "repository",
             "source-token-policy",
             "model source suffixes must use approved, current tokens",
@@ -113,6 +123,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT104",
+            RuleScope::Model,
             "repository",
             "reference-name-policy",
             "referenced model identifiers must follow rule naming grammar",
@@ -120,6 +131,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT105",
+            RuleScope::Model,
             "repository",
             "name-folder-alignment",
             "model name layer must match its canonical folder",
@@ -127,6 +139,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT106",
+            RuleScope::Model,
             "repository",
             "name-schema-alignment",
             "model name layer must match its effective logical schema",
@@ -134,6 +147,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRCONTRACT101",
+            RuleScope::Model,
             "contracts",
             "contract-enforced-required",
             "models must declare an enforced output contract",
@@ -141,6 +155,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT201",
+            RuleScope::Project,
             "repository",
             "domain-level-layout",
             "models must resolve to one configured domain root and level",
@@ -148,6 +163,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT202",
+            RuleScope::Project,
             "repository",
             "owner-leaf-or-branch",
             "model owners must be either leaves or branches",
@@ -155,6 +171,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT203",
+            RuleScope::Project,
             "repository",
             "maximum-subdomain-depth",
             "model ownership must stay within the configured subdomain depth",
@@ -162,6 +179,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRPROJECT204",
+            RuleScope::Project,
             "repository",
             "shared-owner-prefix",
             "sibling owner names must not hide an implicit hierarchy",
@@ -169,6 +187,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRCONTRACT102",
+            RuleScope::Model,
             "contracts",
             "boolean-column-name",
             "boolean column names must have BOOLEAN types",
@@ -176,6 +195,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRCONTRACT103",
+            RuleScope::Model,
             "contracts",
             "timestamp-column-name",
             "timestamp column names must have timestamp types",
@@ -183,6 +203,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRCONTRACT104",
+            RuleScope::Model,
             "contracts",
             "date-column-name",
             "date column names must have DATE types",
@@ -190,6 +211,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRCONTRACT105",
+            RuleScope::Model,
             "contracts",
             "explicit-output-types",
             "contract outputs must establish their declared types explicitly",
@@ -197,6 +219,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRCONTRACT106",
+            RuleScope::Model,
             "contracts",
             "typed-contract-columns",
             "enforced contract columns must declare types",
@@ -204,6 +227,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION101",
+            RuleScope::Model,
             "declarations",
             "named-enum-decisions",
             "enum comparisons must use declared members and normalized operands",
@@ -211,6 +235,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION102",
+            RuleScope::Model,
             "declarations",
             "named-numeric-decisions",
             "non-canonical numeric comparisons must use constants",
@@ -218,6 +243,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION201",
+            RuleScope::Project,
             "declarations",
             "duplicate-enums",
             "identical enum domains must be consolidated",
@@ -225,6 +251,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION301",
+            RuleScope::Project,
             "declarations",
             "declaration-domain-placement",
             "public enum and constant files must live under a configured domain folder",
@@ -232,6 +259,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION302",
+            RuleScope::Project,
             "declarations",
             "declaration-container-shape",
             "declaration role containers must be flat or grouped",
@@ -239,6 +267,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION303",
+            RuleScope::Project,
             "declarations",
             "declaration-container-depth",
             "declaration role buckets must stay within the configured depth",
@@ -246,6 +275,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION304",
+            RuleScope::Project,
             "declarations",
             "declaration-container-capacity",
             "declaration role containers and buckets must remain bounded",
@@ -253,6 +283,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION305",
+            RuleScope::Project,
             "declarations",
             "declaration-bucket-name",
             "declaration role buckets must name a specific concern",
@@ -260,6 +291,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRDECLARATION306",
+            RuleScope::Project,
             "declarations",
             "declaration-container-prefix",
             "declaration filenames must not hide an obvious navigation bucket",
@@ -267,6 +299,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRTEST101",
+            RuleScope::Project,
             "tests",
             "canonical-test-roots",
             "SQL unit tests and scenarios must use their compiler-owned canonical roots",
@@ -274,6 +307,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRTEST102",
+            RuleScope::Project,
             "tests",
             "test-filename-grammar",
             "SQL test and scenario filenames must identify their subject and behavior",
@@ -281,6 +315,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRTEST103",
+            RuleScope::Project,
             "tests",
             "semantic-test-mirroring",
             "SQL unit tests must mirror compiler-resolved resource ownership",
@@ -288,6 +323,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRTEST104",
+            RuleScope::Project,
             "tests",
             "structured-test-name",
             "every SQL unit-test block must have a target-aware subject__expected_behavior name",
@@ -295,6 +331,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRTEST201",
+            RuleScope::ModelAndProject,
             "tests",
             "minimum-audits",
             "non-passthrough models must declare the configured minimum audits",
@@ -303,6 +340,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         minimum_tests_rule(),
         rule!(
             "SQBRTEST203",
+            RuleScope::Project,
             "tests",
             "empty-input-only-test",
             "SQL unit tests must not only prove that empty inputs produce no rows",
@@ -310,6 +348,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         rule!(
             "SQBRTEST301",
+            RuleScope::Project,
             "tests",
             "custom-rule-test-coverage",
             "selected custom rules must have public-harness test cases",
@@ -330,6 +369,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
                 enabled_by_default: true,
                 project_wide: false,
                 custom: false,
+                scope: RuleScope::SqlLint,
             }),
     );
     rules.sort_by(|a, b| a.code.cmp(&b.code));
@@ -358,6 +398,7 @@ fn minimum_tests_rule() -> RuleMetadata {
         enabled_by_default: true,
         project_wide: false,
         custom: false,
+        scope: RuleScope::ModelAndProject,
     }
 }
 
@@ -379,6 +420,7 @@ pub(crate) fn with_custom(custom: &[CustomRule]) -> Result<Vec<RuleMetadata>, St
             enabled_by_default: item.enabled_by_default,
             project_wide: item.project_wide,
             custom: true,
+            scope: RuleScope::Project,
         });
     }
     result.sort_by(|a, b| a.code.cmp(&b.code));

@@ -243,14 +243,16 @@ fn given_sql_test_facts_when_evaluating_project_rules_then_returns_expected_faul
 }
 
 #[test]
-fn given_test_fact_change_when_evaluating_cached_project_rule_then_model_cache_is_invalidated()
+fn given_test_fact_change_when_evaluating_cached_project_rule_then_project_rule_reruns_over_cached_models()
 -> Result<(), String> {
     let project_dir = TempDir::new().map_err(|error| error.to_string())?;
     let test_cases = [test_types::SqlTestRulesCacheTestCase {
-        description: "test fact change invalidates model cache identity",
+        description: "test fact change re-evaluates the project rule and reuses the model",
         expected_first_misses: 1,
-        expected_second_hits: 0,
-        expected_second_misses: 1,
+        expected_second_hits: 1,
+        expected_second_misses: 0,
+        expected_first_codes: &["SQBRTEST104"],
+        expected_second_codes: &["SQBRTEST104"],
     }];
     for test_case in &test_cases {
         let first: Value = serde_json::from_str(&evaluate_json(
@@ -263,6 +265,14 @@ fn given_test_fact_change_when_evaluating_cached_project_rule_then_model_cache_i
                 Some("orders: keeps paid orders"),
             ))?)
             .map_err(|error| error.to_string())?;
+        let codes = |response: &Value| -> Vec<String> {
+            response["faults"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|fault| fault["code"].as_str().map(str::to_owned))
+                .collect()
+        };
         assert_eq!(
             first["cache_misses"], test_case.expected_first_misses,
             "{}",
@@ -275,6 +285,23 @@ fn given_test_fact_change_when_evaluating_cached_project_rule_then_model_cache_i
         );
         assert_eq!(
             second["cache_misses"], test_case.expected_second_misses,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            codes(&first),
+            test_case.expected_first_codes,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            codes(&second),
+            test_case.expected_second_codes,
+            "{}",
+            test_case.description
+        );
+        assert_ne!(
+            first["faults"], second["faults"],
             "{}",
             test_case.description
         );
