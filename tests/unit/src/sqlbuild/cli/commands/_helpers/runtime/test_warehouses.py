@@ -15,8 +15,8 @@ from sqlbuild.cli.commands._helpers.runtime.warehouses import (
 )
 from sqlbuild.cli.commands.constants import COMMAND_WAREHOUSE_GROUPS
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import ResolvedWarehouse
 from sqlbuild.cli.commands.types import CliCommand
+from sqlbuild.cli.entry.models import ResolvedWarehouse
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import WarehouseGroup

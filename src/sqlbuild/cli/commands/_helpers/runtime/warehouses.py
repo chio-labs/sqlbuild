@@ -18,12 +18,12 @@ from sqlbuild.cli.commands.constants import (
     CONNECTION_WAREHOUSE_SOURCE,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.types import CliCommand
+from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CommandWarehouseScope,
     ResolvedWarehouse,
 )
-from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.expand_template_data import expand_template_data

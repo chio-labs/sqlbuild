@@ -12,7 +12,8 @@ from sqlbuild.cli.commands.constants import (
     C1_CONTROL_CODE_LIMIT,
     C1_CONTROL_CODE_START,
 )
-from sqlbuild.cli.commands.models import BuildRunContext, ResolvedWarehouse
+from sqlbuild.cli.commands.models import BuildRunContext
+from sqlbuild.cli.entry.models import ResolvedWarehouse
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
