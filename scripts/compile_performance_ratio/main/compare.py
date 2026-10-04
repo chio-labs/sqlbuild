@@ -14,7 +14,9 @@ from scripts.compile_performance_ratio._helpers.measure import (
     write_benchmark_project,
 )
 from scripts.compile_performance_ratio._helpers.report import append_summary, comparison_markdown
+from scripts.compile_performance_ratio._helpers.verdict import ratio_failures
 from scripts.compile_performance_ratio.constants import (
+    COMPILE_MODES,
     DEFAULT_MAX_RATIO,
     DEFAULT_RUNS,
     PROJECT_KINDS,
@@ -23,7 +25,7 @@ from scripts.compile_performance_ratio.models import CompileComparison
 
 
 def compare_compile_performance(argv: list[str] | None = None) -> int:
-    """Compare base and head cold compiles and enforce the wall and CPU ratio limit."""
+    """Compare base and head compiles per mode and enforce the wall and CPU ratio limit."""
 
     args: argparse.Namespace = _parse_args(argv)
     summary_value: str | None = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -45,8 +47,8 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
                 project_dir=base_project_dir,
                 models=args.models,
             )
-        print(f"Comparing base and head over {args.runs} alternating runs", file=sys.stderr)
-        comparison: CompileComparison = compare_builds(
+        modes: tuple[str, ...] = tuple(dict.fromkeys(args.modes))
+        comparisons: tuple[CompileComparison, ...] = compare_builds(
             kind=args.kind,
             models=args.models,
             base_project_dir=base_project_dir,
@@ -54,22 +56,22 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             base_python=args.base_python,
             head_python=args.head_python,
             runs=args.runs,
+            modes=modes,
         )
+    failures: tuple[str, ...] = ratio_failures(
+        comparisons=comparisons, modes=modes, max_ratio=args.max_ratio
+    )
     markdown: str = comparison_markdown(
-        comparison=comparison,
+        comparisons=comparisons,
         runs=args.runs,
         max_ratio=args.max_ratio,
         per_side_projects=per_side_projects,
+        failures=failures,
     )
     print(markdown)
     _ = append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
-    exceeded: list[str] = [
-        f"{name} ratio {ratio:.3f} exceeds {args.max_ratio:.2f}"
-        for name, ratio in (("wall", comparison.wall_ratio), ("CPU", comparison.cpu_ratio))
-        if ratio > args.max_ratio
-    ]
-    if exceeded:
-        print("Compile performance regression: " + "; ".join(exceeded), file=sys.stderr)
+    if failures:
+        print("Compile performance regression: " + "; ".join(failures), file=sys.stderr)
         return 1
     print("Compile performance within the same-runner limit", file=sys.stderr)
     return 0
@@ -77,7 +79,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="Compare base and head cold compiles on the same machine."
+        description="Compare base and head cold, warm and one-model edit compiles on one machine."
     )
     parser.add_argument("--kind", choices=PROJECT_KINDS, required=True)
     parser.add_argument("--models", type=int, required=True)
@@ -88,6 +90,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Base checkout whose own generator writes the project the base build compiles.",
+    )
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        choices=COMPILE_MODES,
+        default=list(COMPILE_MODES),
+        help="Compile modes to compare, in order; warm and edit reuse the cold project.",
     )
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS)
     parser.add_argument("--max-ratio", type=float, default=DEFAULT_MAX_RATIO)

@@ -10,6 +10,7 @@ class ReleasePerformanceTestCase:
     description: str
     inspection_models: int
     build_models: int
+    dense_models: int
     expected_outcomes: tuple[tuple[int, bool], ...]
     expected_fragments: tuple[str, ...]
     expected_marked_projects: tuple[str, ...]

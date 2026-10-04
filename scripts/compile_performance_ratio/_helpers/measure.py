@@ -8,15 +8,20 @@ import resource
 import shutil
 import statistics
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
+from scripts.compile_performance_ratio._helpers.edit import apply_one_model_edit
 from scripts.compile_performance_ratio.constants import (
+    ANALYSIS_CACHE_MISSES,
     BASE_GENERATOR_ENTRY,
     BASE_LABEL,
+    COLD_MODE,
     COMPILE_ENTRY,
     DENSE_KIND,
+    EDIT_MODE,
     ERROR_TAIL_CHARACTERS,
     EXCLUDED_ENVIRONMENT_KEYS,
     EXCLUDED_ENVIRONMENT_PREFIX,
@@ -27,8 +32,10 @@ from scripts.compile_performance_ratio.constants import (
     FRESH_SOURCE_SHARE,
     FRESH_TEST_SHARE,
     HEAD_LABEL,
+    MODE_TITLES,
     PYTHONPATH_KEY,
     REPORTED_PHASES,
+    WARM_MODE,
 )
 from scripts.compile_performance_ratio.exceptions import CompileComparisonError
 from scripts.compile_performance_ratio.models import CompileComparison, CompileRun
@@ -103,26 +110,57 @@ def compare_builds(
     base_python: Path,
     head_python: Path,
     runs: int,
-) -> CompileComparison:
-    """Alternate base and head cold compiles after one untimed warm-up compile per build."""
+    modes: tuple[str, ...],
+) -> tuple[CompileComparison, ...]:
+    """Alternate base and head compiles per mode; warm and edit reuse the cold project."""
 
     builds: tuple[tuple[str, Path, Path], ...] = (
         (BASE_LABEL, base_python, base_project_dir),
         (HEAD_LABEL, head_python, head_project_dir),
     )
-    for label, python, project_dir in builds:
-        _compile_once(label=label, python=python, project_dir=project_dir)
-    results: dict[str, list[CompileRun]] = {BASE_LABEL: [], HEAD_LABEL: []}
-    for _ in range(runs):
-        for label, python, project_dir in builds:
-            results[label].append(
-                _compile_once(label=label, python=python, project_dir=project_dir)
+    comparisons: list[CompileComparison] = []
+    cache_primed: bool = False
+    for mode in modes:
+        print(f"Comparing {MODE_TITLES[mode]} over {runs} alternating runs", file=sys.stderr)
+        if mode == COLD_MODE:
+            for label, python, project_dir in builds:
+                _ = _compile_once(label=label, python=python, project_dir=project_dir, mode=mode)
+            cache_primed = False
+        elif not cache_primed:
+            for label, python, project_dir in builds:
+                _ = _compile_once(
+                    label=label, python=python, project_dir=project_dir, mode=WARM_MODE
+                )
+            cache_primed = True
+        results: dict[str, list[CompileRun]] = {BASE_LABEL: [], HEAD_LABEL: []}
+        for revision in range(runs):
+            for label, python, project_dir in builds:
+                if mode == EDIT_MODE:
+                    _ = apply_one_model_edit(project_dir=project_dir, revision=revision)
+                run: CompileRun = _compile_once(
+                    label=label, python=python, project_dir=project_dir, mode=mode
+                )
+                _check_cache_use(run=run, mode=mode)
+                results[label].append(run)
+        comparisons.append(
+            _comparison(
+                kind=kind,
+                models=models,
+                mode=mode,
+                base=results[BASE_LABEL],
+                head=results[HEAD_LABEL],
             )
-    base: list[CompileRun] = results[BASE_LABEL]
-    head: list[CompileRun] = results[HEAD_LABEL]
+        )
+    return tuple(comparisons)
+
+
+def _comparison(
+    *, kind: str, models: int, mode: str, base: list[CompileRun], head: list[CompileRun]
+) -> CompileComparison:
     return CompileComparison(
         kind=kind,
         models=models,
+        mode=mode,
         base_wall_seconds=statistics.median(run.wall_seconds for run in base),
         head_wall_seconds=statistics.median(run.wall_seconds for run in head),
         base_cpu_seconds=statistics.median(run.cpu_seconds for run in base),
@@ -132,8 +170,27 @@ def compare_builds(
     )
 
 
-def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
-    shutil.rmtree(project_dir / "target", ignore_errors=True)
+def _check_cache_use(*, run: CompileRun, mode: str) -> None:
+    misses: int | None = run.analysis_cache_misses
+    if misses is None or mode == COLD_MODE:
+        return
+    if mode == WARM_MODE and misses != 0:
+        raise CompileComparisonError(
+            f"{run.label} warm compile missed the analysis cache for {misses} models, so it "
+            "did not measure an unchanged warm compile"
+        )
+    if mode == EDIT_MODE and misses == 0:
+        raise CompileComparisonError(
+            f"{run.label} one-model edit compile reported no analysis cache miss, so the edit "
+            "did not invalidate the edited model"
+        )
+
+
+def _compile_once(*, label: str, python: Path, project_dir: Path, mode: str) -> CompileRun:
+    cache_args: tuple[str, ...] = ()
+    if mode == COLD_MODE:
+        shutil.rmtree(project_dir / "target", ignore_errors=True)
+        cache_args = ("--no-cache",)
     environment: dict[str, str] = _compile_environment()
     before: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     started: float = time.perf_counter()
@@ -147,7 +204,7 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
             "--no-color",
             "compile",
             "--json",
-            "--no-cache",
+            *cache_args,
         ],
         capture_output=True,
         text=True,
@@ -158,20 +215,22 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
     after: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     if completed.returncode != 0:
         raise CompileComparisonError(
-            f"{label} compile failed with exit {completed.returncode}: "
+            f"{label} {mode} compile failed with exit {completed.returncode}: "
             f"{completed.stderr[-ERROR_TAIL_CHARACTERS:]}"
         )
     payload: dict[str, object] = json.loads(completed.stdout)
     timings: object = payload.get("compile_timings", {})
+    numeric: dict[str, int] = {
+        str(name): int(value)
+        for name, value in (timings.items() if isinstance(timings, dict) else ())
+        if isinstance(value, (int, float))
+    }
     return CompileRun(
         label=label,
         wall_seconds=wall_seconds,
         cpu_seconds=(after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime),
-        timings_ms={
-            name: int(value)
-            for name, value in (timings.items() if isinstance(timings, dict) else ())
-            if name in REPORTED_PHASES and isinstance(value, (int, float))
-        },
+        timings_ms={name: value for name, value in numeric.items() if name in REPORTED_PHASES},
+        analysis_cache_misses=numeric.get(ANALYSIS_CACHE_MISSES),
     )
 
 

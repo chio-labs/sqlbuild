@@ -33,7 +33,15 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
             models=20,
             max_ratio="3.0",
             expected_return_code=0,
-            expected_fragments=("| Wall (s) |", "| CPU (s) |", "| analysis_native_ms |"),
+            expected_fragments=(
+                "dense 20 models, cold compile without cache: head vs base",
+                "dense 20 models, unchanged warm compile: head vs base",
+                "dense 20 models, one-model edit on a warm cache: head vs base",
+                "| Wall (s) |",
+                "| CPU (s) |",
+                "| analysis_native_ms |",
+                "**Result: passed.**",
+            ),
         ),
         CompilePerformanceRatioTestCase(
             description="an unattainable limit fails with the exceeded ratios",
@@ -41,7 +49,12 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
             models=20,
             max_ratio="0.01",
             expected_return_code=1,
-            expected_fragments=("Compile performance regression: wall ratio",),
+            expected_fragments=(
+                "Compile performance regression: dense 20 cold: wall ratio",
+                "dense 20 warm: CPU ratio",
+                "dense 20 edit: wall ratio",
+                "**Result: failed.**",
+            ),
         ),
     ),
     ids=lambda case: case.description,
@@ -90,8 +103,9 @@ def test_given_two_builds_when_comparing_compile_performance_then_enforces_ratio
             base_generator=MARKER_GENERATOR,
             expected_return_code=0,
             expected_fragments=("Projects generated per side",),
-            expected_base_projects=("base", "base"),
-            expected_head_projects=("head", "head"),
+            # Cold warm-up and run, warm cache priming and run, then one edit run per side.
+            expected_base_projects=("base",) * 5,
+            expected_head_projects=("head",) * 5,
         ),
         PerSideCompilePerformanceRatioTestCase(
             description="a failing base generator stops before any compile",

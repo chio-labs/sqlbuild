@@ -71,6 +71,14 @@ class BaselineGeneratorTestCase:
 
 
 @dataclass(frozen=True)
+class BaselineDenseGeneratorTestCase:
+    description: str
+    generator: str
+    expected_markers: tuple[str, ...]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ReleaseSourceTestCase:
     description: str
     tag: str

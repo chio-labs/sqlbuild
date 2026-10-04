@@ -64,6 +64,36 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
             expected_regressed=(False, True, False),
         ),
         MetricVerdictTestCase(
+            description="a compile command fails just above its own tighter time limit",
+            comparison=comparison(
+                name="compile (one-model edit)",
+                baseline=((10.0, 10.0, 400),) * 3,
+                candidate=((11.6, 11.4, 400),) * 3,
+                max_time_ratio=1.15,
+            ),
+            expected_regressed=(True, False, False),
+        ),
+        MetricVerdictTestCase(
+            description="a compile command under its tighter limit passes",
+            comparison=comparison(
+                name="compile (no cache)",
+                baseline=((8.0, 16.0, 600),) * 3,
+                candidate=((9.1, 18.3, 600),) * 3,
+                max_time_ratio=1.15,
+            ),
+            expected_regressed=(False, False, False),
+        ),
+        MetricVerdictTestCase(
+            description="a compile command above its tighter limit stays under the time floor",
+            comparison=comparison(
+                name="compile (warm cache)",
+                baseline=((2.0, 2.0, 400),) * 3,
+                candidate=((2.4, 2.4, 400),) * 3,
+                max_time_ratio=1.15,
+            ),
+            expected_regressed=(False, False, False),
+        ),
+        MetricVerdictTestCase(
             description="a wall-only regression at CPU parity fails on wall alone",
             comparison=comparison(
                 name="build (empty warehouse)",

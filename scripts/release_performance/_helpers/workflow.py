@@ -10,10 +10,13 @@ import tempfile
 from pathlib import Path
 
 from scripts.compile_performance_ratio._helpers.report import cpu_model
+from scripts.compile_performance_ratio.exceptions import BenchmarkEditError
 from scripts.release_performance._helpers.benchmark import (
     compare_command,
     prepare_version_projects,
+    write_baseline_dense_project,
     write_baseline_pristine_projects,
+    write_dense_project,
     write_pristine_projects,
 )
 from scripts.release_performance._helpers.report import (
@@ -67,7 +70,7 @@ def run_release_comparison(*, options: ComparisonOptions) -> int:
         else:
             with tempfile.TemporaryDirectory(prefix="sqlbuild-release-performance-") as root:
                 comparison = _compare(options=options, root=Path(root))
-    except (ReleasePerformanceError, OSError) as error:
+    except (ReleasePerformanceError, BenchmarkEditError, OSError) as error:
         print(f"Release performance comparison failed: {error}", file=sys.stderr)
         _ = append_summary(path=summary, markdown=error_markdown(message=str(error)))
         return 1
@@ -122,20 +125,25 @@ def _compare(*, options: ComparisonOptions, root: Path) -> ReleaseComparison:
         if options.baseline_source is not None
         else RELEASE_TAG_PREFIX + baseline.version
     )
+    write_dense_project(pristine=pristine[CANDIDATE_LABEL], models=options.dense_models)
     print(f"Generating baseline benchmark projects with {baseline_generator}", file=sys.stderr)
+    baseline_source: Path = (
+        options.baseline_source.absolute()
+        if options.baseline_source is not None
+        else release_source(
+            version=baseline.version,
+            repo_dir=REPO_ROOT,
+            destination=root / BASELINE_SOURCE_DIRECTORY,
+        )
+    )
     pristine[BASELINE_LABEL] = write_baseline_pristine_projects(
-        source=(
-            options.baseline_source.absolute()
-            if options.baseline_source is not None
-            else release_source(
-                version=baseline.version,
-                repo_dir=REPO_ROOT,
-                destination=root / BASELINE_SOURCE_DIRECTORY,
-            )
-        ),
+        source=baseline_source,
         root=root / BASELINE_GENERATED_DIRECTORY,
         inspection_models=options.inspection_models,
         build_models=options.build_models,
+    )
+    write_baseline_dense_project(
+        source=baseline_source, pristine=pristine[BASELINE_LABEL], models=options.dense_models
     )
     versions: tuple[InstalledVersion, InstalledVersion] = (baseline, candidate)
     projects: dict[str, dict[str, Path]] = {}

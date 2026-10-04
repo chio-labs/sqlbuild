@@ -12,6 +12,9 @@ class BenchmarkCommand:
     project: str
     sqb_args: tuple[str, ...]
     minimum_version: str | None = None
+    edits_model: bool = False
+    removes_target: bool = False
+    max_time_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,7 @@ class CommandComparison:
     name: str
     baseline: tuple[CommandSample, ...]
     candidate: tuple[CommandSample, ...]
+    max_time_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,7 @@ class ComparisonOptions:
     python: str
     inspection_models: int
     build_models: int
+    dense_models: int
     work_dir: Path | None
     output: Path | None
     baseline_source: Path | None = None

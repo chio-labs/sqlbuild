@@ -6,17 +6,24 @@ from pathlib import Path
 
 import pytest
 
-from scripts.release_performance._helpers.benchmark import write_baseline_pristine_projects
+from scripts.release_performance._helpers.benchmark import (
+    write_baseline_dense_project,
+    write_baseline_pristine_projects,
+)
 from scripts.release_performance._helpers.versions import release_source
 from scripts.release_performance.exceptions import ReleasePerformanceError
 from tests.unit.scripts.release_performance._helpers._test_types import (
+    BaselineDenseGeneratorTestCase,
     BaselineGeneratorTestCase,
     ReleaseSourceTestCase,
 )
 from tests.unit.scripts.release_performance._helpers.helpers import (
+    FAILING_DENSE_GENERATOR,
     FAILING_GENERATOR,
+    MARKER_DENSE_GENERATOR,
     MARKER_GENERATOR,
     tagged_repository,
+    write_baseline_dense_source,
     write_baseline_source,
 )
 
@@ -60,6 +67,48 @@ def test_given_baseline_source_when_generating_then_uses_its_own_generator(
     assert tuple(sorted(path.parent.name for path in pristine.glob("*/BASELINE_MARKER"))) == (
         test_case.expected_projects
     )
+    assert all(fragment in error for fragment in test_case.expected_error_fragments), error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BaselineDenseGeneratorTestCase(
+            description="the baseline source's own dense generator writes the dense project",
+            generator=MARKER_DENSE_GENERATOR,
+            expected_markers=("40",),
+            expected_error_fragments=(),
+        ),
+        BaselineDenseGeneratorTestCase(
+            description="a failing baseline dense generator is reported with its stderr",
+            generator=FAILING_DENSE_GENERATOR,
+            expected_markers=(),
+            expected_error_fragments=(
+                "Baseline dense benchmark generation with the generator in",
+                "baseline dense generator exploded",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_baseline_source_when_generating_dense_project_then_uses_its_own_generator(
+    test_case: BaselineDenseGeneratorTestCase, tmp_path: Path
+) -> None:
+    source: Path = write_baseline_dense_source(
+        root=tmp_path / "source", generator=test_case.generator
+    )
+    pristine: Path = tmp_path / "generated" / "pristine"
+    error: str = ""
+
+    try:
+        write_baseline_dense_project(source=source, pristine=pristine, models=40)
+    except ReleasePerformanceError as raised:
+        error = str(raised)
+
+    markers: tuple[str, ...] = tuple(
+        marker.read_text(encoding="utf-8") for marker in pristine.glob("dense/BASELINE_MARKER")
+    )
+    assert markers == test_case.expected_markers
     assert all(fragment in error for fragment in test_case.expected_error_fragments), error
 
 

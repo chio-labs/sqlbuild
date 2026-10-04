@@ -451,13 +451,14 @@ jobs:
       - name: Install base dependencies
         working-directory: base
         run: uv sync --locked --all-extras
-      - name: Compare base and head cold compiles
+      - name: Compare base and head cold, warm and one-model edit compiles
         env:
           KIND: ${{ matrix.kind }}
           MAX_RATIO: ${{ matrix.max_ratio }}
         run: |
           uv run python -m scripts.compare_compile_performance \
             --kind "${KIND}" \
+            --modes cold warm edit \
             --max-ratio "${MAX_RATIO}" \
             --models 3000 \
             --base-root base \
