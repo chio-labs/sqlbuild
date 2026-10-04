@@ -740,7 +740,7 @@ def _sql_model_rule_identities(
 
 
 def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:
-    digest: Any = hashlib.sha256()
+    digest: Any = hashlib.blake2b(digest_size=32)
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
     digest.update(_RULES_BUILD_IDENTITY.encode())
     digest.update(dialect.encode())
@@ -776,7 +776,7 @@ def _sql_file_rule_identity(
         or file_path in sql_expansions
     ):
         return None
-    digest: Any = hashlib.sha256()
+    digest: Any = hashlib.blake2b(digest_size=32)
     for value in (
         _SQL_RULE_CACHE_VERSION,
         "file",

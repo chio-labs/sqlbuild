@@ -212,3 +212,13 @@ class SplitHostStateCase:
     selected_rules: tuple[str, ...]
     files: tuple[tuple[str, str], ...]
     expected_findings: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class RulesEditChainCase:
+    """A chain of authored edits, each compiled warm and compared with a cache-free compile."""
+
+    description: str
+    edits: tuple[RulesCacheEditCase, ...]
+    expected_cold_codes: tuple[str, ...]
+    expected_exit_code: int = 1

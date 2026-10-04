@@ -567,6 +567,8 @@ pub(crate) struct Model {
     pub targeting_test_count: u32,
     #[serde(skip_deserializing)]
     pub empty_input_only_test_count: u32,
+    #[serde(skip)]
+    pub payload_digest: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -727,7 +729,6 @@ pub(crate) struct EvaluateRequest {
     pub initial_findings: Vec<Fault>,
     pub defer_suppressions: bool,
     pub custom_rules: Vec<CustomRule>,
-    pub project_fingerprint: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -764,7 +765,6 @@ impl Default for EvaluateRequest {
             initial_findings: vec![],
             defer_suppressions: false,
             custom_rules: vec![],
-            project_fingerprint: None,
         }
     }
 }
@@ -807,6 +807,26 @@ impl RuleGuidance {
     }
 }
 
+/// Inputs that can change a rule's findings; only `Model` findings are cached per model.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RuleScope {
+    Model,
+    Project,
+    ModelAndProject,
+    SqlLint,
+}
+
+impl RuleScope {
+    pub(crate) fn evaluates_models(self) -> bool {
+        matches!(self, Self::Model | Self::ModelAndProject)
+    }
+
+    pub(crate) fn evaluates_project(self) -> bool {
+        matches!(self, Self::Project | Self::ModelAndProject)
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct RuleMetadata {
     pub code: String,
@@ -819,6 +839,7 @@ pub(crate) struct RuleMetadata {
     pub enabled_by_default: bool,
     pub project_wide: bool,
     pub custom: bool,
+    pub scope: RuleScope,
 }
 
 impl fensu_policy::policy::types::PolicyRule for RuleMetadata {

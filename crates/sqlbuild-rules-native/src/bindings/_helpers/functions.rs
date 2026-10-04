@@ -3,12 +3,12 @@
 use pyo3::prelude::{
     Bound, IntoPyObject, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
+use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyList, PyTuple};
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
 use crate::configuration::main::load;
 use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
-use crate::engine::main::evaluate;
+use crate::engine::main::{evaluate, evaluate_parts};
 use crate::models::CatalogueResponse;
 use crate::rules::main::{catalogue, selected_codes};
 
@@ -70,6 +70,19 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
 #[pyfunction]
 fn evaluate_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| evaluate::evaluate_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn evaluate_rules_parts(
+    py: Python<'_>,
+    request_json: Bound<'_, PyBytes>,
+    model_jsons: Vec<Bound<'_, PyBytes>>,
+    model_digests: Vec<String>,
+) -> PyResult<String> {
+    let request: &[u8] = request_json.as_bytes();
+    let models: Vec<&[u8]> = model_jsons.iter().map(|model| model.as_bytes()).collect();
+    py.compiler_detach(|| evaluate_parts::evaluate_parts(request, &models, &model_digests))
         .map_err(value_error)
 }
 
@@ -465,6 +478,7 @@ fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_rules_parts, module)?)?;
     module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
     module.add_function(wrap_pyfunction!(run_custom_host_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;

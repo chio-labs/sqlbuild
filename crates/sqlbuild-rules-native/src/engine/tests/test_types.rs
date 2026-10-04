@@ -157,6 +157,8 @@ pub(crate) struct SqlTestRulesCacheTestCase {
     pub(crate) expected_first_misses: u64,
     pub(crate) expected_second_hits: u64,
     pub(crate) expected_second_misses: u64,
+    pub(crate) expected_first_codes: &'static [&'static str],
+    pub(crate) expected_second_codes: &'static [&'static str],
 }
 
 pub(crate) struct EmptyInputTestRuleTestCase {
@@ -201,4 +203,40 @@ pub(crate) struct SqlScannerTestCase {
     /// `None` when SQL lint declines non-ASCII input; `Some("")` when no macro site closes.
     pub(crate) expected_lint_site: Option<&'static str>,
     pub(crate) expected_reference_fast_path: bool,
+}
+
+pub(crate) struct IncrementalRulesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) cache_enabled: bool,
+    pub(crate) compared_fields: &'static [&'static str],
+    pub(crate) expected_mismatched_fields: &'static [&'static str],
+}
+
+pub(crate) struct RuleScopeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_scopes: &'static [(&'static str, crate::models::RuleScope)],
+    pub(crate) expected_sql_scope: crate::models::RuleScope,
+}
+
+pub(crate) struct ScopedEvaluationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_codes: &'static [&'static str],
+}
+
+pub(crate) struct MalformedSplitRequestTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) inline_model_count: usize,
+    pub(crate) payload_count: usize,
+    pub(crate) expected_error: &'static str,
+}
+
+pub(crate) struct ModelCacheReuseTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_hits: u64,
+    pub(crate) expected_misses: u64,
+}
+
+pub(crate) struct CachePruningTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_paths: &'static [&'static str],
 }

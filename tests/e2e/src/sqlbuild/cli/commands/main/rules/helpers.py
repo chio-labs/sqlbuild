@@ -381,6 +381,36 @@ def flagged_values(*, model: Model, ctx: RuleContext) -> list[Finding]:
 }
 
 
+BUILT_IN_RULES_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        '[connection]\ndatabase = "warehouse.duckdb"\n\n'
+        '[rules]\nselect = ["SQBR"]\ndomains = ["commerce"]\n\n'
+        "[rules.thresholds]\nmin_tests_per_model = 1\n"
+    ),
+    "models/commerce/staging/commerce__stg__orders.sql": (
+        'MODEL (description "Staged orders");\n\n'
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST(10.5 AS DOUBLE) AS amount, "
+        "'paid' AS status\n"
+    ),
+    "models/commerce/mart/commerce__mart__order_totals.sql": (
+        'MODEL (description "Order totals");\n\n'
+        'WITH orders AS (\n  SELECT * FROM __ref("commerce__stg__orders")\n)\n'
+        "SELECT order_id, amount * 2 AS doubled_amount FROM orders "
+        "WHERE status = 'paid' AND amount > 7\n"
+    ),
+    "models/commerce/mart/commerce__mart__customers.sql": (
+        'MODEL (description "Customers");\n\nSELECT customer_id FROM warehouse.raw.customers\n'
+    ),
+    "tests/unit/test_commerce__mart__order_totals.sql": (
+        "TEST ();\n\nWITH\n__ref__commerce__stg__orders AS (\n"
+        "  SELECT 1 AS order_id, 10.0 AS amount, 'paid' AS status\n),\n"
+        "__expected__commerce__mart__order_totals AS (\n"
+        "  SELECT 1 AS order_id, 20.0 AS doubled_amount\n)\nSELECT 1\n"
+    ),
+}
+
+
 def write_project_files(*, project_dir: Path, files: dict[str, str]) -> None:
     """Write authored project files beneath one project directory."""
 

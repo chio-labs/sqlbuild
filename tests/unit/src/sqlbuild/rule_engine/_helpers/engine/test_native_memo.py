@@ -75,7 +75,7 @@ def test_given_memoized_response_from_another_native_build_when_evaluating_then_
     cold: RulesResult = evaluate_contract_rule(
         config_values=config_values, project_dir=tmp_path, cache_enabled=True
     )
-    native_calls: list[str] = record_native_evaluations(monkeypatch=monkeypatch)
+    native_calls: list[bytes] = record_native_evaluations(monkeypatch=monkeypatch)
     monkeypatch.setattr(native_module, "BUILD_IDENTITY", f"{native_module.BUILD_IDENTITY}-rebuilt")
     rebuilt: RulesResult = evaluate_contract_rule(
         config_values=config_values, project_dir=tmp_path, cache_enabled=True
