@@ -62,6 +62,12 @@ class DuckDbPlusAdapter(DuckDbAdapter):
 adapter = "duckdb_plus"
 ```
 
+A subclass inherits the parent's capabilities. For example, an adapter extending the Snowflake
+adapter keeps `supports_session_warehouse = True`, so it can use
+[command-group warehouses](/docs/concepts/project-configuration#command-group-warehouses) and
+`--warehouse`. An adapter written from scratch that sets this attribute receives the selected
+warehouse as the connection's `warehouse` key.
+
 ### Writing an adapter from scratch
 
 For a database engine with no built-in support, subclass `BaseAdapter`. It provides ANSI SQL defaults for most methods - you only need to implement `connect`, `execute`, `close`, and any methods where your engine differs from standard SQL:

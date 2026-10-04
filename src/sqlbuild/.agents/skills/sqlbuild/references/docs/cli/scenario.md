@@ -40,6 +40,7 @@ sqb scenario test [flags]
 | `--max-snapshot-bytes` | Override per-relation byte limit for capture |
 | `--max-snapshot-total-bytes` | Override total byte limit for capture |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ### Selectors
 
@@ -130,6 +131,7 @@ sqb scenario capture [flags]
 | `--max-snapshot-bytes` | Override per-relation byte limit |
 | `--max-snapshot-total-bytes` | Override total byte limit |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ### Examples
 

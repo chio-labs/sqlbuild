@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.execution.command_warehouse import apply_command_warehouse
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -57,13 +58,19 @@ def build_sqlbuild_plan_output(
     if not request.selected_model_names:
         return None
     planning_project: CompiledProject = environment.project
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config=build_effective_connection_config(
-            discovered_inputs=environment.discovered_inputs
+    connection_config: dict[str, object] = apply_command_warehouse(
+        config=resolve_connection_config(
+            raw_config=build_effective_connection_config(
+                discovered_inputs=environment.discovered_inputs
+            ),
+            project_dir=environment.project_dir,
+            adapter_name=environment.adapter_name,
+            discovered_inputs=environment.discovered_inputs,
         ),
-        project_dir=environment.project_dir,
         adapter_name=environment.adapter_name,
         discovered_inputs=environment.discovered_inputs,
+        project_dir=environment.project_dir,
+        selected_target=None,
     )
     connection: Any = _connect_for_plan(
         adapter=environment.adapter,

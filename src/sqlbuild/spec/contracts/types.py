@@ -14,6 +14,13 @@ class EventExportSeverity(StrEnum):
     ERROR = "error"
 
 
+class WarehouseGroup(StrEnum):
+    """Command group that selects a target's default warehouse."""
+
+    BUILD = "build"
+    QUERY = "query"
+
+
 class SourceWriteStrategy(StrEnum):
     APPEND = "append"
     DELETE_INSERT = "delete_insert"

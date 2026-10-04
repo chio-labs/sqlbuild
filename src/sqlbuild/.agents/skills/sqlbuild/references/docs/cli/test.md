@@ -22,6 +22,7 @@ sqb --project-dir <path> test [flags]
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select tests targeting specific models |
 | `--exclude` | Exclude tests targeting specific models |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 Parameterized cases use parent-level selection. Selecting a target model includes every case in
 each matching `TEST` template; case names are not model selectors.

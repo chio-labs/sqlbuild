@@ -20,6 +20,10 @@ from sqlbuild.compiler.authored_values.main._change_policy_toml_help import (
 )
 from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY, TEMPLATE_OPEN_TOKEN
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import unsupported_keys_help
+from sqlbuild.compiler.discovery._helpers.yml.target_warehouses import (
+    load_target_warehouses,
+    reject_unsupported_target_warehouses,
+)
 from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
     DBT_DEFER_CLONE_CONFIG_KEY,
@@ -479,6 +483,20 @@ def validate_local_sql_analysis_policy(
                 value=False,
             ),
         ),
+    )
+
+
+def validate_target_warehouses_adapter(
+    *, project_dir: Path, project_config: ProjectConfig, local_config: LocalConfig
+) -> None:
+    """Reject command-group warehouses for adapters without a session warehouse."""
+
+    reject_unsupported_target_warehouses(
+        project_dir=project_dir,
+        project_config=project_config,
+        local_config=local_config,
+        project_config_path=_resolve_project_config_path(project_dir=project_dir),
+        local_config_path=_resolve_local_config_path(project_dir=project_dir),
     )
 
 
@@ -1314,6 +1332,7 @@ def _project_target(local: LocalTargetConfig) -> TargetConfig:
         missing_migration_origin=local.missing_migration_origin
         or defaults.missing_migration_origin,
         execution_limits=local.execution_limits,
+        warehouses=local.warehouses,
     )
 
 
@@ -1401,6 +1420,11 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 policy=MissingMigrationOriginPolicy,
             ),
             execution_limits=execution_limits,
+            warehouses=load_target_warehouses(
+                payload=target_mapping.get("warehouses"),
+                target_name=target_name,
+                file_path=file_path,
+            ),
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
@@ -1473,6 +1497,7 @@ def _validate_target_keys(
                 "missing_migration_origin",
                 "clone",
                 "execution_limits",
+                "warehouses",
             }
         ),
         label=f"targets.{target_name}",

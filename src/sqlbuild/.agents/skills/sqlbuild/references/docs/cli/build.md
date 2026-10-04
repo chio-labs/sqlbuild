@@ -54,6 +54,7 @@ sqb --project-dir <path> build [flags]
 | `--manifest` | Generate `target/manifest.json` with plan-aware project metadata |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Fast iteration
 

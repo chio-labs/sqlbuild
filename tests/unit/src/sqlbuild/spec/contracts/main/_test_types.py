@@ -8,6 +8,7 @@ from sqlbuild.spec.contracts.models import (
     LoaderDestinationParts,
     LocalConfig,
     ProjectConfig,
+    TargetWarehousesConfig,
 )
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 from sqlbuild.sql_values.types import CollectionRendering
@@ -65,3 +66,11 @@ class MissingOriginPolicyResolutionTestCase:
     local_config: LocalConfig
     target_name: str
     expected_policy: MissingMigrationOriginPolicy
+
+
+@dataclass(frozen=True)
+class TargetWarehousesResolutionTestCase:
+    description: str
+    project_warehouses: TargetWarehousesConfig
+    local_warehouses: TargetWarehousesConfig
+    expected_warehouses: TargetWarehousesConfig

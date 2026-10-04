@@ -130,6 +130,7 @@ A target is a named build context - the database and schema you build into, plus
 | `defer_sources_to` | Target name to read managed source data from (see [Loaders](/docs/concepts/python-nodes/loaders#source-deferral)) |
 | `clone` | Clone policy (see below) |
 | `missing_migration_origin` | What a build does when a declared `migrate_from` origin does not exist in this target: `allow` (default), `require_confirmation`, or `deny` (see below) |
+| `warehouses` | Default Snowflake warehouse per command group, `build` and `query` (see below) |
 
 ```toml
 [connections.warehouse]
@@ -194,6 +195,76 @@ password = "${ENV:SNOWFLAKE_PASSWORD}"
 
 Commands then use `dev` automatically. An explicit command such as `sqb build --target prod`
 still takes precedence for that invocation.
+
+### Command-group warehouses
+
+Builds and ad-hoc inspection usually need different compute. A Snowflake target can choose a
+default warehouse for each command group, so `sqb build` runs on a large warehouse while
+`sqb query` and `sqb diff` stay on a small one:
+
+```toml
+[connections.warehouse]
+account = "my_org-my_account"
+warehouse = "ANALYTICS_WH"            # fallback for every command, as before
+
+[targets.dev]
+connection = "warehouse"
+database = "ANALYTICS"
+schema = "DEV"
+
+[targets.dev.warehouses]
+build = "BUILD_WH"                    # commands in the build group
+query = "ADHOC_WH"                    # commands in the query group
+```
+
+Each command connects with the first warehouse set in this order:
+
+1. `--warehouse <name>` on the command line, for that invocation only
+2. The target's group warehouse, `[targets.<name>.warehouses] build` or `query`
+3. The connection's `warehouse`
+4. The Snowflake user's default warehouse
+
+Both groups are optional. A target without `warehouses` behaves exactly as before. A group
+warehouse takes precedence over the connection `warehouse` in every file. In particular, a
+shared group overrides a connection `warehouse` you set in `sqlbuild_local.toml`; to change a
+group locally, set the group itself, or pass `--warehouse` for one invocation. Group values
+accept the same `${ENV:...}` and project-variable (`${my_var}`) templates as connection values.
+Group values and `--warehouse` must be Snowflake identifiers: unquoted (`ADHOC_WH`) or
+double-quoted (`"Adhoc WH"`).
+
+Every connection a command opens uses its group, so one invocation never mixes warehouses:
+`sqb build` plans, inspects, and executes on the `build` warehouse, and `sqb diff` creates its
+temporary comparison tables on the `query` warehouse. The exception is `sqb dbt`: it applies the
+`build` group to SQLBuild-owned work, while dbt nodes keep the warehouse from their dbt profile.
+
+| Group | Commands |
+|-------|----------|
+| `build` | `audit`, `build`, `check`, `clone`, `dbt` (SQLBuild-owned work), `janitor`, `load`, `plan`, `scenario`, `seed`, `test` |
+| `query` | `contract`, `cost`, `debug`, `diff`, `freshness`, `query` |
+
+Other commands, such as `compile`, `lineage`, and `format`, never connect to a warehouse.
+Integrations that run builds, such as Dagster, invoke `sqb build` and use the `build` group.
+
+Each developer can point ad-hoc commands at their own warehouse without editing shared
+configuration:
+
+```toml
+# sqlbuild_local.toml
+[targets.dev.warehouses]
+query = "ALICE_XS_WH"
+```
+
+Local group values override the project value for the same group only; the other group keeps
+its project value. `sqb debug` shows the resolved warehouse for each group and where it came
+from, and `sqb build --verbose` shows it in the execution header.
+
+Groups need an adapter with a session warehouse: the Snowflake adapter, or a custom adapter
+that extends it. `warehouses` in `sqlbuild_project.toml` is checked against the project's
+adapter, and `warehouses` in `sqlbuild_local.toml` against the adapter you actually run. Setting
+them for an adapter without a session warehouse, or passing `--warehouse`, is an error rather
+than a silently ignored setting. The one exception is a local `adapter` override, for example a
+developer running a Snowflake project on DuckDB: shared groups then don't apply, and
+`sqb debug` reports them as `not used (adapter duckdb)`.
 
 ### Missing migration origins
 

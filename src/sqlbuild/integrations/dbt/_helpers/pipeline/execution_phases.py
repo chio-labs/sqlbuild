@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
+from sqlbuild.cli.commands.main.execution.command_warehouse import apply_command_warehouse
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
 )
@@ -47,13 +48,19 @@ def resolve_dbt_connection_config(
 ) -> dict[str, object]:
     """Resolve the connection used only by selected SQLBuild work."""
 
-    return resolve_connection_config(
-        raw_config=build_effective_connection_config(
-            discovered_inputs=invocation.discovered_inputs
+    return apply_command_warehouse(
+        config=resolve_connection_config(
+            raw_config=build_effective_connection_config(
+                discovered_inputs=invocation.discovered_inputs
+            ),
+            project_dir=request.project_dir,
+            adapter_name=compiled.adapter_name,
+            discovered_inputs=invocation.discovered_inputs,
         ),
-        project_dir=request.project_dir,
         adapter_name=compiled.adapter_name,
         discovered_inputs=invocation.discovered_inputs,
+        project_dir=request.project_dir,
+        selected_target=None,
     )
 
 

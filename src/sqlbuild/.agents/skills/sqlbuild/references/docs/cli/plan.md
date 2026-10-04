@@ -39,6 +39,7 @@ sqb --project-dir <path> plan [flags]
 | `--end-cursor-int` | Override end cursor for integer incremental models |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Output
 

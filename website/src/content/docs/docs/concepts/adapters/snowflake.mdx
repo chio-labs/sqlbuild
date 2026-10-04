@@ -38,6 +38,11 @@ On connect, SQLBuild applies the connection's role and warehouse, then applies t
 target's authoritative database and schema. These ensure the session context is set correctly
 regardless of the user's default settings.
 
+The warehouse can differ by command. A target's `[targets.<name>.warehouses]` section selects
+one warehouse for build-style commands and another for ad-hoc commands such as `sqb query` and
+`sqb diff`, and `--warehouse` overrides both for one invocation. See
+[command-group warehouses](/docs/concepts/project-configuration#command-group-warehouses).
+
 ## Planning metadata
 
 Planning reads relation and column metadata with `SHOW TABLES`, `SHOW VIEWS`, and `SHOW COLUMNS`

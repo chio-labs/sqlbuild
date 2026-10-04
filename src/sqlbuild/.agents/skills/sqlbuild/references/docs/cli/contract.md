@@ -37,6 +37,7 @@ replace conflicts rather than preserving authored declarations.
 | `--vars` | both | Override project variables |
 | `--write` | generate | Apply generated repository changes |
 | `--overwrite` | generate | Replace conflicting declarations; requires `--write` |
+| `--warehouse <name>` | both | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 See [Contracts](../concepts/models/contracts.md#adopting-an-existing-schema) for ownership and safety
 guarantees.

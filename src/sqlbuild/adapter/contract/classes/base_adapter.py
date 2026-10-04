@@ -112,6 +112,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
     metadata_inspection_concurrency: ClassVar[int] = 1
+    supports_session_warehouse: ClassVar[bool] = False
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
         distinct_condition=render_is_distinct_from,

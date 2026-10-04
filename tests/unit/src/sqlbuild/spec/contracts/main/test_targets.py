@@ -10,12 +10,14 @@ from sqlbuild.spec.contracts.models import (
     LocalTargetConfig,
     ProjectConfig,
     TargetConfig,
+    TargetWarehousesConfig,
 )
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     ExecutionLimitsResolutionTestCase,
     MissingOriginPolicyResolutionTestCase,
     TargetRetentionResolutionTestCase,
+    TargetWarehousesResolutionTestCase,
 )
 
 
@@ -188,3 +190,39 @@ def test_given_missing_origin_policy_when_resolving_then_local_overrides_project
     )
 
     assert target_config.missing_migration_origin is test_case.expected_policy
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TargetWarehousesResolutionTestCase(
+            description="local query group overrides only the query group",
+            project_warehouses=TargetWarehousesConfig(build="BUILD_WH", query="ADHOC_WH"),
+            local_warehouses=TargetWarehousesConfig(query="LOCAL_ADHOC_WH"),
+            expected_warehouses=TargetWarehousesConfig(build="BUILD_WH", query="LOCAL_ADHOC_WH"),
+        ),
+        TargetWarehousesResolutionTestCase(
+            description="local groups apply when the project sets none",
+            project_warehouses=TargetWarehousesConfig(),
+            local_warehouses=TargetWarehousesConfig(build="LOCAL_BUILD_WH"),
+            expected_warehouses=TargetWarehousesConfig(build="LOCAL_BUILD_WH"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_target_warehouses_when_resolving_then_each_group_overrides_project(
+    test_case: TargetWarehousesResolutionTestCase,
+) -> None:
+    target_config: TargetConfig = resolve_target_config(
+        project_config=ProjectConfig(
+            name="shop",
+            adapter="snowflake",
+            targets={"dev": TargetConfig(warehouses=test_case.project_warehouses)},
+        ),
+        local_config=LocalConfig(
+            targets={"dev": LocalTargetConfig(warehouses=test_case.local_warehouses)}
+        ),
+        target_name="dev",
+    )
+
+    assert target_config.warehouses == test_case.expected_warehouses
