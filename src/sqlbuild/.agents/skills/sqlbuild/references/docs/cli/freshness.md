@@ -37,6 +37,7 @@ sqb --project-dir <path> freshness [flags]
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific sources or models (sources upstream of selected models are included) |
 | `--exclude` | Exclude specific sources or models |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Source selection
 

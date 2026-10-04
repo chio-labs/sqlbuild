@@ -29,6 +29,7 @@ sqb --project-dir <path> load [flags]
 | `--json` | Output results as JSON |
 | `--json-output` | Write JSON results to a file path |
 | `--var` | Set project variables (`--var key=value`) |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Examples
 

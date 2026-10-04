@@ -180,6 +180,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     max_identifier_length: ClassVar[int] = 255
     state_tables_transient: ClassVar[bool] = True
+    supports_session_warehouse: ClassVar[bool] = True
     connection_routing_keys: ClassVar[frozenset[str]] = frozenset(
         {"source", "profile", "target", "project_dir", "profiles_dir"}
     )

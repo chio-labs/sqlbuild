@@ -20,6 +20,7 @@ sqb --project-dir <path> seed [flags]
 |------|-------------|
 | `--select`, `-s` | Select specific seeds by name |
 | `--exclude` | Exclude specific seeds |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Examples
 

@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
-from sqlbuild.spec.contracts.models import AuthoredTimeTravelRetention
+from sqlbuild.spec.contracts.models import AuthoredTimeTravelRetention, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, RetentionDecreasePolicy
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -979,3 +979,29 @@ class NativeHeaderMatchTestCase:
     seed: int
     count: int
     expected_mismatches: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TargetWarehousesConfigTestCase:
+    description: str
+    contents: str
+    expected_warehouses: TargetWarehousesConfig
+
+
+@dataclass(frozen=True)
+class TargetWarehousesConfigErrorTestCase:
+    description: str
+    project_contents: str
+    expected_error_fragments: tuple[str, ...]
+    local_contents: str = ""
+    expected_help_fragments: tuple[str, ...] = ()
+    adapter_file_contents: str = ""
+
+
+@dataclass(frozen=True)
+class TargetWarehousesDiscoveryTestCase:
+    description: str
+    project_contents: str
+    expected_build: str | None
+    local_contents: str = ""
+    adapter_file_contents: str = ""

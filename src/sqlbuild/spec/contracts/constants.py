@@ -16,3 +16,4 @@ TIME_TRAVEL_RETENTION_MATERIALIZATIONS: tuple[str, ...] = (
     "incremental",
     "snapshot",
 )
+CONNECTION_WAREHOUSE_KEY: str = "warehouse"

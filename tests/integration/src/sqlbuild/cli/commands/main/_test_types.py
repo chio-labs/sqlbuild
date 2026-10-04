@@ -964,3 +964,47 @@ class RepeatedJsonParseTestCase:
     expected_locations: tuple[tuple[int, int], ...]
     expected_detail: str = ""
     extra_files: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class CommandWarehouseCliTestCase:
+    """One real CLI invocation and the only warehouse its Snowflake sessions may use."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_warehouse: str
+    warehouses_section: str = '[targets.dev.warehouses]\nbuild = "BUILD_WH"\nquery = "ADHOC_WH"\n'
+    local_config: str = ""
+
+
+@dataclass(frozen=True)
+class CommandWarehouseOutputTestCase:
+    """One real CLI invocation and the warehouse report it must print."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    warehouses_section: str = '[targets.dev.warehouses]\nbuild = "BUILD_WH"\nquery = "ADHOC_WH"\n'
+    local_config: str = ""
+
+
+@dataclass(frozen=True)
+class CommandWarehouseDebugJsonTestCase:
+    """One `sqb debug --json` invocation and the warehouse lines it must report."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_lines: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class CommandWarehouseExitTestCase:
+    """One real CLI invocation, its exit code, and the output it must print."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    expected_connect_calls: int = 0
+    warehouses_section: str = '[targets.dev.warehouses]\nbuild = "BUILD_WH"\nquery = "ADHOC_WH"\n'
+    local_config: str = ""

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.cli.commands._helpers.entry.errors import build_argument_parser_class
 from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
@@ -20,6 +21,7 @@ from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
 from sqlbuild.cli.commands.classes.sqlbuild_argument_parser import SqlbuildArgumentParser
 from sqlbuild.cli.commands.constants import (
     COLUMN_LINEAGE_MODE_VALUES,
+    COMMAND_WAREHOUSE_GROUPS,
     COMPILE_LINEAGE_MODE_VALUES,
     PLAYGROUND_TEMPLATE_VALUES,
 )
@@ -74,7 +76,44 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_dbt_parsers(subparsers)
     _add_skills_parsers(subparsers)
     _add_rules_parser(subparsers)
+    _add_warehouse_args(subparsers)
     return parser
+
+
+def _add_warehouse_args(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    command_name: str
+    command_parser: argparse.ArgumentParser
+    for command_name, command_parser in subparsers.choices.items():
+        if command_name == CliCommand.DBT:
+            continue
+        if COMMAND_WAREHOUSE_GROUPS.get(CliCommand(command_name)) is None:
+            continue
+        _add_warehouse_arg_to_leaves(command_parser)
+
+
+def _add_warehouse_arg_to_leaves(parser: argparse.ArgumentParser) -> None:
+    nested: list[argparse._SubParsersAction[argparse.ArgumentParser]] = [
+        cast("argparse._SubParsersAction[argparse.ArgumentParser]", action)
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    ]
+    if not nested:
+        parser.add_argument(
+            "--warehouse",
+            default=None,
+            help=(
+                "warehouse for this invocation; overrides the target's command-group "
+                "warehouse and the connection warehouse"
+            ),
+        )
+        return
+    action: argparse._SubParsersAction[argparse.ArgumentParser]
+    for action in nested:
+        child: argparse.ArgumentParser
+        for child in action.choices.values():
+            _add_warehouse_arg_to_leaves(child)
 
 
 def _add_sql_analysis_override(parser: argparse.ArgumentParser) -> None:

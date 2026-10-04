@@ -23,6 +23,7 @@ from sqlbuild.spec.contracts.types import (
     TableTypeDowngradePolicy,
     TableTypeSource,
     TimeTravelRetentionSource,
+    WarehouseGroup,
 )
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -103,6 +104,21 @@ class ExecutionLimitsConfig:
 
 
 @dataclass(frozen=True)
+class TargetWarehousesConfig:
+    """Optional per-command-group default warehouses for one target."""
+
+    build: str | None = None
+    query: str | None = None
+
+    def for_group(self, group: WarehouseGroup) -> str | None:
+        return self.build if group == WarehouseGroup.BUILD else self.query
+
+    @property
+    def configured(self) -> bool:
+        return self.build is not None or self.query is not None
+
+
+@dataclass(frozen=True)
 class TargetConfig:
     """One named target configuration."""
 
@@ -126,6 +142,7 @@ class TargetConfig:
     time_travel_retention_decrease: RetentionDecreasePolicy = RetentionDecreasePolicy.DENY
     missing_migration_origin: MissingMigrationOriginPolicy = MissingMigrationOriginPolicy.ALLOW
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
+    warehouses: TargetWarehousesConfig = field(default_factory=TargetWarehousesConfig)
 
 
 @dataclass(frozen=True)
@@ -150,6 +167,7 @@ class LocalTargetConfig:
     time_travel_retention_decrease: RetentionDecreasePolicy | None = None
     missing_migration_origin: MissingMigrationOriginPolicy | None = None
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
+    warehouses: TargetWarehousesConfig = field(default_factory=TargetWarehousesConfig)
 
 
 @dataclass(frozen=True)

@@ -6,12 +6,13 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild.cli.commands._helpers.runtime.warehouses import describe_connection_warehouse
 from sqlbuild.cli.commands.constants import (
     C0_CONTROL_CODE_LIMIT,
     C1_CONTROL_CODE_LIMIT,
     C1_CONTROL_CODE_START,
 )
-from sqlbuild.cli.commands.models import BuildRunContext
+from sqlbuild.cli.commands.models import BuildRunContext, ResolvedWarehouse
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
@@ -54,7 +55,7 @@ def _format_build_run_context(*, context: BuildRunContext, use_color: bool) -> s
             ("target", _display_value(context.project.effective_target_name)),
             ("database", _display_value(context.project.effective_target_database)),
             *placement_rows,
-            ("warehouse", _display_value(context.connection_config.get("warehouse"))),
+            ("warehouse", _warehouse_display(context)),
             ("concurrency", f"{context.concurrency} configured limit"),
             ("full_refresh", str(context.full_refresh).lower()),
             ("selected", f"{selected_count:,} of {total_count:,} build resources"),
@@ -79,6 +80,17 @@ def _format_build_run_context(*, context: BuildRunContext, use_color: bool) -> s
             )
     document.blank()
     return document.render()
+
+
+def _warehouse_display(context: BuildRunContext) -> str:
+    resolved: ResolvedWarehouse = describe_connection_warehouse(
+        discovered_inputs=context.discovered_inputs,
+        selected_target=context.project.effective_target_name,
+        connection_config=context.connection_config,
+    )
+    if resolved.warehouse is None:
+        return _display_value(None)
+    return f"{_display_value(resolved.warehouse)} ({resolved.source})"
 
 
 def _display_value(value: object) -> str:

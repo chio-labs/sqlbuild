@@ -24,6 +24,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "defer_clone_from": None,
     "defer_sources_to": None,
     "target": None,
+    "warehouse": None,
     "case": None,
     "inspect": False,
     "target_range": None,
@@ -188,6 +189,7 @@ class CliNamespace:
     defer_clone_from: str | None
     defer_sources_to: str | None
     target: str | None
+    warehouse: str | None
     case: str | None
     inspect: bool
     target_range: str | None

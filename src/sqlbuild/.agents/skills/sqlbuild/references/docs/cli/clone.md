@@ -36,6 +36,7 @@ sqb --project-dir <path> clone --from <target> [--to <target>] [flags]
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to clone |
 | `--exclude` | Exclude specific models from cloning |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Examples
 

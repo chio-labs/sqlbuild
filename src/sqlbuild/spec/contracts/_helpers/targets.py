@@ -11,6 +11,7 @@ from sqlbuild.spec.contracts.models import (
     LocalTargetConfig,
     ProjectConfig,
     TargetConfig,
+    TargetWarehousesConfig,
 )
 
 
@@ -124,6 +125,18 @@ def resolve_target_config(
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,
+        ),
+        warehouses=TargetWarehousesConfig(
+            build=(
+                local_target.warehouses.build
+                if local_target.warehouses.build is not None
+                else project_target.warehouses.build
+            ),
+            query=(
+                local_target.warehouses.query
+                if local_target.warehouses.query is not None
+                else project_target.warehouses.query
+            ),
         ),
     )
     return target_config

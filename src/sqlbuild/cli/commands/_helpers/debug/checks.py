@@ -12,8 +12,23 @@ from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.models import DebugLine, DebugResult
+from sqlbuild.cli.commands._helpers.runtime.warehouses import (
+    apply_command_warehouse,
+    command_warehouse_scope,
+    current_command_warehouse_scope,
+    find_target_group_warehouse,
+    resolve_command_warehouse,
+)
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    AuthoredTargetWarehouse,
+    CommandWarehouseScope,
+    DebugLine,
+    DebugResult,
+    ResolvedWarehouse,
+)
 from sqlbuild.cli.commands.types import DebugCheckStatus
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.effective_target_namespace import (
     build_effective_target_namespace,
 )
@@ -29,6 +44,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 from sqlbuild.spec.contracts.models import TargetConfig
+from sqlbuild.spec.contracts.types import WarehouseGroup
 
 _SECRET_CONNECTION_KEYS: frozenset[str] = frozenset(
     {
@@ -60,11 +76,24 @@ def build_debug_result(
         local_config=discovered_inputs.local_config,
     )
     adapter: BaseAdapter = resolve_adapter(adapter_name=adapter_name, project_dir=project_dir)
-    connection_config: dict[str, object] = resolve_project_connection_config(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-        selected_target=selected_target,
-    )
+    command_scope: CommandWarehouseScope = current_command_warehouse_scope()
+    with command_warehouse_scope(command=None, cli_warehouse=None):
+        base_connection_config: dict[str, object] = resolve_project_connection_config(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            selected_target=selected_target,
+        )
+    connection_config: dict[str, object]
+    try:
+        connection_config = apply_command_warehouse(
+            config=base_connection_config,
+            adapter_name=adapter_name,
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
+        )
+    except (CompileInputError, CliUserError):
+        connection_config = base_connection_config
     target_name: str | None
     target_config: TargetConfig | None
     target_database: str | None
@@ -131,6 +160,13 @@ def build_debug_result(
             status=DebugCheckStatus.OK,
             status_message="resolved",
         ),
+        *_build_warehouse_lines(
+            adapter=adapter,
+            discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
+            command_scope=command_scope,
+            base_connection_config=base_connection_config,
+        ),
     ]
     connection: list[DebugLine] = _build_connection_config_lines(connection_config)
     connection = _append_connection_checks(
@@ -144,6 +180,75 @@ def build_debug_result(
         configuration=tuple(configuration),
         providers=tuple(_build_provider_lines(discovered_inputs.providers)),
         connection=tuple(connection),
+    )
+
+
+def _build_warehouse_lines(
+    *,
+    adapter: BaseAdapter,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    command_scope: CommandWarehouseScope,
+    base_connection_config: dict[str, object],
+) -> list[DebugLine]:
+    lines: list[DebugLine] = []
+    group: WarehouseGroup
+    for group in WarehouseGroup:
+        authored: AuthoredTargetWarehouse | None = find_target_group_warehouse(
+            discovered_inputs=discovered_inputs, selected_target=selected_target, group=group
+        )
+        if not adapter.supports_session_warehouse:
+            if authored is not None:
+                lines.append(
+                    DebugLine(
+                        label=f"{group.value} warehouse",
+                        message=f"not used (adapter {adapter.adapter_name})",
+                        status=DebugCheckStatus.SKIP,
+                        status_message=authored.source,
+                    )
+                )
+            continue
+        lines.append(
+            _build_warehouse_line(
+                group=group,
+                discovered_inputs=discovered_inputs,
+                selected_target=selected_target,
+                command_scope=command_scope,
+                base_connection_config=base_connection_config,
+            )
+        )
+    return lines
+
+
+def _build_warehouse_line(
+    *,
+    group: WarehouseGroup,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    command_scope: CommandWarehouseScope,
+    base_connection_config: dict[str, object],
+) -> DebugLine:
+    try:
+        resolved: ResolvedWarehouse = resolve_command_warehouse(
+            discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
+            group=group,
+            cli_warehouse=command_scope.cli_warehouse,
+            connection_config=base_connection_config,
+            cli_vars=command_scope.cli_vars,
+        )
+    except (CompileInputError, CliUserError) as error:
+        return DebugLine(
+            label=f"{group.value} warehouse",
+            message=f"error: {error.message if isinstance(error, CliUserError) else error}",
+            status=DebugCheckStatus.ERROR,
+            status_message="unresolved",
+        )
+    return DebugLine(
+        label=f"{group.value} warehouse",
+        message=resolved.warehouse or "not set",
+        status=DebugCheckStatus.OK,
+        status_message=resolved.source,
     )
 
 

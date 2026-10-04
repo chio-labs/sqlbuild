@@ -31,6 +31,7 @@ File paths are resolved from the current working directory.
 | `--format` | Output format: `long` (default), `table`, `json`, or `csv` |
 | `--limit` | Maximum rows to return (default: 20) |
 | `--no-limit` | Disable the row limit |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Output formats
 

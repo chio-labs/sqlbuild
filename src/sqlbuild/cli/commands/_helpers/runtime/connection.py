@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.cli.commands._helpers.runtime.warehouses import apply_command_warehouse
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
@@ -36,8 +37,9 @@ def resolve_connection_config(
     adapter_name: str,
     discovered_inputs: DiscoveredProjectInputs | None = None,
     cli_vars: dict[str, object] | None = None,
+    selected_target: str | None = None,
 ) -> dict[str, object]:
-    """Resolve relative database paths in connection config against the project directory."""
+    """Resolve dbt profiles, relative DuckDB paths, and the command group's warehouse."""
 
     config: dict[str, object] = dict(raw_config)
     if discovered_inputs is not None:
@@ -70,7 +72,13 @@ def resolve_connection_config(
         and database != _DUCKDB_MEMORY_DATABASE
     ):
         config[_DATABASE_KEY] = str(project_dir / database)
-    return config
+    return apply_command_warehouse(
+        config=config,
+        adapter_name=adapter_name,
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        selected_target=selected_target,
+    )
 
 
 def _warn_if_duckdb_has_snowflake_like_keys(
@@ -114,6 +122,7 @@ def resolve_project_connection_config(
         ),
         discovered_inputs=discovered_inputs,
         cli_vars=cli_vars,
+        selected_target=selected_target,
     )
 
 
@@ -139,4 +148,5 @@ def resolve_target_connection_config(
         ),
         discovered_inputs=discovered_inputs,
         cli_vars=cli_vars,
+        selected_target=target_name,
     )

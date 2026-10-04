@@ -1,8 +1,11 @@
 """CLI command decision constants."""
 
-from sqlbuild.cli.commands.types import CompileLineageMode, PlaygroundTemplate
+from types import MappingProxyType
+
+from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, PlaygroundTemplate
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild.spec.contracts.types import WarehouseGroup
 
 C0_CONTROL_CODE_LIMIT: int = 32
 C1_CONTROL_CODE_START: int = 127
@@ -138,3 +141,39 @@ RETENTION_DECREASE_DBT_HELP: str = (
 EXECUTION_LIMIT_BUILD_NOTE: str = "No warehouse changes were made."
 EXECUTION_LIMIT_DBT_NOTE: str = "dbt work has already run; no SQLBuild models were built."
 QUERY_DIFF_INCOMPLETE_EXECUTION_CODES: frozenset[str] = frozenset({"C237", "C238", "C239"})
+CLI_WAREHOUSE_SOURCE: str = "--warehouse"
+CONNECTION_WAREHOUSE_SOURCE: str = "connection warehouse"
+CONNECTION_DEFAULT_WAREHOUSE_SOURCE: str = "connection default"
+COMMAND_WAREHOUSE_GROUPS: MappingProxyType[CliCommand, WarehouseGroup | None] = MappingProxyType(
+    {
+        CliCommand.AUDIT: WarehouseGroup.BUILD,
+        CliCommand.BUILD: WarehouseGroup.BUILD,
+        CliCommand.CHECK: WarehouseGroup.BUILD,
+        CliCommand.CLONE: WarehouseGroup.BUILD,
+        CliCommand.DBT: WarehouseGroup.BUILD,
+        CliCommand.JANITOR: WarehouseGroup.BUILD,
+        CliCommand.LOAD: WarehouseGroup.BUILD,
+        CliCommand.PLAN: WarehouseGroup.BUILD,
+        CliCommand.SCENARIO: WarehouseGroup.BUILD,
+        CliCommand.SEED: WarehouseGroup.BUILD,
+        CliCommand.TEST: WarehouseGroup.BUILD,
+        CliCommand.CONTRACT: WarehouseGroup.QUERY,
+        CliCommand.COST: WarehouseGroup.QUERY,
+        CliCommand.DEBUG: WarehouseGroup.QUERY,
+        CliCommand.DIFF: WarehouseGroup.QUERY,
+        CliCommand.FRESHNESS: WarehouseGroup.QUERY,
+        CliCommand.QUERY: WarehouseGroup.QUERY,
+        CliCommand.CLEAN: None,
+        CliCommand.COMPILE: None,
+        CliCommand.DAG: None,
+        CliCommand.FORMAT: None,
+        CliCommand.INIT: None,
+        CliCommand.LINEAGE: None,
+        CliCommand.MV: None,
+        CliCommand.PLAYGROUND: None,
+        CliCommand.RENAME: None,
+        CliCommand.RULES: None,
+        CliCommand.SCOPE: None,
+        CliCommand.SKILLS: None,
+    }
+)

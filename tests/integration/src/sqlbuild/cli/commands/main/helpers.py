@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 import duckdb
 import pytest
 
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
     RetentionRequest,
@@ -683,3 +686,97 @@ def write_repeated_json_parse_project(
         path: Path = tmp_path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
+
+
+class OfflineSnowflakeRawConnection:
+    """Snowflake connector double that answers reads with no rows and refuses writes."""
+
+    description: None = None
+    rowcount: int = 0
+    sfqid: str = "offline"
+
+    def __init__(self, executed_sql: list[str]) -> None:
+        self._executed_sql: list[str] = executed_sql
+
+    def cursor(self, *args: object, **kwargs: object) -> OfflineSnowflakeRawConnection:
+        del args, kwargs
+        return self
+
+    def execute(self, sql: str, *args: object, **kwargs: object) -> OfflineSnowflakeRawConnection:
+        del args, kwargs
+        self._executed_sql.append(sql)
+        _OFFLINE_SNOWFLAKE_STATEMENT_RESPONSES.get(
+            sql.lstrip().split(None, 1)[0].upper(), _refuse_offline_snowflake_write
+        )()
+        return self
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return []
+
+    def fetchone(self) -> None:
+        return None
+
+    def close(self) -> None:
+        pass
+
+
+def _accept_offline_snowflake_read() -> None:
+    return None
+
+
+def _refuse_offline_snowflake_write() -> None:
+    raise AdapterUserError(message="offline Snowflake double refuses writes")
+
+
+_OFFLINE_SNOWFLAKE_STATEMENT_RESPONSES: dict[str, Callable[[], None]] = dict.fromkeys(
+    ("USE", "SHOW", "SELECT", "DESC", "DESCRIBE", "WITH"), _accept_offline_snowflake_read
+)
+
+
+def install_offline_snowflake_connector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[dict[str, object]], list[str]]:
+    """Install an offline snowflake.connector and capture every connect call and statement."""
+
+    connect_calls: list[dict[str, object]] = []
+    executed_sql: list[str] = []
+    snowflake_module: ModuleType = ModuleType("snowflake")
+    connector_module: ModuleType = ModuleType("snowflake.connector")
+
+    def connect(**kwargs: object) -> OfflineSnowflakeRawConnection:
+        connect_calls.append(kwargs)
+        return OfflineSnowflakeRawConnection(executed_sql)
+
+    connector_module.__dict__["connect"] = connect
+    snowflake_module.__dict__["connector"] = connector_module
+    monkeypatch.setitem(sys.modules, "snowflake", snowflake_module)
+    monkeypatch.setitem(sys.modules, "snowflake.connector", connector_module)
+    return connect_calls, executed_sql
+
+
+def write_snowflake_warehouse_project(
+    *, project_dir: Path, warehouses_section: str, local_config: str
+) -> None:
+    """Write a one-model Snowflake project whose connection names a fallback warehouse."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\n'
+        'adapter = "snowflake"\n'
+        'default_target = "dev"\n\n'
+        "[connections.main]\n"
+        'account = "example-account"\n'
+        'user = "builder"\n'
+        'password = "example-password"\n'
+        'warehouse = "ANALYTICS_WH"\n\n'
+        "[targets.dev]\n"
+        'connection = "main"\n'
+        'database = "ANALYTICS"\n'
+        'schema = "DEV"\n\n' + warehouses_section,
+        encoding="utf-8",
+    )
+    (project_dir / "sqlbuild_local.toml").write_text(local_config, encoding="utf-8")
+    (project_dir / "models").mkdir()
+    (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (description 'Orders.', materialized table);\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
