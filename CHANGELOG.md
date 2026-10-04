@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.133.4](https://github.com/chio-labs/sqlbuild/compare/v0.133.3...v0.133.4) (2026-10-04)
+
+
+### Performance Improvements
+
+* **compile:** faster discovery, scope visibility and warm writes ([#930](https://github.com/chio-labs/sqlbuild/issues/930)) ([3a12e4e](https://github.com/chio-labs/sqlbuild/commit/3a12e4e75fc207a210c2fd1d1aacd57587c69e74))
+
 ## [0.133.3](https://github.com/chio-labs/sqlbuild/compare/v0.133.2...v0.133.3) (2026-10-04)
 
 
