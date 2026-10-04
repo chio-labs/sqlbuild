@@ -396,6 +396,23 @@ class CustomRuleEvaluation:
 
 
 @dataclass(frozen=True)
+class ModuleStateTrace:
+    """What exact module-state walks touched: object and type identities and their decisions."""
+
+    touched: dict[int, int]
+    descended_types: frozenset[int]
+    checked_instances: frozenset[int]
+
+
+@dataclass(frozen=True)
+class ModuleStateFingerprint:
+    """One exact custom-rule module-state fingerprint and the trace of the walk behind it."""
+
+    token: str
+    trace: ModuleStateTrace
+
+
+@dataclass(frozen=True)
 class CustomRuleRun:
     """Every invocation of one host run plus rules whose reads could not be attributed."""
 

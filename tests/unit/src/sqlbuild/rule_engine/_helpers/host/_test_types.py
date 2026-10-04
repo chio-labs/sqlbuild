@@ -58,3 +58,33 @@ class HostCapacityTestCase:
     proc_cgroup: str
     files: dict[str, str]
     expected_cores: int
+
+
+@dataclass(frozen=True)
+class ModuleStateCase:
+    """Custom-rule modules whose state changes both detectors must classify identically."""
+
+    description: str
+    files: tuple[tuple[str, str], ...]
+    model_count: int
+    expected_stateful: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RandomModuleStateCase:
+    """Seeded random rule mutations whose classification must match full re-fingerprinting."""
+
+    description: str
+    seed: int
+    model_count: int
+    expected_matches_reference: bool = True
+
+
+@dataclass(frozen=True)
+class StateDetectorCostCase:
+    """Stateless rules sharing helper tables, checked by both detectors after every call."""
+
+    description: str
+    rule_count: int
+    model_count: int
+    expected_min_speedup: float

@@ -10,12 +10,10 @@ from itertools import chain
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.rule_engine._helpers.host.module_state import (
-    module_state_token,
-    rule_namespaces,
-)
+from sqlbuild.rule_engine._helpers.host.module_state import rule_namespaces
 from sqlbuild.rule_engine._helpers.host.tracked_facts import tracked_fact_views
 from sqlbuild.rule_engine.classes.fact_reads import FactReads
+from sqlbuild.rule_engine.classes.module_state_monitor import ModuleStateMonitor
 from sqlbuild.rule_engine.classes.project_tree import public_model
 from sqlbuild.rule_engine.classes.rule_context import (
     EvaluationRuleContext,
@@ -30,7 +28,6 @@ from sqlbuild.rule_engine.constants import (
 from sqlbuild.rule_engine.exceptions import (
     HostCancelledError,
     NonHermeticRuleError,
-    OpaqueModuleStateError,
     RulesError,
 )
 from sqlbuild.rule_engine.models import (
@@ -150,15 +147,14 @@ class _ReadTracker:
         self.untracked_codes: set[str] = set()
         self.uncacheable_codes: set[str] = set()
         self.stateful_codes: set[str] = set()
-        self._rules_root: Path = rules_root
-        self._namespaces: dict[str, tuple[dict[str, object], ...]] = (
-            {rule.code: rule_namespaces((rule.check,)) for rule in rules}
+        self._state: ModuleStateMonitor | None = (
+            ModuleStateMonitor(
+                namespaces={rule.code: rule_namespaces((rule.check,)) for rule in rules},
+                rules_root=rules_root,
+            )
             if reads is not None or detect_state
-            else {}
+            else None
         )
-        self._states: dict[str, str | None] = {
-            code: self._state_token(namespaces) for code, namespaces in self._namespaces.items()
-        }
 
     def start(self) -> None:
         if self.reads is not None:
@@ -176,21 +172,11 @@ class _ReadTracker:
                 self.untracked_codes.add(code)
             if reads.uncacheable:
                 self.uncacheable_codes.add(code)
-        for rule_code, namespaces in self._namespaces.items():
-            if rule_code in self.stateful_codes:
-                continue
-            state: str | None = self._state_token(namespaces)
-            if state is None or state != self._states[rule_code]:
-                self.stateful_codes.add(rule_code)
-                if reads is not None:
-                    self.untracked_codes.add(rule_code)
+        changed: tuple[str, ...] = () if self._state is None else self._state.changed_codes()
+        self.stateful_codes.update(changed)
+        if reads is not None:
+            self.untracked_codes.update(changed)
         return None if observed is None else frozenset(observed)
-
-    def _state_token(self, namespaces: tuple[dict[str, object], ...]) -> str | None:
-        try:
-            return module_state_token(namespaces=namespaces, rules_root=self._rules_root)
-        except OpaqueModuleStateError:
-            return None
 
 
 def _evaluate_pass(

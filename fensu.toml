@@ -106,6 +106,12 @@ symbols = ["apply_model_column_renames"]
 reason = "Each in-place column rename must re-read live columns immediately before its ALTER so overlapping builds reconcile instead of failing."
 
 [[targets.python.rule_exceptions]]
+rule = "FFH005"
+path = "src/sqlbuild/rule_engine/classes/module_state_monitor.py"
+symbols = ["ModuleStateMonitor._snapshot"]
+reason = "A failed shared snapshot only disables the shortcut; exact per-rule fingerprints then run and keep their own failure behavior, so no snapshot error may fail a Rules run."
+
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dbt/_helpers/profile/render.py"
 symbols = ["_render_string.env_var", "_render_string.var"]

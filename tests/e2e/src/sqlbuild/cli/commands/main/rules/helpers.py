@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +111,7 @@ def run_compile_cli(
     *,
     environment: tuple[tuple[str, str], ...] = (),
     working_directory: Path | None = None,
+    preexec: Callable[[], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the real `sqb compile --json` command from an optional invocation directory."""
 
@@ -127,7 +129,46 @@ def run_compile_cli(
         check=False,
         env={**os.environ, **dict(environment)},
         cwd=working_directory,
+        preexec_fn=preexec,
     )
+
+
+def pin_to_one_cpu() -> None:
+    """Restrict the calling process, and so every custom-rule host it starts, to one CPU."""
+
+    os.sched_setaffinity(0, {min(os.sched_getaffinity(0))})
+
+
+SPLIT_ORDER_TABLES: str = (
+    "import re\n\n"
+    "REGIONS = {f'region_{index:02d}': index for index in range(40)}\n"
+    "FLAGGED_SUFFIXES = ('3', '7')\n"
+    "ORDER_NAME = re.compile(r'^orders(_[0-9]{3})?$')\n"
+)
+
+
+def split_model_files(model_count: int) -> tuple[tuple[str, str], ...]:
+    """Return numbered order models beside the project's `models/orders.sql`."""
+
+    return tuple(
+        (f"models/orders_{index:03d}.sql", 'MODEL (description "Orders");\nSELECT 1 AS order_id\n')
+        for index in range(model_count)
+    )
+
+
+def split_expected_findings(model_count: int) -> tuple[tuple[str, str], ...]:
+    """Return what one host reports for the duplicate-parity and flagged-suffix order rules."""
+
+    names: tuple[str, ...] = tuple(f"orders_{index:03d}" for index in range(model_count))
+    # `models/orders.sql` sorts first and is the first odd model; `orders_000` is the first even.
+    duplicates: tuple[tuple[str, str], ...] = tuple(
+        ("XSQBRSPLIT001", f"models/{name}.sql") for name in names[1:]
+    )
+    suffixes: tuple[tuple[str, str], ...] = tuple(
+        ("XSQBRSPLIT002", f"models/{name}.sql")
+        for name in filter(lambda name: name.endswith(("3", "7")), names)
+    )
+    return tuple(sorted(duplicates + suffixes))
 
 
 def custom_rule_diagnostics(result: subprocess.CompletedProcess[str]) -> list[dict[str, Any]]:
@@ -135,6 +176,14 @@ def custom_rule_diagnostics(result: subprocess.CompletedProcess[str]) -> list[di
 
     payload: dict[str, Any] = json.loads(result.stdout)
     return list(filter(lambda item: str(item["code"]).startswith("XSQBR"), payload["diagnostics"]))
+
+
+def custom_rule_findings(result: subprocess.CompletedProcess[str]) -> tuple[tuple[str, str], ...]:
+    """Return sorted custom-rule diagnostic codes and paths from one JSON compile result."""
+
+    return tuple(
+        sorted((str(item["code"]), str(item["path"])) for item in custom_rule_diagnostics(result))
+    )
 
 
 def custom_rule_codes(result: subprocess.CompletedProcess[str]) -> tuple[str, ...]:

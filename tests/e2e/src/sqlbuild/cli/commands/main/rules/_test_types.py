@@ -201,3 +201,14 @@ class RulesCacheEditCase:
     edit: Callable[[Path], None]
     expected_exit_code: int = 1
     expected_diagnostics_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class SplitHostStateCase:
+    """Custom rules sharing helper tables, one with cross-model state, across host processes."""
+
+    description: str
+    model_count: int
+    selected_rules: tuple[str, ...]
+    files: tuple[tuple[str, str], ...]
+    expected_findings: tuple[tuple[str, str], ...]
