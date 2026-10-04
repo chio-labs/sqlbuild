@@ -1662,7 +1662,7 @@ fn generic_lexical_syntax() -> Value {
 
 type MarkerCalls = Option<Vec<(String, String)>>;
 
-/// The previous JSON-tree walk, kept as the oracle the streaming collector must match.
+/// The original JSON-tree walk, kept as the oracle the direct relation walk must match.
 fn json_relation_marker_calls(value: &Value) -> Vec<(String, String)> {
     let from_markers = value
         .get("from")
@@ -1728,7 +1728,7 @@ pub(crate) fn owned_marker_calls(calls: &[(&str, &str)]) -> MarkerCalls {
     )
 }
 
-/// Parse one statement and return the streaming collector's and the JSON oracle's marker calls.
+/// Parse one statement and return the direct walk's and the JSON oracle's marker calls.
 pub(crate) fn relation_markers_and_json_oracle(
     dialect: &str,
     sql: &str,
@@ -1740,7 +1740,7 @@ pub(crate) fn relation_markers_and_json_oracle(
     assert_eq!(statements.len(), 1, "{sql}");
     let expression = statements.remove(0);
     (
-        relation_marker_calls(&expression).ok(),
+        Some(relation_marker_calls(&expression)),
         serde_json::to_value(&expression)
             .ok()
             .map(|value| json_relation_marker_calls(&value)),
@@ -1764,6 +1764,12 @@ pub(crate) fn relation_marker_oracle_mismatches(dialect: &str) -> Vec<String> {
         "SELECT * FROM {a} WHERE EXISTS (SELECT 1 FROM {b})",
         "SELECT * FROM {a} UNION SELECT * FROM {b}",
         "SELECT * FROM {a}, {b}",
+        "SELECT * FROM ({a} JOIN {b} ON TRUE)",
+        "SELECT * FROM {a} AS x LEFT JOIN LATERAL (SELECT * FROM {b}) AS y ON TRUE",
+        "SELECT * FROM (SELECT * FROM {a}) AS x CROSS JOIN {b} WHERE x.id IN (SELECT id FROM {a})",
+        "UPDATE orders SET amount = 1 FROM {a} JOIN {b} ON TRUE",
+        "DELETE FROM orders USING {a} JOIN {b} ON TRUE",
+        "INSERT INTO orders SELECT * FROM {a} JOIN {b} ON TRUE",
     ];
     let parser = Dialect::get_by_name(dialect).expect("test dialect must exist");
     wrappers
@@ -1781,7 +1787,7 @@ pub(crate) fn relation_marker_oracle_mismatches(dialect: &str) -> Vec<String> {
                 .unwrap_or_default()
                 .iter()
                 .any(|expression| {
-                    relation_marker_calls(expression).ok()
+                    Some(relation_marker_calls(expression))
                         != serde_json::to_value(expression)
                             .ok()
                             .map(|value| json_relation_marker_calls(&value))

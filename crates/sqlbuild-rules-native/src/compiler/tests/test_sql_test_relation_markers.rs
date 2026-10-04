@@ -99,6 +99,16 @@ fn given_generated_relation_shapes_when_collecting_markers_then_json_oracle_matc
             dialect: "bigquery",
             expected_mismatches: &[],
         },
+        RelationMarkerOracleTestCase {
+            description: "tsql relation shapes",
+            dialect: "tsql",
+            expected_mismatches: &[],
+        },
+        RelationMarkerOracleTestCase {
+            description: "databricks relation shapes",
+            dialect: "databricks",
+            expected_mismatches: &[],
+        },
     ];
     for test_case in test_cases {
         assert_eq!(
