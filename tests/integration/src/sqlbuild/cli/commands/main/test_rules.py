@@ -909,10 +909,17 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
     original_collect: Callable[..., dict[Path, str]] = rules_module.collect_project_files
 
     def counting_collect(
-        *, project_dir: Path, selected_paths: frozenset[Path] | None
+        *,
+        project_dir: Path,
+        selected_paths: frozenset[Path] | None,
+        discovered_inputs: DiscoveredProjectInputs | None = None,
     ) -> dict[Path, str]:
         collections.append(selected_paths)
-        return original_collect(project_dir=project_dir, selected_paths=selected_paths)
+        return original_collect(
+            project_dir=project_dir,
+            selected_paths=selected_paths,
+            discovered_inputs=discovered_inputs,
+        )
 
     monkeypatch.setattr(rules_module, "collect_project_files", counting_collect)
 

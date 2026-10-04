@@ -60,6 +60,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
 )
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine._helpers.run.literal_duplicates import with_duplicate_literal_hints
+from sqlbuild.rule_engine._helpers.run.memory import release_freed_memory
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
@@ -106,6 +107,7 @@ def evaluate_rules(
     no_sql_analysis: bool = False,
 ) -> RulesRunResult:
     """Evaluate independent rule phases concurrently, then finalize their combined findings."""
+    release_freed_memory()
     effective_config: RulesConfig = resolve_rule_ignore_selectors(
         config=config, project=graph.project
     )
@@ -185,6 +187,7 @@ def evaluate_rules(
             dialect=_lint_identity(lint_config),
             project_dir=resolved_project_dir,
             collect_files=prepared_sql is None and model_paths is None,
+            discovered_inputs=discovered_inputs,
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
@@ -239,6 +242,7 @@ def _prepare_sql_rule_inputs(
     dialect: str,
     project_dir: Path,
     collect_files: bool,
+    discovered_inputs: DiscoveredProjectInputs,
 ) -> _SqlRuleInputs:
     """Hash SQL and read the project files on the caller while built-in rules evaluate natively."""
 
@@ -248,7 +252,9 @@ def _prepare_sql_rule_inputs(
     return _SqlRuleInputs(
         identities=identities,
         project_files=(
-            collect_project_files(project_dir=project_dir, selected_paths=None)
+            collect_project_files(
+                project_dir=project_dir, selected_paths=None, discovered_inputs=discovered_inputs
+            )
             if identities and collect_files
             else None
         ),
@@ -529,7 +535,11 @@ def _run_sql_rules(
             project_files = (
                 prepared_inputs.project_files
                 if prepared_inputs is not None and prepared_inputs.project_files is not None
-                else collect_project_files(project_dir=project_dir, selected_paths=None)
+                else collect_project_files(
+                    project_dir=project_dir,
+                    selected_paths=None,
+                    discovered_inputs=discovered_inputs,
+                )
             )
         file_path: Path
         contents: str

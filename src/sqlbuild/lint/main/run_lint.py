@@ -50,7 +50,10 @@ def run_lint(
     """Lint all DSL files without modifying anything; optionally skip unexpandable SQL."""
 
     files: dict[Path, str] = collect_project_files(
-        project_dir=project_dir, selected_paths=selected_paths, source_files=source_files
+        project_dir=project_dir,
+        selected_paths=selected_paths,
+        source_files=source_files,
+        discovered_inputs=discovered_inputs,
     )
     violations: list[LintViolation] = []
     context: SqlExpansionContext | None = expansion_context or _expansion_context(

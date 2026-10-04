@@ -234,3 +234,12 @@ class BatchedPreparationFailureTestCase:
     unexpandable_file: str
     skip_unexpandable: bool
     expected_error: type[Exception] | None
+
+
+@dataclass(frozen=True)
+class CollectProjectFilesTestCase:
+    """Test case for sharing discovered SQL text when collecting lint inputs."""
+
+    description: str
+    model_bytes: bytes
+    expected_shared: bool
