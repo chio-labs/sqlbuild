@@ -91,3 +91,24 @@ def refuse_preparation(request: NativeLintPreparationRequest) -> NativePreparedS
     """Fail the per-body native preparation of any body."""
 
     raise ValueError(f"cannot prepare {request['dialect']} body")
+
+
+def write_orders_lint_project(*, project_dir: Path, model_bytes: bytes) -> Path:
+    """Write a DuckDB project with one model and one SQL test; return the model path."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model_path: Path = project_dir / "models" / "orders.sql"
+    model_path.parent.mkdir(parents=True)
+    _ = model_path.write_bytes(model_bytes)
+    test_path: Path = project_dir / "tests" / "test_orders.sql"
+    test_path.parent.mkdir(parents=True)
+    _ = test_path.write_text(
+        "TEST (name orders_keep_ids);\n"
+        "WITH orders AS (SELECT 1 AS order_id),\n"
+        "expected AS (SELECT 1 AS order_id)\n"
+        "SELECT * FROM orders\n",
+        encoding="utf-8",
+    )
+    return model_path
