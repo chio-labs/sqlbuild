@@ -50,7 +50,10 @@ line_width = 100
 `MODEL`, `SCENARIO`, `FUNCTION` and `HOOK` headers must carry a non-empty `description`;
 `sqb format --check` fails with `description-present` when one is missing, so pre-commit catches it
 before compile does (see [Descriptions](../concepts/models/configuration.md#descriptions)). A model
-described by `[defaults]`, `[path_defaults]` or its `model_schema` passes, exactly as it compiles.
+described by its `model_schema`, or by the one `[path_defaults]` entry that applies to it, passes,
+exactly as it compiles. `[defaults]` does not accept `description` (`D001`), and only the nearest
+matching path default applies (see
+[Which path default applies](../concepts/project-configuration.md#which-path-default-applies)).
 Format does not render templates, so a templated description that renders empty passes format and
 is reported by `sqb compile`.
 Plain `sqb format` still formats the file and exits non-zero, like any other remaining fault.

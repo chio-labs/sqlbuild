@@ -386,14 +386,52 @@ replay_on_change = "full"
 ```
 
 Path matching uses the path below `models/`. A model at `models/staging/stg_orders.sql` matches the
-`staging` path default.
+`staging` path default. A key matches its folder and every folder below it. In a key, `*` matches one
+folder name and `**` matches any number of folders, so `"**"` matches every model.
+
+### Which path default applies
+
+Each model uses at most one path default: the nearest matching key. Path defaults are not merged, so
+a model gets nothing from a broader key when a more specific key also matches it.
+
+1. A key without wildcards beats every wildcard key. Among those, the deepest key wins, so
+   `staging/orders` beats `staging`.
+2. When only wildcard keys match, the most specific wins: more literal folder names first, then more
+   `*` segments, then fewer `**` segments. Two equally specific matches fail compilation.
+
+A broad `"**"` default therefore applies only to models that no other key matches. With the
+configuration below, `models/orders.sql` gets the `"**"` description, but
+`models/staging/stg_customers.sql` uses only the `staging` entry. It has no description and fails
+with `P010`:
+
+```toml
+[path_defaults."**"]
+description = "Order analytics model."
+
+[path_defaults.staging]
+materialized = "view"
+```
+
+Descriptions belong to individual models, so put each one in the `MODEL()` header, or in the
+`description` of the model's `model_schema`. `[defaults]` rejects `description` with `D001`. If a
+folder of models really shares one description, every key those models can select must set it:
+
+```toml
+[path_defaults."**"]
+description = "Order analytics model."
+
+[path_defaults.staging]
+materialized = "view"
+description = "Staging model."
+```
 
 ### Config layering order
 
 Configuration is layered in this order, with later layers overriding earlier ones:
 
 1. **Project defaults** (`defaults`)
-2. **Path defaults** (`path_defaults`) - if the model's path matches
+2. **Path defaults** (`path_defaults`) - the one nearest matching entry, if any (see
+   [Which path default applies](#which-path-default-applies))
 3. **MODEL() header** - the model's own config
 
 Most keys are overridden by the more specific layer, but three merge instead:

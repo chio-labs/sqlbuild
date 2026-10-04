@@ -86,3 +86,9 @@ pub(crate) struct RelationMarkerOracleTestCase {
     pub(crate) dialect: &'static str,
     pub(crate) expected_mismatches: &'static [&'static str],
 }
+
+pub(crate) struct ModelHeaderMatchTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) expected_offsets: Option<(usize, usize, usize)>,
+}

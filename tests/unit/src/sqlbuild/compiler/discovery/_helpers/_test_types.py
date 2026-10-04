@@ -940,3 +940,42 @@ class StatementHeaderKeysTestCase:
     contents: str
     expected_error: str
     expected_help: str
+
+
+@dataclass(frozen=True)
+class SnapshotGlobTestCase:
+    description: str
+    seed: int
+    entry_count: int
+    expected_mismatches: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SharedSnapshotDiscoveryTestCase:
+    description: str
+    expected_model_paths: tuple[str, ...]
+    expected_mismatches: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DiscoveryPassRefreshTestCase:
+    description: str
+    added_files: dict[str, str]
+    removed_path: str
+    expected_first_paths: tuple[str, ...]
+    expected_second_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotScopeReuseTestCase:
+    description: str
+    expected_nested_reuse: bool
+    expected_later_reuse: bool
+
+
+@dataclass(frozen=True)
+class NativeHeaderMatchTestCase:
+    description: str
+    seed: int
+    count: int
+    expected_mismatches: tuple[str, ...] = ()

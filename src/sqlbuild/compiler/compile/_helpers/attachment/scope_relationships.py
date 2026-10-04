@@ -29,20 +29,22 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
+from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
+    resolve_scope_declaration_visibility,
+)
 from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
     resolve_scope_path_visibility,
 )
-from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    DeclarationVisibility,
     GrantRecord,
     ResourceIdentity,
     ResourceRecord,
     ScopeIndex,
     ScopeLookup,
-    VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, GrantKind, ResourceKind, ScopeKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -288,7 +290,9 @@ def _shared_visible_declarations(
 def _resolve_shared_declarations(
     *, lookup: ScopeLookup, resource: ResourceIdentity
 ) -> tuple[DeclarationRecord, ...]:
-    resolution: VisibilityResolution = resolve_scope_visibility(lookup=lookup, target=resource)
+    resolution: DeclarationVisibility = resolve_scope_declaration_visibility(
+        lookup=lookup, target=resource
+    )
     declarations: list[DeclarationRecord] = []
     for visible in resolution.visible:
         records: tuple[DeclarationRecord, ...] = lookup.declarations.get(visible.declaration, ())
@@ -314,7 +318,7 @@ def _tested_macro_grants(
     if actual_cte is None:
         return []
     tested_macro_names: tuple[str, ...] = find_macro_call_names(actual_cte.sql_body)
-    direct_resolution: VisibilityResolution = resolve_scope_visibility(
+    direct_resolution: DeclarationVisibility = resolve_scope_declaration_visibility(
         lookup=lookup, target=resource
     )
     directly_visible: frozenset[DeclarationIdentity] = frozenset(

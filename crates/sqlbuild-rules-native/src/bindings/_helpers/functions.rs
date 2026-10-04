@@ -377,6 +377,19 @@ fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<Par
 }
 
 #[pyfunction]
+fn match_model_headers(
+    py: Python<'_>,
+    contents: Vec<String>,
+) -> PyResult<Vec<Option<(usize, usize, usize)>>> {
+    py.compiler_detach(|| {
+        Ok(crate::compiler::main::model_header_matching::match_batch(
+            &contents,
+        ))
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
 fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
     compiler_guard(|| {
         crate::compiler::main::model_header_tokenizing::tokenize_one(header).map_err(value_error)
@@ -492,6 +505,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(extract_sql_tests_json, module)?)?;
+    module.add_function(wrap_pyfunction!(match_model_headers, module)?)?;
     module.add_function(wrap_pyfunction!(parse_model_headers, module)?)?;
     module.add_function(wrap_pyfunction!(tokenize_model_header, module)?)?;
     module.add_function(wrap_pyfunction!(substitute_static_project_vars, module)?)?;

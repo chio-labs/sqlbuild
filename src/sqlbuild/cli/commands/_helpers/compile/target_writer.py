@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import stat
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -674,16 +675,29 @@ def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = 
 
 def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
-        if check_existing and path.is_file():
-            existing: bytes = path.read_bytes()
+        if check_existing:
+            existing: bytes | None = _read_existing_file(path=path)
             if existing == contents:
                 return
-            _ = existing.decode("utf-8")
+            if existing is not None:
+                _ = existing.decode("utf-8")
         try:
             _overwrite_bytes(path=path, contents=contents)
         except FileNotFoundError:
             path.parent.mkdir(parents=True, exist_ok=True)
             _overwrite_bytes(path=path, contents=contents)
+
+
+def _read_existing_file(*, path: Path) -> bytes | None:
+    """Return a regular file's bytes in one open, or None when there is no file to compare."""
+
+    try:
+        with open(path, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return None
+            return handle.read()
+    except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
+        return None
 
 
 def _overwrite_text(*, path: Path, contents: str) -> None:
@@ -712,21 +726,30 @@ def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) 
     if not compiled_dir.is_dir():
         return
     managed_names: set[str] = {os.fspath(path) for path in managed_paths}
+    removed_directories: set[str] = set()
     for root, directories, filenames in os.walk(compiled_dir, topdown=False):
+        kept_file: bool = False
         for filename in filenames:
             path: str = os.path.join(root, filename)
-            if path not in managed_names:
+            if path in managed_names:
+                kept_file = True
+            else:
                 os.unlink(path)
-        for name in directories:
-            _remove_empty_directory(os.path.join(root, name))
-    _remove_empty_directory(compiled_dir)
+        if not kept_file and all(
+            os.path.join(root, name) in removed_directories for name in directories
+        ):
+            if root == os.fspath(compiled_dir) or _remove_empty_directory(root):
+                removed_directories.add(root)
+    if os.fspath(compiled_dir) in removed_directories:
+        _remove_empty_directory(compiled_dir)
 
 
-def _remove_empty_directory(directory: str | Path) -> None:
+def _remove_empty_directory(directory: str | Path) -> bool:
     try:
         os.rmdir(directory)
     except OSError:
-        pass
+        return False
+    return True
 
 
 def _model_output_path(relative_path: Path) -> Path:

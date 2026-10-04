@@ -23,6 +23,7 @@ from sqlbuild.compiler.discovery.exceptions import (
 )
 from sqlbuild.compiler.discovery.models import (
     ModelHeaderColumnSpan,
+    ModelHeaderMatch,
     NamedSqlHookEntry,
     PythonHookEntry,
     SqlHookEntry,
@@ -115,10 +116,34 @@ class _ModelHeaderTokenCache:
 _MODEL_HEADER_TOKEN_CACHE: _ModelHeaderTokenCache = _ModelHeaderTokenCache()
 
 
-def match_model_header(contents: str) -> re.Match[str] | None:
+def match_model_header(contents: str) -> ModelHeaderMatch | None:
     """Match the MODEL(...) header once so callers can reuse it for every header projection."""
 
-    return _MODEL_HEADER_PATTERN.match(contents)
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    if header_match is None:
+        return None
+    return ModelHeaderMatch(
+        contents=contents,
+        header_start=header_match.start("header"),
+        header_end=header_match.end("header"),
+        sql_start=header_match.start("sql"),
+    )
+
+
+def match_model_headers(contents: list[str]) -> list[ModelHeaderMatch | None]:
+    """Match many MODEL(...) headers natively with the same semantics as ``match_model_header``."""
+
+    return [
+        None
+        if offsets is None
+        else ModelHeaderMatch(
+            contents=value,
+            header_start=offsets[0],
+            header_end=offsets[1],
+            sql_start=offsets[2],
+        )
+        for value, offsets in zip(contents, _native.match_model_headers(contents), strict=True)
+    ]
 
 
 def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
@@ -128,7 +153,7 @@ def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object
 
 
 def parse_matched_model_sql(
-    *, header_match: re.Match[str] | None, file_path: Path
+    *, header_match: ModelHeaderMatch | None, file_path: Path
 ) -> tuple[dict[str, object], str]:
     """Parse header values and SQL body from one precomputed MODEL header match."""
 
@@ -139,7 +164,7 @@ def parse_matched_model_sql(
         )
 
     header_values: dict[str, object] = parse_header_values(
-        header=header_match.group("header"),
+        header=header_match.header,
         file_path=file_path,
         statement_name="MODEL",
     )
@@ -153,12 +178,12 @@ def parse_matched_model_sql(
         header_values=header_values,
         supported_keys=SQL_MODEL_HEADER_KEYS,
         statement="MODEL()",
-        header=header_match.group("header"),
-        header_line=header_match.string.count("\n", 0, header_match.start("header")) + 1,
+        header=header_match.header,
+        header_line=header_match.contents.count("\n", 0, header_match.header_start) + 1,
         file_path=file_path,
         error_class=ModelSqlParseError,
     )
-    query: str = header_match.group("sql").strip()
+    query: str = header_match.sql.strip()
     if not query:
         raise ModelSqlParseError(f"SQL model '{file_path}' must contain SQL after MODEL(...)")
     return header_values, query
@@ -175,7 +200,7 @@ def model_header_column_locations(
 
 
 def matched_model_header_column_locations(
-    *, contents: str, header_match: re.Match[str] | None, relative_path: Path
+    *, contents: str, header_match: ModelHeaderMatch | None, relative_path: Path
 ) -> dict[str, SourceLocation]:
     """Return authored MODEL(columns) locations from one precomputed header match."""
 
@@ -183,8 +208,8 @@ def matched_model_header_column_locations(
         return {}
     return header_column_locations(
         contents=contents,
-        header=header_match.group("header"),
-        header_start=header_match.start("header"),
+        header=header_match.header,
+        header_start=header_match.header_start,
         relative_path=relative_path,
     )
 
@@ -314,7 +339,7 @@ def model_output_column_locations(
 def matched_model_output_column_locations(
     *,
     contents: str,
-    header_match: re.Match[str] | None,
+    header_match: ModelHeaderMatch | None,
     relative_path: Path,
     extract_implicit_alias_columns: bool,
 ) -> dict[str, SourceLocation]:
@@ -322,8 +347,8 @@ def matched_model_output_column_locations(
 
     if header_match is None:
         return {}
-    sql_start: int = header_match.start("sql")
-    sql: str = header_match.group("sql")
+    sql_start: int = header_match.sql_start
+    sql: str = header_match.sql
     projection_ranges: tuple[tuple[int, int], ...] | None = _top_level_select_projection_ranges(sql)
     if projection_ranges is None:
         return {}
@@ -674,15 +699,11 @@ def prepare_model_file_headers(contents: list[str]) -> None:
     prepare_matched_model_file_headers([match_model_header(value) for value in contents])
 
 
-def prepare_matched_model_file_headers(header_matches: list[re.Match[str] | None]) -> None:
+def prepare_matched_model_file_headers(header_matches: list[ModelHeaderMatch | None]) -> None:
     """Batch tokenization for precomputed MODEL header matches."""
 
     prepare_model_header_tokens(
-        [
-            header_match.group("header")
-            for header_match in header_matches
-            if header_match is not None
-        ]
+        [header_match.header for header_match in header_matches if header_match is not None]
     )
 
 

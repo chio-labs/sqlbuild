@@ -209,6 +209,17 @@ class ScopeIndex:
 
 
 @dataclass(frozen=True)
+class DeclarationVisibilityIndex:
+    """Declaration positions grouped by the scope facts that make them visible."""
+
+    identities: tuple[DeclarationIdentity, ...]
+    global_positions: tuple[int, ...]
+    private_positions: Mapping[ResourceIdentity, tuple[int, ...]]
+    local_positions: Mapping[str, tuple[int, ...]]
+    inherited_positions: Mapping[str, tuple[int, ...]]
+
+
+@dataclass(frozen=True)
 class ScopeLookup:
     """Immutable indexes over one canonical ``ScopeIndex``."""
 
@@ -219,6 +230,7 @@ class ScopeLookup:
     usages_by_consumer: Mapping[ResourceIdentity | DeclarationIdentity, tuple[UsageRecord, ...]]
     usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]]
     grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]]
+    visibility_index: DeclarationVisibilityIndex
 
 
 @dataclass(frozen=True)
@@ -243,6 +255,15 @@ class VisibilityResolution:
     target: ScopeTargetQuery
     visible: tuple[VisibilityRecord, ...] = field(default_factory=tuple)
     inaccessible: tuple[InaccessibleRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DeclarationVisibility:
+    """Visible facts and inaccessible declaration identities for one queried target."""
+
+    target: ScopeTargetQuery
+    visible: tuple[VisibilityRecord, ...] = field(default_factory=tuple)
+    inaccessible: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -34,20 +34,22 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
+from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
+    resolve_scope_declaration_visibility,
+)
 from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
     resolve_scope_path_visibility,
 )
-from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    DeclarationVisibility,
     ResourceIdentity,
     ResourceRecord,
     ScopeIndex,
     UsageRecord,
     VisibilityRecord,
-    VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
@@ -197,7 +199,7 @@ def resolve_declaration_context(
         )
         if cached_path_context is not None:
             return cached_path_context
-    resolution: VisibilityResolution = resolve_scope_visibility(
+    resolution: DeclarationVisibility = resolve_scope_declaration_visibility(
         lookup=resolver.lookup, target=resource or target_path
     )
     enums: dict[str, EnumDeclaration] = {}
@@ -218,7 +220,7 @@ def resolve_declaration_context(
             resolver.lookup.declarations[item.declaration][0] for item in resolution.visible
         )
         inaccessible_records: tuple[DeclarationRecord, ...] = tuple(
-            resolver.lookup.declarations[item.declaration][0] for item in resolution.inaccessible
+            resolver.lookup.declarations[identity][0] for identity in resolution.inaccessible
         )
         for visible_record in resolution.visible:
             visibility_by_declaration.setdefault(visible_record.declaration, []).append(

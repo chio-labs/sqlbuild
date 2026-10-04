@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
@@ -14,7 +13,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     matched_model_output_column_locations,
     parse_matched_model_sql,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, ModelHeaderMatch
 
 
 def discover_matched_model_file(
@@ -22,7 +21,7 @@ def discover_matched_model_file(
     file_path: Path,
     relative_path: Path,
     contents: str,
-    header_match: re.Match[str] | None,
+    header_match: ModelHeaderMatch | None,
     extract_implicit_alias_columns: bool,
     extract_output_column_locations: bool,
 ) -> DiscoveredSqlModelFile:

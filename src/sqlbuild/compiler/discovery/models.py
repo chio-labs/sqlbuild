@@ -82,6 +82,28 @@ class DiscoveredSqlModelFile:
 
 
 @dataclass(frozen=True)
+class ModelHeaderMatch:
+    """Offsets of one matched ``MODEL(...)`` header within its file contents."""
+
+    contents: str
+    header_start: int
+    header_end: int
+    sql_start: int
+
+    @property
+    def header(self) -> str:
+        """Return the header body between the MODEL parentheses."""
+
+        return self.contents[self.header_start : self.header_end]
+
+    @property
+    def sql(self) -> str:
+        """Return everything after the header terminator and following whitespace."""
+
+        return self.contents[self.sql_start :]
+
+
+@dataclass(frozen=True)
 class ModelHeaderColumnSpan:
     """Authored byte offsets for one MODEL(columns) entry and metadata body."""
 

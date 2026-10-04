@@ -229,3 +229,15 @@ class RelocationCase:
     consumer_paths: tuple[str, ...]
     destination: str
     expected_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RandomScopeCase:
+    """One seeded randomized scope project compared with the exhaustive classification."""
+
+    description: str
+    seed: int
+    resource_count: int
+    declaration_count: int
+    grant_count: int
+    expected_mismatches: tuple[str, ...] = ()
