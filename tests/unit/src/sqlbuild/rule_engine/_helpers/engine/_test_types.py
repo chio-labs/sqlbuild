@@ -13,6 +13,15 @@ class RulesConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class AllowExceptionsConfigTestCase:
+    """One `[rules] allow_exceptions` configuration that loads."""
+
+    description: str
+    source: str
+    expected_allow_exceptions: bool
+
+
+@dataclass(frozen=True)
 class RuleIgnoreConfigTestCase:
     """One scoped-ignore configuration expectation."""
 

@@ -180,6 +180,7 @@ def evaluate_rules(
             codes=_sql_rule_codes(native_rules),
             thresholds=effective_config.thresholds,
             relation_keys=compiled_relation_keys(graph.project),
+            allow_suppressions=effective_config.allow_exceptions,
         )
         sql_rule_inputs: _SqlRuleInputs = _prepare_sql_rule_inputs(
             rules=native_rules,
@@ -300,6 +301,7 @@ def prepare_sql_rules(
                 dialect=dialect,
                 codes=codes,
                 thresholds=config.thresholds,
+                allow_suppressions=config.allow_exceptions,
                 relation_keys=declared_relation_keys(
                     relations=(
                         *(
@@ -681,6 +683,7 @@ def sql_lint_config(
     codes: tuple[str, ...],
     thresholds: dict[str, int],
     relation_keys: RelationKeys,
+    allow_suppressions: bool,
 ) -> LintConfig:
     """Build the native SQL lint configuration that SQL Rules run with."""
 
@@ -693,6 +696,7 @@ def sql_lint_config(
             MAX_RANKING_ORDER_BY_THRESHOLD, DEFAULT_MAX_RANKING_ORDER_BY
         ),
         relation_keys=relation_keys,
+        allow_suppressions=allow_suppressions,
     )
 
 
@@ -705,6 +709,7 @@ def _lint_identity(config: LintConfig) -> str:
             config.max_literal_length,
             config.max_ranking_order_by,
             sorted(config.relation_keys.items()),
+            config.allow_suppressions,
         ],
         separators=(",", ":"),
     )

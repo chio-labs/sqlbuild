@@ -21,3 +21,18 @@ pub(crate) struct QualityRemediationTestCase {
     pub(crate) rule: &'static str,
     pub(crate) expected_fragments: &'static [&'static str],
 }
+
+pub(crate) struct JsonParseTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_anchors: &'static [&'static str],
+    pub(crate) expected_details: &'static [&'static str],
+}
+
+pub(crate) struct JsonParseScaleTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) column_count: usize,
+    pub(crate) expected_findings: usize,
+    pub(crate) expected_max_seconds: f64,
+}

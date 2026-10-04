@@ -59,6 +59,37 @@ reason = "These intermediate SQL files intentionally preserve upstream columns."
 
 `paths` and `selectors` may be combined in one scoped ignore. Both forms require a reason.
 
+## Inline suppressions
+
+Suppress one SQL Rule finding on the next SQL line with a reasoned comment:
+
+```sql
+-- sqb: ignore SQBRSQL004 because the sample intentionally keeps one row
+SELECT customer_id FROM customers LIMIT 1
+```
+
+A directive without a reason, or one that no longer matches a finding, is reported as
+`SQBRSQL000`.
+
+## Forbidding exceptions
+
+Set `allow_exceptions = false` to require that every selected Rule passes everywhere:
+
+```toml
+[rules]
+select = ["SQBRSQL", "SQBRMODEL"]
+ignore = ["SQBRSQL004"]
+allow_exceptions = false   # default true
+```
+
+With exceptions forbidden, any `[[rules.rule_exceptions]]` or `[[rules.rule_ignores]]` entry fails
+configuration loading with an error that counts the entries and shows the setting to change, so
+`sqb compile` and `sqb rules run` stop before evaluating Rules. Each inline `-- sqb: ignore`
+directive becomes a `SQBRSQL000` error at the directive and suppresses nothing, so the finding it
+was hiding is reported too. The project-wide `ignore` list stays allowed: it is the adoption switch
+for a Rule across the whole project, not a scoped escape hatch. `[[rules.graph_edge_exceptions]]`,
+`[[rules.select_star_allow]]` and `[[rules.threshold_overrides]]` are not affected.
+
 ## Mandatory correctness
 
 Mandatory compiler correctness is not configurable and cannot be suppressed. A project must first

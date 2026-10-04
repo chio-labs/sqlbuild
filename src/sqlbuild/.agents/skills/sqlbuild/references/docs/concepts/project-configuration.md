@@ -494,6 +494,10 @@ Rules are opt-in. Exact codes activate individual checks and prefixes activate a
 codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
 [Compiler-integrated Rules](rules.md) for configuration, authoring, and suppressions.
 
+| Key | Default | Description |
+| --- | --- | --- |
+| `allow_exceptions` | `true` | When `false`, `[[rules.rule_exceptions]]` and `[[rules.rule_ignores]]` entries are configuration errors and inline `-- sqb: ignore` directives are `SQBRSQL000` errors. The project-wide `ignore` list stays allowed. See [Forbidding exceptions](rules/findings-and-exceptions.md#forbidding-exceptions). |
+
 ## Scopes
 
 Declaration placement findings are errors by default. Set `enforce_placement = false` to report

@@ -177,6 +177,7 @@ class LintConfig:
     header_rules_enabled: bool = True
     max_literal_length: int = DEFAULT_MAX_LITERAL_LENGTH
     max_ranking_order_by: int = DEFAULT_MAX_RANKING_ORDER_BY
+    allow_suppressions: bool = True
     relation_keys: Mapping[str, tuple[tuple[str, ...], ...]] = field(
         default_factory=dict, compare=False
     )

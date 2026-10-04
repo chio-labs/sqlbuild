@@ -100,6 +100,7 @@ def run_format(
             apply_suppressions(
                 violations=violations,
                 contents_by_path=final_contents,
+                allow_suppressions=config.allow_suppressions,
             )
         ),
         formatted_files=tuple(change.file_path for change in changes),

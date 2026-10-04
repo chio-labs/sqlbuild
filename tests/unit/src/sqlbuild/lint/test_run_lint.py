@@ -365,6 +365,44 @@ def test_given_reasoned_local_suppression_when_linting_then_matching_warning_is_
     "test_case",
     [
         LintBehaviorTestCase(
+            description="forbidden suppression keeps the finding and fails",
+            expected_value=(("SQBRSQL000", 2, "fault"), ("SQBRSQL004", 3, "warning")),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_suppressions_forbidden_when_linting_then_directive_is_a_fault_and_suppresses_nothing(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    target: Path = tmp_path / "models" / "sample.sql"
+    target.parent.mkdir()
+    _ = target.write_text(
+        'MODEL (description "ok");\n'
+        "-- sqb: ignore SQBRSQL004 because this fixture intentionally samples one row\n"
+        "SELECT value FROM items LIMIT 1\n",
+        encoding="utf-8",
+    )
+
+    result: LintRunResult = run_lint(
+        project_dir=tmp_path,
+        config=LintConfig(dialect="duckdb", allow_suppressions=False),
+    )
+
+    assert (
+        tuple((item.code, item.line, str(item.severity)) for item in result.violations)
+        == test_case.expected_value
+    )
+    remediation: str = result.violations[0].remediation or ""
+    assert "sqlbuild_project.toml sets [rules] allow_exceptions = false" in remediation
+    assert "[rules]\n            allow_exceptions = true" in remediation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintBehaviorTestCase(
             description="unused local suppression",
             expected_value="Unused suppression for SQBRSQL004",
         )
@@ -426,7 +464,7 @@ def test_given_header_fault_suppression_when_linting_then_mandatory_fault_remain
     )
 
     result: list[LintViolation] = apply_suppressions(
-        violations=[mandatory], contents_by_path={target: contents}
+        violations=[mandatory], contents_by_path={target: contents}, allow_suppressions=True
     )
 
     assert {item.code for item in result} == test_case.expected_value

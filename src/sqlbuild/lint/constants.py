@@ -82,6 +82,8 @@ RULE_FORMAT_UNSAFE: str = "format-unsafe"
 
 PROJECT_CONFIG_FILENAME_KEY: str = "sqlbuild_project.toml"
 FORMAT_SECTION_KEY: str = "format"
+RULES_SECTION_KEY: str = "rules"
+ALLOW_EXCEPTIONS_KEY: str = "allow_exceptions"
 MAX_DESCRIPTION_LINES_KEY: str = "max_description_lines"
 LINE_WIDTH_KEY: str = "line_width"
 

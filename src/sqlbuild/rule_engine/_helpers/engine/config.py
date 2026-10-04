@@ -7,10 +7,21 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.planner.main.selection.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
+from sqlbuild.errors.setting_help.main.join_helps import join_helps
+from sqlbuild.errors.setting_help.main.setting_help import setting_help
+from sqlbuild.errors.setting_help.main.setting_note import setting_note
+from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.rule_engine._helpers.engine.native import load_native_config
-from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.rule_engine.constants import (
+    ALLOW_EXCEPTIONS_KEY,
+    RULE_EXCEPTIONS_KEY,
+    RULE_IGNORES_KEY,
+    RULES_CONFIG_SECTION,
+)
+from sqlbuild.rule_engine.exceptions import RulesConfigError, RulesError
 from sqlbuild.rule_engine.models import (
     GraphEdgeExclusion,
     LayoutConfig,
@@ -29,7 +40,7 @@ def load_rules_config(project_dir: Path) -> RulesConfig:
     """Load configuration validated and normalized by the native engine."""
 
     payload: dict[str, object] = load_native_config(project_dir)
-    return RulesConfig(
+    config: RulesConfig = RulesConfig(
         select=_strings(payload.get("select")),
         ignore=_strings(payload.get("ignore")),
         thresholds=_integers(payload.get("thresholds")),
@@ -65,6 +76,7 @@ def load_rules_config(project_dir: Path) -> RulesConfig:
             )
             for item in _tables(payload.get("rule_ignores"))
         ),
+        allow_exceptions=payload.get("allow_exceptions") is not False,
         select_star_allow=tuple(
             SelectStarAllow(paths=_strings(item.get("paths")), reason=str(item["reason"]))
             for item in _tables(payload.get("select_star_allow"))
@@ -75,6 +87,51 @@ def load_rules_config(project_dir: Path) -> RulesConfig:
         sql_tests=_sql_tests(payload.get("sql_tests")),
         layout=_layout(payload.get("layout")),
         cache=_cache(payload.get("cache")),
+    )
+    _reject_forbidden_exceptions(config)
+    return config
+
+
+def _reject_forbidden_exceptions(config: RulesConfig) -> None:
+    """Fail when `[rules] allow_exceptions = false` and exceptions or scoped ignores exist."""
+
+    if config.allow_exceptions:
+        return
+    entries: list[str] = []
+    tables: list[str] = []
+    for key, count in (
+        (RULE_EXCEPTIONS_KEY, len(config.rule_exceptions)),
+        (RULE_IGNORES_KEY, len(config.rule_ignores)),
+    ):
+        if count:
+            table: str = f"[[{RULES_CONFIG_SECTION}.{key}]]"
+            tables.append(table)
+            entries.append(
+                format_count_noun(count=count, singular=f"{table} entry", plural=f"{table} entries")
+            )
+    if not entries:
+        return
+    raise RulesConfigError(
+        f"{PROJECT_CONFIG_FILENAME} has {' and '.join(entries)}, which this project does not "
+        "allow; "
+        + setting_note(
+            file_name=PROJECT_CONFIG_FILENAME,
+            section=RULES_CONFIG_SECTION,
+            key=ALLOW_EXCEPTIONS_KEY,
+            value=False,
+        ),
+        help=join_helps(
+            f"remove every {' and '.join(tables)} entry and fix the findings it hides; "
+            f"to turn a Rule off for the whole project, add its code to "
+            f"[{RULES_CONFIG_SECTION}] ignore",
+            setting_help(
+                purpose="to allow Rule exceptions, scoped ignores and inline suppressions",
+                file_name=PROJECT_CONFIG_FILENAME,
+                section=RULES_CONFIG_SECTION,
+                key=ALLOW_EXCEPTIONS_KEY,
+                value=True,
+            ),
+        ),
     )
 
 

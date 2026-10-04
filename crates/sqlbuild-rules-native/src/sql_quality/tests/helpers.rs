@@ -23,6 +23,30 @@ pub(crate) fn lint(test_case: &QualityRuleTestCase) -> Result<Vec<Value>, String
         .unwrap_or_default())
 }
 
+/// Lint `sql` in `dialect` with only `rule` enabled.
+pub(crate) fn lint_dialect(sql: &str, dialect: &str, rule: &str) -> Result<Vec<Value>, String> {
+    let request: Value = json!({
+        "version": 1,
+        "sql": sql,
+        "dialect": dialect,
+        "enabled_rules": [rule],
+    });
+    let response: Value = serde_json::from_str(&lint_json(&request.to_string())?)
+        .map_err(|error| error.to_string())?;
+    Ok(response["diagnostics"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default())
+}
+
+/// One DuckDB SELECT that parses each of `column_count` payload columns twice.
+pub(crate) fn wide_json_select(column_count: usize) -> String {
+    let projections: Vec<String> = (0..column_count * 2)
+        .map(|index| format!("json(e.c{})->>'f{index}' AS f{index}", index % column_count))
+        .collect();
+    format!("SELECT {} FROM events AS e", projections.join(", "))
+}
+
 pub(crate) fn anchors(sql: &str, diagnostics: &[Value]) -> Vec<String> {
     diagnostics
         .iter()

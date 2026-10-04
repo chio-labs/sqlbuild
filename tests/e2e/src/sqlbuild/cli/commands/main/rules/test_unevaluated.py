@@ -207,7 +207,7 @@ def test_given_explicit_escape_hatch_when_running_rules_then_honors_policy(
             "Rules CLI groups selected family",
             ("rules", "--json", "run", "SQBRSQL"),
             "findings",
-            tuple(f"SQBRSQL{number:03}" for number in range(1, 45)),
+            tuple(f"SQBRSQL{number:03}" for number in range(1, 46)),
         ),
         GroupedRulesCase(
             "suppression precedes grouping",

@@ -108,6 +108,55 @@ owns the terminal `SELECT`'s plain projection from that last CTE, so select both
 the `SQBRSQL` family, for the complete convention. Parentheses around the entire query do not create
 a nested CTE scope.
 
+## Repeated JSON parsing
+
+`SQBRSQL045` reports a JSON parse function applied to the same column more than once in one
+`SELECT`. Parse the payload once in the CTE that reads it, then read every field from that column:
+
+```sql
+WITH parsed AS (
+  SELECT e.event_id, TRY_PARSE_JSON(e.value) AS payload
+  FROM events AS e
+),
+final AS (
+  SELECT p.event_id, p.payload:order_id AS order_id, p.payload:status AS status
+  FROM parsed AS p
+)
+SELECT event_id, order_id, status FROM final
+```
+
+Each `SELECT` is checked on its own: its select list, `FROM`, `JOIN ... ON`, `WHERE`, `GROUP BY`,
+`HAVING`, `QUALIFY` and `ORDER BY`. A nested `SELECT`, subquery, CTE body or set-operation branch is
+a separate scope. Calls are grouped by function and by the column reference as written, with names
+compared the way the warehouse resolves them: on Snowflake unquoted names fold to upper case and
+quoted names compare exactly, so `"VALUE"` matches `value` but `"Value"` does not; on DuckDB,
+BigQuery and Databricks names compare case-insensitively whether or not they are quoted. References
+are not resolved, so `value` and `e.value`, or `events.value` and
+`e.value`, are different groups. The argument may be wrapped in parentheses, `LOWER`, `UPPER`,
+`TRIM` without trim characters, `CAST`, `TRY_CAST` or a single-argument `COALESCE`; a wrapper with
+more arguments, such as `COALESCE(e.value, e.backup)`, is not a plain column and is not counted. One
+finding is reported at the second call and names the count with the column as written, for example
+`TRY_PARSE_JSON(e.value) is parsed 3 times in one SELECT`. Different parse functions, such as
+`PARSE_JSON` and `TRY_PARSE_JSON`, are counted separately. There is no automatic fix.
+
+Known limitations:
+
+- Calls inside a named `WINDOW` clause, a window frame, or a Databricks `LATERAL VIEW` are not
+  checked.
+- A parse repeated in `GROUP BY` or `ORDER BY` to match the select list is still reported; group or
+  order by the parsed column from an earlier CTE instead.
+- A parse call generated inside a macro is reported at the macro call site.
+
+| Adapter | Parse functions |
+| --- | --- |
+| Snowflake | `PARSE_JSON`, `TRY_PARSE_JSON` |
+| Databricks | `PARSE_JSON`, `TRY_PARSE_JSON` |
+| BigQuery | `PARSE_JSON`, `SAFE.PARSE_JSON` |
+| DuckDB and MotherDuck | `JSON` |
+
+PostgreSQL and SQL Server have no single-argument JSON parse function (they use casts such as
+`::jsonb` or path functions), so the Rule reports nothing on those adapters.
+
 ## SQL quality limits and ranking determinism
 
 These Rules are errors with project-wide limits. No model can opt out of a limit locally.
@@ -173,6 +222,6 @@ A finding that `sqb format --fix` can fix says so in text output and carries `"f
 `sqb rules --json run` output; `sqb compile` adds the same note to the diagnostic.
 
 Family selectors such as `select = ["SQBRSQL", "SQBRMODEL", "SQBRGRAPH"]` pick up new built-in Rules
-on upgrade, so a release that adds `SQBRSQL040` to `SQBRSQL044` can expose computed join keys,
-differently named final CTEs, unused CTE columns, long literals or ranking sorts that were accepted
-before.
+on upgrade, so a release that adds `SQBRSQL040` to `SQBRSQL045` can expose computed join keys,
+differently named final CTEs, unused CTE columns, long literals, ranking sorts or repeated JSON
+parses that were accepted before.
