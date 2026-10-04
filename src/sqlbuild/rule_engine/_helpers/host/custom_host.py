@@ -18,6 +18,8 @@ from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_key_payload
 from sqlbuild.rule_engine._helpers.host.custom_evaluation import evaluate_custom_rules
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
 from sqlbuild.rule_engine.constants import (
+    CUSTOM_HOST_CANCELLED_EXIT_CODE,
+    CUSTOM_HOST_CANCELLED_MESSAGE,
     CUSTOM_HOST_HASH_SEED,
     CUSTOM_HOST_INPUT_TUPLE_SIZE,
     CUSTOM_HOST_LAUNCH_MODULE,
@@ -25,8 +27,14 @@ from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_PROTOCOL_VERSION,
     CUSTOM_HOST_RUNTIME_VERSION,
 )
-from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.models import CustomRuleRun, Finding, Rule, RulesConfig
+from sqlbuild.rule_engine.exceptions import HostCancelledError, RulesError
+from sqlbuild.rule_engine.models import (
+    CustomHostPartition,
+    CustomRuleRun,
+    Finding,
+    Rule,
+    RulesConfig,
+)
 from sqlbuild.rule_engine.types import CustomRulePlan
 
 
@@ -50,6 +58,9 @@ def main() -> int:
         payload: object = request["payload"]
         if not isinstance(payload, dict):
             raise RulesError("custom host payload must be an object")
+        cancel_marker: Path | None = _cancel_marker(payload)
+        if cancel_marker is not None and cancel_marker.exists():
+            raise HostCancelledError(CUSTOM_HOST_CANCELLED_MESSAGE)
         project, config = _decode_inputs(payload)
         project_dir: Path = Path(str(payload["project_dir"])).resolve()
         dialect: str = str(payload.get("dialect", "generic"))
@@ -77,7 +88,15 @@ def main() -> int:
                 track_reads=track_reads,
                 verify_determinism=verify_determinism,
                 guard=guard,
+                partition=(
+                    None
+                    if cancel_marker is None
+                    else CustomHostPartition(cancelled=cancel_marker.exists)
+                ),
             )
+    except HostCancelledError:
+        sys.stderr.write(CUSTOM_HOST_CANCELLED_MESSAGE)
+        return CUSTOM_HOST_CANCELLED_EXIT_CODE
     except Exception as error:
         violation: Exception | None = None if guard is None else guard.violation
         return _write_error(str(violation or error))
@@ -114,6 +133,20 @@ def _decode_inputs(payload: dict[str, Any]) -> tuple[CompiledProject, RulesConfi
     return decoded
 
 
+def _cancel_marker(payload: dict[str, Any]) -> Path | None:
+    """Return the run's cancellation marker, which must live beside the project payload."""
+
+    value: object = payload.get("cancel_marker")
+    if value is None:
+        return None
+    project_dir: Path = Path(str(payload["project_dir"])).resolve()
+    input_root: Path = (project_dir / "target" / "rules-cache" / "host-inputs").resolve()
+    marker: Path = Path(str(value))
+    if not marker.is_absolute() or not marker.resolve().is_relative_to(input_root):
+        raise RulesError("custom host cancellation marker path is invalid")
+    return marker
+
+
 def _decode_plan(value: object) -> CustomRulePlan:
     if not isinstance(value, dict):
         raise RulesError("custom host plan must be an object")
@@ -145,7 +178,8 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
                 "reads": index,
             }
         )
-    if sum(map(len, readsets)) > CUSTOM_HOST_MAX_TRACKED_READS:
+    bounded: bool = sum(map(len, readsets)) > CUSTOM_HOST_MAX_TRACKED_READS
+    if bounded:
         untracked.update(str(item["code"]) for item in evaluations if item["reads"] is not None)
         readsets = {}
         for item in evaluations:
@@ -162,6 +196,8 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
         },
         "uncacheable": sorted(run.uncacheable_codes),
         "observed": sorted([list(key), digest] for key, digest in run.observed),
+        "bounded": bounded,
+        "stateful": sorted(run.stateful_codes),
     }
 
 

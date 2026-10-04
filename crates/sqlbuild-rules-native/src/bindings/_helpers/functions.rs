@@ -117,6 +117,31 @@ fn prepare_lint_sql(
     .map_err(value_error)
 }
 
+/// Prepare many bodies in one detached call; `false` marks a body to prepare again individually.
+#[pyfunction]
+fn prepare_lint_sql_batch(
+    py: Python<'_>,
+    requests: Vec<LintPreparationRequest>,
+) -> PyResult<Vec<(bool, Option<crate::sql_lint::types::PreparedSql>)>> {
+    py.compiler_detach(|| {
+        Ok(requests
+            .iter()
+            .map(|request| {
+                crate::bindings::_helpers::panics::catch_compiler_panic(|| {
+                    crate::sql_lint::main::preparation::prepare(
+                        &request.expanded,
+                        &request.before_expansion,
+                        &request.prior_sites,
+                        &request.dialect,
+                    )
+                })
+                .map_or((false, None), |prepared| (true, prepared))
+            })
+            .collect())
+    })
+    .map_err(value_error)
+}
+
 #[pyfunction]
 fn lint_backtick_identifiers(dialect: &str) -> PyResult<bool> {
     compiler_guard(|| {
@@ -431,6 +456,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_custom_host_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(prepare_lint_sql_batch, module)?)?;
     module.add(
         "NativeCompilerError",
         module

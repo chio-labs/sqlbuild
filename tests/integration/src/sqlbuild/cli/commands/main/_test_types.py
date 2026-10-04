@@ -157,6 +157,16 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class CustomHostSplitIntegrationTestCase:
+    """A compile whose custom rules run on several hosts and must match one host."""
+
+    description: str
+    model_count: int
+    hosts: int
+    expected_code: str
+
+
+@dataclass(frozen=True)
 class DollarQuotedLiteralBuildTestCase:
     """One model projection with dollar-quoted literals and its built rows."""
 

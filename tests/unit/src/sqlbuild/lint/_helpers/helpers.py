@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint.models import HeaderSpan, LintBody
+from sqlbuild.lint.types import NativeLintPreparationRequest, NativePreparedSql
 
 
 def lint_bodies_for(*, file_path: Path, contents: str) -> tuple[LintBody, ...]:
@@ -64,3 +65,29 @@ def authored_positions(*, contents: str, needles: tuple[str, ...]) -> list[tuple
             (contents.count("\n", 0, offset) + 1, offset - contents.rfind("\n", 0, offset))
         )
     return positions
+
+
+def write_lint_project(*, root: Path, files: dict[str, str]) -> None:
+    """Write a DuckDB project containing the given relative files."""
+
+    (root / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    for relative_path, contents in files.items():
+        path: Path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
+def prepare_nothing_in_batch(
+    requests: list[NativeLintPreparationRequest],
+) -> list[tuple[bool, NativePreparedSql | None]]:
+    """Report every body as unprepared so each one takes the per-body native call."""
+
+    return [(False, None) for _request in requests]
+
+
+def refuse_preparation(request: NativeLintPreparationRequest) -> NativePreparedSql | None:
+    """Fail the per-body native preparation of any body."""
+
+    raise ValueError(f"cannot prepare {request['dialect']} body")

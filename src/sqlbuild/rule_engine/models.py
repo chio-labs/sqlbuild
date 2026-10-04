@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, SqlExpansionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.models import LintRunResult
-from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue, RuleSubject
+from sqlbuild.rule_engine.types import FactKey, RuleCheck, RuleOptionValue, RuleSubject
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,6 +402,7 @@ class CustomRuleRun:
     untracked_codes: frozenset[str]
     uncacheable_codes: frozenset[str] = frozenset()
     observed: tuple[tuple[tuple[str, ...], str | None], ...] = ()
+    stateful_codes: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -411,3 +413,40 @@ class CustomRulesOutcome:
     cache_hits: int
     cache_misses: int
     custom_ms: int
+
+
+@dataclass(frozen=True)
+class CustomHostEvaluation:
+    """Decoded findings and recorded reads of one custom-rule invocation."""
+
+    findings: tuple[dict[str, object], ...]
+    reads: tuple[FactKey, ...] | None
+
+
+@dataclass(frozen=True)
+class CustomHostRun:
+    """Every planned custom-rule invocation, merged across host processes."""
+
+    evaluated: dict[tuple[str, str], CustomHostEvaluation]
+    untracked_reads: dict[str, tuple[FactKey, ...]]
+    uncacheable: frozenset[str]
+    observed: dict[FactKey, str | None]
+
+
+@dataclass(frozen=True)
+class CustomHostSlice:
+    """One host process's invocations, in the order that host evaluated them."""
+
+    evaluations: tuple[tuple[str, str, CustomHostEvaluation], ...]
+    untracked_reads: dict[str, tuple[FactKey, ...]]
+    uncacheable: frozenset[str]
+    observed: dict[FactKey, str | None]
+    bounded: bool
+    stateful: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CustomHostPartition:
+    """How one host of a split run detects module state and learns the run was cancelled."""
+
+    cancelled: Callable[[], bool]

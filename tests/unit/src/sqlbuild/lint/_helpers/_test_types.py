@@ -215,3 +215,22 @@ class ManyViolationLocationTestCase:
     unused_cte_count: int
     file_count: int
     expected_code: str
+
+
+@dataclass(frozen=True)
+class BatchedPreparationTestCase:
+    """A project whose lint is compared between batched and per-body native preparation."""
+
+    description: str
+    files: dict[str, str]
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BatchedPreparationFailureTestCase:
+    """A native preparation failure and an unexpandable file, in a given file order."""
+
+    description: str
+    unexpandable_file: str
+    skip_unexpandable: bool
+    expected_error: type[Exception] | None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import asdict, replace
 from decimal import Decimal
 from pathlib import Path
@@ -64,14 +64,15 @@ def evaluate_native(
     initial_findings: tuple[Finding, ...] = (),
     defer_suppressions: bool = False,
     verify_determinism: bool = False,
+    custom_payloads: list[dict[str, object]] | None = None,
+    custom_outcome: Future[CustomRulesOutcome] | None = None,
 ) -> RulesResult:
     """Evaluate built-in rules natively while custom rules run incrementally beside them."""
 
-    custom_payloads: list[dict[str, object]] = _custom_rule_payloads(
-        catalogue=catalogue, project_dir=project_dir
-    )
-    custom_rules: tuple[Rule, ...] = _selected_custom_rules(
-        config=config, catalogue=catalogue, custom_payloads=custom_payloads
+    payloads: list[dict[str, object]] = (
+        custom_rule_payloads(catalogue=catalogue, project_dir=project_dir)
+        if custom_payloads is None
+        else custom_payloads
     )
     request: dict[str, object] = {
         "version": RULES_NATIVE_API_VERSION,
@@ -96,21 +97,22 @@ def evaluate_native(
         "scope_index": scope_metadata_projection(index=project.scope_index),
         "initial_findings": [_finding_payload(finding) for finding in initial_findings],
         "defer_suppressions": True,
-        "custom_rules": custom_payloads,
+        "custom_rules": payloads,
     }
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-rules") as pool:
         custom_future: Future[CustomRulesOutcome] | None = (
-            pool.submit(
-                evaluate_custom_rules_cached,
+            custom_outcome
+            if custom_payloads is not None
+            else start_custom_rules(
+                executor=pool,
                 project=project,
                 config=config,
-                project_dir=project_dir.resolve(),
-                rules=custom_rules,
+                project_dir=project_dir,
+                catalogue=catalogue,
+                custom_payloads=payloads,
                 dialect=dialect,
                 verify_determinism=verify_determinism,
             )
-            if custom_rules
-            else None
         )
         try:
             response_json: str
@@ -154,6 +156,39 @@ def evaluate_native(
         cache_misses=(0 if reused else native_misses) + custom.cache_misses,
         built_in_ms=0 if reused else int(payload.get("built_in_ms", 0)),
         custom_ms=custom.custom_ms,
+    )
+
+
+def start_custom_rules(
+    *,
+    executor: Executor,
+    project: CompiledProject,
+    config: RulesConfig,
+    project_dir: Path,
+    catalogue: tuple[Rule, ...],
+    custom_payloads: list[dict[str, object]],
+    dialect: str,
+    verify_determinism: bool = False,
+) -> Future[CustomRulesOutcome] | None:
+    """Submit selected custom rules, reusing the implementation fingerprints of their payloads."""
+
+    custom_rules: tuple[Rule, ...] = _selected_custom_rules(
+        config=config, catalogue=catalogue, custom_payloads=custom_payloads
+    )
+    if not custom_rules:
+        return None
+    return executor.submit(
+        evaluate_custom_rules_cached,
+        project=project,
+        config=config,
+        project_dir=project_dir.resolve(),
+        rules=custom_rules,
+        dialect=dialect,
+        verify_determinism=verify_determinism,
+        implementation_fingerprints={
+            str(payload["code"]): str(payload["implementation_fingerprint"])
+            for payload in custom_payloads
+        },
     )
 
 
@@ -261,13 +296,21 @@ def native_catalogue() -> tuple[dict[str, object], ...]:
 
 
 def native_selected_codes(
-    *, config: RulesConfig, catalogue: tuple[Rule, ...], project_dir: Path
+    *,
+    config: RulesConfig,
+    catalogue: tuple[Rule, ...],
+    project_dir: Path,
+    custom_payloads: list[dict[str, object]] | None = None,
 ) -> tuple[str, ...]:
     """Resolve the active ruleset through the native Fensu adapter."""
 
     return _selected_codes(
         config=config,
-        custom_payloads=_custom_rule_payloads(catalogue=catalogue, project_dir=project_dir),
+        custom_payloads=(
+            custom_rule_payloads(catalogue=catalogue, project_dir=project_dir)
+            if custom_payloads is None
+            else custom_payloads
+        ),
     )
 
 
@@ -572,9 +615,11 @@ def _typed_value_payload(value: SqlValue) -> object:
     }
 
 
-def _custom_rule_payloads(
+def custom_rule_payloads(
     *, catalogue: tuple[Rule, ...], project_dir: Path
 ) -> list[dict[str, object]]:
+    """Describe every catalogued custom rule for native selection and evaluation."""
+
     closures: dict[str, tuple[Path, ...]] = {}
     return [
         _custom_rule_payload(

@@ -28,6 +28,8 @@ type RuleOptionValue = bool | int | str | tuple[str, ...] | tuple[int, ...]
 type FactKey = tuple[str, ...]
 type CustomRulePlan = dict[str, frozenset[str] | None]
 
+type CustomHostPlan = dict[str, list[str] | None]
+
 
 class RuleSubject(StrEnum):
     """Compiler-owned unit used to invoke and cache one custom rule."""

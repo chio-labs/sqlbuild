@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from itertools import chain
@@ -22,12 +23,18 @@ from sqlbuild.rule_engine.classes.rule_context import (
     build_rule_fact_views,
 )
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
+from sqlbuild.rule_engine.constants import (
+    CUSTOM_HOST_CANCELLED_MESSAGE,
+    CUSTOM_RULE_PROJECT_SUBJECT,
+)
 from sqlbuild.rule_engine.exceptions import (
+    HostCancelledError,
     NonHermeticRuleError,
     OpaqueModuleStateError,
     RulesError,
 )
 from sqlbuild.rule_engine.models import (
+    CustomHostPartition,
     CustomRuleEvaluation,
     CustomRuleRun,
     Finding,
@@ -51,6 +58,7 @@ class _PassInputs:
     facts: RuleFactViews
     plan: CustomRulePlan | None
     guard: RuntimeGuard | None
+    cancelled: Callable[[], bool] | None
 
 
 def evaluate_custom_rules(
@@ -64,6 +72,7 @@ def evaluate_custom_rules(
     track_reads: bool = False,
     verify_determinism: bool = False,
     guard: RuntimeGuard | None = None,
+    partition: CustomHostPartition | None = None,
 ) -> CustomRuleRun:
     """Run selected custom rules for every planned subject through the Python authoring API."""
 
@@ -80,7 +89,10 @@ def evaluate_custom_rules(
     )
     reads: FactReads | None = FactReads() if track_reads else None
     tracker: _ReadTracker = _ReadTracker(
-        reads=reads, rules=custom_rules, rules_root=project_dir / "rules"
+        reads=reads,
+        rules=custom_rules,
+        rules_root=project_dir / "rules",
+        detect_state=partition is not None,
     )
 
     inputs: _PassInputs = _PassInputs(
@@ -92,6 +104,7 @@ def evaluate_custom_rules(
         facts=facts,
         plan=plan,
         guard=guard,
+        cancelled=None if partition is None else partition.cancelled,
     )
 
     def run_pass(
@@ -118,6 +131,7 @@ def evaluate_custom_rules(
         untracked_codes=frozenset(tracker.untracked_codes),
         uncacheable_codes=frozenset(tracker.uncacheable_codes),
         observed=() if reads is None else tuple(reads.observed.items()),
+        stateful_codes=frozenset(tracker.stateful_codes),
     )
 
 
@@ -125,15 +139,21 @@ class _ReadTracker:
     """Attribute reads to one invocation; rules whose module state changes become untracked."""
 
     def __init__(
-        self, *, reads: FactReads | None, rules: tuple[Rule, ...], rules_root: Path
+        self,
+        *,
+        reads: FactReads | None,
+        rules: tuple[Rule, ...],
+        rules_root: Path,
+        detect_state: bool = False,
     ) -> None:
         self.reads: FactReads | None = reads
         self.untracked_codes: set[str] = set()
         self.uncacheable_codes: set[str] = set()
+        self.stateful_codes: set[str] = set()
         self._rules_root: Path = rules_root
         self._namespaces: dict[str, tuple[dict[str, object], ...]] = (
             {rule.code: rule_namespaces((rule.check,)) for rule in rules}
-            if reads is not None
+            if reads is not None or detect_state
             else {}
         )
         self._states: dict[str, str | None] = {
@@ -148,20 +168,22 @@ class _ReadTracker:
 
     def finish(self, *, code: str) -> frozenset[tuple[object, ...]] | None:
         reads: FactReads | None = self.reads
-        if reads is None:
-            return None
-        observed: set[tuple[object, ...]] | None = reads.current
-        reads.current = None
-        if reads.untracked:
-            self.untracked_codes.add(code)
-        if reads.uncacheable:
-            self.uncacheable_codes.add(code)
+        observed: set[tuple[object, ...]] | None = None
+        if reads is not None:
+            observed = reads.current
+            reads.current = None
+            if reads.untracked:
+                self.untracked_codes.add(code)
+            if reads.uncacheable:
+                self.uncacheable_codes.add(code)
         for rule_code, namespaces in self._namespaces.items():
-            if rule_code in self.untracked_codes:
+            if rule_code in self.stateful_codes:
                 continue
             state: str | None = self._state_token(namespaces)
             if state is None or state != self._states[rule_code]:
-                self.untracked_codes.add(rule_code)
+                self.stateful_codes.add(rule_code)
+                if reads is not None:
+                    self.untracked_codes.add(rule_code)
         return None if observed is None else frozenset(observed)
 
     def _state_token(self, namespaces: tuple[dict[str, object], ...]) -> str | None:
@@ -211,7 +233,11 @@ def _evaluate_pass(
         (rule, context(rule), None if plan is None else plan.get(rule.code)) for rule in model_rules
     )
     for rule in project_rules:
+        planned_project: frozenset[str] | None = None if plan is None else plan.get(rule.code)
+        if planned_project is not None and CUSTOM_RULE_PROJECT_SUBJECT not in planned_project:
+            continue
         ctx: EvaluationRuleContext = context(rule)
+        _stop_if_cancelled(inputs)
         tracker.start()
         try:
             findings: list[Finding] = _invoke(
@@ -241,6 +267,7 @@ def _evaluate_pass(
         for rule, ctx, planned in model_contexts:
             if planned is not None and path not in planned:
                 continue
+            _stop_if_cancelled(inputs)
             tracker.start()
             try:
                 findings = _invoke(rule=rule, subject=subject, ctx=ctx, guard=guard)
@@ -259,6 +286,13 @@ def _evaluate_pass(
                 )
             )
     return evaluations
+
+
+def _stop_if_cancelled(inputs: _PassInputs) -> None:
+    """Stop between invocations, outside any Rule's guarded scope, once the run is cancelled."""
+
+    if inputs.cancelled is not None and inputs.cancelled():
+        raise HostCancelledError(CUSTOM_HOST_CANCELLED_MESSAGE)
 
 
 def _invoke(

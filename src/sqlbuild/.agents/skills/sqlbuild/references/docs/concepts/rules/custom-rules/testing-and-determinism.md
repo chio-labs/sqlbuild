@@ -6,6 +6,14 @@
 
 Online: https://sqlbuild.com/docs/concepts/rules/custom-rules/testing-and-determinism/
 
+## Contents
+
+- Test Rules
+- Parallel evaluation
+- Helpers
+- Deterministic inputs
+- Cache granularity
+
 ## Test Rules
 
 Use the public harness to exercise discovery, compilation, and Rules evaluation:
@@ -38,6 +46,19 @@ module-level state, such as a set of already-seen models, that carries over from
 the next. Compute findings from the subject and `ctx` alone.
 
 Repository pytest files remain outside the SQLBuild project's SQL `tests/` directory.
+
+## Parallel evaluation
+
+On large projects, SQLBuild splits custom Rule evaluation across several host processes, at most
+one per available CPU and never more than eight. Each process evaluates a share of the subjects,
+and SQLBuild merges the findings back into the order a single process reports them.
+
+A Rule that changes module-level state while it runs, for example by adding each model to a set of
+already-seen names, could report different findings when its subjects are split. SQLBuild detects
+the state change and evaluates that Rule again in one process over all of its subjects, so its
+findings and cache entries match a single-process run. The result stays correct, but the Rule no
+longer runs in parallel and costs an extra host process. Keep each subject's findings independent
+of the others so Rules can run in parallel.
 
 ## Helpers
 

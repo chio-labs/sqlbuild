@@ -174,13 +174,20 @@ def _native_builtin(*, model: object, ctx: object) -> list[Finding]:
 
 
 def select_rules(
-    *, catalogue: tuple[Rule, ...], config: RulesConfig, project_dir: Path
+    *,
+    catalogue: tuple[Rule, ...],
+    config: RulesConfig,
+    project_dir: Path,
+    custom_payloads: list[dict[str, object]] | None = None,
 ) -> tuple[Rule, ...]:
     """Resolve the active catalogue through the native Fensu rules owner."""
 
     by_code: dict[str, Rule] = {rule.code: rule for rule in catalogue}
     codes: tuple[str, ...] = native_selected_codes(
-        config=config, catalogue=catalogue, project_dir=project_dir
+        config=config,
+        catalogue=catalogue,
+        project_dir=project_dir,
+        custom_payloads=custom_payloads,
     )
     try:
         return tuple(by_code[code] for code in codes)
