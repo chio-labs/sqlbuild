@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
+from sqlbuild.spec.contracts.types import WarehouseGroup
 
 
 @dataclass(frozen=True)
@@ -88,3 +89,10 @@ class CommandWarehouseClassificationTestCase:
     description: str
     command: CliCommand
     expected_classified: bool = True
+
+
+@dataclass(frozen=True)
+class CommandWarehouseGroupTestCase:
+    description: str
+    command: CliCommand
+    expected_group: WarehouseGroup

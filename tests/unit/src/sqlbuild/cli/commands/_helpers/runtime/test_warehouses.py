@@ -19,9 +19,11 @@ from sqlbuild.cli.commands.models import ResolvedWarehouse
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
+from sqlbuild.spec.contracts.types import WarehouseGroup
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     CommandWarehouseClassificationTestCase,
     CommandWarehouseErrorTestCase,
+    CommandWarehouseGroupTestCase,
     CommandWarehouseResolutionTestCase,
     WarehouseFlagParseTestCase,
     WarehouseFlagRejectedTestCase,
@@ -337,6 +339,48 @@ def test_given_command_without_group_when_parsing_warehouse_flag_then_it_is_reje
         build_cli_parser().parse_args(list(test_case.argv))
 
     assert test_case.expected_error_fragment in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CommandWarehouseGroupTestCase(
+            description="standalone SQL tests use fixture data",
+            command=CliCommand.TEST,
+            expected_group=WarehouseGroup.QUERY,
+        ),
+        CommandWarehouseGroupTestCase(
+            description="scenarios build against fixture data",
+            command=CliCommand.SCENARIO,
+            expected_group=WarehouseGroup.QUERY,
+        ),
+        CommandWarehouseGroupTestCase(
+            description="janitor works on catalogue metadata",
+            command=CliCommand.JANITOR,
+            expected_group=WarehouseGroup.QUERY,
+        ),
+        CommandWarehouseGroupTestCase(
+            description="audits scan built tables",
+            command=CliCommand.AUDIT,
+            expected_group=WarehouseGroup.BUILD,
+        ),
+        CommandWarehouseGroupTestCase(
+            description="Python checks read real outputs",
+            command=CliCommand.CHECK,
+            expected_group=WarehouseGroup.BUILD,
+        ),
+        CommandWarehouseGroupTestCase(
+            description="builds execute project resources",
+            command=CliCommand.BUILD,
+            expected_group=WarehouseGroup.BUILD,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cli_command_when_resolving_group_then_matches_its_workload(
+    test_case: CommandWarehouseGroupTestCase,
+) -> None:
+    assert COMMAND_WAREHOUSE_GROUPS[test_case.command] is test_case.expected_group
 
 
 if __name__ == "__main__":

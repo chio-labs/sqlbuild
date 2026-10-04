@@ -239,11 +239,13 @@ temporary comparison tables on the `query` warehouse. The exception is `sqb dbt`
 
 | Group | Commands |
 |-------|----------|
-| `build` | `audit`, `build`, `check`, `clone`, `dbt` (SQLBuild-owned work), `janitor`, `load`, `plan`, `scenario`, `seed`, `test` |
-| `query` | `contract`, `cost`, `debug`, `diff`, `freshness`, `query` |
+| `build` | `audit`, `build`, `check`, `clone`, `dbt` (SQLBuild-owned work), `load`, `plan`, `seed` |
+| `query` | `contract`, `cost`, `debug`, `diff`, `freshness`, `janitor`, `query`, `scenario`, `test` |
 
 Other commands, such as `compile`, `lineage`, and `format`, never connect to a warehouse.
 Integrations that run builds, such as Dagster, invoke `sqb build` and use the `build` group.
+Standalone `sqb test`, `sqb scenario` and `sqb janitor` use the `query` group because they work on
+fixture data or catalogue metadata; tests and audits that run inside `sqb build` use the `build` group.
 
 Each developer can point ad-hoc commands at their own warehouse without editing shared
 configuration:

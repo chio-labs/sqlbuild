@@ -40,7 +40,7 @@ sqb --project-dir <path> janitor [flags]
 | `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
 | `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
 | `--drop-old-name-view <name>` | Drop the [compatibility view](../concepts/models/migrations.md#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
-| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
+| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Targets
 
