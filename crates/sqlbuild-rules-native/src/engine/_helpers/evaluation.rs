@@ -184,12 +184,12 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     evaluate_request(request)
 }
 
-/// Evaluate a request whose models arrive as separate payloads, each with its exact digest.
-pub(crate) fn evaluate_parts(
+/// Decode a request whose models arrive as separate payloads, each with its exact digest.
+pub(crate) fn parse_parts(
     request_json: &[u8],
     model_jsons: &[&[u8]],
     model_digests: &[String],
-) -> Result<String, String> {
+) -> Result<EvaluateRequest, String> {
     let mut request: EvaluateRequest = serde_json::from_slice(request_json)
         .map_err(|error| format!("invalid rules request: {error}"))?;
     if !request.models.is_empty() {
@@ -199,7 +199,7 @@ pub(crate) fn evaluate_parts(
         return Err("invalid rules request: every model payload needs one digest".to_owned());
     }
     request.models = parse_model_payloads(model_jsons, model_digests)?;
-    evaluate_request(request)
+    Ok(request)
 }
 
 fn parse_model_payloads(
@@ -269,7 +269,7 @@ fn model_rules_fingerprint(
     fingerprint::fingerprint(selected, &model_config, dialect)
 }
 
-fn evaluate_request(request: EvaluateRequest) -> Result<String, String> {
+pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, String> {
     if request.version != API_VERSION {
         return Err(format!(
             "unsupported rules native API version {}; expected {API_VERSION}",

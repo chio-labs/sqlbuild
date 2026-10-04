@@ -8,9 +8,11 @@ use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
 use crate::configuration::main::load;
 use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
-use crate::engine::main::{evaluate, evaluate_parts};
+use crate::engine::main::{evaluate, evaluate_parsed, parse_parts};
 use crate::models::CatalogueResponse;
+use crate::models::ParsedRulesRequest;
 use crate::rules::main::{catalogue, selected_codes};
+use std::sync::Mutex;
 
 const SKILL_OWNER: &str = "sqlbuild";
 use crate::bindings::_helpers::panics::compiler_guard;
@@ -74,15 +76,35 @@ fn evaluate_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn evaluate_rules_parts(
+fn parse_rules_parts(
     py: Python<'_>,
     request_json: Bound<'_, PyBytes>,
     model_jsons: Vec<Bound<'_, PyBytes>>,
     model_digests: Vec<String>,
-) -> PyResult<String> {
+) -> PyResult<ParsedRulesRequest> {
     let request: &[u8] = request_json.as_bytes();
     let models: Vec<&[u8]> = model_jsons.iter().map(|model| model.as_bytes()).collect();
-    py.compiler_detach(|| evaluate_parts::evaluate_parts(request, &models, &model_digests))
+    let parsed = py
+        .compiler_detach(|| parse_parts::parse_parts(request, &models, &model_digests))
+        .map_err(value_error)?;
+    Ok(ParsedRulesRequest {
+        request: Mutex::new(Some(parsed)),
+    })
+}
+
+#[pyfunction]
+fn evaluate_parsed_rules(
+    py: Python<'_>,
+    parsed: &Bound<'_, ParsedRulesRequest>,
+) -> PyResult<String> {
+    let request = parsed
+        .borrow()
+        .request
+        .lock()
+        .map_err(|_| value_error("rules request lock is poisoned"))?
+        .take()
+        .ok_or_else(|| value_error("rules request was already evaluated"))?;
+    py.compiler_detach(|| evaluate_parsed::evaluate_parsed(request))
         .map_err(value_error)
 }
 
@@ -478,7 +500,9 @@ fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
-    module.add_function(wrap_pyfunction!(evaluate_rules_parts, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_rules_parts, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_parsed_rules, module)?)?;
+    module.add_class::<ParsedRulesRequest>()?;
     module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
     module.add_function(wrap_pyfunction!(run_custom_host_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;

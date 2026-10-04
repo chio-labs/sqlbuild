@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
-use crate::engine::main::evaluate_parts::evaluate_parts;
+use crate::engine::main::parse_parts::parse_parts;
 use crate::engine::tests::helpers::{
     cached_paths, evaluate_split, evaluate_whole, orders_models, split_request, uncached,
     write_model_files,
@@ -189,7 +189,7 @@ fn given_malformed_split_request_when_evaluating_then_request_is_rejected() -> R
         let model = serde_json::to_vec(&orders_models()[0]).map_err(|error| error.to_string())?;
         let payloads: Vec<&[u8]> = vec![model.as_slice(); test_case.payload_count];
 
-        let error = evaluate_parts(&rest, &payloads, &[]);
+        let error = parse_parts(&rest, &payloads, &[]);
 
         assert!(
             error.is_err_and(|message| message.contains(test_case.expected_error)),

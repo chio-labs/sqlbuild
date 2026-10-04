@@ -67,7 +67,7 @@ class _EncodedNativeRequest:
 class _PreparedNativeRequest:
     identity: str | None
     reused: str | None
-    encoded: _EncodedNativeRequest | None
+    parsed: _native.ParsedRulesRequest | None
 
 
 def evaluate_native(
@@ -285,7 +285,7 @@ def _serialise_native_request(request: dict[str, object]) -> bytes:
 def _prepare_native_request(
     *, encoded: _EncodedNativeRequest, project_dir: Path, cache_enabled: bool
 ) -> _PreparedNativeRequest:
-    """Resolve the memo; a reused response releases the encoded request immediately."""
+    """Resolve the memo, else decode natively so the encoded payloads die when this returns."""
 
     identity: str | None = (
         native_request_identity(
@@ -302,17 +302,23 @@ def _prepare_native_request(
     return _PreparedNativeRequest(
         identity=identity,
         reused=reused,
-        encoded=encoded if reused is None else None,
+        parsed=_parse_native_request(encoded) if reused is None else None,
     )
+
+
+def _parse_native_request(encoded: _EncodedNativeRequest) -> _native.ParsedRulesRequest:
+    try:
+        return _native.parse_rules_parts(
+            encoded.request_json, encoded.model_jsons, encoded.model_digests
+        )
+    except (ValueError, TypeError) as error:
+        raise RulesError(str(error)) from error
 
 
 def _evaluate_request(*, prepared: _PreparedNativeRequest, project_dir: Path) -> str:
     if prepared.reused is not None:
         return prepared.reused
-    encoded: _EncodedNativeRequest = cast(_EncodedNativeRequest, prepared.encoded)
-    response: str = _native.evaluate_rules_parts(
-        encoded.request_json, encoded.model_jsons, encoded.model_digests
-    )
+    response: str = _native.evaluate_parsed_rules(cast(_native.ParsedRulesRequest, prepared.parsed))
     if prepared.identity is not None:
         write_native_response(
             project_dir=project_dir, identity=prepared.identity, response=response

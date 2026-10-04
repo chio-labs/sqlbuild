@@ -61,11 +61,14 @@ def captured_native_request(
 
     captured: dict[str, Any] = {}
 
-    def evaluate_rules_parts(
+    def parse_rules_parts(
         request_json: bytes, model_jsons: list[bytes], model_digests: list[str]
-    ) -> str:
+    ) -> object:
         captured.update(cast(dict[str, Any], json.loads(request_json)))
         captured["models"] = [json.loads(model_json) for model_json in model_jsons]
+        return object()
+
+    def evaluate_parsed_rules(parsed: object) -> str:
         return json.dumps(
             {
                 "version": 1,
@@ -77,7 +80,8 @@ def captured_native_request(
             }
         )
 
-    monkeypatch.setattr(native._native, "evaluate_rules_parts", evaluate_rules_parts)
+    monkeypatch.setattr(native._native, "parse_rules_parts", parse_rules_parts)
+    monkeypatch.setattr(native._native, "evaluate_parsed_rules", evaluate_parsed_rules)
     native.evaluate_native(
         project=project,
         config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
@@ -309,19 +313,17 @@ def evaluate_contract_rule(
     return evaluate(project=project, config=config, project_dir=project_dir)
 
 
-def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[bytes]:
+def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[object]:
     """Count every request that reaches the native built-in rules engine."""
 
-    requests: list[bytes] = []
-    evaluate_rules_parts: Callable[[bytes, list[bytes], list[str]], str] = (
-        native._native.evaluate_rules_parts
-    )
+    requests: list[object] = []
+    evaluate_parsed_rules: Callable[[Any], str] = native._native.evaluate_parsed_rules
 
-    def recording(request_json: bytes, model_jsons: list[bytes], model_digests: list[str]) -> str:
-        requests.append(request_json)
-        return evaluate_rules_parts(request_json, model_jsons, model_digests)
+    def recording(parsed: Any) -> str:
+        requests.append(parsed)
+        return evaluate_parsed_rules(parsed)
 
-    monkeypatch.setattr(native._native, "evaluate_rules_parts", recording)
+    monkeypatch.setattr(native._native, "evaluate_parsed_rules", recording)
     return requests
 
 

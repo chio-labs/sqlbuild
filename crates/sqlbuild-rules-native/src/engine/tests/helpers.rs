@@ -3,7 +3,8 @@ use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 use crate::engine::main::evaluate::evaluate_json;
-use crate::engine::main::evaluate_parts::evaluate_parts;
+use crate::engine::main::evaluate_parsed::evaluate_parsed;
+use crate::engine::main::parse_parts::parse_parts;
 
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
     json!({
@@ -434,8 +435,10 @@ pub(crate) fn evaluate_split(rest: &Value, models: &[Value]) -> Result<Value, St
         .map(|payload| format!("{:x}", Sha256::digest(payload)))
         .collect();
     let rest_json = serde_json::to_vec(rest).map_err(|error| error.to_string())?;
-    serde_json::from_str(&evaluate_parts(&rest_json, &payloads, &digests)?)
-        .map_err(|error| error.to_string())
+    serde_json::from_str(&evaluate_parsed(parse_parts(
+        &rest_json, &payloads, &digests,
+    )?)?)
+    .map_err(|error| error.to_string())
 }
 
 pub(crate) fn evaluate_whole(rest: &Value, models: &[Value]) -> Result<Value, String> {
