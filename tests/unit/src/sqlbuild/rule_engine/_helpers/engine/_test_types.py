@@ -202,3 +202,20 @@ class NativeBuildIdentityTestCase:
     description: str
     expected_rebuilt_evaluations: int
     expected_warm_evaluations: int
+
+
+@dataclass(frozen=True)
+class NativeRequestBuildErrorTestCase:
+    """One programming error raised while building the native rules request."""
+
+    description: str
+    expected_error: Exception
+
+
+@dataclass(frozen=True)
+class NativeRequestEncodeErrorTestCase:
+    """One request value the JSON encoder rejects."""
+
+    description: str
+    rejected_value: object
+    expected_message: str

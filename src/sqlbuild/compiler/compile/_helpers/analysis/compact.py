@@ -180,8 +180,7 @@ from sqlbuild.compiler.sql_analysis.types import NativeQueryAnalysisModule
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
-_LARGE_COMPACT_PROJECT_MODELS: int = 10_000
-_LARGE_COMPACT_SQL_BYTES: int = 48 * 1024 * 1024
+_COMPACT_ANALYSIS_WORKERS: int = 4
 _NATIVE_LEGACY_FALLBACK: str = "native project type recovery requires legacy fallback"
 
 
@@ -886,14 +885,9 @@ def _prepare_compact_analysis_batch(
 
 
 def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> object:
-    """Bound resident analysis heaps before the isolated custom-rule host starts."""
+    """Analyse every project size with the full worker pool; the rules phase sets peak memory."""
 
-    large_project: bool = (
-        len(preparation.projections) >= _LARGE_COMPACT_PROJECT_MODELS
-        and sum(len(sql.encode("utf-8")) for sql in preparation.cleaned_sql)
-        >= _LARGE_COMPACT_SQL_BYTES
-    )
-    workers: int = 1 if large_project else 4
+    workers: int = _COMPACT_ANALYSIS_WORKERS
     if preparation.binding_catalog is not None:
         return orjson.loads(
             preparation.binding_catalog.native.analyze_compact(
