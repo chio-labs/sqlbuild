@@ -34,7 +34,8 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
                 "Benchmark projects are generated per side: the baseline runs projects from its "
                 "own generator (v0.126.1), the candidate from the candidate's.",
                 "Limits: wall +25% (ignored under 0.5 s), CPU +25% (ignored under 0.5 s), "
-                "peak RSS +25% (ignored under 32 MiB).",
+                "peak RSS +25% (ignored under 32 MiB). Cold, warm and one-model edit compiles "
+                "use +15% for wall and CPU.",
                 "| `compile (warm cache)` | 6.00 → 6.10 | 1.017x | 6.50 → 6.40 | 0.985x "
                 "| 500 → 505 | 1.010x | ✅ ok |",
                 "**Result: passed.**",
@@ -56,6 +57,24 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
                 "| 900 → 1800 | **2.000x** | ❌ regressed |",
                 "**Result: failed.** plan --json: wall 2.074x exceeds 1.25x; plan --json: CPU "
                 "2.036x exceeds 1.25x; plan --json: peak RSS 2.000x exceeds 1.25x.",
+            ),
+            unexpected_fragments=("**Result: passed.**",),
+        ),
+        ComparisonMarkdownTestCase(
+            description="a compile regression is judged against the compile time limit",
+            commands=(
+                comparison(
+                    name="compile (one-model edit)",
+                    baseline=((6.0, 7.0, 450),) * 3,
+                    candidate=((7.2, 7.1, 450),) * 3,
+                    max_time_ratio=1.15,
+                ),
+            ),
+            skipped=(),
+            expected_fragments=(
+                "| `compile (one-model edit)` | 6.00 → 7.20 | **1.200x** | 7.00 → 7.10 | 1.014x "
+                "| 450 → 450 | 1.000x | ❌ regressed |",
+                "**Result: failed.** compile (one-model edit): wall 1.200x exceeds 1.15x.",
             ),
             unexpected_fragments=("**Result: passed.**",),
         ),

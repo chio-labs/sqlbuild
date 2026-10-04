@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 MAX_WALL_RATIO: float = 1.25
 MAX_CPU_RATIO: float = 1.25
 MAX_RSS_RATIO: float = 1.25
+MAX_COMPILE_TIME_RATIO: float = 1.15
 MIN_WALL_REGRESSION_SECONDS: float = 0.5
 MIN_CPU_REGRESSION_SECONDS: float = 0.5
 MIN_RSS_REGRESSION_BYTES: int = 32 * 1024 * 1024
@@ -19,6 +20,7 @@ DEFAULT_RUNS: int = 5
 DEFAULT_PYTHON: str = "3.12"
 DEFAULT_INSPECTION_MODELS: int = 3_000
 DEFAULT_BUILD_MODELS: int = 1_000
+DEFAULT_DENSE_MODELS: int = 3_000
 COMMAND_TIMEOUT_SECONDS: float = 900.0
 
 PACKAGE_NAME: str = "sqlbuild"
@@ -37,12 +39,14 @@ BASELINE_LABEL: str = "baseline"
 CANDIDATE_LABEL: str = "candidate"
 INSPECTION_PROJECT: str = "inspection"
 BUILD_PROJECT: str = "build"
+DENSE_PROJECT: str = "dense"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset({"VIRTUAL_ENV", "GITHUB_STEP_SUMMARY"})
 EXCLUDED_ENVIRONMENT_PREFIX: str = "DBT_"
 TIME_FORMAT: str = "%e %M %U %S"
 COMPILE_COMMAND: str = "compile"
 STDERR_TAIL_CHARACTERS: int = 2_000
 PRISTINE_DIRECTORY: str = "pristine"
+TARGET_DIRECTORY: str = "target"
 BASELINE_GENERATED_DIRECTORY: str = "baseline-generated"
 BASELINE_SOURCE_DIRECTORY: str = "baseline-source"
 RELEASE_TAG_PREFIX: str = "v"
@@ -52,17 +56,25 @@ BASELINE_GENERATOR_ENTRY: str = (
     "write_pristine_projects("
     "root=Path(sys.argv[1]), inspection_models=int(sys.argv[2]), build_models=int(sys.argv[3]))"
 )
+DENSE_GENERATOR_ENTRY: str = (
+    "import sys; from pathlib import Path; "
+    "from scripts.cold_compile_performance._helpers.dense_project import "
+    "write_dense_compile_project; "
+    "write_dense_compile_project(project_dir=Path(sys.argv[1]), model_count=int(sys.argv[2]))"
+)
 
 BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
     BenchmarkCommand(
         name="compile (no cache)",
         project=INSPECTION_PROJECT,
         sqb_args=("compile", "--json", "--no-cache"),
+        max_time_ratio=MAX_COMPILE_TIME_RATIO,
     ),
     BenchmarkCommand(
         name="compile (warm cache)",
         project=INSPECTION_PROJECT,
         sqb_args=("compile", "--json"),
+        max_time_ratio=MAX_COMPILE_TIME_RATIO,
     ),
     BenchmarkCommand(
         name="plan --json",
@@ -102,6 +114,33 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
         ),
     ),
     BenchmarkCommand(
+        name="compile (one-model edit)",
+        project=INSPECTION_PROJECT,
+        sqb_args=("compile", "--json"),
+        edits_model=True,
+        max_time_ratio=MAX_COMPILE_TIME_RATIO,
+    ),
+    BenchmarkCommand(
+        name="dense compile (warm cache)",
+        project=DENSE_PROJECT,
+        sqb_args=("compile", "--json"),
+        max_time_ratio=MAX_COMPILE_TIME_RATIO,
+    ),
+    BenchmarkCommand(
+        name="dense compile (one-model edit)",
+        project=DENSE_PROJECT,
+        sqb_args=("compile", "--json"),
+        edits_model=True,
+        max_time_ratio=MAX_COMPILE_TIME_RATIO,
+    ),
+    BenchmarkCommand(
+        name="dense compile (no cache)",
+        project=DENSE_PROJECT,
+        sqb_args=("compile", "--json", "--no-cache"),
+        removes_target=True,
+        max_time_ratio=MAX_COMPILE_TIME_RATIO,
+    ),
+    BenchmarkCommand(
         name="build (empty warehouse)",
         project=BUILD_PROJECT,
         sqb_args=("build",),
@@ -114,3 +153,4 @@ INSPECTION_WARMUPS: tuple[tuple[str, ...], ...] = (
     ("scope", f"model:{SHARED_DIAMOND_ROLLUP}", "--json"),
 )
 BUILD_WARMUPS: tuple[tuple[str, ...], ...] = ((COMPILE_COMMAND, "--json"),)
+DENSE_WARMUPS: tuple[tuple[str, ...], ...] = ((COMPILE_COMMAND, "--json"),)

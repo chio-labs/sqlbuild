@@ -21,17 +21,18 @@ from scripts.release_performance.models import (
 
 
 def metric_verdicts(*, comparison: CommandComparison) -> tuple[MetricVerdict, ...]:
-    """Compare median wall and CPU time and worst-run peak RSS of one command."""
+    """Compare median wall and CPU time, against the command's own time ratio if set, and RSS."""
 
     baseline: CommandSample = summary_sample(samples=comparison.baseline)
     candidate: CommandSample = summary_sample(samples=comparison.candidate)
+    time_ratio: float | None = comparison.max_time_ratio
     return (
         _verdict(
             command=comparison.name,
             metric="wall",
             baseline=baseline.wall_seconds,
             candidate=candidate.wall_seconds,
-            max_ratio=MAX_WALL_RATIO,
+            max_ratio=time_ratio or MAX_WALL_RATIO,
             floor=MIN_WALL_REGRESSION_SECONDS,
         ),
         _verdict(
@@ -39,7 +40,7 @@ def metric_verdicts(*, comparison: CommandComparison) -> tuple[MetricVerdict, ..
             metric="CPU",
             baseline=baseline.cpu_seconds,
             candidate=candidate.cpu_seconds,
-            max_ratio=MAX_CPU_RATIO,
+            max_ratio=time_ratio or MAX_CPU_RATIO,
             floor=MIN_CPU_REGRESSION_SECONDS,
         ),
         _verdict(

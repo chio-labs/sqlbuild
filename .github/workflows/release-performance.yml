@@ -21,6 +21,10 @@ on:
       - .github/workflows/release-performance.yml
       - scripts/compare_release_performance.py
       - scripts/release_performance/**
+      - scripts/compile_performance_ratio/_helpers/edit.py
+      - scripts/compile_performance_ratio/constants.py
+      - scripts/compile_performance_ratio/exceptions.py
+      - scripts/cold_compile_performance/_helpers/dense_project.py
 
 permissions:
   contents: read

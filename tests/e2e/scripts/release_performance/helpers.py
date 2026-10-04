@@ -19,6 +19,15 @@ def write_pristine_projects(*, root: Path, inspection_models: int, build_models:
         (project / "BASELINE_MARKER").write_text("baseline", encoding="utf-8")
     return pristine
 """
+_DENSE_MARKING_WRAPPER: str = """
+
+_unmarked_write_dense_compile_project = write_dense_compile_project
+
+
+def write_dense_compile_project(*, project_dir: Path, model_count: int) -> None:
+    _unmarked_write_dense_compile_project(project_dir=project_dir, model_count=model_count)
+    (project_dir / "BASELINE_MARKER").write_text("baseline", encoding="utf-8")
+"""
 
 
 def write_marked_baseline_source(*, repo_root: Path, destination: Path) -> Path:
@@ -31,5 +40,11 @@ def write_marked_baseline_source(*, repo_root: Path, destination: Path) -> Path:
     benchmark: Path = destination / "scripts" / "release_performance" / "_helpers" / "benchmark.py"
     _ = benchmark.write_text(
         benchmark.read_text(encoding="utf-8") + _MARKING_WRAPPER, encoding="utf-8"
+    )
+    dense: Path = (
+        destination / "scripts" / "cold_compile_performance" / "_helpers" / "dense_project.py"
+    )
+    _ = dense.write_text(
+        dense.read_text(encoding="utf-8") + _DENSE_MARKING_WRAPPER, encoding="utf-8"
     )
     return destination

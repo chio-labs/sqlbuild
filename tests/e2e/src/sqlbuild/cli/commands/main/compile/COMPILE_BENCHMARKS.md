@@ -85,27 +85,48 @@ built project, change the queries of a few models (and rename one table in the s
 rename discovery matches it against stored fingerprints), and bound the next `sqb plan --json`.
 All cases carry `models_3000` identifiers so they run only in the 3,000-model fresh-process job.
 
+## Same-runner comparison with the base branch
+
+Absolute budgets must absorb the spread between hosted runners, so every pull request that touches
+the compiler also runs `scripts/compare_compile_performance.py` on the dense and the fresh
+3,000-model benchmark. Base and head each compile a project written by their own generator, on the
+same runner, three alternating runs per mode, and the medians of wall and CPU time must stay within
+1.10x of base for each mode:
+
+- cold: `sqb compile --json --no-cache` after removing `target`, after one untimed warm-up;
+- warm: an unchanged `sqb compile --json` after one untimed run that writes the cache;
+- edit: `sqb compile --json` after the same one-model edit as the release comparison below.
+
+The warm and edit modes reuse the cold project. A warm run that misses the analysis cache, or an
+edit run that does not, stops the comparison because it would measure the wrong path.
+
 ## Release comparison with the previous release
 
 Fixed ceilings miss gradual creep and slowdowns that stay under a loose limit, so every release
 pull request also compares the candidate with the previous published release on the same runner.
 `scripts/compare_release_performance.py` installs the candidate wheel and the baseline from PyPI
-into separate Python 3.12 environments, generates the inspection and build benchmarks above once,
-and gives each version its own copy with compile, lineage and scope caches warmed by that version.
+into separate Python 3.12 environments, generates the inspection, build and dense benchmarks
+with each version's own generator, and gives each version its own copy with compile, lineage and scope caches warmed by that version.
 It then runs each command alternately for baseline and candidate, five times each, and compares
 the medians of wall time and CPU time (user+sys) and the worst-run peak RSS. Peak RSS depends on
 whether concurrent phases overlap, so it lands on one of a few levels from run to run; a median
 flips between those levels, while the worst run is stable:
 
-- warm and uncached `sqb compile --json`, `sqb plan --json`, `sqb dag --json` and
-  `sqb scope --json` on the 3,000-model inspection benchmark;
+- uncached, warm and one-model edit `sqb compile --json`, `sqb plan --json`, `sqb dag --json`
+  and `sqb scope --json` on the 3,000-model inspection benchmark. The edit run adds a
+  revision-specific comment before the query of the middle model, so every run recompiles one
+  changed model against a warm cache; it runs after the other inspection commands;
 - `sqb lineage` downstream from the hub, upstream from the rollup, and the upstream column trace of
   `shared_orders_rollup.amount`;
+- uncached, warm and one-model edit `sqb compile --json` on the 3,000-model dense all-rules
+  benchmark, which each version generates with its own `write_dense_compile_project`. The
+  uncached runs remove `target` first, so built-in and custom Rules run as in the dense guard;
 - `sqb build` of the 1,000-model build benchmark from an empty warehouse, restored before each run.
 
 A command fails when a candidate value exceeds the baseline by more than 25% and by more than
-0.5 s (wall and CPU) or 32 MiB (peak RSS); the limits live in
-`scripts/release_performance/constants.py`. The baseline defaults to the highest version below
+0.5 s (wall and CPU) or 32 MiB (peak RSS). The six compile commands use a fixed 15% wall and CPU
+limit instead, so small per-pull-request compile regressions cannot accumulate across a release
+unnoticed. The limits live in `scripts/release_performance/constants.py`. The baseline defaults to the highest version below
 the candidate that is installable from PyPI, or release-tagged but not yet on PyPI; yanked releases
 never count. A freshly tagged baseline is awaited until its wheels
 are on PyPI, installing from the uncompressed simple index's wheel URL when the CDN still lags. A

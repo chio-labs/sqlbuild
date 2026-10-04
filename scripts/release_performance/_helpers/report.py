@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.release_performance._helpers.verdict import metric_verdicts, regression_messages
 from scripts.release_performance.constants import (
+    MAX_COMPILE_TIME_RATIO,
     MAX_CPU_RATIO,
     MAX_RSS_RATIO,
     MAX_WALL_RATIO,
@@ -37,7 +38,8 @@ def comparison_markdown(*, comparison: ReleaseComparison) -> str:
         f"Limits: wall {_percent(MAX_WALL_RATIO)} (ignored under "
         f"{MIN_WALL_REGRESSION_SECONDS:g} s), CPU {_percent(MAX_CPU_RATIO)} (ignored under "
         f"{MIN_CPU_REGRESSION_SECONDS:g} s), peak RSS {_percent(MAX_RSS_RATIO)} (ignored under "
-        f"{MIN_RSS_REGRESSION_BYTES // _MIB} MiB).",
+        f"{MIN_RSS_REGRESSION_BYTES // _MIB} MiB). Cold, warm and one-model edit compiles use "
+        f"{_percent(MAX_COMPILE_TIME_RATIO)} for wall and CPU.",
         "",
         "| Command | Wall (s) | Wall ratio | CPU (s) | CPU ratio | Peak RSS (MiB) | RSS ratio "
         "| Result |",

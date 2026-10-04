@@ -18,6 +18,16 @@ def write_pristine_projects(*, root: Path, inspection_models: int, build_models:
 FAILING_GENERATOR: str = """def write_pristine_projects(*, root, inspection_models, build_models):
     raise RuntimeError("baseline generator exploded")
 """
+MARKER_DENSE_GENERATOR: str = """from pathlib import Path
+
+
+def write_dense_compile_project(*, project_dir: Path, model_count: int) -> None:
+    project_dir.mkdir(parents=True)
+    (project_dir / "BASELINE_MARKER").write_text(str(model_count))
+"""
+FAILING_DENSE_GENERATOR: str = """def write_dense_compile_project(*, project_dir, model_count):
+    raise RuntimeError("baseline dense generator exploded")
+"""
 
 
 def comparison(
@@ -25,6 +35,7 @@ def comparison(
     name: str,
     baseline: tuple[tuple[float, float, int], ...],
     candidate: tuple[tuple[float, float, int], ...],
+    max_time_ratio: float | None = None,
 ) -> CommandComparison:
     """Build a comparison from (wall seconds, CPU seconds, peak RSS MiB) samples."""
 
@@ -32,6 +43,7 @@ def comparison(
         name=name,
         baseline=tuple(_sample(values=values) for values in baseline),
         candidate=tuple(_sample(values=values) for values in candidate),
+        max_time_ratio=max_time_ratio,
     )
 
 
@@ -54,6 +66,17 @@ def write_baseline_source(*, root: Path, generator: str) -> Path:
     for package in (root / "scripts", helpers.parent, helpers):
         _ = (package / "__init__.py").write_text("", encoding="utf-8")
     _ = (helpers / "benchmark.py").write_text(generator, encoding="utf-8")
+    return root
+
+
+def write_baseline_dense_source(*, root: Path, generator: str) -> Path:
+    """Write a source tree whose only content is a dense benchmark generator."""
+
+    helpers: Path = root / "scripts" / "cold_compile_performance" / "_helpers"
+    helpers.mkdir(parents=True)
+    for package in (root / "scripts", helpers.parent, helpers):
+        _ = (package / "__init__.py").write_text("", encoding="utf-8")
+    _ = (helpers / "dense_project.py").write_text(generator, encoding="utf-8")
     return root
 
 

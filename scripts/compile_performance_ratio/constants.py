@@ -1,10 +1,26 @@
 """Stable constants for same-runner compile performance comparisons."""
 
+import re
+
 DEFAULT_RUNS: int = 3
 DEFAULT_MAX_RATIO: float = 1.10
 DENSE_KIND: str = "dense"
 FRESH_KIND: str = "fresh"
 PROJECT_KINDS: tuple[str, ...] = (DENSE_KIND, FRESH_KIND)
+COLD_MODE: str = "cold"
+WARM_MODE: str = "warm"
+EDIT_MODE: str = "edit"
+COMPILE_MODES: tuple[str, ...] = (COLD_MODE, WARM_MODE, EDIT_MODE)
+MODE_TITLES: dict[str, str] = {
+    COLD_MODE: "cold compile without cache",
+    WARM_MODE: "unchanged warm compile",
+    EDIT_MODE: "one-model edit on a warm cache",
+}
+ANALYSIS_CACHE_MISSES: str = "analysis_cache_misses"
+MODELS_DIRECTORY: str = "models"
+MODEL_FILE_PATTERN: str = "*.sql"
+EDIT_COMMENT: str = "-- Benchmark edit {revision}.\n"
+STATEMENT_START: re.Pattern[str] = re.compile(r"^(WITH|SELECT)\b", re.MULTILINE)
 BASE_LABEL: str = "base"
 HEAD_LABEL: str = "head"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset({"VIRTUAL_ENV"})

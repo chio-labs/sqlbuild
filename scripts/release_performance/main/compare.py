@@ -8,6 +8,7 @@ from pathlib import Path
 from scripts.release_performance._helpers.workflow import run_release_comparison
 from scripts.release_performance.constants import (
     DEFAULT_BUILD_MODELS,
+    DEFAULT_DENSE_MODELS,
     DEFAULT_INSPECTION_MODELS,
     DEFAULT_PYTHON,
     DEFAULT_RUNS,
@@ -39,6 +40,7 @@ def _parse_args(argv: list[str] | None) -> ComparisonOptions:
     parser.add_argument("--python", default=DEFAULT_PYTHON)
     parser.add_argument("--inspection-models", type=int, default=DEFAULT_INSPECTION_MODELS)
     parser.add_argument("--build-models", type=int, default=DEFAULT_BUILD_MODELS)
+    parser.add_argument("--dense-models", type=int, default=DEFAULT_DENSE_MODELS)
     parser.add_argument(
         "--baseline-source",
         type=Path,
@@ -60,6 +62,7 @@ def _parse_args(argv: list[str] | None) -> ComparisonOptions:
         python=args.python,
         inspection_models=args.inspection_models,
         build_models=args.build_models,
+        dense_models=args.dense_models,
         work_dir=args.work_dir,
         output=args.output,
         baseline_source=args.baseline_source,

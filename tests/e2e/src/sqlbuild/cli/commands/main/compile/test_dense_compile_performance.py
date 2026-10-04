@@ -29,7 +29,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     run_dense_warm_edit_benchmark,
 )
 
-_GIB: int = 1024 * 1024 * 1024
+_MIB: int = 1024 * 1024
+_GIB: int = 1024 * _MIB
 
 
 @pytest.mark.performance
@@ -40,28 +41,28 @@ _GIB: int = 1024 * 1024 * 1024
         DenseCompileGuardTestCase(
             "dense_models_1000_all_rules",
             1000,
-            14.0,
-            3 * _GIB // 2,
+            13.0,
+            800 * _MIB,
             "6ea005eef07fe6d2ec47980bc573903efa060cfde55aa5488e63b29ce846280e",
         ),
         DenseCompileGuardTestCase(
             "dense_models_3000_all_rules",
             3000,
-            45.0,
-            11 * _GIB // 4,
+            25.0,
+            3 * _GIB // 2,
             "3d26ef1a4d30ea96dd97d60b2e2f6c93473e354099138a01d74b136700c9f022",
         ),
         DenseCompileGuardTestCase(
             "dense_models_5000_all_rules",
             5000,
-            75.0,
-            13 * _GIB // 4,
+            42.0,
+            9 * _GIB // 4,
             "bc6b60e90118d66f3217a5f04f104ae91f657a6356f4d19844614d1ba48b0012",
         ),
         DenseCompileGuardTestCase(
             "dense_models_10000_all_rules",
             10000,
-            145.0,
+            77.0,
             13 * _GIB // 4,
             "913a08c2277304efacf75e293728767a3fa416f6b32f5488dca6ab5baea80668",
         ),
@@ -138,9 +139,9 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             "dense_models_3000_warm_and_one_edit",
             3000,
             1521,
-            22.0,
-            24.0,
-            11 * _GIB // 4,
+            11.0,
+            12.0,
+            3 * _GIB // 2,
             "3d26ef1a4d30ea96dd97d60b2e2f6c93473e354099138a01d74b136700c9f022",
             "f7f8a3d881496664ec7e293144d93b8b8e486a04eba830d9cc6500d1b28147f3",
             3,
@@ -149,9 +150,9 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             "dense_models_5000_warm_and_one_edit",
             5000,
             2521,
-            36.0,
-            38.0,
-            13 * _GIB // 4,
+            19.0,
+            21.0,
+            9 * _GIB // 4,
             "bc6b60e90118d66f3217a5f04f104ae91f657a6356f4d19844614d1ba48b0012",
             "571fe58493234057c7128b4929d3518532731192f6fef85da0496788826bb172",
             3,

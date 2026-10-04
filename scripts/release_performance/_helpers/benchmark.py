@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
+from scripts.compile_performance_ratio._helpers.edit import apply_one_model_edit
 from scripts.compile_performance_ratio._helpers.measure import run_checkout_generator
 from scripts.release_performance.constants import (
     BASELINE_GENERATOR_ENTRY,
@@ -18,12 +20,16 @@ from scripts.release_performance.constants import (
     BUILD_WARMUPS,
     COMMAND_TIMEOUT_SECONDS,
     COMPILE_COMMAND,
+    DENSE_GENERATOR_ENTRY,
+    DENSE_PROJECT,
+    DENSE_WARMUPS,
     EXCLUDED_ENVIRONMENT_KEYS,
     EXCLUDED_ENVIRONMENT_PREFIX,
     INSPECTION_PROJECT,
     INSPECTION_WARMUPS,
     PRISTINE_DIRECTORY,
     STDERR_TAIL_CHARACTERS,
+    TARGET_DIRECTORY,
     TIME_FORMAT,
 )
 from scripts.release_performance.exceptions import ReleasePerformanceError
@@ -58,19 +64,30 @@ def write_baseline_pristine_projects(
 ) -> Path:
     """Generate the baseline's benchmarks with the baseline source's own generator."""
 
-    completed: subprocess.CompletedProcess[str] = run_checkout_generator(
-        checkout=source,
-        python=Path(sys.executable).absolute(),
+    _run_baseline_generator(
+        source=source,
         entry=BASELINE_GENERATOR_ENTRY,
         arguments=(str(root), str(inspection_models), str(build_models)),
-        environment=_environment(),
+        description="benchmark",
     )
-    if completed.returncode != 0:
-        raise ReleasePerformanceError(
-            f"Baseline benchmark generation with the generator in {source} failed with exit "
-            f"{completed.returncode}:\n{completed.stderr[-STDERR_TAIL_CHARACTERS:]}"
-        )
     return root / PRISTINE_DIRECTORY
+
+
+def write_dense_project(*, pristine: Path, models: int) -> None:
+    """Generate the dense all-rules benchmark beside the other pristine projects."""
+
+    write_dense_compile_project(project_dir=pristine / DENSE_PROJECT, model_count=models)
+
+
+def write_baseline_dense_project(*, source: Path, pristine: Path, models: int) -> None:
+    """Generate the baseline's dense benchmark with the baseline source's own generator."""
+
+    _run_baseline_generator(
+        source=source,
+        entry=DENSE_GENERATOR_ENTRY,
+        arguments=(str(pristine / DENSE_PROJECT), str(models)),
+        description="dense benchmark",
+    )
 
 
 def prepare_version_projects(
@@ -78,13 +95,17 @@ def prepare_version_projects(
 ) -> dict[str, Path]:
     """Copy the pristine projects for one version and warm its caches with untimed runs."""
 
+    project_warmups: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
+        (INSPECTION_PROJECT, INSPECTION_WARMUPS),
+        (DENSE_PROJECT, DENSE_WARMUPS),
+        (BUILD_PROJECT, BUILD_WARMUPS),
+    )
     projects: dict[str, Path] = {
-        INSPECTION_PROJECT: root / version.label / INSPECTION_PROJECT,
-        BUILD_PROJECT: root / version.label / BUILD_PROJECT,
+        name: root / version.label / name for name, _warmups in project_warmups
     }
     logs: Path = root / version.label / "logs"
     logs.mkdir(parents=True, exist_ok=True)
-    for name, warmups in ((INSPECTION_PROJECT, INSPECTION_WARMUPS), (BUILD_PROJECT, BUILD_WARMUPS)):
+    for name, warmups in project_warmups:
         _ = shutil.copytree(pristine / name, projects[name])
         for index, sqb_args in enumerate(warmups):
             output: Path = _run_sqb(
@@ -117,6 +138,10 @@ def compare_command(
             project_dir: Path = projects[version.label][command.project]
             if command.project == BUILD_PROJECT:
                 _reset_build_project(project_dir=project_dir)
+            if command.removes_target:
+                shutil.rmtree(project_dir / TARGET_DIRECTORY, ignore_errors=True)
+            if command.edits_model:
+                _ = apply_one_model_edit(project_dir=project_dir, revision=run)
             sample: CommandSample = _run_sqb(
                 version=version,
                 project_dir=project_dir,
@@ -136,7 +161,25 @@ def compare_command(
         name=command.name,
         baseline=tuple(samples[baseline.label]),
         candidate=tuple(samples[candidate.label]),
+        max_time_ratio=command.max_time_ratio,
     )
+
+
+def _run_baseline_generator(
+    *, source: Path, entry: str, arguments: tuple[str, ...], description: str
+) -> None:
+    completed: subprocess.CompletedProcess[str] = run_checkout_generator(
+        checkout=source,
+        python=Path(sys.executable).absolute(),
+        entry=entry,
+        arguments=arguments,
+        environment=_environment(),
+    )
+    if completed.returncode != 0:
+        raise ReleasePerformanceError(
+            f"Baseline {description} generation with the generator in {source} failed with exit "
+            f"{completed.returncode}:\n{completed.stderr[-STDERR_TAIL_CHARACTERS:]}"
+        )
 
 
 def _reset_build_project(*, project_dir: Path) -> None:
