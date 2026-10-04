@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.134.1](https://github.com/chio-labs/sqlbuild/compare/v0.134.0...v0.134.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **config:** use the query warehouse for standalone test, scenario and janitor ([#942](https://github.com/chio-labs/sqlbuild/issues/942)) ([311d954](https://github.com/chio-labs/sqlbuild/commit/311d95460ace05463b3f4961192c82e84ee3b13c))
+
 ## [0.134.0](https://github.com/chio-labs/sqlbuild/compare/v0.133.6...v0.134.0) (2026-10-04)
 
 
