@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.133.5](https://github.com/chio-labs/sqlbuild/compare/v0.133.4...v0.133.5) (2026-10-04)
+
+
+### Performance Improvements
+
+* **compile:** read SQL-test relation markers from the parse tree ([#932](https://github.com/chio-labs/sqlbuild/issues/932)) ([d80af81](https://github.com/chio-labs/sqlbuild/commit/d80af8168155f958f133b68a1363c8c0ca8581e6))
+
 ## [0.133.4](https://github.com/chio-labs/sqlbuild/compare/v0.133.3...v0.133.4) (2026-10-04)
 
 
