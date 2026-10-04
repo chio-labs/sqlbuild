@@ -62,7 +62,7 @@ _GIB: int = 1024 * 1024 * 1024
             "dense_models_10000_all_rules",
             10000,
             145.0,
-            4 * _GIB,
+            7 * _GIB // 2,
             "913a08c2277304efacf75e293728767a3fa416f6b32f5488dca6ab5baea80668",
         ),
     ),

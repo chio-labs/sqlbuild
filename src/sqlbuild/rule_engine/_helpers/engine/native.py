@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -54,6 +54,13 @@ from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
 
+@dataclass(frozen=True)
+class _PreparedNativeRequest:
+    identity: str | None
+    reused: str | None
+    request_text: str | None
+
+
 def evaluate_native(
     *,
     project: CompiledProject,
@@ -74,31 +81,20 @@ def evaluate_native(
         if custom_payloads is None
         else custom_payloads
     )
-    request: dict[str, object] = {
-        "version": RULES_NATIVE_API_VERSION,
-        "project_dir": str(project_dir.resolve()),
-        "dialect": dialect,
-        "config": _config_payload(config),
-        "models": _model_payloads(
-            project=project,
-            dialect=dialect,
-            include_type_proof=any(
-                _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
-            ),
+    prepared: _PreparedNativeRequest = _prepare_native_request(
+        request_json=_serialise_native_request(
+            _native_request(
+                project=project,
+                config=config,
+                project_dir=project_dir,
+                dialect=dialect,
+                initial_findings=initial_findings,
+                custom_payloads=payloads,
+            )
         ),
-        "sql_tests": _sql_test_payloads(project),
-        "sql_scenarios": _sql_scenario_payloads(project),
-        "public_enums": [
-            _enum_payload(declaration) for declaration in project.public_enums.values()
-        ],
-        "public_constants": [
-            _constant_payload(declaration) for declaration in project.public_constants.values()
-        ],
-        "scope_index": scope_metadata_projection(index=project.scope_index),
-        "initial_findings": [_finding_payload(finding) for finding in initial_findings],
-        "defer_suppressions": True,
-        "custom_rules": payloads,
-    }
+        project_dir=project_dir,
+        cache_enabled=config.cache.enabled,
+    )
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-rules") as pool:
         custom_future: Future[CustomRulesOutcome] | None = (
             custom_outcome
@@ -114,15 +110,14 @@ def evaluate_native(
                 verify_determinism=verify_determinism,
             )
         )
+        reused: bool = prepared.reused is not None
         try:
-            response_json: str
-            reused: bool
-            response_json, reused = _evaluate_request(
-                request=request, project_dir=project_dir, cache_enabled=config.cache.enabled
+            response: object = orjson.loads(
+                _evaluate_request(prepared=prepared, project_dir=project_dir)
             )
-            response: object = orjson.loads(response_json)
         except (ValueError, TypeError) as error:
             raise RulesError(str(error)) from error
+        del prepared
         custom: CustomRulesOutcome = (
             CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
             if custom_future is None
@@ -157,6 +152,42 @@ def evaluate_native(
         built_in_ms=0 if reused else int(payload.get("built_in_ms", 0)),
         custom_ms=custom.custom_ms,
     )
+
+
+def _native_request(
+    *,
+    project: CompiledProject,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    initial_findings: tuple[Finding, ...],
+    custom_payloads: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "version": RULES_NATIVE_API_VERSION,
+        "project_dir": str(project_dir.resolve()),
+        "dialect": dialect,
+        "config": _config_payload(config),
+        "models": _model_payloads(
+            project=project,
+            dialect=dialect,
+            include_type_proof=any(
+                _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
+            ),
+        ),
+        "sql_tests": _sql_test_payloads(project),
+        "sql_scenarios": _sql_scenario_payloads(project),
+        "public_enums": [
+            _enum_payload(declaration) for declaration in project.public_enums.values()
+        ],
+        "public_constants": [
+            _constant_payload(declaration) for declaration in project.public_constants.values()
+        ],
+        "scope_index": scope_metadata_projection(index=project.scope_index),
+        "initial_findings": [_finding_payload(finding) for finding in initial_findings],
+        "defer_suppressions": True,
+        "custom_rules": custom_payloads,
+    }
 
 
 def start_custom_rules(
@@ -206,19 +237,42 @@ def _selected_custom_rules(
     return tuple(rule for rule in catalogue if rule.custom and rule.code in selected)
 
 
-def _evaluate_request(
-    *, request: dict[str, object], project_dir: Path, cache_enabled: bool
-) -> tuple[str, bool]:
-    request_json: bytes = orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str)
-    if not cache_enabled:
-        return _native.evaluate_json(request_json.decode()), False
-    identity: str = native_request_identity(request_json)
-    reused: str | None = read_native_response(project_dir=project_dir, identity=identity)
-    if reused is not None:
-        return reused, True
-    response: str = _native.evaluate_json(request_json.decode())
-    write_native_response(project_dir=project_dir, identity=identity, response=response)
-    return response, False
+def _serialise_native_request(request: dict[str, object]) -> bytes:
+    """Encode the native request, reporting values the encoder rejects as rules errors."""
+
+    try:
+        return orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str)
+    except orjson.JSONEncodeError as error:
+        raise RulesError(str(error)) from error
+
+
+def _prepare_native_request(
+    *, request_json: bytes, project_dir: Path, cache_enabled: bool
+) -> _PreparedNativeRequest:
+    """Resolve the memo and decode once; the caller's bytes die when this returns."""
+
+    identity: str | None = native_request_identity(request_json) if cache_enabled else None
+    reused: str | None = (
+        read_native_response(project_dir=project_dir, identity=identity)
+        if identity is not None
+        else None
+    )
+    return _PreparedNativeRequest(
+        identity=identity,
+        reused=reused,
+        request_text=request_json.decode() if reused is None else None,
+    )
+
+
+def _evaluate_request(*, prepared: _PreparedNativeRequest, project_dir: Path) -> str:
+    if prepared.reused is not None:
+        return prepared.reused
+    response: str = _native.evaluate_json(cast(str, prepared.request_text))
+    if prepared.identity is not None:
+        write_native_response(
+            project_dir=project_dir, identity=prepared.identity, response=response
+        )
+    return response
 
 
 def finalize_native_findings(
