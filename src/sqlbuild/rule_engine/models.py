@@ -292,6 +292,7 @@ class RulesConfig:
     rule_exceptions: tuple[RuleExemption, ...] = ()
     graph_edge_exceptions: tuple[GraphEdgeExclusion, ...] = ()
     rule_ignores: tuple[RuleIgnore, ...] = ()
+    allow_exceptions: bool = True
     select_star_allow: tuple[SelectStarAllow, ...] = ()
     domains: tuple[str, ...] = ()
     approved_source_tokens: tuple[str, ...] = ()

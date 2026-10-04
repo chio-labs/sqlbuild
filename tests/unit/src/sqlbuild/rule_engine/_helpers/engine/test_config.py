@@ -4,14 +4,24 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.rule_engine.exceptions import RulesConfigError, RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import LayoutConfig, RulesConfig, SqlTestRulesConfig
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
+    AllowExceptionsConfigTestCase,
     PolicyLayoutConfigTestCase,
     RuleIgnoreConfigTestCase,
     RulesConfigErrorTestCase,
     SqlTestRulesConfigTestCase,
+)
+
+_EXCEPTION_ENTRY: str = (
+    '[[rules.rule_exceptions]]\nrule = "SQBRSQL004"\npath = "models/orders.sql"\n'
+    'reason = "A reviewed sample"\n'
+)
+_IGNORE_ENTRY: str = (
+    '[[rules.rule_ignores]]\nrules = ["SQBRSQL"]\npaths = ["models/examples/**"]\n'
+    'reason = "Examples keep minimal SQL"\n'
 )
 
 
@@ -151,6 +161,11 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
             expected_error_pattern="must be a normalized path relative to tests/unit",
         ),
         RulesConfigErrorTestCase(
+            description="non-boolean allow_exceptions",
+            source='[rules]\nallow_exceptions = "no"\n',
+            expected_error_pattern="invalid rules config",
+        ),
+        RulesConfigErrorTestCase(
             description="unknown SQL test rules key",
             source='[rules.sql_tests]\npipeline_directory = "pipelines"\nroot = "tests"\n',
             expected_error_pattern="unknown field `root`",
@@ -166,6 +181,81 @@ def test_given_invalid_rules_config_when_loading_then_raises_clear_error(
 
     with pytest.raises(RulesError, match=test_case.expected_error_pattern):
         load_rules_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RulesConfigErrorTestCase(
+            description="exception entry",
+            source=f"[rules]\nallow_exceptions = false\n{_EXCEPTION_ENTRY}",
+            expected_error_pattern=(
+                r"has 1 \[\[rules\.rule_exceptions\]\] entry, which this project does not "
+                r"allow; sqlbuild_project\.toml sets \[rules\] allow_exceptions = false"
+            ),
+        ),
+        RulesConfigErrorTestCase(
+            description="scoped ignore entry",
+            source=f"[rules]\nallow_exceptions = false\n{_IGNORE_ENTRY}",
+            expected_error_pattern=r"has 1 \[\[rules\.rule_ignores\]\] entry,",
+        ),
+        RulesConfigErrorTestCase(
+            description="exceptions and scoped ignores",
+            source=f"[rules]\nallow_exceptions = false\n{_EXCEPTION_ENTRY}{_EXCEPTION_ENTRY}"
+            f"{_IGNORE_ENTRY}",
+            expected_error_pattern=(
+                r"has 2 \[\[rules\.rule_exceptions\]\] entries and "
+                r"1 \[\[rules\.rule_ignores\]\] entry,"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_exceptions_forbidden_when_loading_then_raises_error_with_exact_setting_help(
+    tmp_path: Path,
+    test_case: RulesConfigErrorTestCase,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(test_case.source, encoding="utf-8")
+
+    with pytest.raises(RulesConfigError, match=test_case.expected_error_pattern) as raised:
+        load_rules_config(project_dir=tmp_path)
+
+    assert raised.value.help.endswith(
+        "set this in sqlbuild_project.toml:\n            [rules]\n"
+        "            allow_exceptions = true"
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AllowExceptionsConfigTestCase(
+            description="absent setting allows exceptions",
+            source=_EXCEPTION_ENTRY + _IGNORE_ENTRY,
+            expected_allow_exceptions=True,
+        ),
+        AllowExceptionsConfigTestCase(
+            description="true allows exceptions",
+            source=f"[rules]\nallow_exceptions = true\n{_EXCEPTION_ENTRY}{_IGNORE_ENTRY}",
+            expected_allow_exceptions=True,
+        ),
+        AllowExceptionsConfigTestCase(
+            description="false with only the project-wide ignore list",
+            source='[rules]\nallow_exceptions = false\nignore = ["SQBRSQL004"]\n',
+            expected_allow_exceptions=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_allow_exceptions_setting_when_loading_then_config_records_it(
+    tmp_path: Path,
+    test_case: AllowExceptionsConfigTestCase,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(test_case.source, encoding="utf-8")
+
+    config: RulesConfig = load_rules_config(project_dir=tmp_path)
+
+    assert config.allow_exceptions is test_case.expected_allow_exceptions
 
 
 @pytest.mark.parametrize(

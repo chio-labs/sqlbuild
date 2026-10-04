@@ -28,6 +28,7 @@ from sqlbuild.lint.models import (
     LintRunResult,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.rule_engine.main.load_config import load_rules_config
 
 
 def resolve_lint_config(*, project_dir: Path) -> LintConfig:
@@ -37,11 +38,13 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
     line_width: int = DEFAULT_LINE_WIDTH
     dialect: str = "generic"
     thresholds: dict[str, object] = {}
+    allow_suppressions: bool = True
     config_file: Path = project_dir / PROJECT_CONFIG_FILENAME_KEY
     if config_file.is_file():
         with config_file.open("rb") as handle:
             payload: dict[str, object] = tomllib.load(handle)
         thresholds = _rule_thresholds(payload)
+        allow_suppressions = load_rules_config(project_dir=project_dir).allow_exceptions
         format_section: object = payload.get(FORMAT_SECTION_KEY)
         raw_adapter: object = payload.get(ADAPTER_CONFIG_KEY)
         if isinstance(raw_adapter, str):
@@ -78,6 +81,7 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
             key=MAX_RANKING_ORDER_BY_THRESHOLD,
             default=DEFAULT_MAX_RANKING_ORDER_BY,
         ),
+        allow_suppressions=allow_suppressions,
     )
 
 

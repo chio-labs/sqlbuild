@@ -211,7 +211,8 @@ This makes the same requirement usable in a terminal, JSON output, CI annotation
 
 Intentional departures remain explicit. Exact exceptions and path- or resource-scoped ignores
 require a reason; exact exceptions are stale-checked so obsolete suppressions do not silently
-accumulate. Mandatory compiler correctness cannot be suppressed.
+accumulate. Mandatory compiler correctness cannot be suppressed. A project can forbid exceptions,
+scoped ignores and inline suppressions entirely with `[rules] allow_exceptions = false`.
 
 See [Findings and exceptions](rules/findings-and-exceptions.md) for configuration examples.
 

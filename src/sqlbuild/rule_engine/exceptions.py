@@ -5,6 +5,15 @@ class RulesError(RuntimeError):
     """Raised for invalid compiler rules or execution."""
 
 
+class RulesConfigError(RulesError):
+    """Raised when rules configuration breaks a project policy; help shows the setting to change."""
+
+    def __init__(self, message: str, *, help: str) -> None:
+        super().__init__(message)
+        self.message = message
+        self.help = help
+
+
 class RuleUsageError(RulesError):
     """Raised when a rule or rule test uses the public API incorrectly."""
 

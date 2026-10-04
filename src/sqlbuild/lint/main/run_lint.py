@@ -106,7 +106,11 @@ def run_lint(
     return LintRunResult(
         files_checked=len(files),
         violations=sort_violations(
-            apply_suppressions(violations=violations, contents_by_path=files)
+            apply_suppressions(
+                violations=violations,
+                contents_by_path=files,
+                allow_suppressions=config.allow_suppressions,
+            )
         ),
         formatted_files=(),
         source_texts=files,

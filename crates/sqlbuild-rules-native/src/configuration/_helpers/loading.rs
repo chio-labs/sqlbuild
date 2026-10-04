@@ -51,6 +51,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         "rule_exceptions",
         "graph_edge_exceptions",
         "rule_ignores",
+        "allow_exceptions",
         "select_star_allow",
         "domains",
         "approved_source_tokens",
