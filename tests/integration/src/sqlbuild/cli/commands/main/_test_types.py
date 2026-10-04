@@ -910,3 +910,22 @@ class UnusedOutputDifferentialCase:
     cte_sql: str
     reader_sql: str
     expected_statuses: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WarmTargetTestCase:
+    description: str
+    compile_args: tuple[str, ...]
+    expected_exit_code: int = 0
+    expected_changed: tuple[str, ...] = ()
+    expected_pruned: tuple[str, ...] = ("legacy", "empty")
+    expected_link_kept: bool = True
+
+
+@dataclass(frozen=True)
+class WarmTargetEditTestCase:
+    description: str
+    edited_path: str
+    edited_contents: str
+    expected_changed: tuple[str, ...]
+    expected_exit_code: int = 0
