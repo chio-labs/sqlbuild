@@ -144,7 +144,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             3 * _GIB // 2,
             "3d26ef1a4d30ea96dd97d60b2e2f6c93473e354099138a01d74b136700c9f022",
             "f7f8a3d881496664ec7e293144d93b8b8e486a04eba830d9cc6500d1b28147f3",
-            3,
+            2,
         ),
         DenseWarmEditCompileGuardTestCase(
             "dense_models_5000_warm_and_one_edit",
@@ -155,7 +155,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             9 * _GIB // 4,
             "bc6b60e90118d66f3217a5f04f104ae91f657a6356f4d19844614d1ba48b0012",
             "571fe58493234057c7128b4929d3518532731192f6fef85da0496788826bb172",
-            3,
+            2,
         ),
     ),
     ids=lambda case: case.description,
@@ -207,6 +207,8 @@ def test_given_dense_project_when_compiling_warm_and_after_one_edit_then_matches
     batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(edit)
     assert 0 < misses < test_case.model_count
     assert batch_hits + entry_hits + misses == test_case.model_count
+    # The edited model misses once in built-in model rules and once in SQL lint; custom rules
+    # replay their recorded facts, and every other model's built-in findings stay cached.
     assert edit_timings["rule_cache_misses"] == test_case.expected_edit_rule_cache_misses
     oracle_timings: dict[str, int] = cast(
         dict[str, int], measurements["oracle"].payload["compile_timings"]
