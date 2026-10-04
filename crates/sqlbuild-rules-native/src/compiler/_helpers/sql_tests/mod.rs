@@ -1,7 +1,6 @@
 pub(crate) mod cte_rename;
 pub(crate) mod cte_slices;
 pub(crate) mod cte_sql;
-pub(crate) mod errors;
 pub(crate) mod expected_columns;
 pub(crate) mod extraction;
 pub(crate) mod helper_scope;

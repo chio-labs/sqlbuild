@@ -13,7 +13,6 @@ use crate::compiler::_helpers::sql_tests::cte_slices::SliceDialect;
 use crate::compiler::_helpers::sql_tests::cte_sql::{
     cte_definition_sql, leading_with_prefix_end, with_leading_ctes, with_unique_ctes,
 };
-use crate::compiler::_helpers::sql_tests::errors::RelationMarkerError;
 use crate::compiler::_helpers::sql_tests::expected_columns::expected_columns;
 use crate::compiler::_helpers::sql_tests::helper_scope::{
     ScopeGraph, helper_scope_ctes, merged_scoped_ctes,
@@ -1305,13 +1304,9 @@ fn analysis_template(
                 return None;
             }
             let expression = statements.remove(0);
-            let marker_calls = match relation_marker_calls(&expression) {
-                Ok(marker_calls) => marker_calls,
-                Err(RelationMarkerError) => return None,
-            };
             Some(AnalysisTemplate {
                 existing_cte_names: top_level_cte_names(&expression),
-                marker_calls,
+                marker_calls: relation_marker_calls(&expression),
             })
         })
     })
