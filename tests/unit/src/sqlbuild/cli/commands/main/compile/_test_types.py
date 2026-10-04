@@ -197,3 +197,11 @@ class CompileCyclicCollectionTestCase:
     collection_enabled_before: bool
     expected_enabled_during: bool
     expected_enabled_after: bool
+
+
+@dataclass(frozen=True)
+class CompileImportFootprintTestCase:
+    description: str
+    checked_modules: tuple[str, ...]
+    expected_exit_code: int
+    expected_loaded_modules: tuple[str, ...]

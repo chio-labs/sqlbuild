@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.types import (
     SkillsUpdateCommandHandler,
 )
 from sqlbuild.cli.compile.models import CompileCommandRequest
+from sqlbuild.spec.contracts.types import WarehouseGroup
 
 
 @dataclass(frozen=True)
@@ -79,3 +80,34 @@ class CliEntrypointHandlers:
     run_scope: ScopeCommandHandler
     run_contract: Callable[..., int] | None = None
     run_refactor: Callable[..., int] | None = None
+
+
+@dataclass(frozen=True)
+class CommandWarehouseScope:
+    """The warehouse group and CLI override active for one command invocation."""
+
+    group: WarehouseGroup | None
+    cli_warehouse: str | None = None
+    cli_vars: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AuthoredTargetWarehouse:
+    """One target's authored, unexpanded warehouse for a command group and its file."""
+
+    warehouse: str
+    target_name: str
+    group: WarehouseGroup
+    file_name: str
+
+    @property
+    def source(self) -> str:
+        return f"{self.file_name} [targets.{self.target_name}.warehouses] {self.group.value}"
+
+
+@dataclass(frozen=True)
+class ResolvedWarehouse:
+    """The warehouse one command connects with and where that value came from."""
+
+    warehouse: str | None
+    source: str

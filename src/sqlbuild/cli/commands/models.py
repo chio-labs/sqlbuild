@@ -89,38 +89,6 @@ from sqlbuild.spec.contracts.models import (
     SnapshotsConfig,
     SourceEntry,
 )
-from sqlbuild.spec.contracts.types import WarehouseGroup
-
-
-@dataclass(frozen=True)
-class CommandWarehouseScope:
-    """The warehouse group and CLI override active for one command invocation."""
-
-    group: WarehouseGroup | None
-    cli_warehouse: str | None = None
-    cli_vars: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class AuthoredTargetWarehouse:
-    """One target's authored, unexpanded warehouse for a command group and its file."""
-
-    warehouse: str
-    target_name: str
-    group: WarehouseGroup
-    file_name: str
-
-    @property
-    def source(self) -> str:
-        return f"{self.file_name} [targets.{self.target_name}.warehouses] {self.group.value}"
-
-
-@dataclass(frozen=True)
-class ResolvedWarehouse:
-    """The warehouse one command connects with and where that value came from."""
-
-    warehouse: str | None
-    source: str
 
 
 @dataclass(frozen=True)

@@ -20,14 +20,13 @@ from sqlbuild.cli.commands._helpers.runtime.warehouses import (
     resolve_command_warehouse,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.models import DebugLine, DebugResult
+from sqlbuild.cli.commands.types import DebugCheckStatus
+from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CommandWarehouseScope,
-    DebugLine,
-    DebugResult,
     ResolvedWarehouse,
 )
-from sqlbuild.cli.commands.types import DebugCheckStatus
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.effective_target_namespace import (
     build_effective_target_namespace,
