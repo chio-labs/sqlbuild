@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.134.0](https://github.com/chio-labs/sqlbuild/compare/v0.133.6...v0.134.0) (2026-10-04)
+
+
+### Features
+
+* **config:** select default warehouses per command group ([#941](https://github.com/chio-labs/sqlbuild/issues/941)) ([e0d0706](https://github.com/chio-labs/sqlbuild/commit/e0d0706566bdd1d27ef0038e91435d0441075acc))
+* **rules:** repeated JSON parse rule and allow_exceptions setting ([#936](https://github.com/chio-labs/sqlbuild/issues/936)) ([f16a20a](https://github.com/chio-labs/sqlbuild/commit/f16a20af414f74a97f779fb058ca246a0ea0afcf))
+
+
+### Performance Improvements
+
+* **compile:** lower rules-phase peak memory ([#937](https://github.com/chio-labs/sqlbuild/issues/937)) ([6d35706](https://github.com/chio-labs/sqlbuild/commit/6d35706909caf095517b7cd0de504c7189f94b1a))
+* **rules:** check custom-rule module state with one shared snapshot per call ([#940](https://github.com/chio-labs/sqlbuild/issues/940)) ([013e687](https://github.com/chio-labs/sqlbuild/commit/013e687cb6a84f1f592d54d7c7e43ae397de5098))
+
 ## [0.133.6](https://github.com/chio-labs/sqlbuild/compare/v0.133.5...v0.133.6) (2026-10-04)
 
 
