@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.134.2](https://github.com/chio-labs/sqlbuild/compare/v0.134.1...v0.134.2) (2026-10-04)
+
+
+### Performance Improvements
+
+* **compile:** keep command models out of the compile import path ([#945](https://github.com/chio-labs/sqlbuild/issues/945)) ([86ab18a](https://github.com/chio-labs/sqlbuild/commit/86ab18ae697e6a781e4f964cf0c81cf56096b1be))
+* **rules:** evaluate built-in rules incrementally per model ([#939](https://github.com/chio-labs/sqlbuild/issues/939)) ([6ddd00b](https://github.com/chio-labs/sqlbuild/commit/6ddd00bd2200e20a191895d6796ca0d0afc7a618))
+
 ## [0.134.1](https://github.com/chio-labs/sqlbuild/compare/v0.134.0...v0.134.1) (2026-10-04)
 
 
