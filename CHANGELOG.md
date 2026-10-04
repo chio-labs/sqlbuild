@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.133.3](https://github.com/chio-labs/sqlbuild/compare/v0.133.2...v0.133.3) (2026-10-04)
+
+
+### Performance Improvements
+
+* **rules:** run custom rules across host processes ([#928](https://github.com/chio-labs/sqlbuild/issues/928)) ([ee6ea4f](https://github.com/chio-labs/sqlbuild/commit/ee6ea4f26572938e08b1d0b0f366f78fc4fdf3f8))
+
 ## [0.133.2](https://github.com/chio-labs/sqlbuild/compare/v0.133.1...v0.133.2) (2026-10-03)
 
 
