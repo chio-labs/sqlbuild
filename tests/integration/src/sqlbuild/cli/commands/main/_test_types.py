@@ -929,3 +929,16 @@ class WarmTargetEditTestCase:
     edited_contents: str
     expected_changed: tuple[str, ...]
     expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class RepeatedJsonParseTestCase:
+    """One model body checked by SQBRSQL045 through the CLI."""
+
+    description: str
+    adapter: str
+    header: str
+    sql: str
+    expected_locations: tuple[tuple[int, int], ...]
+    expected_detail: str = ""
+    extra_files: tuple[tuple[str, str], ...] = ()

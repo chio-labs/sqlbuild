@@ -257,7 +257,7 @@ const DEFAULT_RULES: [&str; 13] = [
     INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 44] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 45] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -302,6 +302,7 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 44] = [
     &crate::sql_quality::constants::UNUSED_CTE_OUTPUT,
     &crate::sql_quality::constants::RANKING_SORT_CAP,
     &crate::sql_quality::constants::LONG_LITERAL,
+    &crate::sql_quality::constants::REPEATED_JSON_PARSE,
 ];
 
 fn is_ceremonial_cte_name(name: &str) -> bool {
@@ -442,6 +443,7 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         &crate::sql_quality::models::QualityRequest {
             statements: &statements,
             tokens: &tokens,
+            dialect: dialect_type,
             enabled: &enabled,
             max_literal_length: request
                 .max_literal_length

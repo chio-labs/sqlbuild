@@ -31,6 +31,9 @@ from sqlbuild.compiler.discovery._helpers.filesystem import (
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.spec.contracts.models import SourceLocation
+from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    RepeatedJsonParseTestCase,
+)
 
 
 def staging_directories(target_dir: Path) -> list[str]:
@@ -661,3 +664,22 @@ def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[Pa
         discovery_model_files_module, "matched_model_output_column_locations", recording
     )
     return scanned
+
+
+def write_repeated_json_parse_project(
+    *, tmp_path: Path, test_case: RepeatedJsonParseTestCase
+) -> None:
+    """Write a one-model project that selects only SQBRSQL045."""
+
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "{test_case.adapter}"\n\n[rules]\nselect = ["SQBRSQL045"]\n',
+        encoding="utf-8",
+    )
+    files: tuple[tuple[str, str], ...] = (
+        ("models/order_events.sql", f"{test_case.header}{test_case.sql}"),
+        *test_case.extra_files,
+    )
+    for relative_path, contents in files:
+        path: Path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")

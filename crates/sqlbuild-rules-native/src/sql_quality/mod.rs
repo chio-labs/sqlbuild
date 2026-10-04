@@ -3,6 +3,8 @@
 pub(crate) mod constants;
 #[path = "_helpers/cte_columns.rs"]
 mod cte_columns;
+#[path = "_helpers/json_parses.rs"]
+mod json_parses;
 #[path = "_helpers/keys.rs"]
 mod keys;
 #[path = "_helpers/literals.rs"]

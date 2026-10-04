@@ -15,6 +15,11 @@ pub(crate) const LONG_LITERAL: LintRuleMetadata = LintRuleMetadata {
     message: "String literal is longer than max_literal_length",
     remediation: "Define the value once as a constant and reference it with `@const`, or shorten it.",
 };
+pub(crate) const REPEATED_JSON_PARSE: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBRSQL045",
+    message: "JSON payload is parsed more than once in one SELECT",
+    remediation: "Parse the payload once in the CTE that reads it, for example `TRY_PARSE_JSON(value) AS payload`, and read every field from that column in a later step.",
+};
 pub(crate) const UNSTABLE_ROW_NUMBER_CODE: &str = "SQBRSQL018";
 pub(crate) const UNPROVEN_RANKING_MESSAGE: &str =
     "Ranking window order is not proven unique within its partition";
