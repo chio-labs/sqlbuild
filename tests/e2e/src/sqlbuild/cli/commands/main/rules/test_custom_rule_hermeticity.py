@@ -13,16 +13,22 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
     NonHermeticRuleCase,
     ProjectTreeCacheCase,
     ScrubbedEnvironmentCase,
+    SplitHostStateCase,
     WorkingDirectoryCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
+    SPLIT_ORDER_TABLES,
     custom_rule_codes,
     custom_rule_diagnostics,
+    custom_rule_findings,
     custom_rule_messages,
     custom_rule_paths,
     custom_rule_source,
+    pin_to_one_cpu,
     rule_cache_hits,
     run_compile_cli,
+    split_expected_findings,
+    split_model_files,
     string_set_order,
     write_custom_rule_project,
 )
@@ -50,6 +56,10 @@ _RELATIVE_HELPER_RULE: str = custom_rule_source(
         "    return [ctx.finding(subject=model)] * int(over_limit)\n"
     ),
 )
+
+
+_SPLIT_MODEL_COUNT: int = 160
+_SPLIT_HEADER: str = "from sqlbuild.rules import Finding, Model, RuleContext, rule\n\nfrom rules import order_tables\n"
 
 
 @pytest.mark.parametrize(
@@ -491,3 +501,66 @@ def test_given_cached_rule_when_relative_helper_is_edited_then_rule_is_reevaluat
 
     assert custom_rule_codes(before) == test_case.expected_rule_codes_before_edit, before.stderr
     assert custom_rule_codes(after) == test_case.expected_rule_codes_after_edit, after.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SplitHostStateCase(
+            description="cross-model duplicate detector and stateless helper rule",
+            model_count=_SPLIT_MODEL_COUNT,
+            selected_rules=("XSQBRSPLIT001", "XSQBRSPLIT002"),
+            files=(
+                ("rules/__init__.py", ""),
+                ("rules/order_tables.py", SPLIT_ORDER_TABLES),
+                (
+                    "rules/duplicates.py",
+                    custom_rule_source(
+                        code="XSQBRSPLIT001",
+                        header=_SPLIT_HEADER + "SEEN_PARITIES: set[str] = set()\n",
+                        body=(
+                            "    even = model.name[-1:] in '02468'\n"
+                            "    parity = 'even' if even else 'odd'\n"
+                            "    duplicate = parity in SEEN_PARITIES\n"
+                            "    SEEN_PARITIES.add(parity)\n"
+                            "    matched = order_tables.ORDER_NAME.match(model.name)\n"
+                            "    return [ctx.finding(subject=model)] * int(duplicate and bool(matched))\n"
+                        ),
+                    ),
+                ),
+                (
+                    "rules/suffixes.py",
+                    custom_rule_source(
+                        code="XSQBRSPLIT002",
+                        header=_SPLIT_HEADER,
+                        body=(
+                            "    flagged = model.name.endswith(order_tables.FLAGGED_SUFFIXES)\n"
+                            "    known = len(order_tables.REGIONS) > 0\n"
+                            "    return [ctx.finding(subject=model)] * int(flagged and known)\n"
+                        ),
+                    ),
+                ),
+                *split_model_files(_SPLIT_MODEL_COUNT),
+            ),
+            expected_findings=split_expected_findings(_SPLIT_MODEL_COUNT),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stateful_and_stateless_rules_when_split_across_hosts_then_findings_match_one_host(
+    tmp_path: Path, test_case: SplitHostStateCase
+) -> None:
+    single_dir: Path = tmp_path / "single"
+    split_dir: Path = tmp_path / "split"
+    for project_dir in (single_dir, split_dir):
+        project_dir.mkdir()
+        write_custom_rule_project(
+            project_dir=project_dir, selected_rules=test_case.selected_rules, files=test_case.files
+        )
+
+    single: subprocess.CompletedProcess[str] = run_compile_cli(single_dir, preexec=pin_to_one_cpu)
+    split: subprocess.CompletedProcess[str] = run_compile_cli(split_dir)
+
+    assert (single.returncode, split.returncode) == (1, 1), single.stderr + split.stderr
+    assert custom_rule_findings(split) == custom_rule_findings(single)
+    assert custom_rule_findings(single) == test_case.expected_findings
