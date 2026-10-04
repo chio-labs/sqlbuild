@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.133.6](https://github.com/chio-labs/sqlbuild/compare/v0.133.5...v0.133.6) (2026-10-04)
+
+
+### Performance Improvements
+
+* **compile:** keep native analysis parallel at 10k models ([#934](https://github.com/chio-labs/sqlbuild/issues/934)) ([ad29d02](https://github.com/chio-labs/sqlbuild/commit/ad29d020c748afb98f276dad4911547dfcb7c4ce))
+
 ## [0.133.5](https://github.com/chio-labs/sqlbuild/compare/v0.133.4...v0.133.5) (2026-10-04)
 
 
