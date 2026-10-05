@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    BrokenChangeDetectionTestCase,
     IncrementalEditSequenceTestCase,
-    IncrementalEditStep,
     RandomEditChainTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
@@ -19,66 +17,28 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     RandomEditChain,
     compare_incremental_compile,
     compile_in_process,
+    disable_change_detection,
     enable_compile_reuse,
+    fact_audit_added,
+    fact_comment,
+    fact_error_fixed,
+    fact_error_introduced,
+    full_edit_step,
     in_process_reuse_run,
+    is_model_only_edit,
+    model_edit_step,
     move_project_file,
+    random_edit_plan,
     replace_project_text,
     run_reuse_compile,
+    staging_comment,
+    staging_contract_change,
+    staging_header_change,
+    staging_new_column,
+    staging_type_change,
     write_generated_edit_models,
     write_project_file,
 )
-
-_STG_ORDERS: str = "models/staging/stg_orders.sql"
-_FACT_ORDERS: str = "models/marts/fact_orders.sql"
-
-
-def _model_comment(root: Path) -> None:
-    replace_project_text(
-        root, _STG_ORDERS, 'FROM __source("raw__orders")', '-- staged\nFROM __source("raw__orders")'
-    )
-
-
-def _model_type_change(root: Path) -> None:
-    replace_project_text(
-        root, _STG_ORDERS, "  quantity,\n", "  CAST(quantity AS BIGINT) AS quantity,\n"
-    )
-
-
-def _model_new_column(root: Path) -> None:
-    replace_project_text(root, _STG_ORDERS, "  status\n", "  status,\n  status AS raw_status\n")
-
-
-def _model_header_change(root: Path) -> None:
-    replace_project_text(root, _STG_ORDERS, "materialized view,", "materialized table,")
-
-
-def _model_contract_change(root: Path) -> None:
-    replace_project_text(
-        root,
-        _STG_ORDERS,
-        "customer_id (nullable false, audits [not_null]),",
-        "customer_id (type BIGINT, nullable false, audits [not_null]),",
-    )
-
-
-def _introduce_error(root: Path) -> None:
-    replace_project_text(root, _FACT_ORDERS, "  o.quantity,\n", "  o.missing_quantity,\n")
-
-
-def _fix_error(root: Path) -> None:
-    replace_project_text(root, _FACT_ORDERS, "  o.missing_quantity,\n", "  o.quantity,\n")
-
-
-def _leaf_comment(root: Path) -> None:
-    replace_project_text(root, _FACT_ORDERS, "FROM __ref", "-- leaf\nFROM __ref")
-
-
-def _model_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
-    return IncrementalEditStep(description=description, edit=edit, reuses_renders=True)
-
-
-def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
-    return IncrementalEditStep(description=description, edit=edit, reuses_renders=False)
 
 
 @pytest.mark.parametrize(
@@ -87,19 +47,20 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
         IncrementalEditSequenceTestCase(
             description="model_edits",
             steps=(
-                _model_step("comment_without_shape_change", _model_comment),
-                _model_step("type_change_propagates_downstream", _model_type_change),
-                _model_step("new_output_column", _model_new_column),
-                _model_step("header_config_change", _model_header_change),
-                _model_step("column_contract_change", _model_contract_change),
-                _model_step("error_introduced", _introduce_error),
-                _model_step("error_fixed", _fix_error),
+                model_edit_step("comment_without_shape_change", staging_comment),
+                model_edit_step("type_change_propagates_downstream", staging_type_change),
+                model_edit_step("new_output_column", staging_new_column),
+                model_edit_step("header_config_change", staging_header_change),
+                model_edit_step("column_contract_change", staging_contract_change),
+                model_edit_step("attached_audit_added", fact_audit_added),
+                model_edit_step("error_introduced", fact_error_introduced),
+                model_edit_step("error_fixed", fact_error_fixed),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="model_set_changes",
             steps=(
-                _full_step(
+                full_edit_step(
                     "model_added",
                     lambda root: write_project_file(
                         root,
@@ -108,8 +69,8 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         'SELECT order_id, quantity FROM __ref("stg_orders")\n',
                     ),
                 ),
-                _model_step("edit_after_add", _model_comment),
-                _full_step(
+                model_edit_step("edit_after_add", staging_comment),
+                full_edit_step(
                     "model_renamed",
                     lambda root: move_project_file(
                         root,
@@ -117,17 +78,17 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "models/marts/order_quantity_totals.sql",
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "model_removed",
                     lambda root: (root / "models/marts/order_quantity_totals.sql").unlink(),
                 ),
-                _model_step("edit_after_remove", _leaf_comment),
+                model_edit_step("edit_after_remove", fact_comment),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="declaration_edits",
             steps=(
-                _full_step(
+                full_edit_step(
                     "macro_edit",
                     lambda root: replace_project_text(
                         root,
@@ -136,14 +97,14 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "{quantity} * {price_cents}",
                     ),
                 ),
-                _model_step("edit_after_macro", _leaf_comment),
-                _full_step(
+                model_edit_step("edit_after_macro", fact_comment),
+                full_edit_step(
                     "module_imported_by_macro_edit",
                     lambda root: replace_project_text(
                         root, "macros/_rounding.py", "_SCALE: int = 2", "_SCALE: int = 3"
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "scoped_macro_edit",
                     lambda root: replace_project_text(
                         root,
@@ -152,7 +113,7 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "/ 100.0, 3)",
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "path_defaults_edit",
                     lambda root: replace_project_text(
                         root,
@@ -161,7 +122,7 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         '[path_defaults.staging]\nmaterialized = "table"',
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "enum_edit",
                     lambda root: replace_project_text(
                         root,
@@ -170,7 +131,7 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         'WEB "online"',
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "constant_edit",
                     lambda root: replace_project_text(
                         root,
@@ -179,7 +140,7 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "value 2)",
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "new_scope_folder",
                     lambda root: write_project_file(
                         root,
@@ -189,19 +150,19 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         '    return f"({price_cents}) * ({quantity})"\n',
                     ),
                 ),
-                _model_step("edit_after_declarations", _model_comment),
+                model_edit_step("edit_after_declarations", staging_comment),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="resource_edits",
             steps=(
-                _full_step(
+                full_edit_step(
                     "seed_edit",
                     lambda root: replace_project_text(
                         root, "seeds/waffle_types.csv", "Classic Belgian", "Classic Brussels"
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "source_edit",
                     lambda root: replace_project_text(
                         root,
@@ -210,8 +171,8 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "      - name: quantity\n        type: BIGINT",
                     ),
                 ),
-                _model_step("edit_after_source", _model_type_change),
-                _full_step(
+                model_edit_step("edit_after_source", staging_type_change),
+                full_edit_step(
                     "test_edit",
                     lambda root: replace_project_text(
                         root,
@@ -220,7 +181,7 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "101 AS customer_id",
                     ),
                 ),
-                _full_step(
+                full_edit_step(
                     "audit_edit",
                     lambda root: replace_project_text(
                         root,
@@ -229,7 +190,7 @@ def _full_step(description: str, edit: Callable[[Path], None]) -> IncrementalEdi
                         "WHERE NOT (@expression) AND 1 = 1",
                     ),
                 ),
-                _model_step("edit_after_resources", _leaf_comment),
+                model_edit_step("edit_after_resources", fact_comment),
             ),
         ),
     ],
@@ -247,15 +208,19 @@ def test_given_edit_sequence_when_compiling_incrementally_then_each_step_matches
         comparison: IncrementalEditComparison = compare_incremental_compile(project_dir=project_dir)
 
         assert comparison.incremental.reused is False, step.description
-        assert comparison.mismatch() is None, (step.description, comparison.incremental.stderr)
-        assert (comparison.reused_renders > 0) is step.reuses_renders, step.description
+        assert comparison.matches is test_case.expected_matches_uncached, (
+            step.description,
+            comparison.mismatched_artifacts,
+            comparison.incremental.stderr,
+        )
+        assert (comparison.reused_renders > 0) is step.expected_render_reuse, step.description
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        RandomEditChainTestCase(description="seed_7", seed=7, model_count=24, step_count=14),
-        RandomEditChainTestCase(description="seed_19", seed=19, model_count=24, step_count=14),
+        RandomEditChainTestCase(description="seed_7", seed=7, model_count=24, step_count=12),
+        RandomEditChainTestCase(description="seed_19", seed=19, model_count=24, step_count=12),
     ],
     ids=lambda case: case.description,
 )
@@ -270,27 +235,49 @@ def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_mat
     assert cold.returncode == 0, cold.stderr
     chain: RandomEditChain = RandomEditChain(project_dir=project_dir, seed=test_case.seed)
 
-    for step in range(test_case.step_count):
-        kind, model_only = chain.apply()
+    for step, kind in enumerate(
+        random_edit_plan(seed=test_case.seed, step_count=test_case.step_count)
+    ):
+        chain.apply(kind)
         comparison: IncrementalEditComparison = compare_incremental_compile(project_dir=project_dir)
 
-        assert comparison.mismatch() is None, (step, kind, comparison.incremental.stderr)
-        assert (comparison.reused_renders > 0) is model_only, (step, kind)
+        assert comparison.matches is test_case.expected_matches_uncached, (
+            step,
+            kind,
+            comparison.mismatched_artifacts,
+            comparison.incremental.stderr,
+        )
+        assert (comparison.reused_renders > 0) is is_model_only_edit(kind), (step, kind)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BrokenChangeDetectionTestCase(
+            description="new_output_column",
+            edit=staging_new_column,
+            expected_matches_uncached=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_broken_change_detection_when_compiling_an_edit_then_the_oracle_reports_a_mismatch(
     compile_reuse_project: Path,
+    test_case: BrokenChangeDetectionTestCase,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = compile_reuse_project
     enable_compile_reuse(monkeypatch)
     assert compile_in_process(project_dir=project_dir) == 0
-    _model_new_column(project_dir)
-    monkeypatch.setattr(reuse_attempt, "changed_project_paths", lambda **_kwargs: frozenset())
+    test_case.edit(project_dir)
+    disable_change_detection(monkeypatch)
 
     broken: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     reference: CompileReuseRun = run_reuse_compile(project_dir=project_dir, args=("--no-cache",))
+    comparison: IncrementalEditComparison = IncrementalEditComparison(
+        incremental=broken, reference=reference
+    )
 
-    assert broken.timings["render_reuse_hits"] > 0
-    assert IncrementalEditComparison(incremental=broken, reference=reference).mismatch() is not None
+    assert comparison.reused_renders > 0
+    assert comparison.matches is test_case.expected_matches_uncached

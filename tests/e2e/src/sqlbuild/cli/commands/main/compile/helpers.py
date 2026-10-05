@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import random
@@ -25,6 +26,7 @@ import duckdb
 import pytest
 
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
+import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
@@ -41,6 +43,7 @@ from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
+    IncrementalEditStep,
     SemanticCorpusCase,
     SetOperationModel,
 )
@@ -3448,21 +3451,28 @@ class IncrementalEditComparison(NamedTuple):
 
         return self.incremental.timings.get("render_reuse_hits", 0)
 
-    def mismatch(self) -> str | None:
-        """Describe the first difference from the --no-cache compile, if any."""
+    @property
+    def matches(self) -> bool:
+        """Return whether exit code, report, and every compiled artifact are byte-identical."""
 
-        if self.incremental.returncode != self.reference.returncode:
-            return f"exit code {self.incremental.returncode} != {self.reference.returncode}"
-        if self.incremental.report != self.reference.report:
-            return "compile report differs"
-        if self.incremental.compiled != self.reference.compiled:
-            changed: list[str] = sorted(
-                path
-                for path in self.incremental.compiled.keys() | self.reference.compiled.keys()
-                if self.incremental.compiled.get(path) != self.reference.compiled.get(path)
+        return _edit_outcome(self.incremental) == _edit_outcome(self.reference)
+
+    @property
+    def mismatched_artifacts(self) -> list[str]:
+        """Return the first compiled artifacts that differ from the --no-cache compile."""
+
+        incremental: dict[str, bytes] = self.incremental.compiled
+        reference: dict[str, bytes] = self.reference.compiled
+        return sorted(
+            filter(
+                lambda path: incremental.get(path) != reference.get(path),
+                incremental.keys() | reference.keys(),
             )
-            return f"compiled artifacts differ: {changed[:5]}"
-        return None
+        )[:5]
+
+
+def _edit_outcome(run: CompileReuseRun) -> tuple[int, str, dict[str, bytes]]:
+    return run.returncode, run.report, run.compiled
 
 
 def compare_incremental_compile(*, project_dir: Path) -> IncrementalEditComparison:
@@ -3491,18 +3501,40 @@ def in_process_reuse_run(
 
 GENERATED_EDIT_MODEL_PREFIX: str = "orders_step_"
 _GENERATED_EDIT_COLUMNS: tuple[str, ...] = ("order_id", "customer_id", "quantity", "status")
+_PLAIN_QUANTITY: str = "  quantity,\n"
+_CAST_QUANTITY: str = "  CAST(quantity AS BIGINT) AS quantity,\n"
+_SWAP_PLACEHOLDER: str = "\x00swap\x00"
+_RANDOM_EDIT_KINDS: tuple[str, ...] = (
+    "comment",
+    "comment",
+    "add_column",
+    "type_change",
+    "header_change",
+    "introduce_error",
+    "add_model",
+    "macro_edit",
+    "test_edit",
+)
+_RANDOM_EDIT_FOLLOW_UPS: dict[str, tuple[str, ...]] = {
+    "introduce_error": ("introduce_error", "fix_error"),
+}
+_MODEL_ONLY_EDIT_KINDS: frozenset[str] = frozenset(
+    {"comment", "add_column", "type_change", "header_change", "introduce_error", "fix_error"}
+)
 
 
 def write_generated_edit_models(*, project_dir: Path, model_count: int, seed: int) -> None:
     """Add a seeded chain of models over the staging orders, each reading an earlier one."""
 
     chooser: random.Random = random.Random(seed)
-    for index in range(model_count):
-        upstream: str = (
-            "stg_orders"
-            if index == 0
-            else f"{GENERATED_EDIT_MODEL_PREFIX}{chooser.randrange(index):03d}"
-        )
+    upstreams: tuple[str, ...] = (
+        "stg_orders",
+        *(
+            f"{GENERATED_EDIT_MODEL_PREFIX}{chooser.randrange(index):03d}"
+            for index in range(1, model_count)
+        ),
+    )
+    for index, upstream in enumerate(upstreams):
         write_project_file(
             project_dir,
             f"models/generated/{GENERATED_EDIT_MODEL_PREFIX}{index:03d}.sql",
@@ -3518,96 +3550,192 @@ def _generated_edit_model_sql(*, upstream: str) -> str:
     )
 
 
+def random_edit_plan(*, seed: int, step_count: int) -> tuple[str, ...]:
+    """Draw seeded edit kinds; every introduced error is fixed by the following step."""
+
+    chooser: random.Random = random.Random(seed)
+    return tuple(
+        itertools.chain.from_iterable(
+            map(
+                lambda drawn: _RANDOM_EDIT_FOLLOW_UPS.get(drawn, (drawn,)),
+                chooser.choices(_RANDOM_EDIT_KINDS, k=step_count),
+            )
+        )
+    )
+
+
+def is_model_only_edit(kind: str) -> bool:
+    """Return whether an edit kind touches model files only, so renders may be reused."""
+
+    return kind in _MODEL_ONLY_EDIT_KINDS
+
+
+def _swapped(contents: str, first: str, second: str) -> str:
+    return (
+        contents.replace(first, _SWAP_PLACEHOLDER)
+        .replace(second, first)
+        .replace(_SWAP_PLACEHOLDER, second)
+    )
+
+
 class RandomEditChain:
     """Apply seeded random edits of every supported kind to a generated project."""
 
     def __init__(self, *, project_dir: Path, seed: int) -> None:
         self._project_dir: Path = project_dir
         self._random: random.Random = random.Random(seed)
-        self._broken: Path | None = None
+        self._broken: Path = project_dir / "models" / "generated" / "unbroken.sql"
         self._added: int = 0
 
-    def apply(self) -> tuple[str, bool]:
-        """Apply one edit; return its kind and whether it touches model files only."""
+    def apply(self, kind: str) -> None:
+        """Apply one edit of the given kind to a randomly chosen generated model."""
 
-        if self._broken is not None:
-            path: Path = self._broken
-            path.write_text(
-                path.read_text(encoding="utf-8").replace("  unknown_column,\n", ""),
-                encoding="utf-8",
-            )
-            self._broken = None
-            return "fix_error", True
-        kind: str = self._random.choice(_RANDOM_EDIT_KINDS)
         models: list[Path] = sorted((self._project_dir / "models" / "generated").glob("*.sql"))
-        model: Path = self._random.choice(models)
-        contents: str = model.read_text(encoding="utf-8")
-        if kind == "comment":
-            model.write_text(
-                contents.replace("FROM __ref", f"-- note {self._random.random()}\nFROM __ref"),
-                encoding="utf-8",
-            )
-        elif kind == "add_column":
-            model.write_text(
-                contents.replace(
-                    "\nFROM __ref",
-                    f",\n  status AS status_{self._random.randrange(1000)}\nFROM __ref",
-                ),
-                encoding="utf-8",
-            )
-        elif kind == "type_change":
-            model.write_text(
-                contents.replace("  quantity", "  CAST(quantity AS BIGINT) AS quantity", 1)
-                if "CAST(quantity" not in contents
-                else contents.replace("CAST(quantity AS BIGINT) AS quantity", "quantity", 1),
-                encoding="utf-8",
-            )
-        elif kind == "header_change":
-            model.write_text(
-                contents.replace("materialized view", "materialized table")
-                if "materialized view" in contents
-                else contents.replace("materialized table", "materialized view"),
-                encoding="utf-8",
-            )
-        elif kind == "introduce_error":
-            model.write_text(
-                contents.replace("SELECT\n", "SELECT\n  unknown_column,\n", 1), encoding="utf-8"
-            )
-            self._broken = model
-        elif kind == "add_model":
-            self._added += 1
-            write_project_file(
-                self._project_dir,
-                f"models/generated/added_step_{self._added:03d}.sql",
-                _generated_edit_model_sql(upstream=model.stem),
-            )
-            return kind, False
-        elif kind == "macro_edit":
-            path = self._project_dir / "macros" / "_rounding.py"
-            scale: int = 2 + self._random.randrange(3)
-            path.write_text(
-                re.sub(r"_SCALE: int = \d+", f"_SCALE: int = {scale}", path.read_text("utf-8")),
-                encoding="utf-8",
-            )
-            return kind, False
-        elif kind == "test_edit":
-            path = self._project_dir / "tests" / "unit" / "test_stg_orders.sql"
-            path.write_text(
-                path.read_text(encoding="utf-8") + f"\n-- revision {self._random.random()}\n",
-                encoding="utf-8",
-            )
-            return kind, False
-        return kind, True
+        edit: Callable[[Path], None] = getattr(self, f"_{kind}")
+        edit(self._random.choice(models))
+
+    def _rewrite(self, model: Path, transform: Callable[[str], str]) -> None:
+        model.write_text(transform(model.read_text(encoding="utf-8")), encoding="utf-8")
+
+    def _comment(self, model: Path) -> None:
+        note: str = f"-- note {self._random.random()}\nFROM __ref"
+        self._rewrite(model, lambda contents: contents.replace("FROM __ref", note))
+
+    def _add_column(self, model: Path) -> None:
+        column: str = f",\n  status AS status_{self._random.randrange(1000)}\nFROM __ref"
+        self._rewrite(model, lambda contents: contents.replace("\nFROM __ref", column))
+
+    def _type_change(self, model: Path) -> None:
+        self._rewrite(model, lambda contents: _swapped(contents, _PLAIN_QUANTITY, _CAST_QUANTITY))
+
+    def _header_change(self, model: Path) -> None:
+        self._rewrite(
+            model,
+            lambda contents: _swapped(contents, "materialized view", "materialized table"),
+        )
+
+    def _introduce_error(self, model: Path) -> None:
+        self._rewrite(
+            model, lambda contents: contents.replace("SELECT\n", "SELECT\n  unknown_column,\n", 1)
+        )
+        self._broken = model
+
+    def _fix_error(self, _model: Path) -> None:
+        self._rewrite(self._broken, lambda contents: contents.replace("  unknown_column,\n", ""))
+
+    def _add_model(self, model: Path) -> None:
+        self._added += 1
+        write_project_file(
+            self._project_dir,
+            f"models/generated/added_step_{self._added:03d}.sql",
+            _generated_edit_model_sql(upstream=model.stem),
+        )
+
+    def _macro_edit(self, _model: Path) -> None:
+        scale: str = f"_SCALE: int = {2 + self._random.randrange(3)}"
+        self._rewrite(
+            self._project_dir / "macros" / "_rounding.py",
+            lambda contents: re.sub(r"_SCALE: int = \d+", scale, contents),
+        )
+
+    def _test_edit(self, _model: Path) -> None:
+        revision: str = f"\n-- revision {self._random.random()}\n"
+        self._rewrite(
+            self._project_dir / "tests" / "unit" / "test_stg_orders.sql",
+            lambda contents: contents + revision,
+        )
 
 
-_RANDOM_EDIT_KINDS: tuple[str, ...] = (
-    "comment",
-    "comment",
-    "add_column",
-    "type_change",
-    "header_change",
-    "introduce_error",
-    "add_model",
-    "macro_edit",
-    "test_edit",
-)
+STG_ORDERS_MODEL: str = "models/staging/stg_orders.sql"
+FACT_ORDERS_MODEL: str = "models/marts/fact_orders.sql"
+
+
+def model_edit_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
+    """Return an edit to model files only, whose compile must reuse unaffected renders."""
+
+    return IncrementalEditStep(description=description, edit=edit, expected_render_reuse=True)
+
+
+def full_edit_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
+    """Return an edit beyond model contents, whose compile must render everything again."""
+
+    return IncrementalEditStep(description=description, edit=edit, expected_render_reuse=False)
+
+
+def staging_comment(root: Path) -> None:
+    """Add a comment to the staging orders model without changing its shape."""
+
+    replace_project_text(
+        root,
+        STG_ORDERS_MODEL,
+        'FROM __source("raw__orders")',
+        '-- staged\nFROM __source("raw__orders")',
+    )
+
+
+def staging_type_change(root: Path) -> None:
+    """Change one staging output column type, which propagates downstream."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, "  quantity,\n", "  CAST(quantity AS BIGINT) AS quantity,\n"
+    )
+
+
+def staging_new_column(root: Path) -> None:
+    """Add an output column to the staging orders model."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, "  status\n", "  status,\n  status AS raw_status\n"
+    )
+
+
+def staging_header_change(root: Path) -> None:
+    """Change the staging orders materialization in its header."""
+
+    replace_project_text(root, STG_ORDERS_MODEL, "materialized view,", "materialized table,")
+
+
+def staging_contract_change(root: Path) -> None:
+    """Add a declared type to one staging column contract."""
+
+    replace_project_text(
+        root,
+        STG_ORDERS_MODEL,
+        "customer_id (nullable false, audits [not_null]),",
+        "customer_id (type BIGINT, nullable false, audits [not_null]),",
+    )
+
+
+def fact_audit_added(root: Path) -> None:
+    """Attach one more column audit to the fact orders model."""
+
+    replace_project_text(
+        root,
+        FACT_ORDERS_MODEL,
+        "    order_id (nullable false, audits [not_null]),",
+        "    order_id (nullable false, audits [not_null, unique]),",
+    )
+
+
+def fact_error_introduced(root: Path) -> None:
+    """Make the fact orders model read a column that does not exist."""
+
+    replace_project_text(root, FACT_ORDERS_MODEL, "  o.quantity,\n", "  o.missing_quantity,\n")
+
+
+def fact_error_fixed(root: Path) -> None:
+    """Restore the column the fact orders model reads."""
+
+    replace_project_text(root, FACT_ORDERS_MODEL, "  o.missing_quantity,\n", "  o.quantity,\n")
+
+
+def fact_comment(root: Path) -> None:
+    """Add a comment to the leaf fact orders model."""
+
+    replace_project_text(root, FACT_ORDERS_MODEL, "FROM __ref", "-- leaf\nFROM __ref")
+
+
+def disable_change_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make compile reuse believe no project file changed since the stored compile."""
+
+    monkeypatch.setattr(reuse_attempt, "changed_project_paths", lambda **_kwargs: (frozenset(), {}))

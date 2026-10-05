@@ -13,19 +13,21 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     tapped_compile_diagnostics,
 )
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
+from sqlbuild.compiler.compile.constants import (
+    COMPILE_INPUT_READS,
+    RENDER_REUSE_MODEL_AUDITS_PREFIX,
+)
 from sqlbuild.compiler.compile.models import (
+    CompileAuditInput,
     CompileModelInput,
     CompilerDiagnostic,
     RenderReuseState,
     StoredRender,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.fact_cache._helpers.restricted_pickle import (
-    dump_fact_payload,
-    load_fact_payload,
-)
 from sqlbuild.compiler.fact_cache.exceptions import FactCachePayloadError
+from sqlbuild.compiler.fact_cache.main._dump_fact_payload import dumped_fact_payload
+from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
 
 _SERIALIZER_THREAD_NAME: str = "sqlbuild-render-reuse-serializer"
@@ -61,6 +63,7 @@ class CompileRenderReuseSession:
         self._serialized_models: dict[str, memoryview] = {}
         self._serialized_groups: dict[str, memoryview] = {}
         self._serializer: threading.Thread | None = None
+        self._reused_paths: set[str] = set()
 
     def claim(self) -> bool:
         """Return True for the first claim only; later project renders neither reuse nor record."""
@@ -105,6 +108,7 @@ class CompileRenderReuseSession:
             return None
         _replay(stored=stored)
         self._model_records[path] = payload
+        self._reused_paths.add(path)
         record_compile_metric(metric="render_reuse_hits", value=1)
         return replace(stored.value, model_file=model_file)
 
@@ -129,12 +133,27 @@ class CompileRenderReuseSession:
             self._pending_models.append((str(model_file.relative_path), stored))
         return model_input
 
-    def group[T](self, *, name: str, render: Callable[[], T]) -> T:
+    def model_audits(
+        self,
+        *,
+        model_input: CompileModelInput,
+        render: Callable[[], tuple[CompileAuditInput, ...]],
+    ) -> tuple[CompileAuditInput, ...]:
+        """Return a reused model's stored attached audits, or render and record them."""
+
+        path: str = str(model_input.model_file.relative_path)
+        return self.group(
+            name=f"{RENDER_REUSE_MODEL_AUDITS_PREFIX}{path}",
+            render=render,
+            reusable=path in self._reused_paths,
+        )
+
+    def group[T](self, *, name: str, render: Callable[[], T], reusable: bool = True) -> T:
         """Return a stored project-wide render no model edit can affect, or render and record it."""
 
         payload: memoryview | None = (
             self._prior.group_payloads.get(name)
-            if self._reusable and self._prior is not None
+            if reusable and self._reusable and self._prior is not None
             else None
         )
         stored: StoredRender | None = None if payload is None else _loaded_render(payload)
@@ -204,7 +223,7 @@ def _stored_render(
 
 def _dumped(stored: StoredRender) -> bytes | None:
     try:
-        return dump_fact_payload(stored)
+        return dumped_fact_payload(stored)
     except (pickle.PicklingError, TypeError, AttributeError, RecursionError):
         return None
 
@@ -218,7 +237,7 @@ def _replay(*, stored: StoredRender) -> None:
 
 def _loaded_render(payload: memoryview) -> StoredRender | None:
     try:
-        loaded: object = load_fact_payload(payload)
+        loaded: object = loaded_fact_payload(payload)
     except _LOAD_ERRORS:
         return None
     return loaded if isinstance(loaded, StoredRender) else None

@@ -162,17 +162,15 @@ def _checked_attempt(
     unchanged: bool = comparison.unchanged and target_files_unchanged(
         stored=inputs.target_files, project_dir=project_dir, tree=inputs.target_tree
     )
-    verified: dict[str, str] = dict(comparison.verified)
-    changed_paths: frozenset[str] | None = (
-        changed_project_paths(
+    changed_paths: frozenset[str] | None = None
+    verified: dict[str, str] = comparison.verified
+    if identity_unchanged and not unchanged:
+        changed_paths, verified = changed_project_paths(
             project_dir=project_dir,
             stored=inputs.project_files,
             current=attempt.snapshot,
-            verified=verified,
+            verified=comparison.verified,
         )
-        if identity_unchanged and not unchanged
-        else None
-    )
     return replace(
         attempt,
         outcome=CompileReuseOutcome.HIT if unchanged else CompileReuseOutcome.MISS,

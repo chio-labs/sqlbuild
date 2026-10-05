@@ -111,6 +111,20 @@ ignored and compile runs in full. Storing a result normally takes a fraction of 
 report is ready. When it has to hash a lot of data or the project has very many files, compile
 prints `Recording compile for reuse...` and a completion line to stderr before the report.
 
+### Compiling after model-only edits
+
+When the only changes since the stored compile are edits to existing model files, compile runs in
+full but reuses the stored render of every unchanged model, together with the diagnostics and
+environment reads that rendering reported. Only the edited models are rendered again. Analysis,
+contracts, rules, and artifact writes still run for the whole project, so downstream effects of an
+edit, such as a changed column type, are reported exactly as in an uncached compile. The output is
+byte-identical to `sqb compile --no-cache`.
+
+Every other change renders the whole project: adding, removing, or renaming a model, and editing
+macros or the Python modules they import, configuration, `path_defaults`, enums, constants, scope
+folders, seeds, sources, tests, or audits. A model whose render read `run.id` or provider settings
+is always rendered again. Stored renders are kept for the two newest compiles in the same folder.
+
 Known limits:
 
 - Python packages outside the project are checked by the stamps of the module files the compile
@@ -130,7 +144,8 @@ Known limits:
 A replayed JSON report is byte-identical to the previous one except for `compile_timings`, which
 holds `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses`,
 `project_reuse_check_ms`, and `total_ms`. Full compiles report the same reuse counters alongside
-the phase timings. In text mode, a replayed compile does not print the per-phase progress lines.
+the phase timings, plus `render_reuse_hits` and `render_reuse_misses` for model renders reused or
+rendered again after model-only edits. In text mode, a replayed compile does not print the per-phase progress lines.
 Lifecycle sinks receive only the invocation events for a replayed compile; per-phase `operation`
 events are not emitted because no compile phase runs.
 </Note>

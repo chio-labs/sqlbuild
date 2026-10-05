@@ -689,7 +689,7 @@ class IncrementalEditStep:
 
     description: str
     edit: Callable[[Path], None]
-    reuses_renders: bool
+    expected_render_reuse: bool
 
 
 @dataclass(frozen=True)
@@ -698,6 +698,7 @@ class IncrementalEditSequenceTestCase:
 
     description: str
     steps: tuple[IncrementalEditStep, ...]
+    expected_matches_uncached: bool = True
 
 
 @dataclass(frozen=True)
@@ -708,3 +709,13 @@ class RandomEditChainTestCase:
     seed: int
     model_count: int
     step_count: int
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class BrokenChangeDetectionTestCase:
+    """A model edit compiled while change detection reports nothing changed."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_matches_uncached: bool

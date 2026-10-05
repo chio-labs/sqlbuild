@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+from sqlbuild.cli.compile_render_reuse.main._render_state_layer import stored_render_layer
+from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse._helpers.entry_file import remove_entry, write_entry
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
     pending_digest_bytes,
@@ -16,7 +18,6 @@ from sqlbuild.cli.compile_reuse._helpers.project_files import (
     with_missing_digests,
 )
 from sqlbuild.cli.compile_reuse._helpers.provider_settings import provider_settings_inputs
-from sqlbuild.cli.compile_reuse._helpers.render_state_file import render_state_layer
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
     environment_digest,
     loaded_module_stamps,
@@ -37,16 +38,13 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_STORE_START_MESSAGE,
 )
 from sqlbuild.cli.compile_reuse.models import (
-    CompileRenderReuse,
     CompileReuseAttempt,
-    RenderStateLayer,
     SettingsInputsResult,
     StoredCompileInputs,
     StoredCompileOutput,
 )
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome, FileStamp
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
-from sqlbuild.compiler.compile.models import RenderReuseState
 
 _LOGGER: logging.Logger = logging.getLogger(REUSE_LOGGER_NAME)
 
@@ -173,18 +171,9 @@ def _write_compile_entry(
             stdout_file="",
         ),
         stdout=stdout,
-        render_state=_render_state_layer(render_reuse=render_reuse),
+        render_state=stored_render_layer(render_reuse=render_reuse),
     )
     _finish_notice(started=notice_started, message=REUSE_STORE_DONE_MESSAGE)
-
-
-def _render_state_layer(*, render_reuse: CompileRenderReuse | None) -> RenderStateLayer | None:
-    state: RenderReuseState | None = (
-        None if render_reuse is None else render_reuse.session.stored_state()
-    )
-    if render_reuse is None or state is None:
-        return None
-    return render_state_layer(state=state, stored=render_reuse.stored)
 
 
 def _start_notice(*, attempt: CompileReuseAttempt) -> float | None:

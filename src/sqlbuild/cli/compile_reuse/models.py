@@ -4,13 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome, FileStamp
-
-if TYPE_CHECKING:
-    from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
-    from sqlbuild.compiler.compile.models import RenderReuseState
 
 
 @dataclass(frozen=True)
@@ -136,43 +131,6 @@ class CompileReuseAttempt:
     restamped: frozenset[str] = frozenset()
     changed_paths: frozenset[str] | None = None
     render_state_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class StoredRenderLayer:
-    """One decoded render file: its index and its payloads by key."""
-
-    model_paths: tuple[str, ...]
-    base_file: str | None
-    models: dict[str, memoryview]
-    groups: dict[str, memoryview]
-    size: int
-
-
-@dataclass(frozen=True)
-class StoredRenderLayers:
-    """How a stored compile's renders are split between a base file and one overlay."""
-
-    base_file: str
-    base_bytes: int
-    overlay_models: frozenset[str]
-    overlay_groups: frozenset[str]
-
-
-@dataclass(frozen=True)
-class StoredRenderState:
-    """Renders a stored compile recorded, merged across layers, with their layout."""
-
-    state: RenderReuseState
-    layers: StoredRenderLayers
-
-
-@dataclass(frozen=True)
-class CompileRenderReuse:
-    """One full compile's render reuse session with the stored renders it started from."""
-
-    session: CompileRenderReuseSession
-    stored: StoredRenderState | None
 
 
 @dataclass(frozen=True)

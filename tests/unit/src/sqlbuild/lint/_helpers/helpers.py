@@ -112,3 +112,22 @@ def write_orders_lint_project(*, project_dir: Path, model_bytes: bytes) -> Path:
         encoding="utf-8",
     )
     return model_path
+
+
+def write_linked_orders_project(*, project_dir: Path) -> None:
+    """Write models reached both directly and through file and directory links."""
+
+    (project_dir / "models" / "orders").mkdir(parents=True)
+    (project_dir / "shared").mkdir()
+    (project_dir / "models" / "orders" / "orders.sql").write_text("SELECT 1 AS order_id\n")
+    (project_dir / "shared" / "customers.sql").write_text("SELECT 1 AS customer_id\n")
+    (project_dir / "models" / "orders" / "customers_link.sql").symlink_to(
+        project_dir / "shared" / "customers.sql"
+    )
+    (project_dir / "models" / "shared_link").symlink_to(project_dir / "shared")
+
+
+def files_resolving_to(*, files: dict[Path, str], selected: frozenset[Path]) -> dict[Path, str]:
+    """Return the files whose fully resolved path is one of the selected paths."""
+
+    return dict(filter(lambda item: item[0].resolve() in selected, files.items()))

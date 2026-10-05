@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import cache
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -17,11 +19,14 @@ def collect_project_files(
 ) -> dict[Path, str]:
     """Return authored SQL files keyed by path, sharing identical text discovery already holds."""
 
+    resolved_directory: Callable[[Path], Path] = cache(_resolved_path)
     if source_files is not None:
         return {
             file_path: contents
             for file_path, contents in source_files.items()
-            if selected_paths is None or file_path.resolve() in selected_paths
+            if selected_paths is None
+            or _resolved_file(path=file_path, resolved_directory=resolved_directory)
+            in selected_paths
         }
     discovered: dict[Path, str] = (
         {} if discovered_inputs is None else discovered_sql_contents(discovered_inputs)
@@ -34,13 +39,29 @@ def collect_project_files(
             continue
         file_path: Path
         for file_path in sorted(root.rglob("*.sql")):
-            if selected_paths is not None and file_path.resolve() not in selected_paths:
+            if (
+                selected_paths is not None
+                and _resolved_file(path=file_path, resolved_directory=resolved_directory)
+                not in selected_paths
+            ):
                 continue
             with file_path.open("r", encoding="utf-8", newline="") as handle:
                 contents: str = handle.read()
             known: str | None = discovered.get(file_path)
             files[file_path] = known if known is not None and known == contents else contents
     return files
+
+
+def _resolved_file(*, path: Path, resolved_directory: Callable[[Path], Path]) -> Path:
+    """Resolve a file as Path.resolve() does, resolving each parent directory only once."""
+
+    if path.is_symlink():
+        return path.resolve()
+    return resolved_directory(path.parent) / path.name
+
+
+def _resolved_path(path: Path) -> Path:
+    return path.resolve()
 
 
 def discovered_sql_contents(discovered_inputs: DiscoveredProjectInputs) -> dict[Path, str]:

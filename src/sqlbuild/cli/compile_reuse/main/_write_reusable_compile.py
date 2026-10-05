@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse._helpers.store import write_compile_entry
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
 from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
-from sqlbuild.cli.compile_reuse.models import CompileRenderReuse, CompileReuseAttempt
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 
 

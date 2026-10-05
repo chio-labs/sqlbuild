@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import replace
-from functools import partial
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.audits import build_project_audit_inputs
@@ -19,11 +17,6 @@ from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import buil
 from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_table_function_call_arities,
-)
-from sqlbuild.compiler.compile._helpers.attachment.sources import build_source_inputs
-from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
-    build_scenario_inputs,
-    build_test_inputs_with_cache,
 )
 from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
@@ -41,13 +34,11 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_model_schema_index,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
-from sqlbuild.compiler.compile.constants import (
-    COMPILE_RENDER_REUSE,
-    RENDER_REUSE_SCENARIOS_GROUP,
-    RENDER_REUSE_SOURCES_GROUP,
-    RENDER_REUSE_TESTS_GROUP,
+from sqlbuild.compiler.compile._helpers.render.reuse import (
+    build_sql_resource_inputs,
+    claimed_render_reuse,
 )
+from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
@@ -128,9 +119,9 @@ def build_compile_inputs(
         _enforce_explicit_references=(discovered_inputs.project_config.references.enforce_explicit),
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
-    render_reuse: CompileRenderReuseSession | None = COMPILE_RENDER_REUSE.claim()
-    if render_reuse is not None:
-        render_reuse.plan_models(model_files=discovered_inputs.model_files)
+    render_reuse: CompileRenderReuseSession | None = claimed_render_reuse(
+        discovered_inputs=discovered_inputs
+    )
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     declaration_scope: DeclarationScopeBuild = build_declaration_scope(
         discovered_inputs=discovered_inputs,
@@ -172,52 +163,18 @@ def build_compile_inputs(
             adapter_context.python_functions_inherit_default_namespace
         ),
     )
-    source_inputs: tuple[CompileSourceInput, ...] = _reused_or_rendered(
+    source_inputs: tuple[CompileSourceInput, ...]
+    test_inputs: tuple[CompileSqlTestInput, ...]
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...]
+    source_inputs, test_inputs, scenario_inputs = build_sql_resource_inputs(
+        discovered_inputs=discovered_inputs,
+        context=model_context,
+        sql_function_inputs=sql_function_inputs,
+        no_sql_validation=no_sql_validation,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+        compile_cache_dir=compile_cache_dir,
         render_reuse=render_reuse,
-        name=RENDER_REUSE_SOURCES_GROUP,
-        render=partial(
-            build_source_inputs,
-            discovered_inputs=discovered_inputs,
-            effective_vars=effective_vars,
-            effective_settings=effective_settings,
-            macro_context=macro_context,
-            loaded_macros=declaration_scope.loaded_macros,
-            declaration_expansion=model_context.declaration_expansion,
-            no_sql_validation=no_sql_validation,
-        ),
     )
-    test_inputs: tuple[CompileSqlTestInput, ...] = _reused_or_rendered(
-        render_reuse=render_reuse,
-        name=RENDER_REUSE_TESTS_GROUP,
-        render=partial(
-            build_test_inputs_with_cache,
-            discovered_inputs=discovered_inputs,
-            effective_vars=effective_vars,
-            macro_context=macro_context,
-            loaded_macros=declaration_scope.loaded_macros,
-            declaration_expansion=model_context.declaration_expansion,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-            sql_function_inputs=sql_function_inputs,
-            compile_cache_dir=compile_cache_dir,
-            sql_lexical_syntax=adapter_context.sql_lexical_syntax,
-        ),
-    )
-    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = _reused_or_rendered(
-        render_reuse=render_reuse,
-        name=RENDER_REUSE_SCENARIOS_GROUP,
-        render=partial(
-            build_scenario_inputs,
-            discovered_inputs=discovered_inputs,
-            effective_vars=effective_vars,
-            macro_context=macro_context,
-            loaded_macros=declaration_scope.loaded_macros,
-            declaration_expansion=model_context.declaration_expansion,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-            sql_lexical_syntax=adapter_context.sql_lexical_syntax,
-        ),
-    )
-    if render_reuse is not None:
-        render_reuse.renders_complete()
     audit_inputs: tuple[CompileAuditInput, ...]
     audit_diagnostics: tuple[CompilerDiagnostic, ...]
     audit_inputs, audit_diagnostics = build_project_audit_inputs(
@@ -226,7 +183,10 @@ def build_compile_inputs(
         model_inputs=model_build.inputs,
         source_inputs=source_inputs,
         seed_inputs=seed_inputs,
+        render_reuse=render_reuse,
     )
+    if render_reuse is not None:
+        render_reuse.renders_complete()
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *audit_diagnostics,
         *model_build.diagnostics,
@@ -276,12 +236,6 @@ def build_compile_inputs(
         scope_index=declaration_scope.index,
         declaration_scope=declaration_scope,
     )
-
-
-def _reused_or_rendered[T](
-    *, render_reuse: CompileRenderReuseSession | None, name: str, render: Callable[[], T]
-) -> T:
-    return render() if render_reuse is None else render_reuse.group(name=name, render=render)
 
 
 def _build_sql_functions(

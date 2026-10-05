@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -29,15 +28,17 @@ from sqlbuild.cli.compile.models import (
     CompileCommandResult,
     CompileWriteResult,
 )
+from sqlbuild.cli.compile_render_reuse.main._activated_render_reuse import activated_render_reuse
+from sqlbuild.cli.compile_render_reuse.main._render_reuse_session import render_reuse_session
+from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
 from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.compile_reuse.main._compile_reuse_timings import compile_reuse_timings
-from sqlbuild.cli.compile_reuse.main._render_reuse_session import render_reuse_session
 from sqlbuild.cli.compile_reuse.main._write_reusable_compile import write_reusable_compile
-from sqlbuild.cli.compile_reuse.models import CompileRenderReuse, CompileReuseAttempt
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome
 from sqlbuild.cli.entry.models import CompileCommandRequest
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, COMPILE_RENDER_REUSE
+from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
@@ -77,7 +78,7 @@ def run_compile(
                 collect_compile_timings() as detailed_timings,
                 COMPILE_INPUT_READS.recording() as input_reads,
                 COMPILE_ARTIFACT_WRITES.recording() as artifact_writes,
-                _activated_render_reuse(render_reuse=render_reuse),
+                activated_render_reuse(render_reuse=render_reuse),
                 PreparedCompileArtifacts(
                     enabled=not request.profile_flags.skip_write
                 ) as prepared_artifacts,
@@ -110,16 +111,6 @@ def run_compile(
         finally:
             output.print_stdout()
     return result.exit_code
-
-
-def _activated_render_reuse(
-    *, render_reuse: CompileRenderReuse | None
-) -> AbstractContextManager[object]:
-    return (
-        nullcontext()
-        if render_reuse is None
-        else COMPILE_RENDER_REUSE.activated(render_reuse.session)
-    )
 
 
 def _run_compile_with_status(

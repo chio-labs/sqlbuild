@@ -8,26 +8,28 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.cli.compile_reuse._helpers.entry_file import framed_section, read_framed_section
+from sqlbuild.cli.compile_render_reuse.constants import (
+    RENDER_INDEX_FIELD_COUNT,
+    RENDER_OVERLAY_MAX_SHARE,
+    RENDER_STATE_MAGIC,
+)
+from sqlbuild.cli.compile_render_reuse.models import (
+    StoredRenderLayer,
+    StoredRenderLayers,
+    StoredRenderState,
+)
 from sqlbuild.cli.compile_reuse.constants import (
     REUSE_ENTRY_BYTE_ORDER,
     REUSE_ENTRY_CHECKSUM_BYTES,
     REUSE_ENTRY_LENGTH_BYTES,
     REUSE_MAX_ENTRY_BYTES,
-    REUSE_RENDER_OVERLAY_MAX_SHARE,
-    REUSE_RENDER_STATE_MAGIC,
     REUSE_RENDER_STATE_SUFFIX,
 )
 from sqlbuild.cli.compile_reuse.exceptions import CompileReuseEntryError
-from sqlbuild.cli.compile_reuse.models import (
-    RenderStateLayer,
-    StoredRenderLayer,
-    StoredRenderLayers,
-    StoredRenderState,
-)
+from sqlbuild.cli.compile_reuse.main._framed_section import framed_stored_section
+from sqlbuild.cli.compile_reuse.main._read_framed_section import read_stored_section
+from sqlbuild.cli.compile_reuse.models import RenderStateLayer
 from sqlbuild.compiler.compile.models import RenderReuseState
-
-_INDEX_FIELD_COUNT: int = 2
 
 
 def read_render_state(*, path: Path, changed_paths: frozenset[str]) -> StoredRenderState | None:
@@ -76,7 +78,7 @@ def render_state_layer(
             )
             if (
                 sum(len(item) for _, item in (*models, *groups))
-                <= stored.layers.base_bytes * REUSE_RENDER_OVERLAY_MAX_SHARE
+                <= stored.layers.base_bytes * RENDER_OVERLAY_MAX_SHARE
             ):
                 return _layer(
                     model_paths=state.model_paths,
@@ -128,8 +130,8 @@ def _layer(
     payloads: tuple[memoryview, ...] = tuple(item for _, item in (*models, *groups))
     return RenderStateLayer(
         chunks=(
-            REUSE_RENDER_STATE_MAGIC,
-            framed_section(data=index),
+            RENDER_STATE_MAGIC,
+            framed_stored_section(data=index),
             _section_header(payloads=payloads),
             *payloads,
         ),
@@ -150,16 +152,16 @@ def _section_header(*, payloads: Iterable[memoryview]) -> bytes:
 
 def _read_layer(*, path: Path, changed_paths: frozenset[str]) -> StoredRenderLayer | None:
     with open(path, "rb") as handle:
-        if handle.read(len(REUSE_RENDER_STATE_MAGIC)) != REUSE_RENDER_STATE_MAGIC:
+        if handle.read(len(RENDER_STATE_MAGIC)) != RENDER_STATE_MAGIC:
             return None
-        index: object = json.loads(read_framed_section(handle=handle))
+        index: object = json.loads(read_stored_section(handle=handle))
         if not isinstance(index, dict):
             return None
         fields: dict[str, object] = cast(dict[str, object], index)
         model_paths: tuple[str, ...] = tuple(_string(item) for item in _list(fields["model_paths"]))
         if not changed_paths.issubset(model_paths):
             return None
-        payload: bytes = read_framed_section(handle=handle)
+        payload: bytes = read_stored_section(handle=handle)
         if handle.read(1) or len(payload) > REUSE_MAX_ENTRY_BYTES:
             return None
     base: object = fields["base"]
@@ -213,7 +215,7 @@ def _rows(value: object) -> list[tuple[str, int]]:
     rows: list[tuple[str, int]] = []
     for row in _list(value):
         items: list[object] = _list(row)
-        if len(items) != _INDEX_FIELD_COUNT:
+        if len(items) != RENDER_INDEX_FIELD_COUNT:
             raise CompileReuseEntryError("invalid stored render index")
         length: object = items[1]
         if not isinstance(length, int) or isinstance(length, bool) or length < 0:
