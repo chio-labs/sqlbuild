@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.runtime.output_capture.constants import (
+    UTF8_CONTINUATION_BYTE_MASK,
+    UTF8_CONTINUATION_BYTE_TAG,
+)
+
 _ANSI_ESCAPE: re.Pattern[str] = re.compile(
     r"(?:\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~])"
 )
@@ -22,6 +27,48 @@ def chunk_text(*, text: str, max_bytes: int) -> tuple[str, ...]:
         if len(text) <= max_bytes:
             return (text,)
         return tuple(text[index : index + max_bytes] for index in range(0, len(text), max_bytes))
+    try:
+        encoded: bytes = text.encode("utf-8")
+    except UnicodeEncodeError:
+        return _chunk_text_by_character(text=text, max_bytes=max_bytes)
+    if len(encoded) <= max_bytes:
+        return (text,)
+    return _chunk_utf8(encoded=encoded, max_bytes=max_bytes)
+
+
+def _chunk_utf8(*, encoded: bytes, max_bytes: int) -> tuple[str, ...]:
+    """Split valid UTF-8 greedily at the last code point boundary within each limit."""
+
+    chunks: list[str] = []
+    total: int = len(encoded)
+    start: int = 0
+    while start < total:
+        end: int = start + max_bytes
+        if end >= total:
+            end = total
+        else:
+            while (
+                end > start
+                and encoded[end] & UTF8_CONTINUATION_BYTE_MASK == UTF8_CONTINUATION_BYTE_TAG
+            ):
+                end -= 1
+            if end <= start:
+                end = start + 1
+                while (
+                    end < total
+                    and encoded[end] & UTF8_CONTINUATION_BYTE_MASK == UTF8_CONTINUATION_BYTE_TAG
+                ):
+                    end += 1
+        chunks.append(encoded[start:end].decode("utf-8"))
+        start = end
+    if not chunks:
+        chunks.append("")
+    return tuple(chunks)
+
+
+def _chunk_text_by_character(*, text: str, max_bytes: int) -> tuple[str, ...]:
+    """Split text containing lone surrogates, which surrogateescape maps to single bytes."""
+
     if len(text) <= max_bytes and len(text.encode("utf-8", "surrogateescape")) <= max_bytes:
         return (text,)
 
