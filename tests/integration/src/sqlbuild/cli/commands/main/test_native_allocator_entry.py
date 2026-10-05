@@ -22,9 +22,11 @@ from sqlbuild.cli.entry.main.entry import main
 
 loaded_at_import = "sqlbuild._native" in sys.modules
 exit_code = main(["--version"])
+loaded_by_version = "sqlbuild._native" in sys.modules
+import sqlbuild._native
 print(json.dumps({
     "loaded_at_import": loaded_at_import,
-    "loaded_after_main": "sqlbuild._native" in sys.modules,
+    "loaded_by_version": loaded_by_version,
     "purge_delay": os.environ.get("MIMALLOC_PURGE_DELAY"),
     "exit_code": exit_code,
 }))
@@ -65,7 +67,7 @@ def test_given_fresh_process_when_running_cli_entry_then_purge_delay_is_set_befo
 
     assert payload == {
         "loaded_at_import": False,
-        "loaded_after_main": True,
+        "loaded_by_version": False,
         "purge_delay": test_case.expected_purge_delay,
         "exit_code": 0,
     }
