@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.134.5](https://github.com/chio-labs/sqlbuild/compare/v0.134.4...v0.134.5) (2026-10-05)
+
+
+### Performance Improvements
+
+* **compile:** reuse the previous compile when no input changed ([#951](https://github.com/chio-labs/sqlbuild/issues/951)) ([0b86fac](https://github.com/chio-labs/sqlbuild/commit/0b86facfcfc28ec4709a095faaad91ed7bf4064a))
+
 ## [0.134.4](https://github.com/chio-labs/sqlbuild/compare/v0.134.3...v0.134.4) (2026-10-05)
 
 
