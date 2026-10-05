@@ -27,4 +27,6 @@ type CompileMetric = Literal[
     "fact_cache_misses",
     "render_reuse_hits",
     "render_reuse_misses",
+    "model_render_native",
+    "model_render_fallback",
 ]

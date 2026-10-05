@@ -5,6 +5,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+import pytest
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -22,6 +24,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
 )
+from sqlbuild.compiler.compile.classes.native_model_rendering import NativeModelRendering
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -761,3 +764,9 @@ def required_description_diagnostics(
         source_inputs=inputs.source_inputs,
         function_inputs=inputs.function_inputs,
     )
+
+
+def scan_references_with_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send every model reference scan through the cached Python extractor."""
+
+    monkeypatch.setattr(NativeModelRendering, "model_references", lambda self, **kwargs: None)

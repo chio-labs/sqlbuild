@@ -3830,3 +3830,11 @@ def json_report_keys(stdout: str) -> tuple[str, ...]:
     """Parse a JSON compile report and return its top-level keys."""
 
     return tuple(cast(dict[str, object], json.loads(stdout)))
+
+
+def compile_payload_without_timings(output: str) -> dict[str, object]:
+    """Return compile JSON without the run-dependent timings."""
+
+    payload: dict[str, object] = json.loads(output)
+    _ = payload.pop("compile_timings", None)
+    return payload

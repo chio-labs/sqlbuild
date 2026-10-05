@@ -19,6 +19,7 @@ from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     DenseCompileGuardTestCase,
+    DenseRenderOracleTestCase,
     DenseWarmEditCompileGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
@@ -27,6 +28,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     fresh_process_compile_cache_metrics,
     measure_model_sql_bytes,
     run_dense_warm_edit_benchmark,
+)
+from tests.integration.src.sqlbuild.compiler.compile.helpers import (
+    NativeRenderComparison,
+    compare_native_rendering,
+    render_differences,
+    rendered_model_counts,
 )
 
 _MIB: int = 1024 * 1024
@@ -125,9 +132,39 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
     assert timings["rule_cache_misses"] == 2 * test_case.model_count + 1
     assert timings["built_in_rules_ms"] > 0
     assert timings["custom_rules_ms"] > 0
+    assert timings["model_render_native"] == test_case.model_count * 7 // 10
+    assert timings["model_render_ms"] < test_case.model_count
     assert result.semantic_fingerprint == test_case.expected_fingerprint
     assert result.elapsed_seconds < test_case.expected_max_wall_seconds
     assert result.peak_rss_bytes < test_case.expected_max_rss_bytes
+
+
+@pytest.mark.performance
+@pytest.mark.cold_compile_performance
+@pytest.mark.parametrize(
+    "test_case",
+    (DenseRenderOracleTestCase("dense_models_3000_render_oracle", 3000, 2100, 900),),
+    ids=lambda case: case.description,
+)
+def test_given_dense_project_when_rendering_natively_then_matches_python_rendering(
+    test_case: DenseRenderOracleTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert_required_cgroup_memory_limit()
+    project_dir: Path = tmp_path / "dense_orders"
+    write_dense_compile_project(project_dir=project_dir, model_count=test_case.model_count)
+
+    comparison: NativeRenderComparison = compare_native_rendering(
+        project_dir=project_dir, capsys=capsys, monkeypatch=monkeypatch
+    )
+
+    assert render_differences(comparison) == test_case.expected_differences
+    assert rendered_model_counts(comparison) == (
+        test_case.expected_native_models,
+        test_case.expected_fallback_models,
+    )
 
 
 @pytest.mark.performance

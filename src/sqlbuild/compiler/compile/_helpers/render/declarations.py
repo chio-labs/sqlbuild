@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -557,16 +557,24 @@ def expand_declaration_references_result(
     declarations: DeclarationResolutionContext,
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
+    reference_starts: tuple[int, ...] | None = None,
 ) -> DeclarationExpansionResult:
-    """Resolve references and retain usage facts from the resolving token walk."""
+    """Resolve references at natively scanned or walked offsets and retain usage facts."""
 
     rendered_parts: list[str] = []
     spans: list[ExpansionSpan] = []
     usages: list[UsageRecord] = []
     output_length: int = 0
     cursor: int = 0
+    known_starts: Iterator[int] | None = (
+        iter(reference_starts) if reference_starts is not None else None
+    )
     while cursor < len(sql):
-        reference_start: int | None = _find_next_reference_start(sql=sql, start=cursor)
+        reference_start: int | None = (
+            _find_next_reference_start(sql=sql, start=cursor)
+            if known_starts is None
+            else next(known_starts, None)
+        )
         if reference_start is None:
             rendered_parts.append(sql[cursor:])
             break

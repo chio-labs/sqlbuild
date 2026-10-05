@@ -49,3 +49,9 @@ def substitute_static_project_vars(
 def extract_static_sql_references(
     sql: str,
 ) -> list[tuple[str, str, str | None, int | None]] | None: ...
+def render_model_sql_batch(
+    sqls: list[str | None], syntax_json: str
+) -> list[tuple[list[int] | None, list[tuple[str, str, str | None, int | None]] | None]]: ...
+def extract_model_sql_references(
+    sql: str, syntax_json: str
+) -> list[tuple[str, str, str | None, int | None]] | None: ...

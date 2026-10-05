@@ -1,5 +1,7 @@
 //! Lexical scanning outcomes and dialect-dependent quoting policy.
 
+use crate::sql_scan::constants::GENERIC_LINE_COMMENT_PREFIX;
+
 /// The SQL construct a scan reached the end of input inside.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Unclosed {
@@ -89,5 +91,23 @@ impl LexicalSyntax {
         self.backslash_escape_quotes
             .iter()
             .any(|value| value.as_bytes() == [quote])
+    }
+
+    /// Return whether these rules can read `sql` differently from generic SQL.
+    pub(crate) fn reads_differently_from_generic(&self, sql: &str) -> bool {
+        if sql.contains('\\')
+            && (!self.backslash_escape_quotes.is_empty() || self.escape_string_prefix)
+        {
+            return true;
+        }
+        if self.triple_quoted_strings && (sql.contains("'''") || sql.contains("\"\"\"")) {
+            return true;
+        }
+        if self.nested_block_comments && sql.matches("/*").count() > 1 {
+            return true;
+        }
+        self.line_comment_prefixes
+            .iter()
+            .any(|prefix| prefix != GENERIC_LINE_COMMENT_PREFIX && sql.contains(prefix.as_str()))
     }
 }

@@ -1,9 +1,10 @@
 //! Conservative native fast path for logical SQL reference extraction.
 
 use crate::constants::{DBT_REFERENCE_KIND, TABLE_FUNCTION_REFERENCE_KIND};
+use crate::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::main::quote_end::quote_end;
-use crate::sql_scan::models::QuotePolicy;
+use crate::sql_scan::models::{LexicalSyntax, QuotePolicy, Unclosed};
 
 const PREFIXES: [(&str, &str); 6] = [
     ("__dbt_ref(", "dbt_ref"),
@@ -17,11 +18,36 @@ const PREFIXES: [(&str, &str); 6] = [
 pub(crate) type StaticReference = (String, String, Option<String>, Option<usize>);
 
 pub(crate) fn extract(sql: &str) -> Option<Vec<StaticReference>> {
+    extract_skipping(sql, |bytes, index| {
+        non_code_end(bytes, index, QuotePolicy::COMPILER)
+    })
+}
+
+/// Extract under one adapter's lexical rules; a name with a backslash is left to Python.
+pub(crate) fn extract_with_syntax(
+    sql: &str,
+    syntax: &LexicalSyntax,
+) -> Option<Vec<StaticReference>> {
+    let references = extract_skipping(sql, |bytes, index| {
+        dialect_non_code_end(bytes, index, syntax)
+    })?;
+    if references.iter().any(|(_, name, package, _)| {
+        name.contains('\\') || package.as_ref().is_some_and(|value| value.contains('\\'))
+    }) {
+        return None;
+    }
+    Some(references)
+}
+
+fn extract_skipping(
+    sql: &str,
+    skip: impl Fn(&[u8], usize) -> Result<Option<usize>, Unclosed>,
+) -> Option<Vec<StaticReference>> {
     let bytes = sql.as_bytes();
     let mut references: Vec<StaticReference> = Vec::new();
     let mut index = 0;
     while index < bytes.len() {
-        match non_code_end(bytes, index, QuotePolicy::COMPILER) {
+        match skip(bytes, index) {
             Ok(Some(end)) => {
                 index = end;
                 continue;

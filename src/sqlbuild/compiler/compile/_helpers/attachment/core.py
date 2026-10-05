@@ -96,6 +96,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_effective_vars,
     expand_template_data,
 )
+from sqlbuild.compiler.compile.classes.native_model_rendering import NativeModelRendering
 from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
@@ -269,6 +270,7 @@ class _ModelInputLoop:
     config_scan_cache: ModelConfigScanCache
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
+    native_rendering: NativeModelRendering
 
 
 @dataclass(frozen=True)
@@ -525,6 +527,9 @@ def _build_model_inputs(
             target_config=context.target_config,
         ),
         declaration_cache=_VisibleModelDeclarationCache.build(context),
+        native_rendering=NativeModelRendering(
+            sqls=prepared_var_substituted_sqls, syntax=context.sql_lexical_syntax
+        ),
     )
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
@@ -551,6 +556,7 @@ def _build_model_inputs(
         model_inputs=tuple(model_inputs),
         schema_files=discovered_inputs.schema_files,
     )
+    loop.native_rendering.record_counts()
     return tuple(model_inputs)
 
 
@@ -672,6 +678,7 @@ def _build_model_input(
         declarations=declaration_context,
         value_renderer=context.value_renderer,
         collection_rendering=context.collection_rendering,
+        reference_starts=loop.native_rendering.declaration_starts(model_file.file_path),
     )
     declaration_expanded_sql: str = declaration_expansion.sql
     macro_expansion: MacroExpansionResult = expand_sql_macros_result(
@@ -703,6 +710,11 @@ def _build_model_input(
         sql_validation_placeholders=sql_validation_placeholders,
         model_schema_columns=model_schema_columns,
         argument_references=macro_expansion.argument_references,
+        native_references=loop.native_rendering.model_references(
+            path=model_file.file_path,
+            expanded_query_sql=expanded_query_sql,
+            var_substituted_sql=var_substituted_sql,
+        ),
     )
     hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
         values=effective_config.values,
@@ -882,6 +894,7 @@ def _validate_model_input(
     sql_validation_placeholders: dict[str, str] | None,
     model_schema_columns: tuple[SchemaColumn, ...] | None,
     argument_references: tuple[CompileSqlReference, ...],
+    native_references: tuple[CompileSqlReference, ...] | None = None,
 ) -> tuple[bool, tuple[CompileSqlReference, ...], SourceLocation | None]:
     model_name: str = model_file.file_path.stem
     sql_validation_enabled: bool = _model_sql_validation_gate(
@@ -918,7 +931,11 @@ def _validate_model_input(
             placeholders=sql_validation_placeholders,
         )
     references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-        references=context.extract_references(expanded_query_sql),
+        references=(
+            native_references
+            if native_references is not None
+            else context.extract_references(expanded_query_sql)
+        ),
         argument_references=argument_references,
     )
     validate_model_references(

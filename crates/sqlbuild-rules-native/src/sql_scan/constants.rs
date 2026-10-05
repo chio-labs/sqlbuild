@@ -6,3 +6,5 @@ pub(crate) const STRING_PREFIX_CHARACTERS: &[u8] = b"bBeErR";
 pub(crate) const STRING_PREFIX_MAX_LENGTH: usize = 2;
 /// Length of a triple-quote string delimiter.
 pub(crate) const TRIPLE_QUOTE_LENGTH: usize = 3;
+/// Line comment prefix every dialect shares.
+pub(crate) const GENERIC_LINE_COMMENT_PREFIX: &str = "--";

@@ -27,3 +27,14 @@ class RandomDagProject:
     missing_reference: bool = False
     cycle: bool = False
     rules: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RandomRenderProject:
+    """One seeded project mixing macros, declarations, variables, and dialect-specific text."""
+
+    seed: int
+    model_count: int
+    adapter: str = "duckdb"
+    errors: int = 0
+    generated_references: bool = False

@@ -45,6 +45,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compile_project_with_cache,
+    scan_references_with_python,
     stored_analysis_contents,
 )
 
@@ -146,7 +147,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     signature_builder.assert_not_called()
     reference_scanner.assert_not_called()
     assert len(tuple((tmp_path / "target" / "cache" / "compiler").rglob("*.sqlite3"))) == (
-        test_case.expected_count + 1
+        test_case.expected_count
     )
 
 
@@ -381,6 +382,7 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
+    scan_references_with_python(monkeypatch)
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
@@ -421,6 +423,7 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
+    scan_references_with_python(monkeypatch)
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(

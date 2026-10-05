@@ -444,6 +444,27 @@ fn substitute_static_project_vars(
 }
 
 #[pyfunction]
+fn render_model_sql_batch(
+    py: Python<'_>,
+    sqls: Vec<Option<String>>,
+    syntax_json: &str,
+) -> PyResult<Vec<crate::compiler::_helpers::model_rendering::batch::ModelRenderFacts>> {
+    py.compiler_detach(|| crate::compiler::main::model_rendering::render_models(&sqls, syntax_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn extract_model_sql_references(
+    sql: &str,
+    syntax_json: &str,
+) -> PyResult<Option<Vec<crate::compiler::_helpers::sql_references::extraction::StaticReference>>> {
+    compiler_guard(|| {
+        crate::compiler::main::model_sql_references::model_sql_references(sql, syntax_json)
+            .map_err(value_error)
+    })
+}
+
+#[pyfunction]
 fn extract_static_sql_references(
     sql: &str,
 ) -> PyResult<Option<Vec<crate::compiler::_helpers::sql_references::extraction::StaticReference>>> {
@@ -548,6 +569,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_model_headers, module)?)?;
     module.add_function(wrap_pyfunction!(tokenize_model_header, module)?)?;
     module.add_function(wrap_pyfunction!(substitute_static_project_vars, module)?)?;
+    module.add_function(wrap_pyfunction!(render_model_sql_batch, module)?)?;
+    module.add_function(wrap_pyfunction!(extract_model_sql_references, module)?)?;
     module.add_function(wrap_pyfunction!(extract_static_sql_references, module)?)?;
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;

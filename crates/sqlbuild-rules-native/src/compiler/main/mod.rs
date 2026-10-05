@@ -1,6 +1,8 @@
 pub(crate) mod model_header_matching;
 pub(crate) mod model_header_parsing;
 pub(crate) mod model_header_tokenizing;
+pub(crate) mod model_rendering;
+pub(crate) mod model_sql_references;
 pub(crate) mod sql_interpolation;
 pub(crate) mod sql_references;
 pub(crate) mod sql_test_chain_resolution;

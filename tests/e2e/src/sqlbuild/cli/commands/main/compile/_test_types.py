@@ -759,3 +759,36 @@ class RenderLoadNoticeTestCase:
     description: str
     notice_bytes: int
     expected_notice: bool
+
+
+@dataclass(frozen=True)
+class NativeRenderBuildTestCase:
+    """A project whose models render natively, then build on DuckDB."""
+
+    description: str
+    expected_native_models: int
+    expected_fallback_models: int
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class NativeRenderEditTestCase:
+    """One authored edit after a warm compile of a natively rendered project."""
+
+    description: str
+    edited_model: str
+    old_text: str
+    new_text: str
+    expected_warm_matches_cold: bool = True
+    expected_edit_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class DenseRenderOracleTestCase:
+    """A dense project rendered through both the Python and native renderers."""
+
+    description: str
+    model_count: int
+    expected_native_models: int
+    expected_fallback_models: int
+    expected_differences: tuple[str, ...] = ()

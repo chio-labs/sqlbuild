@@ -1222,6 +1222,14 @@ class SqlExpansionContext:
 
 
 @dataclass(frozen=True)
+class NativeModelRenderFacts:
+    """Rendering facts computed natively for one model; ``None`` fields are left to Python."""
+
+    declaration_starts: tuple[int, ...] | None
+    references: tuple[CompileSqlReference, ...] | None
+
+
+@dataclass(frozen=True)
 class ExpansionSpan:
     """One substituted region, pairing its source range with its rendered range."""
 

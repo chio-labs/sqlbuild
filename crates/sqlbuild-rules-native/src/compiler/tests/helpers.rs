@@ -8,13 +8,16 @@ use serde_json::{Value, json};
 use crate::compiler::_helpers::model_headers::tokenization::{
     MAX_TOKENIZER_WORKERS, TOKENIZER_WORKER_STACK_BYTES, build_tokenizer_pool, parse_batch,
 };
+use crate::compiler::_helpers::model_rendering::batch::render_batch;
+use crate::compiler::_helpers::model_rendering::declaration_scan::declaration_reference_starts;
 use crate::compiler::_helpers::sql_interpolation::substitution::{
     FALLBACK, SUBSTITUTED, UNCHANGED, substitute_batch,
 };
-use crate::compiler::_helpers::sql_references::extraction::extract;
+use crate::compiler::_helpers::sql_references::extraction::{extract, extract_with_syntax};
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::main::sql_test_extraction::extract_batch_json;
 use crate::compiler::models::AuthoredValue;
+use crate::sql_scan::models::LexicalSyntax;
 
 pub(crate) fn scalar_variables_preserve_lexical_boundaries() -> bool {
     let sqls = vec![
@@ -1794,4 +1797,71 @@ pub(crate) fn relation_marker_oracle_mismatches(dialect: &str) -> Vec<String> {
                 })
         })
         .collect()
+}
+
+fn snowflake_syntax() -> LexicalSyntax {
+    LexicalSyntax {
+        backslash_escape_quotes: vec!["'".to_owned()],
+        line_comment_prefixes: vec!["--".to_owned(), "//".to_owned()],
+        ..LexicalSyntax::default()
+    }
+}
+
+pub(crate) fn declaration_references_follow_the_expansion_walk() -> bool {
+    let sql = concat!(
+        "SELECT @enum(\"status\").ACTIVE, @const ( 'limit' ), @enum( 'kind' ) . B,\n",
+        "-- @enum(\"ignored\").X\n",
+        "'@const(\"quoted\")', $$ @const(\"dollar\") $$, @constant_name(), @enumerate(1)",
+    );
+    declaration_reference_starts(sql) == Some(vec![7, 31, 51])
+}
+
+pub(crate) fn malformed_or_unicode_declarations_request_fallback() -> bool {
+    [
+        "SELECT @enum(status).ACTIVE",
+        "SELECT @enum(\"status\")",
+        "SELECT @const(\"limit\"",
+        "SELECT @const(\u{a0}\"limit\")",
+        "SELECT @enumé",
+        "SELECT 'unclosed @enum(\"status\").ACTIVE",
+        "SELECT /* unclosed @const(\"limit\")",
+    ]
+    .into_iter()
+    .all(|sql| declaration_reference_starts(sql).is_none())
+}
+
+pub(crate) fn sql_without_declarations_skips_unclosed_text() -> bool {
+    declaration_reference_starts("SELECT 'unclosed") == Some(Vec::new())
+}
+
+pub(crate) fn batch_offsets_count_code_points() -> bool {
+    let sqls = vec![
+        Some("SELECT 'café', @const(\"limit\")".to_owned()),
+        None,
+        Some("SELECT 1 FROM __ref(\"orders\")".to_owned()),
+    ];
+    render_batch(&sqls, &LexicalSyntax::default()).expect("render pool builds")
+        == vec![
+            (Some(vec![15]), None),
+            (None, None),
+            (
+                Some(Vec::new()),
+                Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)]),
+            ),
+        ]
+}
+
+pub(crate) fn dialect_comments_hide_references() -> bool {
+    let sql = "SELECT 1 FROM __ref(\"orders\") // __ref(\"ignored\")\nJOIN __seed('regions') ON 'a\\'b' = ''";
+    extract_with_syntax(sql, &snowflake_syntax())
+        == Some(vec![
+            ("ref".to_owned(), "orders".to_owned(), None, None),
+            ("seed".to_owned(), "regions".to_owned(), None, None),
+        ])
+        && snowflake_syntax().reads_differently_from_generic(sql)
+        && !LexicalSyntax::default().reads_differently_from_generic(sql)
+}
+
+pub(crate) fn dialect_escaped_reference_names_request_fallback() -> bool {
+    extract_with_syntax("SELECT * FROM __ref('ord\\'ers')", &snowflake_syntax()).is_none()
 }

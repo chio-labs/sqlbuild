@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
+type NativeReference = tuple[str, str, str | None, int | None]
+
+
 class TypedSqlValueRenderer(Protocol):
     """Adapter rendering operations consumed by authored SQL expansion."""
 

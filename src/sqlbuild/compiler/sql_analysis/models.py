@@ -74,6 +74,18 @@ class SqlLexicalSyntax:
             )
         )
 
+    def native_request(self) -> dict[str, object]:
+        """Return these rules in the shape native scanners deserialize."""
+
+        return {
+            "backslashEscapeQuotes": sorted(self.backslash_escape_quotes),
+            "escapeStringPrefix": self.escape_string_prefix,
+            "rawStringPrefix": self.raw_string_prefix,
+            "tripleQuotedStrings": self.triple_quoted_strings,
+            "nestedBlockComments": self.nested_block_comments,
+            "lineCommentPrefixes": sorted(self.line_comment_prefixes),
+        }
+
     def reads_differently_from_generic(self, sql: str) -> bool:
         """Return whether these rules can read the SQL differently from generic SQL."""
 
