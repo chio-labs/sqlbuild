@@ -11,8 +11,15 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint._helpers.project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult
-from tests.unit.src.sqlbuild.lint._helpers._test_types import CollectProjectFilesTestCase
-from tests.unit.src.sqlbuild.lint._helpers.helpers import write_orders_lint_project
+from tests.unit.src.sqlbuild.lint._helpers._test_types import (
+    CollectProjectFilesTestCase,
+    SelectedProjectFilesTestCase,
+)
+from tests.unit.src.sqlbuild.lint._helpers.helpers import (
+    files_resolving_to,
+    write_linked_orders_project,
+    write_orders_lint_project,
+)
 
 
 @pytest.mark.parametrize(
@@ -52,6 +59,42 @@ def test_given_discovered_project_when_collecting_files_then_returns_exact_autho
     assert shared.source_texts == fresh.source_texts
     assert shared.violations == fresh.violations
     assert shared.files_checked == fresh.files_checked == 2
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectedProjectFilesTestCase(
+            description="regular_file",
+            selected="models/orders/orders.sql",
+            expected_present=("models/orders/orders.sql",),
+        ),
+        SelectedProjectFilesTestCase(
+            description="file_reached_through_links",
+            selected="shared/customers.sql",
+            expected_present=("models/orders/customers_link.sql",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_resolved_paths_when_collecting_files_then_matches_resolving_each_file(
+    test_case: SelectedProjectFilesTestCase, tmp_path: Path
+) -> None:
+    write_linked_orders_project(project_dir=tmp_path)
+    selected: frozenset[Path] = frozenset({(tmp_path / test_case.selected).resolve()})
+    every_file: dict[Path, str] = collect_project_files(project_dir=tmp_path)
+
+    collected: dict[Path, str] = collect_project_files(
+        project_dir=tmp_path, selected_paths=selected
+    )
+    from_sources: dict[Path, str] = collect_project_files(
+        project_dir=tmp_path, selected_paths=selected, source_files=every_file
+    )
+
+    relative: set[str] = {path.relative_to(tmp_path).as_posix() for path in collected}
+    assert relative >= set(test_case.expected_present)
+    assert from_sources == collected
+    assert collected == files_resolving_to(files=every_file, selected=selected)
 
 
 if __name__ == "__main__":

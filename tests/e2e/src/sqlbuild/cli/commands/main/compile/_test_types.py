@@ -681,3 +681,81 @@ class CompileReuseStoreFailureTestCase:
     expected_returncode: int = 0
     expected_stored_entries: int = 0
     expected_raised: type[BaseException] | None = None
+
+
+@dataclass(frozen=True)
+class IncrementalEditStep:
+    """One authored edit, and whether its compile may reuse unaffected renders."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_render_reuse: bool
+
+
+@dataclass(frozen=True)
+class IncrementalEditSequenceTestCase:
+    """Edits applied in order, each compiled incrementally and compared with --no-cache."""
+
+    description: str
+    steps: tuple[IncrementalEditStep, ...]
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class RandomEditChainTestCase:
+    """A seeded random chain of edits over a generated project."""
+
+    description: str
+    seed: int
+    model_count: int
+    step_count: int
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class BrokenChangeDetectionTestCase:
+    """A model edit compiled while change detection reports nothing changed."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_matches_uncached: bool
+
+
+@dataclass(frozen=True)
+class RenderStoreNoticeTestCase:
+    """A render-count notice threshold and whether storing renders announces itself."""
+
+    description: str
+    notice_renders: int
+    expected_notice: bool
+
+
+@dataclass(frozen=True)
+class RenderSavePolicyTestCase:
+    """Compiles after a cold compile, and the render files and reuse each one must leave."""
+
+    description: str
+    edits: tuple[Callable[[Path], None], ...]
+    expected_cold_render_files: int
+    expected_render_files: tuple[int, ...]
+    expected_reused: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
+class ExternalModuleEditTestCase:
+    """An outside module imported only while rendering, rewritten after its render is reused."""
+
+    description: str
+    initial_value: str
+    edited_value: str
+    expected_matches_uncached: bool
+    expected_compiled_value: str
+
+
+@dataclass(frozen=True)
+class RenderLoadNoticeTestCase:
+    """A stored-render size threshold and whether loading the store announces itself."""
+
+    description: str
+    notice_bytes: int
+    expected_notice: bool

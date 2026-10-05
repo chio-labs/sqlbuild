@@ -117,8 +117,31 @@ and when a provider's settings use sources SQLBuild cannot list exactly, such as
 SQLBuild keeps one stored result per project and target under
 `target/cache/compiler/project-reuse-v1/`. It is replaced atomically; a damaged or unreadable entry is
 ignored and compile runs in full. Storing a result normally takes a fraction of a second after the
-report is ready. When it has to hash a lot of data or the project has very many files, compile
-prints `Recording compile for reuse...` and a completion line to stderr before the report.
+report is ready. When it has to hash a lot of data, the project has very many files, or it records
+thousands of new model renders, compile prints `Recording compile for reuse...` and a completion
+line to stderr before the report.
+
+### Compiling after model-only edits
+
+When the only changes since the stored compile are edits to existing model files, compile runs in
+full but reuses the stored render of every unchanged model, together with the diagnostics and
+environment reads that rendering reported. Only the edited models are rendered again. Analysis,
+contracts, rules, and artifact writes still run for the whole project, so downstream effects of an
+edit, such as a changed column type, are reported exactly as in an uncached compile. The output is
+byte-identical to `sqb compile --no-cache`.
+
+Every other change renders the whole project: adding, removing, or renaming a model, and editing
+macros or the Python modules they import, configuration, `path_defaults`, enums, constants, scope
+folders, seeds, sources, tests, or audits. A model whose render read `run.id` or provider settings
+is always rendered again.
+
+Renders are stored only when a compile result for the same project and target is already stored,
+so a compile in a fresh checkout or after deleting `target/` stores none and costs nothing extra.
+The next full compile stores them, and edits after that reuse them. Stored renders are compressed
+and kept for the two newest compiles in the same folder. When the stored renders are large, compile prints
+`Loading stored renders...` and a completion line to stderr before it starts. While renders are
+reused, the Python modules recorded by the previous compile stay tracked even if this compile did
+not import them, so editing such a module runs the next compile in full.
 
 Known limits:
 
@@ -138,7 +161,8 @@ Known limits:
 A replayed JSON report is byte-identical to the previous one except for `compile_timings`, which
 holds `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses`,
 `project_reuse_check_ms`, and `total_ms`. Full compiles report the same reuse counters alongside
-the phase timings. In text mode, a replayed compile does not print the per-phase progress lines.
+the phase timings, plus `render_reuse_hits` and `render_reuse_misses` for model renders reused or
+rendered again after model-only edits. In text mode, a replayed compile does not print the per-phase progress lines.
 Lifecycle sinks receive only the invocation events for a replayed compile; per-phase `operation`
 events are not emitted because no compile phase runs.
 

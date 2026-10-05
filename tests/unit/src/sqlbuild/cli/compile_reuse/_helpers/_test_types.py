@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.cli.compile_reuse.models import StoredProjectFile
+from tests.unit.src.sqlbuild.cli.compile_reuse._helpers.helpers import digested_project_files
+
 
 @dataclass(frozen=True)
 class ProjectFingerprintTestCase:
@@ -78,3 +81,13 @@ class SettingsDigestTestCase:
     description: str
     change: Callable[[pytest.MonkeyPatch, Path], None]
     expected_changed: bool
+
+
+@dataclass(frozen=True)
+class ChangedPathsTestCase:
+    """One project change and every project path a change set must name for it."""
+
+    description: str
+    change: Callable[[Path], object]
+    expected_paths: tuple[str, ...]
+    store: Callable[[Path], dict[str, StoredProjectFile]] = digested_project_files

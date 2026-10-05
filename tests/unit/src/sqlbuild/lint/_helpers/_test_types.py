@@ -243,3 +243,12 @@ class CollectProjectFilesTestCase:
     description: str
     model_bytes: bytes
     expected_shared: bool
+
+
+@dataclass(frozen=True)
+class SelectedProjectFilesTestCase:
+    """Selected lint inputs named by resolved path, possibly through symbolic links."""
+
+    description: str
+    selected: str
+    expected_present: tuple[str, ...]

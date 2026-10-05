@@ -44,7 +44,7 @@ def dump_fact_payload(value: object) -> bytes:
     return pickle.dumps(value, protocol=FACT_CACHE_PICKLE_PROTOCOL)
 
 
-def load_fact_payload(payload: bytes) -> object:
+def load_fact_payload(payload: bytes | memoryview) -> object:
     """Deserialize one verified cache payload through the restricted class allowlist."""
 
     return _RestrictedUnpickler(io.BytesIO(payload)).load()

@@ -101,6 +101,37 @@ def compare_project_files(
     return ProjectFilesComparison(unchanged=True, verified=verified)
 
 
+def changed_project_paths(
+    *,
+    project_dir: str,
+    stored: dict[str, StoredProjectFile],
+    current: dict[str, FileStamp],
+    verified: dict[str, str],
+) -> tuple[frozenset[str], dict[str, str]]:
+    """Return every path added, removed, or changed since the stored compile, and new digests."""
+
+    digests: dict[str, str] = dict(verified)
+    changed: set[str] = {path for path in stored if path not in current}
+    for relative_path, stamp in current.items():
+        previous: StoredProjectFile | None = stored.get(relative_path)
+        if previous is None or not _same_identity(stamp=stamp, recorded=previous.stamp):
+            changed.add(relative_path)
+            continue
+        if stamp.kind in _PRESENCE_ONLY_KINDS or (stamp == previous.stamp and not previous.racy):
+            continue
+        if stamp.kind not in _HASHABLE_KINDS or previous.digest is None:
+            changed.add(relative_path)
+            continue
+        digest: str | None = digests.get(relative_path) or file_digest(
+            path=os.path.join(project_dir, relative_path)
+        )
+        if digest is None or digest != previous.digest:
+            changed.add(relative_path)
+        else:
+            digests[relative_path] = digest
+    return frozenset(changed), digests
+
+
 def carried_forward_digests(
     *,
     stored: dict[str, StoredProjectFile],

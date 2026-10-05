@@ -28,6 +28,9 @@ from sqlbuild.cli.compile.models import (
     CompileCommandResult,
     CompileWriteResult,
 )
+from sqlbuild.cli.compile_render_reuse.main._activated_render_reuse import activated_render_reuse
+from sqlbuild.cli.compile_render_reuse.main._render_reuse_session import render_reuse_session
+from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
 from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.compile_reuse.main._compile_reuse_timings import compile_reuse_timings
@@ -64,34 +67,35 @@ def run_compile(
         else reuse_attempt
     )
     output: RecordedCompileOutput = RecordedCompileOutput()
+    render_reuse: CompileRenderReuse | None = render_reuse_session(attempt=attempt)
     status: TransientStatusReporter | None = start_compile_status(
         json_output=request.json_output,
         no_color=request.no_color,
     )
-    try:
-        with (
-            paused_cyclic_collection(),
-            collect_compile_timings() as detailed_timings,
-            COMPILE_INPUT_READS.recording() as input_reads,
-            COMPILE_ARTIFACT_WRITES.recording() as artifact_writes,
-            PreparedCompileArtifacts(
-                enabled=not request.profile_flags.skip_write
-            ) as prepared_artifacts,
-        ):
-            result: CompileCommandResult = _run_compile_with_status(
-                request=effective_request,
-                total_start=total_start,
-                status=status,
-                detailed_timings=detailed_timings,
-                prepared_artifacts=prepared_artifacts,
-                output=output,
-                reuse_timings_ms=compile_reuse_timings(attempt=attempt),
-            )
-    finally:
-        if status is not None:
-            status.close()
-    try:
-        with paused_cyclic_collection():
+    with paused_cyclic_collection():
+        try:
+            with (
+                collect_compile_timings() as detailed_timings,
+                COMPILE_INPUT_READS.recording() as input_reads,
+                COMPILE_ARTIFACT_WRITES.recording() as artifact_writes,
+                activated_render_reuse(render_reuse=render_reuse),
+                PreparedCompileArtifacts(
+                    enabled=not request.profile_flags.skip_write
+                ) as prepared_artifacts,
+            ):
+                result: CompileCommandResult = _run_compile_with_status(
+                    request=effective_request,
+                    total_start=total_start,
+                    status=status,
+                    detailed_timings=detailed_timings,
+                    prepared_artifacts=prepared_artifacts,
+                    output=output,
+                    reuse_timings_ms=compile_reuse_timings(attempt=attempt),
+                )
+        finally:
+            if status is not None:
+                status.close()
+        try:
             write_reusable_compile(
                 attempt=attempt,
                 output=output,
@@ -102,9 +106,10 @@ def run_compile(
                 artifacts_written=result.artifacts_written,
                 dag_artifact_path=result.dag_artifact_path,
                 json_output=request.json_output,
+                render_reuse=render_reuse,
             )
-    finally:
-        output.print_stdout()
+        finally:
+            output.print_stdout()
     return result.exit_code
 
 

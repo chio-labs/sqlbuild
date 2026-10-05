@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.constants import (
@@ -35,10 +37,16 @@ from sqlbuild.compiler.compile._helpers.render.arguments import (
     render_parameterized_sql,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.reuse import reused_or_rendered
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
 )
-from sqlbuild.compiler.compile.constants import SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE
+from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
+from sqlbuild.compiler.compile.constants import (
+    RENDER_REUSE_ATTACHED_AUDITS_GROUP,
+    RENDER_REUSE_SINGULAR_AUDITS_GROUP,
+    SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -127,6 +135,7 @@ def build_project_audit_inputs(
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
     seed_inputs: tuple[CompileSeedInput, ...],
+    render_reuse: CompileRenderReuseSession | None = None,
 ) -> tuple[tuple[CompileAuditInput, ...], tuple[CompilerDiagnostic, ...]]:
     """Resolve built-in-aware generic audits and build every project audit input."""
 
@@ -142,6 +151,7 @@ def build_project_audit_inputs(
         source_inputs=source_inputs,
         generic_audit_definitions=generic_audit_definitions,
         seed_inputs=seed_inputs,
+        render_reuse=render_reuse,
     )
     return audit_inputs, diagnostics
 
@@ -155,6 +165,7 @@ def build_audit_inputs(
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
     seed_inputs: tuple[CompileSeedInput, ...] = (),
+    render_reuse: CompileRenderReuseSession | None = None,
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -184,6 +195,57 @@ def build_audit_inputs(
         declaration_expansion=declaration_expansion,
         sql_lexical_syntax=sql_lexical_syntax,
     )
+    audit_inputs: list[CompileAuditInput] = list(
+        reused_or_rendered(
+            render_reuse=render_reuse,
+            name=RENDER_REUSE_SINGULAR_AUDITS_GROUP,
+            render=partial(
+                _build_singular_audit_inputs,
+                discovered_inputs=discovered_inputs,
+                context=attachment_context,
+            ),
+        )
+    )
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        if model_input.schema_entry is None:
+            continue
+        render: Callable[[], tuple[CompileAuditInput, ...]] = partial(
+            build_model_attached_audit_inputs, model_input=model_input, context=attachment_context
+        )
+        audit_inputs.extend(
+            render()
+            if render_reuse is None
+            else render_reuse.model_audits(model_input=model_input, render=render)
+        )
+    audit_inputs.extend(
+        reused_or_rendered(
+            render_reuse=render_reuse,
+            name=RENDER_REUSE_ATTACHED_AUDITS_GROUP,
+            render=partial(
+                _build_source_and_seed_audit_inputs,
+                source_inputs=source_inputs,
+                seed_inputs=seed_inputs,
+                context=attachment_context,
+            ),
+        )
+    )
+    return tuple(audit_inputs)
+
+
+def _build_singular_audit_inputs(
+    *, discovered_inputs: DiscoveredProjectInputs, context: _AuditAttachmentContext
+) -> tuple[CompileAuditInput, ...]:
+    attachment_context: _AuditAttachmentContext = context
+    effective_vars: dict[str, object] = context.effective_vars
+    macro_context: MacroContext = context.macro_context
+    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
+    sql_lexical_syntax: SqlLexicalSyntax = context.sql_lexical_syntax
+    known_model_names: set[str] = context.known_model_names
+    known_seed_names: set[str] = context.known_seed_names
+    known_source_names: set[str] = context.known_source_names
+    default_audit_severity: AuditSeverity | None = context.default_audit_severity
+    default_audit_run_scope: str | None = context.default_audit_run_scope
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
     for audit_file in discovered_inputs.audit_files:
@@ -326,28 +388,28 @@ def build_audit_inputs(
                     ),
                 )
             )
-    model_input: CompileModelInput
-    for model_input in model_inputs:
-        if model_input.schema_entry is None:
-            continue
-        audit_inputs.extend(
-            build_model_attached_audit_inputs(
-                model_input=model_input,
-                context=attachment_context,
-            )
-        )
+    return tuple(audit_inputs)
+
+
+def _build_source_and_seed_audit_inputs(
+    *,
+    source_inputs: tuple[CompileSourceInput, ...],
+    seed_inputs: tuple[CompileSeedInput, ...],
+    context: _AuditAttachmentContext,
+) -> tuple[CompileAuditInput, ...]:
+    audit_inputs: list[CompileAuditInput] = []
     source_input: CompileSourceInput
     for source_input in source_inputs:
         audit_inputs.extend(
             build_source_attached_audit_inputs(
                 source_input=source_input,
-                context=attachment_context,
+                context=context,
             )
         )
     seed_input: CompileSeedInput
     for seed_input in seed_inputs:
         audit_inputs.extend(
-            build_seed_attached_audit_inputs(seed_input=seed_input, context=attachment_context)
+            build_seed_attached_audit_inputs(seed_input=seed_input, context=context)
         )
     return tuple(audit_inputs)
 

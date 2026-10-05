@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse._helpers.store import write_compile_entry
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
 from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
@@ -22,6 +23,7 @@ def write_reusable_compile(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
+    render_reuse: CompileRenderReuse | None = None,
 ) -> None:
     """Store a reusable full compile, or drop the stored one when it cannot be reused."""
 
@@ -35,4 +37,5 @@ def write_reusable_compile(
         artifacts_written=artifacts_written,
         dag_artifact_path=dag_artifact_path,
         json_output=json_output,
+        render_reuse=render_reuse,
     )

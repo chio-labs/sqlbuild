@@ -1579,3 +1579,21 @@ class SqlAnalysisOptOutRequest:
     query_sql: str
     placeholders: dict[str, str] | None
     project_config_path: Path
+
+
+@dataclass(frozen=True)
+class StoredRender:
+    """One stored render with the diagnostics it reported and environment variables it read."""
+
+    value: object
+    diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]
+    environment_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RenderReuseState:
+    """Serialized renders of one compile by model path and group; None marks released bytes."""
+
+    model_paths: tuple[str, ...]
+    model_payloads: dict[str, memoryview | None]
+    group_payloads: dict[str, memoryview | None]
