@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from scripts.cold_compile_performance.models import RandomDagProject
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
@@ -389,3 +390,90 @@ class FunctionArgumentTypeCase:
     description: str
     projection: str
     expected_codes: tuple[str, ...] = ()
+
+
+type CompileOutcome = tuple[int, dict[str, object], dict[str, bytes]]
+
+
+@dataclass(frozen=True)
+class DataflowOracleCase:
+    description: str
+    project: RandomDagProject
+    reshaped_steps: tuple[tuple[int, ...], ...]
+    expected_exit_codes: tuple[int, ...]
+    compile_args: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DataflowFixtureCase:
+    description: str
+    fixture: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class DataflowDenseCase:
+    description: str
+    model_count: int
+    expected_exit_codes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class DataflowBuildCase:
+    description: str
+    project: RandomDagProject
+    expected_compile_exit_code: int
+    expected_build_exit_code: int
+
+
+@dataclass(frozen=True)
+class DataflowScheduleCase:
+    description: str
+    workers: int
+    batch_limit: int
+    max_delay_seconds: float
+    expected_cold_exit_code: int = 1
+    expected_edit_exit_code: int = 1
+
+
+@dataclass(frozen=True)
+class DataflowFailureCase:
+    description: str
+    failing_models: tuple[str, ...]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class DataflowPoolCase:
+    description: str
+    compiles: int
+    minimum_batches: int
+    expected_pool_threads: int
+
+
+@dataclass(frozen=True)
+class DataflowInterruptCase:
+    description: str
+    expected_live_workers: tuple[str, ...]
+    expected_overlaps: tuple[str, ...]
+    expected_thread_errors: int
+    expected_notices: int
+
+
+@dataclass(frozen=True)
+class DataflowInterruptAfterFaultCase:
+    description: str
+    failing_model: str
+    interrupted_model: str
+    expected_wave_replays: int
+
+
+@dataclass(frozen=True)
+class DataflowStartFailureCase:
+    description: str
+    failing_start: int
+    interrupt_after_start: bool
+    expected_error_type: type[BaseException]
+    expected_error: str
+    expected_live_workers: tuple[str, ...]
+    expected_notices: int

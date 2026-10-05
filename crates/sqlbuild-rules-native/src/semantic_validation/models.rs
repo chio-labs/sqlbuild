@@ -1,11 +1,12 @@
 //! Compile-owned native catalog, mapping state and Python-boundary requests.
 
-use crate::semantic_validation::types::{Expansion, ProbeKey, Relations};
+use crate::semantic_validation::types::{Expansion, PreparedCompactAnalysis, ProbeKey, Relations};
 use polyglot_sql::validation::SchemaTable;
 use polyglot_sql::{DialectType, SchemaValidationOptions};
 use pyo3::{FromPyObject, pyclass};
+use rayon::ThreadPool;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[derive(Default, Debug)]
 pub(crate) struct Columns(pub(crate) Vec<(String, Option<String>)>);
@@ -53,7 +54,16 @@ pub(crate) struct ProjectCatalog {
     pub(super) tables: HashMap<String, SchemaTable>,
     pub(super) overrides: Vec<HashMap<String, SchemaTable>>,
     pub(super) analysis_tables: HashMap<String, SchemaTable>,
-    pub(crate) function_probes: FunctionProbes,
+    pub(crate) function_probes: Arc<FunctionProbes>,
+    /// One analysis pool per compile catalog, built on first use and shared by its views.
+    pub(super) analysis_pool: Arc<Mutex<Option<Arc<ThreadPool>>>>,
+}
+
+/// One resolved compact analysis batch that runs without borrowing its project catalog.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct CompactAnalysisJob {
+    pub(super) analysis: Mutex<Option<PreparedCompactAnalysis>>,
+    pub(super) catalog: ProjectCatalog,
 }
 
 #[pyclass(module = "sqlbuild._native")]

@@ -578,3 +578,64 @@ pub(crate) fn borrowed_facts_preserve_union_dependencies_and_join_nullability() 
     );
     true
 }
+
+pub(crate) fn catalog_views_reuse_one_analysis_pool() -> bool {
+    let catalog = crate::semantic_validation::models::ProjectCatalog::with_options(
+        polyglot_sql::DialectType::DuckDB,
+        polyglot_sql::SchemaValidationOptions::default(),
+        false,
+    );
+    let first = catalog.analysis_pool().expect("test assumption must hold");
+    let second = catalog.analysis_pool().expect("test assumption must hold");
+    let from_view = catalog
+        .analysis_view()
+        .analysis_pool()
+        .expect("test assumption must hold");
+    std::sync::Arc::ptr_eq(&first, &second)
+        && std::sync::Arc::ptr_eq(&first, &from_view)
+        && first.current_num_threads() == 4
+}
+
+pub(crate) fn concurrent_batches_match_serial_batches() -> bool {
+    let requests: Vec<String> = (0..12)
+        .map(|index| {
+            json!({
+                "queries": (0..=index % 5).map(|query| json!({
+                    "sql": format!(
+                        "WITH ranked AS (SELECT {query} AS order_id, {index} AS amount) \
+                         SELECT order_id, amount * {query} AS amount FROM ranked"
+                    ),
+                    "dialect": "duckdb"
+                })).collect::<Vec<Value>>(),
+                "templates": (0..=index % 5).map(|query| json!({
+                    "queryIndex": query, "recoverCteFacts": true
+                })).collect::<Vec<Value>>(),
+                "projections": (0..=index % 5).map(|query| json!({
+                    "templateIndex": query
+                })).collect::<Vec<Value>>(),
+                "workers": 4
+            })
+            .to_string()
+        })
+        .collect();
+    let serial: Vec<String> = requests
+        .iter()
+        .map(|request| analyze_project_compact_json(request).expect("test assumption must hold"))
+        .collect();
+    let concurrent: Vec<String> = std::thread::scope(|scope| {
+        let handles: Vec<_> = requests
+            .iter()
+            .map(|request| scope.spawn(move || analyze_project_compact_json(request)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .expect("test assumption must hold")
+                    .expect("test assumption must hold")
+            })
+            .collect()
+    });
+    concurrent == serial
+}

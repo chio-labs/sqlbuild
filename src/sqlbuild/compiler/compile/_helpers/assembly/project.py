@@ -45,12 +45,9 @@ from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_location,
     query_line_offset,
 )
-from sqlbuild.compiler.compile._helpers.assembly.binding_waves import analyze_binding_waves
+from sqlbuild.compiler.compile._helpers.assembly.binding_waves import analyze_binding_dataflow
 from sqlbuild.compiler.compile._helpers.assembly.binding_waves import (
     downstream_model_names as _downstream_model_names,
-)
-from sqlbuild.compiler.compile._helpers.assembly.binding_waves import (
-    referenced_model_names as _referenced_model_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
@@ -65,6 +62,9 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_declared_column_types as _build_column_types_by_table,
+)
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    referenced_model_names as _referenced_model_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.targets import (
     build_model_relation_target,
@@ -795,7 +795,7 @@ def _analyze_model_sql_in_parallel(
     )
     analyses: tuple[_ModelSqlAnalysis, ...]
     if dependency_ordered:
-        analyses, cached_analyses = analyze_binding_waves(
+        analyses, cached_analyses = analyze_binding_dataflow(
             requests=requests,
             names=tuple(_model_name(request.model_input) for request in requests),
             cached=cached_analyses,
