@@ -186,7 +186,7 @@ def build_compile_inputs(
         render_reuse=render_reuse,
     )
     if render_reuse is not None:
-        render_reuse.renders_complete()
+        render_reuse.release_stored()
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *audit_diagnostics,
         *model_build.diagnostics,

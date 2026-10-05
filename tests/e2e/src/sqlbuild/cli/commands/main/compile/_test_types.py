@@ -719,3 +719,43 @@ class BrokenChangeDetectionTestCase:
     description: str
     edit: Callable[[Path], None]
     expected_matches_uncached: bool
+
+
+@dataclass(frozen=True)
+class RenderStoreNoticeTestCase:
+    """A render-count notice threshold and whether storing renders announces itself."""
+
+    description: str
+    notice_renders: int
+    expected_notice: bool
+
+
+@dataclass(frozen=True)
+class RenderSavePolicyTestCase:
+    """Compiles after a cold compile, and the render files and reuse each one must leave."""
+
+    description: str
+    edits: tuple[Callable[[Path], None], ...]
+    expected_cold_render_files: int
+    expected_render_files: tuple[int, ...]
+    expected_reused: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
+class ExternalModuleEditTestCase:
+    """An outside module imported only while rendering, rewritten after its render is reused."""
+
+    description: str
+    initial_value: str
+    edited_value: str
+    expected_matches_uncached: bool
+    expected_compiled_value: str
+
+
+@dataclass(frozen=True)
+class RenderLoadNoticeTestCase:
+    """A stored-render size threshold and whether loading the store announces itself."""
+
+    description: str
+    notice_bytes: int
+    expected_notice: bool

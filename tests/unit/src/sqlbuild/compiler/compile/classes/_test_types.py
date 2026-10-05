@@ -36,3 +36,13 @@ class CorruptRenderTestCase:
     description: str
     model_name: str
     expected_rendered_again: bool
+
+
+@dataclass(frozen=True)
+class ReleasedRenderTestCase:
+    """A reused and an edited render, and which stored bytes storing the compile releases."""
+
+    description: str
+    retained_models: frozenset[str]
+    expected_released: dict[str, bool]
+    expected_query_sqls: dict[str, str]

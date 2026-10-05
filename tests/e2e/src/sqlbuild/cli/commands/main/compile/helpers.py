@@ -26,6 +26,7 @@ import duckdb
 import pytest
 
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
+import sqlbuild.cli.compile_render_reuse._helpers.load_notice as render_load_notice
 import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
@@ -39,7 +40,11 @@ from sqlbuild.cli.compile_reuse._helpers.entry_file import (
     read_entry_stdout,
     write_entry,
 )
-from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
+from sqlbuild.cli.compile_reuse.constants import (
+    REUSE_DISABLE_ENV_VAR,
+    REUSE_ENTRY_DIRECTORY_PARTS,
+    REUSE_RENDER_STATE_SUFFIX,
+)
 from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -3739,3 +3744,89 @@ def disable_change_detection(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make compile reuse believe no project file changed since the stored compile."""
 
     monkeypatch.setattr(reuse_attempt, "changed_project_paths", lambda **_kwargs: (frozenset(), {}))
+
+
+def set_store_notice_renders(monkeypatch: pytest.MonkeyPatch, renders: int) -> None:
+    """Announce storing a compile once it has at least this many new renders to record."""
+
+    monkeypatch.setattr(reuse_store, "REUSE_STORE_NOTICE_RENDERS", renders)
+
+
+def prime_render_store(project_dir: Path) -> CompileReuseRun:
+    """After a cold compile, compile one leaf edit so the stored compile also holds renders."""
+
+    fact_comment(project_dir)
+    return run_reuse_compile(project_dir=project_dir)
+
+
+def prime_render_store_in_process(project_dir: Path) -> int:
+    """In this process: compile cold, then compile one leaf edit so renders are stored."""
+
+    cold: int = compile_in_process(project_dir=project_dir)
+    fact_comment(project_dir)
+    return max(cold, compile_in_process(project_dir=project_dir))
+
+
+def render_store_files(project_dir: Path) -> int:
+    """Return how many stored render files the project's compile reuse folder holds."""
+
+    return len(
+        list(
+            project_dir.joinpath(*REUSE_ENTRY_DIRECTORY_PARTS).glob(f"*{REUSE_RENDER_STATE_SUFFIX}")
+        )
+    )
+
+
+def edit_and_compile(*, project_dir: Path, edit: Callable[[Path], None]) -> CompileReuseRun:
+    """Apply one edit, compile with reuse enabled, and return the run."""
+
+    edit(project_dir)
+    return run_reuse_compile(project_dir=project_dir)
+
+
+EXTERNAL_FLAVOR_MODULE: str = "extflavor"
+
+
+def write_external_flavor(extlib: Path, value: str) -> None:
+    """Write, or rewrite in place, an outside module that a macro imports only while rendering."""
+
+    extlib.mkdir(parents=True, exist_ok=True)
+    (extlib / f"{EXTERNAL_FLAVOR_MODULE}.py").write_text(f"VALUE = {value!r}\n", encoding="utf-8")
+
+
+def add_external_flavor_macro(*, project_dir: Path, extlib: Path, value: str) -> dict[str, str]:
+    """Make the fact orders render import an outside module; return the compile environment."""
+
+    write_external_flavor(extlib, value)
+    write_project_file(
+        project_dir,
+        "models/marts/_sqlbuild/_macros/flavor.py",
+        '"""Flavor macros backed by an outside module."""\n\n\n'
+        "def flavor() -> str:\n"
+        '    """Return the configured flavor literal."""\n'
+        f"    import {EXTERNAL_FLAVOR_MODULE}\n\n"
+        f"    return {EXTERNAL_FLAVOR_MODULE}.VALUE\n",
+    )
+    replace_project_text(
+        project_dir, FACT_ORDERS_MODEL, "  o.quantity,\n", "  o.quantity,\n  @flavor() AS flavor,\n"
+    )
+    return {"PYTHONPATH": str(extlib), "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def compiled_text(*, run: CompileReuseRun, suffix: str) -> str:
+    """Return the compiled artifact whose path ends with the suffix."""
+
+    path: str = next(filter(lambda path: path.endswith(suffix), sorted(run.compiled)))
+    return run.compiled[path].decode("utf-8")
+
+
+def set_render_load_notice_bytes(monkeypatch: pytest.MonkeyPatch, stored_bytes: int) -> None:
+    """Announce loading stored renders once their files hold at least this many bytes."""
+
+    monkeypatch.setattr(render_load_notice, "RENDER_LOAD_NOTICE_BYTES", stored_bytes)
+
+
+def json_report_keys(stdout: str) -> tuple[str, ...]:
+    """Parse a JSON compile report and return its top-level keys."""
+
+    return tuple(cast(dict[str, object], json.loads(stdout)))

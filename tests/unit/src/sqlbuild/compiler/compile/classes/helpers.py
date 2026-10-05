@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
@@ -16,9 +17,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompilerDiagnostic,
     RenderReuseState,
+    StoredRender,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey, DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
 
 REGION_ENV_VAR: str = "ORDERS_REGION"
 
@@ -80,7 +83,6 @@ def recorded_state(
                 item.file_path.stem in run_id_readers
             ]
             _ = session.rendered_model(model_file=item, render=lambda item=item, r=render: r(item))
-    session.renders_complete()
     state: RenderReuseState | None = session.stored_state()
     assert state is not None
     return state
@@ -115,3 +117,42 @@ def corrupted_session(item: DiscoveredSqlModelFile) -> CompileRenderReuseSession
     )
     session.plan_models(model_files=(item,))
     return session
+
+
+def edited_session(*, retained_models: frozenset[str]) -> CompileRenderReuseSession:
+    """Reuse the stored orders render and render an edited customers model."""
+
+    orders: DiscoveredSqlModelFile = model_file("orders")
+    customers: DiscoveredSqlModelFile = model_file("customers", "SELECT 2 AS customer_id")
+    session: CompileRenderReuseSession = CompileRenderReuseSession(
+        prior=recorded_state((orders, model_file("customers"))),
+        changed_paths=frozenset({str(customers.relative_path)}),
+        retained_models=retained_models,
+    )
+    session.plan_models(model_files=(orders, customers))
+    with collect_compile_diagnostics():
+        _ = session.reused_model(model_file=orders)
+        _ = session.rendered_model(model_file=customers, render=lambda: _render(customers))
+    return session
+
+
+def released_paths(state: RenderReuseState | None) -> dict[str, bool]:
+    """Return, per stored model, whether its bytes were released."""
+
+    assert state is not None
+    return {path: payload is None for path, payload in state.model_payloads.items()}
+
+
+def stored_query_sqls(state: RenderReuseState | None) -> dict[str, str]:
+    """Decode every stored model render and return its query SQL."""
+
+    assert state is not None
+    return {
+        path: _stored_query_sql(cast(memoryview, payload))
+        for path, payload in filter(lambda item: item[1] is not None, state.model_payloads.items())
+    }
+
+
+def _stored_query_sql(payload: memoryview) -> str:
+    stored: StoredRender = cast(StoredRender, loaded_fact_payload(payload))
+    return cast(CompileModelInput, stored.value).query_sql

@@ -131,6 +131,8 @@ class CompileReuseAttempt:
     restamped: frozenset[str] = frozenset()
     changed_paths: frozenset[str] | None = None
     render_state_path: Path | None = None
+    prior_entry: bool = False
+    prior_modules: tuple[tuple[str, int, int], ...] = ()
 
 
 @dataclass(frozen=True)

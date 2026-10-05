@@ -8,16 +8,24 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     BrokenChangeDetectionTestCase,
+    ExternalModuleEditTestCase,
     IncrementalEditSequenceTestCase,
     RandomEditChainTestCase,
+    RenderLoadNoticeTestCase,
+    RenderSavePolicyTestCase,
+    RenderStoreNoticeTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     IncrementalEditComparison,
     RandomEditChain,
+    add_external_flavor_macro,
     compare_incremental_compile,
     compile_in_process,
+    compile_in_process_output,
+    compiled_text,
     disable_change_detection,
+    edit_and_compile,
     enable_compile_reuse,
     fact_audit_added,
     fact_comment,
@@ -26,16 +34,23 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     full_edit_step,
     in_process_reuse_run,
     is_model_only_edit,
+    json_report_keys,
     model_edit_step,
     move_project_file,
+    prime_render_store,
+    prime_render_store_in_process,
     random_edit_plan,
+    render_store_files,
     replace_project_text,
     run_reuse_compile,
+    set_render_load_notice_bytes,
+    set_store_notice_renders,
     staging_comment,
     staging_contract_change,
     staging_header_change,
     staging_new_column,
     staging_type_change,
+    write_external_flavor,
     write_generated_edit_models,
     write_project_file,
 )
@@ -201,7 +216,8 @@ def test_given_edit_sequence_when_compiling_incrementally_then_each_step_matches
 ) -> None:
     project_dir: Path = compile_reuse_project
     cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
-    assert cold.returncode == 0, cold.stderr
+    primed: CompileReuseRun = prime_render_store(project_dir)
+    assert (cold.returncode, primed.returncode) == (0, 0), primed.stderr
 
     for step in test_case.steps:
         step.edit(project_dir)
@@ -232,7 +248,8 @@ def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_mat
         project_dir=project_dir, model_count=test_case.model_count, seed=test_case.seed
     )
     cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
-    assert cold.returncode == 0, cold.stderr
+    primed: CompileReuseRun = prime_render_store(project_dir)
+    assert (cold.returncode, primed.returncode) == (0, 0), primed.stderr
     chain: RandomEditChain = RandomEditChain(project_dir=project_dir, seed=test_case.seed)
 
     for step, kind in enumerate(
@@ -269,7 +286,7 @@ def test_given_broken_change_detection_when_compiling_an_edit_then_the_oracle_re
 ) -> None:
     project_dir: Path = compile_reuse_project
     enable_compile_reuse(monkeypatch)
-    assert compile_in_process(project_dir=project_dir) == 0
+    assert prime_render_store_in_process(project_dir) == 0
     test_case.edit(project_dir)
     disable_change_detection(monkeypatch)
 
@@ -281,3 +298,141 @@ def test_given_broken_change_detection_when_compiling_an_edit_then_the_oracle_re
 
     assert comparison.reused_renders > 0
     assert comparison.matches is test_case.expected_matches_uncached
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RenderStoreNoticeTestCase(
+            description="few_renders_store_quietly", notice_renders=100_000, expected_notice=False
+        ),
+        RenderStoreNoticeTestCase(
+            description="many_renders_announce_recording", notice_renders=1, expected_notice=True
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_new_renders_when_storing_after_an_edit_then_slow_recording_is_announced(
+    compile_reuse_project: Path,
+    test_case: RenderStoreNoticeTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    enable_compile_reuse(monkeypatch)
+    set_store_notice_renders(monkeypatch, test_case.notice_renders)
+    assert compile_in_process(project_dir=compile_reuse_project) == 0
+    fact_comment(compile_reuse_project)
+
+    code, _, err = compile_in_process_output(project_dir=compile_reuse_project, capsys=capsys)
+
+    assert code == 0
+    assert ("renders)..." in err) is test_case.expected_notice
+    assert ("Recorded compile for reuse" in err) is test_case.expected_notice
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RenderSavePolicyTestCase(
+            description="cold_then_two_model_edits",
+            edits=(fact_comment, staging_comment),
+            expected_cold_render_files=0,
+            expected_render_files=(1, 2),
+            expected_reused=(False, True),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cold_compile_when_editing_then_renders_are_stored_only_once_a_compile_exists(
+    compile_reuse_project: Path, test_case: RenderSavePolicyTestCase
+) -> None:
+    cold: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project)
+    cold_render_files: int = render_store_files(compile_reuse_project)
+    render_files: list[int] = []
+    reused: list[bool] = []
+
+    for edit in test_case.edits:
+        run: CompileReuseRun = edit_and_compile(project_dir=compile_reuse_project, edit=edit)
+        assert run.returncode == 0, run.stderr
+        render_files.append(render_store_files(compile_reuse_project))
+        reused.append(run.timings.get("render_reuse_hits", 0) > 0)
+
+    assert cold.returncode == 0, cold.stderr
+    assert cold_render_files == test_case.expected_cold_render_files
+    assert tuple(render_files) == test_case.expected_render_files
+    assert tuple(reused) == test_case.expected_reused
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExternalModuleEditTestCase(
+            description="module_rewritten_in_place_after_reuse",
+            initial_value="'vanilla'",
+            edited_value="'choco'",
+            expected_matches_uncached=True,
+            expected_compiled_value="'choco' AS flavor",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_module_imported_only_while_rendering_when_it_changes_after_reuse_then_output_is_fresh(
+    compile_reuse_project: Path, tmp_path: Path, test_case: ExternalModuleEditTestCase
+) -> None:
+    extlib: Path = tmp_path / "extlib"
+    env: dict[str, str] = add_external_flavor_macro(
+        project_dir=compile_reuse_project, extlib=extlib, value=test_case.initial_value
+    )
+    cold: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
+    staging_comment(compile_reuse_project)
+    recorded: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
+    staging_comment(compile_reuse_project)
+    reused: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
+
+    write_external_flavor(extlib, test_case.edited_value)
+    comparison: IncrementalEditComparison = IncrementalEditComparison(
+        incremental=run_reuse_compile(project_dir=compile_reuse_project, env=env),
+        reference=run_reuse_compile(
+            project_dir=compile_reuse_project, env=env, args=("--no-cache",)
+        ),
+    )
+
+    assert (cold.returncode, recorded.returncode, reused.returncode) == (0, 0, 0), reused.stderr
+    assert reused.timings.get("render_reuse_hits", 0) > 0
+    assert comparison.matches is test_case.expected_matches_uncached, (
+        comparison.mismatched_artifacts
+    )
+    assert test_case.expected_compiled_value in compiled_text(
+        run=comparison.incremental, suffix="fact_orders.sql"
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RenderLoadNoticeTestCase(
+            description="small_store_loads_quietly", notice_bytes=1 << 40, expected_notice=False
+        ),
+        RenderLoadNoticeTestCase(
+            description="large_store_announces_loading", notice_bytes=1, expected_notice=True
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stored_renders_when_loading_them_then_large_loads_are_announced_on_stderr(
+    compile_reuse_project: Path,
+    test_case: RenderLoadNoticeTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    enable_compile_reuse(monkeypatch)
+    set_render_load_notice_bytes(monkeypatch, test_case.notice_bytes)
+    assert prime_render_store_in_process(compile_reuse_project) == 0
+    staging_comment(compile_reuse_project)
+
+    code, out, err = compile_in_process_output(project_dir=compile_reuse_project, capsys=capsys)
+
+    assert code == 0
+    assert "compile_timings" in json_report_keys(out)
+    assert ("Loading stored renders" in err) is test_case.expected_notice
+    assert ("Loaded stored renders" in err) is test_case.expected_notice

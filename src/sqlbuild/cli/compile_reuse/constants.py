@@ -81,9 +81,10 @@ REUSE_HIT_MESSAGE: str = "Inputs unchanged; reused the previous compile ({second
 MILLISECONDS_PER_SECOND: int = 1000
 REUSE_STORE_NOTICE_BYTES: int = 64 * 1024 * 1024
 REUSE_STORE_NOTICE_PATHS: int = 100_000
+REUSE_STORE_NOTICE_RENDERS: int = 4_000
 BYTES_PER_MEBIBYTE: int = 1024 * 1024
 REUSE_STORE_START_MESSAGE: str = (
-    "Recording compile for reuse ({paths} paths, {mebibytes:.0f} MiB to hash)..."
+    "Recording compile for reuse ({paths} paths, {mebibytes:.0f} MiB to hash, {renders} renders)..."
 )
 REUSE_STORE_DONE_MESSAGE: str = "Recorded compile for reuse ({seconds:.1f} s)"
 REUSE_STORE_SKIPPED_MESSAGE: str = (

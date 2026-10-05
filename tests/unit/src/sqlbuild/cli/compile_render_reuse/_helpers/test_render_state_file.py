@@ -28,8 +28,6 @@ from tests.unit.src.sqlbuild.cli.compile_render_reuse._helpers.helpers import (
     next_render_state,
     overlay_without_base,
     payload_bytes,
-    publish_render_state,
-    read_stored,
     store_edit_chain,
     stored_base,
     truncated,
@@ -44,26 +42,23 @@ from tests.unit.src.sqlbuild.cli.compile_render_reuse._helpers.helpers import (
             changed_models=(MODEL_PATHS[3],),
             removed_models=(),
             expected_overlay=True,
-            expected_overlay_models=frozenset({MODEL_PATHS[3]}),
         ),
         RenderLayerTestCase(
             description="most_models_changed",
             changed_models=MODEL_PATHS[:15],
             removed_models=(),
             expected_overlay=False,
-            expected_overlay_models=frozenset(),
         ),
         RenderLayerTestCase(
             description="stored_render_dropped",
             changed_models=(MODEL_PATHS[3],),
             removed_models=(MODEL_PATHS[5],),
             expected_overlay=False,
-            expected_overlay_models=frozenset(),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_stored_renders_when_storing_the_next_compile_then_reading_returns_its_renders(
+def test_given_released_reused_renders_when_storing_then_only_a_small_overlay_needs_no_rewrite(
     test_case: RenderLayerTestCase, tmp_path: Path
 ) -> None:
     _, stored = stored_base(tmp_path)
@@ -71,15 +66,9 @@ def test_given_stored_renders_when_storing_the_next_compile_then_reading_returns
         stored=stored, edited=test_case.changed_models, removed=test_case.removed_models
     )
 
-    layer: RenderStateLayer = render_state_layer(state=current, stored=stored)
-    reread: StoredRenderState = read_stored(
-        publish_render_state(directory=tmp_path, name="orders-next.render", layer=layer)
-    )
+    layer: RenderStateLayer | None = render_state_layer(state=current, stored=stored.layers)
 
-    assert (layer.base_file is not None) is test_case.expected_overlay
-    assert payload_bytes(reread.state) == payload_bytes(current)
-    assert reread.state.group_payloads.keys() == current.group_payloads.keys()
-    assert reread.layers.overlay_models == test_case.expected_overlay_models
+    assert (layer is not None) is test_case.expected_overlay
 
 
 @pytest.mark.parametrize(

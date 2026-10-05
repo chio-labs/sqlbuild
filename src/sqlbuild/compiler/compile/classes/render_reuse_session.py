@@ -30,7 +30,6 @@ from sqlbuild.compiler.fact_cache.main._dump_fact_payload import dumped_fact_pay
 from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
 
-_SERIALIZER_THREAD_NAME: str = "sqlbuild-render-reuse-serializer"
 _LOAD_ERRORS: tuple[type[Exception], ...] = (
     FactCachePayloadError,
     pickle.UnpicklingError,
@@ -41,6 +40,9 @@ _LOAD_ERRORS: tuple[type[Exception], ...] = (
     KeyError,
     TypeError,
     ValueError,
+    RecursionError,
+    MemoryError,
+    OverflowError,
 )
 
 
@@ -48,7 +50,12 @@ class CompileRenderReuseSession:
     """Serve stored renders of inputs a change set cannot affect, and record every render."""
 
     def __init__(
-        self, *, prior: RenderReuseState | None, changed_paths: frozenset[str] | None
+        self,
+        *,
+        prior: RenderReuseState | None,
+        changed_paths: frozenset[str] | None,
+        retained_models: frozenset[str] = frozenset(),
+        retained_groups: frozenset[str] = frozenset(),
     ) -> None:
         self._lock: threading.Lock = threading.Lock()
         self._claimed: bool = False
@@ -56,13 +63,16 @@ class CompileRenderReuseSession:
         self._changed_paths: frozenset[str] = changed_paths or frozenset()
         self._reusable: bool = False
         self._model_paths: tuple[str, ...] | None = None
-        self._model_records: dict[str, memoryview] = {}
-        self._group_records: dict[str, memoryview] = {}
+        self._retained_models: frozenset[str] = retained_models
+        self._retained_groups: frozenset[str] = retained_groups
+        self._model_records: dict[str, memoryview | None] = {}
+        self._group_records: dict[str, memoryview | None] = {}
+        self._decoded_models: dict[str, StoredRender] = {}
+        self._decoded_groups: dict[str, StoredRender] = {}
         self._pending_models: list[tuple[str, StoredRender]] = []
         self._pending_groups: list[tuple[str, StoredRender]] = []
         self._serialized_models: dict[str, memoryview] = {}
         self._serialized_groups: dict[str, memoryview] = {}
-        self._serializer: threading.Thread | None = None
         self._reused_paths: set[str] = set()
 
     def claim(self) -> bool:
@@ -102,12 +112,13 @@ class CompileRenderReuseSession:
         if not self.has_reusable_model(model_file=model_file) or self._prior is None:
             return None
         path: str = str(model_file.relative_path)
-        payload: memoryview = self._prior.model_payloads[path]
-        stored: StoredRender | None = _loaded_render(payload)
+        payload: memoryview | None = self._prior.model_payloads[path]
+        stored: StoredRender | None = None if payload is None else _loaded_render(payload)
         if stored is None or not isinstance(stored.value, CompileModelInput):
             return None
         _replay(stored=stored)
         self._model_records[path] = payload
+        self._decoded_models[path] = stored
         self._reused_paths.add(path)
         record_compile_metric(metric="render_reuse_hits", value=1)
         return replace(stored.value, model_file=model_file)
@@ -160,6 +171,7 @@ class CompileRenderReuseSession:
         if stored is not None and payload is not None:
             _replay(stored=stored)
             self._group_records[name] = payload
+            self._decoded_groups[name] = stored
             return cast(T, stored.value)
         with (
             COMPILE_INPUT_READS.recording() as reads,
@@ -171,24 +183,42 @@ class CompileRenderReuseSession:
             self._pending_groups.append((name, rendered))
         return value
 
-    def renders_complete(self) -> None:
-        """Serialize this compile's new renders in the background while later phases run."""
+    def pending_renders(self) -> int:
+        """Return how many new renders storing this compile still has to serialize."""
 
-        if self._serializer is None and (self._pending_models or self._pending_groups):
-            self._serializer = threading.Thread(
-                target=self._serialize_pending, name=_SERIALIZER_THREAD_NAME, daemon=True
-            )
-            self._serializer.start()
+        return len(self._pending_models) + len(self._pending_groups)
 
-    def stored_state(self) -> RenderReuseState | None:
-        """Serialize this compile's renders, keeping stored bytes of reused ones as they were."""
+    def reused_any(self) -> bool:
+        """Return whether any render was reused, so imports it made were skipped this run."""
+
+        return bool(self._decoded_models or self._decoded_groups)
+
+    def release_stored(self) -> None:
+        """Drop stored base bytes once every render is decoded, recording reused renders as None."""
+
+        self._prior = None
+        self._reusable = False
+        for records, retained in (
+            (self._model_records, self._retained_models),
+            (self._group_records, self._retained_groups),
+        ):
+            for key in records.keys() - retained:
+                records[key] = None
+
+    def stored_state(self, *, complete: bool = False) -> RenderReuseState | None:
+        """Serialize this compile's renders; with complete, re-serialize released reused ones."""
 
         if self._model_paths is None:
             return None
-        if self._serializer is None:
-            self._serialize_pending()
-        else:
-            self._serializer.join()
+        self.release_stored()
+        self._serialize_pending()
+        if complete:
+            self._model_records = _reserialized(
+                records=self._model_records, decoded=self._decoded_models
+            )
+            self._group_records = _reserialized(
+                records=self._group_records, decoded=self._decoded_groups
+            )
         return RenderReuseState(
             model_paths=self._model_paths,
             model_payloads={**self._model_records, **self._serialized_models},
@@ -204,6 +234,23 @@ class CompileRenderReuseSession:
                 payload: bytes | None = _dumped(stored)
                 if payload is not None:
                     serialized[key] = memoryview(payload)
+            pending.clear()
+
+
+def _reserialized(
+    *, records: dict[str, memoryview | None], decoded: dict[str, StoredRender]
+) -> dict[str, memoryview | None]:
+    complete: dict[str, memoryview | None] = {}
+    key: str
+    payload: memoryview | None
+    for key, payload in records.items():
+        if payload is None:
+            dumped: bytes | None = _dumped(decoded[key])
+            if dumped is None:
+                continue
+            payload = memoryview(dumped)
+        complete[key] = payload
+    return complete
 
 
 def _stored_render(

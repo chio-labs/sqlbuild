@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.cli.compile_render_reuse.constants import (
+    RENDER_COMPRESSION_LEVEL,
     RENDER_INDEX_FIELD_COUNT,
     RENDER_OVERLAY_MAX_SHARE,
     RENDER_STATE_MAGIC,
@@ -47,68 +48,47 @@ def read_render_state(*, path: Path, changed_paths: frozenset[str]) -> StoredRen
         if base is None or base.base_file is not None:
             return None
         return _stored_state(base_file=newest.base_file, base=base, overlay=newest)
-    except (OSError, UnicodeError, ValueError, TypeError, KeyError, IndexError):
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError, IndexError, zlib.error):
         return None
 
 
 def render_state_layer(
-    *, state: RenderReuseState, stored: StoredRenderState | None
-) -> RenderStateLayer:
-    """Extend the stored base with a small overlay of changed renders, or write a new base."""
+    *, state: RenderReuseState, stored: StoredRenderLayers | None
+) -> RenderStateLayer | None:
+    """Return an overlay on the stored base, a new base, or None when released bytes are needed."""
 
-    if stored is not None and state.model_paths == stored.state.model_paths:
-        overlay_models: frozenset[str] | None = _overlay_keys(
-            current=state.model_payloads,
-            previous=stored.state.model_payloads,
-            overlay=stored.layers.overlay_models,
+    if (
+        stored is not None
+        and state.model_paths == stored.model_paths
+        and stored.model_keys <= state.model_payloads.keys()
+        and stored.group_keys <= state.group_payloads.keys()
+    ):
+        models: list[tuple[str, memoryview]] = _held(
+            (path, state.model_payloads.get(path)) for path in state.model_paths
         )
-        overlay_groups: frozenset[str] | None = _overlay_keys(
-            current=state.group_payloads,
-            previous=stored.state.group_payloads,
-            overlay=stored.layers.overlay_groups,
-        )
-        if overlay_models is not None and overlay_groups is not None:
-            models: list[tuple[str, memoryview]] = [
-                (path, state.model_payloads[path])
-                for path in state.model_paths
-                if path in overlay_models
-            ]
-            groups: list[tuple[str, memoryview]] = sorted(
-                (name, state.group_payloads[name]) for name in overlay_groups
+        groups: list[tuple[str, memoryview]] = _held(sorted(state.group_payloads.items()))
+        if (
+            sum(len(item) for _, item in (*models, *groups))
+            <= stored.base_bytes * RENDER_OVERLAY_MAX_SHARE
+        ):
+            return _layer(
+                model_paths=state.model_paths,
+                base_file=stored.base_file,
+                models=models,
+                groups=groups,
             )
-            if (
-                sum(len(item) for _, item in (*models, *groups))
-                <= stored.layers.base_bytes * RENDER_OVERLAY_MAX_SHARE
-            ):
-                return _layer(
-                    model_paths=state.model_paths,
-                    base_file=stored.layers.base_file,
-                    models=models,
-                    groups=groups,
-                )
+    if None in state.model_payloads.values() or None in state.group_payloads.values():
+        return None
     return _layer(
         model_paths=state.model_paths,
         base_file=None,
-        models=[
-            (path, state.model_payloads[path])
-            for path in state.model_paths
-            if path in state.model_payloads
-        ],
-        groups=sorted(state.group_payloads.items()),
+        models=_held((path, state.model_payloads.get(path)) for path in state.model_paths),
+        groups=_held(sorted(state.group_payloads.items())),
     )
 
 
-def _overlay_keys(
-    *,
-    current: dict[str, memoryview],
-    previous: dict[str, memoryview],
-    overlay: frozenset[str],
-) -> frozenset[str] | None:
-    """Return keys the overlay must hold, or None when a stored render is no longer valid."""
-
-    if not previous.keys() <= current.keys():
-        return None
-    return overlay | {key for key, payload in current.items() if previous.get(key) is not payload}
+def _held(items: Iterable[tuple[str, memoryview | None]]) -> list[tuple[str, memoryview]]:
+    return [(key, payload) for key, payload in items if payload is not None]
 
 
 def _layer(
@@ -127,19 +107,21 @@ def _layer(
         },
         separators=(",", ":"),
     ).encode("utf-8", "surrogateescape")
-    payloads: tuple[memoryview, ...] = tuple(item for _, item in (*models, *groups))
+    compressor: zlib._Compress = zlib.compressobj(RENDER_COMPRESSION_LEVEL)
+    compressed: list[bytes] = [compressor.compress(item) for _, item in (*models, *groups)]
+    compressed.append(compressor.flush())
     return RenderStateLayer(
         chunks=(
             RENDER_STATE_MAGIC,
             framed_stored_section(data=index),
-            _section_header(payloads=payloads),
-            *payloads,
+            _section_header(payloads=compressed),
+            *compressed,
         ),
         base_file=base_file,
     )
 
 
-def _section_header(*, payloads: Iterable[memoryview]) -> bytes:
+def _section_header(*, payloads: Iterable[bytes]) -> bytes:
     length: int = 0
     checksum: int = 0
     for payload in payloads:
@@ -161,22 +143,30 @@ def _read_layer(*, path: Path, changed_paths: frozenset[str]) -> StoredRenderLay
         model_paths: tuple[str, ...] = tuple(_string(item) for item in _list(fields["model_paths"]))
         if not changed_paths.issubset(model_paths):
             return None
-        payload: bytes = read_stored_section(handle=handle)
-        if handle.read(1) or len(payload) > REUSE_MAX_ENTRY_BYTES:
+        compressed: bytes = read_stored_section(handle=handle)
+        if handle.read(1) or len(compressed) > REUSE_MAX_ENTRY_BYTES:
             return None
     base: object = fields["base"]
+    model_rows: list[tuple[str, int]] = _rows(fields["models"])
+    group_rows: list[tuple[str, int]] = _rows(fields["groups"])
+    size: int = sum(length for _, length in (*model_rows, *group_rows))
+    if size > REUSE_MAX_ENTRY_BYTES:
+        return None
+    decompressor: zlib._Decompress = zlib.decompressobj()
+    payload: bytes = decompressor.decompress(compressed, size + 1)
+    del compressed
+    if len(payload) != size or not decompressor.eof or decompressor.unconsumed_tail:
+        return None
     view: memoryview = memoryview(payload)
     offset: int = 0
     models: dict[str, memoryview] = {}
-    for name, length in _rows(fields["models"]):
+    for name, length in model_rows:
         models[name] = view[offset : offset + length]
         offset += length
     groups: dict[str, memoryview] = {}
-    for name, length in _rows(fields["groups"]):
+    for name, length in group_rows:
         groups[name] = view[offset : offset + length]
         offset += length
-    if offset != len(view):
-        return None
     return StoredRenderLayer(
         model_paths=model_paths,
         base_file=None if base is None else _string(base),
@@ -190,13 +180,17 @@ def _stored_state(
     *, base_file: str, base: StoredRenderLayer, overlay: StoredRenderLayer | None
 ) -> StoredRenderState:
     newest: StoredRenderLayer = base if overlay is None else overlay
+    state: RenderReuseState = RenderReuseState(
+        model_paths=newest.model_paths,
+        model_payloads=dict(base.models) if overlay is None else {**base.models, **overlay.models},
+        group_payloads=dict(base.groups) if overlay is None else {**base.groups, **overlay.groups},
+    )
     return StoredRenderState(
-        state=RenderReuseState(
-            model_paths=newest.model_paths,
-            model_payloads=base.models if overlay is None else {**base.models, **overlay.models},
-            group_payloads=base.groups if overlay is None else {**base.groups, **overlay.groups},
-        ),
+        state=state,
         layers=StoredRenderLayers(
+            model_paths=newest.model_paths,
+            model_keys=frozenset(state.model_payloads),
+            group_keys=frozenset(state.group_payloads),
             base_file=base_file,
             base_bytes=base.size,
             overlay_models=frozenset() if overlay is None else frozenset(overlay.models),

@@ -16,4 +16,8 @@ def stored_render_layer(*, render_reuse: CompileRenderReuse | None) -> RenderSta
     )
     if render_reuse is None or state is None:
         return None
-    return render_state_layer(state=state, stored=render_reuse.stored)
+    layer: RenderStateLayer | None = render_state_layer(state=state, stored=render_reuse.stored)
+    if layer is not None:
+        return layer
+    complete: RenderReuseState | None = render_reuse.session.stored_state(complete=True)
+    return None if complete is None else render_state_layer(state=complete, stored=None)

@@ -11,15 +11,19 @@ from sqlbuild.compiler.compile.models import CompileModelInput
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from tests.unit.src.sqlbuild.compiler.compile.classes._test_types import (
     CorruptRenderTestCase,
+    ReleasedRenderTestCase,
     RenderReplayTestCase,
     ReusableModelsTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile.classes.helpers import (
     REGION_ENV_VAR,
     corrupted_session,
+    edited_session,
     missing_description,
     model_file,
     planned_session,
+    released_paths,
+    stored_query_sqls,
 )
 
 
@@ -142,6 +146,42 @@ def test_given_corrupt_stored_render_when_reusing_then_the_model_is_rendered_aga
         reused: CompileModelInput | None = session.reused_model(model_file=item)
 
     assert (reused is None) is test_case.expected_rendered_again
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReleasedRenderTestCase(
+            description="reused_from_base",
+            retained_models=frozenset(),
+            expected_released={"models/orders.sql": True, "models/customers.sql": False},
+            expected_query_sqls={
+                "models/orders.sql": "SELECT 1 AS order_id",
+                "models/customers.sql": "SELECT 2 AS customer_id",
+            },
+        ),
+        ReleasedRenderTestCase(
+            description="reused_from_overlay",
+            retained_models=frozenset({"models/orders.sql"}),
+            expected_released={"models/orders.sql": False, "models/customers.sql": False},
+            expected_query_sqls={
+                "models/orders.sql": "SELECT 1 AS order_id",
+                "models/customers.sql": "SELECT 2 AS customer_id",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reused_render_when_storing_then_base_bytes_are_released_and_recoverable(
+    test_case: ReleasedRenderTestCase,
+) -> None:
+    session: CompileRenderReuseSession = edited_session(retained_models=test_case.retained_models)
+
+    released: dict[str, bool] = released_paths(session.stored_state())
+    complete: dict[str, str] = stored_query_sqls(session.stored_state(complete=True))
+
+    assert released == test_case.expected_released
+    assert complete == test_case.expected_query_sqls
 
 
 if __name__ == "__main__":

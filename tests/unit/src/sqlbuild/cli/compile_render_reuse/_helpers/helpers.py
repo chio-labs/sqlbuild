@@ -15,9 +15,10 @@ from sqlbuild.compiler.compile.models import RenderReuseState
 MODEL_PATHS: tuple[str, ...] = tuple(f"models/orders_{index:02d}.sql" for index in range(20))
 
 
-def publish_render_state(*, directory: Path, name: str, layer: RenderStateLayer) -> Path:
+def publish_render_state(*, directory: Path, name: str, layer: RenderStateLayer | None) -> Path:
     """Write one render layer as the store would publish it."""
 
+    assert layer is not None
     path: Path = directory / name
     path.write_bytes(b"".join(bytes(chunk) for chunk in layer.chunks))
     return path
@@ -50,25 +51,39 @@ def stored_base(directory: Path) -> tuple[Path, StoredRenderState]:
 def next_render_state(
     *, stored: StoredRenderState, edited: tuple[str, ...], removed: tuple[str, ...] = ()
 ) -> RenderReuseState:
-    """Return the renders of the next compile: some models edited, some stored renders dropped."""
+    """Return the next compile's renders as a session stores them after releasing reused bytes.
 
-    kept: dict[str, memoryview] = dict(
-        filter(lambda item: item[0] not in removed, stored.state.model_payloads.items())
-    )
+    Renders reused from the stored base are None; reused overlay renders keep their bytes.
+    """
+
+    kept: dict[str, memoryview | None] = {
+        path: retained_payload(stored=stored, path=path, payload=payload)
+        for path, payload in filter(
+            lambda item: item[0] not in removed, stored.state.model_payloads.items()
+        )
+    }
     return RenderReuseState(
         model_paths=MODEL_PATHS,
         model_payloads={
             **kept,
             **{path: memoryview(f"edited {path}".encode() * 20) for path in edited},
         },
-        group_payloads=dict(stored.state.group_payloads),
+        group_payloads=dict.fromkeys(stored.state.group_payloads),
     )
+
+
+def retained_payload(
+    *, stored: StoredRenderState, path: str, payload: memoryview | None
+) -> memoryview | None:
+    """Keep a reused render's bytes only when it lives in the stored overlay."""
+
+    return {True: payload, False: None}[path in stored.layers.overlay_models]
 
 
 def payload_bytes(state: RenderReuseState) -> dict[str, bytes]:
     """Return every model payload as bytes for comparison."""
 
-    return {path: bytes(payload) for path, payload in state.model_payloads.items()}
+    return {path: bytes(payload or b"") for path, payload in state.model_payloads.items()}
 
 
 def store_edit_chain(*, directory: Path, edits: tuple[str, ...]) -> StoredRenderState:
@@ -81,7 +96,7 @@ def store_edit_chain(*, directory: Path, edits: tuple[str, ...]) -> StoredRender
             directory=directory,
             name=f"orders-edit-{index}.render",
             layer=render_state_layer(
-                state=next_render_state(stored=stored, edited=(edited,)), stored=stored
+                state=next_render_state(stored=stored, edited=(edited,)), stored=stored.layers
             ),
         )
         stored = read_stored(path)
@@ -131,7 +146,7 @@ def overlay_without_base(directory: Path) -> tuple[Path, frozenset[str]]:
         directory=directory,
         name="orders-overlay.render",
         layer=render_state_layer(
-            state=next_render_state(stored=stored, edited=(MODEL_PATHS[0],)), stored=stored
+            state=next_render_state(stored=stored, edited=(MODEL_PATHS[0],)), stored=stored.layers
         ),
     )
     base_path.unlink()

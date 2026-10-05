@@ -9,13 +9,12 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class RenderLayerTestCase:
-    """Renders changed after a stored compile, and whether they fit in an overlay."""
+    """Renders changed after a stored compile, and whether an overlay can hold them."""
 
     description: str
     changed_models: tuple[str, ...]
     removed_models: tuple[str, ...]
     expected_overlay: bool
-    expected_overlay_models: frozenset[str]
 
 
 @dataclass(frozen=True)

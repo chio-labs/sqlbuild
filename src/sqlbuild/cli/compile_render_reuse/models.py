@@ -23,6 +23,9 @@ class StoredRenderLayer:
 class StoredRenderLayers:
     """How a stored compile's renders are split between a base file and one overlay."""
 
+    model_paths: tuple[str, ...]
+    model_keys: frozenset[str]
+    group_keys: frozenset[str]
     base_file: str
     base_bytes: int
     overlay_models: frozenset[str]
@@ -42,4 +45,4 @@ class CompileRenderReuse:
     """One full compile's render reuse session with the stored renders it started from."""
 
     session: CompileRenderReuseSession
-    stored: StoredRenderState | None
+    stored: StoredRenderLayers | None

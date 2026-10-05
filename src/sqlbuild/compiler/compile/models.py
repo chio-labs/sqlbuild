@@ -1592,8 +1592,8 @@ class StoredRender:
 
 @dataclass(frozen=True)
 class RenderReuseState:
-    """Serialized renders of one compile: each model by project path and project-wide groups."""
+    """Serialized renders of one compile by model path and group; None marks released bytes."""
 
     model_paths: tuple[str, ...]
-    model_payloads: dict[str, memoryview]
-    group_payloads: dict[str, memoryview]
+    model_payloads: dict[str, memoryview | None]
+    group_payloads: dict[str, memoryview | None]
