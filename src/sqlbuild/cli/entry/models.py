@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.types import (
+    CompileLineageMode,
     DagCommandHandler,
     DebugCommandHandler,
     FormatCommandHandler,
@@ -16,8 +17,37 @@ from sqlbuild.cli.commands.types import (
     ScopeCommandHandler,
     SkillsUpdateCommandHandler,
 )
-from sqlbuild.cli.compile.models import CompileCommandRequest
 from sqlbuild.spec.contracts.types import WarehouseGroup
+
+
+@dataclass(frozen=True)
+class CompileProfileFlags:
+    """Profiling toggles that skip compile phases for benchmarking."""
+
+    skip_discovery_sql_analysis: bool = False
+    skip_column_inference: bool = False
+    skip_contracts: bool = False
+    skip_write: bool = False
+
+
+@dataclass(frozen=True)
+class CompileCommandRequest:
+    """CLI inputs for one `sqb compile` invocation."""
+
+    project_dir: Path | None = None
+    no_sql_validation: bool = False
+    defer_to: str | None = None
+    selected_target: str | None = None
+    json_output: bool = False
+    manifest: bool = False
+    dag_path: str | None = None
+    no_color: bool = False
+    lineage_mode: CompileLineageMode = CompileLineageMode.FAST
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    cli_vars: dict[str, object] | None = None
+    profile_flags: CompileProfileFlags = CompileProfileFlags()
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)

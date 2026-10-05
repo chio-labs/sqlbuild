@@ -85,8 +85,8 @@ from sqlbuild.cli.output import models as output_models
 
 expected_modules = {
     "CompileAnalysis": compile_models,
-    "CompileCommandRequest": compile_models,
-    "CompileProfileFlags": compile_models,
+    "CompileCommandRequest": entry_models,
+    "CompileProfileFlags": entry_models,
     "CompileWriteResult": compile_models,
     "SqlTestArtifactCacheRecord": compile_models,
     "SqlTestArtifactIdentityContext": compile_models,

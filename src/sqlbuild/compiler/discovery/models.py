@@ -14,9 +14,12 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIOS_OWNERSHIP_ROOT,
     SQL_TESTS_OWNERSHIP_ROOT,
 )
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode, ScopedDeclarationFile
+from sqlbuild.compiler.discovery.types import (
+    LoaderConnectionMode,
+    ProjectProvider,
+    ScopedDeclarationFile,
+)
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
-from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
@@ -600,8 +603,8 @@ class DiscoveredProvider:
     file_path: Path
     relative_path: Path
     name: str
-    provider_class: type[Provider]
-    settings: Provider
+    provider_class: type[ProjectProvider]
+    settings: ProjectProvider
 
 
 @dataclass(frozen=True)

@@ -1008,3 +1008,13 @@ class CommandWarehouseExitTestCase:
     expected_connect_calls: int = 0
     warehouses_section: str = '[targets.dev.warehouses]\nbuild = "BUILD_WH"\nquery = "ADHOC_WH"\n'
     local_config: str = ""
+
+
+@dataclass(frozen=True)
+class StartupImportFootprintTestCase:
+    """One fresh-process CLI invocation and the heavy modules it must not load."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_exit_code: int
+    forbidden_modules: tuple[str, ...]

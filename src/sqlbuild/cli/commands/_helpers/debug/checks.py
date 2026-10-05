@@ -12,10 +12,12 @@ from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands._helpers.runtime.warehouses import (
-    apply_command_warehouse,
+from sqlbuild.cli.commands._helpers.runtime.warehouse_scope import (
     command_warehouse_scope,
     current_command_warehouse_scope,
+)
+from sqlbuild.cli.commands._helpers.runtime.warehouses import (
+    apply_command_warehouse,
     find_target_group_warehouse,
     resolve_command_warehouse,
 )

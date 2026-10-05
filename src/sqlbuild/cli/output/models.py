@@ -51,14 +51,14 @@ from sqlbuild.cli.output.types import (
     CursorBoundsOwner,
     CursorResolutionStatus,
     IntegrationOutputKind,
+    PlannedCursorBounds,
+    WrittenTargetDiagnostic,
 )
 from sqlbuild.compiler.auditing.types import (
     AuditEvaluationMode,
     AuditSeverity,
     ThresholdOperator,
 )
-from sqlbuild.compiler.compile.models import CompilerDiagnostic
-from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.runtime.observability.constants import (
     RESOURCE_ATTEMPT_SKIPPED_EVENT,
     RESOURCE_SKIP_CODES,
@@ -85,7 +85,7 @@ class CursorPlanDetails:
     requested_end: str | None
     bounds_owner: CursorBoundsOwner
     resolution_status: CursorResolutionStatus
-    resolved_bounds: CursorBounds | None
+    resolved_bounds: PlannedCursorBounds | None
     declared_grain: str | None
     effective_grain: str | None
     declared_batch_size: str | None
@@ -577,7 +577,7 @@ class WrittenTarget:
     audit_count: int
     test_count: int
     target_dir: Path
-    diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
+    diagnostics: tuple[WrittenTargetDiagnostic, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

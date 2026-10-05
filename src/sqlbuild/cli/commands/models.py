@@ -20,14 +20,14 @@ from sqlbuild.cli.commands.types import (
 )
 from sqlbuild.cli.compile.models import (  # noqa: F401
     CompileAnalysis,
-    CompileCommandRequest,
-    CompileProfileFlags,
     CompileWriteResult,
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
 )
 from sqlbuild.cli.entry.models import (  # noqa: F401
     CliEntrypointHandlers,
+    CompileCommandRequest,
+    CompileProfileFlags,
     ParsedCliInvocation,
     SelectorFileSummary,
     SelectorInputs,

@@ -1,6 +1,15 @@
 """Type-layer declarations for CLI output."""
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.compile.models import CompilerDiagnostic
+    from sqlbuild.compiler.planner.models import CursorBounds
+
+type WrittenTargetDiagnostic = CompilerDiagnostic
+
+type PlannedCursorBounds = CursorBounds
 
 
 class CursorBoundsOwner(StrEnum):

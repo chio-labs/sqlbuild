@@ -10,7 +10,8 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
 )
 from sqlbuild.cli.commands.models import RefactorCompile
 from sqlbuild.cli.commands.types import CompileLineageMode
-from sqlbuild.cli.compile.models import CompileAnalysis, CompileProfileFlags
+from sqlbuild.cli.compile.models import CompileAnalysis
+from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity

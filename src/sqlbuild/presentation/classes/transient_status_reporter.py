@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import atexit
 from contextlib import AbstractContextManager
-from typing import TextIO
-
-from rich.console import Console
-from rich.status import Status
+from typing import TYPE_CHECKING, TextIO
 
 from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
 from sqlbuild.presentation.main._progress_spinners_disabled import progress_spinners_disabled
 from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
+
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.status import Status
 
 
 class TransientStatusReporter:
@@ -35,9 +36,11 @@ class TransientStatusReporter:
             and hasattr(stream, "isatty")
             and stream.isatty()
         )
-        self._console: Console | None = (
-            Console(file=stream, no_color=(not use_color)) if self._enabled else None
-        )
+        self._console: Console | None = None
+        if self._enabled:
+            from rich.console import Console
+
+            self._console = Console(file=stream, no_color=(not use_color))
         self._status_context: AbstractContextManager[Status] | None = None
         self._status: Status | None = None
         self._active: bool = False

@@ -5,9 +5,14 @@ from __future__ import annotations
 from dataclasses import Field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, ClassVar, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, Protocol
 
 from sqlbuild.compiler.scopes.types import ScopeKind
+
+if TYPE_CHECKING:
+    from sqlbuild.provider.classes.provider import Provider
+
+type ProjectProvider = Provider
 
 
 class LoaderConnectionMode(StrEnum):
