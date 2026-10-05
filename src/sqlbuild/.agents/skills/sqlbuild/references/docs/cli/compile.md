@@ -12,6 +12,7 @@ Online: https://sqlbuild.com/docs/cli/compile/
 - Flags
 - What compile does
 - Focused compilation
+- Reusing an unchanged compile
 - Static analysis
 - Output
 - Column lineage modes
@@ -68,6 +69,78 @@ with selected model, seed, and function counts.
 
 Manifest and DAG outputs remain full-project artifacts. Focused compilation changes analysis and
 reporting scope; it does not produce a partial project graph.
+
+## Reusing an unchanged compile
+
+When nothing that can change the result has changed since the last compile, `sqb compile` replays
+that result instead of compiling again. It prints one line to stderr, for example
+`Inputs unchanged; reused the previous compile (0.1 s)`, then the same report and exit code as the
+previous run. Failed compiles are replayed too, with the same diagnostics.
+
+A compile is reused only when all of these match the stored run:
+
+- Every file and directory under the project, compared by type, size, modification and change
+  times, and inode. When those differ, SQLBuild compares content only for files whose content
+  digest it already knows; otherwise the compile runs in full. Digests are recorded for files that
+  changed within two seconds of a compile and for files whose timestamps moved since the previous
+  compile, so large unchanged files are never read. After a checkout that only moves timestamps,
+  the next compile runs in full once, and later timestamp-only changes are reused.
+- The command line: project directory, working directory, flags, selectors, `--vars`, target, and
+  whether color output is active.
+- Environment variables that SQLBuild reads: every `SQLBUILD_*` and `SQB_*` variable, every
+  variable that a template or `@@ENV` read during the stored compile, and every variable a
+  provider's settings can read, including `env_prefix`, aliases, and nested-delimiter variables.
+  Values are stored only as hashes.
+- The contents of each provider settings `env_file` and `secrets_dir`.
+- The Python interpreter, the SQLBuild version and native extension, `sys.path` entries, and every
+  loaded Python module file outside the project.
+- Every artifact the stored compile wrote under `target/compiled/`, and the `--dag` file. If one is
+  missing or changed, compile runs in full and rewrites it. A compile is stored only when these
+  artifacts still hold the bytes it wrote, so a concurrent compile cannot leave another compile's
+  artifacts behind a reused result.
+
+These project paths are not inputs: `target/`, `logs/`, `venv/`, `.git/` and `__pycache__/`
+anywhere, and these folders at the project root: `.cache`, `.fensu`, `.hg`, `.idea`,
+`.mypy_cache`, `.nox`, `.pytest_cache`, `.ruff_cache`, `.sqlbuild`, `.svn`, `.tox`, `.venv`, and
+`.vscode`. Other hidden folders are inputs, because custom rules can read them. DuckDB database
+files count only by presence.
+
+Reuse assumes macros, hooks, providers, adapters, and custom rules are deterministic: the same inputs
+must produce the same output. A compile whose templates read `run.id` is never reused.
+
+Compile always runs in full with `--no-cache`, `--manifest`, `--debug`, or a profiling flag, when
+`SQLBUILD_DISABLE_COMPILE_CACHE=1` or `SQLBUILD_DISABLE_COMPILE_REUSE=1` is set, when the project has
+no `sqlbuild_project.toml` or `sqlbuild_project.yml`, when the target sets `compile_cache = false`,
+and when a provider's settings use sources SQLBuild cannot list exactly, such as a custom
+`settings_customise_sources` or command-line parsing. The reason is logged at debug level.
+
+SQLBuild keeps one stored result per project and target under
+`target/cache/compiler/project-reuse-v1/`. It is replaced atomically; a damaged or unreadable entry is
+ignored and compile runs in full. Storing a result normally takes a fraction of a second after the
+report is ready. When it has to hash a lot of data or the project has very many files, compile
+prints `Recording compile for reuse...` and a completion line to stderr before the report.
+
+Known limits:
+
+- Python packages outside the project are checked by the stamps of the module files the compile
+  loaded. A newly added submodule or package data file that the compile reads without importing it
+  first is not tracked.
+- On network filesystems that cache file attributes, or when clocks differ between machines,
+  timestamps may not reflect a recent edit.
+- On Windows, a file's change time is its creation time. An in-place rewrite that keeps the same
+  size and restores the previous modification time, such as `touch -r`, `rsync -t`, or
+  `robocopy /COPY:T`, is not detected unless the file changed within two seconds of the stored
+  compile. The same applies to filesystems without a real change time, such as some FUSE, SMB, and
+  exFAT mounts.
+- In these cases, or whenever a result looks stale, run `sqb compile --no-cache` or set
+  `SQLBUILD_DISABLE_COMPILE_REUSE=1`.
+
+A replayed JSON report is byte-identical to the previous one except for `compile_timings`, which
+holds `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses`,
+`project_reuse_check_ms`, and `total_ms`. Full compiles report the same reuse counters alongside
+the phase timings. In text mode, a replayed compile does not print the per-phase progress lines.
+Lifecycle sinks receive only the invocation events for a replayed compile; per-phase `operation`
+events are not emitted because no compile phase runs.
 
 ## Static analysis
 
