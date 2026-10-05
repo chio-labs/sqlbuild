@@ -3,16 +3,23 @@ from __future__ import annotations
 import itertools
 import json
 import random
+import shutil
 import signal
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Any, cast
 
+import orjson
 import pytest
 
+import sqlbuild._native as _native
+from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
+from scripts.cold_compile_performance._helpers.random_dag_project import write_random_dag_project
+from scripts.cold_compile_performance.models import RandomDagProject
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
@@ -21,6 +28,7 @@ from sqlbuild.compiler.compile._helpers.analysis.compact import native_section
 from sqlbuild.compiler.compile._helpers.assembly import binding_waves
 from sqlbuild.compiler.compile._helpers.assembly import project as project_assembly
 from sqlbuild.compiler.compile._helpers.assembly.binding_waves import analyze_binding_waves
+from sqlbuild.compiler.compile._helpers.sharing import binding as binding_sharing
 from sqlbuild.compiler.compile.classes.binding_dataflow import BindingDataflow
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -37,14 +45,25 @@ from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
+from sqlbuild.compiler.sql_analysis.main import _normalize_analysis_batch as normalize_batch
+from sqlbuild.compiler.sql_analysis.types import NativePositionsModule, NativeProjectCatalog
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     CompileOutcome,
     DataflowScheduleCase,
+    PreparedCompile,
     SharedBindingQueryCase,
 )
 
+_REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
+_NORMALIZATION_MODULES: tuple[ModuleType, ...] = (normalize_batch, binding_sharing, compact)
+_ANALYSIS_CACHE_METRICS: tuple[str, ...] = (
+    "analysis_batch_cache_hits",
+    "analysis_entry_cache_hits",
+    "analysis_cache_misses",
+    "analysis_cache_bypasses",
+)
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"
 )
@@ -263,11 +282,19 @@ def compile_outcome(
 ) -> CompileOutcome:
     """Compile through the CLI; return the exit code, timing-free JSON, and artifacts."""
 
+    return timed_compile_outcome(project_dir=project_dir, args=args, capsys=capsys)[0]
+
+
+def timed_compile_outcome(
+    *, project_dir: Path, args: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> tuple[CompileOutcome, dict[str, object]]:
+    """Compile through the CLI; return the timing-free outcome and its compile timings."""
+
     exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json", *args])
     payload: dict[str, object] = json.loads(
         capsys.readouterr().out.replace(str(project_dir), "<project>")
     )
-    _ = payload.pop("compile_timings", None)
+    timings: dict[str, object] = cast(dict[str, object], payload.pop("compile_timings", {}))
     compiled: Path = project_dir / "target" / "compiled"
     return (
         exit_code,
@@ -276,7 +303,7 @@ def compile_outcome(
             path.relative_to(compiled).as_posix(): path.read_bytes()
             for path in compiled.rglob("*.sql")
         },
-    )
+    ), timings
 
 
 def reshape_models(*, project_dir: Path, names: tuple[str, ...], indexes: tuple[int, ...]) -> None:
@@ -513,3 +540,121 @@ def live_model_analysis_threads() -> list[str]:
             thread.name
         )
     return sorted(names_by_kind.get(True, []))
+
+
+def random_dag_writer(project: RandomDagProject) -> Callable[[Path], tuple[str, ...]]:
+    return lambda project_dir: write_random_dag_project(project_dir=project_dir, project=project)
+
+
+def fixture_writer(relative: str) -> Callable[[Path], tuple[str, ...]]:
+    def write(project_dir: Path) -> tuple[str, ...]:
+        _ = shutil.copytree(
+            _REPOSITORY_ROOT / relative,
+            project_dir,
+            ignore=shutil.ignore_patterns("target", "*.duckdb"),
+        )
+        return ()
+
+    return write
+
+
+def dense_writer(model_count: int) -> Callable[[Path], tuple[str, ...]]:
+    def write(project_dir: Path) -> tuple[str, ...]:
+        write_dense_compile_project(project_dir=project_dir, model_count=model_count)
+        return ()
+
+    return write
+
+
+def use_per_model_normalization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Normalize each batch member with its own native call, the reference preparation."""
+
+    for module in _NORMALIZATION_MODULES:
+        monkeypatch.setattr(module, "normalize_analysis_sql_results", _per_model_normalization)
+
+
+def keep_batched_normalization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave batched normalization in place, the preparation under test."""
+
+    _ = monkeypatch
+
+
+def perturb_batched_normalization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Change the last member of every batched normalization, which comparisons must catch."""
+
+    batched: Callable[..., list[str | Exception]] = normalize_batch.normalize_analysis_sql_results
+
+    def perturbed(**arguments: Any) -> list[str | Exception]:
+        results: list[str | Exception] = batched(**arguments)
+        return [*results[:-1], *(f"{result} " for result in results[-1:])]
+
+    for module in _NORMALIZATION_MODULES:
+        monkeypatch.setattr(module, "normalize_analysis_sql_results", perturbed)
+
+
+def prepared_compile(
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    normalization: Callable[[pytest.MonkeyPatch], None],
+) -> PreparedCompile:
+    """Compile once; return the outcome, cache keys, cache metrics, and native batch payloads."""
+
+    with monkeypatch.context() as patch:
+        normalization(patch)
+        preparations: list[CompactBatchPreparation] = trace_native_compact_batches(patch)
+        cache_keys: list[str] = _trace_analysis_cache_keys(patch)
+        outcome: CompileOutcome
+        timings: dict[str, object]
+        outcome, timings = timed_compile_outcome(project_dir=project_dir, args=args, capsys=capsys)
+    return (
+        outcome,
+        tuple(sorted(cache_keys)),
+        {name: timings.get(name) for name in _ANALYSIS_CACHE_METRICS},
+        tuple(_preparation_payload(preparation) for preparation in preparations),
+    )
+
+
+def _trace_analysis_cache_keys(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    original: Callable[..., str] = project_assembly.model_analysis_cache_key
+    keys: list[str] = []
+
+    def traced(**arguments: Any) -> str:
+        key: str = original(**arguments)
+        keys.append(key)
+        return key
+
+    monkeypatch.setattr(project_assembly, "model_analysis_cache_key", traced)
+    return keys
+
+
+def _per_model_normalization(
+    *,
+    dialect: str | None,
+    requests: Sequence[tuple[str, Mapping[str, str] | None, Mapping[str, str] | None]],
+    catalog: NativeProjectCatalog | None,
+) -> list[str | Exception]:
+    _ = catalog
+    native: NativePositionsModule = cast(NativePositionsModule, _native)
+    return [
+        native.normalize_analysis_sqls(
+            dialect=dialect or "generic",
+            requests=[(sql, dict(stubs or {}), dict(placeholders or {}))],
+        )[0]
+        for sql, stubs, placeholders in requests
+    ]
+
+
+def _preparation_payload(preparation: CompactBatchPreparation) -> bytes:
+    return orjson.dumps(
+        {
+            "cleaned_sql": preparation.cleaned_sql,
+            "queries": preparation.queries,
+            "templates": preparation.templates,
+            "projections": preparation.projections,
+            "shared_query_indexes": sorted(preparation.shared_query_indexes),
+        },
+        option=orjson.OPT_SORT_KEYS,
+    )

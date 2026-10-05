@@ -6,6 +6,7 @@ use polyglot_sql::{DialectType, SchemaValidationOptions};
 use pyo3::{FromPyObject, pyclass};
 use rayon::ThreadPool;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
 #[derive(Default, Debug)]
@@ -57,6 +58,8 @@ pub(crate) struct ProjectCatalog {
     pub(crate) function_probes: Arc<FunctionProbes>,
     /// One analysis pool per compile catalog, built on first use and shared by its views.
     pub(super) analysis_pool: Arc<Mutex<Option<Arc<ThreadPool>>>>,
+    /// Analysis batches running on the pool; preparation only borrows the pool while none run.
+    pub(super) running_analyses: Arc<AtomicUsize>,
 }
 
 /// One resolved compact analysis batch that runs without borrowing its project catalog.

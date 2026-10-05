@@ -1,5 +1,7 @@
 #[path = "tests/test_function_names.rs"]
 mod function_names;
+#[path = "tests/test_normalize_batch.rs"]
+mod normalize_batch;
 #[path = "tests/test_positions.rs"]
 mod positions;
 #[path = "tests/test_semantic_validation.rs"]

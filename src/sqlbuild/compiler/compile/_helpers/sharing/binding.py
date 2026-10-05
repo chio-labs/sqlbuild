@@ -30,7 +30,9 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.sql_analysis.constants import SQL_QUOTED_IDENTIFIER_DELIMITER
-from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import (
+    normalize_analysis_sql_results,
+)
 from sqlbuild.compiler.sql_analysis.models import SqlSchemaValidationRequest
 
 
@@ -108,6 +110,35 @@ def prepare_binding_queries(
             if prekey is not None and count >= MIN_SHARED_BINDING_QUERY_MEMBERS
         )
     )
+    shared_stubs: dict[int, dict[str, str]] = {}
+    for index, binding_schema in enumerate(binding_schemas):
+        prekey: str | None = prekeys[index]
+        if binding_schema is None or prekey is None or prekey not in candidates:
+            continue
+        names: list[str] | None = _shared_reference_names(
+            cleaned_sql=cleaned_sqls[index],
+            references=inputs.references[index],
+            binding_schema=binding_schema,
+        )
+        if names is not None:
+            shared_stubs[index] = {
+                name: f"{COMPACT_RELATION_STUB_PREFIX}{position}"
+                for position, name in enumerate(names)
+            }
+    shared_sqls: dict[int, str | Exception] = dict(
+        zip(
+            shared_stubs,
+            normalize_analysis_sql_results(
+                dialect=dialect,
+                requests=[
+                    (inputs.query_sqls[index], stubs, inputs.placeholders[index])
+                    for index, stubs in shared_stubs.items()
+                ],
+                catalog=binding_catalog.native,
+            ),
+            strict=True,
+        )
+    )
     prepared: list[PreparedBindingQuery | None] = []
     for index, binding_schema in enumerate(binding_schemas):
         if binding_schema is None:
@@ -120,19 +151,18 @@ def prepare_binding_queries(
                 )
             ]
         )[0]
-        prekey: str | None = prekeys[index]
-        shared: SharedBindingQuery | None = None
-        if prekey is not None and prekey in candidates:
-            shared = _shared_binding_query(
+        shared: SharedBindingQuery | None = (
+            _shared_binding_query(
                 binding_catalog=binding_catalog,
-                query=SqlSchemaValidationRequest(
-                    sql=inputs.query_sqls[index], dialect=dialect, schema=binding_schema
-                ),
-                cleaned_sql=cleaned_sqls[index],
-                references=inputs.references[index],
-                placeholders=inputs.placeholders[index],
+                sql=normalized_analysis_sql(shared_sqls[index]),
+                dialect=dialect,
+                schema=binding_schema,
+                stubs=shared_stubs[index],
                 overrides=overrides,
             )
+            if index in shared_stubs
+            else None
+        )
         prepared.append(
             PreparedBindingQuery(references=binding_references, overrides=overrides, shared=shared)
         )
@@ -190,6 +220,14 @@ def shared_result_is_exact(*, validation: object, template: object) -> bool:
     return isinstance(validation, dict) and cast(dict[str, object], validation).get("errors") == []
 
 
+def normalized_analysis_sql(result: str | Exception) -> str:
+    """Return one normalized batch member, raising the error its own normalization raised."""
+
+    if isinstance(result, Exception):
+        raise result
+    return result
+
+
 def relation_stubs_collide(*, cleaned_sql: str, names: Iterable[str]) -> bool:
     """Return whether authored SQL or relation names already use the relation stub prefix."""
 
@@ -226,29 +264,20 @@ def _shared_reference_names(
 def _shared_binding_query(
     *,
     binding_catalog: Any,
-    query: SqlSchemaValidationRequest,
-    cleaned_sql: str,
-    references: tuple[CompileSqlReference, ...],
-    placeholders: dict[str, str] | None,
+    sql: str,
+    dialect: str | None,
+    schema: Mapping[str, Mapping[str, str]],
+    stubs: dict[str, str],
     overrides: Mapping[str, Mapping[str, str]],
-) -> SharedBindingQuery | None:
-    names: list[str] | None = _shared_reference_names(
-        cleaned_sql=cleaned_sql, references=references, binding_schema=query.schema
-    )
-    if names is None:
-        return None
-    stubs: dict[str, str] = {
-        name: f"{COMPACT_RELATION_STUB_PREFIX}{index}" for index, name in enumerate(names)
-    }
-    sql: str = normalize_analysis_sql(
-        sql=query.sql, dialect=query.dialect, stubs=stubs, placeholders=placeholders
-    )
+) -> SharedBindingQuery:
+    """Identify one query from its SQL normalized with relation `stubs`."""
+
     analysis_shapes: list[tuple[object, ...]] = []
-    for name in names:
+    for name in stubs:
         types, nullability = binding_catalog.analysis_shapes.get(name, ({}, {}))
         analysis_shapes.append((stubs[name], tuple(types.items()), tuple(nullability.items())))
     binding_shapes: list[tuple[object, ...]] = []
-    for relation, columns in query.schema.items():
+    for relation, columns in schema.items():
         effective: Mapping[str, str] = (
             overrides[relation]
             if relation in overrides
@@ -264,7 +293,7 @@ def _shared_binding_query(
         stubs=stubs,
         key=(
             sql,
-            query.dialect or "generic",
+            dialect or "generic",
             tuple(analysis_shapes),
             tuple(sorted(binding_shapes)),
         ),

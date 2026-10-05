@@ -1,14 +1,19 @@
 //! Compile-owned schema catalog and native, batched binding requests.
 
 use crate::bindings::main::compiler_error::compiler_error;
+use crate::bindings::main::normalization_results::normalization_results;
 use crate::bindings::types::CompilerDetach;
+use crate::semantic_validation::main::normalize_batch;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::semantic_validation::models::{
     CatalogInput, Columns, CompactAnalysisJob, FunctionProbes, ProjectCatalog,
 };
-use crate::semantic_validation::types::{BindingRequest, DiagnosticRow, Relations};
+use crate::semantic_validation::types::{
+    BindingRequest, DiagnosticRow, NormalizationRequest, Relations,
+};
 use crate::semantic_validation::{
     _helpers::{diagnostics, identifiers},
     main as validation,
@@ -19,7 +24,7 @@ use polyglot_sql::{
     ValidationSchema,
 };
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, FromPyObject, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, FromPyObject, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pymethods;
 use pyo3::types::{PyBytes, PyDict, PyDictMethods};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -137,6 +142,7 @@ impl ProjectCatalog {
             analysis_tables: HashMap::new(),
             function_probes: Arc::new(FunctionProbes::default()),
             analysis_pool: Arc::default(),
+            running_analyses: Arc::default(),
         };
         catalog.update_relations(relations);
         Ok(catalog)
@@ -158,6 +164,7 @@ impl ProjectCatalog {
             analysis_tables: self.analysis_tables.clone(),
             function_probes: Arc::new(FunctionProbes::default()),
             analysis_pool: Arc::clone(&self.analysis_pool),
+            running_analyses: Arc::clone(&self.running_analyses),
         };
         catalog.update_relations(relations);
         catalog
@@ -234,6 +241,7 @@ impl ProjectCatalog {
     ) -> PyResult<Vec<Vec<DiagnosticRow>>> {
         py.compiler_detach(|| {
             let pool = self.analysis_pool()?;
+            let _running = RunningAnalysis::start(&self.running_analyses);
             pool.install(|| {
                 requests
                     .into_par_iter()
@@ -253,6 +261,44 @@ impl ProjectCatalog {
         })
         .map_err(compiler_error)
     }
+
+    /// Normalize a preparation batch on the idle analysis pool, else in turn, in one detached call.
+    fn normalize_analysis_sqls(
+        &self,
+        py: Python<'_>,
+        dialect: &str,
+        requests: Vec<NormalizationRequest>,
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        let results = py
+            .compiler_detach(|| {
+                let pool = (self.running_analyses.load(Ordering::Acquire) == 0)
+                    .then(|| self.analysis_pool())
+                    .transpose()?;
+                Ok(normalize_batch::normalize_analysis_sqls(
+                    dialect,
+                    requests,
+                    pool.as_deref(),
+                ))
+            })
+            .map_err(compiler_error)?;
+        normalization_results(py, results)
+    }
+}
+
+/// Count one analysis batch as running on the catalog's pool until dropped.
+struct RunningAnalysis<'a>(&'a AtomicUsize);
+
+impl<'a> RunningAnalysis<'a> {
+    fn start(running: &'a AtomicUsize) -> Self {
+        running.fetch_add(1, Ordering::AcqRel);
+        Self(running)
+    }
+}
+
+impl Drop for RunningAnalysis<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 #[pymethods]
@@ -265,7 +311,10 @@ impl CompactAnalysisJob {
             .take()
             .ok_or_else(|| PyValueError::new_err("compact analysis job already ran"))?;
         let result = py
-            .compiler_detach(|| analysis(&self.catalog))
+            .compiler_detach(|| {
+                let _running = RunningAnalysis::start(&self.catalog.running_analyses);
+                analysis(&self.catalog)
+            })
             .map_err(compiler_error)?;
         Ok(PyBytes::new(py, result.as_bytes()))
     }
@@ -283,6 +332,7 @@ impl ProjectCatalog {
             analysis_tables: HashMap::new(),
             function_probes: Arc::clone(&self.function_probes),
             analysis_pool: Arc::clone(&self.analysis_pool),
+            running_analyses: Arc::clone(&self.running_analyses),
         }
     }
 
@@ -321,6 +371,7 @@ impl ProjectCatalog {
             analysis_tables: HashMap::new(),
             function_probes: Arc::new(FunctionProbes::default()),
             analysis_pool: Arc::default(),
+            running_analyses: Arc::default(),
         }
     }
     pub(crate) fn analysis_schema(
