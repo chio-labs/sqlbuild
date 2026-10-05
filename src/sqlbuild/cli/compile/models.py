@@ -19,6 +19,16 @@ from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 
 
 @dataclass(frozen=True)
+class CompileCommandResult:
+    """Outcome of one full compile that decides whether it can be stored for reuse."""
+
+    exit_code: int
+    compile_cache_enabled: bool
+    artifacts_written: bool
+    dag_artifact_path: Path | None
+
+
+@dataclass(frozen=True)
 class CompileAnalysis:
     """Compiled project analysis shared by compile output phases."""
 

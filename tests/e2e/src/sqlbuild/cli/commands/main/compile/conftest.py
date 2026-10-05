@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     InspectionCommandMeasurement,
     prepare_build_benchmark_project,
     prepare_compile_cache_invalidation_project,
+    prepare_compile_reuse_project,
     prepare_inspection_benchmark_project,
     run_fresh_process_inspection_command,
 )
@@ -38,6 +39,13 @@ def semantic_playground(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def cache_invalidation_project(tmp_path: Path) -> Path:
     project_dir: Path = tmp_path / "orders_project"
     prepare_compile_cache_invalidation_project(project_dir=project_dir)
+    return project_dir
+
+
+@pytest.fixture
+def compile_reuse_project(tmp_path: Path) -> Path:
+    project_dir: Path = tmp_path / "orders_project"
+    prepare_compile_reuse_project(project_dir=project_dir)
     return project_dir
 
 

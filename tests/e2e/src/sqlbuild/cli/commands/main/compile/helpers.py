@@ -14,6 +14,7 @@ import time
 from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 from types import FrameType
@@ -22,11 +23,21 @@ from typing import Any, NamedTuple, cast
 import duckdb
 import pytest
 
+import sqlbuild.cli.commands.main.project._compile as compile_command_module
+import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
+import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.cli.compile_reuse._helpers.entry_file import (
+    read_entry_header,
+    read_entry_stdout,
+    write_entry,
+)
+from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
+from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     SemanticCorpusCase,
@@ -2920,3 +2931,505 @@ def diagnostic_location_keys(payload: dict[str, Any]) -> tuple[tuple[str, str, i
             for diagnostic in payload["diagnostics"]
         )
     )
+
+
+COMPILE_REUSE_REGION_ENV_VAR: str = "ORDERS_REGION"
+COMPILE_REUSE_ENV: dict[str, str] = {
+    REUSE_DISABLE_ENV_VAR: "0",
+    COMPILE_CACHE_REGION_ENV_VAR: "east",
+    COMPILE_REUSE_REGION_ENV_VAR: "north",
+}
+COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
+_COMPILE_REUSE_RULES_CONFIG: str = (
+    '\n[rules]\nselect = ["XSQBR"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
+)
+_FUTURE_MTIME_OFFSET_NS: int = 5_000_000_000
+_PROGRESS_LINE: re.Pattern[str] = re.compile(r".+  (START|OK  \(\d+\.\d+s\))")
+_COMPILE_TIMINGS_PATTERN: re.Pattern[str] = re.compile(r'\n  "compile_timings": \{[^{}]*\n  \}')
+_COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
+    "macros/_rounding.py": (
+        "_SCALE: int = 2\n\n\ndef scale() -> int:\n"
+        '    """Return the rounding scale."""\n    return _SCALE\n'
+    ),
+    "macros/currency.py": (
+        '"""Project-wide currency macros."""\n\nfrom macros._rounding import scale\n\n\n'
+        "def line_total_cents(price_cents: str, quantity: str) -> str:\n"
+        '    """Calculate line total cents from a unit price and quantity."""\n'
+        '    return f"ROUND({price_cents} * {quantity}, {scale()})"\n'
+    ),
+    "models/marts/regional_orders.sql": (
+        "MODEL (description 'Orders tagged with the configured region.');\n\n"
+        f"SELECT order_id, '@@ENV:{COMPILE_REUSE_REGION_ENV_VAR}' AS region "
+        'FROM __ref("stg_orders")\n'
+    ),
+    "rules/limits.py": "MAX_NAME_LENGTH: int = 40\n",
+    "rules/naming.py": (
+        "from sqlbuild.rules import Finding, Model, RuleContext, rule\n\n"
+        "from rules import limits\n\n\n"
+        '@rule(code="XSQBRNAME001", message="Model names stay short", '
+        'remediation="Rename the model.")\n'
+        "def short_names(*, model: Model, ctx: RuleContext) -> list[Finding]:\n"
+        "    if len(model.name) <= limits.MAX_NAME_LENGTH:\n"
+        "        return []\n"
+        "    return [ctx.finding(subject=model)]\n"
+    ),
+}
+
+
+class CompileReuseRun(NamedTuple):
+    """Comparable result of one fresh-process JSON compile with compile reuse enabled."""
+
+    returncode: int
+    report: str
+    stderr: str
+    timings: dict[str, int]
+    compiled: dict[str, bytes]
+
+    @property
+    def reused(self) -> bool:
+        """Return whether the run replayed the stored compile."""
+
+        return COMPILE_REUSE_HIT_LINE in self.stderr
+
+
+def prepare_compile_reuse_project(*, project_dir: Path) -> None:
+    """Create a project whose inputs cover every kind compile reuse fingerprints."""
+
+    prepare_compile_cache_invalidation_project(project_dir=project_dir)
+    for relative_path, contents in _COMPILE_REUSE_EXTRA_PROJECT_FILES.items():
+        write_project_file(project_dir, relative_path, contents)
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8") + _COMPILE_REUSE_RULES_CONFIG, encoding="utf-8"
+    )
+    (project_dir / "waffle_shop_control.duckdb").write_bytes(b"original database pages")
+
+
+def run_reuse_compile(
+    *,
+    project_dir: Path,
+    env: dict[str, str] | None = None,
+    args: tuple[str, ...] = (),
+    global_args: tuple[str, ...] = (),
+) -> CompileReuseRun:
+    """Compile with --json in a fresh process with reuse enabled and capture comparable output."""
+
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir,
+        args=(*global_args, "compile", "--json", *args),
+        env={**COMPILE_REUSE_ENV, **(env or {})},
+    )
+    payload: dict[str, object] = cast(dict[str, object], json.loads(result.stdout))
+    return CompileReuseRun(
+        returncode=result.returncode,
+        report=_COMPILE_TIMINGS_PATTERN.sub("", result.stdout),
+        stderr=result.stderr,
+        timings=cast(dict[str, int], payload.get("compile_timings", {})),
+        compiled=compiled_artifacts(project_dir=project_dir),
+    )
+
+
+def run_reuse_text_compile(
+    *, project_dir: Path, args: tuple[str, ...]
+) -> subprocess.CompletedProcess[str]:
+    """Compile with the text report in a fresh process with reuse enabled."""
+
+    return run_installed_sqb(
+        project_dir=project_dir, args=("compile", *args), env=COMPILE_REUSE_ENV
+    )
+
+
+def run_reuse_compile_into_file(
+    *, project_dir: Path, report_path: Path
+) -> subprocess.CompletedProcess[str]:
+    """Compile with --json while the shell-style stdout redirect targets a project file."""
+
+    with report_path.open("w", encoding="utf-8") as report:
+        return subprocess.run(
+            [
+                str(Path(sys.executable).with_name("sqb")),
+                "--project-dir",
+                str(project_dir),
+                "--no-color",
+                "compile",
+                "--json",
+            ],
+            stdout=report,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, **COMPILE_REUSE_ENV},
+            check=False,
+        )
+
+
+def compile_reuse_hit_count(*, report_path: Path) -> int:
+    """Return the reuse hit counter of a JSON report written to a file."""
+
+    payload: dict[str, object] = cast(
+        dict[str, object], json.loads(report_path.read_text(encoding="utf-8"))
+    )
+    return cast(dict[str, int], payload["compile_timings"])["project_reuse_hits"]
+
+
+def compile_notes(*, stderr: str) -> list[str]:
+    """Return the note lines a compile printed to stderr."""
+
+    return re.findall(r"^note:.*$", stderr, flags=re.MULTILINE)
+
+
+def progress_only(*, text: str) -> bool:
+    """Return whether text consists only of per-phase progress lines."""
+
+    return all(_PROGRESS_LINE.fullmatch(line) is not None for line in text.splitlines())
+
+
+def write_recording_sink(*, project_dir: Path, sink_name: str) -> None:
+    """Add a lifecycle sink that appends invocation events to ORDERS_EVENT_PATH."""
+
+    write_project_file(
+        project_dir,
+        f"sinks/{sink_name}.py",
+        "import os\nfrom pathlib import Path\n\n"
+        "from sqlbuild.sinks import (\n    LifecycleEvent,\n    LifecycleEventKind,\n"
+        "    lifecycle_event_sink,\n    lifecycle_event_to_json,\n)\n\n\n"
+        f'@lifecycle_event_sink(name="{sink_name}", '
+        "event_kinds={LifecycleEventKind.INVOCATION})\n"
+        "def record_event(event: LifecycleEvent) -> None:\n"
+        '    with Path(os.environ["ORDERS_EVENT_PATH"]).open("a", encoding="utf-8") as stream:\n'
+        '        stream.write(lifecycle_event_to_json(event) + "\\n")\n',
+    )
+
+
+def recorded_events(*, path: Path) -> list[dict[str, object]]:
+    """Read the lifecycle events a recording sink appended."""
+
+    return [
+        cast(dict[str, object], json.loads(line))
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def compile_reuse_entry_paths(*, project_dir: Path) -> tuple[Path, ...]:
+    """Return every stored compile reuse entry of a project."""
+
+    return tuple(
+        sorted((project_dir / "target" / "cache" / "compiler" / "project-reuse-v1").glob("*.entry"))
+    )
+
+
+def _rewrite_compile_reuse_entries(
+    *, project_dir: Path, rewrite: Callable[[StoredCompileInputs], StoredCompileInputs]
+) -> None:
+    for path in compile_reuse_entry_paths(project_dir=project_dir):
+        header: StoredCompileHeader | None = read_entry_header(path=path)
+        assert header is not None
+        stdout: str | None = read_entry_stdout(path=path, header=header)
+        assert stdout is not None
+        write_entry(path=path, inputs=rewrite(header.inputs), output=header.output, stdout=stdout)
+
+
+def simulate_native_build_change(project_dir: Path) -> None:
+    """Simulate an upgraded SQLBuild version and native build in the stored identity."""
+
+    _rewrite_compile_reuse_entries(
+        project_dir=project_dir,
+        rewrite=lambda inputs: replace(
+            inputs, runtime={**inputs.runtime, "native_build": "0.0.0+simulated"}
+        ),
+    )
+
+
+def simulate_python_version_change(project_dir: Path) -> None:
+    """Simulate a different Python interpreter in the stored identity."""
+
+    _rewrite_compile_reuse_entries(
+        project_dir=project_dir,
+        rewrite=lambda inputs: replace(
+            inputs, runtime={**inputs.runtime, "python": "3.0.0 (simulated)"}
+        ),
+    )
+
+
+def simulate_installed_module_change(project_dir: Path) -> None:
+    """Simulate reinstalled packages by aging every recorded module file stamp."""
+
+    _rewrite_compile_reuse_entries(
+        project_dir=project_dir,
+        rewrite=lambda inputs: replace(
+            inputs,
+            modules=tuple((path, mtime_ns - 1, size) for path, mtime_ns, size in inputs.modules),
+        ),
+    )
+
+
+def touch_model_without_change(project_dir: Path) -> None:
+    """Move a model's mtime forward without changing its content."""
+
+    path: Path = project_dir / "models/staging/stg_orders.sql"
+    mtime_ns: int = path.stat().st_mtime_ns + _FUTURE_MTIME_OFFSET_NS
+    os.utime(path, ns=(mtime_ns, mtime_ns))
+
+
+def rewrite_macro_without_change(project_dir: Path) -> None:
+    """Rewrite a macro file with identical bytes."""
+
+    path: Path = project_dir / "macros/currency.py"
+    path.write_bytes(path.read_bytes())
+
+
+def delete_compiled_model(project_dir: Path) -> None:
+    """Delete one compiled artifact by hand."""
+
+    (project_dir / "target/compiled/models/marts/regional_orders.sql").unlink()
+
+
+def edit_compiled_model(project_dir: Path) -> None:
+    """Edit one compiled artifact by hand."""
+
+    path: Path = project_dir / "target/compiled/models/marts/regional_orders.sql"
+    path.write_text(path.read_text(encoding="utf-8") + "-- edited by hand\n", encoding="utf-8")
+
+
+def add_stale_compiled_file(project_dir: Path) -> None:
+    """Add a compiled artifact that no model produces."""
+
+    write_project_file(project_dir, "target/compiled/models/stale_model.sql", "SELECT 1\n")
+
+
+def truncate_file(path: Path) -> None:
+    """Drop the last bytes of a stored entry."""
+
+    path.write_bytes(path.read_bytes()[:-7])
+
+
+def flip_trailing_bytes(path: Path) -> None:
+    """Corrupt the stored stdout section without changing its length."""
+
+    path.write_bytes(path.read_bytes()[:-3] + b"xyz")
+
+
+def flip_header_byte(path: Path) -> None:
+    """Corrupt one byte inside the stored inputs section."""
+
+    contents: bytes = path.read_bytes()
+    path.write_bytes(contents[:40] + b"!" + contents[41:])
+
+
+def empty_file(path: Path) -> None:
+    """Leave an empty stored entry, as an interrupted copy would."""
+
+    path.write_bytes(b"")
+
+
+def garbage_file(path: Path) -> None:
+    """Replace a stored entry with unrelated bytes."""
+
+    path.write_bytes(b"not a stored compile")
+
+
+ORDERS_API_TOKEN_ENV_VAR: str = "ORDERS_API_TOKEN"
+ORDERS_API_TIMEOUT_ENV_VAR: str = "ORDERS_API_TIMEOUT_SECONDS"
+_ORDERS_API_ENV_FILE_NAME: str = "orders_api.env"
+
+
+def orders_api_env_file(project_dir: Path) -> Path:
+    """Return the provider env file kept beside, not inside, the project."""
+
+    return project_dir.parent / _ORDERS_API_ENV_FILE_NAME
+
+
+def write_orders_api_provider(*, project_dir: Path) -> None:
+    """Add a provider whose required settings come from the environment and an env file."""
+
+    write_project_file(
+        project_dir,
+        "providers/orders_api.py",
+        "from pydantic_settings import SettingsConfigDict\n"
+        "from sqlbuild.providers import Provider\n\n\n"
+        "class OrdersApi(Provider):\n"
+        '    """Orders API connection settings."""\n\n'
+        "    model_config = SettingsConfigDict(\n"
+        f"        env_file={str(orders_api_env_file(project_dir))!r}\n"
+        "    )\n\n"
+        "    orders_api_token: str\n"
+        "    orders_api_timeout_seconds: int = 30\n",
+    )
+
+
+def write_custom_source_provider(project_dir: Path) -> None:
+    """Add a provider whose settings sources reuse cannot enumerate."""
+
+    write_project_file(
+        project_dir,
+        "providers/orders_vault.py",
+        "from pydantic_settings import BaseSettings, PydanticBaseSettingsSource\n"
+        "from sqlbuild.providers import Provider\n\n\n"
+        "class OrdersVault(Provider):\n"
+        '    """Orders vault settings read from a custom source."""\n\n'
+        '    vault_path: str = "orders"\n\n'
+        "    @classmethod\n"
+        "    def settings_customise_sources(\n"
+        "        cls,\n"
+        "        settings_cls: type[BaseSettings],\n"
+        "        init_settings: PydanticBaseSettingsSource,\n"
+        "        env_settings: PydanticBaseSettingsSource,\n"
+        "        dotenv_settings: PydanticBaseSettingsSource,\n"
+        "        file_secret_settings: PydanticBaseSettingsSource,\n"
+        "    ) -> tuple[PydanticBaseSettingsSource, ...]:\n"
+        "        return (init_settings,)\n",
+    )
+
+
+def write_orders_api_timeout_file(project_dir: Path) -> None:
+    """Change a provider setting through its env file only."""
+
+    orders_api_env_file(project_dir).write_text(
+        f"{ORDERS_API_TIMEOUT_ENV_VAR}=45\n", encoding="utf-8"
+    )
+
+
+def stored_stdout_path(entry_path: Path) -> Path:
+    """Return the stored stdout file that one entry references."""
+
+    header: StoredCompileHeader | None = read_entry_header(path=entry_path)
+    assert header is not None
+    return entry_path.parent / header.output.stdout_file
+
+
+def flip_stored_stdout_bytes(entry_path: Path) -> None:
+    """Corrupt the stored stdout without changing its length."""
+
+    path: Path = stored_stdout_path(entry_path)
+    path.write_bytes(path.read_bytes()[:-3] + b"xyz")
+
+
+def remove_stored_stdout(entry_path: Path) -> None:
+    """Delete the stored stdout while keeping the entry that references it."""
+
+    stored_stdout_path(entry_path).unlink()
+
+
+def enable_compile_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Enable compile reuse and the fixture environment for in-process compiles."""
+
+    for name, value in COMPILE_REUSE_ENV.items():
+        monkeypatch.setenv(name, value)
+
+
+def compile_in_process(*, project_dir: Path) -> int:
+    """Run one JSON compile through the CLI entry point in this process."""
+
+    with redirect_stdout(StringIO()):
+        return main(["--project-dir", str(project_dir), "--no-color", "compile", "--json"])
+
+
+def write_before_reuse_store(
+    *, monkeypatch: pytest.MonkeyPatch, project_dir: Path, write: Callable[[Path], None]
+) -> None:
+    """Let another writer change target/ once, after a compile wrote it and before it stores."""
+
+    original: Callable[..., None] = compile_command_module.write_reusable_compile
+    pending: list[Callable[[Path], None]] = [write]
+
+    def write_then_store(**kwargs: Any) -> None:
+        for action in tuple(pending):
+            action(project_dir)
+        pending.clear()
+        original(**kwargs)
+
+    monkeypatch.setattr(compile_command_module, "write_reusable_compile", write_then_store)
+
+
+def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
+    """Rewrite one compiled artifact with the bytes it already holds."""
+
+    path: Path = project_dir / "target/compiled/models/marts/regional_orders.sql"
+    path.write_bytes(path.read_bytes())
+
+
+def record_digested_paths(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record every project file compile reuse reads to compute a content digest."""
+
+    paths: list[str] = []
+    original: Callable[..., str | None] = reuse_project_files.file_digest
+
+    def recording_digest(*, path: str) -> str | None:
+        paths.append(path)
+        return original(path=path)
+
+    monkeypatch.setattr(reuse_project_files, "file_digest", recording_digest)
+    return paths
+
+
+def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Treat files written before a compile starts as settled instead of waiting two seconds."""
+
+    monkeypatch.setattr(reuse_project_files, "RACY_WINDOW_NS", 0)
+
+
+def write_large_file(*, project_dir: Path, relative_path: str, size_bytes: int) -> Path:
+    """Write a large data file that no compile reads."""
+
+    path: Path = project_dir / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"0" * size_bytes)
+    return path
+
+
+def touch_back(path: Path, *, seconds: int) -> None:
+    """Set a file's mtime to a past time without changing its content, as a checkout can."""
+
+    mtime_ns: int = time.time_ns() - seconds * 1_000_000_000
+    os.utime(path, ns=(mtime_ns, mtime_ns))
+
+
+def compiled_artifacts(*, project_dir: Path) -> dict[str, bytes]:
+    """Return every compiled SQL artifact by path relative to target/compiled."""
+
+    compiled_dir: Path = project_dir / "target" / "compiled"
+    return {
+        path.relative_to(compiled_dir).as_posix(): path.read_bytes()
+        for path in sorted(compiled_dir.rglob("*.sql"))
+    }
+
+
+def compile_in_process_reused(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, bool]:
+    """Compile in this process and return its exit code and whether it reused."""
+
+    _ = capsys.readouterr()
+    code: int = compile_in_process(project_dir=project_dir)
+    return code, COMPILE_REUSE_HIT_LINE in capsys.readouterr().err
+
+
+def in_process_compile_reads(
+    *, project_dir: Path, digested: list[str], path: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, int, bool]:
+    """Compile in this process; return its exit code, reads of path, and whether it reused."""
+
+    start: int = len(digested)
+    _ = capsys.readouterr()
+    code: int = compile_in_process(project_dir=project_dir)
+    reused: bool = COMPILE_REUSE_HIT_LINE in capsys.readouterr().err
+    return code, digested[start:].count(str(path)), reused
+
+
+def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -> None:
+    """Make storing a finished compile raise while enumerating provider settings."""
+
+    def raise_error(**_kwargs: Any) -> None:
+        raise error
+
+    monkeypatch.setattr(reuse_store, "provider_settings_inputs", raise_error)
+
+
+def compile_in_process_output(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, str, str]:
+    """Run one JSON compile in this process and return its exit code, stdout, and stderr."""
+
+    _ = capsys.readouterr()
+    code: int = main(["--project-dir", str(project_dir), "--no-color", "compile", "--json"])
+    out, err = capsys.readouterr()
+    return code, out, err

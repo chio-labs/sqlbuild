@@ -13,6 +13,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, cast, get_type_hints
 
+from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.discovery._helpers.filesystem.cached_files import (
     parse_source_file_with_cache,
 )
@@ -1004,6 +1005,8 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
         | None
     ) = cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
+        for cached_provider in cached[0]:
+            COMPILE_INPUT_READS.settings_class_read(cached_provider.provider_class)
         return cached[0]
     providers_root: Path = project_dir / "providers"
     if not providers_root.is_dir():
@@ -1034,6 +1037,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
                     f"{file_path.relative_to(project_dir)}"
                 )
             seen_names[provider_name] = file_path
+            COMPILE_INPUT_READS.settings_class_read(provider_class)
             discovered_providers.append(
                 DiscoveredProvider(
                     file_path=file_path,

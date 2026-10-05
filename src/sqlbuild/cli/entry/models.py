@@ -48,6 +48,7 @@ class CompileCommandRequest:
     cli_vars: dict[str, object] | None = None
     profile_flags: CompileProfileFlags = CompileProfileFlags()
     no_cache: bool = False
+    debug: bool = False
 
 
 @dataclass(frozen=True)

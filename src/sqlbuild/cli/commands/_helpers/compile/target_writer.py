@@ -27,6 +27,7 @@ from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
 )
+from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
@@ -235,6 +236,7 @@ def _move_staged_tree(*, staged_dir: Path, path: Path) -> bool:
             os.rename(staged_dir, path)
         except OSError:
             return False
+    COMPILE_ARTIFACT_WRITES.moved_tree(source=staged_dir, destination=path)
     return True
 
 
@@ -250,6 +252,7 @@ def _staged_files(*, staged_dir: Path) -> list[tuple[Path, str]]:
 
 def _publish_staged_file(*, source: Path, path: Path, check_existing: bool) -> None:
     with record_compile_timing("physical_write_ms"):
+        COMPILE_ARTIFACT_WRITES.moved(source=source, destination=path)
         if check_existing and path.is_file():
             contents: bytes = source.read_bytes()
             existing: bytes = path.read_bytes()
@@ -542,6 +545,11 @@ def _partition_cached_static_tests(
                     identity=artifact_identity,
                 )
                 if cached_path is not None:
+                    COMPILE_ARTIFACT_WRITES.kept(
+                        path=cached_path,
+                        size=cached_record.size,
+                        mtime_ns=cached_record.mtime_ns,
+                    )
                     managed_paths.add(cached_path)
                     current_records[record_key] = cached_record
                     continue
@@ -664,6 +672,10 @@ def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
 
 def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
+        COMPILE_ARTIFACT_WRITES.written(
+            path=path,
+            contents=contents.replace(_POSIX_LINE_SEPARATOR, os.linesep).encode("utf-8"),
+        )
         if check_existing and path.is_file() and path.read_text(encoding="utf-8") == contents:
             return
         try:
@@ -675,6 +687,7 @@ def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = 
 
 def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
+        COMPILE_ARTIFACT_WRITES.written(path=path, contents=contents)
         if check_existing:
             existing: bytes | None = _read_existing_file(path=path)
             if existing == contents:
