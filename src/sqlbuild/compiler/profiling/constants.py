@@ -4,6 +4,7 @@ from sqlbuild.compiler.profiling.types import CompileMetric, CompileTimingPhase
 
 COMPILE_TIMING_PHASES: tuple[CompileTimingPhase, ...] = (
     "attachment_ms",
+    "model_render_ms",
     "model_analysis_ms",
     "analysis_preparation_ms",
     "analysis_native_ms",

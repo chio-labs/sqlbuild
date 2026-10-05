@@ -140,6 +140,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -436,9 +437,12 @@ def build_model_inputs(
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = tuple(
         schema_file for schema_file in discovered_inputs.schema_files if schema_file.model_entries
     )
-    with cached_sql_reference_extractor(
-        root=reference_cache_dir, syntax=context.sql_lexical_syntax
-    ) as extract_references:
+    with (
+        record_compile_timing("model_render_ms"),
+        cached_sql_reference_extractor(
+            root=reference_cache_dir, syntax=context.sql_lexical_syntax
+        ) as extract_references,
+    ):
         return _build_model_inputs(
             discovered_inputs=discovered_inputs,
             context=context,
