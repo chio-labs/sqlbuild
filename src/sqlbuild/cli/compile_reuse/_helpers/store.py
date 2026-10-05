@@ -16,6 +16,7 @@ from sqlbuild.cli.compile_reuse._helpers.project_files import (
     with_missing_digests,
 )
 from sqlbuild.cli.compile_reuse._helpers.provider_settings import provider_settings_inputs
+from sqlbuild.cli.compile_reuse._helpers.render_state_file import render_state_layer
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
     environment_digest,
     loaded_module_stamps,
@@ -36,13 +37,16 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_STORE_START_MESSAGE,
 )
 from sqlbuild.cli.compile_reuse.models import (
+    CompileRenderReuse,
     CompileReuseAttempt,
+    RenderStateLayer,
     SettingsInputsResult,
     StoredCompileInputs,
     StoredCompileOutput,
 )
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome, FileStamp
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
+from sqlbuild.compiler.compile.models import RenderReuseState
 
 _LOGGER: logging.Logger = logging.getLogger(REUSE_LOGGER_NAME)
 
@@ -58,6 +62,7 @@ def write_compile_entry(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
+    render_reuse: CompileRenderReuse | None = None,
 ) -> None:
     """Store a reusable compile, or drop the stored one when this compile cannot be reused."""
 
@@ -66,7 +71,6 @@ def write_compile_entry(
     try:
         _write_compile_entry(
             attempt=attempt,
-            entry_path=attempt.entry_path,
             output=output,
             exit_code=exit_code,
             input_reads=input_reads,
@@ -75,6 +79,7 @@ def write_compile_entry(
             artifacts_written=artifacts_written,
             dag_artifact_path=dag_artifact_path,
             json_output=json_output,
+            render_reuse=render_reuse,
         )
     except Exception:
         _LOGGER.debug("Compile reuse did not store this compile", exc_info=True)
@@ -84,7 +89,6 @@ def write_compile_entry(
 def _write_compile_entry(
     *,
     attempt: CompileReuseAttempt,
-    entry_path: Path,
     output: RecordedCompileOutput,
     exit_code: int,
     input_reads: CompileInputReads,
@@ -93,7 +97,11 @@ def _write_compile_entry(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
+    render_reuse: CompileRenderReuse | None,
 ) -> None:
+    if attempt.entry_path is None:
+        return
+    entry_path: Path = attempt.entry_path
     stdout: str | None = output.stdout
     settings: SettingsInputsResult = provider_settings_inputs(
         settings_classes=input_reads.settings_classes
@@ -165,8 +173,18 @@ def _write_compile_entry(
             stdout_file="",
         ),
         stdout=stdout,
+        render_state=_render_state_layer(render_reuse=render_reuse),
     )
     _finish_notice(started=notice_started, message=REUSE_STORE_DONE_MESSAGE)
+
+
+def _render_state_layer(*, render_reuse: CompileRenderReuse | None) -> RenderStateLayer | None:
+    state: RenderReuseState | None = (
+        None if render_reuse is None else render_reuse.session.stored_state()
+    )
+    if render_reuse is None or state is None:
+        return None
+    return render_state_layer(state=state, stored=render_reuse.stored)
 
 
 def _start_notice(*, attempt: CompileReuseAttempt) -> float | None:

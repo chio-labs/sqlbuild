@@ -681,3 +681,30 @@ class CompileReuseStoreFailureTestCase:
     expected_returncode: int = 0
     expected_stored_entries: int = 0
     expected_raised: type[BaseException] | None = None
+
+
+@dataclass(frozen=True)
+class IncrementalEditStep:
+    """One authored edit, and whether its compile may reuse unaffected renders."""
+
+    description: str
+    edit: Callable[[Path], None]
+    reuses_renders: bool
+
+
+@dataclass(frozen=True)
+class IncrementalEditSequenceTestCase:
+    """Edits applied in order, each compiled incrementally and compared with --no-cache."""
+
+    description: str
+    steps: tuple[IncrementalEditStep, ...]
+
+
+@dataclass(frozen=True)
+class RandomEditChainTestCase:
+    """A seeded random chain of edits over a generated project."""
+
+    description: str
+    seed: int
+    model_count: int
+    step_count: int

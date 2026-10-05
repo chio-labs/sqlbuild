@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import shutil
 import signal
@@ -3433,3 +3434,180 @@ def compile_in_process_output(
     code: int = main(["--project-dir", str(project_dir), "--no-color", "compile", "--json"])
     out, err = capsys.readouterr()
     return code, out, err
+
+
+class IncrementalEditComparison(NamedTuple):
+    """An incremental compile and the --no-cache compile of the same edited project."""
+
+    incremental: CompileReuseRun
+    reference: CompileReuseRun
+
+    @property
+    def reused_renders(self) -> int:
+        """Return how many model renders the incremental compile reused."""
+
+        return self.incremental.timings.get("render_reuse_hits", 0)
+
+    def mismatch(self) -> str | None:
+        """Describe the first difference from the --no-cache compile, if any."""
+
+        if self.incremental.returncode != self.reference.returncode:
+            return f"exit code {self.incremental.returncode} != {self.reference.returncode}"
+        if self.incremental.report != self.reference.report:
+            return "compile report differs"
+        if self.incremental.compiled != self.reference.compiled:
+            changed: list[str] = sorted(
+                path
+                for path in self.incremental.compiled.keys() | self.reference.compiled.keys()
+                if self.incremental.compiled.get(path) != self.reference.compiled.get(path)
+            )
+            return f"compiled artifacts differ: {changed[:5]}"
+        return None
+
+
+def compare_incremental_compile(*, project_dir: Path) -> IncrementalEditComparison:
+    """Compile incrementally, then compile the same inputs without any cache."""
+
+    incremental: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
+    reference: CompileReuseRun = run_reuse_compile(project_dir=project_dir, args=("--no-cache",))
+    return IncrementalEditComparison(incremental=incremental, reference=reference)
+
+
+def in_process_reuse_run(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> CompileReuseRun:
+    """Compile with --json in this process and capture output comparable with fresh processes."""
+
+    code, out, err = compile_in_process_output(project_dir=project_dir, capsys=capsys)
+    payload: dict[str, object] = cast(dict[str, object], json.loads(out))
+    return CompileReuseRun(
+        returncode=code,
+        report=_COMPILE_TIMINGS_PATTERN.sub("", out),
+        stderr=err,
+        timings=cast(dict[str, int], payload.get("compile_timings", {})),
+        compiled=compiled_artifacts(project_dir=project_dir),
+    )
+
+
+GENERATED_EDIT_MODEL_PREFIX: str = "orders_step_"
+_GENERATED_EDIT_COLUMNS: tuple[str, ...] = ("order_id", "customer_id", "quantity", "status")
+
+
+def write_generated_edit_models(*, project_dir: Path, model_count: int, seed: int) -> None:
+    """Add a seeded chain of models over the staging orders, each reading an earlier one."""
+
+    chooser: random.Random = random.Random(seed)
+    for index in range(model_count):
+        upstream: str = (
+            "stg_orders"
+            if index == 0
+            else f"{GENERATED_EDIT_MODEL_PREFIX}{chooser.randrange(index):03d}"
+        )
+        write_project_file(
+            project_dir,
+            f"models/generated/{GENERATED_EDIT_MODEL_PREFIX}{index:03d}.sql",
+            _generated_edit_model_sql(upstream=upstream),
+        )
+
+
+def _generated_edit_model_sql(*, upstream: str) -> str:
+    columns: str = ",\n".join(f"  {column}" for column in _GENERATED_EDIT_COLUMNS)
+    return (
+        "MODEL (description 'Generated order step.', materialized view);\n\n"
+        f'SELECT\n{columns}\nFROM __ref("{upstream}")\n'
+    )
+
+
+class RandomEditChain:
+    """Apply seeded random edits of every supported kind to a generated project."""
+
+    def __init__(self, *, project_dir: Path, seed: int) -> None:
+        self._project_dir: Path = project_dir
+        self._random: random.Random = random.Random(seed)
+        self._broken: Path | None = None
+        self._added: int = 0
+
+    def apply(self) -> tuple[str, bool]:
+        """Apply one edit; return its kind and whether it touches model files only."""
+
+        if self._broken is not None:
+            path: Path = self._broken
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("  unknown_column,\n", ""),
+                encoding="utf-8",
+            )
+            self._broken = None
+            return "fix_error", True
+        kind: str = self._random.choice(_RANDOM_EDIT_KINDS)
+        models: list[Path] = sorted((self._project_dir / "models" / "generated").glob("*.sql"))
+        model: Path = self._random.choice(models)
+        contents: str = model.read_text(encoding="utf-8")
+        if kind == "comment":
+            model.write_text(
+                contents.replace("FROM __ref", f"-- note {self._random.random()}\nFROM __ref"),
+                encoding="utf-8",
+            )
+        elif kind == "add_column":
+            model.write_text(
+                contents.replace(
+                    "\nFROM __ref",
+                    f",\n  status AS status_{self._random.randrange(1000)}\nFROM __ref",
+                ),
+                encoding="utf-8",
+            )
+        elif kind == "type_change":
+            model.write_text(
+                contents.replace("  quantity", "  CAST(quantity AS BIGINT) AS quantity", 1)
+                if "CAST(quantity" not in contents
+                else contents.replace("CAST(quantity AS BIGINT) AS quantity", "quantity", 1),
+                encoding="utf-8",
+            )
+        elif kind == "header_change":
+            model.write_text(
+                contents.replace("materialized view", "materialized table")
+                if "materialized view" in contents
+                else contents.replace("materialized table", "materialized view"),
+                encoding="utf-8",
+            )
+        elif kind == "introduce_error":
+            model.write_text(
+                contents.replace("SELECT\n", "SELECT\n  unknown_column,\n", 1), encoding="utf-8"
+            )
+            self._broken = model
+        elif kind == "add_model":
+            self._added += 1
+            write_project_file(
+                self._project_dir,
+                f"models/generated/added_step_{self._added:03d}.sql",
+                _generated_edit_model_sql(upstream=model.stem),
+            )
+            return kind, False
+        elif kind == "macro_edit":
+            path = self._project_dir / "macros" / "_rounding.py"
+            scale: int = 2 + self._random.randrange(3)
+            path.write_text(
+                re.sub(r"_SCALE: int = \d+", f"_SCALE: int = {scale}", path.read_text("utf-8")),
+                encoding="utf-8",
+            )
+            return kind, False
+        elif kind == "test_edit":
+            path = self._project_dir / "tests" / "unit" / "test_stg_orders.sql"
+            path.write_text(
+                path.read_text(encoding="utf-8") + f"\n-- revision {self._random.random()}\n",
+                encoding="utf-8",
+            )
+            return kind, False
+        return kind, True
+
+
+_RANDOM_EDIT_KINDS: tuple[str, ...] = (
+    "comment",
+    "comment",
+    "add_column",
+    "type_change",
+    "header_change",
+    "introduce_error",
+    "add_model",
+    "macro_edit",
+    "test_edit",
+)

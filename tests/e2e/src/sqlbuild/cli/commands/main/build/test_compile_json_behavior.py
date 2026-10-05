@@ -90,6 +90,8 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         "analysis_cache_bypasses",
         "fact_cache_hits",
         "fact_cache_misses",
+        "render_reuse_hits",
+        "render_reuse_misses",
         "project_reuse_hits",
         "project_reuse_misses",
         "project_reuse_bypasses",

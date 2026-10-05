@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.audits import build_project_audit_inputs
@@ -39,6 +41,13 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_model_schema_index,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
+from sqlbuild.compiler.compile.constants import (
+    COMPILE_RENDER_REUSE,
+    RENDER_REUSE_SCENARIOS_GROUP,
+    RENDER_REUSE_SOURCES_GROUP,
+    RENDER_REUSE_TESTS_GROUP,
+)
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
@@ -119,6 +128,9 @@ def build_compile_inputs(
         _enforce_explicit_references=(discovered_inputs.project_config.references.enforce_explicit),
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
+    render_reuse: CompileRenderReuseSession | None = COMPILE_RENDER_REUSE.claim()
+    if render_reuse is not None:
+        render_reuse.plan_models(model_files=discovered_inputs.model_files)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     declaration_scope: DeclarationScopeBuild = build_declaration_scope(
         discovered_inputs=discovered_inputs,
@@ -146,6 +158,7 @@ def build_compile_inputs(
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=compile_cache_dir,
+        render_reuse=render_reuse,
     )
     model_context = model_build.context
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
@@ -159,35 +172,52 @@ def build_compile_inputs(
             adapter_context.python_functions_inherit_default_namespace
         ),
     )
-    source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
-        discovered_inputs=discovered_inputs,
-        effective_vars=effective_vars,
-        effective_settings=effective_settings,
-        macro_context=macro_context,
-        loaded_macros=declaration_scope.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
-        no_sql_validation=no_sql_validation,
+    source_inputs: tuple[CompileSourceInput, ...] = _reused_or_rendered(
+        render_reuse=render_reuse,
+        name=RENDER_REUSE_SOURCES_GROUP,
+        render=partial(
+            build_source_inputs,
+            discovered_inputs=discovered_inputs,
+            effective_vars=effective_vars,
+            effective_settings=effective_settings,
+            macro_context=macro_context,
+            loaded_macros=declaration_scope.loaded_macros,
+            declaration_expansion=model_context.declaration_expansion,
+            no_sql_validation=no_sql_validation,
+        ),
     )
-    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs_with_cache(
-        discovered_inputs=discovered_inputs,
-        effective_vars=effective_vars,
-        macro_context=macro_context,
-        loaded_macros=declaration_scope.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        sql_function_inputs=sql_function_inputs,
-        compile_cache_dir=compile_cache_dir,
-        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
+    test_inputs: tuple[CompileSqlTestInput, ...] = _reused_or_rendered(
+        render_reuse=render_reuse,
+        name=RENDER_REUSE_TESTS_GROUP,
+        render=partial(
+            build_test_inputs_with_cache,
+            discovered_inputs=discovered_inputs,
+            effective_vars=effective_vars,
+            macro_context=macro_context,
+            loaded_macros=declaration_scope.loaded_macros,
+            declaration_expansion=model_context.declaration_expansion,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            sql_function_inputs=sql_function_inputs,
+            compile_cache_dir=compile_cache_dir,
+            sql_lexical_syntax=adapter_context.sql_lexical_syntax,
+        ),
     )
-    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
-        discovered_inputs=discovered_inputs,
-        effective_vars=effective_vars,
-        macro_context=macro_context,
-        loaded_macros=declaration_scope.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = _reused_or_rendered(
+        render_reuse=render_reuse,
+        name=RENDER_REUSE_SCENARIOS_GROUP,
+        render=partial(
+            build_scenario_inputs,
+            discovered_inputs=discovered_inputs,
+            effective_vars=effective_vars,
+            macro_context=macro_context,
+            loaded_macros=declaration_scope.loaded_macros,
+            declaration_expansion=model_context.declaration_expansion,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            sql_lexical_syntax=adapter_context.sql_lexical_syntax,
+        ),
     )
+    if render_reuse is not None:
+        render_reuse.renders_complete()
     audit_inputs: tuple[CompileAuditInput, ...]
     audit_diagnostics: tuple[CompilerDiagnostic, ...]
     audit_inputs, audit_diagnostics = build_project_audit_inputs(
@@ -248,6 +278,12 @@ def build_compile_inputs(
     )
 
 
+def _reused_or_rendered[T](
+    *, render_reuse: CompileRenderReuseSession | None, name: str, render: Callable[[], T]
+) -> T:
+    return render() if render_reuse is None else render_reuse.group(name=name, render=render)
+
+
 def _build_sql_functions(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -284,6 +320,7 @@ def _build_models_with_declarations(
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     reference_cache_dir: Path | None,
+    render_reuse: CompileRenderReuseSession | None,
 ) -> ModelInputScopeBuild:
     public_enums: dict[str, EnumDeclaration]
     public_constants: dict[str, ConstantDeclaration]
@@ -309,6 +346,7 @@ def _build_models_with_declarations(
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=reference_cache_dir,
+        render_reuse=render_reuse,
     )
     return ModelInputScopeBuild(
         inputs=model_inputs,
