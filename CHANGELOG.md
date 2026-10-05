@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.134.3](https://github.com/chio-labs/sqlbuild/compare/v0.134.2...v0.134.3) (2026-10-05)
+
+
+### Performance Improvements
+
+* **cli:** load command code only after argument parsing ([#947](https://github.com/chio-labs/sqlbuild/issues/947)) ([8fced25](https://github.com/chio-labs/sqlbuild/commit/8fced258cc141fa475c9af8821f7faa488d2e3d5))
+
 ## [0.134.2](https://github.com/chio-labs/sqlbuild/compare/v0.134.1...v0.134.2) (2026-10-04)
 
 
