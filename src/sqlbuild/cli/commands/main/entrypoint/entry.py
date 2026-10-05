@@ -5,15 +5,11 @@ from __future__ import annotations
 import argparse
 from collections.abc import Mapping, Sequence
 
-from sqlbuild.cli.commands._helpers.entry.dispatch_errors import dispatch_and_handle_errors
 from sqlbuild.cli.commands._helpers.entry.errors import cli_error_use_color
 from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_handlers
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs import (
-    dispatch_with_compute_logs,
-)
 from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
     ParsedCliInvocation,
@@ -58,6 +54,13 @@ def _main_with_dependencies(
             if invocation.args is None:
                 return invocation.exit_code if invocation.exit_code is not None else 1
             args: CliNamespace = invocation.args
+            from sqlbuild.cli.commands._helpers.entry.dispatch_errors import (
+                dispatch_and_handle_errors,
+            )
+            from sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs import (
+                dispatch_with_compute_logs,
+            )
+
             return dispatch_with_compute_logs(
                 args=args,
                 identity=identity,

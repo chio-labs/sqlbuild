@@ -15,9 +15,7 @@ from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.main.project import _compile as compile_command
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
-from sqlbuild.cli.compile.models import (
-    CompileCommandRequest,
-)
+from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph

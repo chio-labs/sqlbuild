@@ -25,9 +25,9 @@ from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCom
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
-    CompileCommandRequest,
     CompileWriteResult,
 )
+from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings

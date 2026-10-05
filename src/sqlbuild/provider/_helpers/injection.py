@@ -5,11 +5,13 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from pathlib import Path
-from typing import get_type_hints
+from typing import TYPE_CHECKING, get_type_hints
 
 from sqlbuild.provider.classes.container import ProviderContainer
-from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import ProviderInjectionError, ProviderLookupError
+
+if TYPE_CHECKING:
+    from sqlbuild.provider.classes.provider import Provider
 
 _CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx", "hook_context"})
 
@@ -80,6 +82,8 @@ def _provider_for_parameter(
     annotation: object,
     providers: ProviderContainer | None,
 ) -> Provider | None:
+    from sqlbuild.provider.classes.provider import Provider
+
     provider_annotation: type[Provider] | None = (
         annotation if isinstance(annotation, type) and issubclass(annotation, Provider) else None
     )

@@ -26,9 +26,9 @@ from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCom
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
-    CompileProfileFlags,
     CompileWriteResult,
 )
+from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )

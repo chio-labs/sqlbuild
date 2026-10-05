@@ -9,10 +9,8 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.runtime.connection import resolve_project_connection_config
-from sqlbuild.cli.commands._helpers.runtime.warehouses import (
-    command_warehouse_scope,
-    describe_connection_warehouse,
-)
+from sqlbuild.cli.commands._helpers.runtime.warehouse_scope import command_warehouse_scope
+from sqlbuild.cli.commands._helpers.runtime.warehouses import describe_connection_warehouse
 from sqlbuild.cli.commands.constants import COMMAND_WAREHOUSE_GROUPS
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand

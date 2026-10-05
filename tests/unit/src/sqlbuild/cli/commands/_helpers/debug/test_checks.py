@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands._helpers.debug.checks import build_debug_result
-from sqlbuild.cli.commands._helpers.runtime.warehouses import command_warehouse_scope
+from sqlbuild.cli.commands._helpers.runtime.warehouse_scope import command_warehouse_scope
 from sqlbuild.cli.commands.models import DebugResult
 from tests.unit.src.sqlbuild.cli.commands._helpers.debug._test_types import (
     DebugWarehouseVarsTestCase,

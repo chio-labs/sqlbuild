@@ -7,10 +7,7 @@ from pathlib import Path
 from sqlbuild.cli.commands._helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inputs
 from sqlbuild.cli.commands._helpers.lint.positional_paths import format_path_selectors
-from sqlbuild.cli.commands._helpers.runtime.warehouses import (
-    command_warehouse_scope,
-    validate_cli_warehouse,
-)
+from sqlbuild.cli.commands._helpers.runtime.warehouse_scope import command_warehouse_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
@@ -22,12 +19,10 @@ from sqlbuild.cli.commands.constants import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
-from sqlbuild.cli.compile.models import (
-    CompileCommandRequest,
-    CompileProfileFlags,
-)
 from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
+    CompileCommandRequest,
+    CompileProfileFlags,
     SelectorInputs,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -37,10 +32,15 @@ from sqlbuild.integrations.dbt.types import DbtInteropCommand
 def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
     """Route a parsed CLI namespace to its command handler and return its exit code."""
 
-    validate_cli_warehouse(
-        cli_warehouse=args.warehouse,
-        project_dir=Path.cwd() if args.project_dir is None else Path(args.project_dir).resolve(),
-    )
+    if args.warehouse is not None:
+        from sqlbuild.cli.commands._helpers.runtime.warehouses import validate_cli_warehouse
+
+        validate_cli_warehouse(
+            cli_warehouse=args.warehouse,
+            project_dir=(
+                Path.cwd() if args.project_dir is None else Path(args.project_dir).resolve()
+            ),
+        )
     with command_warehouse_scope(
         command=args.command, cli_warehouse=args.warehouse, cli_vars=args.vars
     ):

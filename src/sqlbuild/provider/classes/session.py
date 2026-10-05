@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from threading import RLock
+from typing import TYPE_CHECKING
 
 from sqlbuild.provider.classes.container import ProviderContainer
-from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import (
     ProviderLookupError,
     ProviderSetupError,
     ProviderTeardownError,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild.provider.classes.provider import Provider
 
 
 class ProviderSession:
