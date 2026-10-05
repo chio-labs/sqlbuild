@@ -19,7 +19,7 @@ def start_load_notice(*, entry_path: Path) -> float | None:
     """Announce loading on stderr when the slot's stored render files are large."""
 
     stored_bytes: int = sum(
-        path.stat().st_size
+        _file_size(path=path)
         for path in entry_path.parent.glob(f"{entry_path.stem}-*{REUSE_RENDER_STATE_SUFFIX}")
     )
     if stored_bytes < RENDER_LOAD_NOTICE_BYTES:
@@ -29,6 +29,15 @@ def start_load_notice(*, entry_path: Path) -> float | None:
         file=sys.stderr,
     )
     return time.monotonic()
+
+
+def _file_size(*, path: Path) -> int:
+    """Size a stored render file, treating one removed by a concurrent compile as empty."""
+
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
 
 
 def finish_load_notice(*, started: float | None, loaded: bool) -> None:

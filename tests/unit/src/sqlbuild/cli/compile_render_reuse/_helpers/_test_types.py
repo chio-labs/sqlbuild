@@ -33,3 +33,14 @@ class StoredRenderReadTestCase:
     description: str
     prepare: Callable[[Path], tuple[Path, frozenset[str]]]
     expected_readable: bool
+
+
+@dataclass(frozen=True)
+class RenderLoadNoticeTestCase:
+    """Stored render files, some removed while being sized, and the expected notice."""
+
+    description: str
+    file_sizes: tuple[int, ...]
+    removed_while_sizing: int
+    notice_bytes: int
+    expected_notice: bool

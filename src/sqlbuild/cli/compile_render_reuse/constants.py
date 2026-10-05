@@ -10,5 +10,5 @@ RENDER_LOAD_NOTICE_BYTES: int = 8 * 1024 * 1024
 RENDER_LOAD_START_MESSAGE: str = "Loading stored renders ({mebibytes:.0f} MiB)..."
 RENDER_LOAD_DONE_MESSAGE: str = "Loaded stored renders ({seconds:.1f} s)"
 RENDER_LOAD_FAILED_MESSAGE: str = (
-    "Stored renders are unusable; rendering every model again ({seconds:.1f} s)"
+    "Stored renders not reused; rendering every model again ({seconds:.1f} s)"
 )
