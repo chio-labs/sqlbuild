@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     RenderStoreNoticeTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    SHARED_MACRO_CALLERS,
     CompileReuseRun,
     IncrementalEditComparison,
     RandomEditChain,
@@ -53,6 +54,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_external_flavor,
     write_generated_edit_models,
     write_project_file,
+    write_shared_macro_callers,
 )
 
 
@@ -206,6 +208,24 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                     ),
                 ),
                 model_edit_step("edit_after_resources", fact_comment),
+            ),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="shared_macro_calls",
+            steps=(
+                full_edit_step("models_sharing_a_macro_call_added", write_shared_macro_callers),
+                model_edit_step(
+                    "first_caller_edited",
+                    lambda root: replace_project_text(
+                        root, SHARED_MACRO_CALLERS[0], "AS line_total", "AS order_line_total"
+                    ),
+                ),
+                model_edit_step(
+                    "second_caller_edited",
+                    lambda root: replace_project_text(
+                        root, SHARED_MACRO_CALLERS[1], "FROM", "-- second caller\nFROM"
+                    ),
+                ),
             ),
         ),
     ],

@@ -26,6 +26,7 @@ from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     rename_native_references,
     render_differences,
     rendered_model_counts,
+    replay_stale_macro_results,
 )
 
 _REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
@@ -199,6 +200,11 @@ def test_given_dense_project_when_rendering_natively_then_matches_python_renderi
             "reference scan ignores dialect comments",
             RandomRenderProject(seed=5, model_count=40, adapter="snowflake"),
             ignore_dialect_comments,
+        ),
+        NativeRenderMutationCase(
+            "macro memo replays a stale result",
+            RandomRenderProject(seed=3, model_count=40),
+            replay_stale_macro_results,
         ),
     ],
     ids=lambda case: case.description,

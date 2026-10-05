@@ -36,6 +36,12 @@ _REFERENCE_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
 _REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|//|#|'|\"|`|\$")
 
 
+def contains_sql_reference_call(sql: str) -> bool:
+    """Return whether SQL text contains any reference call the extractor recognises."""
+
+    return any(prefix in sql for prefix, _ in _REFERENCE_PREFIXES)
+
+
 def extract_sql_references(
     *, sql: str, syntax: SqlLexicalSyntax
 ) -> tuple[CompileSqlReference, ...]:

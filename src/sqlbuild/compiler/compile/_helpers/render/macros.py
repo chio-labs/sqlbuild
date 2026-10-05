@@ -9,7 +9,8 @@ import inspect
 import re
 import sys
 import threading
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from contextvars import Token
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -24,6 +25,14 @@ from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments impo
     relation_placeholder_text,
     render_relation_placeholders,
 )
+from sqlbuild.compiler.compile._helpers.macro_memo.call_reads import (
+    observed_macro_call,
+    replay_macro_call_reads,
+)
+from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
+from sqlbuild.compiler.compile.classes.macro_call_memo import MacroCallMemo
+from sqlbuild.compiler.compile.classes.macro_declaration_values import MacroDeclarationValues
+from sqlbuild.compiler.compile.classes.macro_enum_members import MacroEnumMembers
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
@@ -32,14 +41,16 @@ from sqlbuild.compiler.compile.constants import (
     SQL_OPEN_PAREN_TOKEN,
     SQL_QUOTE_TOKENS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroDeclarationLookupError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    CompilerDiagnostic,
     DeclarationResolutionContext,
     DeclarationScopeResolver,
     ExpansionSpan,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
+    MemoizedMacroCall,
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
@@ -111,6 +122,8 @@ class _ExpansionFacts:
     argument_references: dict[SqlResourceRef, None] = field(default_factory=dict)
     call_site_refs: list[set[SqlResourceRef]] = field(default_factory=list)
     rendering_approved: list[frozenset[SqlResourceRef]] = field(default_factory=list)
+    call_site_trace: list[tuple[SqlResourceRef, ...]] | None = None
+    lookup_missed: bool = False
 
     def add_dependency(self, identity: DeclarationIdentity) -> _ExpansionFacts:
         """Record a resolved dependency in encounter order."""
@@ -130,6 +143,13 @@ class _ExpansionFacts:
         self.argument_references.update(dict.fromkeys(refs))
         for approved in self.call_site_refs:
             approved.update(refs)
+        if self.call_site_trace is not None:
+            self.call_site_trace.append(refs)
+
+    def miss_lookup(self) -> None:
+        """Record that a macro looked up a declaration its caller cannot see."""
+
+        self.lookup_missed = True
 
     def open_call_site(self) -> _ExpansionFacts:
         """Start collecting the references written as one macro call's arguments."""
@@ -178,73 +198,7 @@ class _ExpansionState:
     declarations: DeclarationResolutionContext | None
     facts: _ExpansionFacts
     consumer: ResourceIdentity | DeclarationIdentity | None = None
-
-
-class _MacroDeclarationValues(Mapping[str, object]):
-    def __init__(
-        self,
-        *,
-        values: Mapping[str, object],
-        inaccessible: Mapping[str, DeclarationRecord],
-        declaration_kind: str,
-        file_path: Path,
-        on_access: Callable[[str], None],
-    ) -> None:
-        self._values: Mapping[str, object] = values
-        self._inaccessible: Mapping[str, DeclarationRecord] = inaccessible
-        self._declaration_kind: str = declaration_kind
-        self._file_path: Path = file_path
-        self._on_access: Callable[[str], None] = on_access
-
-    def __getitem__(self, name: str) -> object:
-        if name in self._values:
-            self._on_access(name)
-            return self._values[name]
-        inaccessible: DeclarationRecord | None = self._inaccessible.get(name)
-        if inaccessible is not None:
-            owner: str = inaccessible.owning_path or "global"
-            raise MacroDeclarationLookupError(
-                f"{self._declaration_kind.title()} '{name}' in '{self._file_path}' is "
-                f"inaccessible. Defined at '{inaccessible.path}:{inaccessible.line}:"
-                f"{inaccessible.column}' with scope owner '{owner}'"
-            )
-        visible: str = ", ".join(sorted(self._values)) or "none"
-        raise MacroDeclarationLookupError(
-            f"Unknown {self._declaration_kind} '{name}' in '{self._file_path}'. "
-            f"Visible {self._declaration_kind}s: {visible}"
-        )
-
-    def __iter__(self) -> Iterator[str]:
-        for name in self._values:
-            self._on_access(name)
-            yield name
-
-    def __len__(self) -> int:
-        for name in self._values:
-            self._on_access(name)
-        return len(self._values)
-
-
-class _MacroEnumMembers(Mapping[str, str | int]):
-    def __init__(self, *, enum_name: str, values: Mapping[str, str | int], file_path: Path) -> None:
-        self._enum_name: str = enum_name
-        self._values: Mapping[str, str | int] = values
-        self._file_path: Path = file_path
-
-    def __getitem__(self, name: str) -> str | int:
-        if name in self._values:
-            return self._values[name]
-        available: str = ", ".join(sorted(self._values)) or "none"
-        raise MacroDeclarationLookupError(
-            f"Unknown member '{name}' for enum '{self._enum_name}' in '{self._file_path}'. "
-            f"Available members: {available}"
-        )
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._values)
-
-    def __len__(self) -> int:
-        return len(self._values)
+    call_memo: MacroCallMemo | None = None
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
@@ -1252,6 +1206,7 @@ def expand_sql_macros_result(
     declaration_resolver: DeclarationScopeResolver | None = None,
     declarations: DeclarationResolutionContext | None = None,
     consumer: ResourceIdentity | DeclarationIdentity | None = None,
+    call_memo: MacroCallMemo | None = None,
 ) -> MacroExpansionResult:
     """Expand macros and retain deterministic resolved dependency facts."""
 
@@ -1264,6 +1219,7 @@ def expand_sql_macros_result(
         declarations=declarations,
         facts=facts,
         consumer=consumer,
+        call_memo=call_memo if not macro_overrides else None,
     )
     expanded_sql, spans = _expand_sql_macros(
         sql=sql,
@@ -1312,23 +1268,16 @@ def _expand_sql_macros(
         leading_literal: str = sql[cursor:macro_start_index]
         rendered_sql_parts.append(leading_literal)
         output_length += len(leading_literal)
-        macro_result: object
+        macro_result: str
         next_index: int
-        macro_result, next_index = _evaluate_macro_call(
+        macro_result, next_index = _expand_top_level_macro_call(
             sql=sql,
             call_start_index=macro_start_index,
-            file_path=consumer_path,
+            consumer_path=consumer_path,
             state=state,
             declarations=declarations,
             stack=stack,
-            top_level=True,
         )
-        if not isinstance(macro_result, str):
-            raise CompileInputError(
-                f"Macro '@{_parse_macro_name(sql=sql, call_start_index=macro_start_index)}' in "
-                f"'{consumer_path}' must return a SQL string when used directly in SQL"
-            )
-        macro_result = state.facts.render_relation_placeholders(macro_result)
         rendered_sql_parts.append(macro_result)
         spans.append(
             ExpansionSpan(
@@ -1341,6 +1290,102 @@ def _expand_sql_macros(
         output_length += len(macro_result)
         cursor = next_index
     return "".join(rendered_sql_parts), tuple(spans)
+
+
+def _expand_top_level_macro_call(
+    *,
+    sql: str,
+    call_start_index: int,
+    consumer_path: Path,
+    state: _ExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
+) -> tuple[str, int]:
+    memo: MacroCallMemo | None = state.call_memo if not stack else None
+    macro_name: str = _parse_macro_name(sql=sql, call_start_index=call_start_index)
+    memoized_calls: dict[str, MemoizedMacroCall] | None = (
+        memo.calls_for(macro_name) if memo is not None else None
+    )
+    if memoized_calls is not None:
+        opening_paren_index: int = _skip_whitespace(
+            sql=sql, start_index=call_start_index + 1 + len(macro_name)
+        )
+        closing_paren_index: int = _find_matching_paren(
+            sql=sql, opening_paren_index=opening_paren_index
+        )
+        memoized: MemoizedMacroCall | None = memoized_calls.get(
+            sql[opening_paren_index + 1 : closing_paren_index]
+        )
+        if memoized is not None:
+            _replay_memoized_macro_call(memoized=memoized, state=state)
+            return memoized.sql, closing_paren_index + 1
+    facts: _ExpansionFacts = state.facts
+    first_dependency: int = len(facts.dependencies)
+    first_usage: int = len(facts.usages)
+    facts.call_site_trace = [] if memo is not None else None
+    facts.lookup_missed = False
+    observed: tuple[CompileInputReads, list[tuple[tuple[str, ...], CompilerDiagnostic]]] | None
+    with observed_macro_call() if memo is not None else nullcontext() as observed:
+        try:
+            macro_result: object
+            next_index: int
+            macro_result, next_index = _evaluate_macro_call(
+                sql=sql,
+                call_start_index=call_start_index,
+                file_path=consumer_path,
+                state=state,
+                declarations=declarations,
+                stack=stack,
+                top_level=True,
+            )
+            call_site_trace: list[tuple[SqlResourceRef, ...]] | None = facts.call_site_trace
+        finally:
+            facts.call_site_trace = None
+    if not isinstance(macro_result, str):
+        raise CompileInputError(
+            f"Macro '@{macro_name}' in '{consumer_path}' must return a SQL string when used "
+            "directly in SQL"
+        )
+    rendered: str = facts.render_relation_placeholders(macro_result)
+    if memo is not None and call_site_trace is not None and not facts.lookup_missed:
+        memo.remember(
+            macro_name=macro_name,
+            arguments=_macro_arguments_source(
+                sql=sql,
+                macro_name=macro_name,
+                call_start_index=call_start_index,
+                end_index=next_index,
+            ),
+            call=MemoizedMacroCall(
+                sql=rendered,
+                consumer=state.consumer,
+                dependencies=tuple(facts.dependencies[first_dependency:]),
+                usages=tuple(facts.usages[first_usage:]),
+                call_site_refs=tuple(call_site_trace),
+            ),
+            observed=observed,
+        )
+    return rendered, next_index
+
+
+def _macro_arguments_source(
+    *, sql: str, macro_name: str, call_start_index: int, end_index: int
+) -> str:
+    opening: int = _skip_whitespace(sql=sql, start_index=call_start_index + 1 + len(macro_name))
+    return sql[opening + 1 : end_index - 1]
+
+
+def _replay_memoized_macro_call(*, memoized: MemoizedMacroCall, state: _ExpansionState) -> None:
+    facts: _ExpansionFacts = state.facts
+    replay_macro_call_reads(memoized)
+    facts.dependencies.extend(memoized.dependencies)
+    if state.consumer == memoized.consumer:
+        facts.usages.extend(memoized.usages)
+    else:
+        facts.usages.extend(replace(usage, consumer=state.consumer) for usage in memoized.usages)
+    refs: tuple[SqlResourceRef, ...]
+    for refs in memoized.call_site_refs:
+        facts.record_call_site_refs(refs)
 
 
 def find_macro_call_names(sql: str) -> tuple[str, ...]:
@@ -1548,9 +1593,9 @@ def _build_macro_invocation_context(
         return macro_context
     constant_values: Mapping[str, object] = _build_constant_context_values(declarations.constants)
     enum_values: Mapping[str, object] = _build_enum_context_values(
-        declarations=declarations.enums, file_path=file_path
+        declarations=declarations.enums, file_path=file_path, on_miss=state.facts.miss_lookup
     )
-    constants: Mapping[str, object] = _MacroDeclarationValues(
+    constants: Mapping[str, object] = MacroDeclarationValues(
         values=constant_values,
         inaccessible=declarations.inaccessible_constants,
         declaration_kind="constant",
@@ -1561,8 +1606,9 @@ def _build_macro_invocation_context(
             declarations=declarations,
             state=state,
         ),
+        on_miss=state.facts.miss_lookup,
     )
-    enum_mapping: Mapping[str, object] = _MacroDeclarationValues(
+    enum_mapping: Mapping[str, object] = MacroDeclarationValues(
         values=enum_values,
         inaccessible=declarations.inaccessible_enums,
         declaration_kind="enum",
@@ -1573,6 +1619,7 @@ def _build_macro_invocation_context(
             declarations=declarations,
             state=state,
         ),
+        on_miss=state.facts.miss_lookup,
     )
     return replace(
         macro_context,
@@ -1595,16 +1642,18 @@ def _build_enum_context_values(
     *,
     declarations: Mapping[str, EnumDeclaration],
     file_path: Path,
+    on_miss: Callable[[], None],
 ) -> Mapping[str, object]:
     values: dict[str, object] = {}
     for name, declaration in declarations.items():
         members: dict[str, str | int] = {}
         for member in declaration.members:
             members[member.name] = member.value
-        values[name] = _MacroEnumMembers(
+        values[name] = MacroEnumMembers(
             enum_name=name,
             values=MappingProxyType(members),
             file_path=file_path,
+            on_miss=on_miss,
         )
     return MappingProxyType(values)
 

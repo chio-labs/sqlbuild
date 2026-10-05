@@ -96,6 +96,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_effective_vars,
     expand_template_data,
 )
+from sqlbuild.compiler.compile.classes.macro_call_memo import MacroCallMemo
 from sqlbuild.compiler.compile.classes.native_model_rendering import NativeModelRendering
 from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.constants import (
@@ -205,6 +206,8 @@ class _VisibleModelDeclarationCache:
     reusable_by_parent: bool
     resource_specific: frozenset[ResourceIdentity] = frozenset()
     by_parent: dict[Path, _VisibleModelDeclarations] = field(default_factory=dict)
+    macro_memos: dict[tuple[object, ...] | None, MacroCallMemo] = field(default_factory=dict)
+    memo_groups: dict[Path, tuple[object, ...]] = field(default_factory=dict)
 
     @classmethod
     def build(cls, context: ModelInputBuildContext) -> _VisibleModelDeclarationCache:
@@ -241,6 +244,23 @@ class _VisibleModelDeclarationCache:
         if self.reusable_by_parent:
             self.by_parent[parent] = resolved
         return resolved
+
+    def macro_memo_for(
+        self, *, model_file: DiscoveredSqlModelFile, consumer: ResourceIdentity
+    ) -> MacroCallMemo | None:
+        """Share macro calls among models whose macros see identical declarations."""
+
+        group: tuple[object, ...] | None = None
+        if self.context.declaration_resolver is not None:
+            parent: Path = model_file.file_path.parent
+            declarations: _VisibleModelDeclarations | None = self.by_parent.get(parent)
+            if consumer in self.resource_specific or declarations is None:
+                return None
+            group = self.memo_groups.get(parent)
+            if group is None:
+                group = _macro_declaration_group(declarations)
+                self.memo_groups[parent] = group
+        return self.macro_memos.setdefault(group, MacroCallMemo())
 
 
 @dataclass(frozen=True)
@@ -395,6 +415,29 @@ class _ReusableModelConfigCache:
         self.reusable_by_path_default[matched_path_default] = reusable
         self.inherited_values_by_path_default[matched_path_default] = layered_values
         return reusable
+
+
+def _macro_declaration_group(declarations: _VisibleModelDeclarations) -> tuple[object, ...]:
+    """Return what a macro call can observe of its caller's visible declarations, in order."""
+
+    return (
+        tuple((name, id(macro)) for name, macro in declarations.macros.items()),
+        tuple((name, record.identity) for name, record in declarations.macro_records.items()),
+        tuple((name, id(record)) for name, record in declarations.inaccessible_macros.items()),
+        tuple((name, id(enum)) for name, enum in declarations.enums.items()),
+        tuple((name, id(constant)) for name, constant in declarations.constants.items()),
+        tuple((name, id(record)) for name, record in declarations.inaccessible_enums.items()),
+        tuple((name, id(record)) for name, record in declarations.inaccessible_constants.items()),
+        _visibility_group(declarations.enum_visibility),
+        _visibility_group(declarations.constant_visibility),
+    )
+
+
+def _visibility_group(records: dict[str, tuple[VisibilityRecord, ...]]) -> tuple[object, ...]:
+    group: list[object] = []
+    for name, items in records.items():
+        group.append((name, tuple((item.declaration, item.reason, item.through) for item in items)))
+    return tuple(group)
 
 
 def _contains_mutable_nested_config(values: dict[str, object]) -> bool:
@@ -689,6 +732,9 @@ def _build_model_input(
         declaration_resolver=context.declaration_resolver,
         declarations=(declaration_context if context.declaration_resolver is not None else None),
         consumer=model_identity,
+        call_memo=loop.declaration_cache.macro_memo_for(
+            model_file=model_file, consumer=model_identity
+        ),
     )
     expanded_query_sql: str = macro_expansion.sql
     expanded_query_sql = get_validated_model_cursor_intrinsics(

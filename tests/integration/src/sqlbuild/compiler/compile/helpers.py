@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Callable
+from dataclasses import replace
 from itertools import compress
 from pathlib import Path
 from typing import Any, cast
@@ -12,8 +13,14 @@ import pytest
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.attachment import core
 from sqlbuild.compiler.compile.classes import native_model_rendering
+from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
+from sqlbuild.compiler.compile.classes.macro_call_memo import MacroCallMemo
 from sqlbuild.compiler.compile.main import _build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileModelInput
+from sqlbuild.compiler.compile.models import (
+    CompileModelInput,
+    CompilerDiagnostic,
+    MemoizedMacroCall,
+)
 from sqlbuild.compiler.compile.types import NativeReference
 
 type RenderedModels = tuple[object, ...]
@@ -27,23 +34,26 @@ _OUTCOME_PARTS: tuple[str, ...] = ("exit code", "compile JSON", "compiled SQL", 
 
 
 def use_python_model_rendering(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Render every model through the authoritative Python path."""
+    """Render every model through the authoritative Python path with no macro memo."""
 
     monkeypatch.setattr(core, "NativeModelRendering", _PythonModelRendering)
+    monkeypatch.setattr(
+        core._VisibleModelDeclarationCache, "macro_memo_for", lambda self, **kwargs: None
+    )
 
 
 class _PythonModelRendering:
     def __init__(self, **kwargs: object) -> None:
         del kwargs
 
-    def declaration_starts(self, index: int) -> None:
-        del index
+    def declaration_starts(self, path: Path) -> None:
+        del path
 
     def model_references(self, **kwargs: object) -> None:
         del kwargs
 
-    def record_counts(self, *, total: int) -> None:
-        del total
+    def record_counts(self) -> None:
+        pass
 
 
 def compare_native_rendering(
@@ -165,3 +175,28 @@ def ignore_dialect_comments(monkeypatch: pytest.MonkeyPatch) -> None:
         "extract_model_sql_references",
         lambda sql, syntax_json: native_model_rendering._native.extract_static_sql_references(sql),
     )
+
+
+def replay_stale_macro_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the macro memo replay a call result that differs from the macro's output."""
+
+    original: Callable[..., None] = MacroCallMemo.remember
+
+    def broken(
+        self: MacroCallMemo,
+        *,
+        macro_name: str,
+        arguments: str,
+        call: MemoizedMacroCall,
+        observed: tuple[CompileInputReads, list[tuple[tuple[str, ...], CompilerDiagnostic]]]
+        | None = None,
+    ) -> None:
+        original(
+            self,
+            macro_name=macro_name,
+            arguments=arguments,
+            call=replace(call, sql=f"{call.sql} + 0"),
+            observed=observed,
+        )
+
+    monkeypatch.setattr(MacroCallMemo, "remember", broken)

@@ -1,4 +1,4 @@
-"""Shared builders for render reuse session unit tests."""
+"""Shared builders for render reuse session and macro call memo unit tests."""
 
 from __future__ import annotations
 
@@ -11,17 +11,22 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
     report_compile_diagnostic,
 )
+from sqlbuild.compiler.compile._helpers.macro_memo.call_reads import observed_macro_call
+from sqlbuild.compiler.compile.classes.macro_call_memo import MacroCallMemo
 from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompilerDiagnostic,
+    MemoizedMacroCall,
     RenderReuseState,
     StoredRender,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey, DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
+from sqlbuild.compiler.scopes.models import ResourceIdentity
+from sqlbuild.compiler.scopes.types import ResourceKind
 
 REGION_ENV_VAR: str = "ORDERS_REGION"
 
@@ -156,3 +161,52 @@ def stored_query_sqls(state: RenderReuseState | None) -> dict[str, str]:
 def _stored_query_sql(payload: memoryview) -> str:
     stored: StoredRender = cast(StoredRender, loaded_fact_payload(payload))
     return cast(CompileModelInput, stored.value).query_sql
+
+
+def macro_call_without_reads() -> None:
+    """Stand in for a macro call that reads no volatile input."""
+
+
+def macro_call_reading_environment() -> None:
+    """Stand in for a macro call that reads two environment variables."""
+
+    COMPILE_INPUT_READS.environment_read(REGION_ENV_VAR)
+    COMPILE_INPUT_READS.environment_read("ORDERS_CURRENCY")
+
+
+def macro_call_reading_run_id() -> None:
+    """Stand in for a macro call that reads the per-invocation run identity."""
+
+    COMPILE_INPUT_READS.context_read(CompileContextKey.RUN_ID)
+
+
+def macro_call_reporting_diagnostic() -> None:
+    """Stand in for a macro call that reads the environment and reports a diagnostic."""
+
+    COMPILE_INPUT_READS.environment_read(REGION_ENV_VAR)
+    report_compile_diagnostic(
+        key=("P010", "orders_summary"), diagnostic=missing_description("orders_summary")
+    )
+
+
+def remembered_macro_call(
+    macro_call: Callable[[], None],
+) -> dict[str, MemoizedMacroCall] | None:
+    """Observe one stand-in macro call, offer it to a fresh memo, and return what it kept."""
+
+    memo: MacroCallMemo = MacroCallMemo()
+    with collect_compile_diagnostics(), observed_macro_call() as observed:
+        macro_call()
+    memo.remember(
+        macro_name="orders_sql",
+        arguments="'amount'",
+        call=MemoizedMacroCall(
+            sql="CAST(amount AS BIGINT)",
+            consumer=ResourceIdentity(ResourceKind.MODEL, "orders_summary"),
+            dependencies=(),
+            usages=(),
+            call_site_refs=(),
+        ),
+        observed=observed,
+    )
+    return memo.calls_for("orders_sql")

@@ -3655,6 +3655,25 @@ STG_ORDERS_MODEL: str = "models/staging/stg_orders.sql"
 FACT_ORDERS_MODEL: str = "models/marts/fact_orders.sql"
 
 
+SHARED_MACRO_CALLERS: tuple[str, str] = (
+    "models/marts/order_line_totals.sql",
+    "models/marts/order_line_totals_copy.sql",
+)
+
+
+def write_shared_macro_callers(root: Path) -> None:
+    """Add two models that call the same macro with the same arguments."""
+
+    for relative_path in SHARED_MACRO_CALLERS:
+        write_project_file(
+            root,
+            relative_path,
+            "MODEL (description 'Order line totals.');\n\n"
+            'SELECT order_id, @line_total_cents("100", "quantity") AS line_total\n'
+            'FROM __ref("stg_orders")\n',
+        )
+
+
 def model_edit_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
     """Return an edit to model files only, whose compile must reuse unaffected renders."""
 

@@ -1,7 +1,8 @@
-"""Test case types for the compile render reuse session."""
+"""Test case types for compile classes."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
@@ -46,3 +47,31 @@ class ReleasedRenderTestCase:
     retained_models: frozenset[str]
     expected_released: dict[str, bool]
     expected_query_sqls: dict[str, str]
+
+
+@dataclass(frozen=True)
+class MacroCallMemoTestCase:
+    """A macro's output and whether the memo may replay it."""
+
+    description: str
+    macro_sql: str
+    expected_remembered: bool
+
+
+@dataclass(frozen=True)
+class MacroCallReadsTestCase:
+    """A first macro call's input reads, which a replay must report for the next model."""
+
+    description: str
+    macro_call: Callable[[], None]
+    expected_environment_names: tuple[str, ...]
+    expected_read_run_id: bool
+
+
+@dataclass(frozen=True)
+class MacroCallDiagnosticTestCase:
+    """A first macro call, and whether the memo may replay it for the next model."""
+
+    description: str
+    macro_call: Callable[[], None]
+    expected_remembered: bool

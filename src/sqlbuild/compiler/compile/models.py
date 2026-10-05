@@ -64,6 +64,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -223,6 +224,20 @@ class CursorInputRoles:
 
     filter_inputs: dict[str, str]
     watermark_inputs: dict[str, str]
+
+
+@dataclass(frozen=True)
+class MemoizedMacroCall:
+    """Final SQL and recorded facts of one successful top-level macro call."""
+
+    sql: str
+    consumer: ResourceIdentity | DeclarationIdentity | None
+    dependencies: tuple[DeclarationIdentity, ...]
+    usages: tuple[UsageRecord, ...]
+    call_site_refs: tuple[tuple[SqlResourceRef, ...], ...]
+    environment_names: tuple[str, ...] = ()
+    settings_classes: tuple[type, ...] = ()
+    read_run_id: bool = False
 
 
 @dataclass(frozen=True)
