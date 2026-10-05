@@ -3,8 +3,11 @@
 use crate::bindings::main::compiler_error::compiler_error;
 use crate::bindings::types::CompilerDetach;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex, PoisonError};
 
-use crate::semantic_validation::models::{CatalogInput, Columns, FunctionProbes, ProjectCatalog};
+use crate::semantic_validation::models::{
+    CatalogInput, Columns, CompactAnalysisJob, FunctionProbes, ProjectCatalog,
+};
 use crate::semantic_validation::types::{BindingRequest, DiagnosticRow, Relations};
 use crate::semantic_validation::{
     _helpers::{diagnostics, identifiers},
@@ -20,6 +23,9 @@ use pyo3::prelude::{Bound, FromPyObject, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pymethods;
 use pyo3::types::{PyBytes, PyDict, PyDictMethods};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+const ANALYSIS_WORKERS: usize = 4;
+const ANALYSIS_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
 impl<'py> FromPyObject<'py> for Columns {
     fn extract_bound(value: &Bound<'py, PyAny>) -> PyResult<Self> {
@@ -129,7 +135,8 @@ impl ProjectCatalog {
             tables: HashMap::new(),
             overrides: Vec::new(),
             analysis_tables: HashMap::new(),
-            function_probes: FunctionProbes::default(),
+            function_probes: Arc::new(FunctionProbes::default()),
+            analysis_pool: Arc::default(),
         };
         catalog.update_relations(relations);
         Ok(catalog)
@@ -149,7 +156,8 @@ impl ProjectCatalog {
             tables: self.tables.clone(),
             overrides: Vec::new(),
             analysis_tables: self.analysis_tables.clone(),
-            function_probes: FunctionProbes::default(),
+            function_probes: Arc::new(FunctionProbes::default()),
+            analysis_pool: Arc::clone(&self.analysis_pool),
         };
         catalog.update_relations(relations);
         catalog
@@ -202,16 +210,21 @@ impl ProjectCatalog {
         serde_json::to_string(&payloads).map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
-    fn analyze_compact<'py>(
-        &self,
-        py: Python<'py>,
-        payload: &[u8],
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    /// Resolve a compact batch now; the job runs later while the catalog keeps changing.
+    fn prepare_compact(&self, py: Python<'_>, payload: &[u8]) -> PyResult<CompactAnalysisJob> {
         let text = std::str::from_utf8(payload)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let result = py.compiler_detach(|| crate::query_analysis::main::analyze_project_catalog::analyze_project_compact_with_catalog(text, self))
+        let analysis = py
+            .compiler_detach(|| {
+                crate::query_analysis::main::prepare_project_catalog::prepare_project_compact_with_catalog(
+                    text, self,
+                )
+            })
             .map_err(compiler_error)?;
-        Ok(PyBytes::new(py, result.as_bytes()))
+        Ok(CompactAnalysisJob {
+            analysis: Mutex::new(Some(analysis)),
+            catalog: self.analysis_view(),
+        })
     }
 
     fn binding_results(
@@ -220,11 +233,7 @@ impl ProjectCatalog {
         requests: Vec<BindingRequest>,
     ) -> PyResult<Vec<Vec<DiagnosticRow>>> {
         py.compiler_detach(|| {
-            let pool = rayon::ThreadPoolBuilder::new()
-                .num_threads(4.min(requests.len().max(1)))
-                .stack_size(16 * 1024 * 1024)
-                .build()
-                .map_err(|error| error.to_string())?;
+            let pool = self.analysis_pool()?;
             pool.install(|| {
                 requests
                     .into_par_iter()
@@ -246,7 +255,58 @@ impl ProjectCatalog {
     }
 }
 
+#[pymethods]
+impl CompactAnalysisJob {
+    fn run<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let analysis = self
+            .analysis
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .ok_or_else(|| PyValueError::new_err("compact analysis job already ran"))?;
+        let result = py
+            .compiler_detach(|| analysis(&self.catalog))
+            .map_err(compiler_error)?;
+        Ok(PyBytes::new(py, result.as_bytes()))
+    }
+}
+
 impl ProjectCatalog {
+    /// Return the options-only view a resolved analysis batch validates with.
+    pub(crate) fn analysis_view(&self) -> Self {
+        Self {
+            dialect: self.dialect,
+            options: self.options.clone(),
+            quoted_ignore_case: self.quoted_ignore_case,
+            tables: HashMap::new(),
+            overrides: Vec::new(),
+            analysis_tables: HashMap::new(),
+            function_probes: Arc::clone(&self.function_probes),
+            analysis_pool: Arc::clone(&self.analysis_pool),
+        }
+    }
+
+    /// Return this compile's analysis pool, building it on first use.
+    pub(crate) fn analysis_pool(&self) -> Result<Arc<rayon::ThreadPool>, String> {
+        let mut pool = self
+            .analysis_pool
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(pool) = pool.as_ref() {
+            return Ok(Arc::clone(pool));
+        }
+        let built = Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(ANALYSIS_WORKERS)
+                .stack_size(ANALYSIS_WORKER_STACK_BYTES)
+                .thread_name(|index| format!("sqlbuild-analysis-{index}"))
+                .build()
+                .map_err(|error| error.to_string())?,
+        );
+        *pool = Some(Arc::clone(&built));
+        Ok(built)
+    }
+
     pub(crate) fn with_options(
         dialect: DialectType,
         options: SchemaValidationOptions,
@@ -259,7 +319,8 @@ impl ProjectCatalog {
             tables: HashMap::new(),
             overrides: Vec::new(),
             analysis_tables: HashMap::new(),
-            function_probes: FunctionProbes::default(),
+            function_probes: Arc::new(FunctionProbes::default()),
+            analysis_pool: Arc::default(),
         }
     }
     pub(crate) fn analysis_schema(

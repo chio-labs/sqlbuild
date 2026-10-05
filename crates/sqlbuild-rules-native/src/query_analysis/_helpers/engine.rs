@@ -323,6 +323,24 @@ pub(crate) fn analyze_project_compact_with_catalog(
     request_json: &str,
     catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
 ) -> Result<String, String> {
+    analyze_resolved_compact_batch(resolve_compact_batch(request_json, catalog)?, catalog)
+}
+
+/// Resolve catalog schemas now and return the analysis to run later without catalog tables.
+pub(crate) fn prepare_project_compact_with_catalog(
+    request_json: &str,
+    catalog: &crate::semantic_validation::models::ProjectCatalog,
+) -> Result<crate::semantic_validation::types::PreparedCompactAnalysis, String> {
+    let request = resolve_compact_batch(request_json, Some(catalog))?;
+    Ok(Box::new(move |view| {
+        analyze_resolved_compact_batch(request, Some(view))
+    }))
+}
+
+fn resolve_compact_batch(
+    request_json: &str,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> Result<CompactProjectAnalysisBatchRequest, String> {
     let mut request: CompactProjectAnalysisBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
     for query in &mut request.queries {
@@ -349,6 +367,14 @@ pub(crate) fn analyze_project_compact_with_catalog(
             }
         }
     }
+    Ok(request)
+}
+
+/// Analyse a resolved batch; a catalog supplies options, probes, and its compile-wide pool.
+fn analyze_resolved_compact_batch(
+    request: CompactProjectAnalysisBatchRequest,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> Result<String, String> {
     let workers = request.workers.clamp(1, MAX_WORKERS);
     if request
         .templates
@@ -400,12 +426,16 @@ pub(crate) fn analyze_project_compact_with_catalog(
         })
         .collect();
     let sql_bytes: usize = request.queries.iter().map(|query| query.sql.len()).sum();
-    let analysis_workers = workers.min(unique_query_count.max(1));
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(analysis_workers)
-        .stack_size(ANALYSIS_WORKER_STACK_BYTES)
-        .build()
-        .map_err(|error| error.to_string())?;
+    let pool = match catalog {
+        Some(catalog) => catalog.analysis_pool()?,
+        None => std::sync::Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(workers.min(unique_query_count.max(1)))
+                .stack_size(ANALYSIS_WORKER_STACK_BYTES)
+                .build()
+                .map_err(|error| error.to_string())?,
+        ),
+    };
     let query_work: Vec<CompactQueryWork> = request
         .queries
         .into_iter()
@@ -450,7 +480,7 @@ pub(crate) fn analyze_project_compact_with_catalog(
     serde_json::to_string(&response).map_err(|error| error.to_string())
 }
 
-/// Analyse a batch largest SQL first so no late wide query becomes its critical path.
+/// Analyse largest SQL first on spawned drainers rather than a broadcast to every pool thread.
 fn analyze_largest_first(
     pool: &rayon::ThreadPool,
     batch: Vec<CompactQueryWork>,
@@ -463,21 +493,33 @@ fn analyze_largest_first(
         .map(|work| Mutex::new(Some(work)))
         .collect();
     let next = AtomicUsize::new(0);
-    let finished: Vec<Vec<(usize, CompiledQueryWorkResult)>> = pool.broadcast(|_| {
-        let mut finished: Vec<(usize, CompiledQueryWorkResult)> = Vec::new();
-        while let Some(index) = order.get(next.fetch_add(1, Ordering::Relaxed)).copied() {
-            let work = slots[index]
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take();
-            if let Some(work) = work {
-                finished.push((index, analyze_compact_query_work(work, catalog)));
-            }
+    let finished: Mutex<Vec<(usize, CompiledQueryWorkResult)>> = Mutex::new(Vec::new());
+    let drainers = pool.current_num_threads().min(slots.len());
+    pool.scope(|scope| {
+        for _ in 0..drainers {
+            scope.spawn(|_| {
+                let mut drained: Vec<(usize, CompiledQueryWorkResult)> = Vec::new();
+                while let Some(index) = order.get(next.fetch_add(1, Ordering::Relaxed)).copied() {
+                    let work = slots[index]
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take();
+                    if let Some(work) = work {
+                        drained.push((index, analyze_compact_query_work(work, catalog)));
+                    }
+                }
+                finished
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .extend(drained);
+            });
         }
-        finished
     });
     let mut results: Vec<Option<CompiledQueryWorkResult>> = slots.iter().map(|_| None).collect();
-    for (index, result) in finished.into_iter().flatten() {
+    for (index, result) in finished
+        .into_inner()
+        .unwrap_or_else(PoisonError::into_inner)
+    {
         results[index] = Some(result);
     }
     results.into_iter().flatten().collect()
@@ -497,7 +539,7 @@ fn analyze_compact_query_work(
         && let Some(validation) = result.validation.take()
     {
         let local_probes = crate::semantic_validation::models::FunctionProbes::default();
-        let probes = catalog.map_or(&local_probes, |catalog| &catalog.function_probes);
+        let probes = catalog.map_or(&local_probes, |catalog| catalog.function_probes.as_ref());
         result.validation = Some(validation.and_then(|value| {
             crate::semantic_validation::main::map_diagnostics::map_diagnostics(
                 &sql, dialect, value, probes,

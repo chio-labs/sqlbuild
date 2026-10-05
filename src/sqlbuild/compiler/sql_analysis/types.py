@@ -9,6 +9,10 @@ type NativeDiagnosticRow = tuple[str, str, int | None, int | None, int | None, i
 type NativeBindingRequest = tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]
 
 
+class NativeCompactAnalysisJob(Protocol):
+    def run(self) -> bytes: ...
+
+
 class NativeProjectCatalog(Protocol):
     def inferred_schema(
         self, *, sql: str, columns: Mapping[str, str], inputs: Mapping[str, Mapping[str, str]]
@@ -21,7 +25,7 @@ class NativeProjectCatalog(Protocol):
         self, relations: Mapping[str, tuple[Mapping[str, str], Mapping[str, str]]]
     ) -> None: ...
     def register_override(self, relations: Mapping[str, Mapping[str, str]]) -> int: ...
-    def analyze_compact(self, payload: bytes) -> bytes: ...
+    def prepare_compact(self, payload: bytes) -> NativeCompactAnalysisJob: ...
     def update_relations(self, relations: Mapping[str, Mapping[str, str]]) -> None: ...
     def binding_results(
         self, requests: list[NativeBindingRequest]

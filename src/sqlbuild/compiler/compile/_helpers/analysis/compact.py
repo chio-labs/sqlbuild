@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import replace
 from typing import Any, cast
 
@@ -176,12 +179,45 @@ from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
     SqlSchemaValidationRequest,
 )
-from sqlbuild.compiler.sql_analysis.types import NativeQueryAnalysisModule
+from sqlbuild.compiler.sql_analysis.types import (
+    NativeCompactAnalysisJob,
+    NativeProjectCatalog,
+    NativeQueryAnalysisModule,
+)
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
+_ANALYSIS_LOCK: ContextVar[threading.Condition | None] = ContextVar(
+    "sqlbuild_model_analysis_lock", default=None
+)
 _COMPACT_ANALYSIS_WORKERS: int = 4
 _NATIVE_LEGACY_FALLBACK: str = "native project type recovery requires legacy fallback"
+
+
+@contextmanager
+def serialized_analysis(lock: threading.Condition) -> Iterator[None]:
+    """Mark the held `lock` as the guard of every Python analysis step in this context."""
+
+    token: Token[threading.Condition | None] = _ANALYSIS_LOCK.set(lock)
+    try:
+        yield
+    finally:
+        _ANALYSIS_LOCK.reset(token)
+
+
+@contextmanager
+def native_section() -> Iterator[None]:
+    """Release the analysis lock around native work that reads no shared analysis state."""
+
+    lock: threading.Condition | None = _ANALYSIS_LOCK.get()
+    if lock is None:
+        yield
+        return
+    lock.release()
+    try:
+        yield
+    finally:
+        _ = lock.acquire()
 
 
 def infer_columns_with_sql_analysis(
@@ -889,31 +925,35 @@ def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> obje
 
     workers: int = _COMPACT_ANALYSIS_WORKERS
     if preparation.binding_catalog is not None:
-        return orjson.loads(
-            preparation.binding_catalog.native.analyze_compact(
-                orjson.dumps(
-                    {
-                        "queries": preparation.queries,
-                        "templates": preparation.templates,
-                        "projections": preparation.projections,
-                        "workers": workers,
-                    }
-                )
-            )
-        )
-    return orjson.loads(
-        cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
+        job: NativeCompactAnalysisJob = cast(
+            NativeProjectCatalog, preparation.binding_catalog.native
+        ).prepare_compact(
             orjson.dumps(
                 {
                     "queries": preparation.queries,
                     "templates": preparation.templates,
                     "projections": preparation.projections,
                     "workers": workers,
-                },
-                option=orjson.OPT_SORT_KEYS,
-            ).decode()
+                }
+            )
         )
-    )
+        with native_section():
+            return orjson.loads(job.run())
+    request_json: str = orjson.dumps(
+        {
+            "queries": preparation.queries,
+            "templates": preparation.templates,
+            "projections": preparation.projections,
+            "workers": workers,
+        },
+        option=orjson.OPT_SORT_KEYS,
+    ).decode()
+    with native_section():
+        return orjson.loads(
+            cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
+                request_json
+            )
+        )
 
 
 def _attach_compiled_bindings(

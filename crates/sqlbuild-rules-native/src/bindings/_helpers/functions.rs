@@ -515,6 +515,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
             .get_type::<crate::bindings::_helpers::panics::NativeCompilerError>(),
     )?;
     module.add_class::<crate::semantic_validation::models::ProjectCatalog>()?;
+    module.add_class::<crate::semantic_validation::models::CompactAnalysisJob>()?;
     module.add_class::<crate::semantic_validation::models::BindingPositions>()?;
     module.add_function(wrap_pyfunction!(normalize_analysis_sql, module)?)?;
     module.add_function(wrap_pyfunction!(normalize_analysis_sqls, module)?)?;

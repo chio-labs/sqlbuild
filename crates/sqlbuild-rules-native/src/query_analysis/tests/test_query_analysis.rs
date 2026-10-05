@@ -5,10 +5,10 @@ use crate::query_analysis::tests::helpers::{
     borrowed_facts_preserve_named_outputs_and_terminal_sources,
     borrowed_facts_preserve_union_dependencies_and_join_nullability,
     bound_lineage_survives_type_recovery, canonical_queries_reuse_semantics_and_project_resources,
-    combined_queries_preserve_standalone_binding,
+    catalog_views_reuse_one_analysis_pool, combined_queries_preserve_standalone_binding,
     compact_project_query_interns_repeated_lineage_strings,
-    interleaved_query_templates_preserve_template_order, larger_later_queries_keep_request_order,
-    native_compatibility_types_preserve_result_semantics,
+    concurrent_batches_match_serial_batches, interleaved_query_templates_preserve_template_order,
+    larger_later_queries_keep_request_order, native_compatibility_types_preserve_result_semantics,
     repeated_project_facts_intern_complete_facts,
     unannotated_types_require_complete_nested_evidence,
     widening_aggregates_require_compatibility_recovery,
@@ -84,6 +84,16 @@ fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_hold
         CompactQueryAnalysisTestCase {
             description: "larger later queries keep request order",
             run: larger_later_queries_keep_request_order,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "catalog views reuse one analysis pool",
+            run: catalog_views_reuse_one_analysis_pool,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "concurrent batches match serial batches",
+            run: concurrent_batches_match_serial_batches,
             expected_success: true,
         },
     ];

@@ -309,3 +309,18 @@ def _expression_source_shape(
         columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
         inputs={},
     )
+
+
+def referenced_model_names(
+    *, model_input: CompileModelInput, available_names: frozenset[str] | None = None
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                reference.ref_name
+                for reference in model_input.references
+                if reference.ref_kind == SqlReferenceKind.REF
+                and (available_names is None or reference.ref_name in available_names)
+            }
+        )
+    )
