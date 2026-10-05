@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_with_spans,
 )
 from sqlbuild.compiler.compile.constants import (
+    COMPILE_INPUT_READS,
     SQL_CONTEXT_NAME_EXTRA_TOKENS,
     SQL_IDENTIFIER_EXTRA_TOKEN,
     SQL_INTERPOLATION_TOKEN,
@@ -366,6 +367,7 @@ def _render_interpolation_token(
         if env_name_end == env_name_start:
             raise CompileInputError(f"invalid environment interpolation token in '{file_path}'")
         env_name: str = sql[env_name_start:env_name_end]
+        COMPILE_INPUT_READS.environment_read(env_name)
         if env_name not in os.environ:
             raise CompileInputError(
                 f"unknown environment variable '@@ENV:{env_name}' in '{file_path}'"
@@ -387,6 +389,7 @@ def _render_interpolation_token(
             context_values=context_values,
         )
         context_name = sql[context_name_start:context_name_end]
+        COMPILE_INPUT_READS.context_read(context_name)
         if context_name not in context_values:
             raise CompileInputError(
                 f"SQL text in '{file_path}' references unknown CTX key '{context_name}'"

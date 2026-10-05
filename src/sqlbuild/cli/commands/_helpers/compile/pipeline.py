@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import replace
 from functools import partial
@@ -28,6 +29,7 @@ from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileWriteResult,
 )
+from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
@@ -319,13 +321,14 @@ def write_compile_dag_artifact(
         dag_path=dag_path,
     )
     resolved_dag_path.parent.mkdir(parents=True, exist_ok=True)
-    resolved_dag_path.write_text(
-        build_dag_json(
-            graph=analysis.graph,
-            project_name=analysis.discovered_inputs.project_config.name,
-            python_graph=python_graph,
-        ),
-        encoding="utf-8",
+    dag_json: str = build_dag_json(
+        graph=analysis.graph,
+        project_name=analysis.discovered_inputs.project_config.name,
+        python_graph=python_graph,
+    )
+    _ = resolved_dag_path.write_text(dag_json, encoding="utf-8")
+    COMPILE_ARTIFACT_WRITES.written(
+        path=resolved_dag_path, contents=dag_json.replace("\n", os.linesep).encode("utf-8")
     )
     _ = complete_compile_phase(
         status=status, message=f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"

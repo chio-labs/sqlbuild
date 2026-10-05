@@ -1018,3 +1018,14 @@ class StartupImportFootprintTestCase:
     argv: tuple[str, ...]
     expected_exit_code: int
     forbidden_modules: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReusedCompileImportFootprintTestCase:
+    """One reused compile in a fresh process and the compile modules it must not load."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_exit_code: int
+    expected_reuse_message: str
+    forbidden_modules: tuple[str, ...]

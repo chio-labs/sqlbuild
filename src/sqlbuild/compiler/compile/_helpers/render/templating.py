@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.constants import (
+    COMPILE_INPUT_READS,
     MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
     MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
     MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
@@ -521,6 +522,7 @@ def _lookup_variable(*, name: str, variables: dict[str, object], context_label: 
 
 
 def _lookup_environment_variable(*, name: str, context_label: str) -> str:
+    COMPILE_INPUT_READS.environment_read(name)
     if name not in os.environ:
         raise CompileInputError(f"{context_label} references missing ENV variable '{name}'")
     return os.environ[name]
@@ -533,6 +535,7 @@ def _lookup_context_value(
     context_label: str,
     preserve_unknown_context: bool,
 ) -> str:
+    COMPILE_INPUT_READS.context_read(name)
     if name not in context_values:
         if preserve_unknown_context:
             return f"${{{TemplateNamespace.CTX}:{name}}}"

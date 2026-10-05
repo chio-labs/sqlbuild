@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 import time
 from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.compile.collection import paused_cyclic_collection
+from sqlbuild.cli.commands._helpers.compile.dag import resolve_compile_dag_path
 from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
@@ -25,9 +25,17 @@ from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCom
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
+    CompileCommandResult,
     CompileWriteResult,
 )
+from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
+from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
+from sqlbuild.cli.compile_reuse.main._compile_reuse_timings import compile_reuse_timings
+from sqlbuild.cli.compile_reuse.main._write_reusable_compile import write_reusable_compile
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
+from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome
 from sqlbuild.cli.entry.models import CompileCommandRequest
+from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
@@ -37,13 +45,25 @@ from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.rule_engine.main.render_skipped_rules import format_skipped_type_proof_rules
 
 
-def run_compile(request: CompileCommandRequest) -> int:
+def run_compile(
+    *, request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
+) -> int:
     """Execute the compile command."""
 
-    total_start: float = time.monotonic()
+    total_start: float = time.monotonic() if reuse_attempt is None else reuse_attempt.started
     effective_request: CompileCommandRequest = (
         request if request.project_dir is not None else replace(request, project_dir=Path.cwd())
     )
+    attempt: CompileReuseAttempt = (
+        CompileReuseAttempt(
+            outcome=CompileReuseOutcome.BYPASS,
+            project_dir=Path(effective_request.project_dir or Path.cwd()),
+            started=total_start,
+        )
+        if reuse_attempt is None
+        else reuse_attempt
+    )
+    output: RecordedCompileOutput = RecordedCompileOutput()
     status: TransientStatusReporter | None = start_compile_status(
         json_output=request.json_output,
         no_color=request.no_color,
@@ -52,20 +72,40 @@ def run_compile(request: CompileCommandRequest) -> int:
         with (
             paused_cyclic_collection(),
             collect_compile_timings() as detailed_timings,
+            COMPILE_INPUT_READS.recording() as input_reads,
+            COMPILE_ARTIFACT_WRITES.recording() as artifact_writes,
             PreparedCompileArtifacts(
                 enabled=not request.profile_flags.skip_write
             ) as prepared_artifacts,
         ):
-            return _run_compile_with_status(
+            result: CompileCommandResult = _run_compile_with_status(
                 request=effective_request,
                 total_start=total_start,
                 status=status,
                 detailed_timings=detailed_timings,
                 prepared_artifacts=prepared_artifacts,
+                output=output,
+                reuse_timings_ms=compile_reuse_timings(attempt=attempt),
             )
     finally:
         if status is not None:
             status.close()
+    try:
+        with paused_cyclic_collection():
+            write_reusable_compile(
+                attempt=attempt,
+                output=output,
+                exit_code=result.exit_code,
+                input_reads=input_reads,
+                artifact_writes=artifact_writes,
+                compile_cache_enabled=result.compile_cache_enabled,
+                artifacts_written=result.artifacts_written,
+                dag_artifact_path=result.dag_artifact_path,
+                json_output=request.json_output,
+            )
+    finally:
+        output.print_stdout()
+    return result.exit_code
 
 
 def _run_compile_with_status(
@@ -75,7 +115,9 @@ def _run_compile_with_status(
     status: TransientStatusReporter | None,
     detailed_timings: CompileTimingCollector,
     prepared_artifacts: PreparedCompileArtifacts,
-) -> int:
+    output: RecordedCompileOutput,
+    reuse_timings_ms: dict[str, int],
+) -> CompileCommandResult:
     """Execute compile after the optional interactive status reporter is initialized."""
 
     project_dir: Path = request.project_dir if request.project_dir is not None else Path.cwd()
@@ -132,6 +174,7 @@ def _run_compile_with_status(
         "rule_cache_misses": analysis.rule_cache_misses,
         "write_ms": write_result.write_ms,
         **detailed_timings.as_milliseconds(),
+        **reuse_timings_ms,
         "total_ms": elapsed_ms(total_start),
     }
     withheld_test_diagnostics: tuple[CompilerDiagnostic, ...] = (
@@ -154,7 +197,14 @@ def _run_compile_with_status(
         codes=analysis.skipped_type_proof_rules
     )
     if skipped_rules_note is not None:
-        print(f"note: {skipped_rules_note}", file=sys.stderr)
+        output.print_stderr_line(f"note: {skipped_rules_note}")
+    result: CompileCommandResult = _command_result(
+        request=request,
+        project_dir=project_dir,
+        exit_code=exit_code,
+        rules_failed=rules_failed,
+        analysis=analysis,
+    )
 
     if json_output:
         notice: str | None = semantic_coverage_notice(
@@ -163,8 +213,8 @@ def _run_compile_with_status(
             sql_validation_enabled=not request.no_sql_validation,
         )
         if notice:
-            print(notice, file=sys.stderr)
-        print(
+            output.print_stderr_line(notice)
+        output.record_stdout(
             format_compile_json(
                 graph=analysis.graph,
                 written=write_result.written,
@@ -177,9 +227,9 @@ def _run_compile_with_status(
                 sql_validation_enabled=not request.no_sql_validation,
             )
         )
-        return exit_code
+        return result
 
-    print(
+    output.record_stdout(
         format_compile_text(
             graph=analysis.graph,
             written=write_result.written,
@@ -192,4 +242,24 @@ def _run_compile_with_status(
             sql_validation_enabled=not request.no_sql_validation,
         )
     )
-    return exit_code
+    return result
+
+
+def _command_result(
+    *,
+    request: CompileCommandRequest,
+    project_dir: Path,
+    exit_code: int,
+    rules_failed: bool,
+    analysis: CompileAnalysis,
+) -> CompileCommandResult:
+    return CompileCommandResult(
+        exit_code=exit_code,
+        compile_cache_enabled=analysis.graph.project.compile_cache_dir is not None,
+        artifacts_written=not (rules_failed or request.profile_flags.skip_write),
+        dag_artifact_path=(
+            None
+            if rules_failed or request.dag_path is None
+            else resolve_compile_dag_path(project_dir=project_dir, dag_path=request.dag_path)
+        ),
+    )

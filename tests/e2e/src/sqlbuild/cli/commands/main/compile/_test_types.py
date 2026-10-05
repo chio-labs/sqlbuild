@@ -558,3 +558,126 @@ class EarlyLintCompileTestCase:
     order_totals_sql: str
     expected_exit_code: int
     expected_diagnostics: tuple[tuple[str, str, int, int], ...]
+
+
+@dataclass(frozen=True)
+class CompileReuseInvalidationTestCase:
+    """One compile input change that must make the stored compile miss."""
+
+    description: str
+    edit: Callable[[Path], None] = lambda _project_dir: None
+    edited_env: dict[str, str] = field(default_factory=dict)
+    edited_args: tuple[str, ...] = ()
+    expected_returncode: int = 0
+    expected_rewarm_hit: bool = True
+
+
+@dataclass(frozen=True)
+class CompileReuseHitTestCase:
+    """One change outside the compile inputs that must still reuse the stored compile."""
+
+    description: str
+    edit: Callable[[Path], None]
+    edited_env: dict[str, str] = field(default_factory=dict)
+    expected_reused: bool = True
+
+
+@dataclass(frozen=True)
+class CompileReuseBypassTestCase:
+    """One control or input that must always run the full compile."""
+
+    description: str
+    edit: Callable[[Path], None] = lambda _project_dir: None
+    compile_args: tuple[str, ...] = ()
+    global_args: tuple[str, ...] = ()
+    env: dict[str, str] = field(default_factory=dict)
+    expected_stored_entries: int = 0
+
+
+@dataclass(frozen=True)
+class CompileReuseCorruptEntryTestCase:
+    """One way a stored compile can be damaged on disk."""
+
+    description: str
+    corrupt: Callable[[Path], None]
+    expected_fallback_reused: bool = False
+    expected_restored_reused: bool = True
+
+
+@dataclass(frozen=True)
+class CompileReuseReplayTestCase:
+    """One compile whose replay must reproduce output, notes, and exit code."""
+
+    description: str
+    compile_args: tuple[str, ...]
+    expected_returncode: int
+    expected_note_prefix: str = "note:"
+
+
+@dataclass(frozen=True)
+class CompileReuseRedirectTestCase:
+    """A compile whose stdout is redirected into a file inside the project."""
+
+    description: str
+    report_name: str
+    expected_hit_counts: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class CompileReuseEventTestCase:
+    """A lifecycle sink that must still receive invocation events on a reuse hit."""
+
+    description: str
+    sink_name: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompileReuseTimingsTestCase:
+    """The compile_timings object a reuse hit reports in place of the stored timings."""
+
+    description: str
+    expected_timing_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CompileReuseProviderSettingsTestCase:
+    """A provider settings input change that must miss and match a full compile."""
+
+    description: str
+    edited_env: dict[str, str]
+    edit: Callable[[Path], None] = lambda _project_dir: None
+    expected_returncode: int = 0
+    expected_rewarm_hit: bool = True
+
+
+@dataclass(frozen=True)
+class CompileReuseConcurrentWriterTestCase:
+    """Another writer touching compiled artifacts between this compile's write and store."""
+
+    description: str
+    other_write: Callable[[Path], None]
+    expected_stored_entries: int
+    expected_rerun_reused: bool
+
+
+@dataclass(frozen=True)
+class CompileReuseLargeFileTestCase:
+    """A large data file that reuse must not read unless its stat identity moves."""
+
+    description: str
+    size_bytes: int
+    relative_path: str
+    expected_reads: tuple[int, int, int, int, int]
+    expected_reused: tuple[bool, bool, bool, bool, bool]
+
+
+@dataclass(frozen=True)
+class CompileReuseStoreFailureTestCase:
+    """An unexpected error while storing a finished compile."""
+
+    description: str
+    error: BaseException
+    expected_returncode: int = 0
+    expected_stored_entries: int = 0
+    expected_raised: type[BaseException] | None = None

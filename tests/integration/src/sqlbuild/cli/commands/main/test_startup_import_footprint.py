@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,7 +11,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    ReusedCompileImportFootprintTestCase,
     StartupImportFootprintTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
@@ -60,6 +63,21 @@ COMPILE_FORBIDDEN: tuple[str, ...] = (
     *WAREHOUSE_AND_INTEGRATION_MODULES,
     *PRESENTATION_AND_PROVIDER_MODULES,
 )
+FULL_COMPILE_MODULES: tuple[str, ...] = (
+    "polyglot_sql",
+    "pydantic",
+    "sqlbuild.adapter.contract.classes.base_adapter",
+    "sqlbuild.cli.commands.main.project._compile",
+    "sqlbuild.cli.compile.models",
+    "sqlbuild.compiler.compile.models",
+    "sqlbuild.compiler.pipeline",
+    "sqlbuild.compiler.planner.models",
+)
+REUSED_COMPILE_FORBIDDEN: tuple[str, ...] = (
+    *WAREHOUSE_AND_INTEGRATION_MODULES,
+    *FULL_COMPILE_MODULES,
+    *PRESENTATION_AND_PROVIDER_MODULES,
+)
 
 _FOOTPRINT_SCRIPT: str = """
 import contextlib, io, json, sys
@@ -67,13 +85,14 @@ from sqlbuild.cli.entry.main.entry import main
 
 argv = json.loads(sys.argv[1])
 forbidden = json.loads(sys.argv[2])
-with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+stderr = io.StringIO()
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
     code = main(argv)
 loaded = sorted(
     name for name in forbidden
     if any(module == name or module.startswith(name + ".") for module in sys.modules)
 )
-print(json.dumps({"code": code, "loaded": loaded}))
+print(json.dumps({"code": code, "loaded": loaded, "stderr": stderr.getvalue()}))
 """
 
 
@@ -135,6 +154,43 @@ def test_given_fresh_interpreter_when_running_cli_then_heavy_modules_stay_unload
     outcome: dict[str, object] = json.loads(result.stdout.strip().splitlines()[-1])
 
     assert outcome["code"] == test_case.expected_exit_code
+    assert cast(list[str], outcome["loaded"]) == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReusedCompileImportFootprintTestCase(
+            description="reused compile",
+            argv=("compile", "--json"),
+            expected_exit_code=0,
+            expected_reuse_message="Inputs unchanged; reused the previous compile",
+            forbidden_modules=REUSED_COMPILE_FORBIDDEN,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unchanged_project_when_compile_is_reused_then_compiler_stays_unloaded(
+    test_case: ReusedCompileImportFootprintTestCase, tmp_path: Path
+) -> None:
+    write_compile_startup_project(tmp_path)
+    command: list[str] = [
+        sys.executable,
+        "-c",
+        _FOOTPRINT_SCRIPT,
+        json.dumps(["--project-dir", str(tmp_path), *test_case.argv]),
+        json.dumps(test_case.forbidden_modules),
+    ]
+    environment: dict[str, str] = {**os.environ, REUSE_DISABLE_ENV_VAR: "0"}
+
+    _ = subprocess.run(command, check=True, capture_output=True, cwd=tmp_path, env=environment)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        command, check=True, capture_output=True, text=True, cwd=tmp_path, env=environment
+    )
+    outcome: dict[str, object] = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert outcome["code"] == test_case.expected_exit_code
+    assert test_case.expected_reuse_message in cast(str, outcome["stderr"])
     assert cast(list[str], outcome["loaded"]) == []
 
 

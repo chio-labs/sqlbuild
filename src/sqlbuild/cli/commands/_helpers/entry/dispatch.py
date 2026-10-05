@@ -501,6 +501,7 @@ def _dispatch_compile_or_contract(
                     skip_contracts=args.profile_skip_contracts,
                     skip_write=args.profile_skip_write,
                 ),
+                debug=args.debug,
             )
         )
     return None
