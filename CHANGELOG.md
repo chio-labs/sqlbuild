@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.134.4](https://github.com/chio-labs/sqlbuild/compare/v0.134.3...v0.134.4) (2026-10-05)
+
+
+### Performance Improvements
+
+* **runtime:** chunk captured non-ASCII output on UTF-8 byte boundaries ([#949](https://github.com/chio-labs/sqlbuild/issues/949)) ([e697cd9](https://github.com/chio-labs/sqlbuild/commit/e697cd9ebb7b5fc23e6e87860389ade9c4451edf))
+
 ## [0.134.3](https://github.com/chio-labs/sqlbuild/compare/v0.134.2...v0.134.3) (2026-10-05)
 
 
