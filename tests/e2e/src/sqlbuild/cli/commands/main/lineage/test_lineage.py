@@ -13,6 +13,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import (
     LineageCacheCliTestCase,
     LineageCliTestCase,
     LineageErrorCliTestCase,
+    SharedSelectorCliTestCase,
+    SharedSelectorErrorCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage.helpers import (
     DIAMOND_EDGE_COUNT,
@@ -79,7 +81,7 @@ _LINEAGE_CACHE_RELATIVE_PATH: Path = Path("target/cache/lineage/v1/structural-gr
             command=(
                 "lineage",
                 "--select",
-                "path:staging",
+                "path:models/staging",
                 "--exclude",
                 "tag:finance",
                 "--direction",
@@ -539,3 +541,88 @@ def test_given_diamond_dependencies_when_rendering_lineage_tree_then_output_stay
     assert len(tree_lines) <= test_case.expected_max_lines
     assert len(expanded_nodes) == len(set(expanded_nodes))
     assert set(test_case.expected_expanded_names) <= set(expanded_nodes)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SharedSelectorCliTestCase(
+            description="models-rooted path",
+            selector="path:models/staging",
+            expected_node_ids=("model:stg_customers", "model:stg_orders", "model:stg_payments"),
+            expected_selected_models=3,
+            expected_selected_functions=0,
+        ),
+        SharedSelectorCliTestCase(
+            description="name glob",
+            selector="stg_*",
+            expected_node_ids=("model:stg_customers", "model:stg_orders", "model:stg_payments"),
+            expected_selected_models=3,
+            expected_selected_functions=0,
+        ),
+        SharedSelectorCliTestCase(
+            description="path and tag intersection",
+            selector="path:models/marts,tag:acceptance",
+            expected_node_ids=(
+                "model:daily_activity_rollup",
+                "model:hourly_activity_with_daily_context",
+                "udf:is_completed_order",
+                "udf:is_completed_order_py",
+            ),
+            expected_selected_models=2,
+            expected_selected_functions=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_selector_when_running_lineage_and_compile_then_both_select_the_same_resources(
+    test_case: SharedSelectorCliTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+
+    lineage: subprocess.CompletedProcess[str] = run_sqb(
+        command=("lineage", "--select", test_case.selector, "--format", "json"),
+        project_dir=project_dir,
+    )
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        command=("compile", "--select", test_case.selector, "--json"),
+        project_dir=project_dir,
+    )
+
+    assert lineage.returncode == 0, lineage.stdout + lineage.stderr
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    summary: dict[str, int] = json.loads(compiled.stdout)["summary"]
+    assert lineage_node_ids(payload=json.loads(lineage.stdout)) == test_case.expected_node_ids
+    assert summary["selected_models"] == test_case.expected_selected_models
+    assert summary["selected_functions"] == test_case.expected_selected_functions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SharedSelectorErrorCliTestCase(
+            description="path without the models root",
+            selector="path:staging",
+            expected_fragment="error[S012]",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_selector_when_running_lineage_and_compile_then_both_report_it(
+    test_case: SharedSelectorErrorCliTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+
+    results: tuple[subprocess.CompletedProcess[str], ...] = tuple(
+        run_sqb(command=command, project_dir=project_dir)
+        for command in (
+            ("--no-color", "lineage", "--select", test_case.selector),
+            ("--no-color", "compile", "--select", test_case.selector),
+        )
+    )
+
+    for result in results:
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert test_case.expected_fragment in result.stdout + result.stderr

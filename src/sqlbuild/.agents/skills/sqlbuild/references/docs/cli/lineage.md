@@ -43,7 +43,7 @@ Exactly one of a positional target or `--select` is required.
 | `--format` | Output format: `tree` (default), `list`, or `json`. |
 | `--mode` | Column lineage analysis mode: `rich` (default) or `fast`. |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias). |
-| `--select`, `-s` | Select resources using standard selector syntax. |
+| `--select`, `-s` | Select resources using the same selector syntax as `sqb compile`, `sqb plan` and `sqb build`, for example `path:models/marts`, `tag:finance` or `stg_*`. |
 | `--exclude` | Exclude resources from the selection. |
 
 ## Model lineage
@@ -244,7 +244,7 @@ sqb lineage fact_orders --format json --direction upstream
 
 ## Depth limiting
 
-`--depth` controls how many hops from the focus node(s) to include. In selector mode, `--depth` requires name, source, seed, or path-between selectors - it cannot be combined with tag or path selectors or comma-intersection selectors.
+`--depth` controls how many hops from the focus node(s) to include. In selector mode without `--direction`, `--depth` requires name (including glob patterns), source, seed, or path-between selectors - it cannot be combined with tag or path selectors or comma-intersection selectors.
 
 ```bash
 # Only immediate parents

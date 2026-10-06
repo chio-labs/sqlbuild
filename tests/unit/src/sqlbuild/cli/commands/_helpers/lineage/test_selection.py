@@ -12,6 +12,7 @@ from sqlbuild.cli.commands._helpers.lineage.selection import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import ColumnLineageTrace, LineageGraph
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
@@ -20,6 +21,8 @@ from sqlbuild.compiler.lineage.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
     ColumnLineageSelectionTestCase,
     LineagePathSelectorErrorTestCase,
@@ -28,6 +31,9 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
     LineageSelectorDepthErrorTestCase,
     NormalizeLineageTargetErrorTestCase,
     NormalizeLineageTargetTestCase,
+    SharedSelectorDepthTestCase,
+    SharedSelectorErrorParityTestCase,
+    SharedSelectorParityTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage.helpers import (
     build_lineage_test_graph,
@@ -314,7 +320,6 @@ def test_given_path_selector_when_selecting_lineage_then_returns_path_nodes(
         LineagePathSelectorErrorTestCase(
             description="rejects an end that is not downstream of the start",
             select=("daily_rollup~raw_orders",),
-            expected_error_code="C319",
             expected_error_fragment=(
                 "'source:raw_orders' is not downstream of 'model:daily_rollup'"
             ),
@@ -327,7 +332,7 @@ def test_given_unreachable_path_selector_when_selecting_lineage_then_raises_user
 ) -> None:
     graph: ProjectGraph = build_lineage_test_graph()
 
-    with pytest.raises(CliUserError) as error:
+    with pytest.raises(PlannerInputError) as error:
         select_selector_lineage(
             graph=graph,
             select=test_case.select,
@@ -335,7 +340,6 @@ def test_given_unreachable_path_selector_when_selecting_lineage_then_raises_user
             depth=None,
         )
 
-    assert error.value.code == test_case.expected_error_code
     assert test_case.expected_error_fragment in str(error.value)
 
 
@@ -415,3 +419,200 @@ def test_given_mismatched_kind_prefix_when_normalizing_then_raises_unknown_targe
         _ = normalize_lineage_target(graph=graph, target=test_case.target)
 
     assert raised.value.code == test_case.expected_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SharedSelectorParityTestCase(
+            description="models-rooted path selects one folder",
+            select=("path:models/staging",),
+            exclude=(),
+            expected_node_ids=("model:stg_orders",),
+        ),
+        SharedSelectorParityTestCase(
+            description="models root selects every model",
+            select=("path:models",),
+            exclude=(),
+            expected_node_ids=("model:daily_rollup", "model:fact_orders", "model:stg_orders"),
+        ),
+        SharedSelectorParityTestCase(
+            description="bare models-rooted path is a path selector",
+            select=("models/marts",),
+            exclude=(),
+            expected_node_ids=("model:daily_rollup", "model:fact_orders"),
+        ),
+        SharedSelectorParityTestCase(
+            description="path selector expands upstream",
+            select=("+path:models/staging",),
+            exclude=(),
+            expected_node_ids=("model:stg_orders", "source:raw_orders"),
+        ),
+        SharedSelectorParityTestCase(
+            description="name glob matches every resource kind",
+            select=("*_orders",),
+            exclude=(),
+            expected_node_ids=("model:fact_orders", "model:stg_orders", "source:raw_orders"),
+        ),
+        SharedSelectorParityTestCase(
+            description="typed glob matches only that kind",
+            select=("source:raw_*",),
+            exclude=(),
+            expected_node_ids=("source:raw_orders",),
+        ),
+        SharedSelectorParityTestCase(
+            description="seed selector expands downstream",
+            select=("seed:waffle_types+",),
+            exclude=(),
+            expected_node_ids=("model:daily_rollup", "model:fact_orders", "seed:waffle_types"),
+        ),
+        SharedSelectorParityTestCase(
+            description="exclude removes a resolved upstream",
+            select=("+fact_orders",),
+            exclude=("source:raw_orders",),
+            expected_node_ids=("model:fact_orders", "model:stg_orders", "seed:waffle_types"),
+        ),
+        SharedSelectorParityTestCase(
+            description="comma intersects tag and path",
+            select=("tag:marts,path:models/marts",),
+            exclude=(),
+            expected_node_ids=("model:daily_rollup", "model:fact_orders"),
+        ),
+        SharedSelectorParityTestCase(
+            description="space-separated selectors are unioned",
+            select=("stg_orders daily_rollup",),
+            exclude=(),
+            expected_node_ids=("model:daily_rollup", "model:stg_orders"),
+        ),
+        SharedSelectorParityTestCase(
+            description="path-between keeps nodes on the path",
+            select=("raw_orders~fact_orders",),
+            exclude=(),
+            expected_node_ids=("model:fact_orders", "model:stg_orders", "source:raw_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_selector_when_selecting_lineage_then_matches_shared_project_selection(
+    test_case: SharedSelectorParityTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    lineage: LineageGraph = select_selector_lineage(
+        graph=graph,
+        select=test_case.select,
+        exclude=test_case.exclude,
+        depth=None,
+    )
+    shared: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=test_case.select,
+        exclude=test_case.exclude,
+        all_keys=graph.all_keys,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+    )
+
+    assert node_ids(lineage.nodes) == test_case.expected_node_ids
+    assert tuple(sorted(f"{key.resource_type}:{key.name}" for key in shared)) == (
+        test_case.expected_node_ids
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SharedSelectorErrorParityTestCase(
+            description="path without models root is rejected",
+            select=("path:staging",),
+            expected_code="S012",
+        ),
+        SharedSelectorErrorParityTestCase(
+            description="unknown models-rooted path is rejected",
+            select=("path:models/missing",),
+            expected_code="S009",
+        ),
+        SharedSelectorErrorParityTestCase(
+            description="unknown tag is rejected",
+            select=("tag:missing",),
+            expected_code="S008",
+        ),
+        SharedSelectorErrorParityTestCase(
+            description="unknown name is rejected",
+            select=("missing_model",),
+            expected_code="S007",
+        ),
+        SharedSelectorErrorParityTestCase(
+            description="unsupported selector kind is rejected",
+            select=("model:fact_orders",),
+            expected_code="S005",
+        ),
+        SharedSelectorErrorParityTestCase(
+            description="inner plus marker is rejected",
+            select=("stg+orders",),
+            expected_code="S002",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_selector_when_selecting_lineage_then_raises_shared_selector_error(
+    test_case: SharedSelectorErrorParityTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    with pytest.raises(PlannerInputError) as lineage_error:
+        _ = select_selector_lineage(graph=graph, select=test_case.select, exclude=(), depth=None)
+    with pytest.raises(PlannerInputError) as shared_error:
+        _ = resolve_project_selectors(
+            select=test_case.select,
+            exclude=(),
+            all_keys=graph.all_keys,
+            upstream_deps=graph.upstream_deps,
+            downstream_deps=graph.downstream_deps,
+            tag_index=graph.tag_index,
+            path_index=graph.path_index,
+        )
+
+    assert lineage_error.value.code == test_case.expected_code
+    assert shared_error.value.code == test_case.expected_code
+    assert str(lineage_error.value) == str(shared_error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedSelectorDepthTestCase(
+            description="glob anchors every match when trimming to depth",
+            select=("*_orders+",),
+            direction=None,
+            expected_node_ids=(
+                "model:daily_rollup",
+                "model:fact_orders",
+                "model:stg_orders",
+                "source:raw_orders",
+            ),
+        ),
+        SharedSelectorDepthTestCase(
+            description="models-rooted path expands by direction",
+            select=("path:models/staging",),
+            direction="downstream",
+            expected_node_ids=("model:fact_orders", "model:stg_orders"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_shared_selector_with_depth_when_selecting_lineage_then_trims_from_matches(
+    test_case: SharedSelectorDepthTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    result: LineageGraph = select_selector_lineage(
+        graph=graph,
+        select=test_case.select,
+        exclude=(),
+        depth=1,
+        direction=test_case.direction,
+    )
+
+    assert node_ids(result.nodes) == test_case.expected_node_ids
