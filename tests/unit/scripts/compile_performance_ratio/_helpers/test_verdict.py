@@ -3,7 +3,7 @@
 import pytest
 
 from scripts.compile_performance_ratio._helpers.verdict import ratio_failures
-from scripts.compile_performance_ratio.constants import COMPILE_MODES
+from scripts.compile_performance_ratio.constants import COMPILE_MODES, NOISE_FLOOR_SECONDS
 from tests.unit.scripts.compile_performance_ratio._helpers._test_types import (
     RatioFailuresTestCase,
 )
@@ -53,6 +53,20 @@ from tests.unit.scripts.compile_performance_ratio._helpers.helpers import compar
             expected_failures=("dense 3000 edit: CPU ratio 1.200 exceeds 1.10",),
         ),
         RatioFailuresTestCase(
+            description="a sub-second reused warm compile within the floor passes",
+            comparisons=(comparison(mode="warm", wall=(0.56, 0.65), cpu=(0.44, 0.52)),),
+            modes=("warm",),
+            max_ratio=1.10,
+            expected_failures=(),
+        ),
+        RatioFailuresTestCase(
+            description="a sub-second reused warm compile beyond the floor fails",
+            comparisons=(comparison(mode="warm", wall=(0.56, 0.85), cpu=(0.44, 0.44)),),
+            modes=("warm",),
+            max_ratio=1.10,
+            expected_failures=("dense 3000 warm: wall ratio 1.518 exceeds 1.10",),
+        ),
+        RatioFailuresTestCase(
             description="a requested mode without a measurement fails",
             comparisons=(comparison(mode="cold", wall=(18.0, 18.0), cpu=(40.0, 40.0)),),
             modes=("cold", "edit"),
@@ -84,7 +98,10 @@ def test_given_mode_comparisons_when_judging_then_reports_each_failed_limit(
     test_case: RatioFailuresTestCase,
 ) -> None:
     failures: tuple[str, ...] = ratio_failures(
-        comparisons=test_case.comparisons, modes=test_case.modes, max_ratio=test_case.max_ratio
+        comparisons=test_case.comparisons,
+        modes=test_case.modes,
+        max_ratio=test_case.max_ratio,
+        noise_floor_seconds=NOISE_FLOOR_SECONDS,
     )
 
     assert failures == test_case.expected_failures

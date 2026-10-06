@@ -8,9 +8,13 @@ from scripts.compile_performance_ratio.models import CompileComparison
 
 
 def ratio_failures(
-    *, comparisons: tuple[CompileComparison, ...], modes: tuple[str, ...], max_ratio: float
+    *,
+    comparisons: tuple[CompileComparison, ...],
+    modes: tuple[str, ...],
+    max_ratio: float,
+    noise_floor_seconds: float,
 ) -> tuple[str, ...]:
-    """Describe every requested mode that is unmeasured or whose wall or CPU ratio is too high."""
+    """Describe every requested mode that is unmeasured or slower than ratio plus floor allow."""
 
     measured: dict[str, CompileComparison] = {
         comparison.mode: comparison for comparison in comparisons
@@ -35,7 +39,7 @@ def ratio_failures(
                 failures.append(
                     f"{prefix}: {metric} measurement missing (base {base:.2f} s, head {head:.2f} s)"
                 )
-            elif ratio > max_ratio:
+            elif head > base * max_ratio + noise_floor_seconds:
                 failures.append(f"{prefix}: {metric} ratio {ratio:.3f} exceeds {max_ratio:.2f}")
     return tuple(failures)
 
