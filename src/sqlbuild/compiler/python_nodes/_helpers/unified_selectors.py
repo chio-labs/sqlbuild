@@ -22,6 +22,9 @@ from sqlbuild.compiler.planner.main.selection._build_resources import (
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.selection.unit_test_selector_error import (
+    unit_test_selector_error,
+)
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.compiler.python_nodes._helpers.selectors import resolve_python_node_selectors
@@ -368,6 +371,8 @@ def _resolve_single_side(
                 )
             )
         return atoms
+    if parsed.kind == SelectorKind.TEST:
+        raise unit_test_selector_error(selector=raw)
     if parsed.kind == SelectorKind.PATH:
         atoms = _resolve_path(raw=raw, project_graph=project_graph, python_graph=python_graph)
         if parsed.upstream:

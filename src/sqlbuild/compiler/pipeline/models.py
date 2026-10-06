@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanOutput,
     SeedPlanEntry,
+    SqlTestSelection,
 )
 from sqlbuild.compiler.python_nodes.types import (
     PythonIdentityStatus,
@@ -62,6 +63,8 @@ class CompilePipelineOptions:
     selection_diagnostics: bool = False
     plan_sql_tests: bool = True
     record_migration_fingerprints: bool = True
+    accepts_unit_test_selectors: bool = False
+    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
 
 
 @dataclass(frozen=True)

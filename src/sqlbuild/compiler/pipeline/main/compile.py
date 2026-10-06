@@ -23,6 +23,7 @@ from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
+    apply_unit_test_selectors,
     resolve_configured_rule_selection,
 )
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
@@ -83,8 +84,8 @@ def run_compile_pipeline(
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
-    resolved_options: CompilePipelineOptions = (
-        options if options is not None else CompilePipelineOptions()
+    resolved_options: CompilePipelineOptions = apply_unit_test_selectors(
+        options=options, discovered_inputs=discovered_inputs
     )
     resolved_hooks: ConnectionHooks = hooks if hooks is not None else ConnectionHooks()
     on_progress: Callable[[str], None] | None = resolved_hooks.on_progress
@@ -208,7 +209,9 @@ def _build_result(
     selected_python_node_names: frozenset[str] = frozenset()
     python_read_source_names: frozenset[str] = frozenset()
     run_selection: PythonSqlRunSelection | None = None
-    if options.resolve_python_run_selectors:
+    if not options.sql_test_selection.models_selected:
+        selected_sql_keys = frozenset()
+    elif options.resolve_python_run_selectors:
         run_selection = resolve_python_sql_run_selection_from_inputs(
             select=select,
             exclude=exclude,
@@ -230,6 +233,7 @@ def _build_result(
             exclude=exclude,
             selected_keys=selected_sql_keys,
             python_read_source_names=python_read_source_names,
+            sql_test_selection=options.sql_test_selection,
         ),
         overrides=PlannerOverrides(
             cursor_overrides=options.cursor_overrides,

@@ -777,6 +777,32 @@ class ChangeDetectionResult:
 
 
 @dataclass(frozen=True)
+class SqlTestSelection:
+    """Unit tests selected or excluded by name, beside the tests of the selected resources."""
+
+    names: frozenset[str] = frozenset()
+    excluded_names: frozenset[str] = frozenset()
+    models_selected: bool = True
+
+
+@dataclass(frozen=True)
+class UnitTestSelectorNames:
+    """Names selectors can match: unit tests, and every other selectable resource."""
+
+    tests: frozenset[str]
+    resources: frozenset[str]
+
+
+@dataclass(frozen=True)
+class UnitTestSelectorSplit:
+    """Resource selectors left after unit-test selectors moved into a test selection."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    sql_test_selection: SqlTestSelection
+
+
+@dataclass(frozen=True)
 class PlannerScope:
     """Resolved graph scope for one planner invocation."""
 
@@ -788,6 +814,7 @@ class PlannerScope:
     execution_order: tuple[CompiledObjectKey, ...]
     user_selected_keys: frozenset[CompiledObjectKey] = frozenset()
     python_read_source_names: frozenset[str] = frozenset()
+    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
 
 
 @dataclass(frozen=True)
@@ -1152,9 +1179,10 @@ class PlanOutputExtras:
 
 @dataclass(frozen=True)
 class PlannedSqlTests:
-    """SQL test entries planned for one selection; reusable only for the same selected keys."""
+    """SQL test entries planned for one selection; reusable only for the same selection."""
 
     selected_keys: frozenset[CompiledObjectKey]
+    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
     entries: tuple[SqlTestPlanEntry, ...] = ()
     warnings: tuple[PlanWarning, ...] = ()
 
@@ -1586,6 +1614,7 @@ class PlannerSelection:
     exclude: tuple[str, ...] = ()
     selected_keys: frozenset[CompiledObjectKey] | None = None
     python_read_source_names: frozenset[str] = frozenset()
+    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
 
 
 @dataclass(frozen=True)

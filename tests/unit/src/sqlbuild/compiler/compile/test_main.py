@@ -1409,7 +1409,7 @@ MODEL (description "Test model orders.",
 select @project_columns() from __source("raw_orders")
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -1526,7 +1526,7 @@ SELECT 1
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -1624,7 +1624,7 @@ FUNCTION (description "Test function is_large_order.",
 amount > @@min_amount AND '@@ENV:USER_NAME' = 'runner'
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -2218,7 +2218,7 @@ def project_columns() -> str:
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST (name "first");
 
 WITH
@@ -3646,7 +3646,7 @@ sources:
             description="raises when a compiled test body references an unknown macro",
             repo_files=base_repo_files()
             | {
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 SELECT @missing_macro()
@@ -3662,7 +3662,7 @@ SELECT @missing_macro()
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 SELECT 1
@@ -3684,7 +3684,7 @@ sources:
     description: Test source raw_orders.
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3707,7 +3707,7 @@ SELECT order_id FROM __expected__orders
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3730,7 +3730,7 @@ SELECT 1
             repo_files=base_repo_files()
             | {
                 "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect 1\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3776,7 +3776,7 @@ sources:
     description: Test source raw__orders.
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3827,7 +3827,7 @@ seeds:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3856,7 +3856,7 @@ sources:
     description: Test source raw_orders.
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3887,7 +3887,7 @@ sources:
     description: Test source raw_orders.
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH
@@ -3916,7 +3916,7 @@ sources:
     description: Test source raw_orders.
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": """
+                "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH

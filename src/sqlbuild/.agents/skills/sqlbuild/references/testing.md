@@ -23,6 +23,10 @@
 
 Files live under `tests/unit/` (any subfolder). Each file is a `TEST();` header, CTEs, and a
 required closing `SELECT 1`.
+A test's name is its `name` or the file stem. Test names are globally unique across tests,
+scenarios, models, sources, seeds, functions and Python nodes, so never name a test file after its
+model (`test_stg_orders.sql`, not `stg_orders.sql`). Run one test with `sqb test <test name>` or
+`sqb test test:<name>`; only `sqb test` and `sqb build` accept test selectors.
 
 ```sql
 -- tests/unit/test_stg_orders.sql

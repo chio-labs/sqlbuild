@@ -8,7 +8,7 @@ import pytest
 
 from sqlbuild.compiler.discovery.exceptions import ProjectPythonPathError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestBlock
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,
@@ -17,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
     DiscoverFactoryValidationTestCase,
     DiscoverProjectInputsErrorTestCase,
     DiscoverProjectInputsTestCase,
+    DiscoverUniqueTestNameTestCase,
     DiscoveryLifecycleTestCase,
     DiscoveryRelevantCountTestCase,
     ProjectPythonPathAcceptanceTestCase,
@@ -51,7 +52,7 @@ seeds:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "tests/unit/orders.sql": "TEST ();\nSELECT 1\n",
+                "tests/unit/orders_test.sql": "TEST ();\nSELECT 1\n",
                 "tests/legacy_orders.sql": "TEST ();\nSELECT 2\n",
                 "tests/scenarios/revenue/revenue__customer_refund.sql": """
 SCENARIO (description "Customer refund", tags ["revenue"]);
@@ -119,7 +120,7 @@ class SlackProvider(Provider):
             expected_source_paths=("sources/raw.yml",),
             expected_source_entry_names=(("raw_orders",),),
             expected_seed_paths=("seeds/country_codes.csv",),
-            expected_test_paths=("tests/unit/orders.sql",),
+            expected_test_paths=("tests/unit/orders_test.sql",),
             expected_test_block_indexes=(1,),
             expected_test_block_names=(None,),
             expected_test_block_sql_bodies=("SELECT 1",),
@@ -880,6 +881,39 @@ def test_given_invalid_generated_factory_nodes_when_discovering_inputs_then_rais
 @pytest.mark.parametrize(
     "test_case",
     [
+        DiscoverUniqueTestNameTestCase(
+            description="parameterized cases share their test's unique name",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/order_status.sql": (
+                    "TEST (parameters (status string), cases "
+                    '(open_case (status "open"), closed_case (status "closed")));\nSELECT 1\n'
+                ),
+            },
+            expected_test_block_names=(None,),
+            expected_case_names=("open_case", "closed_case"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_test_when_discovering_inputs_then_cases_are_not_duplicate_names(
+    test_case: DiscoverUniqueTestNameTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    blocks: tuple[DiscoveredSqlTestBlock, ...] = discovered.test_files[0].blocks
+    assert tuple(block.name for block in blocks) == test_case.expected_test_block_names
+    assert tuple(case.name for case in blocks[0].cases) == test_case.expected_case_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DiscoverProjectInputsErrorTestCase(
             description="raises when Python lives outside a supported project root",
             repo_files=base_repo_files()
@@ -961,6 +995,45 @@ seeds:
                 "tests/scenarios/support/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
             },
             expected_error_fragment="Duplicate scenario file name found for 'customer_refund'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a unit test and a model share a name",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/orders.sql": "TEST ();\nSELECT 1\n",
+            },
+            expected_error_fragment=(
+                "Project resource name 'orders' is declared as both model in "
+                "models/marts/orders.sql and unit test in tests/unit/orders.sql; .*unit test, "
+                "and scenario names must be globally unique"
+            ),
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a scenario and a source share a name",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_orders\n    schema: public\n    table: orders\n"
+                ),
+                "tests/scenarios/raw_orders.sql": "SCENARIO ();\nSELECT 1\n",
+            },
+            expected_error_fragment=(
+                "Project resource name 'raw_orders' is declared as both source in "
+                "sources/raw.yml and scenario in tests/scenarios/raw_orders.sql"
+            ),
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a named unit test and a scenario share a name",
+            repo_files=base_repo_files()
+            | {
+                "tests/scenarios/order_refunds.sql": "SCENARIO ();\nSELECT 1\n",
+                "tests/unit/refunds.sql": 'TEST (name "order_refunds");\nSELECT 1\n',
+            },
+            expected_error_fragment=(
+                "Project resource name 'order_refunds' is declared as both scenario in "
+                "tests/scenarios/order_refunds.sql and unit test in tests/unit/refunds.sql"
+            ),
         ),
         DiscoverProjectInputsErrorTestCase(
             description="raises when model and source names collide",

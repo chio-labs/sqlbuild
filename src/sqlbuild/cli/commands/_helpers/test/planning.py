@@ -31,6 +31,7 @@ def compile_test_plan(
         source_deferral_enabled=False,
         select=request.select,
         exclude=request.exclude,
+        accepts_unit_test_selectors=True,
         connection_config=invocation.connection_config,
         cli_vars=request.cli_vars,
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(

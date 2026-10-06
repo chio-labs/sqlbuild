@@ -32,7 +32,12 @@ from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
     build_model_tag_index_impl as build_model_tag_index,
 )
 from sqlbuild.compiler.planner._helpers.graph.selectors import parse_selector, resolve_selectors
-from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, PlannerScope
+from sqlbuild.compiler.planner.models import (
+    ParsedSelector,
+    PathSelector,
+    PlannerScope,
+    SqlTestSelection,
+)
 from sqlbuild.compiler.planner.types import SelectorKind
 
 
@@ -44,6 +49,7 @@ def build_planner_scope(
     auto_load_sources: bool,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     python_read_source_names: frozenset[str] = frozenset(),
+    sql_test_selection: SqlTestSelection | None = None,
 ) -> PlannerScope:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_execution_upstream_deps(project)
@@ -102,6 +108,7 @@ def build_planner_scope(
         ),
         user_selected_keys=resolved_selected_keys,
         python_read_source_names=python_read_source_names,
+        sql_test_selection=sql_test_selection or SqlTestSelection(),
     )
 
 

@@ -233,7 +233,7 @@ def test_given_sql_test_string_when_formatting_then_project_still_compiles(
         "SELECT 1 AS order_id, 'Customer''s order' AS order_label\n",
         encoding="utf-8",
     )
-    test: Path = tmp_path / "tests" / "unit" / "orders.sql"
+    test: Path = tmp_path / "tests" / "unit" / "orders_test.sql"
     test.parent.mkdir(parents=True)
     test.write_text(
         "TEST();\n\nWITH __ref__stg_orders AS ("

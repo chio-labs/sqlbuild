@@ -193,8 +193,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
         expected_count=1,
         additional_project_files=(
             (
-                "models/local_model_error.sql",
-                "MODEL (description 'Test model local_model_error.', materialized table);\n\n"
+                "models/local_model_error_rows.sql",
+                "MODEL (description 'Test model local_model_error_rows.', materialized table);\n\n"
                 "SELECT CAST('not_a_number_' || amount AS INTEGER) AS bad_value\n"
                 'FROM __source("raw_orders")\n',
             ),
@@ -205,7 +205,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
                 "),\n"
-                "__expected__local_model_error AS (\n"
+                "__expected__local_model_error_rows AS (\n"
                 "  SELECT 10 AS bad_value\n"
                 ")\n"
                 "SELECT 1\n",
@@ -233,8 +233,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "FUNCTION (description 'Test function is_large_order.', arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
             ),
             (
-                "models/local_sql_function_pass.sql",
-                "MODEL (description 'Test model local_sql_function_pass.', materialized table);\n\n"
+                "models/local_sql_function_pass_rows.sql",
+                "MODEL (description 'Test model local_sql_function_pass_rows.', materialized table);\n\n"
                 'SELECT id, __udf("is_large_order")(amount) AS is_large_order\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -247,7 +247,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "  UNION ALL\n"
                 "  SELECT 2 AS id, 5 AS amount\n"
                 "),\n"
-                "__expected__local_sql_function_pass AS (\n"
+                "__expected__local_sql_function_pass_rows AS (\n"
                 "  SELECT 1 AS id, TRUE AS is_large_order\n"
                 "  UNION ALL\n"
                 "  SELECT 2 AS id, FALSE AS is_large_order\n"
@@ -281,8 +281,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "FUNCTION (description 'Test function bad_sql_function.', arguments (amount INTEGER), returns BOOLEAN);\n\nmissing_col > 9\n",
             ),
             (
-                "models/local_sql_function_setup_error.sql",
-                "MODEL (description 'Test model local_sql_function_setup_error.', materialized table);\n\n"
+                "models/local_sql_function_setup_error_rows.sql",
+                "MODEL (description 'Test model local_sql_function_setup_error_rows.', materialized table);\n\n"
                 'SELECT id, __udf("bad_sql_function")(amount) AS is_large_order\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -293,7 +293,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
                 "),\n"
-                "__expected__local_sql_function_setup_error AS (\n"
+                "__expected__local_sql_function_setup_error_rows AS (\n"
                 "  SELECT 1 AS id, TRUE AS is_large_order\n"
                 ")\n"
                 "SELECT 1\n",
@@ -336,8 +336,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "FUNCTION (description 'Test function bad_transpile_function.', arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
             ),
             (
-                "models/local_sql_function_transpile_error.sql",
-                "MODEL (description 'Test model local_sql_function_transpile_error.', materialized table);\n\n"
+                "models/local_sql_function_transpile_error_rows.sql",
+                "MODEL (description 'Test model local_sql_function_transpile_error_rows.', materialized table);\n\n"
                 'SELECT id, __udf("bad_transpile_function")(amount) AS is_large_order\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -348,7 +348,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
                 "),\n"
-                "__expected__local_sql_function_transpile_error AS (\n"
+                "__expected__local_sql_function_transpile_error_rows AS (\n"
                 "  SELECT 1 AS id, TRUE AS is_large_order\n"
                 ")\n"
                 "SELECT 1\n",
@@ -380,8 +380,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "CAST('bad' AS INTEGER)\n",
             ),
             (
-                "models/local_sql_function_runtime_error.sql",
-                "MODEL (description 'Test model local_sql_function_runtime_error.', materialized table);\n\n"
+                "models/local_sql_function_runtime_error_rows.sql",
+                "MODEL (description 'Test model local_sql_function_runtime_error_rows.', materialized table);\n\n"
                 'SELECT id, __udf("sql_runtime_error")(amount) AS bad_value\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -392,7 +392,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
                 "),\n"
-                "__expected__local_sql_function_runtime_error AS (\n"
+                "__expected__local_sql_function_runtime_error_rows AS (\n"
                 "  SELECT 1 AS id, 10 AS bad_value\n"
                 ")\n"
                 "SELECT 1\n",
@@ -427,8 +427,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "    '''Test function main.'''\n    return amount is not None and amount > 9\n",
             ),
             (
-                "models/local_python_function_pass.sql",
-                "MODEL (description 'Test model local_python_function_pass.', materialized table);\n\n"
+                "models/local_python_function_pass_rows.sql",
+                "MODEL (description 'Test model local_python_function_pass_rows.', materialized table);\n\n"
                 'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -441,7 +441,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "  UNION ALL\n"
                 "  SELECT 2 AS id, 5 AS amount\n"
                 "),\n"
-                "__expected__local_python_function_pass AS (\n"
+                "__expected__local_python_function_pass_rows AS (\n"
                 "  SELECT 1 AS id, TRUE AS is_large_order\n"
                 "  UNION ALL\n"
                 "  SELECT 2 AS id, FALSE AS is_large_order\n"
@@ -482,8 +482,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "    '''Test function main.'''\n    return amount is not None and amount > 9\n",
             ),
             (
-                "models/local_python_function_error.sql",
-                "MODEL (description 'Test model local_python_function_error.', materialized table);\n\n"
+                "models/local_python_function_error_rows.sql",
+                "MODEL (description 'Test model local_python_function_error_rows.', materialized table);\n\n"
                 'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -494,7 +494,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
                 "),\n"
-                "__expected__local_python_function_error AS (\n"
+                "__expected__local_python_function_error_rows AS (\n"
                 "  SELECT 1 AS id, TRUE AS is_large_order\n"
                 ")\n"
                 "SELECT 1\n",
@@ -543,8 +543,8 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 '    """Test function main."""\n    raise ValueError("python udf exploded")\n',
             ),
             (
-                "models/local_python_function_runtime_error.sql",
-                "MODEL (description 'Test model local_python_function_runtime_error.', materialized table);\n\n"
+                "models/local_python_function_runtime_error_rows.sql",
+                "MODEL (description 'Test model local_python_function_runtime_error_rows.', materialized table);\n\n"
                 'SELECT id, __udf("python_runtime_error")(amount) AS bad_value\n'
                 'FROM __source("raw_orders")\n',
             ),
@@ -555,7 +555,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
                 "__source__raw_orders AS (\n"
                 "  SELECT 1 AS id, 10 AS amount\n"
                 "),\n"
-                "__expected__local_python_function_runtime_error AS (\n"
+                "__expected__local_python_function_runtime_error_rows AS (\n"
                 "  SELECT 1 AS id, 10 AS bad_value\n"
                 ")\n"
                 "SELECT 1\n",
@@ -901,8 +901,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
             expected_count=1,
             additional_project_files=(
                 (
-                    "models/local_model_error.sql",
-                    "MODEL (description 'Test model local_model_error.', materialized table);\n\n"
+                    "models/local_model_error_rows.sql",
+                    "MODEL (description 'Test model local_model_error_rows.', materialized table);\n\n"
                     "SELECT CAST('not_a_number_' || amount AS INTEGER) AS bad_value\n"
                     'FROM __source("raw_orders")\n',
                 ),
@@ -913,7 +913,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "__source__raw_orders AS (\n"
                     "  SELECT 1 AS id, 10 AS amount\n"
                     "),\n"
-                    "__expected__local_model_error AS (\n"
+                    "__expected__local_model_error_rows AS (\n"
                     "  SELECT 10 AS bad_value\n"
                     ")\n"
                     "SELECT 1\n",
@@ -941,8 +941,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "FUNCTION (description 'Test function is_large_order.', arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
                 ),
                 (
-                    "models/local_sql_function_pass.sql",
-                    "MODEL (description 'Test model local_sql_function_pass.', materialized table);\n\n"
+                    "models/local_sql_function_pass_rows.sql",
+                    "MODEL (description 'Test model local_sql_function_pass_rows.', materialized table);\n\n"
                     'SELECT id, __udf("is_large_order")(amount) AS is_large_order\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -955,7 +955,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "  UNION ALL\n"
                     "  SELECT 2 AS id, 5 AS amount\n"
                     "),\n"
-                    "__expected__local_sql_function_pass AS (\n"
+                    "__expected__local_sql_function_pass_rows AS (\n"
                     "  SELECT 1 AS id, TRUE AS is_large_order\n"
                     "  UNION ALL\n"
                     "  SELECT 2 AS id, FALSE AS is_large_order\n"
@@ -989,8 +989,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "FUNCTION (description 'Test function bad_sql_function.', arguments (amount INTEGER), returns BOOLEAN);\n\nmissing_col > 9\n",
                 ),
                 (
-                    "models/local_sql_function_setup_error.sql",
-                    "MODEL (description 'Test model local_sql_function_setup_error.', materialized table);\n\n"
+                    "models/local_sql_function_setup_error_rows.sql",
+                    "MODEL (description 'Test model local_sql_function_setup_error_rows.', materialized table);\n\n"
                     'SELECT id, __udf("bad_sql_function")(amount) AS is_large_order\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -1001,7 +1001,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "__source__raw_orders AS (\n"
                     "  SELECT 1 AS id, 10 AS amount\n"
                     "),\n"
-                    "__expected__local_sql_function_setup_error AS (\n"
+                    "__expected__local_sql_function_setup_error_rows AS (\n"
                     "  SELECT 1 AS id, TRUE AS is_large_order\n"
                     ")\n"
                     "SELECT 1\n",
@@ -1044,8 +1044,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "FUNCTION (description 'Test function bad_transpile_function.', arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
                 ),
                 (
-                    "models/local_sql_function_transpile_error.sql",
-                    "MODEL (description 'Test model local_sql_function_transpile_error.', materialized table);\n\n"
+                    "models/local_sql_function_transpile_error_rows.sql",
+                    "MODEL (description 'Test model local_sql_function_transpile_error_rows.', materialized table);\n\n"
                     'SELECT id, __udf("bad_transpile_function")(amount) AS is_large_order\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -1056,7 +1056,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "__source__raw_orders AS (\n"
                     "  SELECT 1 AS id, 10 AS amount\n"
                     "),\n"
-                    "__expected__local_sql_function_transpile_error AS (\n"
+                    "__expected__local_sql_function_transpile_error_rows AS (\n"
                     "  SELECT 1 AS id, TRUE AS is_large_order\n"
                     ")\n"
                     "SELECT 1\n",
@@ -1099,8 +1099,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "CAST('bad' AS INTEGER)\n",
                 ),
                 (
-                    "models/local_sql_function_runtime_error.sql",
-                    "MODEL (description 'Test model local_sql_function_runtime_error.', materialized table);\n\n"
+                    "models/local_sql_function_runtime_error_rows.sql",
+                    "MODEL (description 'Test model local_sql_function_runtime_error_rows.', materialized table);\n\n"
                     'SELECT id, __udf("sql_runtime_error")(amount) AS bad_value\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -1111,7 +1111,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "__source__raw_orders AS (\n"
                     "  SELECT 1 AS id, 10 AS amount\n"
                     "),\n"
-                    "__expected__local_sql_function_runtime_error AS (\n"
+                    "__expected__local_sql_function_runtime_error_rows AS (\n"
                     "  SELECT 1 AS id, 10 AS bad_value\n"
                     ")\n"
                     "SELECT 1\n",
@@ -1146,8 +1146,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "    '''Test function main.'''\n    return amount is not None and amount > 9\n",
                 ),
                 (
-                    "models/local_python_function_pass.sql",
-                    "MODEL (description 'Test model local_python_function_pass.', materialized table);\n\n"
+                    "models/local_python_function_pass_rows.sql",
+                    "MODEL (description 'Test model local_python_function_pass_rows.', materialized table);\n\n"
                     'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -1160,7 +1160,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "  UNION ALL\n"
                     "  SELECT 2 AS id, 5 AS amount\n"
                     "),\n"
-                    "__expected__local_python_function_pass AS (\n"
+                    "__expected__local_python_function_pass_rows AS (\n"
                     "  SELECT 1 AS id, TRUE AS is_large_order\n"
                     "  UNION ALL\n"
                     "  SELECT 2 AS id, FALSE AS is_large_order\n"
@@ -1201,8 +1201,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "    '''Test function main.'''\n    return amount is not None and amount > 9\n",
                 ),
                 (
-                    "models/local_python_function_error.sql",
-                    "MODEL (description 'Test model local_python_function_error.', materialized table);\n\n"
+                    "models/local_python_function_error_rows.sql",
+                    "MODEL (description 'Test model local_python_function_error_rows.', materialized table);\n\n"
                     'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -1213,7 +1213,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "__source__raw_orders AS (\n"
                     "  SELECT 1 AS id, 10 AS amount\n"
                     "),\n"
-                    "__expected__local_python_function_error AS (\n"
+                    "__expected__local_python_function_error_rows AS (\n"
                     "  SELECT 1 AS id, TRUE AS is_large_order\n"
                     ")\n"
                     "SELECT 1\n",
@@ -1262,8 +1262,8 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     '    """Test function main."""\n    raise ValueError("python udf exploded")\n',
                 ),
                 (
-                    "models/local_python_function_runtime_error.sql",
-                    "MODEL (description 'Test model local_python_function_runtime_error.', materialized table);\n\n"
+                    "models/local_python_function_runtime_error_rows.sql",
+                    "MODEL (description 'Test model local_python_function_runtime_error_rows.', materialized table);\n\n"
                     'SELECT id, __udf("python_runtime_error")(amount) AS bad_value\n'
                     'FROM __source("raw_orders")\n',
                 ),
@@ -1274,7 +1274,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                     "__source__raw_orders AS (\n"
                     "  SELECT 1 AS id, 10 AS amount\n"
                     "),\n"
-                    "__expected__local_python_function_runtime_error AS (\n"
+                    "__expected__local_python_function_runtime_error_rows AS (\n"
                     "  SELECT 1 AS id, 10 AS bad_value\n"
                     ")\n"
                     "SELECT 1\n",

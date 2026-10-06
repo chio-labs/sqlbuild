@@ -331,7 +331,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 "MODEL (description 'Test model summary.', materialized view, audits [minimum_quantity]);\n\n"
                 "SELECT @minimum_quantity() AS minimum_quantity"
             ),
-            "tests/unit/summary.sql": (
+            "tests/unit/summary_test.sql": (
                 "TEST (mode macro);\n\nWITH\n__macro_actual__ AS (\n"
                 "  SELECT @minimum_quantity() AS minimum_quantity\n),\n"
                 "__macro_expected__ AS (\n  SELECT 2 AS minimum_quantity\n)\nSELECT 1"

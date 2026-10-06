@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline._helpers.analysis_selection import apply_unit_test_selectors
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     resolve_deferred_target_config,
@@ -39,6 +40,9 @@ def compile_static_command_context(
 ) -> StaticCommandContext:
     """Run canonical compile, selector, and relation phases without build planning."""
 
+    options = apply_unit_test_selectors(options=options, discovered_inputs=discovered_inputs)
+    if selected_keys is None and not options.sql_test_selection.models_selected:
+        selected_keys = frozenset()
     compiled: CompiledProjectPhaseResult = compile_project_phase(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -66,6 +70,7 @@ def compile_static_command_context(
             select=options.select,
             exclude=options.exclude,
             selected_keys=selected_keys,
+            sql_test_selection=options.sql_test_selection,
         ),
         auto_load_sources=options.auto_load_sources,
     )

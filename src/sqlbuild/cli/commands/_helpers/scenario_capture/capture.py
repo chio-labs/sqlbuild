@@ -41,6 +41,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.main.sql_analysis_off_guidance import sql_analysis_off_guidance
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile_only import run_compile_only_pipeline
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
@@ -77,6 +78,9 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    reject_unit_test_selectors(
+        select=selectors, exclude=exclude, discovered_inputs=discovered_inputs
     )
     discovered_inputs, namespace = resolve_scenario_namespace(
         inputs=discovered_inputs, cli_value=request.scenario_namespace

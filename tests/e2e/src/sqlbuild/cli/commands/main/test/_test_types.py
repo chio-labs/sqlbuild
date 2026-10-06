@@ -300,3 +300,14 @@ class FixtureProjectIsolationE2ETestCase:
     description: str
     project_dir: Path
     expected_minimum_tests: int
+
+
+@dataclass(frozen=True)
+class SelectTestByNameE2ETestCase:
+    """One command selecting SQL unit tests by name through the real CLI."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...] = ()

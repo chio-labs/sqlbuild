@@ -80,6 +80,19 @@ sqb build --select seed:waffle_types
 sqb build --select source:raw__orders
 ```
 
+### Unit test
+
+`sqb test` and `sqb build` select SQL unit tests by name. Test names are globally unique, so a bare
+name works; `test:` is the explicit form and accepts glob patterns:
+
+```bash
+sqb test order_status_rules
+sqb test "test:orders_*" stg_customers
+```
+
+Test selectors are unioned with other selectors and cannot use `+` or `,`. Other commands reject
+them with `S013`.
+
 ## Graph expansion
 
 ### Upstream
@@ -163,6 +176,14 @@ error[S007]: unknown selector name 'missing_*'
 error[S009]: no models found under path 'models/nonexistent'.
 error[S000]: no SQL resources or Python nodes found with tag 'nonexistent_tag'
 error[S003]: path selector 'fact_orders~' requires names on both sides of '~'
+error[S013]: selector 'order_status_rules' selects a unit test; only `sqb test` and `sqb build` accept unit-test selectors
+```
+
+Unknown names suggest the closest selectable names, including unit tests:
+
+```
+error[S007]: unknown selector name 'order_status_rule'
+  = help: did you mean 'order_status_rules'?
 ```
 
 If a path selector omits the root directory, SQLBuild asks for the explicit form:

@@ -11,7 +11,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
-from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry, SqlTestSelection
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     FixturePlanningIntegrationTestCase,
 )
@@ -71,6 +71,7 @@ def test_given_partial_fixture_when_compiling_and_planning_then_completes_requir
         adapter=adapter,
     )
     entries, warnings = build_selected_test_entries(
+        sql_test_selection=SqlTestSelection(),
         project=project,
         adapter=adapter,
         selected_keys=frozenset((project.models[0].key,)),
@@ -139,6 +140,7 @@ def test_given_untyped_null_fixture_when_planning_then_applies_authoritative_typ
         adapter=adapter,
     )
     entries, warnings = build_selected_test_entries(
+        sql_test_selection=SqlTestSelection(),
         project=project,
         adapter=adapter,
         selected_keys=frozenset((project.models[0].key,)),

@@ -8,6 +8,9 @@ from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_clos
 from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.selection.unit_test_selector_error import (
+    unit_test_selector_error,
+)
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.compiler.python_nodes.constants import (
@@ -74,6 +77,8 @@ def _resolve_single(*, raw: str, graph: PythonNodeGraph) -> frozenset[str]:
             code="S011",
         )
 
+    if parsed.kind == SelectorKind.TEST:
+        raise unit_test_selector_error(selector=raw)
     if parsed.kind == SelectorKind.TAG:
         return _resolve_tag(parsed=parsed, graph=graph)
 

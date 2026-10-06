@@ -29,6 +29,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import (
     resolve_project_selectors,
@@ -43,6 +44,9 @@ def run_contract(request: ContractCommandRequest) -> int:
         raise CliUserError("contract --overwrite requires generate --write", code="C471")
     project_dir: Path = request.project_dir or Path.cwd()
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    _ = reject_unit_test_selectors(
+        select=request.select, exclude=request.exclude, discovered_inputs=discovered
+    )
     if request.from_target not in discovered.project_config.targets:
         raise CliUserError(
             f"unknown contract source target '{request.from_target}'",

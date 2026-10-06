@@ -32,6 +32,7 @@ from sqlbuild.cli.output.main._write_execution_json_output import write_executio
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 from sqlbuild.presentation.main.supports_color import supports_color
@@ -55,6 +56,9 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    _ = reject_unit_test_selectors(
+        select=select, exclude=request.exclude, discovered_inputs=discovered_inputs
     )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

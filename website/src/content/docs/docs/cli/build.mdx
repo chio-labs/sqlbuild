@@ -58,7 +58,7 @@ own option. `--version` works only directly after `sqb`, as in `sqb --version`:
 | `--selection-diagnostics` | Warn when a selected model will build on changed upstream models that are not selected; see [Selection and staleness](/docs/concepts/planning/selection-and-staleness) |
 | `--manifest` | Generate `target/manifest.json` with plan-aware project metadata |
 | `SELECTOR ...` | Positional selectors, the same as `--select` |
-| `--select`, `-s` | Select specific models |
+| `--select`, `-s` | Select specific models, or unit tests by name (`test:<name>`); selecting only unit tests runs them without building models |
 | `--exclude` | Exclude specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
 

@@ -223,19 +223,19 @@ def test_given_scoped_declaration_when_compiling_model_then_only_lexically_visib
             "model private does not export to test",
             {
                 "models/orders.sql": "MODEL (description 'Test model orders.', constants (_value 1));\nSELECT 1 AS value",
-                "tests/unit/orders.sql": (
+                "tests/unit/orders_test.sql": (
                     'TEST ();\nWITH __expected__orders AS (SELECT @const("_value") AS value) '
                     "SELECT 1"
                 ),
             },
-            ("known but inaccessible", "models/orders.sql", "tests/unit/orders.sql"),
+            ("known but inaccessible", "models/orders.sql", "tests/unit/orders_test.sql"),
         ),
         ScopedDeclarationErrorTestCase(
             "filename resemblance without expected relationship",
             {
                 "models/domain/_constants/value.sql": "CONSTANT (name model_value, value 9);",
                 "models/domain/orders.sql": "MODEL (description 'Test model orders.');\nSELECT 1 AS value",
-                "tests/unit/orders.sql": (
+                "tests/unit/orders_test.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
                     "__assert__valid AS (SELECT @const('model_value') WHERE FALSE) SELECT 1"
                 ),
@@ -350,7 +350,7 @@ def test_given_inaccessible_or_unknown_declaration_when_compiling_then_diagnosti
             "unit test authored path",
             {
                 "tests/unit/domain/_constants/value.sql": "CONSTANT (name value, value 16);",
-                "tests/unit/domain/orders.sql": (
+                "tests/unit/domain/orders_test.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
                     '__expected__orders AS (SELECT @const("value") AS value) SELECT 1'
                 ),
@@ -364,7 +364,7 @@ def test_given_inaccessible_or_unknown_declaration_when_compiling_then_diagnosti
             "scenario authored path",
             {
                 "tests/scenarios/domain/_constants/value.sql": ("CONSTANT (name value, value 17);"),
-                "tests/scenarios/domain/orders.sql": (
+                "tests/scenarios/domain/orders_scenario.sql": (
                     "SCENARIO (description 'Test scenario orders.');\nWITH __ref__orders AS (SELECT 1 AS value), "
                     '__expected__orders AS (SELECT @const("value") AS value) SELECT 1'
                 ),
@@ -510,7 +510,7 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
             description="filename resemblance and no expected model grant nothing",
             files={
                 "models/domain/orders.sql": "MODEL (description 'Test model orders.');\nSELECT 1 AS value",
-                "tests/unit/orders.sql": (
+                "tests/unit/orders_test.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
                     "__assert__valid AS (SELECT 1 WHERE FALSE) SELECT 1"
                 ),

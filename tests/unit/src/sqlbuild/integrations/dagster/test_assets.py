@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.integrations.dagster import (
     SqlBuildDagsterTranslator,
     build_sqlbuild_asset_selection,
@@ -31,6 +32,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterPythonArtifactCompatibilityTestCase,
     DagsterScenarioCheckDecoratorTestCase,
     DagsterSourceAssetKeyTestCase,
+    DagsterUnitTestSelectorTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     build_dagster_selection_graph_dag,
@@ -652,3 +654,38 @@ def test_given_unreachable_path_selector_when_building_asset_selection_then_rais
             dag=dag,
             sqlbuild_select=test_case.select,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterUnitTestSelectorTestCase(
+            description="rejects a unit-test selector like other non-test commands",
+            select="test:orders_status_rules",
+            expected_code="S013",
+            expected_message=(
+                "selector 'test:orders_status_rules' selects a unit test; only `sqb test` and "
+                "`sqb build` accept unit-test selectors"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unit_test_selector_when_building_asset_selection_then_raises_s013(
+    test_case: DagsterUnitTestSelectorTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_dagster_selection_graph_dag()
+
+    @sqlbuild_assets(dag=dag)
+    def assets_def() -> dg.MaterializeResult:
+        return dg.MaterializeResult()
+
+    with pytest.raises(PlannerInputError) as raised:
+        build_sqlbuild_asset_selection(
+            sqlbuild_assets=[assets_def],
+            dag=dag,
+            sqlbuild_select=test_case.select,
+        )
+
+    assert raised.value.code == test_case.expected_code
+    assert raised.value.message == test_case.expected_message

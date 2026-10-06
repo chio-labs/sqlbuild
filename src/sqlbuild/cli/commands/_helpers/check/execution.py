@@ -24,6 +24,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.pipeline.main.project_relation_targets import build_project_relation_targets
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
@@ -56,6 +57,11 @@ def prepare_check_execution(
 
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=invocation.discovered_inputs
+    )
+    reject_unit_test_selectors(
+        select=request.select,
+        exclude=request.exclude,
+        discovered_inputs=invocation.discovered_inputs,
     )
     check_names: frozenset[str] = resolve_selected_check_names(
         graph=python_graph,

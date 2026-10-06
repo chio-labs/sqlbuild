@@ -134,7 +134,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
                 "models/orders.sql": (
                     'MODEL (description "Test model orders.", materialized table);\n\nSELECT * FROM __ref("raw_orders")\n'
                 ),
-                "tests/unit/orders.sql": dedent(
+                "tests/unit/orders_test.sql": dedent(
                     """
                     TEST ();
 

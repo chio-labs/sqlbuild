@@ -44,7 +44,7 @@ tests/
       fulfillment__late_shipment.sql
 ```
 
-Folders are organizational only. The scenario name is the filename stem and must be globally unique across all discovered scenario files.
+Folders are organizational only. The scenario name is the filename stem. Like model, source, seed, and unit-test names, it must be globally unique across the project.
 
 ### Scenario format
 

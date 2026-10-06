@@ -22,12 +22,19 @@ Positional `SELECTOR` arguments work like `--select`, and both forms can be comb
 |------|-------------|
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `SELECTOR ...` | Positional selectors, the same as `--select` |
-| `--select`, `-s` | Select tests targeting specific models |
-| `--exclude` | Exclude tests targeting specific models |
+| `--select`, `-s` | Select tests by name (`order_status_rules` or `test:order_status_rules`), or the tests targeting specific models |
+| `--exclude` | Exclude tests by name, or the tests targeting specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
 
-Parameterized cases use parent-level selection. Selecting a target model includes every case in
-each matching `TEST` template; case names are not model selectors.
+Test names are globally unique, so a bare test name selects exactly that test. `test:<name>` is the
+explicit form and accepts the same glob patterns as names, such as `test:orders_*`. A bare pattern
+selects tests only when it matches no other resource. Test selectors are unioned with model
+selectors, so `sqb test test:order_status_rules stg_orders` runs that test and every test targeting
+`stg_orders`. Test selectors cannot use `+` graph expansion or `,` intersection. Only `sqb test` and
+`sqb build` accept test selectors; other commands reject them with `S013`.
+
+Parameterized cases use parent-level selection. Selecting a test or a target model includes every
+case of each matching `TEST` template, and `--case` narrows the run to one case name.
 
 Text output identifies each case as `<parent> [<case>]` and includes its source path and safe typed
 parameters. Structured JSON emits one check per case with stable source/block/case identity,
@@ -43,4 +50,10 @@ sqb test
 
 # Run tests for a specific model
 sqb test stg_orders
+
+# Run one test by name
+sqb test order_status_rules
+
+# Run one case of a parameterized test
+sqb test test:order_status_rules --case open_case
 ```

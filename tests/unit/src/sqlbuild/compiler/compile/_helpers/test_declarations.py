@@ -121,7 +121,7 @@ sources:
     expression: |
       SELECT @const("min_items") AS value
 """,
-            "tests/unit/orders.sql": """
+            "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH __ref__orders AS (
@@ -132,7 +132,7 @@ __expected__orders AS (
 )
 SELECT 1
 """,
-            "tests/scenarios/orders.sql": """
+            "tests/scenarios/orders_scenario.sql": """
 SCENARIO (description "Test scenario orders.");
 
 WITH __ref__orders AS (
@@ -353,13 +353,13 @@ sources:
     expression: |
       SELECT * FROM entries WHERE country IN @const("countries")
 """,
-            "tests/unit/orders.sql": """
+            "tests/unit/orders_test.sql": """
 TEST ();
 WITH __ref__orders AS (SELECT 'GB' IN @const("countries") AS supported),
 __expected__orders AS (SELECT true AS supported)
 SELECT 1
 """,
-            "tests/scenarios/orders.sql": """
+            "tests/scenarios/orders_scenario.sql": """
 SCENARIO (description "Test scenario orders.");
 WITH __ref__orders AS (SELECT @const("country_array") AS countries),
 __expected__orders AS (SELECT @const("country_array") AS countries)

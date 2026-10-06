@@ -2043,7 +2043,7 @@ def test_given_ceremonial_test_select_when_running_alias_rule_then_control_proje
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
-    test: Path = tmp_path / "tests" / "unit" / "orders.sql"
+    test: Path = tmp_path / "tests" / "unit" / "orders_test.sql"
     test.parent.mkdir(parents=True)
     test.write_text(
         "TEST();\n\nWITH __ref__orders AS (SELECT 1 AS order_id), "
@@ -2088,7 +2088,7 @@ def test_given_direct_ceremonial_select_when_running_terminal_rule_then_test_is_
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
-    test: Path = tmp_path / "tests" / "unit" / "orders.sql"
+    test: Path = tmp_path / "tests" / "unit" / "orders_test.sql"
     test.parent.mkdir(parents=True)
     test.write_text(
         "TEST();\n\nWITH __ref__orders AS (SELECT 1 AS order_id), "

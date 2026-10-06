@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from difflib import get_close_matches
 from fnmatch import fnmatchcase
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -20,7 +22,11 @@ from sqlbuild.compiler.planner.constants import (
     SELECTOR_KIND_SEPARATOR,
     SELECTOR_MISSING_NAME_ERROR_FRAGMENT,
     SELECTOR_PATH_SEPARATOR,
+    SELECTOR_SUGGESTION_CUTOFF,
+    SELECTOR_SUGGESTION_LIMIT,
     SQL_FILE_SELECTOR_SUFFIX,
+    UNIT_TEST_SELECTOR_ERROR_CODE,
+    UNIT_TEST_SELECTOR_ONLY_TEST_AND_BUILD,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
@@ -37,6 +43,7 @@ _SELECTOR_KIND_BY_PREFIX: dict[str, SelectorKind] = {
     SelectorKind.CHECK: SelectorKind.CHECK,
     SelectorKind.TAG: SelectorKind.TAG,
     SelectorKind.PATH: SelectorKind.PATH,
+    SelectorKind.TEST: SelectorKind.TEST,
 }
 
 _RESOURCE_TYPE_BY_SELECTOR_KIND: dict[SelectorKind, CompiledResourceType] = {
@@ -199,10 +206,19 @@ def match_selector_keys(
     if parsed.kind == SelectorKind.PATH:
         return _match_path(value=parsed.value, path_index=path_index)
 
+    if parsed.kind == SelectorKind.TEST:
+        raise unit_test_selector_rejection(
+            selector=f"{SelectorKind.TEST}{SELECTOR_KIND_SEPARATOR}{parsed.value}"
+        )
+
     keys: frozenset[CompiledObjectKey] = _lookup_keys(parsed=parsed, all_keys=all_keys)
     if not keys:
         label: str = "pattern" if _is_name_pattern(parsed.value) else "name"
-        raise PlannerInputError(f"unknown selector {label} '{parsed.value}'", code="S007")
+        raise PlannerInputError(
+            f"unknown selector {label} '{parsed.value}'",
+            code="S007",
+            help=selector_name_help(value=parsed.value, candidates=all_keys),
+        )
     return keys
 
 
@@ -415,3 +431,25 @@ def _lookup_keys(
 
 def _is_name_pattern(value: str) -> bool:
     return any(character in value for character in "*?[")
+
+
+def selector_name_help(*, value: str, candidates: Iterable[str]) -> str | None:
+    """Suggest the nearest selectable names for an unknown selector name."""
+
+    if _is_name_pattern(value):
+        return None
+    matches: list[str] = get_close_matches(
+        value, sorted(candidates), n=SELECTOR_SUGGESTION_LIMIT, cutoff=SELECTOR_SUGGESTION_CUTOFF
+    )
+    if not matches:
+        return None
+    return f"did you mean {', '.join(f"'{match}'" for match in matches)}?"
+
+
+def unit_test_selector_rejection(*, selector: str) -> PlannerInputError:
+    """The error for a unit-test selector given to a command that does not run unit tests."""
+
+    return PlannerInputError(
+        f"selector '{selector}' selects a unit test; {UNIT_TEST_SELECTOR_ONLY_TEST_AND_BUILD}",
+        code=UNIT_TEST_SELECTOR_ERROR_CODE,
+    )
