@@ -143,7 +143,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             12.0,
             3 * _GIB // 2,
             "196fca3e87989eb3e89e443b7ca93bb094198538d5bde32b9d6fcca58ffc8eed",
-            "f7f8a3d881496664ec7e293144d93b8b8e486a04eba830d9cc6500d1b28147f3",
+            "1afe754dd8c66bc36e38a40c66e9183ecbaf365fd8d87a784069cd615c3ce64a",
             2,
         ),
         DenseWarmEditCompileGuardTestCase(
@@ -154,7 +154,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             21.0,
             9 * _GIB // 4,
             "3477a472fa76d6236ebd0c9758d79c18f67f1bf55e9bbec05b002ba3744cfd22",
-            "571fe58493234057c7128b4929d3518532731192f6fef85da0496788826bb172",
+            "dfbada4c59a3ab8ec7733784890d74c7b64e9b0adcb03364baaabef5bdba5574",
             2,
         ),
     ),

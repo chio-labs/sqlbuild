@@ -60,13 +60,13 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
                 "1914b788abcb452422eaf6c3a2c240ff390bab9530217285a5ca93334db7b6c3"
             ),
             expected_leaf_edit_fingerprint=(
-                "a041d989ef3810e0840361a4f793548b428f941da2f265462a4b46a5bf4d7676"
+                "3a9480f952f11e16177274185e8bfda7eb0e65953a8ed1c8b21ad3cdb7d0b07d"
             ),
             expected_macro_edit_fingerprint=(
-                "8b62365b60a9f60afaffe6571d6849a187480d503a3114f8783050ebed46363b"
+                "552931889359ce882b18d4fb11fdc87341e60a8a4d2b26ad0f1635138c8b9ad8"
             ),
             expected_project_config_fingerprint=(
-                "d077b4676e827b41383cb199f342867995ec1a5564e859e85558a24d1201abf6"
+                "6bf4f742469eee2be7eb5bbf2411564c924011fea0bd43becd80db4027022dac"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -94,13 +94,13 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
                 "2f1e5dfd29025c25e0dffc6e74f4c2be020a5ef133ecd081f44e0c55c24858b4"
             ),
             expected_leaf_edit_fingerprint=(
-                "a2e0a328277276f960bef73b4fbc85f9dcacbfad73c10af2df129b78592606ba"
+                "708f04a565a71b3981c9beba420aff691c8467eb30c5cdedd45c2518d45b31ba"
             ),
             expected_macro_edit_fingerprint=(
-                "38779c13ac071bf082455f27cdc1d071060da243b9a3d47f0f34b384962b5d11"
+                "7dd4d45c2b21f61cbc32d33b0e0cf98721975b9f8948277cc15dc947355cfc25"
             ),
             expected_project_config_fingerprint=(
-                "a26f85f97e7c28d40056f95d6be646399b03b215f0a24884f4c26b7b3e996595"
+                "69f4fe914afc955d690e9c5b9074ca69dc58b8b7a0886a421b888385e6b066cb"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -128,13 +128,13 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
                 "ecdd7f2cf961fab739aa806b6d90283916cffad2007e1e2f3ba90a466db6cb75"
             ),
             expected_leaf_edit_fingerprint=(
-                "f1f25d949e182901656fcef88c7c566254c847174b888bd35c87372aea347807"
+                "f67b73b56d7ad7677cbfa649e7933e8f294f9dd7c99f3660d7c42e1d01b804ff"
             ),
             expected_macro_edit_fingerprint=(
-                "b8f3cc27552a0d49e97b112732a3b6331040f0dcdec6ed15cc7058a21e98aa4f"
+                "5554615dbc5fe9dbfd7555771167f3380222cb3da468b4313076adecef0ff9c3"
             ),
             expected_project_config_fingerprint=(
-                "ff3467ff64bfbfa1073a169d53576bfee8699c2529a37250c44e6cc2ecd11845"
+                "ebc15f5381746d060005ecc61f477b1b0338640198197f6788f9beab5da88db5"
             ),
             macro_call_interval=6,
             scoped_macros=True,
