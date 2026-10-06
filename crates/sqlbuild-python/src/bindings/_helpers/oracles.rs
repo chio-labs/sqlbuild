@@ -3,13 +3,19 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
-use serde_json::Value;
+use serde_json::{Value, json};
+use sqlbuild_config::errors::ConfigError;
+use sqlbuild_config::models::{ConfigDate, ConfigTime, ConfigValue};
+use sqlbuild_config::project::main::read_local_config::read_local_config;
+use sqlbuild_config::project::main::read_project_config::read_project_config;
+use sqlbuild_config::toml::main::load_toml::load_toml;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{
     JsonDialect, JsonInteger, JsonValue, OrjsonOptions, StdlibJsonOptions,
 };
 use sqlbuild_core::text::main::decode_python_text::decode_python_text;
 use sqlbuild_core::text::models::LineIndex;
+use std::path::Path;
 
 fn oracle_error(message: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(message.to_string())
@@ -130,8 +136,93 @@ fn _oracle_text_positions(
     Ok((text, positions))
 }
 
+fn date_parts(date: ConfigDate) -> Value {
+    json!([date.year, date.month, date.day])
+}
+
+fn time_parts(time: ConfigTime) -> Value {
+    json!([time.hour, time.minute, time.second, time.microsecond])
+}
+
+fn float_canonical(value: f64) -> Value {
+    if value.is_nan() {
+        return json!(["float", "nan"]);
+    }
+    json!(["float", value.to_bits().to_string()])
+}
+
+/// The tagged canonical form the Python oracle tests build from `tomllib` and PyYAML values.
+fn canonical(value: &ConfigValue) -> Value {
+    match value {
+        ConfigValue::Null => json!(["null"]),
+        ConfigValue::Bool(flag) => json!(["bool", flag]),
+        ConfigValue::Integer(number) => json!(["int", number.to_string()]),
+        ConfigValue::BigInteger(text) => json!(["int", text]),
+        ConfigValue::Float(number) => float_canonical(*number),
+        ConfigValue::String(text) => json!(["str", text]),
+        ConfigValue::Date(date) => json!(["date", date_parts(*date)]),
+        ConfigValue::DateTime(moment) => json!([
+            "datetime",
+            date_parts(moment.date),
+            time_parts(moment.time),
+            moment.utc_offset_seconds
+        ]),
+        ConfigValue::Time(time) => json!(["time", time_parts(*time)]),
+        ConfigValue::List(items) => {
+            json!(["list", items.iter().map(canonical).collect::<Vec<_>>()])
+        }
+        ConfigValue::Map(entries) => json!([
+            "map",
+            entries
+                .iter()
+                .map(|(key, item)| json!([canonical(key), canonical(item)]))
+                .collect::<Vec<_>>()
+        ]),
+    }
+}
+
+fn outcome(result: Result<Value, ConfigError>) -> String {
+    result
+        .unwrap_or_else(|error| json!({"error": format!("{:?}", error.kind)}))
+        .to_string()
+}
+
+/// Load TOML natively and return its canonical form, or `{"error": kind}`.
+#[pyfunction]
+fn _oracle_toml_load(text: &str) -> String {
+    outcome(load_toml(text).map(|value| canonical(&value)))
+}
+
+/// Read a project's discovery configuration natively, or return `{"error": kind}`.
+#[pyfunction]
+fn _oracle_project_config(project_dir: &str) -> String {
+    let directory = Path::new(project_dir);
+    outcome(read_project_config(directory).and_then(|project| {
+        let local = read_local_config(directory)?;
+        Ok(json!({
+            "name": project.name,
+            "adapter": project.adapter,
+            "default_target": project.default_target,
+            "sql_analysis": project.settings.sql_analysis,
+            "require_sql_analysis": project.settings.require_sql_analysis,
+            "enforce_placement": project.enforce_placement,
+            "enforce_explicit_references": project.enforce_explicit_references,
+            "vars": project.vars,
+            "path_default_keys": project.path_defaults.iter().map(|(key, _)| key).collect::<Vec<_>>(),
+            "target_names": project.target_names,
+            "local_target": local.target,
+            "local_adapter": local.adapter,
+            "local_sql_analysis": local.sql_analysis,
+            "local_vars": local.vars,
+            "local_target_names": local.target_names,
+        }))
+    }))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_oracle_json_dumps, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_text_positions, module)?)?;
+    module.add_function(wrap_pyfunction!(_oracle_toml_load, module)?)?;
+    module.add_function(wrap_pyfunction!(_oracle_project_config, module)?)?;
     Ok(())
 }

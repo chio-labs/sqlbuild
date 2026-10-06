@@ -2,6 +2,7 @@
 members = [
     "crates/sqlbuild-core",
     "crates/sqlbuild-sqltext",
+    "crates/sqlbuild-config",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
     "crates/sqlbuild-python",
@@ -15,6 +16,7 @@ resolver = "2"
 order = [
     "sqlbuild-core",
     "sqlbuild-sqltext",
+    "sqlbuild-config",
     "sqlbuild-analysis",
     "sqlbuild-rules",
     "sqlbuild-python",
@@ -59,6 +61,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
+sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-sqltext = { path = "crates/sqlbuild-sqltext" }
@@ -67,6 +70,8 @@ sqlparser = { version = "0.58", features = ["visitor"] }
 syn = { version = "2", features = ["full", "visit", "extra-traits"] }
 tempfile = "3"
 toml = "0.9"
+toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
+toml_parser = "1"
 walkdir = "2"
 
 [workspace.lints.rust]

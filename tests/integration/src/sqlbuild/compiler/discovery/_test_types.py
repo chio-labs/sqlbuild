@@ -1,0 +1,36 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class GeneratedDocumentOracleTestCase:
+    """Seeded generated documents loaded natively and by the Python library they mirror."""
+
+    description: str
+    generator: str
+    seed: int
+    case_count: int
+    expected_maximum_deferred: int
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class RepositoryFileOracleTestCase:
+    """Repository files of one kind loaded natively and by the Python loader."""
+
+    description: str
+    pattern: str
+    expected_minimum_files: int
+    expected_deferred: int = 0
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class HostileDocumentOracleTestCase:
+    """A document built to exhaust a naive reader, which the native reader must defer quickly."""
+
+    description: str
+    document: str
+    expected_deferred: bool = True
+    expected_maximum_seconds: float = 1.0
