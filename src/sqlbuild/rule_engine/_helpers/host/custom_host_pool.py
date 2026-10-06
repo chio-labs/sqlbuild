@@ -17,7 +17,7 @@ from typing import Any, cast
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_ABANDONED_SUFFIX,
@@ -99,17 +99,40 @@ def run_custom_hosts(
 def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
     """Publish the project payload atomically; hosts started earlier wait for it to appear."""
 
+    payload: CompiledProject = host_payload_project(project)
     with tempfile.NamedTemporaryFile(
         dir=path.parent, prefix="writing-", suffix=".pickle", delete=False
     ) as handle:
         partial: Path = Path(handle.name)
         try:
-            pickle.dump((project, config), handle)
+            pickle.dump((payload, config), handle)
         except BaseException:
             handle.close()
             partial.unlink(missing_ok=True)
             raise
     partial.replace(path)
+
+
+def host_payload_project(project: CompiledProject) -> CompiledProject:
+    """Return the project hosts decode, without model state no Rule fact reads."""
+
+    return replace(project, models=tuple(map(_payload_model, project.models)))
+
+
+def _payload_model(model: CompiledModel) -> CompiledModel:
+    """Drop model state no Rule fact reads, so hosts decode less of every model."""
+
+    return replace(
+        model,
+        references=(),
+        fast_lineage_columns=None,
+        authored_query_sql="",
+        output_column_locations={},
+        macro_deps=(),
+        enum_columns={},
+        binding_diagnostics=(),
+        unchecked_output_columns=frozenset(),
+    )
 
 
 def _abandon_inputs(marker: Path) -> bool:
