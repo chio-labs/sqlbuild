@@ -679,6 +679,7 @@ def _dispatch_scenario_command(
                 retain=args.scenario_retain,
                 local=args.scenario_local,
                 strict=args.scenario_strict,
+                concurrency=args.concurrency,
                 sync_snapshots=args.scenario_sync_snapshots,
                 refresh=args.scenario_refresh,
                 limit_inputs=ScenarioSnapshotLimitInputs(

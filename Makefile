@@ -122,7 +122,8 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_scenario.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_capture.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_namespace.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_promotion.py
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_promotion.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_concurrency.py
 
 E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \

@@ -74,7 +74,8 @@ def write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_colo
     )
     style: CliStyle = CliStyle(use_color=use_color)
     status: str = style.status(status=status_text)
-    stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}\n")
+    duration: str = "" if result.duration_ms is None else f"  {result.duration_ms / 1000:.2f}s"
+    stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{duration}\n")
     if result.error_message:
         rendered_error_message: str = render_result_error(
             error_code=result.error_code,

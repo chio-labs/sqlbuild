@@ -471,6 +471,7 @@ def format_scenario_execution_json(
     local: bool = False,
     run_namespace: str | None = None,
     namespace_source: str = "unset",
+    duration_ms: float | None = None,
 ) -> str:
     """Format scenario test command execution results as JSON."""
 
@@ -494,11 +495,14 @@ def format_scenario_execution_json(
         assets=tuple(assets),
         checks=tuple(checks),
         scenarios=tuple(_format_scenario_result(result) for result in results),
-        summary={
-            "pass_count": len(results) - fail_count,
-            "fail_count": fail_count,
-            "total_count": len(results),
-        },
+        summary=_drop_none(
+            {
+                "pass_count": len(results) - fail_count,
+                "fail_count": fail_count,
+                "total_count": len(results),
+                "duration_ms": None if duration_ms is None else round(duration_ms),
+            }
+        ),
     )
 
 
@@ -1044,6 +1048,7 @@ def _format_scenario_result(result: ScenarioRunResult) -> dict[str, object]:
         {
             "name": result.scenario_name,
             "status": result.status.value,
+            "duration_ms": None if result.duration_ms is None else round(result.duration_ms),
             "local_status": result.local_status.value if result.local_status else None,
             "retained": result.retained,
             "local_duckdb_path": (

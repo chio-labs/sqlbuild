@@ -79,6 +79,7 @@ _TTY_RESOURCE_OWNER_OPERATIONS: frozenset[str] = frozenset(
 _FRESHNESS_METADATA_OPERATION: str = "source_freshness_metadata_observation"
 _FRESHNESS_QUERY_OPERATION: str = "source_freshness_query_observation"
 _RESOURCE_START: str = "resource_attempt_started"
+_SCENARIO_RESOURCE_PREFIX: str = "scenario:"
 _OPERATION_START: str = "operation_started"
 _OPERATION_TERMINALS: frozenset[str] = frozenset({"operation_completed", "operation_failed"})
 _STATEMENT_START: str = "statement_started"
@@ -258,7 +259,10 @@ class NativeProgressProjector:
         if ordinal is not None and self._resource_total > 0:
             counter = f"{ordinal}/{self._resource_total}  "
         status: str = self._style.status(status="START")
-        self._write(f"  {counter}{resource_kind:<10}{resource_name} {status}")
+        display_name: str = _display_resource_name(
+            resource_id=resource_id, resource_name=resource_name
+        )
+        self._write(f"  {counter}{resource_kind:<10}{display_name} {status}")
 
     def _consume_resource_terminal(self, event: LifecycleEvent) -> None:
         attempt_id: str | None = event.resource_attempt_id
@@ -292,7 +296,10 @@ class NativeProgressProjector:
         elapsed: str = (
             f" {float(duration) / 1000.0:.2f}s" if isinstance(duration, int | float) else ""
         )
-        self._write(f"  {resource_kind:<10}{resource_name} {status}{elapsed}")
+        display_name: str = _display_resource_name(
+            resource_id=event.resource_id, resource_name=resource_name
+        )
+        self._write(f"  {resource_kind:<10}{display_name} {status}{elapsed}")
 
     def _render_prior_attempts(self, *, resource_id: str, resource_name: str) -> None:
         pending: deque[str] = self._pending_terminal_ids_by_resource[resource_id]
@@ -492,6 +499,13 @@ class NativeProgressProjector:
 _CURRENT_PROJECTOR: ContextVar[NativeProgressProjector | None] = ContextVar(
     "sqlbuild_native_progress_projector", default=None
 )
+
+
+def _display_resource_name(*, resource_id: str | None, resource_name: str) -> str:
+    if resource_id is None or not resource_id.startswith(_SCENARIO_RESOURCE_PREFIX):
+        return resource_name
+    scenario_name: str = resource_id.removeprefix(_SCENARIO_RESOURCE_PREFIX).split(":", 1)[0]
+    return f"{scenario_name}/{resource_name}"
 
 
 def current_native_progress_projector() -> NativeProgressProjector | None:

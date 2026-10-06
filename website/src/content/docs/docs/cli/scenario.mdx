@@ -25,6 +25,7 @@ sqb scenario test [flags]
 | `--scenario-namespace NAMESPACE` | Isolate warehouse artifacts for this run; overrides environment and config |
 | `--local` | Run locally against DuckDB using captured JSONL snapshots |
 | `--strict` | Treat missing/stale local snapshots as errors instead of skips |
+| `--concurrency N` | Run up to `N` scenarios at once (default: the project `concurrency` setting) |
 | `--sync-snapshots` | Capture missing/stale snapshots before local run (requires `--local`) |
 | `--refresh` | Recapture all selected snapshots before local run (requires `--local`) |
 | `--force` | Bypass snapshot capture safety limits |
@@ -86,17 +87,20 @@ sqb scenario test --local --strict
 Remote scenarios report per-scenario PASS/FAIL with nested check rows:
 
 ```
-daily_revenue_minimal                                            PASS
+daily_revenue_minimal                                            PASS  0.84s
     expect    expected daily_revenue                             PASS
     expect    assertion no_negative_revenue                      PASS
 
-PASS=1  FAIL=0  TOTAL=1
+PASS=1  FAIL=0  TOTAL=1  (0.91s)
 ```
+
+Each scenario row shows its wall time and the summary shows the total. `--json` reports the same
+values as `scenarios[].duration_ms` and `summary.duration_ms`.
 
 Local scenarios add ERROR and SKIP statuses:
 
 ```
-PASS=2  FAIL=0  ERROR=0  SKIP=1  TOTAL=3
+PASS=2  FAIL=0  ERROR=0  SKIP=1  TOTAL=3  (1.20s)
 ```
 
 Failed scenarios suggest rerunning with `--retain` for inspection. Local runs always keep the DuckDB file at `target/run/scenarios/<scenario_name>/local.duckdb`.

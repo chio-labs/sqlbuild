@@ -22,6 +22,7 @@ def execute_scenario_fixture(
     fixture_plan: ScenarioFixturePlan,
     adapter: BaseAdapter,
     connection: Any,
+    schema_prepared: bool = False,
 ) -> ScenarioFixtureExecutionResult:
     """Materialize one source/ref/seed fixture as a scenario-owned table."""
 
@@ -32,12 +33,13 @@ def execute_scenario_fixture(
     )
 
     try:
-        adapter.ensure_schema(
-            connection=connection,
-            database=fixture_plan.destination.database,
-            schema=fixture_plan.destination.schema,
-            statement_recorder=statement_recorder,
-        )
+        if not schema_prepared:
+            adapter.ensure_schema(
+                connection=connection,
+                database=fixture_plan.destination.database,
+                schema=fixture_plan.destination.schema,
+                statement_recorder=statement_recorder,
+            )
         with diagnostics_context(
             sqlbuild_phase="scenario_fixture",
             sqlbuild_action_name="create_table",

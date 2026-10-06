@@ -22,6 +22,7 @@ def execute_scenario_models(
     connection: Any,
     run_id: str,
     promotion_mode: TablePromotionMode,
+    schema_prepared: bool = False,
 ) -> tuple[ModelExecutionResult, ...]:
     """Execute scenario model entries in planned dependency order."""
 
@@ -41,6 +42,7 @@ def execute_scenario_models(
                 connection=connection,
                 run_id=run_id,
                 promotion_mode=promotion_mode,
+                schema_prepared=schema_prepared,
             )
             if result.status == ExecutionStatus.FAILED:
                 lifecycle.failed(error_code=result.error_code)

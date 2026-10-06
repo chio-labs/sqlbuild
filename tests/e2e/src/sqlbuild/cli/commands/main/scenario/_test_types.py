@@ -195,3 +195,13 @@ class ScenarioPromotionE2ETestCase:
     expect_staged_promotion: bool
     unexpected_stdout_fragments: tuple[str, ...] = ("K011", "R004")
 
+
+@dataclass(frozen=True)
+class ScenarioConcurrencyE2ETestCase:
+    """Test case for concurrent scenario execution through the CLI."""
+
+    description: str
+    command_args: tuple[str, ...]
+    settings_config: str
+    expected_header: str
+

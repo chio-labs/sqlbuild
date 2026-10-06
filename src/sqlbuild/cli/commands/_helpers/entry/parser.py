@@ -792,6 +792,7 @@ def _add_workspace_parsers(
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
     scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
+    scenario_test_parser.add_argument("--concurrency", type=int, default=None)
     scenario_test_parser.add_argument("--json", action="store_true", default=False)
     _ = add_execution_json_output_arg(scenario_test_parser)
     _ = add_select_args(scenario_test_parser)

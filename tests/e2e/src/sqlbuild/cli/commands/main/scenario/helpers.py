@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections import defaultdict
 from pathlib import Path
@@ -628,4 +629,13 @@ def build_promotion_project_files(test_case: ScenarioPromotionE2ETestCase) -> di
             "SELECT 1\n"
         ),
     }
+
+
+def scenario_result_lines(stdout: str) -> tuple[str, ...]:
+    """Return scenario result rows and expectation rows without timings, in output order."""
+
+    rows: list[str] = re.findall(
+        r"^(?:order_|orders_|    expect|    expected |    assertion ).*$", stdout, re.M
+    )
+    return tuple(re.sub(r"\s+\d+\.\d\ds$", "", row).rstrip() for row in rows)
 

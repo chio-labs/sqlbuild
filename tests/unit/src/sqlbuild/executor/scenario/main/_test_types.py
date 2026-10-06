@@ -68,3 +68,11 @@ class ScenarioExpectedComparisonSqlTestCase:
     description: str
     set_difference_operator: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioCatalogCleanupTestCase:
+    description: str
+    relation_types: dict[str, str]
+    expected_drop_sql: tuple[str, ...]
+    fail_listing: bool = False

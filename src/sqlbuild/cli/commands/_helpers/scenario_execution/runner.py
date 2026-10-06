@@ -52,6 +52,7 @@ from sqlbuild.cli.output.main._write_execution_json_output import write_executio
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
+from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.main.sql_analysis_off_guidance import sql_analysis_off_guidance
@@ -158,6 +159,12 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         )
     )
     use_color: bool = not no_color and supports_color()
+    concurrency: int = max(
+        1,
+        request.concurrency
+        if request.concurrency is not None
+        else build_effective_settings_config(discovered_inputs=discovered_inputs).concurrency,
+    )
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     progress_stream.write(
         f"Scenario namespace: {namespace.value or '(unset)'} (source: {namespace.source})\n"
@@ -172,7 +179,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         stream=progress_stream,
         command="sqb scenario test --local" if local else "sqb scenario test",
         target=target_label,
-        concurrency=1,
+        concurrency=concurrency,
         use_color=use_color,
     )
 
@@ -252,6 +259,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
             project_name=discovered_inputs.project_config.name,
             target_dir=effective_project_dir / "target",
             retain=retain,
+            concurrency=concurrency,
             output_context=ScenarioRunOutputContext(
                 namespace=namespace,
                 progress_stream=progress_stream,
@@ -267,6 +275,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         adapter=adapter,
         project_name=discovered_inputs.project_config.name,
         strict=strict,
+        concurrency=concurrency,
         replay_source=ScenarioLocalReplaySource(
             lexical_syntax=project_adapter.sql_lexical_syntax,
             capture_adapter=project_adapter_name,

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -27,6 +26,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioExpectedExpectationExecutionResult,
     ScenarioFailureDetails,
     ScenarioFixtureExecutionResult,
+    ScenarioRunOptions,
     ScenarioRunResult,
     ScenarioStepResults,
 )
@@ -43,19 +43,26 @@ def execute_scenario_run_steps(
     connection: Any,
     run_id: str,
     retain: bool,
-    promotion_mode: TablePromotionMode,
+    options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
     """Execute a planned scenario and apply cleanup policy."""
 
     with OperationLifecycle(operation_kind="scenario", operation_name="scenario_execution"):
-        return _execute_scenario_run_steps(
-            scenario_plan=scenario_plan,
-            adapter=adapter,
-            connection=connection,
-            run_id=run_id,
-            retain=retain,
-            promotion_mode=promotion_mode,
-        )
+        try:
+            return _execute_scenario_run_steps(
+                scenario_plan=scenario_plan,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                retain=retain,
+                options=options,
+            )
+        except BaseException:
+            if not retain:
+                _ = execute_scenario_cleanup(
+                    scenario_plan=scenario_plan, adapter=adapter, connection=connection
+                )
+            raise
 
 
 def _execute_scenario_run_steps(
@@ -65,7 +72,7 @@ def _execute_scenario_run_steps(
     connection: Any,
     run_id: str,
     retain: bool,
-    promotion_mode: TablePromotionMode,
+    options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
 
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
@@ -84,11 +91,17 @@ def _execute_scenario_run_steps(
             error_message=prepare_result.error_message,
         )
 
+    schema_prepared: bool = options.prepared_schemas is not None and (
+        options.prepared_schemas.ensure(
+            scenario_plan=scenario_plan, adapter=adapter, connection=connection
+        )
+    )
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = execute_scenario_fixtures(
         scenario_name=scenario_plan.name,
         fixture_plans=scenario_plan.fixture_plans,
         adapter=adapter,
         connection=connection,
+        schema_prepared=schema_prepared,
     )
     if _has_failed(fixture_results):
         return _finish_scenario(
@@ -131,7 +144,8 @@ def _execute_scenario_run_steps(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
-        promotion_mode=promotion_mode,
+        promotion_mode=options.promotion_mode,
+        schema_prepared=schema_prepared,
     )
     if _has_failed(model_results):
         return _finish_scenario(

@@ -950,6 +950,16 @@ class ScenarioRunOutputContext:
 
 
 @dataclass(frozen=True)
+class ScenarioRunPresentation:
+    """Live status and timing shared by one scenario test run's progress output."""
+
+    scenario_status: TransientStatusReporter
+    status_is_tty: bool
+    activity: str
+    started: float
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotLimitInputs:
     """CLI snapshot capture-limit overrides for one scenario run."""
 
@@ -973,6 +983,7 @@ class ScenarioTestCommandRequest:
     retain: bool = False
     local: bool = False
     strict: bool = False
+    concurrency: int | None = None
     sync_snapshots: bool = False
     refresh: bool = False
     limit_inputs: ScenarioSnapshotLimitInputs = ScenarioSnapshotLimitInputs()

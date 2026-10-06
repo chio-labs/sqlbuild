@@ -9,7 +9,10 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
-from sqlbuild.executor.scenario._helpers.lifecycle.cleanup import collect_scenario_cleanup_targets
+from sqlbuild.executor.scenario._helpers.lifecycle.cleanup import (
+    collect_scenario_cleanup_targets,
+    existing_scenario_cleanup_targets,
+)
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.executor.scenario.models import (
     ScenarioCleanupExecutionResult,
@@ -25,7 +28,7 @@ def execute_scenario_cleanup(
     adapter: BaseAdapter,
     connection: Any,
 ) -> ScenarioCleanupExecutionResult:
-    """Drop only scenario-owned relations listed in the current scenario plan."""
+    """Drop the scenario-owned relations of the current plan that exist."""
 
     with OperationLifecycle(
         operation_kind="scenario", operation_name="scenario_cleanup"
@@ -52,26 +55,28 @@ def _execute_scenario_cleanup(
     )
 
     try:
-        cleanup_target: ScenarioCleanupTarget
-        for cleanup_target in cleanup_targets:
+        drop_target: ScenarioCleanupTarget
+        for drop_target in existing_scenario_cleanup_targets(
+            targets=cleanup_targets, adapter=adapter, connection=connection
+        ):
             with diagnostics_context(
                 sqlbuild_phase="scenario_cleanup",
                 sqlbuild_action_name="drop_relation",
                 sqlbuild_scenario=scenario_plan.name,
-                sqlbuild_artifact_kind=cleanup_target.kind.value,
-                sqlbuild_artifact_name=cleanup_target.logical_name,
+                sqlbuild_artifact_kind=drop_target.kind.value,
+                sqlbuild_artifact_name=drop_target.logical_name,
             ):
-                if cleanup_target.materialization_type == MaterializationType.VIEW:
+                if drop_target.materialization_type == MaterializationType.VIEW:
                     adapter.drop_view(
                         connection=connection,
-                        destination=cleanup_target.target_relation,
+                        destination=drop_target.target_relation,
                         if_exists=True,
                         statement_recorder=statement_recorder,
                     )
                 else:
                     adapter.drop(
                         connection=connection,
-                        destination=cleanup_target.target_relation,
+                        destination=drop_target.target_relation,
                         if_exists=True,
                         statement_recorder=statement_recorder,
                     )

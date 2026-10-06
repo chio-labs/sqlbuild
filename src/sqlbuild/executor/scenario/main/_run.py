@@ -5,10 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario._helpers.execution.run import execute_scenario_run_steps
-from sqlbuild.executor.scenario.models import ScenarioRunResult
+from sqlbuild.executor.scenario.models import ScenarioRunOptions, ScenarioRunResult
 
 
 def execute_scenario_run(
@@ -18,7 +17,7 @@ def execute_scenario_run(
     connection: Any,
     run_id: str,
     retain: bool,
-    promotion_mode: TablePromotionMode,
+    options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
     """Execute a planned scenario for an external entrypoint."""
 
@@ -28,5 +27,5 @@ def execute_scenario_run(
         connection=connection,
         run_id=run_id,
         retain=retain,
-        promotion_mode=promotion_mode,
+        options=options,
     )

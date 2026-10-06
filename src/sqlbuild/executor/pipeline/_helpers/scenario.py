@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import logging
+import queue
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
+from contextvars import copy_context
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
@@ -24,7 +28,12 @@ from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
+from sqlbuild.executor.pipeline._helpers.connections import (
+    close_connections,
+    open_worker_connections,
+)
 from sqlbuild.executor.pipeline._helpers.settings import resolve_promotion_mode
+from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
@@ -38,6 +47,7 @@ from sqlbuild.executor.scenario.main._snapshots import classify_scenario_snapsho
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
     ScenarioLocalReplaySource,
+    ScenarioRunOptions,
     ScenarioRunResult,
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotStateResult,
@@ -59,6 +69,14 @@ _SCENARIO_INTERNAL_ERROR_HELP: str = (
 )
 
 
+@dataclass(frozen=True)
+class _ScenarioOutcome[ResultT]:
+    scenario: CompiledSqlScenario
+    scenario_plan: ScenarioExecutionPlan | None
+    result: ResultT
+    resource_attempt_id: str
+
+
 def _scenario_failure_help(exc: Exception) -> str | None:
     explicit_help: str | None = error_help(exc)
     if explicit_help is not None:
@@ -69,6 +87,8 @@ def _scenario_failure_help(exc: Exception) -> str | None:
 
 
 class _ScenarioPipelineResult(Protocol):
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
     @property
     def status(self) -> ExecutionStatus: ...
 
@@ -88,6 +108,7 @@ def run_scenario_test_pipeline(
     adapter: BaseAdapter,
     project_name: str,
     retain: bool,
+    concurrency: int = 1,
     connection_hooks: ConnectionHooks | None = None,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
@@ -97,24 +118,33 @@ def run_scenario_test_pipeline(
 ) -> tuple[ScenarioRunResult, ...]:
     """Execute selected scenarios from a compiled project."""
 
-    with _scenario_target_connection(
+    worker_count: int = max(1, min(concurrency, len(scenarios)))
+    with _scenario_target_connections(
         adapter=adapter,
         connection_config=connection_config,
         connection_hooks=connection_hooks,
-    ) as connection:
-        promotion_mode: TablePromotionMode = resolve_promotion_mode(
-            settings=pipeline_result.project.settings, adapter=adapter
+        connection_count=worker_count,
+    ) as connection_pool:
+        options: ScenarioRunOptions = ScenarioRunOptions(
+            promotion_mode=resolve_promotion_mode(
+                settings=pipeline_result.project.settings, adapter=adapter
+            ),
+            prepared_schemas=PreparedScenarioSchemas(),
         )
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioRunResult:
-            return execute_scenario_run(
-                scenario_plan=scenario_plan,
-                adapter=adapter,
-                connection=connection,
-                run_id=pipeline_result.project.run_id,
-                retain=retain,
-                promotion_mode=promotion_mode,
-            )
+            connection: Any = connection_pool.get()
+            try:
+                return execute_scenario_run(
+                    scenario_plan=scenario_plan,
+                    adapter=adapter,
+                    connection=connection,
+                    run_id=pipeline_result.project.run_id,
+                    retain=retain,
+                    options=options,
+                )
+            finally:
+                connection_pool.put(connection)
 
         def failed(*, scenario_name: str, exc: Exception) -> ScenarioRunResult:
             return ScenarioRunResult(
@@ -136,6 +166,7 @@ def run_scenario_test_pipeline(
             failed=failed,
             on_scenario_start=on_scenario_start,
             on_scenario_complete=on_scenario_complete,
+            worker_count=worker_count,
         )
 
 
@@ -148,6 +179,7 @@ def run_scenario_local_test_pipeline(
     project_name: str,
     strict: bool,
     replay_source: ScenarioLocalReplaySource,
+    concurrency: int = 1,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
@@ -192,6 +224,7 @@ def run_scenario_local_test_pipeline(
         failed=failed,
         on_scenario_start=on_scenario_start,
         on_scenario_complete=on_scenario_complete,
+        worker_count=max(1, min(concurrency, len(scenarios))),
     )
 
 
@@ -213,11 +246,13 @@ def run_scenario_capture_pipeline(
 ) -> tuple[ScenarioSnapshotCaptureRunResult, ...]:
     """Capture selected scenario inputs into durable local snapshot files."""
 
-    with _scenario_target_connection(
+    with _scenario_target_connections(
         adapter=adapter,
         connection_config=connection_config,
         connection_hooks=connection_hooks,
-    ) as connection:
+        connection_count=1,
+    ) as connection_pool:
+        connection: Any = connection_pool.get()
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioSnapshotCaptureRunResult:
             return execute_scenario_snapshot_capture_run(
@@ -257,31 +292,44 @@ def run_scenario_capture_pipeline(
 
 
 @contextmanager
-def _scenario_target_connection(
+def _scenario_target_connections(
     *,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection_hooks: ConnectionHooks | None,
-) -> Iterator[Any]:
+    connection_count: int,
+) -> Iterator[queue.SimpleQueue[Any]]:
     hooks: ConnectionHooks = connection_hooks if connection_hooks is not None else ConnectionHooks()
     if hooks.on_connection_start is not None:
-        hooks.on_connection_start(1)
+        hooks.on_connection_start(connection_count)
     start: float = time.monotonic()
     try:
         with OperationLifecycle(
             operation_kind="scenario", operation_name="scenario_target_connection"
         ):
-            connection: Any = adapter.connect(connection_config)
+            connections: tuple[Any, ...] = open_worker_connections(
+                adapter=adapter,
+                connection_config=connection_config,
+                connection_count=connection_count,
+            )
     except Exception:
         if hooks.on_connection_error is not None:
-            hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
+            hooks.on_connection_error(connection_count, elapsed_seconds=time.monotonic() - start)
         raise
     if hooks.on_connection_complete is not None:
-        hooks.on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
+        hooks.on_connection_complete(connection_count, elapsed_seconds=time.monotonic() - start)
+    connection_pool: queue.SimpleQueue[Any] = queue.SimpleQueue()
+    connection: Any
+    for connection in connections:
+        connection_pool.put(connection)
+    active_error: BaseException | None = None
     try:
-        yield connection
+        yield connection_pool
+    except BaseException as error:
+        active_error = error
+        raise
     finally:
-        adapter.close(connection)
+        close_connections(adapter=adapter, connections=connections, active_error=active_error)
 
 
 def _run_scenarios[ResultT: _ScenarioPipelineResult](
@@ -298,56 +346,114 @@ def _run_scenarios[ResultT: _ScenarioPipelineResult](
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ResultT], None
     ]
     | None,
+    worker_count: int = 1,
 ) -> tuple[ResultT, ...]:
-    results: list[ResultT] = []
+    def run(*, scenario: CompiledSqlScenario, notify_start: bool) -> _ScenarioOutcome[ResultT]:
+        return _run_scenario(
+            scenario=scenario,
+            pipeline_result=pipeline_result,
+            adapter=adapter,
+            project_name=project_name,
+            source_lexical_syntax=source_lexical_syntax,
+            execute=execute,
+            failed=failed,
+            on_scenario_start=on_scenario_start if notify_start else None,
+        )
+
+    def complete(outcome: _ScenarioOutcome[ResultT]) -> ResultT:
+        projector: NativeProgressProjector | None = current_native_progress_projector()
+        if projector is not None and on_scenario_complete is not None:
+            _ = projector.consume_resource_terminal(
+                resource_name=outcome.scenario.name,
+                resource_id=_scenario_resource_id(outcome.scenario.name),
+                resource_attempt_id=outcome.resource_attempt_id,
+            )
+        if on_scenario_complete is not None:
+            on_scenario_complete(outcome.scenario, outcome.scenario_plan, outcome.result)
+        return outcome.result
+
     scenario: CompiledSqlScenario
     for scenario in scenarios:
-        scenario_plan: ScenarioExecutionPlan | None = None
-        resource_id: str = f"sql_scenario:{scenario.name}"
-        projector: NativeProgressProjector | None = _prepare_scenario_presentation(
+        _prepare_scenario_presentation(
             scenario_name=scenario.name,
             has_completion_callback=on_scenario_complete is not None,
         )
-        with ResourceAttemptLifecycle(
-            resource_id=resource_id,
-            resource_kind="scenario",
-            resource_name=scenario.name,
-            run_id=pipeline_result.project.run_id,
-        ) as lifecycle:
-            if on_scenario_start is not None:
-                on_scenario_start(scenario)
-            try:
-                scenario_plan = build_scenario_plan(
-                    scenario=scenario,
-                    pipeline_result=pipeline_result,
-                    adapter=adapter,
-                    project_name=project_name,
-                    source_lexical_syntax=source_lexical_syntax,
-                )
-                result: ResultT = execute(scenario_plan)
-            except Exception as exc:
-                result = failed(scenario_name=scenario.name, exc=exc)
-            if result.status == ExecutionStatus.FAILED:
-                lifecycle.failed(error_code=result.error_code)
-        if projector is not None and on_scenario_complete is not None:
-            _ = projector.consume_resource_terminal(
-                resource_name=scenario.name,
-                resource_id=resource_id,
-                resource_attempt_id=lifecycle.resource_attempt_id,
+    if worker_count <= 1:
+        return tuple(complete(run(scenario=scenario, notify_start=True)) for scenario in scenarios)
+    results: list[ResultT] = []
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        futures: tuple[Future[_ScenarioOutcome[ResultT]], ...] = tuple(
+            cast(
+                Future[_ScenarioOutcome[ResultT]],
+                pool.submit(copy_context().run, run, scenario=scenario, notify_start=False),
             )
-        results.append(result)
-        if on_scenario_complete is not None:
-            on_scenario_complete(scenario, scenario_plan, result)
+            for scenario in scenarios
+        )
+        try:
+            index: int
+            future: Future[_ScenarioOutcome[ResultT]]
+            for index, future in enumerate(futures):
+                if on_scenario_start is not None:
+                    on_scenario_start(scenarios[index])
+                results.append(complete(future.result()))
+        except BaseException:
+            for future in futures:
+                _ = future.cancel()
+            raise
     return tuple(results)
 
 
-def _prepare_scenario_presentation(
-    *, scenario_name: str, has_completion_callback: bool
-) -> NativeProgressProjector | None:
+def _run_scenario[ResultT: _ScenarioPipelineResult](
+    *,
+    scenario: CompiledSqlScenario,
+    pipeline_result: CompilePipelineResult,
+    adapter: BaseAdapter,
+    project_name: str,
+    source_lexical_syntax: SqlLexicalSyntax,
+    execute: Callable[[ScenarioExecutionPlan], ResultT],
+    failed: _ScenarioFailureResult[ResultT],
+    on_scenario_start: Callable[[CompiledSqlScenario], None] | None,
+) -> _ScenarioOutcome[ResultT]:
+    scenario_plan: ScenarioExecutionPlan | None = None
+    started: float = time.monotonic()
+    with ResourceAttemptLifecycle(
+        resource_id=_scenario_resource_id(scenario.name),
+        resource_kind="scenario",
+        resource_name=scenario.name,
+        run_id=pipeline_result.project.run_id,
+    ) as lifecycle:
+        if on_scenario_start is not None:
+            on_scenario_start(scenario)
+        try:
+            scenario_plan = build_scenario_plan(
+                scenario=scenario,
+                pipeline_result=pipeline_result,
+                adapter=adapter,
+                project_name=project_name,
+                source_lexical_syntax=source_lexical_syntax,
+            )
+            result: ResultT = execute(scenario_plan)
+        except Exception as exc:
+            result = failed(scenario_name=scenario.name, exc=exc)
+        result = replace(result, duration_ms=(time.monotonic() - started) * 1000)
+        if result.status == ExecutionStatus.FAILED:
+            lifecycle.failed(error_code=result.error_code)
+    return _ScenarioOutcome(
+        scenario=scenario,
+        scenario_plan=scenario_plan,
+        result=result,
+        resource_attempt_id=lifecycle.resource_attempt_id,
+    )
+
+
+def _scenario_resource_id(scenario_name: str) -> str:
+    return f"sql_scenario:{scenario_name}"
+
+
+def _prepare_scenario_presentation(*, scenario_name: str, has_completion_callback: bool) -> None:
     projector: NativeProgressProjector | None = current_native_progress_projector()
     if projector is not None and has_completion_callback:
         projector.expect_resource_enrichment(resource_name=scenario_name)
-    return projector
 
 
 def select_scenario_snapshot_capture_candidates(
