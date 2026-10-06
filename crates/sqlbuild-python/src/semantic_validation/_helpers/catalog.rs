@@ -1,8 +1,5 @@
 //! Compile-owned schema catalog and native, batched binding requests.
 
-use crate::bindings::main::compiler_error::compiler_error;
-use crate::bindings::main::normalization_results::normalization_results;
-use crate::bindings::types::CompilerDetach;
 use crate::semantic_validation::main::normalize_batch;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -12,7 +9,7 @@ use crate::semantic_validation::models::{
     CatalogInput, Columns, CompactAnalysisJob, FunctionProbes, ProjectCatalog,
 };
 use crate::semantic_validation::types::{
-    BindingRequest, DiagnosticRow, NormalizationRequest, Relations,
+    BindingRequest, DiagnosticRow, NormalizationRequest, PreparedCompactAnalysis, Relations,
 };
 use crate::semantic_validation::{
     _helpers::{diagnostics, identifiers},
@@ -23,88 +20,69 @@ use polyglot_sql::{
     Dialect, DialectType, SchemaValidationOptions, ValidationError, ValidationResult,
     ValidationSchema,
 };
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, FromPyObject, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::pymethods;
-use pyo3::types::{PyBytes, PyDict, PyDictMethods};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 const ANALYSIS_WORKERS: usize = 4;
 const ANALYSIS_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
-impl<'py> FromPyObject<'py> for Columns {
-    fn extract_bound(value: &Bound<'py, PyAny>) -> PyResult<Self> {
-        value
-            .downcast::<PyDict>()?
-            .iter()
-            .map(|(name, data_type)| Ok((name.extract()?, data_type.extract()?)))
-            .collect::<PyResult<Vec<_>>>()
-            .map(Self)
-    }
-}
-#[pymethods]
 impl ProjectCatalog {
-    fn inferred_schema(
+    /// Map inferred column types onto the binding names the query projects.
+    pub(crate) fn inferred_schema(
         &self,
-        py: Python<'_>,
         sql: &str,
         columns: Columns,
         inputs: Relations,
-    ) -> PyResult<HashMap<String, Option<String>>> {
-        py.compiler_detach(|| {
-            use polyglot_sql::{Expression, ExpressionWalk};
-            let parsed = Dialect::get(self.dialect)
-                .parse(sql)
-                .map_err(|error| error.to_string())?;
-            let mut identifiers: HashMap<String, String> = HashMap::new();
-            for expression in &parsed {
-                if let Some(select) = expression.dfs().find_map(|node| match node {
-                    Expression::Select(select) => Some(select),
-                    _ => None,
-                }) {
-                    for projection in &select.expressions {
-                        let identifier = match projection {
-                            Expression::Alias(alias) => Some(&alias.alias),
-                            Expression::Column(column) => Some(&column.name),
-                            _ => None,
+    ) -> Result<HashMap<String, Option<String>>, String> {
+        use polyglot_sql::{Expression, ExpressionWalk};
+        let parsed = Dialect::get(self.dialect)
+            .parse(sql)
+            .map_err(|error| error.to_string())?;
+        let mut identifiers: HashMap<String, String> = HashMap::new();
+        for expression in &parsed {
+            if let Some(select) = expression.dfs().find_map(|node| match node {
+                Expression::Select(select) => Some(select),
+                _ => None,
+            }) {
+                for projection in &select.expressions {
+                    let identifier = match projection {
+                        Expression::Alias(alias) => Some(&alias.alias),
+                        Expression::Column(column) => Some(&column.name),
+                        _ => None,
+                    };
+                    if let Some(identifier) = identifier {
+                        let name = if identifier.quoted {
+                            format!("\"{}\"", identifier.name.replace('"', "\"\""))
+                        } else {
+                            identifier.name.clone()
                         };
-                        if let Some(identifier) = identifier {
-                            let name = if identifier.quoted {
-                                format!("\"{}\"", identifier.name.replace('"', "\"\""))
-                            } else {
-                                identifier.name.clone()
-                            };
-                            identifiers.insert(identifier.name.clone(), name);
-                        }
-                    }
-                    break;
-                }
-            }
-            let mut exact_inputs: HashMap<String, String> = HashMap::new();
-            for shape in inputs.values() {
-                for (name, _) in &shape.0 {
-                    if name.len() > 1 && name.starts_with('"') && name.ends_with('"') {
-                        exact_inputs
-                            .insert(name[1..name.len() - 1].replace("\"\"", "\""), name.clone());
+                        identifiers.insert(identifier.name.clone(), name);
                     }
                 }
+                break;
             }
-            let mut result: HashMap<String, Option<String>> = HashMap::new();
-            for (name, column_type) in columns.0 {
-                let binding_name = identifiers
-                    .get(&name)
-                    .or_else(|| exact_inputs.get(&name))
-                    .cloned()
-                    .unwrap_or(name);
-                result.insert(binding_name, column_type);
+        }
+        let mut exact_inputs: HashMap<String, String> = HashMap::new();
+        for shape in inputs.values() {
+            for (name, _) in &shape.0 {
+                if name.len() > 1 && name.starts_with('"') && name.ends_with('"') {
+                    exact_inputs
+                        .insert(name[1..name.len() - 1].replace("\"\"", "\""), name.clone());
+                }
             }
-            Ok(result)
-        })
-        .map_err(compiler_error)
+        }
+        let mut result: HashMap<String, Option<String>> = HashMap::new();
+        for (name, column_type) in columns.0 {
+            let binding_name = identifiers
+                .get(&name)
+                .or_else(|| exact_inputs.get(&name))
+                .cloned()
+                .unwrap_or(name);
+            result.insert(binding_name, column_type);
+        }
+        Ok(result)
     }
 
-    #[new]
-    fn new(request: CatalogInput) -> PyResult<Self> {
+    pub(crate) fn new(request: CatalogInput) -> Result<Self, String> {
         let CatalogInput {
             dialect,
             quoted_ignore_case,
@@ -114,7 +92,7 @@ impl ProjectCatalog {
         } = request;
         let dialect = dialect
             .parse::<DialectType>()
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(|error| error.to_string())?;
         let mut catalog = Self {
             dialect,
             quoted_ignore_case,
@@ -148,13 +126,13 @@ impl ProjectCatalog {
         Ok(catalog)
     }
 
-    fn update_relations(&mut self, relations: Relations) {
+    pub(crate) fn update_relations(&mut self, relations: Relations) {
         for (name, columns) in relations {
             self.tables.insert(name.clone(), self.table(&name, columns));
         }
     }
 
-    fn with_relations(&self, relations: Relations) -> Self {
+    pub(crate) fn with_relations(&self, relations: Relations) -> Self {
         let mut catalog = Self {
             dialect: self.dialect,
             options: self.options.clone(),
@@ -170,7 +148,7 @@ impl ProjectCatalog {
         catalog
     }
 
-    fn update_analysis(&mut self, relations: HashMap<String, (Columns, Columns)>) {
+    pub(crate) fn update_analysis(&mut self, relations: HashMap<String, (Columns, Columns)>) {
         for (name, (types, nullability)) in relations {
             let types: HashMap<_, _> = types.0.into_iter().collect();
             let mut table = self.table(&name, Columns::default());
@@ -196,7 +174,7 @@ impl ProjectCatalog {
         }
     }
 
-    fn register_override(&mut self, relations: Relations) -> usize {
+    pub(crate) fn register_override(&mut self, relations: Relations) -> usize {
         let tables: HashMap<String, SchemaTable> = relations
             .into_iter()
             .map(|(name, columns)| (name.clone(), self.table(&name, columns)))
@@ -205,83 +183,69 @@ impl ProjectCatalog {
         self.overrides.len() - 1
     }
 
-    fn validation_payload(&self, requests: Vec<BindingRequest>) -> PyResult<String> {
+    pub(crate) fn validation_payload(
+        &self,
+        requests: Vec<BindingRequest>,
+    ) -> Result<String, String> {
         let mut payloads = Vec::with_capacity(requests.len());
         for (sql, references, overrides) in requests {
-            let schema = self
-                .schema(&references, overrides)
-                .map_err(compiler_error)?;
+            let schema = self.schema(&references, overrides)?;
             payloads.push(serde_json::json!({"sql": sql, "dialect": self.dialect.to_string(), "schema": schema,
                 "options": self.options, "quoted_ignore_case": self.quoted_ignore_case}));
         }
-        serde_json::to_string(&payloads).map_err(|error| PyValueError::new_err(error.to_string()))
+        serde_json::to_string(&payloads).map_err(|error| error.to_string())
     }
 
     /// Resolve a compact batch now; the job runs later while the catalog keeps changing.
-    fn prepare_compact(&self, py: Python<'_>, payload: &[u8]) -> PyResult<CompactAnalysisJob> {
-        let text = std::str::from_utf8(payload)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let analysis = py
-            .compiler_detach(|| {
-                crate::query_analysis::main::prepare_project_catalog::prepare_project_compact_with_catalog(
-                    text, self,
-                )
-            })
-            .map_err(compiler_error)?;
+    pub(crate) fn prepare_compact(&self, text: &str) -> Result<CompactAnalysisJob, String> {
+        let analysis =
+            crate::query_analysis::main::prepare_project_catalog::prepare_project_compact_with_catalog(
+                text, self,
+            )?;
         Ok(CompactAnalysisJob {
             analysis: Mutex::new(Some(analysis)),
             catalog: self.analysis_view(),
         })
     }
 
-    fn binding_results(
+    pub(crate) fn binding_results(
         &self,
-        py: Python<'_>,
         requests: Vec<BindingRequest>,
-    ) -> PyResult<Vec<Vec<DiagnosticRow>>> {
-        py.compiler_detach(|| {
-            let pool = self.analysis_pool()?;
-            let _running = RunningAnalysis::start(&self.running_analyses);
-            pool.install(|| {
-                requests
-                    .into_par_iter()
-                    .map(|(sql, references, overrides)| {
-                        let schema = self.schema(&references, overrides)?;
-                        let result = self.validate(&sql, &schema)?;
-                        let result = diagnostics::map_diagnostics(
-                            &sql,
-                            self.dialect,
-                            result,
-                            &self.function_probes,
-                        )?;
-                        Ok(result.errors.into_iter().map(diagnostic_row).collect())
-                    })
-                    .collect::<Result<Vec<_>, String>>()
-            })
+    ) -> Result<Vec<Vec<DiagnosticRow>>, String> {
+        let pool = self.analysis_pool()?;
+        let _running = RunningAnalysis::start(&self.running_analyses);
+        pool.install(|| {
+            requests
+                .into_par_iter()
+                .map(|(sql, references, overrides)| {
+                    let schema = self.schema(&references, overrides)?;
+                    let result = self.validate(&sql, &schema)?;
+                    let result = diagnostics::map_diagnostics(
+                        &sql,
+                        self.dialect,
+                        result,
+                        &self.function_probes,
+                    )?;
+                    Ok(result.errors.into_iter().map(diagnostic_row).collect())
+                })
+                .collect::<Result<Vec<_>, String>>()
         })
-        .map_err(compiler_error)
     }
 
-    /// Normalize a preparation batch on the idle analysis pool, else in turn, in one detached call.
-    fn normalize_analysis_sqls(
+    /// Normalize a preparation batch on the idle analysis pool, else in turn.
+    pub(crate) fn normalize_analysis_sqls(
         &self,
-        py: Python<'_>,
         dialect: &str,
         requests: Vec<NormalizationRequest>,
-    ) -> PyResult<Vec<Py<PyAny>>> {
-        let results = py
-            .compiler_detach(|| {
-                let pool = (self.running_analyses.load(Ordering::Acquire) == 0)
-                    .then(|| self.analysis_pool())
-                    .transpose()?;
-                Ok(normalize_batch::normalize_analysis_sqls(
-                    dialect,
-                    requests,
-                    pool.as_deref(),
-                ))
-            })
-            .map_err(compiler_error)?;
-        normalization_results(py, results)
+    ) -> Result<Vec<Result<String, String>>, String> {
+        let pool = (self.running_analyses.load(Ordering::Acquire) == 0)
+            .then(|| self.analysis_pool())
+            .transpose()?;
+        Ok(normalize_batch::normalize_analysis_sqls(
+            dialect,
+            requests,
+            pool.as_deref(),
+        ))
     }
 }
 
@@ -301,22 +265,19 @@ impl Drop for RunningAnalysis<'_> {
     }
 }
 
-#[pymethods]
 impl CompactAnalysisJob {
-    fn run<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        let analysis = self
-            .analysis
+    /// Take the resolved analysis; a job runs at most once.
+    pub(crate) fn take_analysis(&self) -> Option<PreparedCompactAnalysis> {
+        self.analysis
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
-            .ok_or_else(|| PyValueError::new_err("compact analysis job already ran"))?;
-        let result = py
-            .compiler_detach(|| {
-                let _running = RunningAnalysis::start(&self.catalog.running_analyses);
-                analysis(&self.catalog)
-            })
-            .map_err(compiler_error)?;
-        Ok(PyBytes::new(py, result.as_bytes()))
+    }
+
+    /// Run a taken analysis, counted as running on the catalog's pool.
+    pub(crate) fn run(&self, analysis: PreparedCompactAnalysis) -> Result<String, String> {
+        let _running = RunningAnalysis::start(&self.catalog.running_analyses);
+        analysis(&self.catalog)
     }
 }
 

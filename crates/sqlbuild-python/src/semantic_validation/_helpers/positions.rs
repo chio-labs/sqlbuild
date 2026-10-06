@@ -1,11 +1,8 @@
 //! Native authored positions, including macro-expansion passes.
 
-use crate::bindings::main::compiler_guard::compiler_guard;
 use crate::semantic_validation::_helpers::diagnostics::column_pattern;
 use crate::semantic_validation::_helpers::normalization::normalize;
 use crate::semantic_validation::models::{BindingPositions, PositionInput};
-use pyo3::exceptions::PyValueError;
-use pyo3::{PyResult, pymethods};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::{LazyLock, OnceLock};
@@ -15,92 +12,83 @@ static TOKENS: LazyLock<Result<Regex, String>> =
     LazyLock::new(|| Regex::new(r"\w+|[^\w\s]").map_err(|error| error.to_string()));
 type Mapping = (usize, usize, usize, usize);
 
-#[pymethods]
 impl BindingPositions {
-    #[new]
-    fn new(request: PositionInput) -> PyResult<Self> {
-        compiler_guard(|| {
-            let PositionInput {
-                authored,
-                query,
-                expanded,
-                cleaned,
-                passes,
-            } = request;
-            let mapped = normalize(&expanded, "snowflake", &HashMap::new(), &HashMap::new());
-            let offsets = match mapped {
-                Ok(mapped) if mapped.sql == cleaned => mapped.offsets,
-                _ if expanded == cleaned => (0..=expanded.chars().count()).collect(),
-                _ => align_offsets(&expanded, &cleaned).map_err(PyValueError::new_err)?,
-            };
-            Ok(Self {
-                query_start: authored
-                    .find(&query)
-                    .map(|offset| authored[..offset].chars().count()),
-                lines: line_starts(&authored),
-                cleaned_lines: line_starts(&cleaned),
-                authored,
-                offsets,
-                passes,
-                words: OnceLock::new(),
-            })
+    pub(crate) fn new(request: PositionInput) -> Result<Self, String> {
+        let PositionInput {
+            authored,
+            query,
+            expanded,
+            cleaned,
+            passes,
+        } = request;
+        let mapped = normalize(&expanded, "snowflake", &HashMap::new(), &HashMap::new());
+        let offsets = match mapped {
+            Ok(mapped) if mapped.sql == cleaned => mapped.offsets,
+            _ if expanded == cleaned => (0..=expanded.chars().count()).collect(),
+            _ => align_offsets(&expanded, &cleaned)?,
+        };
+        Ok(Self {
+            query_start: authored
+                .find(&query)
+                .map(|offset| authored[..offset].chars().count()),
+            lines: line_starts(&authored),
+            cleaned_lines: line_starts(&cleaned),
+            authored,
+            offsets,
+            passes,
+            words: OnceLock::new(),
         })
     }
 
-    fn position(
+    pub(crate) fn position(
         &self,
         start: Option<usize>,
         line: Option<usize>,
         column: Option<usize>,
         message: &str,
-    ) -> PyResult<(Option<usize>, Option<usize>)> {
-        compiler_guard(|| {
-            if let Some(captures) = column_pattern()
-                .map_err(PyValueError::new_err)?
-                .captures(message)
-            {
-                let identifier = captures[1].rsplit('.').next().unwrap_or(&captures[1]);
-                if let Some(offset) = self.unique_word_offset(identifier) {
-                    return Ok(position(&self.lines, offset));
-                }
+    ) -> Result<(Option<usize>, Option<usize>), String> {
+        if let Some(captures) = column_pattern()?.captures(message) {
+            let identifier = captures[1].rsplit('.').next().unwrap_or(&captures[1]);
+            if let Some(offset) = self.unique_word_offset(identifier) {
+                return Ok(position(&self.lines, offset));
             }
-            let Some(query_start) = self.query_start else {
-                return Ok((None, None));
-            };
-            let offset = start.or_else(|| {
-                line.zip(column).map(|(line, column)| {
-                    self.cleaned_lines
-                        .get(line.saturating_sub(1))
-                        .copied()
-                        .unwrap_or(0)
-                        + column.saturating_sub(1)
-                })
-            });
-            let Some(offset) = offset else {
-                return Ok(position(&self.lines, query_start));
-            };
-            let mut mapped = self
-                .offsets
-                .get(offset)
-                .copied()
-                .unwrap_or_else(|| *self.offsets.last().unwrap_or(&0));
-            for pass in self.passes.iter().rev() {
-                let mut adjusted = mapped as isize;
-                for &(source_start, source_end, output_start, output_end) in pass {
-                    if mapped < output_start {
-                        break;
-                    }
-                    if mapped < output_end {
-                        adjusted = source_start as isize;
-                        break;
-                    }
-                    adjusted +=
-                        (source_end - source_start) as isize - (output_end - output_start) as isize;
+        }
+        let Some(query_start) = self.query_start else {
+            return Ok((None, None));
+        };
+        let offset = start.or_else(|| {
+            line.zip(column).map(|(line, column)| {
+                self.cleaned_lines
+                    .get(line.saturating_sub(1))
+                    .copied()
+                    .unwrap_or(0)
+                    + column.saturating_sub(1)
+            })
+        });
+        let Some(offset) = offset else {
+            return Ok(position(&self.lines, query_start));
+        };
+        let mut mapped = self
+            .offsets
+            .get(offset)
+            .copied()
+            .unwrap_or_else(|| *self.offsets.last().unwrap_or(&0));
+        for pass in self.passes.iter().rev() {
+            let mut adjusted = mapped as isize;
+            for &(source_start, source_end, output_start, output_end) in pass {
+                if mapped < output_start {
+                    break;
                 }
-                mapped = adjusted.max(0) as usize;
+                if mapped < output_end {
+                    adjusted = source_start as isize;
+                    break;
+                }
+                adjusted +=
+                    (source_end - source_start) as isize - (output_end - output_start) as isize;
             }
-            Ok(position(&self.lines, query_start + mapped))
-        })
+            mapped = adjusted.max(0) as usize;
+        }
+        Ok(position(&self.lines, query_start + mapped))
     }
 }
 

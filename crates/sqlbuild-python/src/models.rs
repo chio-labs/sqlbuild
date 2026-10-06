@@ -1,8 +1,6 @@
-use pyo3::pyclass;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::sync::Mutex;
 
 use crate::constants::{
     API_VERSION, BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE, RULE_CODE_NUMBER_LENGTH,
@@ -749,13 +747,6 @@ pub(crate) struct ResolveRulesRequest {
     pub version: u32,
     pub config: RulesConfig,
     pub custom_rules: Vec<CustomRule>,
-}
-
-/// A decoded rules request held natively so the caller can release its encoded payloads.
-#[pyclass(module = "sqlbuild._native")]
-#[derive(Debug)]
-pub(crate) struct ParsedRulesRequest {
-    pub(crate) request: Mutex<Option<EvaluateRequest>>,
 }
 
 impl Default for EvaluateRequest {

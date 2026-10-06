@@ -1,9 +1,8 @@
-//! Compile-owned native catalog, mapping state and Python-boundary requests.
+//! Compile-owned native catalog, mapping state and boundary requests.
 
 use crate::semantic_validation::types::{Expansion, PreparedCompactAnalysis, ProbeKey, Relations};
 use polyglot_sql::validation::SchemaTable;
 use polyglot_sql::{DialectType, SchemaValidationOptions};
-use pyo3::{FromPyObject, pyclass};
 use rayon::ThreadPool;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
@@ -12,8 +11,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Default, Debug)]
 pub(crate) struct Columns(pub(crate) Vec<(String, Option<String>)>);
 
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
+#[derive(Debug)]
 pub(crate) struct CatalogInput {
     pub(crate) dialect: String,
     pub(crate) quoted_ignore_case: bool,
@@ -22,8 +20,7 @@ pub(crate) struct CatalogInput {
     pub(crate) relations: Relations,
 }
 
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
+#[derive(Debug)]
 pub(crate) struct NormalizationInput {
     pub(crate) sql: String,
     pub(crate) dialect: String,
@@ -31,8 +28,7 @@ pub(crate) struct NormalizationInput {
     pub(crate) placeholders: HashMap<String, String>,
 }
 
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
+#[derive(Debug)]
 pub(crate) struct PositionInput {
     pub(crate) authored: String,
     pub(crate) query: String,
@@ -47,7 +43,6 @@ pub(crate) struct FunctionProbes {
     pub(crate) suggestions: Mutex<HashMap<ProbeKey, Option<String>>>,
 }
 
-#[pyclass(module = "sqlbuild._native")]
 pub(crate) struct ProjectCatalog {
     pub(crate) dialect: DialectType,
     pub(crate) options: SchemaValidationOptions,
@@ -63,13 +58,11 @@ pub(crate) struct ProjectCatalog {
 }
 
 /// One resolved compact analysis batch that runs without borrowing its project catalog.
-#[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct CompactAnalysisJob {
     pub(super) analysis: Mutex<Option<PreparedCompactAnalysis>>,
     pub(super) catalog: ProjectCatalog,
 }
 
-#[pyclass(module = "sqlbuild._native")]
 #[derive(Debug)]
 pub(crate) struct BindingPositions {
     pub(super) authored: String,

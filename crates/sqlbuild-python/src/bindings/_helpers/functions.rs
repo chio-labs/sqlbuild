@@ -6,11 +6,11 @@ use pyo3::prelude::{
 use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyList, PyTuple};
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::models::ParsedRulesRequest;
 use crate::configuration::main::load;
 use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::engine::main::{evaluate, evaluate_parsed, parse_parts};
 use crate::models::CatalogueResponse;
-use crate::models::ParsedRulesRequest;
 use crate::rules::main::{catalogue, selected_codes};
 use std::sync::Mutex;
 
@@ -22,10 +22,10 @@ const SKILL_IDENTITY: &str = "sqlbuild-rules";
 #[pyfunction]
 fn normalize_analysis_sql(
     py: Python<'_>,
-    request: crate::semantic_validation::models::NormalizationInput,
+    request: crate::bindings::models::NormalizationInput,
 ) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::semantic_validation::main::normalize::normalize_analysis_sql(request)
+        crate::semantic_validation::main::normalize::normalize_analysis_sql(request.into())
     })
     .map_err(value_error)
 }
@@ -520,9 +520,9 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
             .py()
             .get_type::<crate::bindings::_helpers::panics::NativeCompilerError>(),
     )?;
-    module.add_class::<crate::semantic_validation::models::ProjectCatalog>()?;
-    module.add_class::<crate::semantic_validation::models::CompactAnalysisJob>()?;
-    module.add_class::<crate::semantic_validation::models::BindingPositions>()?;
+    module.add_class::<crate::bindings::models::ProjectCatalog>()?;
+    module.add_class::<crate::bindings::models::CompactAnalysisJob>()?;
+    module.add_class::<crate::bindings::models::BindingPositions>()?;
     module.add_function(wrap_pyfunction!(normalize_analysis_sql, module)?)?;
     module.add_function(wrap_pyfunction!(normalize_analysis_sqls, module)?)?;
     module.add_function(wrap_pyfunction!(normalize_dialect_sql, module)?)?;
