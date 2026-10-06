@@ -90,8 +90,9 @@ _STATEMENT_TERMINALS: frozenset[str] = frozenset({"statement_completed", "statem
 class NativeProgressProjector:
     """Project canonical starts and correlate enriched terminal presentation."""
 
-    def __init__(self, *, stream: TextIO, use_color: bool) -> None:
+    def __init__(self, *, stream: TextIO, use_color: bool, debug: bool = False) -> None:
         self._stream: TextIO = stream
+        self._debug: bool = debug
         self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
@@ -413,7 +414,8 @@ class NativeProgressProjector:
         if statement_id is None or event.resource_id not in self._resource_names:
             return
         self._statement_starts[statement_id] = event
-        self._write(f"    statement  {self._statement_context(event)}  START")
+        if self._debug:
+            self._write(f"    statement  {self._statement_context(event)}  START")
 
     def _consume_statement_submitted(self, event: LifecycleEvent) -> None:
         statement_id: str | None = event.statement_id
@@ -427,6 +429,8 @@ class NativeProgressProjector:
         if self._statement_query_ids.get(statement_id) == query_id:
             return
         self._statement_query_ids[statement_id] = query_id
+        if not self._debug:
+            return
         start: LifecycleEvent = self._statement_starts.get(statement_id, event)
         self._write(f"    statement  {self._statement_context(start)}  query_id={query_id}")
 

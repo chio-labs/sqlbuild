@@ -23,6 +23,7 @@ from tests.unit.src.sqlbuild.cli.progress.classes.helpers import (
             adapter="snowflake",
             query_id="01-query-orders",
             expected_context="model=orders  phase=create  kind=CREATE",
+            debug=True,
         ),
     ),
     ids=lambda case: case.description,
@@ -73,6 +74,7 @@ def test_given_query_id_capture_race_when_monitor_stops_then_submission_is_publi
             adapter="snowflake",
             query_id="01-query-failed",
             expected_context="model=orders  phase=create  kind=CREATE",
+            debug=True,
         ),
     ),
     ids=lambda case: case.description,
@@ -98,6 +100,7 @@ def test_given_slow_statement_when_it_fails_then_failure_has_query_id_and_monito
             adapter="duckdb",
             query_id=None,
             expected_context="model=orders  phase=create  kind=CREATE",
+            debug=True,
         ),
     ),
     ids=lambda case: case.description,
@@ -114,3 +117,63 @@ def test_given_adapter_without_query_ids_when_statement_runs_then_id_noise_is_om
     assert "query_id=" not in output
     assert monitor_thread.is_alive() is False
     assert error is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        StatementProgressCase(
+            description="snowflake completion without debug keeps only the slow-statement heartbeat",
+            adapter="snowflake",
+            query_id="01-query-quiet",
+            expected_context="model=orders  phase=create  kind=CREATE",
+            debug=False,
+        ),
+        StatementProgressCase(
+            description="duckdb completion without debug keeps only the slow-statement heartbeat",
+            adapter="duckdb",
+            query_id=None,
+            expected_context="model=orders  phase=create  kind=CREATE",
+            debug=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_no_debug_when_slow_statement_completes_then_start_and_submission_rows_are_hidden(
+    test_case: StatementProgressCase,
+) -> None:
+    output, monitor_thread, error = execute_statement_progress_case(
+        test_case=test_case, adapter_type=FakeSlowAdapter
+    )
+
+    assert f"statement  {test_case.expected_context}  START" not in output
+    assert f"statement  {test_case.expected_context}  query_id=" not in output
+    assert f"statement  {test_case.expected_context}  RUNNING" in output
+    assert monitor_thread.is_alive() is False
+    assert error is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        StatementProgressCase(
+            description="snowflake failure without debug still reports the failed statement",
+            adapter="snowflake",
+            query_id="01-query-quiet-failed",
+            expected_context="model=orders  phase=create  kind=CREATE",
+            debug=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_no_debug_when_slow_statement_fails_then_failure_row_keeps_query_id(
+    test_case: StatementProgressCase,
+) -> None:
+    output, monitor_thread, error = execute_statement_progress_case(
+        test_case=test_case, adapter_type=FakeFailingSlowAdapter
+    )
+
+    assert f"statement  {test_case.expected_context}  START" not in output
+    assert f"statement  {test_case.expected_context}  FAIL  query_id={test_case.query_id}" in output
+    assert monitor_thread.is_alive() is False
+    assert str(error) == "warehouse statement failed"

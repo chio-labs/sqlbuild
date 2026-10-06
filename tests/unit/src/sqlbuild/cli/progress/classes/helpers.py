@@ -113,7 +113,9 @@ def execute_statement_progress_case(
     """Execute one fake resource-scoped statement and capture projected output."""
 
     stream: StringIO = StringIO()
-    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    projector: NativeProgressProjector = NativeProgressProjector(
+        stream=stream, use_color=False, debug=test_case.debug
+    )
     adapter: FakeSlowAdapter = adapter_type(adapter=test_case.adapter, query_id=test_case.query_id)
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)

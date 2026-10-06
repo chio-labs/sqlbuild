@@ -200,6 +200,14 @@ class TerminalTestProgressE2ETestCase:
 
 
 @dataclass(frozen=True)
+class TerminalStatementRowsE2ETestCase:
+    description: str
+    columns: int
+    command: tuple[str, ...]
+    expected_statement_rows_visible: bool
+
+
+@dataclass(frozen=True)
 class ChainCteScopeTestCase:
     description: str
     queries: tuple[str, ...]

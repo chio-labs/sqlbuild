@@ -47,6 +47,7 @@ class StatementProgressCase:
     adapter: str
     query_id: str | None
     expected_context: str
+    debug: bool
 
 
 @dataclass(frozen=True)
