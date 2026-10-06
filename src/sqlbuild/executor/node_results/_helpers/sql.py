@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
+    render_state_table_create_sql,
+)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.constants import (
     COLUMN_ERROR_MESSAGE,
@@ -25,7 +28,6 @@ from sqlbuild.executor.node_results.constants import (
 )
 from sqlbuild.executor.node_results.models import NodeResultQuery, NodeResultRecord
 from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
-from sqlbuild.sql_values.types import StateSqlValueType
 
 _REQUIRED_NODE_RESULT_COLUMNS: frozenset[str] = frozenset(
     {
@@ -62,27 +64,16 @@ def build_create_table_sql(
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
-    transient: bool = False,
 ) -> str:
-    qualified_name: str = build_qualified_table_name(
-        database=database,
-        schema=schema,
-        render_qualified_name=render_qualified_name,
+    return render_state_table_create_sql(
+        qualified_name=build_qualified_table_name(
+            database=database, schema=schema, render_qualified_name=render_qualified_name
+        ),
+        columns=NODE_RESULT_COLUMNS,
+        column_types=NODE_RESULT_COLUMN_TYPES,
+        required_columns=_REQUIRED_NODE_RESULT_COLUMNS,
+        render_framework_type=render_framework_type,
     )
-    string_type: str = render_framework_type(FrameworkType.STRING)
-    timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
-    table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    definitions: list[str] = []
-    for column in NODE_RESULT_COLUMNS:
-        column_type: str = (
-            timestamp_type
-            if NODE_RESULT_COLUMN_TYPES[column]
-            in {StateSqlValueType.TIMESTAMP, StateSqlValueType.TEXT_TIMESTAMP}
-            else string_type
-        )
-        required: str = " NOT NULL" if column in _REQUIRED_NODE_RESULT_COLUMNS else ""
-        definitions.append(f"{column} {column_type}{required}")
-    return f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"
 
 
 def build_insert_sql(

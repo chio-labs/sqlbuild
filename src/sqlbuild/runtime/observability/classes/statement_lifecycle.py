@@ -91,6 +91,14 @@ class StatementLifecycle:
         with statement_listener_scope(listener):
             yield
 
+    @staticmethod
+    def discard_failed_attempt() -> None:
+        """Forget a failed attempt deferred to the active statement before an adapter retry."""
+
+        owner: StatementLifecycle | None = _STATEMENT_LIFECYCLE_OWNER.get()
+        if owner is not None and owner._execution_owner_key == _current_execution_owner_key():
+            owner._pending_failure = None
+
     def __enter__(self) -> StatementLifecycle:
         execution_owner_key: _ExecutionOwnerKey = _current_execution_owner_key()
         owner: StatementLifecycle | None = _STATEMENT_LIFECYCLE_OWNER.get()

@@ -15,7 +15,6 @@ def render_state_table_create_sql_impl(
     column_types: Mapping[str, StateSqlValueType],
     required_columns: frozenset[str],
     render_framework_type: Callable[[FrameworkType], str],
-    transient: bool,
 ) -> str:
     """Render create-if-missing DDL for string, integer, and text-timestamp state columns."""
 
@@ -28,5 +27,4 @@ def render_state_table_create_sql_impl(
     for column in columns:
         required: str = " NOT NULL" if column in required_columns else ""
         definitions.append(f"{column} {rendered_types[column_types[column]]}{required}")
-    table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    return f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"
+    return f"CREATE TABLE IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"

@@ -21,3 +21,13 @@ class SchemaEvolutionTestCase:
     added_column: str
     expected_target_reads: int
     expected_merge_fragment: str
+
+
+@dataclass(frozen=True)
+class StateTableRetentionTestCase:
+    """An offline account edition and the time travel its state tables are created with."""
+
+    description: str
+    max_retention_days: int
+    expected_first_retention_days: str
+    expected_later_retention_days: frozenset[str]

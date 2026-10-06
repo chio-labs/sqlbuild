@@ -17,7 +17,6 @@ class BuildCreateTableSqlTestCase:
     database: str | None
     schema: str
     expected_contains: tuple[str, ...]
-    transient: bool = False
 
 
 @dataclass(frozen=True)

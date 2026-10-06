@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from io import StringIO
 from itertools import cycle, islice
 from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
+from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    OperationAttributes,
+    OperationLifecycle,
+    ResourceAttemptLifecycle,
+    dispatcher_scope,
+    invocation_scope,
+    run_scope,
+)
 
 
 class FakeSnowflakeDescribeCursor:
@@ -248,3 +264,135 @@ def install_fake_snowflake_connector(
     monkeypatch.setitem(sys.modules, "snowflake", snowflake_module)
     monkeypatch.setitem(sys.modules, "snowflake.connector", connector_module)
     return captured_kwargs, raw_connection
+
+
+def _raise_rejection(error: Exception) -> None:
+    raise error
+
+
+def _accept_statement(error: Exception) -> None:
+    del error
+
+
+_REJECTION_OUTCOMES: dict[bool, Callable[[Exception], None]] = {
+    True: _raise_rejection,
+    False: _accept_statement,
+}
+
+
+class FakeSnowflakeRejectingConnection:
+    """Connection double that raises one driver error for statements containing a fragment."""
+
+    def __init__(self, *, rejected_fragments: tuple[str, ...], error: Exception) -> None:
+        self._rejected_fragments: tuple[str, ...] = rejected_fragments
+        self._error: Exception = error
+        self.executed_sql: list[str] = []
+
+    def execute(self, sql: str) -> FakeSnowflakeDescribeCursor:
+        self.executed_sql.append(sql)
+        _REJECTION_OUTCOMES[all(fragment in sql for fragment in self._rejected_fragments)](
+            self._error
+        )
+        return FakeSnowflakeDescribeCursor(description=(("status",),))
+
+
+class FakeSnowflakeRejectingRawCursor:
+    """Raw driver cursor that submits every statement and rejects those matching all fragments."""
+
+    def __init__(self, *, rejections: tuple[tuple[tuple[str, ...], Exception], ...]) -> None:
+        self._rejections: tuple[tuple[tuple[str, ...], Exception], ...] = rejections
+        self.sfqid: str | None = None
+        self.rowcount: int = 0
+        self.executed_sql: list[str] = []
+
+    def execute(self, sql: str, **kwargs: object) -> FakeSnowflakeRejectingRawCursor:
+        del kwargs
+        self.executed_sql.append(sql)
+        self.sfqid = f"01c-query-{len(self.executed_sql)}"
+        fragments: tuple[str, ...]
+        error: Exception
+        for fragments, error in self._rejections:
+            _REJECTION_OUTCOMES[all(fragment in sql for fragment in fragments)](error)
+        return self
+
+    def close(self) -> None:
+        return None
+
+
+class FakeSnowflakeRejectingRawConnection:
+    """Raw driver connection handing out one shared cursor."""
+
+    def __init__(self, cursor: FakeSnowflakeRejectingRawCursor) -> None:
+        self._cursor: FakeSnowflakeRejectingRawCursor = cursor
+
+    def cursor(self) -> FakeSnowflakeRejectingRawCursor:
+        return self._cursor
+
+
+@dataclass(frozen=True)
+class StatementProgressCapture:
+    """Lifecycle statement events and CLI progress text published around one statement."""
+
+    statement_events: tuple[str, ...]
+    statement_fail_lines: tuple[str, ...]
+    output: str
+    error: Exception | None
+
+
+def execute_with_statement_progress(
+    *, adapter: SnowflakeAdapter, raw_cursor: FakeSnowflakeRejectingRawCursor, sql: str
+) -> StatementProgressCapture:
+    """Execute one statement through the real Snowflake cursor under a resource operation."""
+
+    stream: StringIO = StringIO()
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    dispatcher.subscribe_lifecycle(
+        subscriber=NativeProgressProjector(stream=stream, use_color=False).consume,
+        accepts_opaque=False,
+    )
+    connection: _SnowflakeConnection = _SnowflakeConnection(
+        FakeSnowflakeRejectingRawConnection(raw_cursor)
+    )
+    error: Exception | None = None
+    try:
+        with (
+            invocation_scope("inv-state-table-retention"),
+            run_scope("run-state-table-retention"),
+            dispatcher_scope(dispatcher),
+            ResourceAttemptLifecycle(
+                resource_id="model:orders", resource_kind="table", resource_name="orders"
+            ),
+            OperationLifecycle(
+                operation_kind="warehouse",
+                operation_name="staging_creation",
+                attributes=OperationAttributes(phase="create", adapter="snowflake"),
+            ),
+        ):
+            _ = adapter.execute(connection=connection, sql=sql)
+    except Exception as caught:
+        error = caught
+    return StatementProgressCapture(
+        statement_events=tuple(
+            filter(
+                lambda event_type: event_type.startswith("statement_"),
+                (event.event_type for event in events),
+            )
+        ),
+        statement_fail_lines=tuple(
+            filter(
+                lambda line: line.lstrip().startswith("statement") and "FAIL" in line,
+                stream.getvalue().splitlines(),
+            )
+        ),
+        output=stream.getvalue(),
+        error=error,
+    )
+
+
+class CustomInitSnowflakeAdapter(SnowflakeAdapter):
+    """Custom adapter whose own initializer does not call the base initializer."""
+
+    def __init__(self) -> None:
+        self.custom_label: str = "orders"

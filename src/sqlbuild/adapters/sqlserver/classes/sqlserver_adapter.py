@@ -445,6 +445,18 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"DELETE FROM __sqlbuild_ranked WHERE __sqlbuild_history_rank > {retain_versions}"
         )
 
+    def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.source_freshness.main.create_table_sql import (
+            build_create_table_sql as build_source_freshness_create_table_sql,
+        )
+
+        return build_source_freshness_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_create_source_freshness_index_sqls(
         self,
         *,

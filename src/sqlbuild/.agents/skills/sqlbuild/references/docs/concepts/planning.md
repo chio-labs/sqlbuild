@@ -133,6 +133,10 @@ SQLBuild records append-only planning evidence in the warehouse:
 
 The planner reads the latest applicable facts and appends new facts after successful work.
 
+On Snowflake, SQLBuild creates its state tables as permanent tables with the maximum time travel:
+90 days, or 1 day on editions that allow only 1. The retention is set when SQLBuild creates the
+table. See [Snowflake state tables](adapters/snowflake.md#state-tables).
+
 ## Related topics
 
 - [Replay decisions](planning/replay-decisions.md)

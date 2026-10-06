@@ -12,6 +12,9 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, ModelPlanEntry, SqlTestPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.compiler.source_freshness.main.create_table_sql import (
+    build_create_table_sql as build_source_freshness_create_table_sql,
+)
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -21,8 +24,6 @@ from sqlbuild.cost.models import CostResourceContext
 
 
 class RecordingAdapter:
-    state_tables_transient: bool = False
-
     def __init__(self) -> None:
         self.insert_count: int = 0
         self.executed_sql: list[str] = []
@@ -53,6 +54,14 @@ class RecordingAdapter:
 
     def render_framework_type(self, framework_type: FrameworkType) -> str:
         return framework_type.value
+
+    def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
+        return build_source_freshness_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
 
     def render_create_source_freshness_index_sqls(
         self,

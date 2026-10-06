@@ -88,16 +88,6 @@ def test_given_schema_when_building_qualified_name_then_returns_expected(
                 "ts TIMESTAMP NOT NULL",
             ),
         ),
-        BuildCreateTableSqlTestCase(
-            description="emits transient table when requested",
-            database=None,
-            schema="analytics",
-            transient=True,
-            expected_contains=(
-                "CREATE TRANSIENT TABLE IF NOT EXISTS",
-                f"analytics.{FINGERPRINT_TABLE_NAME}",
-            ),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -109,7 +99,6 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
-        transient=test_case.transient,
     )
 
     fragment: str

@@ -49,7 +49,6 @@ def build_create_table_sql(
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
-    transient: bool = False,
 ) -> str:
     return render_state_table_create_sql(
         qualified_name=build_qualified_table_name(
@@ -59,7 +58,6 @@ def build_create_table_sql(
         column_types=JANITOR_EVENT_COLUMN_TYPES,
         required_columns=JANITOR_EVENT_REQUIRED_COLUMNS,
         render_framework_type=render_framework_type,
-        transient=transient,
     )
 
 
