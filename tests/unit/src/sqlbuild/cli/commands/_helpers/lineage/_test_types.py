@@ -98,3 +98,17 @@ class LineagePathSelectorErrorTestCase:
     select: tuple[str, ...]
     expected_error_code: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class NormalizeLineageTargetTestCase:
+    description: str
+    target: str
+    expected_target: str
+
+
+@dataclass(frozen=True)
+class NormalizeLineageTargetErrorTestCase:
+    description: str
+    target: str
+    expected_code: str

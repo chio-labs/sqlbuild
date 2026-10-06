@@ -139,7 +139,7 @@ def test_given_migration_decision_when_formatting_then_applies_colour_roles(
                 "    ├── compatibility  compatible\n"
                 "    ├── transfer  physical copy, promote by transactional rename\n"
                 "    ├── discovery  automatic\n"
-                "    └── hint  matched by unchanged definition; sqb rename model:<old> <new> "
+                "    └── hint  matched by unchanged definition; sqb rename <old> <new> "
                 "rewrites references and declares migrate_from so the move does not depend on discovery"
             ),
         ),

@@ -153,7 +153,9 @@ def _add_refactor_parsers(
         CliCommand.RENAME, help="rename a model or column and update every reference"
     )
     rename_parser.add_argument(
-        "refactor_target", metavar="TARGET", help="model:<name> or column:<model>.<column>"
+        "refactor_target",
+        metavar="TARGET",
+        help="<model> or <model>.<column>; the model: and column: prefixes are optional",
     )
     rename_parser.add_argument("refactor_new_name", metavar="NEW_NAME")
     rename_parser.add_argument(
@@ -166,7 +168,9 @@ def _add_refactor_parsers(
     move_parser: argparse.ArgumentParser = subparsers.add_parser(
         CliCommand.MV, help="move a model file, optionally renaming it, and update references"
     )
-    move_parser.add_argument("refactor_target", metavar="TARGET", help="model:<name>")
+    move_parser.add_argument(
+        "refactor_target", metavar="TARGET", help="<model>; the model: prefix is optional"
+    )
     move_parser.add_argument(
         "refactor_destination", metavar="DESTINATION", help="new .sql path or folder/"
     )

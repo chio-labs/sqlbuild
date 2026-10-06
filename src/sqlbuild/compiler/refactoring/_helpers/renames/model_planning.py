@@ -59,12 +59,12 @@ from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def find_model(*, project: CompiledProject, name: str) -> CompiledModel:
-    """Return the compiled model a kind-qualified target names."""
+    """Return the compiled model a target names."""
 
     model: CompiledModel | None = next((item for item in project.models if item.name == name), None)
     if model is None:
         raise RefactorInputError(
-            f"{MODEL_KIND_PREFIX}{name} is not a model in this project",
+            f"no model named '{name}' in this project",
             code="C951",
             help="list models with sqb dag --json or sqb scope --browse models",
         )

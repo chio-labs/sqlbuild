@@ -12,7 +12,6 @@ from sqlbuild.compiler.refactoring.types import (
 )
 
 MODEL_KIND_PREFIX: str = "model:"
-COLUMN_KIND_PREFIX: str = "column:"
 SQL_SUFFIX: str = ".sql"
 PATH_SEPARATOR: str = "/"
 IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

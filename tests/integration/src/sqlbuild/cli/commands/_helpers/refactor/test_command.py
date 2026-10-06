@@ -10,6 +10,7 @@ from sqlbuild.cli.commands._helpers.refactor.command import run_refactor_command
 from sqlbuild.cli.commands.models import RefactorCommandRequest
 from sqlbuild.cli.commands.types import CliCommand
 from tests.integration.src.sqlbuild.cli.commands._helpers.refactor._test_types import (
+    BareTargetRefactorTestCase,
     RefactorStatusMessagesTestCase,
 )
 
@@ -111,6 +112,63 @@ def test_given_refactor_when_running_then_progress_messages_agree_in_number(
     expected: str
     for expected in test_case.expected_lines:
         assert expected in lines, lines
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BareTargetRefactorTestCase(
+            description="bare model.column renames the column downstream",
+            command=CliCommand.RENAME,
+            target="stg_orders.amount",
+            new_name="revenue",
+            destination=None,
+            expected_path="models/marts/fact_orders.sql",
+            expected_fragment="revenue AS amount",
+            expected_missing_paths=(),
+        ),
+        BareTargetRefactorTestCase(
+            description="bare model name moves the model file",
+            command=CliCommand.MV,
+            target="fact_orders",
+            new_name=None,
+            destination="models/finance/",
+            expected_path="models/finance/fact_orders.sql",
+            expected_fragment='FROM __ref("stg_orders")',
+            expected_missing_paths=("models/marts/fact_orders.sql",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_bare_target_when_running_then_applies_refactor(
+    test_case: BareTargetRefactorTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    relative_path: str
+    content: str
+    for relative_path, content in _PROJECT_FILES.items():
+        path: Path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+    exit_code: int = run_refactor_command(
+        request=RefactorCommandRequest(
+            command=test_case.command,
+            target=test_case.target,
+            new_name=test_case.new_name,
+            destination=test_case.destination,
+            project_dir=tmp_path,
+            no_color=True,
+        )
+    )
+
+    output: str = capsys.readouterr().out
+    assert exit_code == 0, output
+    assert test_case.expected_fragment in (tmp_path / test_case.expected_path).read_text()
+    missing_path: str
+    for missing_path in test_case.expected_missing_paths:
+        assert not (tmp_path / missing_path).exists()
 
 
 if __name__ == "__main__":
