@@ -73,55 +73,60 @@ SQLBuild materializes all models in DAG order. SQL unit tests run before their t
 ```
 Execution  sqb build  (concurrency: 1)
 
-   1/13  seed      waffle_types                                          OK     0.09s
-   2/13  view      stg_customers                                         OK     0.05s
+   1/17  source    raw__customers                                        OK     0.05s  rows=5
+   2/17  source    raw__orders                                           OK     0.03s  rows=10
+
+   3/17  seed      waffle_types                                          OK     0.03s
+   4/17  view      stg_customers                                         OK     0.02s
            audit     not_null (customer_id)                              PASS
            audit     unique (customer_id)                                PASS
            audit     not_null (email)                                    PASS
-   3/13  view      stg_payments                                          OK     0.02s
-           audit     not_null (payment_id)                               PASS
-           audit     unique (payment_id)                                 PASS
-           audit     not_null (order_id)                                 PASS
-   4/13  view      stg_orders                                            OK     0.03s
+   7/17  view      stg_orders                                            OK     0.04s
+           test      test_daily_revenue_chain                            PASS
+             expect  expected stg_orders                                 PASS
+             expect  expected stg_payments                               PASS
+             expect  expected daily_revenue                              PASS
+             expect  assertion daily_revenue_is_non_negative             PASS
            test      test_stg_orders                                     PASS
+             expect  expected stg_orders                                 PASS
+             expect  assertion order_ids_are_not_null                    PASS
            audit     not_null (order_id)                                 PASS
            audit     unique (order_id)                                   PASS
            audit     not_null (customer_id)                              PASS
+           audit     relationships (waffle_type_id)                      PASS
            audit     accepted_values (status)                            PASS
-   5/13  custom    daily_order_partitioned                               OK     0.17s
-           audit     expression_is_true                                  PASS  4/4
+   8/17  custom    daily_order_partitioned                               OK     0.21s
+           audit     waffles_ordered_is_positive                         PASS  4/4
            audit     not_null (order_date)                               PASS  4/4
-   6/13  table     daily_revenue                                         OK     0.05s
-           audit     expression_is_true                                  PASS
-   7/13  table     dim_customers                                         OK     0.05s
-           audit     not_null (customer_id)                              PASS
-           audit     unique (customer_id)                                PASS
-   8/13  table     fact_orders                                           OK     0.04s
+   9/17  table     daily_revenue                                         OK     0.07s
+           test      test_daily_revenue_chain                            PASS
+             expect  expected stg_orders                                 PASS
+             expect  expected stg_payments                               PASS
+             expect  expected daily_revenue                              PASS
+             expect  assertion daily_revenue_is_non_negative             PASS
+           audit     revenue_is_non_negative                             PASS
+  11/17  table     fact_orders                                           OK     0.05s
+           test      test_fact_orders                                    PASS
+             expect  expected fact_orders                                PASS
+             expect  assertion line_totals_are_non_negative              PASS
            audit     not_null (order_id)                                 PASS
-   9/13  table     customer_status_snapshot  (merge)                     OK     0.04s
+  12/17  table     customer_status_snapshot  (merge)                     OK     0.05s
            audit     not_null (customer_id)                              PASS
            audit     unique (customer_id)                                PASS
-  10/13  table     hourly_order_activity  (delete_insert)                OK     0.16s
-           audit (d) expression_is_true                                  PASS  4/4
-           audit (d) not_null (activity_hour)                            PASS  4/4
-           audit (f) expression_is_true                                  PASS
+  13/17  table     hourly_order_activity  (delete_insert)                OK     0.24s
+         5 batches (1d)    range 2026-03-31T09:00:00 → 2026-04-04T14:00:00    8 rows
+           audit (d) orders_placed_is_non_negative                       PASS  5/5
+           audit (d) not_null (activity_hour)                            PASS  5/5
+           audit (f) orders_placed_is_non_negative                       PASS
            audit (f) not_null (activity_hour)                            PASS
-  11/13  table     order_status_index  (delete_insert)                   OK     0.03s
-           audit     not_null (order_id)                                 PASS
-           audit     unique (order_id)                                   PASS
-  12/13  table     daily_activity_rollup  (delete_insert)                OK     0.08s
-           audit (d) expression_is_true                                  PASS  2/2
-           audit (d) not_null (activity_day)                             PASS  2/2
-           audit (f) expression_is_true                                  PASS
-           audit (f) not_null (activity_day)                             PASS
-  13/13  table     hourly_activity_with_daily_context  (delete_insert)   OK     0.17s
-           audit (d) expression_is_true                                  PASS  4/4
-           audit (d) not_null (activity_hour)                            PASS  4/4
-           audit (f) expression_is_true                                  PASS
+  17/17  table     hourly_activity_with_daily_context  (delete_insert)   OK     0.63s
+         13 batches (6h)    range 2026-03-31T18:00:00 → 2026-04-03T23:00:00    0 rows
+           audit (d) day_orders_cover_hourly_orders                      PASS  13/13
+           audit (d) not_null (activity_hour)                            PASS  13/13
+           audit (f) day_orders_cover_hourly_orders                      PASS
            audit (f) not_null (activity_hour)                            PASS
 
-Completed successfully.
-PASS=66  WARN=0  FAIL=0  SKIP=0  TOTAL=66  (1.09s)
+✓ Completed successfully  PASS=99  WARN=0  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=99  (2.13s)
 ```
 
 Notice `audit (d)` and `audit (f)` on incremental models - these are delta-phase and final-phase audits. Delta audits validate each batch before DML is applied; final audits run against the target after promotion.

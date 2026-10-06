@@ -10,7 +10,7 @@ Show
 Type "tree --noreport models"
 Enter
 Sleep 1500ms
-Type "sqb mv model:revenue models/finance/daily_revenue.sql"
+Type "sqb mv revenue models/finance/daily_revenue.sql"
 Sleep 300ms
 Enter
 Wait@60s /\$\s*$/
