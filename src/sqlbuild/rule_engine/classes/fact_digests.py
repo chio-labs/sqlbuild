@@ -8,7 +8,11 @@ from typing import Any
 
 import orjson
 
-from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_outcome_digest
+from sqlbuild.rule_engine._helpers.engine.fact_replay import (
+    fact_outcome_digest,
+    shared_fact_encoder,
+)
+from sqlbuild.rule_engine.classes.shared_fact_encoder import SharedFactEncoder
 from sqlbuild.rule_engine.models import RuleFactViews
 from sqlbuild.rule_engine.types import FactKey
 
@@ -20,6 +24,7 @@ class FactDigests:
         self._views_factory: Callable[[], RuleFactViews] = views
         self._views: RuleFactViews | None = None
         self._digests: dict[FactKey, str] = {}
+        self._shared: SharedFactEncoder = shared_fact_encoder()
 
     @property
     def views(self) -> RuleFactViews:
@@ -33,7 +38,7 @@ class FactDigests:
         cached: str | None = self._digests.get(key)
         if cached is not None:
             return cached
-        digest: str = fact_outcome_digest(views=self.views, key=key)
+        digest: str = fact_outcome_digest(views=self.views, key=key, shared=self._shared)
         self._digests[key] = digest
         return digest
 

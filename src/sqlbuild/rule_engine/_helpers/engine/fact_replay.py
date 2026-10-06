@@ -9,6 +9,7 @@ from pathlib import Path, PurePath
 
 import orjson
 
+from sqlbuild.rule_engine.classes.shared_fact_encoder import SharedFactEncoder
 from sqlbuild.rule_engine.classes.sql_document import SqlDocument
 from sqlbuild.rule_engine.constants import (
     FACT_AUDITS_ALL,
@@ -98,6 +99,7 @@ _TEXT_FACT_ARITY: dict[str, int] = {
     FACT_TREE_READ_TEXT: 1,
 }
 _TREE_FACTS: frozenset[str] = frozenset({FACT_TREE_PATHS, *_TEXT_FACTS})
+_SHARED_FACTS: frozenset[str] = frozenset(_GLOBAL_FACTS) - _TREE_FACTS
 
 
 def fact_key_payload(key: tuple[object, ...]) -> list[str]:
@@ -123,8 +125,10 @@ def full_fact_keys(views: RuleFactViews) -> tuple[FactKey, ...]:
     return tuple(keys)
 
 
-def fact_outcome_digest(*, views: RuleFactViews, key: FactKey) -> str:
-    """Recompute one recorded fact and digest its value or raised error."""
+def fact_outcome_digest(
+    *, views: RuleFactViews, key: FactKey, shared: SharedFactEncoder | None = None
+) -> str:
+    """Recompute one recorded fact and digest its value, sharing whole-project encodings."""
 
     try:
         value: object = _fact_value(views=views, key=key)
@@ -132,7 +136,18 @@ def fact_outcome_digest(*, views: RuleFactViews, key: FactKey) -> str:
         raise
     except Exception as error:
         return fact_error_digest(error)
+    if shared is not None and key[0] in _SHARED_FACTS:
+        try:
+            return hashlib.sha256(shared.encode(("value", value))).hexdigest()
+        except (TypeError, FactDigestError) as error:
+            raise FactDigestError(str(error)) from error
     return fact_value_digest(value)
+
+
+def shared_fact_encoder() -> SharedFactEncoder:
+    """Return an encoder for whole-project facts that share compiler objects."""
+
+    return SharedFactEncoder(options=_ORJSON_OPTIONS, encode_default=_encode_default)
 
 
 def fact_value_digest(value: object) -> str:

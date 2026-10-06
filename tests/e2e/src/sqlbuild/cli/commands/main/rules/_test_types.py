@@ -222,3 +222,13 @@ class RulesEditChainCase:
     edits: tuple[RulesCacheEditCase, ...]
     expected_cold_codes: tuple[str, ...]
     expected_exit_code: int = 1
+
+
+@dataclass(frozen=True)
+class BrokenInvalidationChainCase:
+    """An edit chain compiled with deliberately stale fact digests against a cache-free oracle."""
+
+    description: str
+    edits: tuple[RulesCacheEditCase, ...]
+    stale_digests_sitecustomize: str
+    expected_first_divergent_edit: str

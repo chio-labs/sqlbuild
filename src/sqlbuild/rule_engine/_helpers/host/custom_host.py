@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import contextlib
+import gc
 import io
 import json
 import os
 import pickle
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
@@ -20,8 +22,11 @@ from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_CANCELLED_EXIT_CODE,
     CUSTOM_HOST_CANCELLED_MESSAGE,
+    CUSTOM_HOST_EXEC_OS_NAME,
     CUSTOM_HOST_HASH_SEED,
+    CUSTOM_HOST_INPUT_POLL_SECONDS,
     CUSTOM_HOST_INPUT_TUPLE_SIZE,
+    CUSTOM_HOST_INPUT_WAIT_SECONDS,
     CUSTOM_HOST_LAUNCH_MODULE,
     CUSTOM_HOST_MAX_TRACKED_READS,
     CUSTOM_HOST_PROTOCOL_VERSION,
@@ -61,7 +66,7 @@ def main() -> int:
         cancel_marker: Path | None = _cancel_marker(payload)
         if cancel_marker is not None and cancel_marker.exists():
             raise HostCancelledError(CUSTOM_HOST_CANCELLED_MESSAGE)
-        project, config = _decode_inputs(payload)
+        project, config = _decode_inputs(payload=payload, cancel_marker=cancel_marker)
         project_dir: Path = Path(str(payload["project_dir"])).resolve()
         dialect: str = str(payload.get("dialect", "generic"))
         verify_determinism: bool = payload.get("verify_determinism") is True
@@ -111,18 +116,27 @@ def main() -> int:
     return 0
 
 
-def _decode_inputs(payload: dict[str, Any]) -> tuple[CompiledProject, RulesConfig]:
+def _decode_inputs(
+    *, payload: dict[str, Any], cancel_marker: Path | None
+) -> tuple[CompiledProject, RulesConfig]:
     project_dir: Path = Path(str(payload["project_dir"])).resolve()
     input_root: Path = (project_dir / "target" / "rules-cache" / "host-inputs").resolve()
     input_path: Path = Path(str(payload["project_pickle_path"]))
-    if (
-        not input_path.is_absolute()
-        or input_path.is_symlink()
-        or not input_path.resolve().is_relative_to(input_root)
-    ):
+    if not input_path.is_absolute() or not input_path.parent.resolve().is_relative_to(input_root):
+        raise RulesError("custom host project payload path is invalid")
+    await_inputs(
+        path=input_path,
+        cancel_markers=tuple(
+            marker
+            for marker in (cancel_marker, _input_marker(payload=payload, key="abandoned_marker"))
+            if marker is not None
+        ),
+        parent_pid=_expected_parent(payload),
+    )
+    if input_path.is_symlink() or not input_path.resolve().is_relative_to(input_root):
         raise RulesError("custom host project payload path is invalid")
     with input_path.open("rb") as handle:
-        decoded: object = pickle.load(handle)
+        decoded: object = _load_long_lived(handle)
     if (
         not isinstance(decoded, tuple)
         or len(decoded) != CUSTOM_HOST_INPUT_TUPLE_SIZE
@@ -133,18 +147,60 @@ def _decode_inputs(payload: dict[str, Any]) -> tuple[CompiledProject, RulesConfi
     return decoded
 
 
-def _cancel_marker(payload: dict[str, Any]) -> Path | None:
-    """Return the run's cancellation marker, which must live beside the project payload."""
+def await_inputs(*, path: Path, cancel_markers: tuple[Path, ...], parent_pid: int) -> None:
+    """Wait for the payload the parent publishes after starting this host, while it still runs."""
 
-    value: object = payload.get("cancel_marker")
+    deadline: float = time.monotonic() + CUSTOM_HOST_INPUT_WAIT_SECONDS
+    while not path.exists():
+        if any(marker.exists() for marker in cancel_markers):
+            raise HostCancelledError(CUSTOM_HOST_CANCELLED_MESSAGE)
+        if os.getppid() != parent_pid:
+            raise RulesError("custom host parent exited before writing the project payload")
+        if time.monotonic() > deadline:
+            raise RulesError("custom host project payload was never written")
+        time.sleep(CUSTOM_HOST_INPUT_POLL_SECONDS)
+
+
+def _expected_parent(payload: dict[str, Any]) -> int:
+    """Return the parent that started this host; a relaying launcher stands in for it."""
+
+    value: object = payload.get("parent_pid")
+    if os.name == CUSTOM_HOST_EXEC_OS_NAME and isinstance(value, int) and value > 0:
+        return value
+    return os.getppid()
+
+
+def _input_marker(*, payload: dict[str, Any], key: str) -> Path | None:
+    """Return a signal file the run placed beside the project payload, if it named one."""
+
+    value: object = payload.get(key)
     if value is None:
         return None
     project_dir: Path = Path(str(payload["project_dir"])).resolve()
     input_root: Path = (project_dir / "target" / "rules-cache" / "host-inputs").resolve()
     marker: Path = Path(str(value))
-    if not marker.is_absolute() or not marker.resolve().is_relative_to(input_root):
-        raise RulesError("custom host cancellation marker path is invalid")
+    if not marker.is_absolute() or not marker.parent.resolve().is_relative_to(input_root):
+        raise RulesError(f"custom host {key} path is invalid")
     return marker
+
+
+def _load_long_lived(handle: BinaryIO) -> Any:
+    """Unpickle the host-lifetime project without cyclic collection, then freeze it."""
+
+    was_enabled: bool = gc.isenabled()
+    gc.disable()
+    try:
+        return pickle.load(handle)
+    finally:
+        gc.freeze()
+        if was_enabled:
+            gc.enable()
+
+
+def _cancel_marker(payload: dict[str, Any]) -> Path | None:
+    """Return the run's cancellation marker, which must live beside the project payload."""
+
+    return _input_marker(payload=payload, key="cancel_marker")
 
 
 def _decode_plan(value: object) -> CustomRulePlan:

@@ -6,20 +6,27 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.rule_engine._helpers.host import custom_host_pool
+from sqlbuild.rule_engine._helpers.host import custom_host, custom_host_pool
 from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
-from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.rule_engine.exceptions import HostCancelledError, RulesError
 from sqlbuild.rule_engine.models import CustomRulesOutcome
 from tests.unit.src.sqlbuild.rule_engine._helpers.host._test_types import (
+    AwaitInputsTestCase,
+    AwaitPublishedInputsTestCase,
     HostCancellationTestCase,
     HostFailureTestCase,
+    HostInputsTestCase,
     HostPartitionTestCase,
     HostPlanTestCase,
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.host.helpers import (
+    delay_inputs,
     evaluate_order_rules,
+    fail_inputs,
+    fail_inputs_without_directory,
     orders_project,
     record_signals,
+    touch_files,
     use_hosts,
     write_order_rules,
 )
@@ -278,6 +285,186 @@ def test_given_cancelled_hosts_when_failing_then_no_process_is_signalled(
 
     assert signals == []
     assert test_case.expected_error_fragment in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        HostInputsTestCase(
+            description="one host waits for a slow payload",
+            model_count=4,
+            hosts=1,
+            write_delay_seconds=1.0,
+            expected_max_seconds=60.0,
+        ),
+        HostInputsTestCase(
+            description="split hosts wait for a slow payload",
+            model_count=7,
+            hosts=3,
+            write_delay_seconds=1.0,
+            expected_max_seconds=60.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_hosts_started_before_payload_when_payload_arrives_then_findings_are_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInputsTestCase
+) -> None:
+    write_order_rules(root=tmp_path)
+    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    oracle: CustomRulesOutcome = evaluate_order_rules(
+        project=project, root=tmp_path, cache_enabled=False
+    )
+    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    delay_inputs(monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds)
+    started: float = time.monotonic()
+
+    delayed: CustomRulesOutcome = evaluate_order_rules(project=project, root=tmp_path)
+
+    assert time.monotonic() - started < test_case.expected_max_seconds
+    assert len(launches) == test_case.hosts
+    assert delayed.findings == oracle.findings
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        HostInputsTestCase(
+            description="one waiting host is released",
+            model_count=4,
+            hosts=1,
+            write_delay_seconds=0.5,
+            expected_max_seconds=30.0,
+        ),
+        HostInputsTestCase(
+            description="split waiting hosts are released",
+            model_count=7,
+            hosts=3,
+            write_delay_seconds=0.5,
+            expected_max_seconds=30.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_payload_write_failure_when_hosts_wait_then_original_error_is_raised_promptly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInputsTestCase
+) -> None:
+    write_order_rules(root=tmp_path)
+    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    fail_inputs(monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds)
+    started: float = time.monotonic()
+
+    with pytest.raises(OSError, match="project payload disk is full"):
+        _ = evaluate_order_rules(project=project, root=tmp_path)
+
+    assert time.monotonic() - started < test_case.expected_max_seconds
+    assert len(launches) == test_case.hosts
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        HostInputsTestCase(
+            description="one host released after its input folder vanished",
+            model_count=4,
+            hosts=1,
+            write_delay_seconds=2.0,
+            expected_max_seconds=1.0,
+        ),
+        HostInputsTestCase(
+            description="split hosts released after their input folder vanished",
+            model_count=7,
+            hosts=3,
+            write_delay_seconds=2.0,
+            expected_max_seconds=1.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_input_folder_removed_when_payload_write_fails_then_original_error_returns_promptly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInputsTestCase
+) -> None:
+    write_order_rules(root=tmp_path)
+    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    failures: list[float] = fail_inputs_without_directory(
+        monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds
+    )
+
+    with pytest.raises(OSError, match="project payload disk is full"):
+        _ = evaluate_order_rules(project=project, root=tmp_path)
+
+    assert time.monotonic() - failures[0] < test_case.expected_max_seconds
+    assert len(launches) == test_case.hosts
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AwaitInputsTestCase(
+            description="parent exited before publishing",
+            reported_parent_pid=1,
+            existing_files=(),
+            expected_error=RulesError,
+            expected_max_seconds=1.0,
+        ),
+        AwaitInputsTestCase(
+            description="run abandoned by its parent",
+            reported_parent_pid=4242,
+            existing_files=("project.abandoned",),
+            expected_error=HostCancelledError,
+            expected_max_seconds=1.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_waiting_host_when_parent_exits_or_run_is_abandoned_then_wait_stops_promptly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: AwaitInputsTestCase
+) -> None:
+    touch_files(root=tmp_path, names=test_case.existing_files)
+    monkeypatch.setattr(custom_host.os, "getppid", lambda: test_case.reported_parent_pid)
+    started: float = time.monotonic()
+
+    with pytest.raises(test_case.expected_error):
+        custom_host.await_inputs(
+            path=tmp_path / "project.pickle",
+            cancel_markers=(tmp_path / "project.abandoned",),
+            parent_pid=4242,
+        )
+
+    assert time.monotonic() - started < test_case.expected_max_seconds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AwaitPublishedInputsTestCase(
+            description="payload published while the parent runs",
+            reported_parent_pid=4242,
+            existing_files=("project.pickle",),
+            expected_max_seconds=1.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_published_payload_when_parent_still_runs_then_wait_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: AwaitPublishedInputsTestCase
+) -> None:
+    touch_files(root=tmp_path, names=test_case.existing_files)
+    monkeypatch.setattr(custom_host.os, "getppid", lambda: test_case.reported_parent_pid)
+    started: float = time.monotonic()
+
+    custom_host.await_inputs(
+        path=tmp_path / "project.pickle",
+        cancel_markers=(tmp_path / "project.abandoned",),
+        parent_pid=4242,
+    )
+
+    assert time.monotonic() - started < test_case.expected_max_seconds
 
 
 if __name__ == "__main__":

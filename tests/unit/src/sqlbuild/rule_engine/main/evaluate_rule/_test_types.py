@@ -25,3 +25,11 @@ class EvaluateRuleDeterminismTestCase:
     description: str
     rule_case: RuleCase
     expected_error_pattern: str
+
+
+@dataclass(frozen=True)
+class AuthoringImportTestCase:
+    description: str
+    imported_module: str
+    checked_modules: tuple[str, ...]
+    expected_loaded_modules: tuple[str, ...]

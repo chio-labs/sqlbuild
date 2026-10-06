@@ -2,6 +2,7 @@
 
 import os
 import random
+import shutil
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -429,3 +430,51 @@ def timed_state_history(
         rules=rules, model_count=model_count, detectors=(detector(rules=rules, root=root),)
     )
     return time.process_time() - started, history
+
+
+def delay_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
+    """Publish every host project payload only after a delay."""
+
+    write: Callable[..., None] = custom_host_pool._write_inputs
+
+    def delayed_write(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+        time.sleep(delay_seconds)
+        write(path=path, project=project, config=config)
+
+    monkeypatch.setattr(custom_host_pool, "_write_inputs", delayed_write)
+
+
+def fail_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
+    """Fail to publish every host project payload after a delay."""
+
+    def failed_write(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+        del path, project, config
+        time.sleep(delay_seconds)
+        raise OSError("project payload disk is full")
+
+    monkeypatch.setattr(custom_host_pool, "_write_inputs", failed_write)
+
+
+def fail_inputs_without_directory(
+    *, monkeypatch: pytest.MonkeyPatch, delay_seconds: float
+) -> list[float]:
+    """Remove the host-input directory, then fail to publish; return when each write failed."""
+
+    failures: list[float] = []
+
+    def failed_write(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+        del project, config
+        time.sleep(delay_seconds)
+        shutil.rmtree(path.parent)
+        failures.append(time.monotonic())
+        raise OSError("project payload disk is full")
+
+    monkeypatch.setattr(custom_host_pool, "_write_inputs", failed_write)
+    return failures
+
+
+def touch_files(*, root: Path, names: tuple[str, ...]) -> None:
+    """Create empty files beneath one folder."""
+
+    for name in names:
+        (root / name).touch()
