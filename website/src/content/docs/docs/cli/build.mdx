@@ -71,22 +71,27 @@ audit reads, so the audit can gate the resource like its other audits. See
 ```
 Execution  sqb build  (concurrency: 1)
 
-   1/13  seed      waffle_types                                          OK     0.09s
-   2/13  view      stg_customers                                         OK     0.05s
-           audit     not_null (customer_id)                              PASS
-           audit     unique (customer_id)                                PASS
-   3/13  view      stg_orders                                            OK     0.03s
+   1/17  source    raw__customers                                        OK     0.05s  rows=5
+   2/17  source    raw__orders                                           OK     0.03s  rows=10
+
+   3/17  seed      waffle_types                                          OK     0.03s
+   7/17  view      stg_orders                                            OK     0.04s
            test      test_stg_orders                                     PASS
+             expect  expected stg_orders                                 PASS
+             expect  assertion order_ids_are_not_null                    PASS
            audit     not_null (order_id)                                 PASS
            audit     unique (order_id)                                   PASS
-  10/13  table     hourly_order_activity  (delete_insert)                OK     0.16s
-           audit (d) expression_is_true                                  PASS  4/4
-           audit (d) not_null (activity_hour)                            PASS  4/4
-           audit (f) expression_is_true                                  PASS
+           audit     not_null (customer_id)                              PASS
+           audit     relationships (waffle_type_id)                      PASS
+           audit     accepted_values (status)                            PASS
+  13/17  table     hourly_order_activity  (delete_insert)                OK     0.24s
+         5 batches (1d)    range 2026-03-31T09:00:00 → 2026-04-04T14:00:00    8 rows
+           audit (d) orders_placed_is_non_negative                       PASS  5/5
+           audit (d) not_null (activity_hour)                            PASS  5/5
+           audit (f) orders_placed_is_non_negative                       PASS
            audit (f) not_null (activity_hour)                            PASS
 
-Completed successfully.
-PASS=66  WARN=0  FAIL=0  SKIP=0  TOTAL=66  (1.09s)
+✓ Completed successfully  PASS=99  WARN=0  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=99  (2.13s)
 ```
 
 ## Deferred builds
