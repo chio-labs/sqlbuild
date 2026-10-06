@@ -42,7 +42,6 @@ def build_column_create_table_sql(
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
-    transient: bool,
 ) -> str:
     return render_state_table_create_sql(
         qualified_name=qualified_column_migration_table(
@@ -52,7 +51,6 @@ def build_column_create_table_sql(
         column_types=COLUMN_MIGRATION_COLUMN_TYPES,
         required_columns=frozenset(),
         render_framework_type=render_framework_type,
-        transient=transient,
     )
 
 

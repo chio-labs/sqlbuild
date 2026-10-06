@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
+    render_state_table_create_sql,
+)
 from sqlbuild.compiler.source_freshness.constants import (
     COLUMN_DATA_VERSION,
     COLUMN_DATA_VERSION_HASH,
@@ -21,7 +24,6 @@ from sqlbuild.compiler.source_freshness.constants import (
     SOURCE_FRESHNESS_TABLE_NAME,
 )
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
-from sqlbuild.sql_values.types import StateSqlValueType
 
 _REQUIRED_SOURCE_FRESHNESS_COLUMNS: frozenset[str] = frozenset(
     {
@@ -59,29 +61,18 @@ def build_create_table_sql(
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
-    transient: bool = False,
 ) -> str:
     """Build a CREATE TABLE IF NOT EXISTS statement for source freshness state."""
 
-    qualified_name: str = build_qualified_table_name(
-        database=database,
-        schema=schema,
-        render_qualified_name=render_qualified_name,
+    return render_state_table_create_sql(
+        qualified_name=build_qualified_table_name(
+            database=database, schema=schema, render_qualified_name=render_qualified_name
+        ),
+        columns=SOURCE_FRESHNESS_COLUMNS,
+        column_types=SOURCE_FRESHNESS_COLUMN_TYPES,
+        required_columns=_REQUIRED_SOURCE_FRESHNESS_COLUMNS,
+        render_framework_type=render_framework_type,
     )
-    string_type: str = render_framework_type(FrameworkType.STRING)
-    timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
-    table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    definitions: list[str] = []
-    for column in SOURCE_FRESHNESS_COLUMNS:
-        column_type: str = (
-            timestamp_type
-            if SOURCE_FRESHNESS_COLUMN_TYPES[column]
-            in {StateSqlValueType.TIMESTAMP, StateSqlValueType.TEXT_TIMESTAMP}
-            else string_type
-        )
-        required: str = " NOT NULL" if column in _REQUIRED_SOURCE_FRESHNESS_COLUMNS else ""
-        definitions.append(f"{column} {column_type}{required}")
-    return f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"
 
 
 def build_read_latest_sql(

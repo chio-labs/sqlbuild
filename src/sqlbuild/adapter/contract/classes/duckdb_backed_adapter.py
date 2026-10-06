@@ -804,6 +804,18 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             render_qualified_name=self.render_qualified_name,
         )
 
+    def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.source_freshness.main.create_table_sql import (
+            build_create_table_sql as build_source_freshness_create_table_sql,
+        )
+
+        return build_source_freshness_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_create_source_freshness_index_sqls(
         self,
         *,
@@ -907,7 +919,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_column_migration_state_table_sql(

@@ -12,6 +12,7 @@ Online: https://sqlbuild.com/docs/concepts/adapters/snowflake/
 - Session initialization
 - Planning metadata
 - Build metadata
+- State tables
 - Shared connections across targets
 - Cost estimates
 
@@ -74,6 +75,18 @@ During a build, checks for whether one relation exists use `SHOW TERSE TABLES` a
 `SHOW TERSE VIEWS`, and reads of one relation's columns use `SHOW COLUMNS`, so they also don't
 need a running warehouse. Each build reuses these answers until it changes that relation, for
 example by replacing a delta table or adding a column, and then reads it again.
+
+## State tables
+
+SQLBuild records its state in `_sqlbuild_*` tables, such as `_sqlbuild_fingerprints`,
+`_sqlbuild_source_freshness`, and `_sqlbuild_microbatches`. On Snowflake, SQLBuild creates every
+state table as a permanent table with `DATA_RETENTION_TIME_IN_DAYS = 90`, the maximum time travel,
+so the table also has Fail-safe. On editions that allow only 1 day of time travel, Snowflake
+rejects 90 and SQLBuild creates the table with 1 day instead.
+
+The retention is set only in the statement that creates the table. SQLBuild never alters an
+existing state table, so a state table that already exists keeps its current table type and
+retention. Models are not affected: their table type follows the model `table_type` setting.
 
 ## Shared connections across targets
 

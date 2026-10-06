@@ -106,7 +106,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = None
     sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax()
     max_identifier_length: ClassVar[int] = 63
-    state_tables_transient: ClassVar[bool] = False
     relation_grants_supported: ClassVar[bool] = True
     views_read_with_reader_access: ClassVar[bool] = False
     allows_implicit_managed_write_schema: ClassVar[bool] = False
@@ -2092,7 +2091,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
@@ -2161,6 +2159,20 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         del database, schema
         return ()
 
+    def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the source freshness table when it is missing."""
+
+        from sqlbuild.compiler.source_freshness.main.create_table_sql import (
+            build_create_table_sql as build_source_freshness_create_table_sql,
+        )
+
+        return build_source_freshness_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_create_source_freshness_index_sqls(
         self,
         *,
@@ -2205,7 +2217,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_node_result_index_sqls(
@@ -2230,7 +2241,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_audit_result_index_sqls(
@@ -2252,7 +2262,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
@@ -2267,7 +2276,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_old_name_view_state_table_sql(
@@ -2284,7 +2292,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_create_column_migration_state_table_sql(
@@ -2301,7 +2308,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
         )
 
     def render_prune_fingerprint_history_sql(

@@ -135,11 +135,12 @@ def test_given_adapter_when_rendering_column_rename_then_uses_the_engine_stateme
             ),
         ),
         AdapterColumnMigrationStateTableTestCase(
-            description="snowflake state tables follow the transient state setting",
+            description="snowflake state tables are permanent with maximum time travel",
             adapter=SnowflakeAdapter(),
             expected_fragments=(
-                "CREATE TRANSIENT TABLE IF NOT EXISTS main._sqlbuild_column_migrations",
+                "CREATE TABLE IF NOT EXISTS main._sqlbuild_column_migrations",
                 "origin_column",
+                ") DATA_RETENTION_TIME_IN_DAYS = 90",
             ),
         ),
         AdapterColumnMigrationStateTableTestCase(

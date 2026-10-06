@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlbuild.adapter.contract.models import FunctionInfo, SchemaDiffResult
 from sqlbuild.adapter.contract.types import TableFreshnessStatus
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
 
@@ -225,3 +226,61 @@ class SnowflakeFunctionDiscoveryTestCase:
     expected_relation: str
     expected_params: tuple[str, ...]
     expected_functions: tuple[FunctionInfo, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeStateTableDdlTestCase:
+    description: str
+    render_method: str
+    expected_prefix: str
+    expected_suffix: str
+
+
+@dataclass(frozen=True)
+class SnowflakeStateTableExactDdlTestCase:
+    description: str
+    render_method: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class SnowflakeStateTableFallbackTestCase:
+    description: str
+    adapter_type: type[SnowflakeAdapter]
+    rejection_errno: int
+    rejection_message: str
+    expected_executed_tables: tuple[str, ...]
+    expected_executed_retention_days: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeStateTableRetentionErrorTestCase:
+    description: str
+    errno: int
+    message: str
+    expected_executed_count: int
+    expected_next_retention_days: str
+
+
+@dataclass(frozen=True)
+class SnowflakeNonStateRetentionErrorTestCase:
+    description: str
+    sql: str
+    expected_executed_sql: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeStateTableFallbackLifecycleTestCase:
+    description: str
+    rejections: tuple[tuple[tuple[str, ...], Exception], ...]
+    expected_statement_events: tuple[str, ...]
+    expected_progress_fail_lines: int
+    expected_executed_retention_days: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeStateTableSchemaFallbackTestCase:
+    description: str
+    rejecting_schema: str
+    accepting_schema: str
+    expected_executed: tuple[tuple[str, str], ...]

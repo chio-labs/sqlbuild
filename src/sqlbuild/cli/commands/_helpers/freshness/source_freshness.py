@@ -145,7 +145,7 @@ def _append_records_by_location(
                         render_qualified_name=adapter.render_qualified_name,
                         render_framework_type=adapter.render_framework_type,
                         render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+                        render_create_table_sql=adapter.render_create_source_freshness_table_sql,
                         render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,
                     ),
-                    transient=adapter.state_tables_transient,
                 )

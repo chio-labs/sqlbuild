@@ -25,6 +25,7 @@ from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
     FakeColumn,
     FakeRelation,
+    FakeSnowflakeProgrammingError,
     OfflineSnowflakeAdapter,
     RecordingSnowflakeWarehouse,
 )
@@ -80,6 +81,7 @@ _RUNTIME_BOUNDS_PATTERN: re.Pattern[str] = re.compile(r"^SELECT MIN\([^)]*\), MA
 _COPY_SOURCE_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*SELECT\s+\*\s+FROM\s+" + _NAME.format(group="source") + r"\s*$", re.IGNORECASE
 )
+_RETENTION_PATTERN: re.Pattern[str] = re.compile(r"DATA_RETENTION_TIME_IN_DAYS = (?P<days>\d+)")
 _DEFAULT_COLUMNS: tuple[FakeColumn, ...] = (FakeColumn(name="ID", data_type="NUMBER"),)
 _STATUS_DESCRIPTION: tuple[tuple[str], ...] = (("status",),)
 
@@ -94,6 +96,7 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
 
     model_columns: dict[str, tuple[FakeColumn, ...]] = field(default_factory=dict)
     ddl_events: list[tuple[int, frozenset[_Identity]]] = field(default_factory=list)
+    max_retention_days: int = 90
 
     def reset(self) -> None:
         """Forget recorded statements and simulated DDL events, keeping the catalog."""
@@ -109,6 +112,11 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
             self.model_columns[model.upper()] = columns
 
     def _answer(self, *, sql: str, params: tuple[object, ...]) -> tuple[list[tuple[Any, ...]], Any]:
+        retention: re.Match[str]
+        for retention in filter(None, (_RETENTION_PATTERN.search(sql),)):
+            _RETENTION_CHECKS[int(retention.group("days")) > self.max_retention_days](
+                retention.group("days")
+            )
         routes: tuple[tuple[re.Pattern[str], _DdlAction], ...] = (
             (_CREATE_AS_PATTERN, self._create_as),
             (_CREATE_DEFINED_PATTERN, self._create_defined),
@@ -256,6 +264,24 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
         return full[0], full[1], full[2]
 
 
+def _accept_retention(days: str) -> None:
+    del days
+
+
+def _reject_retention(days: str) -> None:
+    raise FakeSnowflakeProgrammingError(
+        "001008 (22023): SQL compilation error:\n"
+        f"invalid value [{days}] for parameter 'DATA_RETENTION_TIME_IN_DAYS'",
+        errno=1008,
+    )
+
+
+_RETENTION_CHECKS: dict[bool, Callable[[str], None]] = {
+    False: _accept_retention,
+    True: _reject_retention,
+}
+
+
 def _name_length(name: str) -> int:
     return len(name)
 
@@ -314,6 +340,17 @@ def build_offline_snowflake_project(
         result=result,
         statements=tuple(warehouse.attempted_sql),
         ddl_events=tuple(warehouse.ddl_events),
+    )
+
+
+def state_table_creates(build: OfflineBuild) -> tuple[str, ...]:
+    """Return the CREATE statements the build attempted for SQLBuild state tables."""
+
+    return tuple(
+        filter(
+            lambda statement: _STATE_TABLE_CREATE_PATTERN.match(statement) is not None,
+            build.statements,
+        )
     )
 
 
@@ -380,6 +417,9 @@ def _show_schema_identity(match: re.Match[str]) -> _Identity:
     return match.group("database"), match.group("schema"), ""
 
 
+_STATE_TABLE_CREATE_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*CREATE\s+(?:TRANSIENT\s+)?TABLE\s+IF\s+NOT\s+EXISTS\s+\S*_sqlbuild_", re.IGNORECASE
+)
 _INFORMATION_SCHEMA_PATTERN: re.Pattern[str] = re.compile(r"information_schema", re.IGNORECASE)
 _SHOW_COLUMNS_RELATION: re.Pattern[str] = re.compile(r"^SHOW COLUMNS IN (?:TABLE|VIEW) (\S+)$")
 _METADATA_STATEMENTS: tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], _Identity]], ...] = (

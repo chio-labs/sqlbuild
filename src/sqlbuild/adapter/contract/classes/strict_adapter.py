@@ -911,6 +911,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the source freshness table when it is missing."""
+        ...
+
+    @abstractmethod
     def render_create_source_freshness_index_sqls(
         self,
         *,

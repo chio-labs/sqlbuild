@@ -129,7 +129,7 @@ from tests.unit.src.sqlbuild.cli.compile_reuse._helpers.helpers import (
         ),
         ProjectFingerprintTestCase(
             description="root_hidden_project_directory_change",
-            change=lambda root: write_file(root / ".orders_rules/limits.txt", "10\n"),
+            change=lambda root: write_file(root / ".orders_rules/limits.txt", "400\n"),
             expected_unchanged=False,
         ),
         ProjectFingerprintTestCase(

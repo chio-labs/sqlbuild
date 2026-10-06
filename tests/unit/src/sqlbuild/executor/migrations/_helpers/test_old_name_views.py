@@ -80,7 +80,7 @@ def test_given_recorded_column_renames_when_composing_then_old_names_map_to_curr
             expected_statements=(
                 "CREATE OR REPLACE VIEW analytics.revenue AS SELECT * FROM analytics.daily_revenue",
             ),
-            expected_state_table_prefix="CREATE TRANSIENT TABLE IF NOT EXISTS",
+            expected_state_table_prefix="CREATE TABLE IF NOT EXISTS",
             expected_transactional=False,
         ),
         AdapterOldNameSqlTestCase(
@@ -92,7 +92,7 @@ def test_given_recorded_column_renames_when_composing_then_old_names_map_to_curr
                 "CREATE OR REPLACE VIEW analytics.revenue AS "
                 'SELECT "ORDER_ID", "REVENUE" AS "AMOUNT" FROM analytics.daily_revenue',
             ),
-            expected_state_table_prefix="CREATE TRANSIENT TABLE IF NOT EXISTS",
+            expected_state_table_prefix="CREATE TABLE IF NOT EXISTS",
             expected_transactional=False,
         ),
         AdapterOldNameSqlTestCase(

@@ -125,3 +125,11 @@ class RelationRevokeTestCase:
     grants: tuple[RelationGrant, ...]
     destination: str
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AdapterStateTableDdlTestCase:
+    description: str
+    adapter: StrictAdapter
+    render_method: str
+    expected_create_fragment: str

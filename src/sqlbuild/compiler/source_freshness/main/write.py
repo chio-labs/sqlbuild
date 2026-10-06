@@ -22,7 +22,6 @@ def write_source_freshness_records(
     schema: str,
     records: tuple[SourceFreshnessRecord, ...],
     renderers: SourceFreshnessRenderers,
-    transient: bool = False,
 ) -> None:
     """Append source freshness rows, creating the table once if needed."""
 
@@ -36,7 +35,6 @@ def write_source_freshness_records(
             schema=schema,
             render_qualified_name=renderers.render_qualified_name,
             render_framework_type=renderers.render_framework_type,
-            transient=transient,
         )
     )
     _ = execute(connection=connection, sql=create_sql)
