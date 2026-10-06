@@ -2,6 +2,7 @@
 members = [
     "crates/sqlbuild-core",
     "crates/sqlbuild-sqltext",
+    "crates/sqlbuild-analysis",
     "crates/sqlbuild-python",
 ]
 resolver = "2"
@@ -39,8 +40,10 @@ quote = "1"
 rayon = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# Every crate relies on insertion-ordered JSON objects, which the extension has always built with.
+serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
+sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-sqltext = { path = "crates/sqlbuild-sqltext" }
 stacker = "0.1"

@@ -1,9 +1,9 @@
 //! Read catalog relation shapes from Python mappings in their authored column order.
 
-use crate::semantic_validation::models::Columns;
-use crate::semantic_validation::types::{BindingRequest, Relations};
 use pyo3::prelude::{Bound, FromPyObject, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
+use sqlbuild_analysis::semantic_validation::models::Columns;
+use sqlbuild_analysis::semantic_validation::types::{BindingRequest, Relations};
 use std::collections::HashMap;
 
 /// One relation's columns, read from a `{name: type}` mapping.

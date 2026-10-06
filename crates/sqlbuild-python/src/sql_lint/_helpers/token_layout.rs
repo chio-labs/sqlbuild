@@ -6,11 +6,11 @@ use polyglot_sql::Dialect;
 use polyglot_sql::tokens::{Token, TokenType};
 
 use crate::sql_lint::constants::{CLOSE_PARENTHESIS, OPEN_PARENTHESIS};
-use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
-use crate::sql_tokens::main::case_folding::foldable_tokens;
-use crate::sql_tokens::main::is_unquoted_word::is_unquoted_word;
-use crate::sql_tokens::main::name_positions::name_positions;
-use crate::sql_tokens::main::token_texts::token_texts;
+use sqlbuild_analysis::sql_tokens::main::canonical_tokens::canonical_tokens;
+use sqlbuild_analysis::sql_tokens::main::case_folding::foldable_tokens;
+use sqlbuild_analysis::sql_tokens::main::is_unquoted_word::is_unquoted_word;
+use sqlbuild_analysis::sql_tokens::main::name_positions::name_positions;
+use sqlbuild_analysis::sql_tokens::main::token_texts::token_texts;
 
 const TOKEN_PRESERVATION_FAILURE: &str =
     "native formatter would change authored SQL tokens, not only layout";

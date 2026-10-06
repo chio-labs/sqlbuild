@@ -25,7 +25,9 @@ fn normalize_analysis_sql(
     request: crate::bindings::models::NormalizationInput,
 ) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::semantic_validation::main::normalize::normalize_analysis_sql(request.into())
+        sqlbuild_analysis::semantic_validation::main::normalize::normalize_analysis_sql(
+            request.into(),
+        )
     })
     .map_err(value_error)
 }
@@ -33,7 +35,9 @@ fn normalize_analysis_sql(
 #[pyfunction]
 fn normalize_dialect_sql(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::semantic_validation::main::normalize_dialect::normalize_dialect_sql(sql, dialect)
+        sqlbuild_analysis::semantic_validation::main::normalize_dialect::normalize_dialect_sql(
+            sql, dialect,
+        )
     })
     .map_err(value_error)
 }
@@ -43,11 +47,11 @@ fn normalize_dialect_sql(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<S
 fn normalize_analysis_sqls(
     py: Python<'_>,
     dialect: &str,
-    requests: Vec<crate::semantic_validation::types::NormalizationRequest>,
+    requests: Vec<sqlbuild_analysis::semantic_validation::types::NormalizationRequest>,
 ) -> PyResult<Vec<Py<PyAny>>> {
     let results = py.compiler_detach(|| {
         Ok(
-            crate::semantic_validation::main::normalize_batch::normalize_analysis_sqls(
+            sqlbuild_analysis::semantic_validation::main::normalize_batch::normalize_analysis_sqls(
                 dialect, requests, None,
             ),
         )
@@ -63,10 +67,12 @@ fn binding_diagnostics(
     py: Python<'_>,
     sql: &str,
     dialect: &str,
-    rows: Vec<crate::semantic_validation::types::DiagnosticRow>,
-) -> PyResult<Vec<crate::semantic_validation::types::DiagnosticRow>> {
+    rows: Vec<sqlbuild_analysis::semantic_validation::types::DiagnosticRow>,
+) -> PyResult<Vec<sqlbuild_analysis::semantic_validation::types::DiagnosticRow>> {
     py.compiler_detach(|| {
-        crate::semantic_validation::main::diagnostics::binding_diagnostics(sql, dialect, rows)
+        sqlbuild_analysis::semantic_validation::main::diagnostics::binding_diagnostics(
+            sql, dialect, rows,
+        )
     })
     .map_err(value_error)
 }
@@ -211,45 +217,53 @@ fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String>
 #[pyfunction]
 fn query_fingerprint(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::sql_tokens::main::query_fingerprint::query_fingerprint(sql, dialect)
+        sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint(sql, dialect)
     })
     .map_err(value_error)
 }
 
 #[pyfunction(name = "validate_sql_with_schema_json")]
 fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::semantic_validation::main::validation_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::validation_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction(name = "validate_sql_with_schemas_json")]
 fn schema_validations_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::semantic_validation::main::validations_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::validations_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::semantic_usage::main::analyze_json(request_json))
+    py.compiler_detach(|| sqlbuild_analysis::semantic_usage::main::analyze_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_column_references_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::column_references::main::analyze::analyze_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_analysis::column_references::main::analyze::analyze_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::query_analysis::main::analyze::analyze_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_analysis::query_analysis::main::analyze::analyze_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::query_analysis::main::analyze_project::analyze_project_json(request_json)
+        sqlbuild_analysis::query_analysis::main::analyze_project::analyze_project_json(request_json)
     })
     .map_err(value_error)
 }
@@ -257,7 +271,7 @@ fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<
 #[pyfunction]
 fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::query_analysis::main::analyze_project_compact::analyze_project_compact_json(
+        sqlbuild_analysis::query_analysis::main::analyze_project_compact::analyze_project_compact_json(
             request_json,
         )
     })
@@ -266,14 +280,16 @@ fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> P
 
 #[pyfunction]
 fn render_sql_test_comparisons_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::compiler::main::sql_test_rendering::render_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_test_rendering::render_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::compiler::main::sql_test_planning::plan_and_render_json(request_json)
+        sqlbuild_analysis::compiler::main::sql_test_planning::plan_and_render_json(request_json)
     })
     .map_err(value_error)
 }
@@ -281,7 +297,9 @@ fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResul
 #[pyfunction]
 fn resolve_sql_test_chains_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(request_json)
+        sqlbuild_analysis::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+            request_json,
+        )
     })
     .map_err(value_error)
 }
@@ -289,7 +307,7 @@ fn resolve_sql_test_chains_json(py: Python<'_>, request_json: &str) -> PyResult<
 #[pyfunction]
 fn render_sql_test_difference_sample_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+        sqlbuild_analysis::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
             request_json,
         )
     })
@@ -299,7 +317,7 @@ fn render_sql_test_difference_sample_json(py: Python<'_>, request_json: &str) ->
 #[pyfunction]
 fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
-        crate::compiler::main::sql_test_extraction::extract_batch_json(request_json)
+        sqlbuild_analysis::compiler::main::sql_test_extraction::extract_batch_json(request_json)
     })
     .map_err(value_error)
 }

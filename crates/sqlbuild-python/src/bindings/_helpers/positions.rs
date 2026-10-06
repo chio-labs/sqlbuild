@@ -2,9 +2,9 @@
 
 use crate::bindings::_helpers::panics::compiler_guard;
 use crate::bindings::models::{BindingPositions, PositionInput};
-use crate::semantic_validation::models as validation;
 use pyo3::exceptions::PyValueError;
 use pyo3::{PyResult, pymethods};
+use sqlbuild_analysis::semantic_validation::models as validation;
 
 #[pymethods]
 impl BindingPositions {

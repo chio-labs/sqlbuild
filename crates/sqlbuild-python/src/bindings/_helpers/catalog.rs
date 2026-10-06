@@ -5,14 +5,14 @@ use crate::bindings::_helpers::panics::compiler_error;
 use crate::bindings::main::normalization_results::normalization_results;
 use crate::bindings::models::{CatalogInput, CompactAnalysisJob, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
-use crate::semantic_validation::models as validation;
-use crate::semantic_validation::types::{
-    BindingRequest, DiagnosticRow, NormalizationRequest, Relations,
-};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
 use pyo3::pymethods;
 use pyo3::types::PyBytes;
+use sqlbuild_analysis::semantic_validation::models as validation;
+use sqlbuild_analysis::semantic_validation::types::{
+    BindingRequest, DiagnosticRow, NormalizationRequest, Relations,
+};
 use std::collections::HashMap;
 
 #[pymethods]

@@ -18,7 +18,7 @@ use crate::sql_quality::syntax::{
     Projection, columns, cte_select_tokens, lower, projection_removal, projections, qualifier,
     sources,
 };
-use crate::sql_tokens::main::projection_spans::projection_spans;
+use sqlbuild_analysis::sql_tokens::main::projection_spans::projection_spans;
 
 const HARNESS_PREFIX: &str = "__";
 const COLUMNS_FUNCTION: &str = "COLUMNS";

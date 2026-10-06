@@ -1,4 +1,3 @@
-use crate::compiler::main::sql_test_fixture_facts::fixture_facts;
 use crate::models::{
     DeclarationKind, EvaluateRequest, Fault, Model, ResourceKind, RuleMetadata, RulesConfig,
     ScopeResource, SqlScenarioFact, SqlTestCteFact, SqlTestFact, SqlTestMode,
@@ -8,6 +7,7 @@ use crate::rules::_helpers::evaluation::{
     unwrap_nested,
 };
 use crate::rules::models::ProjectEvaluationRequest;
+use sqlbuild_analysis::compiler::main::sql_test_fixture_facts::fixture_facts;
 use sqlparser::ast::{
     BinaryOperator, Expr, FunctionArg, FunctionArgExpr, LimitClause, Query, Select, SetExpr,
     Statement, TableFactor, Value, Visit, Visitor,

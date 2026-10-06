@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use crate::sql_lint::tests::helpers::format_at_width;
 use crate::sql_lint::tests::test_types;
-use crate::sql_tokens::main::query_fingerprint::query_fingerprint;
+use sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint;
 
 #[test]
 fn given_clause_layout_rules_when_formatting_then_each_rule_applies_idempotently()

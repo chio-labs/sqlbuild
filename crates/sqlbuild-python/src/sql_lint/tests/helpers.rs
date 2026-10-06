@@ -6,10 +6,10 @@ use serde_json::{Value, json};
 use crate::sql_lint::main::batch_formatter::format_batch_json;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
-use crate::sql_tokens::_helpers::builtin_functions::builtin_function_names;
-use crate::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
-use crate::sql_tokens::main::canonical_tokens::canonical_tokens;
-use crate::sql_tokens::main::query_fingerprint::query_fingerprint;
+use sqlbuild_analysis::sql_tokens::_helpers::builtin_functions::builtin_function_names;
+use sqlbuild_analysis::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
+use sqlbuild_analysis::sql_tokens::main::canonical_tokens::canonical_tokens;
+use sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint;
 
 pub(crate) fn nested_function_sql(depth: usize) -> String {
     format!("SELECT {}1{}", "F(".repeat(depth), ")".repeat(depth))
