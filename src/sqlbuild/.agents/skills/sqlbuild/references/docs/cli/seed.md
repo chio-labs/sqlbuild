@@ -11,13 +11,16 @@ Loads seed CSV files into the warehouse as tables. Seeds are fully replaced on e
 ## Usage
 
 ```bash
-sqb --project-dir <path> seed [flags]
+sqb seed [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select specific seeds by name |
 | `--exclude` | Exclude specific seeds |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
@@ -29,5 +32,5 @@ sqb --project-dir <path> seed [flags]
 sqb seed
 
 # Load a specific seed
-sqb seed --select seed:waffle_types
+sqb seed seed:waffle_types
 ```

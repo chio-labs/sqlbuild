@@ -11,13 +11,17 @@ Compiles, plans, and executes the selected build lifecycle, running the full sel
 ## Usage
 
 ```bash
-sqb --project-dir <path> build [flags]
+sqb build [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined.
 
 ## Global options
 
-These options apply to every `sqb` command and go before the command name, as in
-`sqb --debug build`:
+These options apply to every `sqb` command. `--project-dir`, `--no-color`, and `--debug` go
+before or after the command name, as in `sqb --debug build` or `sqb build --debug`. Under
+`sqb dbt`, put `--project-dir` before `dbt`: after it, `--project-dir` is passed to dbt as dbt's
+own option. `--version` works only directly after `sqb`, as in `sqb --version`:
 
 | Option | Description |
 |--------|-------------|
@@ -42,6 +46,8 @@ These options apply to every `sqb` command and go before the command name, as in
 | `--fail-fast` | Stop on first failure and skip remaining nodes |
 | `--concurrency` | Number of worker connections (default: 1) |
 | `--verbose`, `-v` | Show lifecycle SQL inline after each model |
+| `--start-cursor` | Override the start cursor, typed from the selected incremental models' cursor type; fails with `S303` if the selection mixes timestamp and integer cursors. With no cursor model selected, an integer value is read as an integer cursor and anything else as an ISO timestamp |
+| `--end-cursor` | Override the end cursor, typed the same way as `--start-cursor` |
 | `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer incremental models |
@@ -51,6 +57,7 @@ These options apply to every `sqb` command and go before the command name, as in
 | `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
 | `--selection-diagnostics` | Warn when a selected model will build on changed upstream models that are not selected; see [Selection and staleness](/docs/concepts/planning/selection-and-staleness) |
 | `--manifest` | Generate `target/manifest.json` with plan-aware project metadata |
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
@@ -118,7 +125,7 @@ statement or step still prints its `FAIL` row.
 Use `--defer-to` to resolve unselected model references against another target. This lets you build a subset of models in dev while referencing production tables for everything else:
 
 ```bash
-sqb build --select fact_orders --defer-to prod
+sqb build fact_orders --defer-to prod
 ```
 
 No `manifest.json` is required. `--defer-to` selects only the namespace used for unselected

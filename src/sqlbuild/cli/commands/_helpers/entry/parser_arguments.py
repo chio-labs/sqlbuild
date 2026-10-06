@@ -36,10 +36,22 @@ def add_vars_args(parser: argparse.ArgumentParser) -> None:
 def add_cursor_override_args(parser: argparse.ArgumentParser) -> None:
     """Add cursor override flags to a subparser."""
 
-    parser.add_argument("--start-cursor-ts", default=None)
-    parser.add_argument("--end-cursor-ts", default=None)
-    parser.add_argument("--start-cursor-int", default=None)
-    parser.add_argument("--end-cursor-int", default=None)
+    parser.add_argument(
+        "--start-cursor",
+        default=None,
+        metavar="VALUE",
+        help="override the start cursor, typed from the selected models' cursor type",
+    )
+    parser.add_argument(
+        "--end-cursor",
+        default=None,
+        metavar="VALUE",
+        help="override the end cursor, typed from the selected models' cursor type",
+    )
+    parser.add_argument("--start-cursor-ts", default=None, help="timestamp start cursor override")
+    parser.add_argument("--end-cursor-ts", default=None, help="timestamp end cursor override")
+    parser.add_argument("--start-cursor-int", default=None, help="integer start cursor override")
+    parser.add_argument("--end-cursor-int", default=None, help="integer end cursor override")
 
 
 def add_microbatch_limit_override_arg(parser: argparse.ArgumentParser) -> None:
@@ -81,6 +93,18 @@ def add_select_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--select", "-s", nargs="+", action="extend", default=[])
     parser.add_argument("--select-file", action="append", default=[])
     parser.add_argument("--exclude", nargs="+", action="extend", default=[])
+
+
+def add_positional_select_arg(parser: argparse.ArgumentParser) -> None:
+    """Accept selectors as positional arguments; they are combined with --select."""
+
+    parser.add_argument(
+        "positional_select",
+        nargs="*",
+        default=[],
+        metavar="SELECTOR",
+        help="selectors to include, the same as --select; combined with any --select values",
+    )
 
 
 def add_dbt_config_args(*, parser: argparse.ArgumentParser, prefix: str = "dbt") -> None:

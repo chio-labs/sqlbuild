@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime
 
+from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
+    CursorOverrides,
     Duration,
     EmptyCursorInputDecision,
     MaximumStartPolicyInputs,
@@ -17,6 +21,7 @@ from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
     CursorWatermarkMode,
+    MaterializationType,
     MicrobatchStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
@@ -30,7 +35,10 @@ from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.try_parse import try_parse
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
+_INTEGER_LITERAL: re.Pattern[str] = re.compile(r"[+-]?\d+")
+_LISTED_MODEL_LIMIT: int = 3
 _EMPTY_INTEGER_CURSOR_BOUND: int = 0
 _EMPTY_TIMESTAMP_CURSOR_BOUND: datetime = datetime(1970, 1, 1)
 
@@ -483,3 +491,66 @@ def _parse_required(*, value: str, cursor_type: str | None) -> CursorScalar:
     if parsed is None:
         raise CursorAlgebraError(f"invalid cursor value: {value}")
     return parsed
+
+
+def type_cursor_overrides(
+    *,
+    cursor_overrides: CursorOverrides | None,
+    selected_models: Iterable[CompiledModel],
+) -> CursorOverrides | None:
+    """Type `--start-cursor`/`--end-cursor` from the selected cursor models, else the literal."""
+
+    if cursor_overrides is None or not cursor_overrides.has_untyped:
+        return cursor_overrides
+    model_names_by_type: dict[CursorType, list[str]] = {}
+    model: CompiledModel
+    for model in selected_models:
+        cursor_type: CursorType | None = _model_cursor_type(model=model)
+        if cursor_type is not None:
+            model_names_by_type.setdefault(cursor_type, []).append(model.name)
+    if len(model_names_by_type) > 1:
+        raise PlannerInputError(
+            "--start-cursor and --end-cursor need one cursor type, but the selection mixes "
+            + " and ".join(
+                f"{cursor_type} cursor models ({_format_names(names)})"
+                for cursor_type, names in sorted(model_names_by_type.items())
+            ),
+            code="S303",
+            help=(
+                "select models with one cursor type, or set each type explicitly with "
+                "--start-cursor-ts/--end-cursor-ts and --start-cursor-int/--end-cursor-int"
+            ),
+        )
+    resolved_type: CursorType = (
+        next(iter(model_names_by_type))
+        if model_names_by_type
+        else _literal_cursor_type(cursor_overrides=cursor_overrides)
+    )
+    return cursor_overrides.typed_as(cursor_type=resolved_type)
+
+
+def _model_cursor_type(*, model: CompiledModel) -> CursorType | None:
+    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
+    cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
+    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
+        return None
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
+    if cursor_type not in {CursorType.TIMESTAMP, CursorType.INTEGER}:
+        return None
+    return CursorType(cursor_type)
+
+
+def _literal_cursor_type(*, cursor_overrides: CursorOverrides) -> CursorType:
+    values: tuple[str, ...] = tuple(
+        value for value in (cursor_overrides.start, cursor_overrides.end) if value is not None
+    )
+    if all(_INTEGER_LITERAL.fullmatch(value.strip()) for value in values):
+        return CursorType.INTEGER
+    return CursorType.TIMESTAMP
+
+
+def _format_names(names: list[str]) -> str:
+    ordered: list[str] = sorted(names)
+    shown: str = ", ".join(ordered[:_LISTED_MODEL_LIMIT])
+    hidden: int = len(ordered) - _LISTED_MODEL_LIMIT
+    return f"{shown} and {hidden} more" if hidden > 0 else shown

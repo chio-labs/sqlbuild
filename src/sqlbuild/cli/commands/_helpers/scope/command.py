@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands._helpers.scope.output import render_scope_result
+from sqlbuild.cli.commands._helpers.scope.target import qualify_scope_target
 from sqlbuild.cli.commands.models import ScopeCommandRequest
 from sqlbuild.cli.commands.types import ScopeIndexLoader
 from sqlbuild.compiler.scopes.main.browse_scope_folders import browse_scope_folders
@@ -42,6 +43,7 @@ def run_scope_command(
     project_dir: Path = request.project_dir if request.project_dir is not None else Path.cwd()
     index: ScopeIndex = load_scope_index(project_dir=project_dir, no_cache=request.no_cache)
     lookup: ScopeLookup = build_scope_lookup(index=index)
+    request = replace(request, target=qualify_scope_target(lookup=lookup, target=request.target))
     filters: ScopeReportFilters = ScopeReportFilters(
         include_nearby=request.include_nearby,
         defined_under=request.defined_under,

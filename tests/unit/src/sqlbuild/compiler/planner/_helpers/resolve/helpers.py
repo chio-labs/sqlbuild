@@ -65,3 +65,34 @@ class BracketTableFunctionCallAdapter(DuckDbAdapter):
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         arguments_sql: str = call_suffix_sql.removeprefix("(").removesuffix(")")
         return f"TABLE({target}[{arguments_sql}])"
+
+
+def build_cursor_models(
+    *, model_cursor_types: tuple[tuple[str, str | None], ...]
+) -> tuple[CompiledModel, ...]:
+    """Build models named by `model_cursor_types`; a None type builds a non-cursor table."""
+
+    return tuple(
+        CompiledModel(
+            key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
+            deps=(),
+            name=name,
+            relative_path=Path(f"models/{name}.sql"),
+            query_sql="SELECT 1",
+            config=CompileModelConfig(values=_cursor_model_config_values(cursor_type=cursor_type)),
+            destination=CompiledRelationLocation(
+                database=None, schema="staging", name=name, qualified_name=f"staging.{name}"
+            ),
+        )
+        for name, cursor_type in model_cursor_types
+    )
+
+
+def _cursor_model_config_values(*, cursor_type: str | None) -> dict[str, object]:
+    table: dict[str, object] = {"materialized": "table"}
+    incremental: dict[str, object] = {
+        "materialized": "incremental",
+        "cursor": "updated_at",
+        "cursor_type": cursor_type,
+    }
+    return (table, incremental)[cursor_type is not None]

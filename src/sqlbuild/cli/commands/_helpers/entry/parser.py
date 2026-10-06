@@ -14,6 +14,7 @@ from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
     add_execution_args,
     add_execution_json_output_arg,
     add_microbatch_limit_override_arg,
+    add_positional_select_arg,
     add_scenario_snapshot_safety_args,
     add_select_args,
     add_vars_args,
@@ -23,6 +24,7 @@ from sqlbuild.cli.commands.constants import (
     COLUMN_LINEAGE_MODE_VALUES,
     COMMAND_WAREHOUSE_GROUPS,
     COMPILE_LINEAGE_MODE_VALUES,
+    JSON_OUTPUT_FORMAT,
     PLAYGROUND_TEMPLATE_VALUES,
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
@@ -51,14 +53,7 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         action="version",
         version=f"sqb {_installed_version()}",
     )
-    parser.add_argument("--project-dir", "--sqb-project-dir", dest="project_dir", default=None)
-    parser.add_argument("--no-color", action="store_true", default=False)
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
-        help="enable verbose output and mirror internal diagnostics to stderr",
-    )
+    _add_global_args(parser=parser, suppress_defaults=False)
 
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(
         dest="command",
@@ -77,7 +72,56 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_skills_parsers(subparsers)
     _add_rules_parser(subparsers)
     _add_warehouse_args(subparsers)
+    _add_global_args_to_subcommands(subparsers)
     return parser
+
+
+def _add_global_args(*, parser: argparse.ArgumentParser, suppress_defaults: bool) -> None:
+    """Add flags accepted before or after the subcommand; subcommand copies suppress defaults."""
+
+    parser.add_argument(
+        "--project-dir",
+        "--sqb-project-dir",
+        dest="project_dir",
+        default=argparse.SUPPRESS if suppress_defaults else None,
+        help="SQLBuild project directory (default: the current directory)",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        default=argparse.SUPPRESS if suppress_defaults else False,
+        help="disable colored output",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS if suppress_defaults else False,
+        help="enable verbose output and mirror internal diagnostics to stderr",
+    )
+
+
+def _add_global_args_to_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    command_name: str
+    command_parser: argparse.ArgumentParser
+    for command_name, command_parser in subparsers.choices.items():
+        if command_name == CliCommand.DBT:
+            continue
+        _add_global_args(parser=command_parser, suppress_defaults=True)
+        nested: argparse._SubParsersAction[argparse.ArgumentParser]
+        for nested in _nested_subparsers(command_parser):
+            _add_global_args_to_subcommands(nested)
+
+
+def _nested_subparsers(
+    parser: argparse.ArgumentParser,
+) -> list[argparse._SubParsersAction[argparse.ArgumentParser]]:
+    return [
+        cast("argparse._SubParsersAction[argparse.ArgumentParser]", action)
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    ]
 
 
 def _add_warehouse_args(
@@ -94,11 +138,7 @@ def _add_warehouse_args(
 
 
 def _add_warehouse_arg_to_leaves(parser: argparse.ArgumentParser) -> None:
-    nested: list[argparse._SubParsersAction[argparse.ArgumentParser]] = [
-        cast("argparse._SubParsersAction[argparse.ArgumentParser]", action)
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
-    ]
+    nested: list[argparse._SubParsersAction[argparse.ArgumentParser]] = _nested_subparsers(parser)
     if not nested:
         parser.add_argument(
             "--warehouse",
@@ -239,6 +279,7 @@ def _add_compile_and_dag_parsers(
         help="Diagnostic: skip writing target/compiled artifacts",
     )
     add_select_args(compile_parser)
+    _ = add_positional_select_arg(compile_parser)
     _ = add_vars_args(compile_parser)
     _ = add_dbt_config_args(parser=compile_parser)
 
@@ -290,6 +331,7 @@ def _add_plan_and_build_parsers(
     _ = add_cursor_override_args(plan_parser)
     _ = add_microbatch_limit_override_arg(plan_parser)
     _ = add_select_args(plan_parser)
+    _ = add_positional_select_arg(plan_parser)
     _ = add_vars_args(plan_parser)
     _ = add_dbt_config_args(parser=plan_parser)
 
@@ -328,6 +370,7 @@ def _add_plan_and_build_parsers(
     build_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
     _ = add_execution_args(build_parser)
     _ = add_select_args(build_parser)
+    _ = add_positional_select_arg(build_parser)
     _ = add_vars_args(build_parser)
     _ = add_dbt_config_args(parser=build_parser)
 
@@ -344,6 +387,7 @@ def _add_quality_parsers(
     freshness_parser.add_argument("--fail-on-stale", action="store_true", default=False)
     _ = add_execution_json_output_arg(freshness_parser)
     _ = add_select_args(freshness_parser)
+    _ = add_positional_select_arg(freshness_parser)
     _ = add_vars_args(freshness_parser)
     _ = add_dbt_config_args(parser=freshness_parser)
 
@@ -358,6 +402,7 @@ def _add_quality_parsers(
     )
     _ = add_execution_json_output_arg(test_parser)
     _ = add_select_args(test_parser)
+    _ = add_positional_select_arg(test_parser)
     _ = add_vars_args(test_parser)
     _ = add_dbt_config_args(parser=test_parser)
 
@@ -367,6 +412,7 @@ def _add_quality_parsers(
     check_parser.add_argument("--target", default=None)
     _ = add_execution_json_output_arg(check_parser)
     _ = add_select_args(check_parser)
+    _ = add_positional_select_arg(check_parser)
     _ = add_vars_args(check_parser)
     _ = add_dbt_config_args(parser=check_parser)
 
@@ -378,6 +424,7 @@ def _add_quality_parsers(
     audit_parser.add_argument("--json", action="store_true", default=False)
     _ = add_execution_json_output_arg(audit_parser)
     _ = add_select_args(audit_parser)
+    _ = add_positional_select_arg(audit_parser)
     _ = add_vars_args(audit_parser)
     _ = add_dbt_config_args(parser=audit_parser)
 
@@ -426,6 +473,7 @@ def _add_data_parsers(
     seed_parser.add_argument("--concurrency", type=int, default=None)
     _ = add_execution_json_output_arg(seed_parser)
     _ = add_select_args(seed_parser)
+    _ = add_positional_select_arg(seed_parser)
     _ = add_vars_args(seed_parser)
 
     clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
@@ -620,12 +668,16 @@ def _add_inspection_parsers(
     query_parser.add_argument("query_sql", nargs="?", metavar="sql")
     query_parser.add_argument("--file", dest="query_file", default=None)
     query_parser.add_argument("--target", default=None)
-    query_parser.add_argument(
+    query_format_group: argparse._MutuallyExclusiveGroup = (
+        query_parser.add_mutually_exclusive_group()
+    )
+    query_format_group.add_argument(
         "--format",
         dest="query_format",
         choices=("long", "table", "json", "csv"),
         default="long",
     )
+    _add_json_format_alias(group=query_format_group, dest="query_format")
     query_parser.add_argument("--limit", dest="query_limit", type=int, default=20)
     query_parser.add_argument(
         "--no-limit", dest="query_no_limit", action="store_true", default=False
@@ -641,12 +693,16 @@ def _add_inspection_parsers(
         "or one model.column",
     )
     _add_sql_analysis_override(lineage_parser)
-    lineage_parser.add_argument(
+    lineage_format_group: argparse._MutuallyExclusiveGroup = (
+        lineage_parser.add_mutually_exclusive_group()
+    )
+    lineage_format_group.add_argument(
         "--format",
         dest="lineage_format",
         choices=("tree", "json", "list"),
         default="tree",
     )
+    _add_json_format_alias(group=lineage_format_group, dest="lineage_format")
     lineage_parser.add_argument(
         "--include-uses",
         dest="lineage_include_uses",
@@ -670,6 +726,16 @@ def _add_inspection_parsers(
     )
     _ = add_select_args(lineage_parser)
     _ = add_vars_args(lineage_parser)
+
+
+def _add_json_format_alias(*, group: argparse._MutuallyExclusiveGroup, dest: str) -> None:
+    group.add_argument(
+        "--json",
+        dest=dest,
+        action="store_const",
+        const=JSON_OUTPUT_FORMAT,
+        help="shorthand for --format json",
+    )
 
 
 def _add_maintenance_parsers(

@@ -12,14 +12,17 @@ building models. Useful for validating test logic independently.
 ## Usage
 
 ```bash
-sqb --project-dir <path> test [flags]
+sqb test [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select tests targeting specific models |
 | `--exclude` | Exclude tests targeting specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
@@ -39,5 +42,5 @@ are strings in JSON so their scale is preserved.
 sqb test
 
 # Run tests for a specific model
-sqb test --select stg_orders
+sqb test stg_orders
 ```

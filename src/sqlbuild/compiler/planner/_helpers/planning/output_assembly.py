@@ -67,7 +67,11 @@ def assemble_base_plan_output(
             planned_sql_tests=planned_sql_tests,
         ),
     )
-    plan_output = replace(plan_output, source_freshness=source_freshness)
+    plan_output = replace(
+        plan_output,
+        source_freshness=source_freshness,
+        cursor_overrides=overrides.cursor_overrides,
+    )
     if pruning.pruned_direct_model_names:
         plan_output = replace(
             plan_output,

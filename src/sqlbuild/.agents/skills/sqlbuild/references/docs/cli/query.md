@@ -6,6 +6,14 @@
 
 Online: https://sqlbuild.com/docs/cli/query/
 
+## Contents
+
+- Usage
+- Flags
+- Output formats
+- Errors
+- Examples
+
 Execute ad hoc SQL against the active project connection. Useful for inspecting data, debugging models, or running one-off queries without leaving the SQLBuild CLI.
 
 ## Usage
@@ -29,6 +37,7 @@ File paths are resolved from the current working directory.
 | `sql` | SQL to execute (positional argument) |
 | `--file` | Read SQL from a file instead of the command line |
 | `--format` | Output format: `long` (default), `table`, `json`, or `csv` |
+| `--json` | Shorthand for `--format json` |
 | `--limit` | Maximum rows to return (default: 20) |
 | `--no-limit` | Disable the row limit |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
@@ -101,7 +110,7 @@ sqb query "SELECT * FROM dev.fact_orders"
 sqb query "SELECT * FROM dev.dim_customers" --format table --limit 50
 
 # Export to JSON
-sqb query "SELECT * FROM dev.daily_revenue" --format json --no-limit
+sqb query "SELECT * FROM dev.daily_revenue" --json --no-limit
 
 # Run SQL from a file
 sqb query --file debug_query.sql

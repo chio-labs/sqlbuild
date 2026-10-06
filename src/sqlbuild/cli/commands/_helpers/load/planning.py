@@ -15,6 +15,9 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
+from sqlbuild.compiler.planner.main.cursor_window.typed_cursor_overrides import (
+    typed_cursor_overrides,
+)
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.provider.main.session import build_provider_session
@@ -74,7 +77,9 @@ def prepare_load_execution(
         target_name=target_name,
         effective_vars=effective_vars,
         run_id=run_id,
-        effective_cursor_overrides=request.cursor_overrides or CursorOverrides(),
+        effective_cursor_overrides=(
+            typed_cursor_overrides(cursor_overrides=request.cursor_overrides) or CursorOverrides()
+        ),
         effective_concurrency=effective_concurrency,
         provider_session=build_provider_session(
             discovered_providers=invocation.discovered_inputs.providers

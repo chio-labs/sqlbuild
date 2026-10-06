@@ -12,8 +12,10 @@ Discovers the complete project, resolves references, expands macros, validates S
 ## Usage
 
 ```bash
-sqb --project-dir <path> compile [flags]
+sqb compile [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
@@ -25,6 +27,7 @@ sqb --project-dir <path> compile [flags]
 | `--json` | Output the full compile report as JSON |
 | `--manifest` | Generate `target/manifest.json` with project metadata |
 | `--lineage-mode` | Column lineage mode: `fast` (default), `rich` (slower, more detail), or `none` |
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Analyze and report selected resources |
 | `--select-file` | Read selectors from a file, one selector per line |
 | `--exclude` | Remove resources from the selected scope |
@@ -47,7 +50,7 @@ Use normal selectors to limit expensive analysis and reporting while retaining c
 discovery and reference integrity:
 
 ```bash
-sqb compile --select fact_orders daily_revenue
+sqb compile fact_orders daily_revenue
 sqb compile --select-file selected-models.txt
 sqb compile --exclude deprecated_model
 ```
@@ -279,7 +282,7 @@ sqb compile --lineage-mode none
 sqb compile --manifest
 
 # Compile only selected models
-sqb compile --select fact_orders daily_revenue
+sqb compile fact_orders daily_revenue
 
 # Disable SQL analysis
 sqb compile --no-sql-analysis

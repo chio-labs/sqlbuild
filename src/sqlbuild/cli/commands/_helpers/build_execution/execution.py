@@ -32,6 +32,9 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import (
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.main.project_relation_targets import build_project_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.main.cursor_window.typed_cursor_overrides import (
+    typed_cursor_overrides,
+)
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -97,7 +100,11 @@ def prepare_build_execution(
         blank_line_after_complete=True,
         use_color=invocation.use_color,
     )
-    cursor_overrides: CursorOverrides = request.cursor_overrides or CursorOverrides()
+    cursor_overrides: CursorOverrides = (
+        pipeline_result.plan_output.cursor_overrides
+        or typed_cursor_overrides(cursor_overrides=request.cursor_overrides)
+        or CursorOverrides()
+    )
     preparation: BuildExecutionPreparation = BuildExecutionPreparation(
         callbacks=callbacks,
         effective_concurrency=effective_concurrency,

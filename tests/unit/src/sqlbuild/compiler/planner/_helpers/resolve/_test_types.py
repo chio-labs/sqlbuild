@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import CursorBounds, CursorOverrides, ModelCursorSnapshot
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -134,3 +134,24 @@ class HookSqlResolutionTestCase:
     post_hooks: object
     expected_pre_hooks: object
     expected_post_hooks: object
+
+
+@dataclass(frozen=True)
+class UntypedCursorOverrideTestCase:
+    """Untyped --start-cursor/--end-cursor values and the selected models' cursor types."""
+
+    description: str
+    model_cursor_types: tuple[tuple[str, str | None], ...]
+    overrides: CursorOverrides
+    expected_overrides: CursorOverrides
+
+
+@dataclass(frozen=True)
+class UntypedCursorOverrideErrorTestCase:
+    """Untyped cursor values that cannot be typed from the selection."""
+
+    description: str
+    model_cursor_types: tuple[tuple[str, str | None], ...]
+    overrides: CursorOverrides
+    expected_message_prefix: str
+    expected_code: str

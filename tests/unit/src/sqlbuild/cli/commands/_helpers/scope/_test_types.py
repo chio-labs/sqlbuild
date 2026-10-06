@@ -23,3 +23,17 @@ class ScopeColourCase:
     use_color: bool
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScopeTargetCase:
+    description: str
+    target: str | None
+    expected_target: str | None
+
+
+@dataclass(frozen=True)
+class ScopeTargetErrorCase:
+    description: str
+    target: str
+    expected_message: str

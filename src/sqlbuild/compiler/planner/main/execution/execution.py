@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.changes.actions import resolve_model_actions
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
@@ -31,6 +33,9 @@ from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_s
 from sqlbuild.compiler.planner._helpers.planning.warehouse_state import (
     gather_planner_warehouse_state,
 )
+from sqlbuild.compiler.planner._helpers.resolve.cursor import (
+    type_cursor_overrides,
+)
 from sqlbuild.compiler.planner._helpers.warehouse.source_freshness import (
     build_planner_source_freshness_result,
 )
@@ -48,6 +53,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
     PlannerResolvedActions,
     PlannerRuntime,
+    PlannerScope,
     PlannerScopePruningResult,
     PlannerScopeResolution,
     PlannerSelection,
@@ -80,10 +86,12 @@ def build_execution_plan(
         local_config=local_config,
         on_progress=on_progress,
     )
-    scopes: PlannerScopeResolution = resolve_planner_scopes(
+    scopes: PlannerScopeResolution
+    scopes, overrides = _resolve_scopes_and_cursor_overrides(
         project=project,
         selection=selection,
         policies=policies,
+        overrides=overrides,
     )
     with (
         BackgroundSqlTestPlanning(
@@ -196,6 +204,33 @@ def build_execution_plan(
         if on_progress is not None:
             on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
         return plan_output
+
+
+def _resolve_scopes_and_cursor_overrides(
+    *,
+    project: CompiledProject,
+    selection: PlannerSelection,
+    policies: PlannerPolicies,
+    overrides: PlannerOverrides,
+) -> tuple[PlannerScopeResolution, PlannerOverrides]:
+    scopes: PlannerScopeResolution = resolve_planner_scopes(
+        project=project,
+        selection=selection,
+        policies=policies,
+    )
+    selected_scope: PlannerScope = scopes.selected_scope
+    selected_models: tuple[CompiledModel, ...] = tuple(
+        selected_scope.models_by_name[key.name]
+        for key in selected_scope.selected_keys
+        if key.resource_type == CompiledResourceType.MODEL
+        and key.name in selected_scope.models_by_name
+    )
+    return scopes, replace(
+        overrides,
+        cursor_overrides=type_cursor_overrides(
+            cursor_overrides=overrides.cursor_overrides, selected_models=selected_models
+        ),
+    )
 
 
 def _detect_planner_change_results(

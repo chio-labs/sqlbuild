@@ -21,6 +21,8 @@ sqb --project-dir <path> load [flags]
 | `--exclude` | Exclude specific sources or loaders |
 | `--reload` | Pass `is_reload=True` to loader functions |
 | `--concurrency` | Number of worker connections (default: from settings or 1) |
+| `--start-cursor` | Override the start cursor; an integer value sets `start_cursor_int`, anything else is read as an ISO timestamp and sets `start_cursor_ts` |
+| `--end-cursor` | Override the end cursor, typed the same way as `--start-cursor` |
 | `--start-cursor-ts` | Override start cursor for timestamp-based loaders (ISO format) |
 | `--end-cursor-ts` | Override end cursor for timestamp-based loaders (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer-based loaders |
@@ -46,7 +48,7 @@ sqb load --concurrency 4
 sqb load --reload
 
 # Override cursor bounds
-sqb load --start-cursor-ts "2026-05-01T00:00:00"
+sqb load --start-cursor "2026-05-01T00:00:00"
 ```
 
 ## Execution order

@@ -2137,13 +2137,8 @@ def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
     "test_case",
     [
         MainTestCase(
-            description="returns parser error for command local debug",
-            argv=["build", "--debug"],
-            expected_exit_code=2,
-        ),
-        MainTestCase(
-            description="returns parser error for command local no color",
-            argv=["plan", "--no-color"],
+            description="returns parser error for an unknown command flag",
+            argv=["build", "--no-such-flag"],
             expected_exit_code=2,
         ),
         MainTestCase(
@@ -2154,7 +2149,7 @@ def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
     ],
     ids=lambda case: case.description,
 )
-def test_given_command_local_global_flags_when_running_main_then_it_returns_parser_error(
+def test_given_unknown_flags_or_commands_when_running_main_then_it_returns_parser_error(
     test_case: MainTestCase,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -2171,7 +2166,7 @@ def test_given_command_local_global_flags_when_running_main_then_it_returns_pars
     [
         MainTestCase(
             description="colorizes parser error prefix when color is supported",
-            argv=["build", "--debug"],
+            argv=["build", "--no-such-flag"],
             expected_exit_code=2,
         )
     ],
@@ -2197,7 +2192,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
     [
         MainTestCase(
             description="leaves parser error plain when no color is requested",
-            argv=["--no-color", "build", "--debug"],
+            argv=["build", "--no-such-flag", "--no-color"],
             expected_exit_code=2,
         )
     ],

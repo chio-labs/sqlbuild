@@ -1305,3 +1305,13 @@ class SameRunEmptyInputsE2ETestCase:
     expected_json_empty_inputs: tuple[str, ...] | None
     expected_json_waiting_on_empty_inputs: bool | None
     expected_json_warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UntypedCursorOverrideSelectionE2ETestCase:
+    """Untyped cursor flags over a selection that does or does not mix cursor types."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]

@@ -8,12 +8,13 @@ Selectors let you scope commands to specific subsets of your project. They work 
 ## Basic usage
 
 ```bash
+sqb build daily_revenue
+sqb build daily_revenue customer_status_snapshot
 sqb build --select daily_revenue
-sqb build --select daily_revenue customer_status_snapshot
 sqb build --exclude stg_customers
 ```
 
-`--select` (or `-s` for short) accepts one or more names. Multiple values are unioned. Space-separated names within one `--select` are also unioned. `--exclude` subtracts from the selected set.
+Selectors can be written as positional arguments on `compile`, `plan`, `build`, `test`, `seed`, `freshness`, `audit`, and `check`, or with `--select` (or `-s` for short) on any command that selects. Both forms accept one or more names, can be combined, and are unioned. `--exclude` subtracts from the selected set.
 
 When no `--select` is provided, all models are selected.
 

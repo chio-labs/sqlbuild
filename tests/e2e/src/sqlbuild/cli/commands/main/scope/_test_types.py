@@ -35,3 +35,11 @@ class LargeScopePerformanceCase:
     expected_max_warm_seconds: float
     expected_max_cache_bytes: int
     command_timeout_seconds: float
+
+
+@dataclass(frozen=True)
+class ScopeBareTargetE2eCase:
+    description: str
+    target: str
+    expected_exit_code: int
+    expected_fragment: str
