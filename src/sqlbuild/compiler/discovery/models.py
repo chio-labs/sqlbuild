@@ -627,6 +627,27 @@ class DiscoveryCacheRequest:
 
 
 @dataclass(frozen=True)
+class DiscoveredDeclarationFiles:
+    """Project files discovery parses without importing any project Python."""
+
+    source_files: tuple[DiscoveredSourceFile, ...]
+    model_files: tuple[DiscoveredSqlModelFile, ...]
+    enum_files: tuple[DiscoveredEnumFile, ...]
+    constant_files: tuple[DiscoveredConstantFile, ...]
+    model_schema_files: tuple[DiscoveredModelSchemaFile, ...]
+    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...]
+    sql_hook_files: tuple[DiscoveredSqlHookFile, ...]
+    python_function_files: tuple[DiscoveredPythonFunctionFile, ...]
+    schema_files: tuple[DiscoveredSchemaFile, ...]
+    seed_files: tuple[DiscoveredSeedFile, ...]
+    test_files: tuple[DiscoveredSqlTestFile, ...]
+    scenario_files: tuple[DiscoveredSqlScenarioFile, ...]
+    audit_files: tuple[DiscoveredAuditFile, ...]
+    macro_files: tuple[DiscoveredMacroFile, ...]
+    adapter_file: DiscoveredAdapterFile | None
+
+
+@dataclass(frozen=True)
 class DiscoveredProjectInputs:
     """All raw project inputs discovered from disk before semantic resolution."""
 

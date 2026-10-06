@@ -20,7 +20,11 @@ from sqlbuild.compiler.compile.models import (
     StoredRender,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey, DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredDeclarationFiles,
+    DiscoveredMacroFile,
+    DiscoveredSqlModelFile,
+)
 from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
 
 REGION_ENV_VAR: str = "ORDERS_REGION"
@@ -156,3 +160,75 @@ def stored_query_sqls(state: RenderReuseState | None) -> dict[str, str]:
 def _stored_query_sql(payload: memoryview) -> str:
     stored: StoredRender = cast(StoredRender, loaded_fact_payload(payload))
     return cast(CompileModelInput, stored.value).query_sql
+
+
+DECLARATIONS_VARIANT: str = "10"
+OTHER_DECLARATIONS_VARIANT: str = "01"
+
+
+def declaration_files(
+    model_files: tuple[DiscoveredSqlModelFile, ...],
+) -> DiscoveredDeclarationFiles:
+    """Return discovered declaration files holding one macro file and the given models."""
+
+    return DiscoveredDeclarationFiles(
+        source_files=(),
+        model_files=model_files,
+        enum_files=(),
+        constant_files=(),
+        model_schema_files=(),
+        sql_function_files=(),
+        sql_hook_files=(),
+        python_function_files=(),
+        schema_files=(),
+        seed_files=(),
+        test_files=(),
+        scenario_files=(),
+        audit_files=(),
+        macro_files=(
+            DiscoveredMacroFile(
+                file_path=Path("/orders/macros/currency.py"),
+                relative_path=Path("macros/currency.py"),
+                contents="def total(price: str) -> str:\n    return price\n",
+            ),
+        ),
+        adapter_file=None,
+    )
+
+
+class CountingDiscovery:
+    """Discover fixed declaration files and count full and model-only discoveries."""
+
+    def __init__(self, model_files: tuple[DiscoveredSqlModelFile, ...]) -> None:
+        self.model_files: tuple[DiscoveredSqlModelFile, ...] = model_files
+        self.full: int = 0
+
+    def discover(self) -> DiscoveredDeclarationFiles:
+        """Discover every declaration file."""
+
+        self.full += 1
+        return declaration_files(self.model_files)
+
+    def discover_models(self) -> tuple[DiscoveredSqlModelFile, ...]:
+        """Discover model files only."""
+
+        return self.model_files
+
+
+def declarations_state(*, recorded_variant: str) -> RenderReuseState:
+    """Return stored renders of two models, with declaration files discovered for one variant."""
+
+    stored: tuple[DiscoveredSqlModelFile, ...] = (model_file("orders"), model_file("customers"))
+    session: CompileRenderReuseSession = CompileRenderReuseSession(prior=None, changed_paths=None)
+    _ = session.declaration_files(
+        variant=recorded_variant,
+        discover=CountingDiscovery(stored).discover,
+        discover_models=CountingDiscovery(stored).discover_models,
+    )
+    session.plan_models(model_files=stored)
+    with collect_compile_diagnostics():
+        for item in stored:
+            _ = session.rendered_model(model_file=item, render=lambda item=item: _render(item))
+    state: RenderReuseState | None = session.stored_state()
+    assert state is not None
+    return state

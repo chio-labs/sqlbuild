@@ -46,3 +46,13 @@ class ReleasedRenderTestCase:
     retained_models: frozenset[str]
     expected_released: dict[str, bool]
     expected_query_sqls: dict[str, str]
+
+
+@dataclass(frozen=True)
+class DeclarationReuseTestCase:
+    """Paths changed since a stored compile, and whether its declaration files are reused."""
+
+    description: str
+    changed_paths: frozenset[str] | None
+    recorded_variant: str
+    expected_full_discoveries: int

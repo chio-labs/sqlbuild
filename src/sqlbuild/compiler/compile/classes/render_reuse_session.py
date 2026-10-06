@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 from sqlbuild.compiler.compile.constants import (
     COMPILE_INPUT_READS,
+    RENDER_REUSE_DECLARATIONS_PREFIX,
     RENDER_REUSE_MODEL_AUDITS_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
@@ -24,7 +25,7 @@ from sqlbuild.compiler.compile.models import (
     RenderReuseState,
     StoredRender,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import DiscoveredDeclarationFiles, DiscoveredSqlModelFile
 from sqlbuild.compiler.fact_cache.exceptions import FactCachePayloadError
 from sqlbuild.compiler.fact_cache.main._dump_fact_payload import dumped_fact_payload
 from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
@@ -59,6 +60,7 @@ class CompileRenderReuseSession:
     ) -> None:
         self._lock: threading.Lock = threading.Lock()
         self._claimed: bool = False
+        self._discovery_claimed: bool = False
         self._prior: RenderReuseState | None = prior if changed_paths is not None else None
         self._changed_paths: frozenset[str] = changed_paths or frozenset()
         self._reusable: bool = False
@@ -82,6 +84,54 @@ class CompileRenderReuseSession:
             claimed: bool = self._claimed
             self._claimed = True
             return not claimed
+
+    def claim_discovery(self) -> bool:
+        """Return True for the first discovery claim only; later discoveries run in full."""
+
+        with self._lock:
+            claimed: bool = self._discovery_claimed
+            self._discovery_claimed = True
+            return not claimed
+
+    def declaration_files(
+        self,
+        *,
+        variant: str,
+        discover: Callable[[], DiscoveredDeclarationFiles],
+        discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
+    ) -> DiscoveredDeclarationFiles:
+        """Reuse stored declaration files after model-only edits, or discover and record them."""
+
+        name: str = f"{RENDER_REUSE_DECLARATIONS_PREFIX}{variant}"
+        prior: RenderReuseState | None = self._prior
+        payload: memoryview | None = (
+            prior.group_payloads.get(name)
+            if prior is not None
+            and edits_only_models(changed_paths=self._changed_paths, model_paths=prior.model_paths)
+            else None
+        )
+        stored: StoredRender | None = None if payload is None else _loaded_render(payload)
+        if (
+            stored is not None
+            and payload is not None
+            and isinstance(stored.value, DiscoveredDeclarationFiles)
+        ):
+            model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
+            _replay(stored=stored)
+            self._group_records[name] = payload
+            self._decoded_groups[name] = stored
+            return replace(stored.value, model_files=model_files)
+        with (
+            COMPILE_INPUT_READS.recording() as reads,
+            tapped_compile_diagnostics() as reported,
+        ):
+            declarations: DiscoveredDeclarationFiles = discover()
+        recorded: StoredRender | None = _stored_render(
+            reads=reads, value=replace(declarations, model_files=()), reported=reported
+        )
+        if recorded is not None:
+            self._pending_groups.append((name, recorded))
+        return declarations
 
     def plan_models(self, *, model_files: tuple[DiscoveredSqlModelFile, ...]) -> None:
         """Reuse stored renders only when the change set touches nothing but existing models."""
@@ -235,6 +285,12 @@ class CompileRenderReuseSession:
                 if payload is not None:
                     serialized[key] = memoryview(payload)
             pending.clear()
+
+
+def edits_only_models(*, changed_paths: frozenset[str], model_paths: tuple[str, ...]) -> bool:
+    """Return whether every changed path is a model file of the stored compile."""
+
+    return changed_paths.issubset(model_paths)
 
 
 def _reserialized(
