@@ -1,6 +1,6 @@
-use crate::compiler::_helpers::sql_tests::cte_rename::{CteRename, rename_ctes};
+use crate::compiler::_helpers::sql_tests::cte_rename::{CteRename, defined_cte_keys, rename_ctes};
 use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, split_top_level_with};
-use crate::compiler::tests::test_types::CteRenameTestCase;
+use crate::compiler::tests::test_types::{CteRenameTestCase, DefinedCteKeysTestCase};
 
 #[test]
 fn given_tsql_cte_when_renaming_by_token_span_then_only_relation_references_change() {
@@ -110,5 +110,35 @@ fn given_tsql_cte_when_renaming_by_token_span_then_only_relation_references_chan
             "{}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_statement_when_listing_defined_ctes_then_only_with_list_entries_count() {
+    let test_cases = [
+        DefinedCteKeysTestCase {
+            description: "top-level and nested WITH lists are listed",
+            sql: "WITH base AS (SELECT 1 AS id), other AS (WITH inner_rows AS (SELECT id FROM base) \
+                  SELECT id FROM inner_rows) SELECT id FROM other",
+            expected_keys: &["base", "other", "inner_rows"],
+        },
+        DefinedCteKeysTestCase {
+            description: "named windows are not CTEs",
+            sql: "SELECT order_id, row_number() OVER w1 AS n FROM orders \
+                  WINDOW w1 AS (ORDER BY order_id), base AS (PARTITION BY order_id)",
+            expected_keys: &[],
+        },
+        DefinedCteKeysTestCase {
+            description: "a WITH list after a named window in a subquery is still listed",
+            sql: "SELECT * FROM (SELECT id FROM t WINDOW w AS (ORDER BY id), v AS (ORDER BY id)) AS s \
+                  JOIN (WITH base AS (SELECT 1 AS id), rows_two AS (SELECT 2 AS id) SELECT id FROM base) AS b \
+                  ON b.id = s.id",
+            expected_keys: &["base", "rows_two"],
+        },
+    ];
+    for test_case in test_cases {
+        let keys =
+            defined_cte_keys(test_case.sql, SliceDialect::new(Some("duckdb"))).expect("scans");
+        assert_eq!(keys, test_case.expected_keys, "{}", test_case.description);
     }
 }

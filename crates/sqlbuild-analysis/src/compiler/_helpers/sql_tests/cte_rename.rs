@@ -95,6 +95,7 @@ pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<S
             .and_then(|token| token.key.as_deref())
             .is_some_and(|key| key == word)
     };
+    let in_with_list = with_list_commas(sql, &code);
     let mut keys: Vec<String> = Vec::new();
     for (index, token) in code.iter().enumerate() {
         let Some(key) = token.key.as_deref() else {
@@ -103,7 +104,7 @@ pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<S
         let opens_list = index > 0
             && (keyword(index - 1, "with")
                 || keyword(index - 1, "recursive")
-                || text(index - 1) == Some(","));
+                || (text(index - 1) == Some(",") && in_with_list[index - 1]));
         if !opens_list {
             continue;
         }
@@ -137,6 +138,55 @@ pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<S
         }
     }
     Some(keys)
+}
+
+/// Clause keywords that end a WITH list at their parenthesis depth.
+const LIST_ENDING_CLAUSES: &[&str] = &[
+    "select",
+    "from",
+    "where",
+    "group",
+    "having",
+    "qualify",
+    "order",
+    "limit",
+    "window",
+    "union",
+    "except",
+    "intersect",
+    "minus",
+    "values",
+    "insert",
+    "update",
+    "delete",
+    "merge",
+];
+
+/// Whether each token sits directly in a WITH list, so a comma there separates CTEs.
+fn with_list_commas(sql: &str, code: &[&Token]) -> Vec<bool> {
+    let mut lists: Vec<bool> = vec![false];
+    let mut in_list: Vec<bool> = Vec::with_capacity(code.len());
+    for token in code {
+        match &sql[token.start..token.end] {
+            "(" => lists.push(false),
+            ")" => {
+                if lists.len() > 1 {
+                    let _ = lists.pop();
+                }
+            }
+            _ => {
+                if let (Some(key), Some(current)) = (token.key.as_deref(), lists.last_mut()) {
+                    if key == "with" {
+                        *current = true;
+                    } else if LIST_ENDING_CLAUSES.contains(&key) {
+                        *current = false;
+                    }
+                }
+            }
+        }
+        in_list.push(lists.last().copied().unwrap_or(false));
+    }
+    in_list
 }
 
 /// How one occurrence of a renamed CTE's name is used.

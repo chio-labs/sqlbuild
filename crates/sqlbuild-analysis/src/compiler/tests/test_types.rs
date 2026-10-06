@@ -49,6 +49,12 @@ pub(crate) struct CteRenameTestCase {
     pub(crate) expected_sql: Option<&'static str>,
 }
 
+pub(crate) struct DefinedCteKeysTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_keys: &'static [&'static str],
+}
+
 pub(crate) struct MarkerNamesTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
