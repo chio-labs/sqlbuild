@@ -214,3 +214,14 @@ class ScenarioEmptyFixtureE2ETestCase:
     customer_columns_yaml: str
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioInterruptE2ETestCase:
+    """Test case for interrupting concurrent scenarios through the real CLI."""
+
+    description: str
+    scenario_count: int
+    concurrency: int
+    interrupt_count: int
+    expected_notice: str

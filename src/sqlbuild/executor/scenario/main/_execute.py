@@ -86,7 +86,7 @@ def execute_scenario_model(
                 schema_prepared=schema_prepared,
             ),
             declared_columns=entry.declared_columns,
-            promotion_mode=TablePromotionMode.STAGED if entry.contract_enforced else promotion_mode,
+            promotion_mode=promotion_mode,
         )
     )
 

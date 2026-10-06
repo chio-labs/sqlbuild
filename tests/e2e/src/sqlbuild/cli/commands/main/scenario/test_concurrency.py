@@ -13,9 +13,12 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioCliE2ETestCase,
     ScenarioConcurrencyE2ETestCase,
+    ScenarioInterruptE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_scenario_project_files,
+    build_slow_scenario_project_files,
+    interrupt_scenario_run,
     list_scenario_relation_names,
     scenario_result_lines,
 )
@@ -153,6 +156,46 @@ def test_given_retained_artifact_of_another_type_when_rerunning_then_replaces_an
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in rerun.stdout
     assert list_scenario_relation_names(db_path=project_dir / "scenario_demo.duckdb") == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioInterruptE2ETestCase(
+            description="repeated interrupts stop running scenarios and clean up once",
+            scenario_count=8,
+            concurrency=4,
+            interrupt_count=2,
+            expected_notice="Interrupted; cleaning up running scenarios...",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_running_concurrent_scenarios_when_interrupted_then_stops_and_cleans_up(
+    test_case: ScenarioInterruptE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_interrupt",
+        repo_files=build_slow_scenario_project_files(scenario_count=test_case.scenario_count),
+    )
+
+    result: subprocess.CompletedProcess[str]
+    stop_seconds: float
+    result, stop_seconds = interrupt_scenario_run(
+        project_dir=project_dir,
+        concurrency=test_case.concurrency,
+        interrupt_count=test_case.interrupt_count,
+    )
+
+    assert result.returncode != 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr.count(test_case.expected_notice) == 1, result.stderr
+    assert "expect    expected order_totals" not in result.stderr
+    assert "slow_7/orders START" not in result.stderr
+    assert stop_seconds < 30
+    assert list_scenario_relation_names(db_path=project_dir / "scenario_interrupt.duckdb") == ()
 
 
 if __name__ == "__main__":

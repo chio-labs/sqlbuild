@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,7 @@ class ScenarioRunOptions:
 
     promotion_mode: TablePromotionMode
     prepared_schemas: PreparedScenarioSchemas | None = None
+    stop_requested: threading.Event | None = None
 
 
 @dataclass(frozen=True)

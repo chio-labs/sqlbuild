@@ -19,6 +19,7 @@ from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_seed_entries,
 )
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
+from sqlbuild.executor.scenario.exceptions import ScenarioStopRequested
 from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
@@ -75,6 +76,7 @@ def _execute_scenario_run_steps(
     options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
 
+    _raise_if_stop_requested(options)
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,
         adapter=adapter,
@@ -91,6 +93,7 @@ def _execute_scenario_run_steps(
             error_message=prepare_result.error_message,
         )
 
+    _raise_if_stop_requested(options)
     schema_prepared: bool = options.prepared_schemas is not None and (
         options.prepared_schemas.ensure(
             scenario_plan=scenario_plan, adapter=adapter, connection=connection
@@ -116,6 +119,7 @@ def _execute_scenario_run_steps(
             ),
         )
 
+    _raise_if_stop_requested(options)
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
         scenario_name=scenario_plan.name,
         seed_entries=scenario_plan.seed_entries,
@@ -139,6 +143,7 @@ def _execute_scenario_run_steps(
             ),
         )
 
+    _raise_if_stop_requested(options)
     model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
         scenario_plan=scenario_plan,
         adapter=adapter,
@@ -146,6 +151,7 @@ def _execute_scenario_run_steps(
         run_id=run_id,
         promotion_mode=options.promotion_mode,
         schema_prepared=schema_prepared,
+        stop_requested=options.stop_requested,
     )
     if _has_failed(model_results):
         return _finish_scenario(
@@ -164,12 +170,14 @@ def _execute_scenario_run_steps(
             ),
         )
 
+    _raise_if_stop_requested(options)
     expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
     expected_results = execute_scenario_expected_expectations(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
     )
+    _raise_if_stop_requested(options)
     assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...]
     assertion_results = execute_scenario_assertion_expectations(
         scenario_plan=scenario_plan,
@@ -273,6 +281,11 @@ def _scenario_failure(
         error_help=error_help,
         error_message=error_message,
     )
+
+
+def _raise_if_stop_requested(options: ScenarioRunOptions) -> None:
+    if options.stop_requested is not None and options.stop_requested.is_set():
+        raise ScenarioStopRequested
 
 
 def _has_failed(results: tuple[object, ...]) -> bool:

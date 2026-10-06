@@ -158,8 +158,9 @@ Scenario artifacts are physically isolated from production:
 7. Clean up this namespace's scenario-owned artifacts (unless `--retain`), including after a failure or Ctrl-C
 
 Table models use the same promotion as `sqb build`: the project's `table_promotion_mode`, or the
-adapter default (staged) when it is unset. A model whose contract is enforced always uses staged
-promotion, so its runtime contract check runs before the scenario reaches its expectations.
+adapter default (staged) when it is unset. An enforced contract needs staged promotion, so its
+runtime contract check runs before the scenario reaches its expectations; with
+`table_promotion_mode = "immediate"` such a model fails with `K011`, exactly as in `sqb build`.
 
 Independent scenarios run concurrently, up to `--concurrency` or the project `concurrency`
 setting. Each scenario writes only its own prefixed relations, so concurrent scenarios never
@@ -167,6 +168,11 @@ share an artifact. Results are reported in selection order with each scenario's 
 summary includes the total time. On DuckDB, concurrent scenarios use separate connections to the
 same database file; an in-memory database (`:memory:`) gives each connection its own database, so
 fixtures still isolate every scenario.
+
+On Ctrl-C, SQLBuild prints one notice, cancels scenarios that have not started, stops running
+scenarios at their next step, drops their relations (unless `--retain`), and only then exits.
+Further Ctrl-C presses
+during that cleanup are ignored.
 
 ### Parallel CI runs
 

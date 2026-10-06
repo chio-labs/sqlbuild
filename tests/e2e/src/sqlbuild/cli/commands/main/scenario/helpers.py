@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+import signal
 import subprocess
+import sys
+import time
 from collections import defaultdict
+from itertools import takewhile
 from pathlib import Path
 from typing import cast
 
@@ -692,3 +696,98 @@ def build_empty_fixture_scenario_project_files(*, customer_columns_yaml: str) ->
             "SELECT 1\n"
         ),
     }
+
+
+def build_slow_scenario_project_files(*, scenario_count: int) -> dict[str, str]:
+    """Build scenarios whose first model pauses in a Python post-hook."""
+
+    scenario_sql: str = (
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        "  SELECT 1 AS id, 10 AS amount\n"
+        "),\n"
+        "__expected__order_totals AS (\n"
+        "  SELECT 10 AS total_amount\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return {
+        "sqlbuild_project.toml": (
+            'name = "scenario_interrupt"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_interrupt.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+        ),
+        "hooks/python/slow_hooks.py": (
+            "import time\n\n"
+            "from sqlbuild.hooks import hook\n\n\n"
+            "@hook\n"
+            "def pause_after_build(ctx):\n"
+            "    '''Pause so an interrupt lands while scenarios run.'''\n"
+            "    time.sleep(3.0)\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Orders.', materialized table, "
+            'post_hooks [python("pause_after_build")]);\n\n'
+            'SELECT id AS order_id, amount FROM __source("raw_orders")\n'
+        ),
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals.', materialized table);\n\n"
+            'SELECT SUM(amount) AS total_amount FROM __ref("orders")\n'
+        ),
+        **{
+            f"tests/scenarios/slow_{index}.sql": (
+                f"SCENARIO (description 'Slow scenario {index}.');\n\n{scenario_sql}"
+            )
+            for index in range(scenario_count)
+        },
+    }
+
+
+def interrupt_scenario_run(
+    *, project_dir: Path, concurrency: int, interrupt_count: int
+) -> tuple[subprocess.CompletedProcess[str], float]:
+    """Interrupt a JSON scenario run once its first model starts; return output and stop time."""
+
+    process: subprocess.Popen[str] = subprocess.Popen(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--no-color",
+            "--project-dir",
+            str(project_dir),
+            "scenario",
+            "test",
+            "--concurrency",
+            str(concurrency),
+            "--json",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stderr is not None
+    started: list[str] = list(takewhile(lambda line: "/orders START" not in line, process.stderr))
+    time.sleep(0.5)
+    interrupted_at: float = time.monotonic()
+    for _ in range(interrupt_count):
+        process.send_signal(signal.SIGINT)
+        time.sleep(0.3)
+    stdout, stderr = process.communicate(timeout=120)
+    return (
+        subprocess.CompletedProcess(
+            args=process.args,
+            returncode=process.returncode,
+            stdout=stdout,
+            stderr="".join(started) + stderr,
+        ),
+        time.monotonic() - interrupted_at,
+    )
