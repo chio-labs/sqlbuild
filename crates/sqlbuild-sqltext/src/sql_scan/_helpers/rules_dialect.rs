@@ -6,7 +6,7 @@ use sqlparser::dialect::{
     MsSqlDialect, PostgreSqlDialect, SnowflakeDialect,
 };
 
-pub fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
+pub(crate) fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
     let dialect = rules_dialect(dialect_name);
     let backslash_escapes = dialect.supports_string_literal_backslash_escape();
     QuotePolicy {
@@ -18,7 +18,7 @@ pub fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
     }
 }
 
-pub fn rules_dialect(name: &str) -> Box<dyn Dialect> {
+pub(crate) fn rules_dialect(name: &str) -> Box<dyn Dialect> {
     match name.to_ascii_lowercase().as_str() {
         "bigquery" => Box::new(BigQueryDialect {}),
         "clickhouse" => Box::new(ClickHouseDialect {}),

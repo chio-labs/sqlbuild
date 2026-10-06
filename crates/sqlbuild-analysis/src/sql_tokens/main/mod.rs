@@ -1,3 +1,5 @@
+#[cfg(any(test, feature = "test-support"))]
+pub mod builtin_function_names;
 pub mod canonical_tokens;
 pub mod case_folding;
 pub mod is_unquoted_word;

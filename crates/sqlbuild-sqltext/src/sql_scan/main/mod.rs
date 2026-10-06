@@ -5,4 +5,5 @@ pub mod matching_paren;
 pub mod non_code_end;
 pub mod quote_end;
 pub mod quote_policy;
+pub mod rules_dialect;
 pub mod skip_whitespace;

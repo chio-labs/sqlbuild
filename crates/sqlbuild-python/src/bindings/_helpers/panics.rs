@@ -3,7 +3,9 @@
 use pyo3::Python;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::{PyErr, create_exception};
-use sqlbuild_core::panics::main::{PANIC_MESSAGE, catch_compiler_panic, is_compiler_panic};
+use sqlbuild_core::constants::PANIC_MESSAGE;
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::bindings::types::CompilerDetach;

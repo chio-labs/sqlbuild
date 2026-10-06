@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use crate::sql_lint::main::batch_formatter::format_batch_json;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
-use sqlbuild_analysis::sql_tokens::_helpers::builtin_functions::builtin_function_names;
 use sqlbuild_analysis::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
+use sqlbuild_analysis::sql_tokens::main::builtin_function_names::builtin_function_names;
 use sqlbuild_analysis::sql_tokens::main::canonical_tokens::canonical_tokens;
 use sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint;
 

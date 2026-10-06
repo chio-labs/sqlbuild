@@ -56,7 +56,7 @@ fn normalize_analysis_sqls(
             ),
         )
     });
-    crate::bindings::main::normalization_results::normalization_results(
+    crate::bindings::_helpers::normalization_results::normalization_results(
         py,
         results.map_err(value_error)?,
     )
@@ -178,7 +178,7 @@ fn prepare_lint_sql_batch(
         Ok(requests
             .iter()
             .map(|request| {
-                sqlbuild_core::panics::main::catch_compiler_panic(|| {
+                sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic(|| {
                     sqlbuild_rules::sql_lint::main::preparation::prepare(
                         &request.expanded,
                         &request.before_expansion,
@@ -481,9 +481,7 @@ fn substitute_static_project_vars(
 #[pyfunction]
 fn extract_static_sql_references(
     sql: &str,
-) -> PyResult<
-    Option<Vec<sqlbuild_sqltext::compiler::_helpers::sql_references::extraction::StaticReference>>,
-> {
+) -> PyResult<Option<Vec<sqlbuild_sqltext::compiler::types::StaticReference>>> {
     compiler_guard(|| {
         Ok(sqlbuild_sqltext::compiler::main::sql_references::extract(
             sql,

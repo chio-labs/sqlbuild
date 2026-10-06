@@ -1,5 +1,6 @@
 //! Conservative native fast path for logical SQL reference extraction.
 
+use crate::compiler::types::StaticReference;
 use crate::constants::{DBT_REFERENCE_KIND, TABLE_FUNCTION_REFERENCE_KIND};
 use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::main::quote_end::quote_end;
@@ -14,9 +15,7 @@ const PREFIXES: [(&str, &str); 6] = [
     ("__ref(", "ref"),
 ];
 
-pub type StaticReference = (String, String, Option<String>, Option<usize>);
-
-pub fn extract(sql: &str) -> Option<Vec<StaticReference>> {
+pub(crate) fn extract(sql: &str) -> Option<Vec<StaticReference>> {
     let bytes = sql.as_bytes();
     let mut references: Vec<StaticReference> = Vec::new();
     let mut index = 0;

@@ -1,4 +1,5 @@
-use crate::panics::main::{catch_compiler_panic, is_compiler_panic};
+use crate::panics::main::catch_compiler_panic::catch_compiler_panic;
+use crate::panics::main::is_compiler_panic::is_compiler_panic;
 use crate::panics::tests::test_types::PanicTestCase;
 
 #[test]

@@ -14,9 +14,10 @@ use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
 use globset::{Glob, GlobSetBuilder};
-use sqlbuild_sqltext::sql_scan::_helpers::rules_dialect::{rules_dialect, rules_quote_policy};
 use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
 use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy as rules_quote_policy;
+use sqlbuild_sqltext::sql_scan::main::rules_dialect::rules_dialect;
 use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
 use sqlparser::ast::{
     BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,

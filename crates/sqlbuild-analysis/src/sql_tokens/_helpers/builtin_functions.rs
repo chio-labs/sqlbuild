@@ -50,7 +50,7 @@ pub(crate) fn is_builtin_function(dialect: DialectType, upper_name: &str) -> boo
 
 /// Every catalogued or parser-typed built-in function name of `dialect`, lower-cased.
 #[cfg(any(test, feature = "test-support"))]
-pub fn builtin_function_names(dialect: DialectType) -> Vec<String> {
+pub(crate) fn builtin_function_names(dialect: DialectType) -> Vec<String> {
     let typed: &HashSet<String> = match dialect {
         DialectType::DuckDB => &HashSet::new(),
         DialectType::Snowflake => &SNOWFLAKE_TYPED,
