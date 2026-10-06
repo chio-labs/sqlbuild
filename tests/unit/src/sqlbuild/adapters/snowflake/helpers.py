@@ -349,7 +349,7 @@ def execute_with_statement_progress(
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
     dispatcher.subscribe_lifecycle(
-        subscriber=NativeProgressProjector(stream=stream, use_color=False).consume,
+        subscriber=NativeProgressProjector(stream=stream, use_color=False, debug=True).consume,
         accepts_opaque=False,
     )
     connection: _SnowflakeConnection = _SnowflakeConnection(
