@@ -35,6 +35,7 @@ class BinaryComputeLogTee:
         self._before_write: Callable[[], None] | None = before_write
         self._failure_callback: Callable[[Exception], None] | None = failure_callback
         self._storage_failed: bool = False
+        self._detached: bool = False
 
     def write(self, data: bytes | bytearray) -> int:
         """Preserve sink behavior while isolating capture append failures."""
@@ -53,7 +54,7 @@ class BinaryComputeLogTee:
                 : accepted_write_count(result=result, offered_count=len(text))
             ]
             accepted = accepted_text.encode(self._encoding, self._errors)
-        if accepted and not self._storage_failed:
+        if accepted and not self._storage_failed and not self._detached:
             try:
                 self._storage.append(
                     invocation_id=self._invocation_id, stream=self._stream, data=accepted
@@ -63,6 +64,11 @@ class BinaryComputeLogTee:
                 if self._failure_callback is not None:
                     self._failure_callback(error)
         return result if isinstance(result, int) else len(offered)
+
+    def detach(self) -> None:
+        """Stop retaining writes once capture ends; late writers reach only the sink."""
+
+        self._detached = True
 
     def flush(self) -> None:
         """Flush the original sink without closing it."""

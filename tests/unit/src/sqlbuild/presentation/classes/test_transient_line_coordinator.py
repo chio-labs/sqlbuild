@@ -72,5 +72,34 @@ def test_given_released_spinner_when_writing_persistent_line_then_writes_directl
     assert tuple(events) == test_case.expected_events
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TransientLineCoordinatorTestCase(
+            description="cleared spinner is erased once and never redrawn",
+            persistent_stream_is_tty=True,
+            expected_events=("clear", "write:error[S301]: failed\n"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_live_spinner_when_clearing_active_line_then_later_writes_do_not_redraw_it(
+    test_case: TransientLineCoordinatorTestCase,
+) -> None:
+    events: list[str] = []
+    coordinator: TransientLineCoordinator = TransientLineCoordinator()
+    owner: RecordingSpinnerOwner = RecordingSpinnerOwner(events=events)
+    coordinator.claim(stream=RecordingStream(events=[], tty=True), owner=owner)
+
+    coordinator.clear_active()
+    coordinator.clear_active()
+    coordinator.write_persistent(
+        stream=RecordingStream(events=events, tty=test_case.persistent_stream_is_tty),
+        text="error[S301]: failed\n",
+    )
+
+    assert tuple(events) == test_case.expected_events
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

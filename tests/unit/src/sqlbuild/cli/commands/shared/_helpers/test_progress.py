@@ -11,6 +11,10 @@ import pytest
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.cli.commands._helpers.test.sql_progress import (
+    build_test_expectation_rows,
+    resolve_test_name_width,
+)
 from sqlbuild.cli.commands.classes import build_progress_callbacks
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
@@ -55,11 +59,15 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     NestedProgressChildRowsTestCase,
     NestedProgressConcurrentTestCase,
     RuntimeDiagnosticsTestCase,
+    SqlTestStatusAlignmentTestCase,
     TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import (
     build_audit_result,
     build_progress_snapshot_plan_output,
+    build_sql_test_plan_entry,
+    build_sql_test_result,
+    status_columns,
     write_spinner_line_and_release,
 )
 
@@ -242,7 +250,7 @@ def test_given_name_and_width_when_truncating_then_returns_expected_result(
                 "test      test_fact_orders",
                 "expect  expected fact_orders",
                 "expect  assertion line_totals_are_non_negative",
-                "expected fact_orders                               PASS",
+                "expected fact_orders                           PASS",
             ),
             unexpected_fragments=("...",),
         ),
@@ -910,7 +918,7 @@ def test_given_execution_context_when_writing_header_then_renders_expected_outpu
                 "test      test_daily_revenu...",
                 "ERROR",
                 "├── expect  expected stg_orders",
-                "└── error  [T002] execution error while running 'stg_orders'",
+                "└── error   [T002] execution error while running 'stg_orders'",
             ),
             unexpected_fragments=("0 mismatched", "\033["),
         ),
@@ -1317,3 +1325,184 @@ def test_given_active_top_level_node_when_waiting_then_spinner_advances_frames(
     spinner_frame: str
     for spinner_frame in test_case.expected_spinner_frames:
         assert spinner_frame in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestStatusAlignmentTestCase(
+            description="short names share one status column",
+            test_name="test_daily_revenue_chain",
+            expected_models=("stg_orders", "daily_revenue"),
+            assertion_names=("revenue_is_non_negative",),
+            expected_row_count=4,
+        ),
+        SqlTestStatusAlignmentTestCase(
+            description="longest name is a child assertion",
+            test_name="test_daily_revenue_chain",
+            expected_models=("stg_orders",),
+            assertion_names=("daily_revenue_is_non_negative_for_every_completed_order_day",),
+            expected_row_count=3,
+        ),
+        SqlTestStatusAlignmentTestCase(
+            description="longest name is the parent test",
+            test_name="test_daily_revenue_chain_with_refunds_and_partial_payment_retries",
+            expected_models=("stg_orders", "daily_revenue"),
+            assertion_names=(),
+            expected_row_count=3,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_failed_sql_test_when_reporting_build_progress_then_child_statuses_align_with_parent(
+    test_case: SqlTestStatusAlignmentTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(
+            test_entries=(
+                build_sql_test_plan_entry(
+                    test_name=test_case.test_name,
+                    expected_models=test_case.expected_models,
+                    assertion_names=test_case.assertion_names,
+                ),
+            )
+        ),
+        use_color=False,
+    )
+
+    callbacks.on_node_complete(
+        build_sql_test_result(
+            test_name=test_case.test_name,
+            expected_models=test_case.expected_models,
+            assertion_names=test_case.assertion_names,
+            outcome=SqlTestOutcome.FAIL,
+        )
+    )
+    columns: tuple[int, ...] = status_columns(stream.getvalue())
+
+    assert len(columns) == test_case.expected_row_count, stream.getvalue()
+    assert len(set(columns)) == 1, stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestStatusAlignmentTestCase(
+            description="longest name is a child assertion",
+            test_name="test_daily_revenue_chain",
+            expected_models=("stg_orders",),
+            assertion_names=("daily_revenue_is_non_negative_for_every_completed_order_day",),
+            expected_row_count=4,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_passing_sql_test_when_reporting_host_model_then_test_rows_align_with_model_status(
+    test_case: SqlTestStatusAlignmentTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(
+            test_entries=(
+                build_sql_test_plan_entry(
+                    test_name=test_case.test_name,
+                    expected_models=test_case.expected_models,
+                    assertion_names=test_case.assertion_names,
+                ),
+            )
+        ),
+        use_color=False,
+    )
+
+    callbacks.on_node_complete(
+        build_sql_test_result(
+            test_name=test_case.test_name,
+            expected_models=test_case.expected_models,
+            assertion_names=test_case.assertion_names,
+            outcome=SqlTestOutcome.PASS,
+        )
+    )
+    callbacks.on_node_complete(
+        ModelExecutionResult(
+            model_name=test_case.expected_models[0],
+            status=ExecutionStatus.SUCCESS,
+            duration_ms=100,
+        )
+    )
+    columns: tuple[int, ...] = status_columns(stream.getvalue())
+
+    assert len(columns) == test_case.expected_row_count, stream.getvalue()
+    assert len(set(columns)) == 1, stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestStatusAlignmentTestCase(
+            description="short names share one status column",
+            test_name="test_daily_revenue_chain",
+            expected_models=("stg_orders", "daily_revenue"),
+            assertion_names=("revenue_is_non_negative",),
+            expected_row_count=4,
+        ),
+        SqlTestStatusAlignmentTestCase(
+            description="longest name is a child assertion",
+            test_name="test_daily_revenue_chain",
+            expected_models=("stg_orders",),
+            assertion_names=("daily_revenue_is_non_negative_for_every_completed_order_day",),
+            expected_row_count=3,
+        ),
+        SqlTestStatusAlignmentTestCase(
+            description="longest name is the parent test",
+            test_name="test_daily_revenue_chain_with_refunds_and_partial_payment_retries",
+            expected_models=("stg_orders", "daily_revenue"),
+            assertion_names=(),
+            expected_row_count=3,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_failed_sql_test_when_reporting_test_command_progress_then_child_statuses_align(
+    test_case: SqlTestStatusAlignmentTestCase,
+) -> None:
+    stream: StringIO = StringIO()
+    callbacks: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
+        total=1,
+        label="test",
+        stream=stream,
+        use_color=False,
+        name_width=resolve_test_name_width(
+            (
+                build_sql_test_plan_entry(
+                    test_name=test_case.test_name,
+                    expected_models=test_case.expected_models,
+                    assertion_names=test_case.assertion_names,
+                ),
+            )
+        ),
+    )
+    result: SqlTestExecutionResult = build_sql_test_result(
+        test_name=test_case.test_name,
+        expected_models=test_case.expected_models,
+        assertion_names=test_case.assertion_names,
+        outcome=SqlTestOutcome.FAIL,
+    )
+
+    callbacks.on_item_start(group_name="daily_revenue", item_name=test_case.test_name)
+    callbacks.on_item_complete(
+        group_name="daily_revenue",
+        item_name=test_case.test_name,
+        status_text="FAIL",
+        child_rows=build_test_expectation_rows(result),
+    )
+    columns: tuple[int, ...] = status_columns(stream.getvalue())
+
+    assert len(columns) == test_case.expected_row_count, stream.getvalue()
+    assert len(set(columns)) == 1, stream.getvalue()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
-from functools import partial
 from typing import Any
 
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
@@ -73,7 +72,7 @@ class ScopedComputeLogCapture:
         return operation_result
 
     def _install(self) -> None:
-        write_failure: Callable[[Exception], None] = partial(self._report, channel="capture_write")
+        write_failure: Callable[[Exception], None] = self._report_write_failure
         self._stdout_tee = TextComputeLogTee(
             sink=self._original_stdout,
             storage=self._storage,
@@ -110,6 +109,9 @@ class ScopedComputeLogCapture:
                 self._report(error=error, channel="capture_flush")
         sys.stdout = self._original_stdout
         sys.stderr = self._original_stderr
+        for tee in (self._stdout_tee, self._stderr_tee):
+            if tee is not None:
+                tee.detach()
         if self._routing is not None:
             try:
                 self._routing.__exit__(None, None, None)
@@ -150,6 +152,9 @@ class ScopedComputeLogCapture:
             self._storage.close()
         except Exception as error:
             self._report(error=error, channel="capture_close")
+
+    def _report_write_failure(self, error: Exception) -> None:
+        self._report(error=error, channel="capture_write")
 
     def _report(self, *, error: Exception, channel: str) -> None:
         try:
