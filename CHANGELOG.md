@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.134.6](https://github.com/chio-labs/sqlbuild/compare/v0.134.5...v0.134.6) (2026-10-06)
+
+
+### Performance Improvements
+
+* **compile:** analyze models as soon as their producers finish ([#953](https://github.com/chio-labs/sqlbuild/issues/953)) ([84b50fb](https://github.com/chio-labs/sqlbuild/commit/84b50fb7fa43b0cfb20bcda60ad6b1980f1483f9))
+* **compile:** batch analysis preparation normalization ([#957](https://github.com/chio-labs/sqlbuild/issues/957)) ([9a98b2f](https://github.com/chio-labs/sqlbuild/commit/9a98b2f5aa66fdd9e99397c0e83e2f2384776364))
+* **compile:** reuse unaffected model renders after model-only edits ([#955](https://github.com/chio-labs/sqlbuild/issues/955)) ([d576523](https://github.com/chio-labs/sqlbuild/commit/d576523acb0620e5b278db1ae70d775d3cdf15ec))
+
 ## [0.134.5](https://github.com/chio-labs/sqlbuild/compare/v0.134.4...v0.134.5) (2026-10-05)
 
 
