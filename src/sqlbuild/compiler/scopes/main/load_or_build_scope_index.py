@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -13,6 +14,8 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
+from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.scopes._helpers.builder import build_tolerant_scope_index
 from sqlbuild.compiler.scopes._helpers.cache import (
     read_cached_scope_index,
@@ -57,23 +60,27 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
         )
         adapter: BaseAdapter = resolve_adapter(adapter_name=adapter_name)
         sql_lexical_syntax = adapter.sql_lexical_syntax
-        compile_inputs: CompileProjectInputs = build_compile_inputs(
-            discovered_inputs=discovered,
-            adapter_context=CompileAdapterContext(
-                value_renderer=adapter,
-                collection_rendering=resolve_effective_collection_rendering(
-                    project_config=discovered.project_config,
-                    declaration_override=None,
+        compile_inputs: CompileProjectInputs = compile_frontier(
+            until=CompilerStage.COMPILE_PROJECT_INPUTS,
+            python_stage=partial(
+                build_compile_inputs,
+                discovered_inputs=discovered,
+                adapter_context=CompileAdapterContext(
+                    value_renderer=adapter,
+                    collection_rendering=resolve_effective_collection_rendering(
+                        project_config=discovered.project_config,
+                        declaration_override=None,
+                    ),
+                    python_functions_inherit_default_namespace=(
+                        adapter.python_functions_inherit_default_namespace()
+                    ),
+                    sql_lexical_syntax=adapter.sql_lexical_syntax,
                 ),
-                python_functions_inherit_default_namespace=(
-                    adapter.python_functions_inherit_default_namespace()
-                ),
-                sql_lexical_syntax=adapter.sql_lexical_syntax,
+                resolved_connection={},
+                no_sql_validation=True,
+                defer_model_sql_validation=True,
+                no_cache=True,
             ),
-            resolved_connection={},
-            no_sql_validation=True,
-            defer_model_sql_validation=True,
-            no_cache=True,
         )
         index: ScopeIndex = scope_index_with_compile_usages(inputs=compile_inputs)
     except (OSError, UnicodeError, ValueError, ImportError):

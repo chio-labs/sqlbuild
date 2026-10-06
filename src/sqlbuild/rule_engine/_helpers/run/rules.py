@@ -58,10 +58,11 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     native_catalogue,
     start_custom_rules,
 )
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine._helpers.run.literal_duplicates import with_duplicate_literal_hints
 from sqlbuild.rule_engine._helpers.run.memory import release_freed_memory
-from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
+from sqlbuild.rule_engine.constants import SQL_RULES_CACHE_FILE, TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import (
@@ -792,7 +793,7 @@ def _sql_file_rule_identity(
 
 
 def _sql_rule_cache_path(project_dir: Path) -> Path:
-    return project_dir / "target" / "rules-cache" / "bulk" / "sql.json"
+    return rules_bulk_cache_path(project_dir=project_dir, file_name=SQL_RULES_CACHE_FILE)
 
 
 def _read_sql_rule_cache(project_dir: Path) -> dict[str, dict[str, object]]:

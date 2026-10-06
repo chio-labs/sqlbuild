@@ -91,3 +91,22 @@ class ChangedPathsTestCase:
     change: Callable[[Path], object]
     expected_paths: tuple[str, ...]
     store: Callable[[Path], dict[str, StoredProjectFile]] = digested_project_files
+
+
+@dataclass(frozen=True)
+class EngineReuseDigestTestCase:
+    """Two engine environments for one invocation and whether their reuse keys may match."""
+
+    description: str
+    first_environment: dict[str, str]
+    second_environment: dict[str, str]
+    expected_same_digest: bool
+
+
+@dataclass(frozen=True)
+class EngineReuseStoreTestCase:
+    """One engine and the store directory that holds its compile reuse entry."""
+
+    description: str
+    engine: str
+    expected_entry_directory: str

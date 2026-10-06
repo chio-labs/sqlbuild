@@ -103,3 +103,33 @@ class UntypedCursorParsingTestCase:
     argv: tuple[str, ...]
     expected_start: str | None
     expected_end: str | None
+
+
+@dataclass(frozen=True)
+class CompilerEngineOptionTestCase:
+    """One compiler engine selection through the hidden flag and the environment."""
+
+    description: str
+    argv: tuple[str, ...]
+    environment_value: str
+    expected_engine: str | None
+
+
+@dataclass(frozen=True)
+class RejectedCompilerEngineTestCase:
+    """An unsupported engine selection and the usage error that names accepted values."""
+
+    description: str
+    argv: tuple[str, ...]
+    environment_value: str
+    expected_exit_code: int
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class HiddenOptionTestCase:
+    """A help page and an option that must not appear on it."""
+
+    description: str
+    option: str
+    expected_listed: bool

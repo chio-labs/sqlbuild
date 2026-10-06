@@ -795,3 +795,37 @@ class SharedCacheKeyTestCase:
     description: str
     schedule: Callable[[pytest.MonkeyPatch], None]
     expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class CompilerEngineParityTestCase:
+    """Two engines compiling separate copies of one project."""
+
+    description: str
+    left_engine: str
+    right_engine: str
+    expected_engines: tuple[str, str]
+    expected_exit_codes: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class CompilerEngineStoreTestCase:
+    """A sequence of engine compiles in one project and which of them reuse a stored compile."""
+
+    description: str
+    engines: tuple[str, ...]
+    expected_reused: tuple[bool, ...]
+    expected_python_stores: tuple[str, ...]
+    expected_native_stores: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompilerEngineRulesStoreTestCase:
+    """Compile plus Rules under each engine and the store files each engine must own."""
+
+    description: str
+    rules_selector: str
+    stores: tuple[str, ...]
+    native_marker: str
+    expected_python_files: tuple[str, ...]
+    expected_native_files: tuple[str, ...]

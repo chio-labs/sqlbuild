@@ -11,6 +11,7 @@ from typing import Any
 import orjson
 
 from sqlbuild.compiler.fact_cache.main.code_identity import compiled_code_identity
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine.constants import NATIVE_RULES_MEMO_FILE, NATIVE_RULES_MEMO_VERSION
 
 
@@ -39,7 +40,11 @@ def read_native_response(*, project_dir: Path, identity: str) -> str | None:
     """Return the stored response for this exact request identity, if any."""
 
     try:
-        payload: object = orjson.loads((project_dir / NATIVE_RULES_MEMO_FILE).read_bytes())
+        payload: object = orjson.loads(
+            rules_bulk_cache_path(
+                project_dir=project_dir, file_name=NATIVE_RULES_MEMO_FILE
+            ).read_bytes()
+        )
     except (OSError, orjson.JSONDecodeError):
         return None
     if not isinstance(payload, dict) or payload.get("identity") != identity:
@@ -51,7 +56,7 @@ def read_native_response(*, project_dir: Path, identity: str) -> str | None:
 def write_native_response(*, project_dir: Path, identity: str, response: str) -> None:
     """Atomically replace the stored response with the latest evaluated request."""
 
-    path: Path = project_dir / NATIVE_RULES_MEMO_FILE
+    path: Path = rules_bulk_cache_path(project_dir=project_dir, file_name=NATIVE_RULES_MEMO_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path = path.with_suffix(f".tmp-{os.getpid()}-{threading.get_ident()}")
     temporary.write_bytes(orjson.dumps({"identity": identity, "response": response}))

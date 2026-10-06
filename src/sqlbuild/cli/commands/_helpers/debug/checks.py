@@ -41,6 +41,7 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
+from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -272,6 +273,7 @@ def _build_runtime_lines() -> list[DebugLine]:
         sqlbuild_version = "unknown"
     return [
         DebugLine(label="sqlbuild version", message=sqlbuild_version),
+        DebugLine(label="compiler engine", message=resolve_compiler_engine().value),
         DebugLine(label="python version", message=platform.python_version()),
         DebugLine(label="python path", message=sys.executable),
         DebugLine(label="os info", message=platform.platform()),

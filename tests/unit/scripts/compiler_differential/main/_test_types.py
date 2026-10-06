@@ -1,0 +1,47 @@
+"""Test case types for the generator and failure corpus entry points."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from scripts.compiler_differential.models import FailureCase
+
+
+@dataclass(frozen=True)
+class SeedDeterminismTestCase:
+    """One seed generated twice."""
+
+    description: str
+    seed: int
+    expected_identical: bool
+
+
+@dataclass(frozen=True)
+class SeedRangeTestCase:
+    """A seed range and what the generated projects must cover together."""
+
+    description: str
+    seeds: range
+    expected_features: frozenset[str]
+    expected_distinct_projects: int
+    expected_min_invalid: int
+    expected_max_invalid: int
+
+
+@dataclass(frozen=True)
+class FailureCorpusTestCase:
+    """The failure corpus and the breadth it must keep."""
+
+    description: str
+    expected_min_cases: int
+    expected_min_codes: int
+    expected_min_families: int
+
+
+@dataclass(frozen=True)
+class FailureCaseWriteTestCase:
+    """One failure case and the files its written project must contain."""
+
+    description: str
+    case: FailureCase
+    expected_files: tuple[str, ...]

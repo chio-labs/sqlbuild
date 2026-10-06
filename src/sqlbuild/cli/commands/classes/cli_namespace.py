@@ -48,6 +48,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "start_cursor_int": None,
     "end_cursor_int": None,
     "no_color": False,
+    "compiler_engine": None,
     "fail_fast": False,
     "full_refresh": False,
     "as_target": None,
@@ -217,6 +218,7 @@ class CliNamespace:
     start_cursor_int: str | None
     end_cursor_int: str | None
     no_color: bool
+    compiler_engine: str | None
     fail_fast: bool
     full_refresh: bool
     as_target: str | None

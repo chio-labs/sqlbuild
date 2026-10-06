@@ -331,6 +331,47 @@ fn given_removed_model_file_when_cache_is_rewritten_then_only_its_entry_is_dropp
 }
 
 #[test]
+fn given_configured_cache_path_when_evaluating_then_only_that_file_is_used() -> Result<(), String> {
+    let test_cases = [test_types::ConfiguredCachePathTestCase {
+        description: "an engine-owned cache file replaces the default bulk cache",
+        cache_file: "target/rules-cache-native-v1/bulk/native.json",
+        expected_default_cache_exists: false,
+        expected_warm_hits: 3,
+    }];
+    for test_case in &test_cases {
+        let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+        let mut rest = split_request(
+            &project_dir,
+            &json!({"select": ["SQBR"], "cache": {"enabled": true}}),
+        );
+        let cache_path = project_dir.path().join(test_case.cache_file);
+        rest["rules_cache_path"] = json!(cache_path);
+        let models = orders_models();
+
+        let cold = evaluate_split(&rest, &models)?;
+        let warm = evaluate_split(&rest, &models)?;
+
+        assert!(cache_path.is_file(), "{}", test_case.description);
+        assert_eq!(
+            project_dir
+                .path()
+                .join("target/rules-cache/bulk/native.json")
+                .exists(),
+            test_case.expected_default_cache_exists,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            warm["cache_hits"], test_case.expected_warm_hits,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(warm["faults"], cold["faults"], "{}", test_case.description);
+    }
+    Ok(())
+}
+
+#[test]
 fn given_corrupt_model_cache_when_evaluating_then_every_model_reevaluates() -> Result<(), String> {
     let test_cases = [test_types::ModelCacheReuseTestCase {
         description: "a truncated cache file is a miss for every model",

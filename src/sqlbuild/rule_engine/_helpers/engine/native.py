@@ -34,6 +34,7 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_test_evidence,
 )
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine._helpers.run.native_memo import (
     native_payload_digests,
     native_request_identity,
@@ -41,6 +42,7 @@ from sqlbuild.rule_engine._helpers.run.native_memo import (
     write_native_response,
 )
 from sqlbuild.rule_engine.constants import (
+    NATIVE_RULES_CACHE_FILE,
     RULES_NATIVE_API_VERSION,
     TYPE_PROOF_RULE_CODES,
 )
@@ -223,6 +225,11 @@ def _native_request(
         "initial_findings": [_finding_payload(finding) for finding in initial_findings],
         "defer_suppressions": True,
         "custom_rules": custom_payloads,
+        "rules_cache_path": str(
+            rules_bulk_cache_path(
+                project_dir=project_dir.resolve(), file_name=NATIVE_RULES_CACHE_FILE
+            )
+        ),
     }
 
 

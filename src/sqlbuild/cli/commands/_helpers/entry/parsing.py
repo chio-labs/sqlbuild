@@ -25,6 +25,8 @@ from sqlbuild.cli.entry.models import (
     SelectorFileSummary,
     SelectorInputs,
 )
+from sqlbuild.compiler.frontier.exceptions import CompilerEngineError
+from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
@@ -115,6 +117,11 @@ def parse_cli_invocation(
             if unknown_args:
                 parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
         args.verbose = args.verbose or args.debug
+        if args.compiler_engine is None:
+            try:
+                _ = resolve_compiler_engine()
+            except CompilerEngineError as error:
+                parser.error(str(error))
         if (
             args.debug
             and args.command == CliCommand.DBT

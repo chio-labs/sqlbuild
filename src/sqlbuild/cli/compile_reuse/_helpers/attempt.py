@@ -45,7 +45,7 @@ from sqlbuild.cli.compile_reuse.constants import (
     PROJECT_CONFIG_FILENAMES,
     REUSE_DISABLE_ENV_VAR,
     REUSE_DISABLE_VALUE,
-    REUSE_ENTRY_DIRECTORY_PARTS,
+    REUSE_ENTRY_DIRECTORY_NAME,
     REUSE_ENTRY_SUFFIX,
     REUSE_HIT_MESSAGE,
     TOTAL_TIMING,
@@ -62,6 +62,7 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_ENV_VAR,
     COMPILE_CACHE_DISABLE_VALUE,
 )
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
@@ -81,7 +82,8 @@ def attempt_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt:
     attempt: CompileReuseAttempt = replace(
         bypass,
         outcome=CompileReuseOutcome.MISS,
-        entry_path=Path(project_dir, *REUSE_ENTRY_DIRECTORY_PARTS)
+        entry_path=compiler_cache_directory(Path(project_dir))
+        / REUSE_ENTRY_DIRECTORY_NAME
         / f"{entry_slot_name(selected_target=request.selected_target)}{REUSE_ENTRY_SUFFIX}",
         runtime=runtime_identity(),
         search_path=search_path_stamps(project_dir=project_dir),

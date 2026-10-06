@@ -16,11 +16,14 @@ from typing import Any
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.models import LineageNode, RelationLineageIndex
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.frontier.constants import CACHE_DIRECTORY_NAME
+from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 _CACHE_SCHEMA_VERSION: int = 1
 _CACHE_ALGORITHM_VERSION: str = "relation-lineage-graph-v4"
-_CACHE_RELATIVE_PATH: Path = Path("cache/lineage/v1/structural-graph.sqlite3")
+_LINEAGE_CACHE_DIRECTORY_NAME: str = "lineage"
+_CACHE_FILE_RELATIVE_PATH: Path = Path("v1/structural-graph.sqlite3")
 _CACHE_MAX_BYTES: int = 50_000_000
 _CACHE_MAX_ROWS: int = 1_000_000
 _SQLITE_TIMEOUT_SECONDS: float = 5.0
@@ -176,7 +179,13 @@ def _is_excluded(*, path: Path, project_dir: Path) -> bool:
 
 
 def _cache_path(*, project_dir: Path) -> Path:
-    return project_dir / TARGET_DIRECTORY_NAME / _CACHE_RELATIVE_PATH
+    return (
+        project_dir
+        / TARGET_DIRECTORY_NAME
+        / CACHE_DIRECTORY_NAME
+        / engine_cache_name(_LINEAGE_CACHE_DIRECTORY_NAME)
+        / _CACHE_FILE_RELATIVE_PATH
+    )
 
 
 def _relation_index(*, graph: ProjectGraph) -> RelationLineageIndex:

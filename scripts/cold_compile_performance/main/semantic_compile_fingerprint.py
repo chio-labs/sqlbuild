@@ -14,6 +14,7 @@ def semantic_compile_fingerprint(*, payload: dict[str, object], compiled_dir: Pa
 
     semantic_payload: dict[str, object] = dict(payload)
     semantic_payload.pop("compile_timings", None)
+    semantic_payload.pop("compiler_engine", None)
     semantic_payload.pop("version", None)
     fingerprint: Any = hashlib.sha256(orjson.dumps(semantic_payload, option=orjson.OPT_SORT_KEYS))
     for artifact_path in sorted(path for path in compiled_dir.rglob("*") if path.is_file()):

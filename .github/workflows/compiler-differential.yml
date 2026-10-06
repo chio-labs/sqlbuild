@@ -1,0 +1,44 @@
+name: Compiler Differential
+
+on:
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compiler-differential-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dense:
+    name: Dense compiler differential (${{ matrix.models }} models)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        models: [3000, 10000]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Compare dense projects with and without custom rules
+        env:
+          MODELS: ${{ matrix.models }}
+        run: make compiler-differential-dense COMPILER_DIFFERENTIAL_DENSE_MODELS="${MODELS}"
+

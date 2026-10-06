@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine._helpers.host import custom_host, custom_host_pool
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
 from sqlbuild.rule_engine.exceptions import HostCancelledError, RulesError
 from sqlbuild.rule_engine.models import CustomRulesOutcome
@@ -75,8 +76,10 @@ def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_o
         detects_duplicates=test_case.detects_duplicates,
     )
     project: CompiledProject = orders_project(model_count=test_case.model_count)
-    cache_path: Path = tmp_path / CUSTOM_RULES_CACHE_FILE
-    cache_glob: str = CUSTOM_RULES_CACHE_FILE
+    cache_path: Path = rules_bulk_cache_path(
+        project_dir=tmp_path, file_name=CUSTOM_RULES_CACHE_FILE
+    )
+    cache_glob: str = cache_path.relative_to(tmp_path).as_posix()
     cache_enabled: bool = test_case.cache_enabled
 
     single_launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=1)
