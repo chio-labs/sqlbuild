@@ -251,3 +251,13 @@ class ModelInliningE2ETestCase:
     expected_order_lines_sql: str
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JsonDurationE2ETestCase:
+    """A SQL test whose structured JSON output must report its duration."""
+
+    description: str
+    expected_order_lines_sql: str
+    expected_exit_code: int
+    expected_status: str

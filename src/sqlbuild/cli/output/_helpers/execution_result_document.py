@@ -825,6 +825,7 @@ def _format_sql_test_checks(
                     **_sql_test_case_metadata(result),
                     "passed": result.outcome == SqlTestOutcome.PASS,
                     "status": result.outcome.value,
+                    "duration_ms": _result_duration(result=result, fallback=None),
                     "asset_name": _sql_test_asset_name(result),
                     "error_code": result.error_code,
                     "error_help": result.error_help,
