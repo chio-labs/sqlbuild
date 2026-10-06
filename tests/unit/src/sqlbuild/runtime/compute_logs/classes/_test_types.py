@@ -85,3 +85,36 @@ class PathSafetyTestCase:
     description: str
     alias_kind: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class CaptureWriteFailureTestCase:
+    description: str
+    stream_name: str
+    expected_exit_code: int
+    expected_channels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LateStreamWriteTestCase:
+    description: str
+    captured_text: str
+    late_text: str
+    expected_sink_text: str
+    expected_captured_byte_count: int
+
+
+@dataclass(frozen=True)
+class TeeStorageFailureTestCase:
+    description: str
+    writes: tuple[str, ...]
+    expected_sink_writes: tuple[str, ...]
+    expected_failure_count: int
+
+
+@dataclass(frozen=True)
+class DetachedTeeTestCase:
+    description: str
+    text: str
+    binary: bytes
+    expected_append_count: int

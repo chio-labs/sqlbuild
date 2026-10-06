@@ -23,6 +23,7 @@ from sqlbuild.cli.output.models import (
     SkillMaintenanceResult,
 )
 from sqlbuild.lint.exceptions import LintError
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.rule_engine.exceptions import RulesError
 
 
@@ -37,7 +38,7 @@ def dispatch_and_handle_errors(
 
     _report_skill_freshness(invocation=invocation)
     try:
-        return dispatch_with_observability(args=args, handlers=handlers)
+        return _dispatch_clearing_transient_line(args=args, handlers=handlers)
     except SystemExit as error:
         return error.code if isinstance(error.code, int) else 1
     except (CliUserError, RulesError) as error:
@@ -78,6 +79,17 @@ def dispatch_and_handle_errors(
             file=sys.stderr,
         )
         return 1
+
+
+def _dispatch_clearing_transient_line(
+    *, args: CliNamespace, handlers: CliEntrypointHandlers
+) -> int:
+    """Stop a status line a failed command left running before its error is reported."""
+
+    try:
+        return dispatch_with_observability(args=args, handlers=handlers)
+    finally:
+        shared_transient_line_coordinator().clear_active()
 
 
 def _expected_command_failure_types() -> tuple[type[Exception], ...]:

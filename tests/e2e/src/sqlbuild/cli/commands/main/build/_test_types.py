@@ -1206,3 +1206,12 @@ class QueryFingerprintEditE2ETestCase:
     format_flags: tuple[str, ...]
     expected_format_summary: str
     expected_reasons: dict[str, str]
+
+
+@dataclass(frozen=True)
+class TerminalBuildFailureE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    model_replacements: tuple[tuple[str, str, str], ...]
+    expected_screen_fragments: tuple[str, ...]
+    columns: int = 120

@@ -1,10 +1,11 @@
+import io
 import json
 import logging
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import TextIO, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -32,7 +33,9 @@ from sqlbuild.runtime.compute_logs.classes.scoped_compute_log_capture import (
 from sqlbuild.runtime.compute_logs.classes.text_tee import TextComputeLogTee
 from tests.unit.src.sqlbuild.runtime.compute_logs.classes._test_types import (
     CaptureOutcomeTestCase,
+    CaptureWriteFailureTestCase,
     DiagnosticRoutingTestCase,
+    LateStreamWriteTestCase,
 )
 from tests.unit.src.sqlbuild.runtime.compute_logs.classes.helpers import (
     AccessFailureTextSink,
@@ -530,3 +533,104 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
     assert diagnostic_text.count("plain internal api_key=[REDACTED]") == 1
     assert diagnostic_text.count("structured internal client_secret=[REDACTED]") == 1
     assert diagnostic_text.count("user debug") == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CaptureWriteFailureTestCase(
+            description="stdout append failure reports one capture write failure",
+            stream_name="stdout",
+            expected_exit_code=0,
+            expected_channels=("capture_write",),
+        ),
+        CaptureWriteFailureTestCase(
+            description="stderr append failure reports one capture write failure",
+            stream_name="stderr",
+            expected_exit_code=3,
+            expected_channels=("capture_write",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_storage_append_failure_when_operation_writes_then_failure_reaches_callback(
+    tmp_path: Path, test_case: CaptureWriteFailureTestCase
+) -> None:
+    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
+        project_dir=tmp_path
+    )
+    metadata: CaptureMetadata = build_capture_metadata(
+        project_dir=tmp_path, invocation_id="append_failure", started_at=datetime.now(UTC)
+    )
+    storage.start_capture(metadata)
+    reported: list[tuple[type[Exception], str]] = []
+    capture: ScopedComputeLogCapture = ScopedComputeLogCapture(
+        storage=storage,
+        metadata=metadata,
+        failure_callback=lambda error, channel: reported.append((type(error), channel)),
+    )
+
+    def write_twice() -> int:
+        stream: TextIO = getattr(sys, test_case.stream_name)
+        _ = stream.write("first line\n")
+        _ = stream.write("second line\n")
+        return test_case.expected_exit_code
+
+    with patch.object(storage, "append", Mock(side_effect=OSError("disk full"))):
+        result: int = capture.run(operation=write_twice)
+
+    assert result == test_case.expected_exit_code
+    assert tuple(channel for _error_type, channel in reported) == test_case.expected_channels
+    assert all(error_type is OSError for error_type, _channel in reported)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LateStreamWriteTestCase(
+            description="stale stdout reference written after capture reaches only the terminal",
+            captured_text="during capture\n",
+            late_text="after capture\n",
+            expected_sink_text="during capture\nafter capture\n",
+            expected_captured_byte_count=len(b"during capture\n"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_stale_stream_reference_when_writing_after_capture_then_sink_receives_text_only(
+    tmp_path: Path, test_case: LateStreamWriteTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sink: io.StringIO = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", sink)
+    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
+        project_dir=tmp_path
+    )
+    metadata: CaptureMetadata = build_capture_metadata(
+        project_dir=tmp_path, invocation_id="late_write", started_at=datetime.now(UTC)
+    )
+    storage.start_capture(metadata)
+    reported: list[str] = []
+    capture: ScopedComputeLogCapture = ScopedComputeLogCapture(
+        storage=storage,
+        metadata=metadata,
+        failure_callback=lambda _error, channel: reported.append(channel),
+    )
+    stale_streams: list[TextIO] = []
+
+    def keep_stream_reference() -> int:
+        stale_streams.append(sys.stdout)
+        _ = sys.stdout.write(test_case.captured_text)
+        return 0
+
+    result: int = capture.run(operation=keep_stream_reference)
+    _ = stale_streams[0].write(test_case.late_text)
+    stale_streams[0].flush()
+
+    assert result == 0
+    assert reported == []
+    assert sink.getvalue() == test_case.expected_sink_text
+    assert (
+        storage.get_byte_count(invocation_id=metadata.invocation_id, stream=ComputeLogStream.STDOUT)
+        == test_case.expected_captured_byte_count
+    )
+    assert storage.is_complete(invocation_id=metadata.invocation_id) is True

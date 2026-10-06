@@ -30,6 +30,7 @@ class TextComputeLogTee:
         self._errors: str = getattr(sink, "errors", None) or "strict"
         self._failure_callback: Callable[[Exception], None] | None = failure_callback
         self._storage_failed: bool = False
+        self._detached: bool = False
         binary_sink: Any = getattr(sink, "buffer", sink)
         binary_uses_text_sink: bool = binary_sink is sink
         self._buffer: BinaryComputeLogTee = BinaryComputeLogTee(
@@ -49,7 +50,7 @@ class TextComputeLogTee:
 
         result: object = self._sink.write(text)
         accepted_count: int = accepted_write_count(result=result, offered_count=len(text))
-        if accepted_count and not self._storage_failed:
+        if accepted_count and not self._storage_failed and not self._detached:
             try:
                 emitted: bytes = text[:accepted_count].encode(self._encoding, self._errors)
                 self._storage.append(
@@ -60,6 +61,12 @@ class TextComputeLogTee:
                 if self._failure_callback is not None:
                     self._failure_callback(error)
         return result if isinstance(result, int) else len(text)
+
+    def detach(self) -> None:
+        """Stop retaining writes once capture ends; late writers reach only the sink."""
+
+        self._detached = True
+        self._buffer.detach()
 
     def flush(self) -> None:
         """Flush the existing text sink without changing its ownership."""

@@ -28,6 +28,16 @@ class TransientLineCoordinator:
             if self._active is not None and self._active[1] is owner:
                 self._active = None
 
+    def clear_active(self) -> None:
+        """Erase and forget any live transient line, so nothing redraws it afterwards."""
+
+        with self.lock:
+            if self._active is None:
+                return
+            owner: TransientLineOwner = self._active[1]
+            self._active = None
+            owner.clear_transient_line()
+
     def write_persistent(self, *, stream: TextIO, text: str) -> None:
         """Write lasting text, clearing and then redrawing any live transient line."""
 
