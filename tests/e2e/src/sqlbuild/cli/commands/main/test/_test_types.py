@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -240,3 +242,61 @@ class TerminalStepRowsE2ETestCase:
     expected_absent_fragments: tuple[str, ...]
     expected_absent_line_prefixes: tuple[str, ...]
     expected_screen_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelInliningE2ETestCase:
+    """A two-model chain whose models share CTE names, tested with and without SQL analysis."""
+
+    description: str
+    sql_analysis_enabled: bool
+    expected_order_lines_sql: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JsonDurationE2ETestCase:
+    """A SQL test whose structured JSON output must report its duration."""
+
+    description: str
+    expected_order_lines_sql: str
+    expected_exit_code: int
+    expected_status: str
+
+
+@dataclass(frozen=True)
+class ParameterizedJsonE2ETestCase:
+    """Parameterized SQL tests whose cases must each appear in structured JSON output."""
+
+    description: str
+    expected_checks: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class HelperIsolationE2ETestCase:
+    """A helper named like a physical table or a model CTE, read only by a fixture."""
+
+    description: str
+    sql_analysis_enabled: bool
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IsolatedCompileE2ETestCase:
+    """A project whose compiled SQL tests must keep helper and model CTE names apart."""
+
+    description: str
+    project_files: Mapping[str, str]
+    compile_arguments: tuple[str, ...]
+    helper_names: tuple[str, ...]
+    expected_minimum_tests: int
+
+
+@dataclass(frozen=True)
+class FixtureProjectIsolationE2ETestCase:
+    """A fixture project whose compiled SQL tests must keep CTE names apart."""
+
+    description: str
+    project_dir: Path
+    expected_minimum_tests: int

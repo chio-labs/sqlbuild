@@ -3,6 +3,7 @@
 use crate::compiler::_helpers::sql_tests::cte_slices::{
     SliceDialect, WithSlices, opaque_end, read_identifier,
 };
+use crate::constants::{WITH_KEYWORD, WITH_LIST_ENDING_CLAUSES};
 use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
 use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
@@ -80,6 +81,91 @@ pub(crate) fn rename_ctes(
         Err(_) => return None,
     };
     preserves_tokens((sql, &tokens), (&renamed, &renamed_tokens), &replaced).then_some(renamed)
+}
+
+/// Case-folded names of every CTE a statement defines at any depth; `None` when unscannable.
+pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<String>> {
+    let tokens = match tokens(sql, dialect) {
+        Ok(tokens) => tokens,
+        Err(_) => return None,
+    };
+    let code: Vec<&Token> = tokens.iter().filter(|token| !token.comment).collect();
+    let text = |index: usize| code.get(index).map(|token| &sql[token.start..token.end]);
+    let keyword = |index: usize, word: &str| {
+        code.get(index)
+            .and_then(|token| token.key.as_deref())
+            .is_some_and(|key| key == word)
+    };
+    let in_with_list = with_list_commas(sql, &code);
+    let mut keys: Vec<String> = Vec::new();
+    for (index, token) in code.iter().enumerate() {
+        let Some(key) = token.key.as_deref() else {
+            continue;
+        };
+        let opens_list = index > 0
+            && (keyword(index - 1, "with")
+                || keyword(index - 1, "recursive")
+                || (text(index - 1) == Some(",") && in_with_list[index - 1]));
+        if !opens_list {
+            continue;
+        }
+        let mut next = index + 1;
+        if text(next) == Some("(") {
+            let mut depth = 0usize;
+            while let Some(part) = text(next) {
+                depth = match part {
+                    "(" => depth + 1,
+                    ")" => depth.saturating_sub(1),
+                    _ => depth,
+                };
+                next += 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+        }
+        if !keyword(next, "as") {
+            continue;
+        }
+        next += 1;
+        if keyword(next, "not") {
+            next += 1;
+        }
+        if keyword(next, "materialized") {
+            next += 1;
+        }
+        if text(next) == Some("(") {
+            keys.push(key.to_string());
+        }
+    }
+    Some(keys)
+}
+
+/// Whether each token sits directly in a WITH list, so a comma there separates CTEs.
+fn with_list_commas(sql: &str, code: &[&Token]) -> Vec<bool> {
+    let mut lists: Vec<bool> = vec![false];
+    let mut in_list: Vec<bool> = Vec::with_capacity(code.len());
+    for token in code {
+        match &sql[token.start..token.end] {
+            "(" => lists.push(false),
+            ")" => {
+                if lists.len() > 1 {
+                    let _ = lists.pop();
+                }
+            }
+            _ => {
+                if let (Some(key), Some(current)) = (token.key.as_deref(), lists.last_mut()) {
+                    if key == WITH_KEYWORD {
+                        *current = true;
+                    } else if WITH_LIST_ENDING_CLAUSES.contains(&key) {
+                        *current = false;
+                    }
+                }
+            }
+        }
+        in_list.push(lists.last().copied().unwrap_or(false));
+    }
+    in_list
 }
 
 /// How one occurrence of a renamed CTE's name is used.

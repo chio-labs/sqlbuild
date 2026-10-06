@@ -50,6 +50,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import (
     SqlTestDifferenceSample,
     SqlTestExecutionResult,
@@ -825,6 +826,7 @@ def _format_sql_test_checks(
                     **_sql_test_case_metadata(result),
                     "passed": result.outcome == SqlTestOutcome.PASS,
                     "status": result.outcome.value,
+                    "duration_ms": _result_duration(result=result, fallback=None),
                     "asset_name": _sql_test_asset_name(result),
                     "error_code": result.error_code,
                     "error_help": result.error_help,
@@ -837,9 +839,12 @@ def _format_sql_test_checks(
 
 
 def _sql_test_check_id(result: SqlTestExecutionResult) -> str:
-    if result.case_name is None or result.source_path is None or result.block_index is None:
-        return f"sql_test:{result.test_name}"
-    return f"sql_test:{result.source_path.as_posix()}:{result.block_index}:{result.case_name}"
+    return sql_test_resource_id(
+        test_name=result.test_name,
+        source_path=result.source_path,
+        block_index=result.block_index,
+        case_name=result.case_name,
+    )
 
 
 def _sql_test_case_metadata(result: SqlTestExecutionResult) -> dict[str, object]:
@@ -1180,7 +1185,7 @@ def _result_resource_identity(*, result: object) -> tuple[str | None, str | None
         resource_id = f"check:{result.node_name}"
     elif isinstance(result, SqlTestExecutionResult):
         resource_name = result.test_name
-        resource_id = f"sql_test:{result.test_name}"
+        resource_id = _sql_test_check_id(result)
     elif isinstance(result, AuditExecutionResult):
         resource_name = result.audit_name
         resource_id = _audit_check_id(result)

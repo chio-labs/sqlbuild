@@ -32,7 +32,8 @@ each matching `TEST` template; case names are not model selectors.
 Text output identifies each case as `<parent> [<case>]` and includes its source path and safe typed
 parameters. Structured JSON emits one check per case with stable source/block/case identity,
 declared parameter types and nullability, typed values, and a content fingerprint. Exact decimals
-are strings in JSON so their scale is preserved.
+are strings in JSON so their scale is preserved. Each test check in JSON output reports its
+`duration_ms`.
 
 ## Examples
 

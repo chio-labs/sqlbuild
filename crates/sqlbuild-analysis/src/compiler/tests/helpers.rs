@@ -1,12 +1,15 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 
 use polyglot_sql::Dialect;
 use serde_json::{Value, json};
 
+use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
+use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, split_top_level_with};
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::main::sql_test_extraction::extract_batch_json;
+use crate::compiler::tests::test_types::{PlanShape, RenderedShapeTestCase, SharedNameTestCase};
 
 pub(crate) fn mixed_expanded_tests_preserve_order_and_payloads() -> bool {
     let response = extract_batch_json(r#"{"tests":[{"sql":"WITH helper AS (SELECT 1 AS id), __source__raw_orders AS (SELECT id FROM helper), __expected__orders AS (SELECT id FROM helper), __assert__positive AS (SELECT id FROM helper WHERE id < 0) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"},{"sql":"WITH input AS (SELECT 1 AS value), __udf_actual__ AS (SELECT __udf(\"increment\")(value) AS value FROM input), __udf_expected__ AS (SELECT 2 AS value) SELECT 1","fileLabel":"tests/increment.sql","mode":"udf"}]}"#).expect("batch succeeds");
@@ -567,7 +570,10 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
     assert_eq!(artifact["chain"][0]["expectedCteSql"], Value::Null);
     assert_eq!(
         artifact["chain"][1]["liftedCtes"],
-        json!([["__ref__stg_orders", "SELECT * FROM (SELECT 1 AS order_id)"]])
+        json!([
+            ["__source__raw_orders", "SELECT 1 AS order_id"],
+            ["__ref__stg_orders", "SELECT * FROM __source__raw_orders"]
+        ])
     );
     assert_eq!(
         artifact["chain"][1]["comparisonBodySql"],
@@ -583,7 +589,7 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
         json!("SELECT * FROM __ref__orders WHERE order_id < 0")
     );
     assert_eq!(
-        artifact["assertions"][0]["liftedCtes"][1],
+        artifact["assertions"][0]["liftedCtes"][2],
         json!(["__ref__orders", "SELECT * FROM __ref__stg_orders"])
     );
     assert!(
@@ -644,7 +650,8 @@ pub(crate) fn textual_assertion_with_clause_merges_lifted_ctes() -> bool {
     assert_eq!(
         resolved_sql,
         concat!(
-            "WITH __ref__stg_orders AS (SELECT * FROM (SELECT 1 AS order_id)), ",
+            "WITH __source__raw_orders AS (SELECT 1 AS order_id), ",
+            "__ref__stg_orders AS (SELECT * FROM __source__raw_orders), ",
             "__ref__orders AS (SELECT * FROM __ref__stg_orders), ",
             "negative_orders AS (SELECT * FROM __ref__orders WHERE order_id < 0) ",
             "SELECT * FROM negative_orders"
@@ -792,7 +799,8 @@ pub(crate) fn difference_sample_lifts_generated_ctes_and_bounds_rows() -> bool {
         limited["sql"],
         json!(
             "WITH __ref__stg_orders AS (SELECT 1 AS order_id),\n\
-             __actual AS (SELECT * FROM __ref__stg_orders),\n\
+             __ref__orders AS (SELECT * FROM __ref__stg_orders),\n\
+             __actual AS (SELECT * FROM __ref__orders),\n\
              __expected AS (SELECT 2 AS order_id)\n\
              SELECT * FROM (SELECT * FROM __expected EXCEPT SELECT * FROM __actual) \
              AS __sqlbuild_difference LIMIT 3"
@@ -1099,26 +1107,92 @@ fn top_level_cte_position(sql: &str, name: &str) -> usize {
     positions[0]
 }
 
+/// Case-folded names of the CTEs a rendered test query defines at its top level.
+pub(crate) fn top_level_cte_keys(sql: &str, dialect: &str) -> Vec<String> {
+    let dialect =
+        crate::compiler::_helpers::sql_tests::cte_slices::SliceDialect::new(Some(dialect));
+    crate::compiler::_helpers::sql_tests::cte_slices::split_top_level_with(sql, dialect)
+        .expect("rendered SQL scans")
+        .expect("rendered SQL has a WITH")
+        .ctes
+        .iter()
+        .map(|cte| cte.key.clone())
+        .collect()
+}
+
+fn assert_rendered_shape(sql: &str, shape: &RenderedShapeTestCase, helpers: &[&str]) {
+    let top_level = top_level_cte_keys(sql, "duckdb");
+    for helper in helpers {
+        assert!(!top_level.contains(&(*helper).to_string()), "{sql}");
+    }
+    for (first, second) in shape.expected_order {
+        assert!(
+            top_level_cte_position(sql, first) < top_level_cte_position(sql, second),
+            "{}: {first} before {second}: {sql}",
+            shape.description
+        );
+    }
+    for fragment in shape.expected_fragments {
+        assert!(
+            sql.contains(fragment),
+            "{}: {fragment}: {sql}",
+            shape.description
+        );
+    }
+    for fragment in shape.expected_absent_fragments {
+        assert!(
+            !sql.contains(fragment),
+            "{}: {fragment}: {sql}",
+            shape.description
+        );
+    }
+}
+
 pub(crate) fn helper_ctes_are_in_scope_for_assertions_and_expected_rows() -> bool {
-    for sql_analysis_enabled in [true, false] {
+    let shapes = [
+        RenderedShapeTestCase {
+            description: "sql analysis on",
+            sql_analysis_enabled: true,
+            expected_order: &[
+                ("__ref__stg_orders", "__expected__orders"),
+                ("__expected__orders", "__assert__ids_match"),
+                ("__ref__stg_orders", "__helper__matched_ids"),
+                ("__helper__expected_rows", "__helper__matched_ids"),
+                ("__helper__expected_rows", "__expected__orders"),
+                ("__helper__matched_ids", "__assert__ids_match"),
+            ],
+            expected_fragments: &[
+                "__expected__orders AS (SELECT order_id, amount FROM __helper__expected_rows AS expected_rows)",
+            ],
+            expected_absent_fragments: &["__helper__unused_rows"],
+        },
+        RenderedShapeTestCase {
+            description: "sql analysis off",
+            sql_analysis_enabled: false,
+            expected_order: &[
+                ("__ref__stg_orders", "__expected__orders"),
+                ("__expected__orders", "__assert__ids_match"),
+            ],
+            expected_fragments: &[
+                "__expected__orders AS (WITH expected_rows AS (SELECT 1 AS order_id, 10 AS amount) \
+                 SELECT order_id, amount FROM expected_rows)",
+            ],
+            expected_absent_fragments: &["unused_rows"],
+        },
+    ];
+    for shape in shapes {
         let response: Value = serde_json::from_str(
-            &plan_helper_scope_request(sql_analysis_enabled, "matched_ids")
+            &plan_helper_scope_request(shape.sql_analysis_enabled, "matched_ids")
                 .expect("test assumption must hold"),
         )
         .expect("test assumption must hold");
         let sql = response["artifacts"][0]["sql"]
             .as_str()
             .expect("test assumption must hold");
-        let mock = top_level_cte_position(sql, "__ref__stg_orders");
-        let expected_rows = top_level_cte_position(sql, "expected_rows");
-        let matched_ids = top_level_cte_position(sql, "matched_ids");
-        let expected = top_level_cte_position(sql, "__expected__orders");
-        let assertion = top_level_cte_position(sql, "__assert__ids_match");
-        assert!(mock < matched_ids && expected_rows < matched_ids, "{sql}");
-        assert!(expected_rows < expected && matched_ids < assertion, "{sql}");
-        assert!(
-            !sql.contains(",\nunused_rows AS ("),
-            "unreferenced helpers stay out of top-level scope: {sql}"
+        assert_rendered_shape(
+            sql,
+            &shape,
+            &["expected_rows", "matched_ids", "unused_rows"],
         );
         assert_eq!(response["artifacts"][0]["warnings"], json!([]), "{sql}");
     }
@@ -1171,7 +1245,36 @@ pub(crate) fn difference_sample_lifts_expected_helper_ctes() -> bool {
 }
 
 pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope() -> bool {
-    for sql_analysis_enabled in [true, false] {
+    let shapes = [
+        RenderedShapeTestCase {
+            description: "sql analysis on",
+            sql_analysis_enabled: true,
+            expected_order: &[
+                ("__ref__raw_orders", "__ref__stg_orders"),
+                ("__ref__raw_orders", "__actual__orders"),
+                ("__ref__raw_orders", "__helper__base_rows"),
+                ("__helper__base_rows", "__ref__stg_orders"),
+                ("__ref__stg_orders", "__helper__expected_rows"),
+                ("__helper__expected_rows", "__assert__rows_match"),
+            ],
+            expected_fragments: &[],
+            expected_absent_fragments: &[],
+        },
+        RenderedShapeTestCase {
+            description: "sql analysis off",
+            sql_analysis_enabled: false,
+            expected_order: &[
+                ("__ref__raw_orders", "__ref__stg_orders"),
+                ("__ref__raw_orders", "__actual__orders"),
+            ],
+            expected_fragments: &[
+                "__ref__stg_orders AS (WITH base_rows AS (SELECT order_id FROM __ref__raw_orders) \
+                 SELECT order_id FROM base_rows)",
+            ],
+            expected_absent_fragments: &[],
+        },
+    ];
+    for shape in shapes {
         let response: Value = serde_json::from_str(
             &crate::compiler::main::sql_test_planning::plan_and_render_json(
                 &json!({
@@ -1203,7 +1306,7 @@ pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope()
                             }]
                         }
                     }],
-                    "sqlAnalysisEnabled": sql_analysis_enabled,
+                    "sqlAnalysisEnabled": shape.sql_analysis_enabled,
                     "sqlAnalysisDialect": "duckdb",
                     "setDifferenceOperator": "EXCEPT"
                 })
@@ -1215,17 +1318,12 @@ pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope()
         let sql = response["artifacts"][0]["sql"]
             .as_str()
             .expect("test assumption must hold");
-        let raw_mock = top_level_cte_position(sql, "__ref__raw_orders");
-        let stg_mock = top_level_cte_position(sql, "__ref__stg_orders");
-        let expected_rows = top_level_cte_position(sql, "expected_rows");
-        let actual = top_level_cte_position(sql, "__actual__orders");
-        let assertion = top_level_cte_position(sql, "__assert__rows_match");
-        assert!(raw_mock < stg_mock && stg_mock < expected_rows, "{sql}");
-        assert!(raw_mock < actual && expected_rows < assertion, "{sql}");
+        assert_rendered_shape(sql, &shape, &["base_rows", "expected_rows"]);
         assert_eq!(response["artifacts"][0]["warnings"], json!([]), "{sql}");
     }
     true
 }
+
 fn render_one(request: Value) -> Result<String, String> {
     let response = crate::compiler::_helpers::sql_tests::rendering::render_json(
         &json!({"requests": [request]}).to_string(),
@@ -1283,7 +1381,7 @@ pub(super) fn repeated_model_sql_renders_like_separate_batches() -> bool {
         })
 }
 
-pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
+pub(super) fn shared_model_cte_names_stay_nested_on_nested_with_dialects() -> bool {
     [
         ("duckdb", "final"),
         ("snowflake", "final"),
@@ -1300,7 +1398,12 @@ pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
         let sql = render_one(json!({
             "sqlAnalysisDialect": dialect,
             "chain": [
-                {"modelName": "stg_orders", "resolvedSql": upstream, "expectedCteSql": "SELECT 1 AS order_id"},
+                {
+                    "modelName": "stg_orders",
+                    "resolvedSql": upstream,
+                    "comparisonBodySql": upstream,
+                    "expectedCteSql": "SELECT 1 AS order_id"
+                },
                 {
                     "modelName": "orders",
                     "resolvedSql": format!("WITH __ref__stg_orders AS ({upstream}), {}", &downstream[5..]),
@@ -1310,11 +1413,14 @@ pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
                 }
             ]
         }))
-        .expect("nested fallback");
+        .expect("nested model scopes");
         sql.starts_with(&format!(
-            "WITH {name} AS (SELECT 1 AS order_id),\n__ref__stg_orders AS ({upstream}),\n"
-        )) && sql.contains(&format!("__actual__stg_orders AS (SELECT * FROM {name})"))
-            && sql.contains(&format!("__actual__orders AS ({downstream})"))
+            "WITH __ref__stg_orders AS ({upstream}),\n\
+             __ref__orders AS ({downstream}),\n\
+             __actual__stg_orders AS (SELECT * FROM __ref__stg_orders),\n"
+        )) && sql.contains("__actual__orders AS (SELECT * FROM __ref__orders)")
+            && sql.matches(&upstream).count() == 1
+            && sql.matches(&downstream).count() == 1
     })
 }
 
@@ -1322,8 +1428,9 @@ pub(super) fn generated_with_bodies_stay_nested_verbatim() -> bool {
     let sql = render_one(colliding_chain_request("duckdb", "final")).expect("render");
     sql.starts_with(
         "WITH __ref__stg_orders AS (WITH final AS (SELECT 1 AS order_id) SELECT * FROM final),\n\
-         final AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
-         __actual__orders AS (SELECT final.order_id FROM final),\n",
+         __ref__orders AS (WITH final AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders) \
+         SELECT final.order_id FROM final),\n\
+         __actual__orders AS (SELECT * FROM __ref__orders),\n",
     )
 }
 
@@ -1333,7 +1440,8 @@ pub(super) fn tsql_model_cte_collisions_are_renamed_by_token_span() -> bool {
         "WITH final AS (SELECT 1 AS order_id),\n\
          __ref__stg_orders AS (SELECT * FROM final),\n\
          __sqb_cte_0 AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
-         __actual__orders AS (SELECT __sqb_cte_0.order_id FROM __sqb_cte_0),\n",
+         __ref__orders AS (SELECT __sqb_cte_0.order_id FROM __sqb_cte_0),\n\
+         __actual__orders AS (SELECT * FROM __ref__orders),\n",
     )
 }
 
@@ -1352,8 +1460,8 @@ pub(super) fn tsql_unprovable_cte_renames_are_refused_with_named_ctes() -> bool 
     true
 }
 
-pub(super) fn tsql_fixture_and_model_cte_collisions_are_refused() -> bool {
-    let error = render_one(json!({
+pub(super) fn tsql_fixture_and_model_cte_collisions_are_renamed() -> bool {
+    let sql = render_one(json!({
         "sqlAnalysisDialect": "tsql",
         "chain": [{
             "modelName": "orders",
@@ -1362,14 +1470,13 @@ pub(super) fn tsql_fixture_and_model_cte_collisions_are_refused() -> bool {
             "expectedLiftedCtes": [["helper_rows", "SELECT 2 AS order_id"]]
         }]
     }))
-    .expect_err("T-SQL refusal");
-    assert_eq!(
-        error,
-        "CTE 'helper_rows' of the expected rows of model 'orders' collides with CTE \
-         'helper_rows' of model 'orders'; T-SQL does not allow a nested WITH, so rename the \
-         CTE in the model or the fixture so the names are unique"
-    );
-    true
+    .expect("T-SQL rename");
+    sql.starts_with(
+        "WITH helper_rows AS (SELECT 1 AS order_id),\n\
+         __sqb_cte_0 AS (SELECT 2 AS order_id),\n\
+         __actual__orders AS (SELECT order_id FROM helper_rows),\n\
+         __expected__orders AS (SELECT order_id FROM __sqb_cte_0)\n",
+    )
 }
 
 pub(super) fn tsql_identical_helper_ending_in_line_comment_is_shared() -> bool {
@@ -1587,4 +1694,100 @@ pub(crate) fn relation_marker_oracle_mismatches(dialect: &str) -> Vec<String> {
                 })
         })
         .collect()
+}
+
+/// Dialects and their analysis modes; analysis reads BigQuery and Databricks markers as strings.
+const DIALECT_MODES: [(&str, &[bool]); 6] = [
+    ("duckdb", &[true, false]),
+    ("snowflake", &[true, false]),
+    ("postgres", &[true, false]),
+    ("bigquery", &[false]),
+    ("databricks", &[false]),
+    ("tsql", &[true, false]),
+];
+
+/// Plan a fixture-read helper beside a model on every dialect and check names stay isolated.
+pub(crate) fn helper_names_are_isolated(shared: &SharedNameTestCase) -> bool {
+    for (dialect, modes) in DIALECT_MODES {
+        for &sql_analysis_enabled in modes {
+            let label = format!(
+                "{} on {dialect}, analysis {sql_analysis_enabled}",
+                shared.description
+            );
+            let artifact = plan_shape(&PlanShape {
+                dialect,
+                sql_analysis_enabled,
+                model_sql: shared.model_sql,
+                helper_name: shared.helper_name,
+                expected_sql: "SELECT 1 AS order_id",
+            })
+            .expect("plan");
+            assert_eq!(artifact["warnings"], json!([]), "{label}");
+            let sql = artifact["sql"].as_str().expect("rendered SQL");
+            assert_names_isolated(sql, dialect, shared.helper_name, &label);
+            assert_eq!(
+                sql.matches(shared.expected_model_reads).count(),
+                1,
+                "{label}: {sql}"
+            );
+        }
+    }
+    true
+}
+
+/// The compile error, or else the first warning, of planning one shape.
+pub(crate) fn plan_shape_refusal(shape: &PlanShape<'_>) -> String {
+    plan_shape(shape)
+        .map(|artifact| {
+            artifact["warnings"][0]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        })
+        .unwrap_or_else(|error| error)
+}
+
+fn plan_shape(shape: &PlanShape<'_>) -> Result<Value, String> {
+    let response = crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &json!({
+            "lexicalSyntax": generic_lexical_syntax(),
+            "models": [{"name": "orders", "querySql": shape.model_sql, "modelDependencies": []}],
+            "tests": [{"name": "orders_case", "fileLabel": "tests/orders.sql", "payload": {
+                "kind": "model",
+                "authoredCtes": [
+                    {"name": shape.helper_name, "sqlBody": "SELECT 1 AS order_id"},
+                    {"name": "__source__raw_orders", "sqlBody": format!("SELECT order_id FROM {}", shape.helper_name)}
+                ],
+                "expectedCtes": [{"name": "__expected__orders", "sqlBody": shape.expected_sql}],
+                "expectedModelNames": ["orders"],
+                "assertionCtes": []
+            }}],
+            "sqlAnalysisEnabled": shape.sql_analysis_enabled,
+            "sqlAnalysisDialect": shape.dialect
+        })
+        .to_string(),
+    )?;
+    Ok(serde_json::from_str::<Value>(&response).expect("plan JSON")["artifacts"][0].clone())
+}
+
+/// Top-level CTE names and every nested CTE name are disjoint, and no helper keeps its name.
+fn assert_names_isolated(sql: &str, dialect: &str, helper_name: &str, label: &str) {
+    let slice_dialect = SliceDialect::new(Some(dialect));
+    let split = split_top_level_with(sql, slice_dialect)
+        .expect("rendered SQL scans")
+        .expect("rendered SQL has a WITH");
+    let top_level: HashSet<String> = split.ctes.iter().map(|cte| cte.key.clone()).collect();
+    let helper_at_top_level = split.ctes.iter().any(|cte| {
+        cte.key == helper_name
+            && (!slice_dialect.rejects_nested_with() || cte.body.contains("SELECT 1 AS order_id"))
+    });
+    assert!(!helper_at_top_level, "{label}: {sql}");
+    for cte in &split.ctes {
+        let nested = defined_cte_keys(cte.body, slice_dialect).expect("body scans");
+        assert!(
+            nested.iter().all(|name| !top_level.contains(name)),
+            "{label}: {} nests {nested:?}: {sql}",
+            cte.header
+        );
+    }
 }

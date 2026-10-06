@@ -61,5 +61,7 @@ def test_given_helper_ctes_when_expected_and_assertions_use_them_then_tests_comp
     compiled_sql: str = next(
         (project_dir / "target" / "compiled" / "tests").rglob("helper_reads_mock_and_helper.sql")
     ).read_text(encoding="utf-8")
-    assert compiled_sql.count("\ndoubled AS (") == 1, compiled_sql
-    assert compiled_sql.count("\nexpected_rows AS (") == 1, compiled_sql
+    assert compiled_sql.count("\n__helper__doubled AS (") == 1, compiled_sql
+    assert compiled_sql.count("\n__helper__expected_rows AS (") == 1, compiled_sql
+    assert "\ndoubled AS (" not in compiled_sql, compiled_sql
+    assert "\nexpected_rows AS (" not in compiled_sql, compiled_sql

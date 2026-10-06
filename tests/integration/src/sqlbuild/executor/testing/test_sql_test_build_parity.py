@@ -64,29 +64,29 @@ def test_given_fixture_project_test_when_rendering_then_whole_build_sql_appears_
     "test_case",
     [
         SqlTestBuildParityTestCase(
-            description="CTE bodies with comments, quotes and dollar quotes are lifted verbatim",
+            description="CTE bodies with comments, quotes and dollar quotes stay verbatim",
             test_name="test_stg_orders",
             model_name="stg_orders",
-            expected_whole_body_rendered=False,
+            expected_whole_body_rendered=True,
             expected_verbatim_fragments=(
-                "base AS (\n  -- a comment with an unmatched ) parenthesis\n"
+                "__ref__stg_orders AS (WITH base AS (\n"
+                "  -- a comment with an unmatched ) parenthesis\n"
                 "  SELECT id AS order_id, amount, 'it''s (fine)' AS note /* ( */\n"
-                "  FROM __source__raw_orders)",
+                "  FROM __source__raw_orders\n),",
                 "tagged AS (SELECT order_id, amount, note, $$a ) b$$ AS tag FROM base)",
-                "__actual__stg_orders AS (SELECT order_id, amount, note, tag FROM tagged)",
+                "__actual__stg_orders AS (SELECT * FROM __ref__stg_orders)",
             ),
         ),
         SqlTestBuildParityTestCase(
-            description="nested WITH stays inside its lifted CTE beside a colliding fixture CTE",
+            description="model CTEs stay in the model's scope beside a same-named fixture CTE",
             test_name="test_orders",
             model_name="orders",
-            expected_whole_body_rendered=False,
+            expected_whole_body_rendered=True,
             expected_verbatim_fragments=(
-                "totals AS (\n"
-                "  WITH ranked AS (SELECT order_id, amount, tag FROM __ref__stg_orders)\n"
-                "  SELECT order_id, amount * 2 AS doubled, tag FROM ranked)",
-                "helper_rows AS (SELECT order_id, doubled, tag FROM totals)",
-                "__actual__orders AS (SELECT order_id, doubled, tag FROM helper_rows)",
+                "__ref__orders AS (WITH totals AS (\n"
+                "  WITH ranked AS (SELECT order_id, amount, tag FROM __ref__stg_orders)\n",
+                "helper_rows AS (SELECT 1 AS order_id, 20 AS doubled, 'x' AS tag)",
+                "__actual__orders AS (SELECT * FROM __ref__orders)",
             ),
         ),
     ],
@@ -107,6 +107,8 @@ def test_given_model_ctes_when_rendering_then_build_sql_slices_appear_verbatim(
     )
 
     assert build_sql_matches_test_body(build_sql=build_sql, test_body=test_body), test_body
+    assert (test_body in rendered_sql) is test_case.expected_whole_body_rendered, rendered_sql
+    assert rendered_sql.count(test_body) == 1, rendered_sql
     assert all(fragment in rendered_sql for fragment in test_case.expected_verbatim_fragments), (
         rendered_sql
     )
@@ -126,7 +128,8 @@ def test_given_shared_cte_name_in_chain_when_rendering_tsql_then_rename_runs_lik
     nested_sql: str = build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="duckdb")
 
     assert "__sqb_cte_0 AS (SELECT id + 1 AS id FROM __ref__stg)" in renamed_sql
-    assert "__actual__mart AS (SELECT __sqb_cte_0.id FROM __sqb_cte_0)" in renamed_sql
+    assert "__ref__mart AS (SELECT __sqb_cte_0.id FROM __sqb_cte_0)" in renamed_sql
+    assert "__actual__mart AS (SELECT * FROM __ref__mart)" in renamed_sql
     assert "AS (WITH" not in renamed_sql
     assert (
         comparison_rows(adapter=adapter, connection=connection, sql=renamed_sql)

@@ -922,8 +922,10 @@ def test_given_assertion_only_sql_test_when_assertion_returns_rows_then_it_fails
             description="model test replaces complete table function invocation",
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                "WITH fixture_rows AS",
-                "FROM fixture_rows",
+                "WITH __helper__fixture_rows AS (SELECT 7 AS order_id)",
+                "__table_fn__customer_orders AS (SELECT order_id FROM __helper__fixture_rows "
+                "AS fixture_rows)",
+                "FROM __table_fn__customer_orders",
                 "__actual__orders",
             ),
             unexpected_artifact_fragments=("customer_orders(7)", "customer_id * 100"),

@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import re
+from typing import Any
+
+import duckdb
+
 
 def build_dynamic_pivot_test_project_files() -> dict[str, str]:
     """Build a Snowflake dynamic-pivot project for offline test-plan inspection."""
@@ -1554,3 +1560,123 @@ def build_cte_scope_project_files(*, queries: tuple[str, ...], expected: str) ->
     for index, query in enumerate(queries):
         files[f"models/orders_{index}.sql"] = f"MODEL (description 'Test model.');\n{query}"
     return files
+
+
+ORDER_LINES_MODEL_SQL: str = (
+    'WITH base_rows AS (SELECT order_id, amount FROM __source("raw_orders")),\n'
+    "final AS (SELECT order_id, amount * 2 AS line_total FROM base_rows)\n"
+    "SELECT order_id, line_total FROM final"
+)
+ORDER_TOTALS_MODEL_SQL: str = (
+    "WITH final AS (\n"
+    "  SELECT order_id, line_total + 1 AS order_total, 'paid' AS status\n"
+    '  FROM __ref("order_lines")\n'
+    ")\n"
+    "SELECT order_id, order_total, status FROM final"
+)
+ORDER_TOTALS_EXPECTED_ROWS_SQL: str = "SELECT 1 AS order_id, 21 AS order_total"
+
+
+def build_shared_cte_name_chain_project_files(
+    *, sql_analysis_enabled: bool, expected_order_lines_sql: str
+) -> dict[str, str]:
+    """Build two chained models that both end in `final`, plus helpers shared by fixtures."""
+
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
+    return {
+        "sqlbuild_project.toml": (
+            'name = "model_inlining"\nadapter = "duckdb"\n\n[connection]\n'
+            'database = "model_inlining.duckdb"\n\n[settings]\n'
+            f"sql_analysis = {sql_analysis_value}\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
+        ),
+        "models/order_lines.sql": (
+            f"MODEL (description 'Order lines.');\n\n{ORDER_LINES_MODEL_SQL}\n"
+        ),
+        "models/order_totals.sql": (
+            f"MODEL (description 'Order totals.');\n\n{ORDER_TOTALS_MODEL_SQL}\n"
+        ),
+        "tests/unit/order_chain.sql": (
+            'TEST (name "order_chain");\n\n'
+            "WITH\n"
+            "base_rows AS (SELECT 1 AS order_id, 10 AS amount),\n"
+            "__source__raw_orders AS (SELECT order_id, amount FROM base_rows),\n"
+            f"expected_rows AS ({ORDER_TOTALS_EXPECTED_ROWS_SQL}),\n"
+            f"__expected__order_lines AS ({expected_order_lines_sql}),\n"
+            "__expected__order_totals AS (\n"
+            "  SELECT order_id, order_total, 'paid' AS status FROM expected_rows\n"
+            "),\n"
+            "__assert__totals_match AS (\n"
+            '  SELECT order_id, order_total FROM __ref("order_totals")\n'
+            "  EXCEPT SELECT order_id, order_total FROM expected_rows\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+_CTE_ENTRY_KEY: re.Pattern[str] = re.compile(r'\{"key": "((?:[^"\\]|\\.)*)", "value": \{"aliases"')
+
+
+def rendered_cte_names(sql: str) -> tuple[set[str], set[str]]:
+    """Return a rendered test query's top-level CTE names and every CTE name nested below them."""
+
+    row: tuple[Any, ...] | None = duckdb.sql(
+        "SELECT json_serialize_sql($sql)", params={"sql": sql}
+    ).fetchone()
+    assert row is not None
+    entries: list[dict[str, Any]] = json.loads(row[0])["statements"][0]["node"]["cte_map"]["map"]
+    top_level: set[str] = {entry["key"].lower() for entry in entries}
+    nested_json: str = json.dumps([entry["value"] for entry in entries])
+    nested: set[str] = {name.lower() for name in _CTE_ENTRY_KEY.findall(nested_json)}
+    return top_level, nested
+
+
+def assert_test_query_names_isolated(sql: str, helper_names: tuple[str, ...]) -> None:
+    """Assert no nested CTE reuses a top-level name and no helper keeps its name at top level."""
+
+    top_level, nested = rendered_cte_names(sql)
+    assert not top_level & nested, (top_level & nested, sql)
+    assert not top_level & {name.lower() for name in helper_names}, sql
+
+
+def build_lookup_project_files(*, sql_analysis_enabled: bool) -> dict[str, str]:
+    """Build models reading a physical table and a model CTE named like a fixture-only helper."""
+
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
+    return {
+        "sqlbuild_project.toml": (
+            'name = "lookup"\nadapter = "duckdb"\n\n[connection]\n'
+            'database = "lookup.duckdb"\n\n[settings]\n'
+            f"sql_analysis = {sql_analysis_value}\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
+        ),
+        "models/matched_orders.sql": (
+            "MODEL (description 'Orders found in the lookup table.');\n\n"
+            "WITH lookup_rows AS (SELECT order_id FROM main.lookup_rows)\n"
+            'SELECT o.order_id FROM __source("raw_orders") AS o\n'
+            "INNER JOIN lookup_rows AS l ON l.order_id = o.order_id\n"
+        ),
+        "models/listed_orders.sql": (
+            "MODEL (description 'Orders listed in the physical lookup table.');\n\n"
+            'SELECT o.order_id FROM __source("raw_orders") AS o\n'
+            "INNER JOIN lookup_rows AS l ON l.order_id = o.order_id\n"
+        ),
+        "tests/unit/lookup.sql": (
+            'TEST (name "lookup");\n\n'
+            "WITH\n"
+            "lookup_rows AS (SELECT 99 AS order_id),\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id UNION ALL SELECT order_id FROM lookup_rows\n"
+            "),\n"
+            "__expected__matched_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__listed_orders AS (SELECT 1 AS order_id)\n"
+            "SELECT 1\n"
+        ),
+    }

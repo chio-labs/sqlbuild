@@ -1320,7 +1320,7 @@ def test_given_sql_analysis_enabled_when_planning_test_then_it_uses_top_level_ge
             helper_ctes={},
             expected_model_names=("orders",),
             expected_chain_length=1,
-            expected_error_fragments=("conflicts with the generated source CTE",),
+            expected_error_fragments=("names starting with a SQLBuild test prefix",),
             expected_cte_bodies={"orders": "SELECT 1 AS id"},
         )
     ],
@@ -1488,7 +1488,7 @@ def test_given_adapter_function_when_resolving_with_analysis_then_keeps_authored
     "test_case",
     [
         PlanTestChainTestCase(
-            description="model and fixture CTEs share a name on T-SQL",
+            description="model and helper CTEs share a name on T-SQL",
             model_queries={
                 "orders": (
                     'WITH helper_rows AS (SELECT order_id FROM __ref("raw_orders")) '
@@ -1500,36 +1500,38 @@ def test_given_adapter_function_when_resolving_with_analysis_then_keeps_authored
             helper_ctes={"helper_rows": "SELECT 2 AS order_id"},
             expected_model_names=("orders",),
             expected_chain_length=1,
-            expected_error_fragments=(
-                "CTE 'helper_rows' of the expected rows of model 'orders' collides with "
-                "CTE 'helper_rows' of model 'orders'",
-                "T-SQL does not allow a nested WITH, so rename the CTE in the model or the fixture",
-            ),
+            expected_sql_fragments={
+                "orders": "__helper__helper_rows AS (SELECT 2 AS order_id)",
+                "__actual__orders": "helper_rows AS (SELECT order_id FROM __ref__raw_orders)",
+                "__expected__orders": (
+                    "__expected__orders AS (SELECT order_id FROM __helper__helper_rows AS "
+                    "helper_rows)"
+                ),
+            },
             expected_cte_bodies={"orders": "SELECT order_id FROM helper_rows"},
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_tsql_cte_name_collision_when_planning_then_test_is_refused_naming_the_ctes(
+def test_given_tsql_shared_cte_name_when_planning_then_helper_and_model_cte_stay_distinct(
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
     project: CompiledProject
     compiled_test, project = build_test_and_project(test_case)
+    adapter: BaseAdapter = build_comparison_test_adapter("sqlserver")
 
-    result: SqlTestPlanResult
-    result, _ = plan_single_test_allowing_errors(
-        test=compiled_test,
-        project=project,
-        adapter=build_comparison_test_adapter("sqlserver"),
-        sql_analysis_enabled=True,
+    entry, _ = plan_single_test(
+        test=compiled_test, project=project, adapter=adapter, sql_analysis_enabled=True
+    )
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
-    assert result.entry is None
-    for expected_fragment in test_case.expected_error_fragments:
-        assert any(expected_fragment in message for message in result.fixture_diagnostics), (
-            result.fixture_diagnostics
-        )
+    for expected_fragment in test_case.expected_sql_fragments.values():
+        assert expected_fragment in comparison_sql, comparison_sql
 
 
 @pytest.mark.parametrize(

@@ -9,3 +9,25 @@ pub(crate) const TABLE_FUNCTION_TEST_MODE: &str = "table_fn";
 pub(crate) const UDF_TEST_MODE: &str = "udf";
 pub(crate) const UNKNOWN_SQL_TYPE: &str = "UNKNOWN";
 pub(crate) const VARCHAR_SQL_TYPE: &str = "VARCHAR";
+pub(crate) const WITH_KEYWORD: &str = "with";
+/// Clause keywords that end a WITH list at their parenthesis depth.
+pub(crate) const WITH_LIST_ENDING_CLAUSES: &[&str] = &[
+    "select",
+    "from",
+    "where",
+    "group",
+    "having",
+    "qualify",
+    "order",
+    "limit",
+    "window",
+    "union",
+    "except",
+    "intersect",
+    "minus",
+    "values",
+    "insert",
+    "update",
+    "delete",
+    "merge",
+];
