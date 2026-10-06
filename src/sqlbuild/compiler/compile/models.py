@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
+    ModelAnalysisReuse,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -776,6 +777,44 @@ class ModelSqlAnalysis:
 
 
 @dataclass(frozen=True)
+class DataflowReuse:
+    """Analyses a binding dataflow may reuse, and the signatures that decide whether it may."""
+
+    cached: dict[str, PolyglotAnalysisResult]
+    previous_signatures: dict[str, str]
+    served: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True)
+class StoredModelAnalysis:
+    """One model's analysis as the analysis cache held it after a compile, kept for reuse."""
+
+    context: str
+    cache_key: str
+    analysis: PolyglotAnalysisResult
+    output_signature: str
+    dependencies: dict[str, str]
+    signature: str | None
+
+
+@dataclass(frozen=True)
+class StoredAnalysisScope:
+    """Stored analyses one compile may serve, and the session recording its own analyses."""
+
+    reuse: ModelAnalysisReuse
+    context: str
+    stored: dict[str, StoredModelAnalysis]
+
+
+@dataclass(frozen=True)
+class ModelAnalysisCaching:
+    """The analysis cache one compile reads and writes, and its stored analysis reuse."""
+
+    cache: AnalysisCacheContext
+    reuse: ModelAnalysisReuse | None = None
+
+
+@dataclass(frozen=True)
 class ModelSqlAnalysisRequest:
     """Inputs to one model's SQL analysis."""
 
@@ -889,6 +928,7 @@ class CompileProjectInputs:
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
     declaration_scope: DeclarationScopeBuild | None = field(default=None, repr=False, compare=False)
+    analysis_reuse: ModelAnalysisReuse | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)

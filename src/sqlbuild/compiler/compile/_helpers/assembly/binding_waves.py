@@ -7,7 +7,11 @@ from functools import partial
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.classes.binding_dataflow import BindingDataflow
-from sqlbuild.compiler.compile.models import CompileModelInput, PolyglotAnalysisResult
+from sqlbuild.compiler.compile.models import (
+    CompileModelInput,
+    DataflowReuse,
+    PolyglotAnalysisResult,
+)
 from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis as _ModelSqlAnalysis,
 )
@@ -26,8 +30,7 @@ def analyze_binding_waves(
     *,
     requests: tuple[_ModelSqlAnalysisRequest, ...],
     names: tuple[str, ...],
-    cached: dict[str, PolyglotAnalysisResult],
-    previous_signatures: dict[str, str],
+    reuse: DataflowReuse,
     shapes: dict[str, dict[str, str]],
     types: dict[str, dict[str, str]],
     nullability: dict[str, dict[str, InferredNullability]],
@@ -40,8 +43,7 @@ def analyze_binding_waves(
     return BindingDataflow(
         requests=requests,
         names=names,
-        cached=cached,
-        previous_signatures=previous_signatures,
+        reuse=reuse,
         shapes=shapes,
         types=types,
         nullability=nullability,
@@ -55,8 +57,7 @@ def analyze_binding_dataflow(
     *,
     requests: tuple[_ModelSqlAnalysisRequest, ...],
     names: tuple[str, ...],
-    cached: dict[str, PolyglotAnalysisResult],
-    previous_signatures: dict[str, str],
+    reuse: DataflowReuse,
     shapes: dict[str, dict[str, str]],
     types: dict[str, dict[str, str]],
     nullability: dict[str, dict[str, InferredNullability]],
@@ -70,8 +71,7 @@ def analyze_binding_dataflow(
         BindingDataflow,
         requests=requests,
         names=names,
-        cached=cached,
-        previous_signatures=previous_signatures,
+        reuse=reuse,
         shapes=shapes,
         types=types,
         nullability=nullability,

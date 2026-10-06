@@ -19,9 +19,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     model_analysis_cache_key,
     model_analysis_output_signature,
     read_compact_analysis_cache_candidate,
-    read_model_analyses,
     record_analysis_cache_metrics,
-    write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     substitute_placeholder_defaults,
@@ -96,6 +94,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
+from sqlbuild.compiler.compile.classes.stored_model_analyses import StoredModelAnalyses
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
@@ -132,9 +131,11 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    DataflowReuse,
     DynamicColumnContractProof,
     InferredColumn,
     MacroContext,
+    ModelAnalysisCaching,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.models import (
@@ -336,7 +337,14 @@ def assemble_compiled_project(
                 inference_profile=profile,
                 allow_compact_analysis=allow_compact_analysis,
                 rich_type_inference=rich_type_inference,
-                analysis_cache=analysis_cache,
+                analysis_caching=(
+                    None
+                    if analysis_cache is None
+                    else ModelAnalysisCaching(
+                        cache=analysis_cache,
+                        reuse=inputs.analysis_reuse if analysis_model_names is None else None,
+                    )
+                ),
                 complete_binding_schemas=complete_binding_schemas,
             )
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
@@ -628,11 +636,14 @@ def _analyze_model_sql_in_parallel(
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
     rich_type_inference: bool,
-    analysis_cache: AnalysisCacheContext | None,
+    analysis_caching: ModelAnalysisCaching | None,
     complete_binding_schemas: dict[str, dict[str, str]],
 ) -> dict[str, _ModelSqlAnalysis]:
     if not model_inputs:
         return {}
+    analysis_cache: AnalysisCacheContext | None = (
+        None if analysis_caching is None else analysis_caching.cache
+    )
     analyzed_model_names: frozenset[str] = frozenset(
         _model_name(model_input) for model_input in model_inputs
     )
@@ -646,6 +657,13 @@ def _analyze_model_sql_in_parallel(
         )
         for model_input in model_inputs
     )
+    stored: StoredModelAnalyses = StoredModelAnalyses(
+        caching=analysis_caching,
+        requests=requests,
+        column_types_by_table=column_types_by_table,
+        column_nullability_by_table=column_nullability_by_table,
+        complete_binding_schemas=complete_binding_schemas,
+    )
     request_cache_keys: tuple[str, ...] = tuple(
         request.cache_key for request in requests if request.cache_key is not None
     )
@@ -654,7 +672,7 @@ def _analyze_model_sql_in_parallel(
         for request in requests
     )
     compact_batch_plan: CompactAnalysisCachePlan | None = None
-    if analysis_cache is not None:
+    if analysis_cache is not None and not stored.served:
         compact_batch_plan = build_compact_analysis_cache_plan(
             context=analysis_cache,
             models=tuple(
@@ -682,32 +700,24 @@ def _analyze_model_sql_in_parallel(
         else None
     )
     if compact_candidate is not None:
-        completed_analyses: dict[str, PolyglotAnalysisResult] = {}
-        if analysis_cache is not None:
-            completed_analyses, _, _ = read_model_analyses(
-                context=analysis_cache,
-                cache_keys=request_cache_keys,
-                model_names=tuple(_model_name(request.model_input) for request in requests),
-                upstream_model_names_by_key={
-                    request.cache_key: _referenced_model_names(
-                        model_input=request.model_input,
-                        available_names=analyzed_model_names,
-                    )
-                    for request in requests
-                    if request.cache_key is not None
-                },
+        completed_analyses: dict[str, PolyglotAnalysisResult] = (
+            {}
+            if analysis_cache is None
+            else stored.read_every_model(context=analysis_cache, requests=requests)
+        )
+        if analysis_cache is not None and all(
+            key in completed_analyses for key in request_cache_keys
+        ):
+            record_analysis_cache_metrics(
+                batch_hits=len(requests), entry_hits=0, misses=0, bypasses=0
             )
-            if all(key in completed_analyses for key in request_cache_keys):
-                record_analysis_cache_metrics(
-                    batch_hits=len(requests), entry_hits=0, misses=0, bypasses=0
+            return {
+                _model_name(request.model_input): _ModelSqlAnalysis(
+                    polyglot_analysis=completed_analyses[cache_key],
+                    placeholders=request.placeholders,
                 )
-                return {
-                    _model_name(request.model_input): _ModelSqlAnalysis(
-                        polyglot_analysis=completed_analyses[cache_key],
-                        placeholders=request.placeholders,
-                    )
-                    for request, cache_key in zip(requests, request_cache_keys, strict=True)
-                }
+                for request, cache_key in zip(requests, request_cache_keys, strict=True)
+            }
         try:
             compact_analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
                 requests=requests,
@@ -745,6 +755,7 @@ def _analyze_model_sql_in_parallel(
                     complete_binding_schemas=complete_binding_schemas,
                     inference_profile=inference_profile,
                 )
+                stored.record_none()
                 return {
                     _model_name(model_input): analysis
                     for model_input, analysis in zip(model_inputs, compact_analyses, strict=True)
@@ -756,7 +767,7 @@ def _analyze_model_sql_in_parallel(
     previous_signatures: dict[str, str]
     cached_output_signatures_by_key: dict[str, str]
     cached_analyses, previous_signatures, cached_output_signatures_by_key = (
-        read_model_analyses(
+        stored.read(
             context=analysis_cache,
             cache_keys=entry_cache_keys,
             model_names=tuple(_model_name(request.model_input) for request in requests),
@@ -798,8 +809,11 @@ def _analyze_model_sql_in_parallel(
         analyses, cached_analyses = analyze_binding_dataflow(
             requests=requests,
             names=tuple(_model_name(request.model_input) for request in requests),
-            cached=cached_analyses,
-            previous_signatures=previous_signatures,
+            reuse=DataflowReuse(
+                cached=cached_analyses,
+                previous_signatures=previous_signatures,
+                served={name: analysis.dependencies for name, analysis in stored.served.items()},
+            ),
             shapes=complete_binding_schemas,
             types=column_types_by_table,
             nullability=column_nullability_by_table,
@@ -898,6 +912,11 @@ def _analyze_model_sql_in_parallel(
     invalidated_names: set[str] = _downstream_model_names(
         model_inputs=model_inputs,
         changed_names=changed_signature_names,
+    ) | _with_downstream(
+        model_inputs=model_inputs,
+        names=stored.stale_names(
+            requests=requests, cached=cached_analyses, current_signatures=current_signatures_by_name
+        ),
     )
     if invalidated_names and not dependency_ordered:
         invalidated_requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
@@ -959,28 +978,17 @@ def _analyze_model_sql_in_parallel(
                 for model_name, invalidated_analysis in invalidated_analyses_by_name.items()
             }
         )
-    if analysis_cache is not None:
-        with record_compile_timing("cache_publication_ms"):
-            write_model_analyses(
-                context=analysis_cache,
-                analyses_by_key={
-                    request.cache_key: analysis.polyglot_analysis
-                    for request, analysis in zip(requests, analyses, strict=True)
-                    if request.cache_key is not None
-                    and (
-                        request.cache_key not in cached_analyses
-                        or _model_name(request.model_input) in invalidated_names
-                    )
-                },
-                latest_analyses_by_model=analyses_to_record_by_name,
-                dependency_signatures_by_key=_dependency_signatures_by_key(
-                    requests=requests,
-                    cached_analyses=cached_analyses,
-                    invalidated_names=invalidated_names,
-                    current_signatures_by_name=current_signatures_by_name,
-                    analyzed_model_names=analyzed_model_names,
-                ),
-            )
+    stored.publish(
+        context=analysis_cache,
+        requests=requests,
+        results=tuple(analysis.polyglot_analysis for analysis in analyses),
+        cached=cached_analyses,
+        cached_output_signatures=cached_output_signatures_by_key,
+        invalidated_names=invalidated_names,
+        latest_by_model=analyses_to_record_by_name,
+        previous_signatures=previous_signatures,
+        current_signatures=current_signatures_by_name,
+    )
     return {
         _model_name(model_input): analysis
         for model_input, analysis in zip(model_inputs, analyses, strict=True)
@@ -1197,7 +1205,7 @@ def _complete_inferred_bindings(
             )
             results[index] = replace(results[index], polyglot_analysis=analysis)
         star_known: bool = not analysis.has_star or (analysis.star_resolved and inputs_known)
-        if analysis.columns and star_known:
+        if analysis.columns and star_known and name not in complete_schemas:
             complete_schemas.setdefault(
                 name,
                 published_model_shape(
@@ -1255,33 +1263,6 @@ def _complete_inferred_bindings(
             ),
         )
     return tuple(results)
-
-
-def _dependency_signatures_by_key(
-    *,
-    requests: tuple[_ModelSqlAnalysisRequest, ...],
-    cached_analyses: dict[str, PolyglotAnalysisResult],
-    invalidated_names: set[str],
-    current_signatures_by_name: dict[str, str],
-    analyzed_model_names: frozenset[str],
-) -> dict[str, dict[str, str]]:
-    dependencies_by_key: dict[str, dict[str, str]] = {}
-    for request in requests:
-        cache_key: str | None = request.cache_key
-        if cache_key is None or (
-            cache_key in cached_analyses
-            and _model_name(request.model_input) not in invalidated_names
-        ):
-            continue
-        dependencies_by_key[cache_key] = {
-            upstream_name: current_signatures_by_name[upstream_name]
-            for upstream_name in _referenced_model_names(
-                model_input=request.model_input,
-                available_names=analyzed_model_names,
-            )
-            if upstream_name in current_signatures_by_name
-        }
-    return dependencies_by_key
 
 
 def _analyze_model_sql(
@@ -1375,6 +1356,10 @@ def _should_recover_cte_facts(model_input: CompileModelInput) -> bool:
     return model_input.config.values.get("contract") == ContractPolicy.ENFORCED or (
         model_input.schema_entry is not None and bool(model_input.schema_entry.type_enforcement)
     )
+
+
+def _with_downstream(*, model_inputs: tuple[CompileModelInput, ...], names: set[str]) -> set[str]:
+    return names | _downstream_model_names(model_inputs=model_inputs, changed_names=names)
 
 
 def _model_name(model_input: CompileModelInput) -> str:

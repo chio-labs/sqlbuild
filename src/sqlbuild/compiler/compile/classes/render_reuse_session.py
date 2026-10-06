@@ -6,6 +6,7 @@ import pickle
 import threading
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
@@ -15,6 +16,7 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 from sqlbuild.compiler.compile.constants import (
     COMPILE_INPUT_READS,
+    RENDER_REUSE_ANALYSIS_PREFIX,
     RENDER_REUSE_DECLARATIONS_PREFIX,
     RENDER_REUSE_MODEL_AUDITS_PREFIX,
 )
@@ -23,6 +25,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompilerDiagnostic,
     RenderReuseState,
+    StoredModelAnalysis,
     StoredRender,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredDeclarationFiles, DiscoveredSqlModelFile
@@ -76,6 +79,8 @@ class CompileRenderReuseSession:
         self._serialized_models: dict[str, memoryview] = {}
         self._serialized_groups: dict[str, memoryview] = {}
         self._reused_paths: set[str] = set()
+        self._stored_analyses: dict[str, StoredModelAnalysis] = {}
+        self._stored_analysis_payloads: dict[str, memoryview] = {}
 
     def claim(self) -> bool:
         """Return True for the first claim only; later project renders neither reuse nor record."""
@@ -243,9 +248,36 @@ class CompileRenderReuseSession:
 
         return bool(self._decoded_models or self._decoded_groups)
 
+    def reused_model_names(self) -> frozenset[str]:
+        """Return the names of models whose stored renders this compile reused."""
+
+        return frozenset(Path(path).stem for path in self._reused_paths)
+
+    def stored_analyses(self) -> dict[str, StoredModelAnalysis]:
+        """Return stored analyses of reused models by model name."""
+
+        return self._stored_analyses
+
+    def record_analyses(self, *, analyses: dict[str, StoredModelAnalysis | None]) -> None:
+        """Record every model's analysis for the next compile; absent or None drops it."""
+
+        for path in self._model_paths or ():
+            name: str = f"{RENDER_REUSE_ANALYSIS_PREFIX}{path}"
+            model_name: str = Path(path).stem
+            analysis: StoredModelAnalysis | None = analyses.get(model_name)
+            stored: StoredRender = StoredRender(
+                value=analysis, diagnostics=(), environment_names=()
+            )
+            if analysis is not None and analysis is self._stored_analyses.get(model_name):
+                self._group_records[name] = self._stored_analysis_payloads.get(name)
+                self._decoded_groups[name] = stored
+            else:
+                self._pending_groups.append((name, stored))
+
     def release_stored(self) -> None:
         """Drop stored base bytes once every render is decoded, recording reused renders as None."""
 
+        self._keep_stored_analyses()
         self._prior = None
         self._reusable = False
         for records, retained in (
@@ -254,6 +286,22 @@ class CompileRenderReuseSession:
         ):
             for key in records.keys() - retained:
                 records[key] = None
+
+    def _keep_stored_analyses(self) -> None:
+        prior: RenderReuseState | None = self._prior
+        if prior is None or not self._reusable:
+            return
+        for path in self._reused_paths:
+            name: str = f"{RENDER_REUSE_ANALYSIS_PREFIX}{path}"
+            payload: memoryview | None = prior.group_payloads.get(name)
+            stored: StoredRender | None = None if payload is None else _loaded_render(payload)
+            if payload is None or stored is None:
+                continue
+            if not isinstance(stored.value, StoredModelAnalysis):
+                continue
+            self._stored_analyses[Path(path).stem] = stored.value
+            if name in self._retained_groups:
+                self._stored_analysis_payloads[name] = memoryview(bytes(payload))
 
     def stored_state(self, *, complete: bool = False) -> RenderReuseState | None:
         """Serialize this compile's renders; with complete, re-serialize released reused ones."""
