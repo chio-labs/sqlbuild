@@ -617,7 +617,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sqlbuild-analysis"
-version = "0.136.1"
+version = "0.136.2"
 dependencies = [
  "polyglot-sql",
  "polyglot-sql-function-catalogs",
@@ -632,11 +632,11 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-core"
-version = "0.136.1"
+version = "0.136.2"
 
 [[package]]
 name = "sqlbuild-python"
-version = "0.136.1"
+version = "0.136.2"
 dependencies = [
  "fensu-policy",
  "mimalloc",
@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-rules"
-version = "0.136.1"
+version = "0.136.2"
 dependencies = [
  "fensu-policy",
  "globset",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-sqltext"
-version = "0.136.1"
+version = "0.136.2"
 dependencies = [
  "rayon",
  "serde",

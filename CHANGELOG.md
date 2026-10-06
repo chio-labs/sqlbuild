@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.136.2](https://github.com/chio-labs/sqlbuild/compare/v0.136.1...v0.136.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* **test:** isolate unit-test SQL per model and reserve helper names ([#986](https://github.com/chio-labs/sqlbuild/issues/986)) ([0e38e08](https://github.com/chio-labs/sqlbuild/commit/0e38e087caf64c1f08de14ce18ada37428239487))
+* **test:** isolate unit-test SQL per model and reserve helper names ([#986](https://github.com/chio-labs/sqlbuild/issues/986)) ([36b5fc8](https://github.com/chio-labs/sqlbuild/commit/36b5fc83ff1cdfe579431a3e9a1add2fefd6936d))
+
 ## [0.136.1](https://github.com/chio-labs/sqlbuild/compare/v0.136.0...v0.136.1) (2026-10-06)
 
 
