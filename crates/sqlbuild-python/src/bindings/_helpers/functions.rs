@@ -7,11 +7,11 @@ use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyList, PyTupl
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::models::ParsedRulesRequest;
-use crate::configuration::main::load;
-use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
-use crate::engine::main::{evaluate, evaluate_parsed, parse_parts};
-use crate::models::CatalogueResponse;
-use crate::rules::main::{catalogue, selected_codes};
+use sqlbuild_rules::configuration::main::load;
+use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
+use sqlbuild_rules::engine::main::{evaluate, evaluate_parsed, parse_parts};
+use sqlbuild_rules::models::CatalogueResponse;
+use sqlbuild_rules::rules::main::{catalogue, selected_codes};
 use std::sync::Mutex;
 
 const SKILL_OWNER: &str = "sqlbuild";
@@ -122,20 +122,24 @@ fn evaluate_parsed_rules(
 
 #[pyfunction]
 fn run_custom_host_json(py: Python<'_>, spec_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::engine::main::custom_host::run_custom_host_json(spec_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_rules::engine::main::custom_host::run_custom_host_json(spec_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::sql_lint::main::engine::lint_json(request_json))
+    py.compiler_detach(|| sqlbuild_rules::sql_lint::main::engine::lint_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn finalize_rule_findings_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::engine::main::finalize::finalize_findings_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_rules::engine::main::finalize::finalize_findings_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 /// One SQL lint preparation request, read from a Python mapping.
@@ -152,9 +156,9 @@ struct LintPreparationRequest {
 fn prepare_lint_sql(
     py: Python<'_>,
     request: LintPreparationRequest,
-) -> PyResult<Option<crate::sql_lint::types::PreparedSql>> {
+) -> PyResult<Option<sqlbuild_rules::sql_lint::types::PreparedSql>> {
     py.compiler_detach(|| {
-        crate::sql_lint::main::preparation::prepare(
+        sqlbuild_rules::sql_lint::main::preparation::prepare(
             &request.expanded,
             &request.before_expansion,
             &request.prior_sites,
@@ -169,13 +173,13 @@ fn prepare_lint_sql(
 fn prepare_lint_sql_batch(
     py: Python<'_>,
     requests: Vec<LintPreparationRequest>,
-) -> PyResult<Vec<(bool, Option<crate::sql_lint::types::PreparedSql>)>> {
+) -> PyResult<Vec<(bool, Option<sqlbuild_rules::sql_lint::types::PreparedSql>)>> {
     py.compiler_detach(|| {
         Ok(requests
             .iter()
             .map(|request| {
                 sqlbuild_core::panics::main::catch_compiler_panic(|| {
-                    crate::sql_lint::main::preparation::prepare(
+                    sqlbuild_rules::sql_lint::main::preparation::prepare(
                         &request.expanded,
                         &request.before_expansion,
                         &request.prior_sites,
@@ -192,26 +196,30 @@ fn prepare_lint_sql_batch(
 #[pyfunction]
 fn lint_backtick_identifiers(dialect: &str) -> PyResult<bool> {
     compiler_guard(|| {
-        Ok(crate::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect))
+        Ok(sqlbuild_rules::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect))
     })
 }
 
 #[pyfunction]
 fn lint_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::sql_lint::main::batch_engine::lint_batch_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_rules::sql_lint::main::batch_engine::lint_batch_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::sql_lint::main::formatter::format_json(request_json))
+    py.compiler_detach(|| sqlbuild_rules::sql_lint::main::formatter::format_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| crate::sql_lint::main::batch_formatter::format_batch_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        sqlbuild_rules::sql_lint::main::batch_formatter::format_batch_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]

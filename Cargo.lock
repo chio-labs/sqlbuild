@@ -639,11 +639,22 @@ name = "sqlbuild-python"
 version = "0.135.0"
 dependencies = [
  "fensu-policy",
- "globset",
  "mimalloc",
- "polyglot-sql",
- "polyglot-sql-function-catalogs",
  "pyo3",
+ "serde_json",
+ "sqlbuild-analysis",
+ "sqlbuild-core",
+ "sqlbuild-rules",
+ "sqlbuild-sqltext",
+]
+
+[[package]]
+name = "sqlbuild-rules"
+version = "0.135.0"
+dependencies = [
+ "fensu-policy",
+ "globset",
+ "polyglot-sql",
  "rayon",
  "regex",
  "serde",

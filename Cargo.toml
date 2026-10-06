@@ -3,6 +3,7 @@ members = [
     "crates/sqlbuild-core",
     "crates/sqlbuild-sqltext",
     "crates/sqlbuild-analysis",
+    "crates/sqlbuild-rules",
     "crates/sqlbuild-python",
 ]
 resolver = "2"
@@ -45,6 +46,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
+sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-sqltext = { path = "crates/sqlbuild-sqltext" }
 stacker = "0.1"
 sqlparser = { version = "0.58", features = ["visitor"] }

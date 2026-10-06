@@ -1,9 +1,9 @@
 //! Python-facing classes and mapping requests, converted to native models at the boundary.
 
-use crate::models::EvaluateRequest;
 use pyo3::{FromPyObject, pyclass};
 use sqlbuild_analysis::semantic_validation::models as validation;
 use sqlbuild_analysis::semantic_validation::types::{Expansion, Relations};
+use sqlbuild_rules::models::EvaluateRequest;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
