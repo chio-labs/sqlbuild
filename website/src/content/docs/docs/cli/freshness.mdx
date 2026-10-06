@@ -10,8 +10,10 @@ Observes the current data version of each source and reports whether the data ha
 ## Usage
 
 ```bash
-sqb --project-dir <path> freshness [flags]
+sqb freshness [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
@@ -23,6 +25,7 @@ sqb --project-dir <path> freshness [flags]
 | `--json` | Output as JSON instead of human-readable text |
 | `--json-output` | Write JSON output to a file path (also prints text to stdout unless `--json` is set) |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select specific sources or models (sources upstream of selected models are included) |
 | `--exclude` | Exclude specific sources or models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
@@ -36,10 +39,10 @@ Without `--select`, all sources in the project are observed. When `--select` is 
 sqb freshness
 
 # Observe a specific source
-sqb freshness --select raw_orders
+sqb freshness raw_orders
 
 # Observe sources upstream of a model
-sqb freshness --select fact_orders
+sqb freshness fact_orders
 ```
 
 ## Observation without state

@@ -48,6 +48,7 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
     CursorGrain,
+    CursorType,
     CursorWatermarkMode,
     FixtureKey,
     GraphResourceKind,
@@ -192,12 +193,14 @@ class GraphIdentityNode:
 
 @dataclass(frozen=True, kw_only=True, init=False)
 class CursorOverrides:
-    """Typed cursor override values from CLI flags."""
+    """Cursor override values from CLI flags; untyped `start`/`end` await planner typing."""
 
     start_ts: CursorScalar | None = None
     end_ts: CursorScalar | None = None
     start_int: CursorScalar | None = None
     end_int: CursorScalar | None = None
+    start: str | None = None
+    end: str | None = None
 
     def __init__(
         self,
@@ -206,7 +209,11 @@ class CursorOverrides:
         end_ts: str | CursorScalar | None = None,
         start_int: str | CursorScalar | None = None,
         end_int: str | CursorScalar | None = None,
+        start: str | None = None,
+        end: str | None = None,
     ) -> None:
+        object.__setattr__(self, "start", start)
+        object.__setattr__(self, "end", end)
         object.__setattr__(
             self,
             "start_ts",
@@ -222,6 +229,34 @@ class CursorOverrides:
         )
         object.__setattr__(
             self, "end_int", self._parse_integer(field_name="--end-cursor-int", value=end_int)
+        )
+
+    @property
+    def has_untyped(self) -> bool:
+        """Return whether `--start-cursor` or `--end-cursor` still needs a cursor type."""
+
+        return self.start is not None or self.end is not None
+
+    def typed_as(self, *, cursor_type: CursorType) -> CursorOverrides:
+        """Return these overrides with `--start-cursor`/`--end-cursor` read as `cursor_type`."""
+
+        if not self.has_untyped:
+            return self
+        if cursor_type == CursorType.INTEGER:
+            return CursorOverrides(
+                start_ts=self.start_ts,
+                end_ts=self.end_ts,
+                start_int=self._parse_integer(field_name="--start-cursor", value=self.start)
+                or self.start_int,
+                end_int=self._parse_integer(field_name="--end-cursor", value=self.end)
+                or self.end_int,
+            )
+        return CursorOverrides(
+            start_ts=self._parse_timestamp(field_name="--start-cursor", value=self.start)
+            or self.start_ts,
+            end_ts=self._parse_timestamp(field_name="--end-cursor", value=self.end) or self.end_ts,
+            start_int=self.start_int,
+            end_int=self.end_int,
         )
 
     @staticmethod
@@ -1534,6 +1569,7 @@ class PlanOutput:
     source_freshness: DirectSourceFreshnessPlanningResult | None = None
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)
+    cursor_overrides: CursorOverrides | None = None
 
     @property
     def python_source_entries(self) -> dict[str, SourceEntry]:

@@ -16,6 +16,12 @@ Build the project locally with DuckDB:
 sqb build
 ```
 
+Build one model and everything downstream of it:
+
+```bash
+sqb build stg_orders+
+```
+
 After the build creates the local DuckDB objects, run SQL unit tests:
 
 ```bash

@@ -132,6 +132,18 @@ QUERY_DIFF_INCOMPLETE_EXECUTION_CODES: frozenset[str] = frozenset({"C237", "C238
 CLI_WAREHOUSE_SOURCE: str = "--warehouse"
 CONNECTION_WAREHOUSE_SOURCE: str = "connection warehouse"
 CONNECTION_DEFAULT_WAREHOUSE_SOURCE: str = "connection default"
+POSITIONAL_SELECT_COMMANDS: frozenset[str] = frozenset(
+    {
+        CliCommand.AUDIT,
+        CliCommand.BUILD,
+        CliCommand.CHECK,
+        CliCommand.COMPILE,
+        CliCommand.FRESHNESS,
+        CliCommand.PLAN,
+        CliCommand.SEED,
+        CliCommand.TEST,
+    }
+)
 COMMAND_WAREHOUSE_GROUPS: MappingProxyType[CliCommand, WarehouseGroup | None] = MappingProxyType(
     {
         CliCommand.AUDIT: WarehouseGroup.BUILD,

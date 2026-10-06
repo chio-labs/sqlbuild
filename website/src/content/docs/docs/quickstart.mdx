@@ -184,10 +184,10 @@ The models and functions are no longer listed as first run, and the seed is curr
 
 ```bash
 # Rebuild a specific model
-sqb build --select daily_revenue
+sqb build daily_revenue
 
 # Rebuild models under a path
-sqb build --select path:models/marts
+sqb build path:models/marts
 
 # Full refresh of everything
 sqb build --full-refresh

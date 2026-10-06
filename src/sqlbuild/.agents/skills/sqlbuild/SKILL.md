@@ -58,11 +58,11 @@ JOIN __ref("stg_payments") p USING (order_id)
    than guessing how pieces connect.
 2. **Look at the data.** `sqb query "SELECT ..." --limit 20` runs SQL on the active target. Profile
    inputs (counts, nulls, key uniqueness) before writing joins.
-3. **Compile.** `sqb compile --select <models>` after every edit. It is offline and fast.
-4. **Plan.** `sqb plan --select <models>` shows exactly what a build will do and why. Read it before
+3. **Compile.** `sqb compile <models>` after every edit. It is offline and fast.
+4. **Plan.** `sqb plan <models>` shows exactly what a build will do and why. Read it before
    building, especially for incremental models, full refreshes and anything destructive.
-5. **Test.** `sqb test --select <models>` runs SQL unit tests without building.
-6. **Build.** `sqb build --select <models>` runs tests, builds, and runs audits in DAG order.
+5. **Test.** `sqb test <models>` runs SQL unit tests without building.
+6. **Build.** `sqb build <models>` runs tests, builds, and runs audits in DAG order.
    Use `--defer-to <target>` to read unselected upstream models from another target instead of
    rebuilding them.
 7. **Verify.** Prove the result is right with `sqb diff` (below), not only that it built.
@@ -79,13 +79,13 @@ the trigger applies.
 |---|---|
 | Check a refactor did not change results, or compare dev with prod | `sqb diff prod:dev --full --select <model>` |
 | Compare two arbitrary queries (old vs new logic, before vs after a fix, two tables) | `sqb diff --left-query "..." --right-query "..." --key <col>` |
-| Know what a model can see: which macros, enums and constants are visible, used, or unavailable | `sqb scope model:<name>` |
-| Fix "unknown macro/enum/constant", or decide where a declaration should live | `sqb scope model:<name> --explain macro:<name>` |
-| Preview whether moving a file breaks declaration visibility | `sqb scope model:<name> --as-path <new/path.sql>` |
+| Know what a model can see: which macros, enums and constants are visible, used, or unavailable | `sqb scope <name>` |
+| Fix "unknown macro/enum/constant", or decide where a declaration should live | `sqb scope <name> --explain macro:<name>` |
+| Preview whether moving a file breaks declaration visibility | `sqb scope <name> --as-path <new/path.sql>` |
 | Rename a model, move a model file, or rename a column | `sqb rename <old> <new>`, `sqb mv <name> <path/or/folder/>`, `sqb rename <model>.<column> <new>` (`model:`/`column:` prefixes optional) |
 | Find what a model depends on, or what breaks if it changes | `sqb lineage <model> --direction both` |
 | Trace where a column comes from, or who consumes it before renaming or dropping it | `sqb lineage <model>.<column> --direction downstream` |
-| See which intermediate models a SQL test will really execute | `sqb test --select <model> --inspect` |
+| See which intermediate models a SQL test will really execute | `sqb test <model> --inspect` |
 | Inspect the full graph as data | `sqb dag --json`, `sqb plan --json`, `sqb compile --json` |
 | Adopt an existing warehouse table's columns into a contract | `sqb contract generate --from <target> --select <model>` |
 | Try syntax safely in a throwaway DuckDB project | `sqb playground /tmp/sqb-sandbox` |
@@ -167,7 +167,7 @@ SQLBuild models downstream of them.
 
 ## Selectors
 
-`--select a b` unions, `--exclude` subtracts. `+model` includes upstream, `model+` downstream.
+`sqb build a b` (or `--select a b`) unions, `--exclude` subtracts. `+model` includes upstream, `model+` downstream.
 `tag:<tag>`, `path:models/marts` (or any value containing `/`), `seed:<name>`, `source:<name>`,
 and quoted name globs such as `"stg_*"`. They work with plan, build, test, audit, seed, clone and
 diff.

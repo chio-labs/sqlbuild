@@ -41,6 +41,7 @@ Exactly one of a positional target or `--select` is required.
 | `--direction` | `upstream` (default), `downstream`, or `both`. `both` is only available for model lineage. |
 | `--depth` | How many hops to traverse. An integer or `all` (default: `all`). |
 | `--format` | Output format: `tree` (default), `list`, or `json`. |
+| `--json` | Shorthand for `--format json`. |
 | `--mode` | Column lineage analysis mode: `rich` (default) or `fast`. |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias). |
 | `--select`, `-s` | Select resources using the same selector syntax as `sqb compile`, `sqb plan` and `sqb build`, for example `path:models/marts`, `tag:finance` or `stg_*`. |
@@ -101,7 +102,7 @@ source:raw__payments        -> model:stg_payments
 Structured output with nodes, edges, and metadata:
 
 ```bash
-sqb lineage fact_orders --format json
+sqb lineage fact_orders --json
 ```
 
 ```json
@@ -173,7 +174,7 @@ raw__payments.amount_cents -> stg_payments.amount_cents direct
 ### JSON
 
 ```bash
-sqb lineage fact_orders.total_cents --format json
+sqb lineage fact_orders.total_cents --json
 ```
 
 ```json
@@ -240,7 +241,7 @@ sqb lineage --select "stg_orders~daily_activity_rollup"
 sqb lineage --select "+fact_orders"
 
 # JSON output for programmatic consumption
-sqb lineage fact_orders --format json --direction upstream
+sqb lineage fact_orders --json --direction upstream
 ```
 
 ## Depth limiting

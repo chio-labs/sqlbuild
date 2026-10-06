@@ -10,13 +10,16 @@ Runs Python [checks](/docs/concepts/python-nodes/checks) in isolation. Checks va
 ## Usage
 
 ```bash
-sqb --project-dir <path> check [flags]
+sqb check [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select checks to run (by name, `check:`, `tag:`, or graph expansion) |
 | `--exclude` | Exclude checks from the selection |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
@@ -34,10 +37,10 @@ Selecting a non-check node is rejected; use [`sqb build`](/docs/cli/build) to ru
 sqb check
 
 # Run one check and its required dependencies
-sqb check --select +check_orders_exported
+sqb check +check_orders_exported
 
 # Run checks by tag
-sqb check --select tag:exports
+sqb check tag:exports
 
 # Print results as JSON
 sqb check --json

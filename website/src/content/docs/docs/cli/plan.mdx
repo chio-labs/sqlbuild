@@ -10,8 +10,10 @@ Shows the execution plan without making any changes. Useful for inspecting chang
 ## Usage
 
 ```bash
-sqb --project-dir <path> plan [flags]
+sqb plan [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
@@ -25,10 +27,13 @@ sqb --project-dir <path> plan [flags]
 | `--json` | Output the plan as JSON |
 | `--selection-diagnostics` | Warn when a selected model will build on changed upstream models that are not selected; see [Selection and staleness](/docs/concepts/planning/selection-and-staleness) |
 | `--full-refresh` | Plan a full rebuild for selected models unless a model sets `full_refresh false`; `full_refresh true` forces a model without this flag |
+| `--start-cursor` | Override the start cursor, typed from the selected incremental models' cursor type; fails with `S303` if the selection mixes timestamp and integer cursors. With no cursor model selected, an integer value is read as an integer cursor and anything else as an ISO timestamp |
+| `--end-cursor` | Override the end cursor, typed the same way as `--start-cursor` |
 | `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer incremental models |
 | `--end-cursor-int` | Override end cursor for integer incremental models |
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |

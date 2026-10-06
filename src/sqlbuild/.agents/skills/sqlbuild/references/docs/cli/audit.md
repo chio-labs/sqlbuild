@@ -11,8 +11,10 @@ Runs all attached audits without rebuilding models. Useful for verifying data qu
 ## Usage
 
 ```bash
-sqb --project-dir <path> audit [flags]
+sqb audit [SELECTOR ...] [flags]
 ```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
 
 ## Flags
 
@@ -20,6 +22,7 @@ sqb --project-dir <path> audit [flags]
 |------|-------------|
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--defer-to` | Resolve model references against another target |
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
 | `--select`, `-s` | Select audits attached to specific models |
 | `--select-file` | Read selectors from a file |
 | `--exclude` | Exclude audits attached to specific models |
@@ -62,7 +65,7 @@ guarantee immediate cancellation of a query already running in the warehouse.
 sqb audit
 
 # Run audits for marts only
-sqb audit --select path:models/marts
+sqb audit path:models/marts
 
 # Run up to 8 audit queries concurrently
 sqb audit --concurrency 8

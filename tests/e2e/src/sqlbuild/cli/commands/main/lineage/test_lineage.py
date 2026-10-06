@@ -321,7 +321,7 @@ def test_given_unchanged_project_when_lineage_runs_twice_then_reuses_structural_
     (
         LineageCacheCliTestCase(
             description="authored dependency change invalidates structural lineage cache",
-            command=("lineage", "fact_orders", "--format", "json"),
+            command=("lineage", "fact_orders", "--json"),
             expected_node_id="model:stg_customers",
         ),
     ),

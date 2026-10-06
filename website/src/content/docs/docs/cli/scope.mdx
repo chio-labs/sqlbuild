@@ -24,9 +24,10 @@ sqb scope --at PATH [flags]
 sqb scope TARGET --as-path PATH [flags]
 ```
 
-`TARGET` is either a kind-qualified identity or an exact project-relative resource path:
+`TARGET` is a model, source, seed, or function name, a kind-qualified identity, or an exact project-relative resource path:
 
 ```bash
+sqb scope stg_orders
 sqb scope model:stg_orders
 sqb scope test:stg_orders__excludes_cancelled
 sqb scope scenario:daily_revenue
@@ -42,7 +43,7 @@ sqb scope constant:minimum_order_value
 sqb scope models/staging/orders/stg_orders.sql
 ```
 
-Bare names such as `stg_orders` and `order_status` are rejected even if they are currently unique. Qualification keeps commands stable when names collide across resource or declaration kinds. Public declaration identities are `macro:<name>`, `enum:<name>`, and `constant:<name>`.
+Models, sources, seeds, and functions share one project-wide namespace, so their bare names, such as `stg_orders`, are accepted and resolve to the qualified identity. Macros, enums, constants, tests, and audits can share names with each other and with resources, so they always need their prefix: a bare name such as `order_status` that names one of them fails with `C960` and shows the qualified form to use, and a bare name that matches both a resource and one of these declarations fails and lists every match. Public declaration identities are `macro:<name>`, `enum:<name>`, and `constant:<name>`.
 
 Model-private constants and enums include their owner in the introspection identity:
 
