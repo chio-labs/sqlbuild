@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -261,3 +263,40 @@ class JsonDurationE2ETestCase:
     expected_order_lines_sql: str
     expected_exit_code: int
     expected_status: str
+
+
+@dataclass(frozen=True)
+class ParameterizedJsonE2ETestCase:
+    """Parameterized SQL tests whose cases must each appear in structured JSON output."""
+
+    description: str
+    expected_checks: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class HelperIsolationE2ETestCase:
+    """A helper named like a physical table or a model CTE, read only by a fixture."""
+
+    description: str
+    sql_analysis_enabled: bool
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IsolatedCompileE2ETestCase:
+    """A project whose compiled SQL tests must keep helper and model CTE names apart."""
+
+    description: str
+    project_files: Mapping[str, str]
+    compile_arguments: tuple[str, ...]
+    helper_names: tuple[str, ...]
+    expected_minimum_tests: int
+
+
+@dataclass(frozen=True)
+class FixtureProjectIsolationE2ETestCase:
+    """A fixture project whose compiled SQL tests must keep CTE names apart."""
+
+    description: str
+    project_dir: Path
+    expected_minimum_tests: int

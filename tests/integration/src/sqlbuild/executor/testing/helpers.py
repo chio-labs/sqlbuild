@@ -246,7 +246,7 @@ def comparison_rows(*, adapter: DuckDbAdapter, connection: Any, sql: str) -> lis
 
 
 def build_terminated_model_project_files() -> dict[str, str]:
-    """Build a DuckDB project whose WITH model ends in a statement terminator."""
+    """Build a DuckDB project whose WITH model ends in a terminator and is read downstream."""
 
     return {
         "sqlbuild_project.toml": (
@@ -262,11 +262,17 @@ def build_terminated_model_project_files() -> dict[str, str]:
             'WITH a AS (SELECT id FROM __source("raw_orders"))\n'
             "SELECT id FROM a;\n"
         ),
+        "models/m_next.sql": (
+            "MODEL (description 'Test model m_next.', materialized table);\n\n"
+            'SELECT id + 1 AS id FROM __ref("m")\n'
+        ),
         "tests/unit/test_m.sql": (
             "TEST();\n\n"
             "WITH\n"
             "__source__raw_orders AS (SELECT 1 AS id),\n"
-            "__expected__m AS (SELECT 1 AS id)\n"
+            "__expected__m AS (SELECT 1 AS id),\n"
+            "__expected__m_next AS (SELECT 2 AS id),\n"
+            '__assert__m_has_one_row AS (SELECT id FROM __ref("m") WHERE id <> 1)\n'
             "SELECT 1\n"
         ),
     }

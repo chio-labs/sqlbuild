@@ -36,9 +36,10 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
                 "  WITH ranked AS (SELECT order_id, amount, tag FROM __ref__stg_orders)\n"
                 "  SELECT order_id, amount * 2 AS doubled, tag FROM ranked\n),\n"
                 "helper_rows AS (SELECT order_id, doubled, tag FROM totals)",
-                "\nhelper_rows AS (SELECT 1 AS order_id, 20 AS doubled, 'x' AS tag),\n",
+                "\n__helper__helper_rows AS (SELECT 1 AS order_id, 20 AS doubled, 'x' AS tag),\n",
                 "__actual__orders AS (SELECT * FROM __ref__orders)",
-                "__expected__orders AS (SELECT order_id, doubled, tag FROM helper_rows)",
+                "__expected__orders AS (SELECT order_id, doubled, tag FROM __helper__helper_rows "
+                "AS helper_rows)",
             ),
         ),
     ),
@@ -72,7 +73,7 @@ def test_given_authored_ctes_when_testing_then_passes_and_runs_the_authored_sql(
     "test_case",
     (
         AuthoredSqlParityTestCase(
-            description="a WITH model ending in a statement terminator",
+            description="a WITH model ending in a terminator read by a later step and assert",
             compiled_test_name="test_m.sql",
             expected_fragments=(
                 "__ref__m AS (WITH a AS (SELECT id FROM __source__raw_orders)\nSELECT id FROM a)",
@@ -104,6 +105,8 @@ def test_given_model_ending_in_semicolon_when_testing_then_terminator_is_dropped
     ).read_text()
     for fragment in test_case.expected_fragments:
         assert fragment in sql, sql
+    assert sql.count("__ref__m AS (") == 1, sql
+    assert ";" not in sql and "__sqb_cte_" not in sql, sql
 
 
 if __name__ == "__main__":

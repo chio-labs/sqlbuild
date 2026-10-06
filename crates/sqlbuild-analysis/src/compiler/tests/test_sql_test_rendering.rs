@@ -9,7 +9,7 @@ use crate::compiler::tests::helpers::{
     generated_with_bodies_stay_nested_verbatim, repeated_model_sql_renders_like_separate_batches,
     shared_model_cte_names_stay_nested_on_nested_with_dialects,
     snowflake_function_synonyms_stay_as_authored, trailing_statement_terminators_are_dropped,
-    tsql_distinct_ctes_lift_verbatim, tsql_fixture_and_model_cte_collisions_are_refused,
+    tsql_distinct_ctes_lift_verbatim, tsql_fixture_and_model_cte_collisions_are_renamed,
     tsql_identical_helper_ending_in_line_comment_is_shared,
     tsql_model_cte_collisions_are_renamed_by_token_span,
     tsql_unprovable_cte_renames_are_refused_with_named_ctes,
@@ -40,8 +40,8 @@ fn given_sql_rendering_cases_when_rendering_native_batches_then_expected_behavio
             expected_success: true,
         },
         SqlTestRenderingTestCase {
-            description: "T-SQL fixture and model CTE collisions are refused",
-            run: tsql_fixture_and_model_cte_collisions_are_refused,
+            description: "T-SQL fixture and model CTE collisions are renamed by token span",
+            run: tsql_fixture_and_model_cte_collisions_are_renamed,
             expected_success: true,
         },
         SqlTestRenderingTestCase {

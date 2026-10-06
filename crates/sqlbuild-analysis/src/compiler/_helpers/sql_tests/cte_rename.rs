@@ -82,6 +82,63 @@ pub(crate) fn rename_ctes(
     preserves_tokens((sql, &tokens), (&renamed, &renamed_tokens), &replaced).then_some(renamed)
 }
 
+/// Case-folded names of every CTE a statement defines at any depth; `None` when unscannable.
+pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<String>> {
+    let tokens = match tokens(sql, dialect) {
+        Ok(tokens) => tokens,
+        Err(_) => return None,
+    };
+    let code: Vec<&Token> = tokens.iter().filter(|token| !token.comment).collect();
+    let text = |index: usize| code.get(index).map(|token| &sql[token.start..token.end]);
+    let keyword = |index: usize, word: &str| {
+        code.get(index)
+            .and_then(|token| token.key.as_deref())
+            .is_some_and(|key| key == word)
+    };
+    let mut keys: Vec<String> = Vec::new();
+    for (index, token) in code.iter().enumerate() {
+        let Some(key) = token.key.as_deref() else {
+            continue;
+        };
+        let opens_list = index > 0
+            && (keyword(index - 1, "with")
+                || keyword(index - 1, "recursive")
+                || text(index - 1) == Some(","));
+        if !opens_list {
+            continue;
+        }
+        let mut next = index + 1;
+        if text(next) == Some("(") {
+            let mut depth = 0usize;
+            while let Some(part) = text(next) {
+                depth = match part {
+                    "(" => depth + 1,
+                    ")" => depth.saturating_sub(1),
+                    _ => depth,
+                };
+                next += 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+        }
+        if !keyword(next, "as") {
+            continue;
+        }
+        next += 1;
+        if keyword(next, "not") {
+            next += 1;
+        }
+        if keyword(next, "materialized") {
+            next += 1;
+        }
+        if text(next) == Some("(") {
+            keys.push(key.to_string());
+        }
+    }
+    Some(keys)
+}
+
 /// How one occurrence of a renamed CTE's name is used.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Usage {

@@ -98,8 +98,11 @@ The trailing `SELECT 1` is required as a ceremonial closing statement.
 | `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
 | `__macro__<name>` | Mock a macro. Replaces every `@<name>(...)` call with the mock value. |
 
-Any CTE without one of these prefixes is treated as a helper CTE, available to mock, model,
-`__expected__`, and `__assert__` SQL in the test.
+Any CTE without one of these prefixes is treated as a helper CTE, available to mock, helper,
+`__expected__`, and `__assert__` SQL in the test. Models never see helpers: a model's own CTEs and
+the tables it reads keep their meaning even when a helper shares their name. A CTE inside another
+test CTE must not redefine a helper's name, and a model CTE must not use a name SQLBuild generates
+for the test query, such as `__ref__orders` or `__helper__expected_rows`.
 
 SQLBuild splits test files into CTEs and finds `__ref`, `__source`, `__seed`, `__dbt_ref`,
 `__udf` and `__table_fn` calls outside comments and quoted text, in tests, scenarios, models,
