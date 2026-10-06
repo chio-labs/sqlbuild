@@ -23,6 +23,7 @@ sqb --project-dir <path> plan [flags]
 | `--defer-to` | Resolve unselected model references against another target |
 | `--as` | Compile for another target and show its plan, including [model migration](/docs/concepts/models/migrations) decisions, using the current connection. Inspection only. |
 | `--json` | Output the plan as JSON |
+| `--selection-diagnostics` | Warn when a selected model will build on changed upstream models that are not selected; see [Selection and staleness](/docs/concepts/planning/selection-and-staleness) |
 | `--full-refresh` | Plan a full rebuild for selected models unless a model sets `full_refresh false`; `full_refresh true` forces a model without this flag |
 | `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
@@ -37,45 +38,68 @@ sqb --project-dir <path> plan [flags]
 First run:
 
 ```
-Plan ready (13 selected)
+Plan ready  15 selected, 2 sources to load
+
+Sources to load (2)
+├── raw__customers                     table
+└── raw__orders                        delete_insert (cursor: ordered_at)
+
+Changed functions (2)
+├── table_fn__customer_orders          table function
+    └── reason  first run
+└── udf__is_completed_order            sql udf
+    └── reason  first run
 
 First run (12)
-  stg_customers               view
-  stg_payments                view
-  stg_orders                  view
-  daily_order_partitioned     partition_tracked (custom)
-  daily_revenue               table
-  dim_customers               table
-  fact_orders                 table
-  customer_status_snapshot    merge (timestamp)
-  hourly_order_activity       delete_insert (timestamp, microbatch)
-  daily_activity_rollup       delete_insert (timestamp, microbatch)
-  hourly_activity_with_daily_context delete_insert (timestamp, microbatch)
-  order_status_index          delete_insert (integer)
+├── stg_customers                      view
+├── stg_payments                       view
+├── stg_orders                         view
+├── daily_order_partitioned            partition_tracked (custom)
+├── daily_revenue                      table
+├── dim_customers                      table
+├── fact_orders                        table
+├── customer_status_snapshot           merge (timestamp)
+    ├── cursor  last_ordered_at (timestamp)
+    └── bounds  computed at run time, once model fact_orders is up to date
+├── hourly_order_activity              delete_insert (timestamp, microbatch)
+    ├── cursor  activity_hour (timestamp)
+    ├── mode  microbatch
+    ...
+└── order_status_index                 delete_insert (integer)
+    ├── cursor  order_id (integer)
+    └── bounds  computed at run time, once model fact_orders is up to date
 
 Seeds (1)
-  waffle_types
+└── waffle_types  (first_run)
 
-✓ Plan complete  13 selected
+✓ Plan complete  15 selected, 2 sources to load
 ```
 
 Steady state:
 
 ```
-Plan ready (13 selected)
+Plan ready  15 selected, 2 sources to load
 
-Normal (12)
-    3 view
-    3 table
-    3 delete_insert (timestamp, microbatch)
-    1 partition_tracked (custom)
-    1 merge (timestamp)
-    1 delete_insert (integer)
+Sources to load (2)
+├── raw__customers                     table
+└── raw__orders                        delete_insert (cursor: ordered_at)
+
+Models (12)
+├── stg_customers                      view
+├── stg_payments                       view
+...
+└── order_status_index                 delete_insert (integer)
+    ├── cursor  order_id (integer)
+    └── bounds  computed at run time, once model fact_orders is up to date
+
+Functions (2)
+├── table_fn__customer_orders          table function
+└── udf__is_completed_order            sql udf
 
 Seeds (1)
-  waffle_types
+└── waffle_types  (current)
 
-✓ Plan complete  13 selected
+✓ Plan complete  15 selected, 2 sources to load
 ```
 
 When query, function, or schema changes are detected, the plan lists each affected model under its own change with its backfill action. A model that calls a changed function directly appears under `Function changed` with `cause: function <name> changed`; models further downstream continue forward. See [Replay decisions](/docs/concepts/planning/replay-decisions).

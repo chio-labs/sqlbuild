@@ -9,6 +9,7 @@ Online: https://sqlbuild.com/docs/cli/build/
 ## Contents
 
 - Usage
+- Global options
 - Flags
 - Fast iteration
 - Execution order
@@ -26,6 +27,18 @@ Compiles, plans, and executes the selected build lifecycle, running the full sel
 ```bash
 sqb --project-dir <path> build [flags]
 ```
+
+## Global options
+
+These options apply to every `sqb` command and go before the command name, as in
+`sqb --debug build`:
+
+| Option | Description |
+|--------|-------------|
+| `--project-dir <path>` | Run against the project in `<path>` instead of the current directory |
+| `--no-color` | Print without colour |
+| `--debug` | Print detailed progress, the SQL each step runs, and internal diagnostics to stderr; implies `--verbose` |
+| `--version`, `-V` | Print the SQLBuild version |
 
 ## Flags
 
@@ -50,7 +63,7 @@ sqb --project-dir <path> build [flags]
 | `--load` | Explicitly load managed sources before building |
 | `--no-load` | Skip automatic source loading |
 | `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
-| `--include-stale-upstreams` | Expand selection to include stale upstream models needed for coherence |
+| `--selection-diagnostics` | Warn when a selected model will build on changed upstream models that are not selected; see [Selection and staleness](../concepts/planning/selection-and-staleness.md) |
 | `--manifest` | Generate `target/manifest.json` with plan-aware project metadata |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
@@ -69,7 +82,7 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 ## Execution order
 
 1. Managed sources are loaded (unless `--no-load`)
-2. Seeds are loaded (if changed)
+2. Selected seeds are loaded
 3. Source audits run before their dependent models (unless `--no-audits`)
 4. SQL unit tests run before their target model (unless `--no-tests`)
 5. Models are materialized in DAG topological order
@@ -84,23 +97,35 @@ audit reads, so the audit can gate the resource like its other audits. See
 ```
 Execution  sqb build  (concurrency: 1)
 
-   1/13  seed      waffle_types                                          OK     0.09s
-   2/13  view      stg_customers                                         OK     0.05s
-           audit     not_null (customer_id)                              PASS
-           audit     unique (customer_id)                                PASS
-   3/13  view      stg_orders                                            OK     0.03s
+   1/17  source    raw__customers                                        OK     0.05s  rows=5
+   2/17  source    raw__orders                                           OK     0.03s  rows=10
+
+   3/17  seed      waffle_types                                          OK     0.03s
+   7/17  view      stg_orders                                            OK     0.04s
            test      test_stg_orders                                     PASS
+             expect  expected stg_orders                                 PASS
+             expect  assertion order_ids_are_not_null                    PASS
            audit     not_null (order_id)                                 PASS
            audit     unique (order_id)                                   PASS
-  10/13  table     hourly_order_activity  (delete_insert)                OK     0.16s
-           audit (d) expression_is_true                                  PASS  4/4
-           audit (d) not_null (activity_hour)                            PASS  4/4
-           audit (f) expression_is_true                                  PASS
+           audit     not_null (customer_id)                              PASS
+           audit     relationships (waffle_type_id)                      PASS
+           audit     accepted_values (status)                            PASS
+  13/17  table     hourly_order_activity  (delete_insert)                OK     0.24s
+         5 batches (1d)    range 2026-03-31T09:00:00 → 2026-04-04T14:00:00    8 rows
+           audit (d) orders_placed_is_non_negative                       PASS  5/5
+           audit (d) not_null (activity_hour)                            PASS  5/5
+           audit (f) orders_placed_is_non_negative                       PASS
            audit (f) not_null (activity_hour)                            PASS
 
-Completed successfully.
-PASS=66  WARN=0  FAIL=0  SKIP=0  TOTAL=66  (1.09s)
+✓ Completed successfully  PASS=99  WARN=0  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=99  (2.13s)
 ```
+
+Each resource prints one row when it finishes, followed by its tests and audits. Rows for
+individual warehouse statements and for steps inside a resource, such as `Create staging relation`,
+`Promote relation`, `loader callable`, or audit evaluation, appear only with `sqb --debug build`.
+Without `--debug`, a statement that is still running after 30 seconds prints a `RUNNING` row every
+30 seconds, with its elapsed time and, when the warehouse reports one, its query ID. A failed
+statement or step still prints its `FAIL` row.
 
 ## Deferred builds
 

@@ -112,7 +112,7 @@ sqb build --select path:models/staging+
 
 ## Path-between selectors
 
-Select all models on the shortest path between two nodes:
+Select all models on every path between two nodes:
 
 ```bash
 sqb build --select fact_orders~daily_activity_rollup
@@ -157,15 +157,15 @@ Unknown resource names, name patterns with no matches, empty paths, and malforme
 clear error messages:
 
 ```
-unknown selector name 'nonexistent_model'
-unknown selector pattern 'missing_*'
-no models found under path 'models/nonexistent'.
-no models found with tag 'nonexistent_tag'
-path selector 'fact_orders~' requires names on both sides of '~'
+error[S007]: unknown selector name 'nonexistent_model'
+error[S007]: unknown selector name 'missing_*'
+error[S009]: no models found under path 'models/nonexistent'.
+error[S000]: no SQL resources or Python nodes found with tag 'nonexistent_tag'
+error[S003]: path selector 'fact_orders~' requires names on both sides of '~'
 ```
 
 If a path selector omits the root directory, SQLBuild asks for the explicit form:
 
 ```
-path selectors require an explicit root: use 'models/' or 'python/'
+error[S012]: path selectors require an explicit root: use 'models/' or 'python/'
 ```

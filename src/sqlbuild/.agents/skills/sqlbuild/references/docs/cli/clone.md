@@ -10,8 +10,8 @@ Copies selected relations from one target to another. It uses adapter-native clo
 
 No `manifest.json` generation or artifact management is required. Clone works directly against live targets.
 
-When `--to` is omitted, the destination is the active target selected by `--target`,
-`sqlbuild_local.toml`, or `default_target`, in that order.
+When `--to` is omitted, the destination is the active target selected by `sqlbuild_local.toml`
+or `default_target`, in that order.
 
 `--from` selects only the origin namespace and its clone-origin policy. `--to`, or the active
 target when it is omitted, selects the sole physical connection used by the operation. The

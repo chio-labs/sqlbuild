@@ -66,11 +66,11 @@ sqb freshness
 Source freshness
 
 Observed (3)
-  raw_customers  timestamp  2026-06-05T14:30:00  adapter
-  raw_orders     timestamp  2026-06-05T15:45:00  column  tolerance 15m
-  raw_payments   integer    42871                 column
+├── raw_customers  value 2026-06-05T14:30:00+00:00  kind timestamp  via column
+├── raw_orders     value 2026-06-05T12:00:00+00:00  kind timestamp  via column  tolerance 15m
+└── raw_payments   value 2026-06-05T14:28:00+00:00  kind timestamp  via column  tolerance 15m
 
-Summary: observed=3 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0
+OBSERVED=3  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0
 ```
 
 Sources without explicit `freshness:` config are auto-observed using the `adapter` strategy if the adapter supports table metadata. Sources that can't be observed (expression sources, managed sources without freshness config on unsupported adapters) show as `unknown`.
@@ -93,15 +93,15 @@ sqb freshness --state
 Source freshness
 
 Changed (1)
-  raw_orders     previous 2026-06-05T12:00:00  current 2026-06-05T15:45:00  tolerance 15m
+└── raw_orders     previous 2026-06-05T12:00:00+00:00  current 2026-06-05T15:45:00+00:00  tolerance 15m
 
 Unchanged (1)
-  raw_customers  previous 2026-06-05T14:30:00  current 2026-06-05T14:30:00
+└── raw_customers  previous 2026-06-05T14:30:00+00:00  current 2026-06-05T14:30:00+00:00
 
 Tolerated (1)
-  raw_payments   previous 2026-06-05T14:28:00  current 2026-06-05T14:30:00  tolerance 15m
+└── raw_payments   previous 2026-06-05T14:28:00+00:00  current 2026-06-05T14:30:00+00:00  tolerance 15m
 
-Summary: observed=0 changed=1 unchanged=1 tolerated=1 unknown=0 errors=0
+OBSERVED=0  CHANGED=1  UNCHANGED=1  TOLERATED=1  UNKNOWN=0  ERROR=0
 ```
 
 ### Statuses
@@ -145,7 +145,7 @@ sqb freshness --json
       "status": "observed",
       "strategy": "column",
       "value_kind": "timestamp",
-      "current_data_version": "2026-06-05T15:45:00",
+      "current_data_version": "2026-06-05T15:45:00+00:00",
       "previous_data_version": null,
       "lag_tolerance": "15m",
       "target": {
@@ -153,7 +153,8 @@ sqb freshness --json
         "schema": "raw",
         "name": "orders"
       },
-      "message": null
+      "message": null,
+      "age_status": null
     }
   ],
   "summary": {
@@ -162,7 +163,11 @@ sqb freshness --json
     "unchanged": 0,
     "tolerated": 0,
     "unknown": 0,
-    "errors": 0
+    "errors": 0,
+    "age_pass": 0,
+    "age_warn": 0,
+    "age_error": 0,
+    "age_unknown": 0
   }
 }
 ```

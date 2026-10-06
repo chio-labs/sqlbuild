@@ -8,6 +8,8 @@ Online: https://sqlbuild.com/docs/cli/debug/
 
 Checks that your project config is valid, the adapter is resolvable, and the warehouse connection works. Useful for diagnosing setup issues.
 
+For detailed progress from any other command, use the global [`--debug`](build.md#global-options) option instead, as in `sqb --debug build`.
+
 ## Usage
 
 ```bash
@@ -16,11 +18,13 @@ sqb debug [flags]
 
 ## What it checks
 
-The command runs three groups of checks:
+The command reports four groups of checks:
 
 **Runtime** - SQLBuild version, Python version, Python path, OS info.
 
-**Configuration** - Finds and validates `sqlbuild_project.toml`, loads `sqlbuild_local.toml` if present, resolves the adapter and active target. For Snowflake it also shows the warehouse each [command group](../concepts/project-configuration.md#command-group-warehouses) connects with and where that value came from.
+**Configuration** - Finds and validates `sqlbuild_project.toml`, loads `sqlbuild_local.toml` if present, resolves the adapter, active target, connection, database, and schema. For Snowflake it also shows the warehouse each [command group](../concepts/project-configuration.md#command-group-warehouses) connects with and where that value came from.
+
+**Providers** - Lists the [providers](../concepts/python-nodes/providers.md) the project defines.
 
 **Connection** - Displays connection settings as `sqb debug` itself uses them, with the `query` warehouse group applied (secrets are masked), attempts to connect to the warehouse, and runs `SELECT 1` to verify query execution.
 
@@ -42,7 +46,7 @@ sqb debug
 SQLBuild Diagnostics
 
 Runtime:
-  sqlbuild version: 0.2.1
+  sqlbuild version: 0.134.8
   python version: 3.14.3
   python path: /home/user/.venv/bin/python3
   os info: Linux-6.6.87
@@ -53,18 +57,24 @@ Configuration:
   project: waffle_shop [OK loaded]
   adapter: snowflake [OK found]
   target: dev [OK resolved]
+  connection: snowflake_dev [OK resolved]
+  database: ANALYTICS [OK resolved]
+  schema: DEV [OK resolved]
   build warehouse: BUILD_WH [OK sqlbuild_project.toml [targets.dev.warehouses] build]
-  query warehouse: SQB_WH [OK connection warehouse]
+  query warehouse: TRANSFORM_WH [OK connection warehouse]
+
+Providers:
+  providers: none discovered [OK none discovered]
 
 Connection:
-  account: FJMQFQV-OJ66172
+  account: myorg-myaccount
   authenticator: programmatic_access_token
-  database: SQB_DB
-  role: role_sqb_test
-  schema: TEST
+  database: ANALYTICS
+  role: TRANSFORMER
+  schema: DEV
   token: ****
-  user: svc_sqb_test
-  warehouse: SQB_WH
+  user: SQLBUILD_USER
+  warehouse: TRANSFORM_WH
   connection test: [OK connected]
   query test: [OK SELECT 1]
 ```

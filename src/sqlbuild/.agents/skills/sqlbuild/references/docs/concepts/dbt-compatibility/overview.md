@@ -53,13 +53,13 @@ profiles_dir = "/Users/you/.dbt"
 target_path = "../analytics/target"
 target = "dev"
 
-[connections.dbt_dev]
+[connections.dev_dbt_profile]
 source = "dbt_profile"
 profile = "analytics"
 target = "dev"
 
 [targets.dev]
-connection = "dbt_dev"
+connection = "dev_dbt_profile"
 database = "ANALYTICS"
 schema = "analytics"
 ```

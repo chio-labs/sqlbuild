@@ -12,8 +12,8 @@ DuckDB.
 
 ## Step 01: compile errors
 
-Step 01 needs semantic compile checks for unknown columns and type mismatches, which are not
-released yet; the output was produced with a development build. In a copy of `waffle-shop`:
+Step 01 shows the semantic compile checks for unknown columns and type mismatches. In a copy of
+`waffle-shop`:
 
 1. In `sources/raw.yml`, add `contract: enforced` to `raw__customers` and `raw__orders`, so the
    columns and types that flow into the models are authoritative.
@@ -30,6 +30,7 @@ first:
 cd tidy-shop
 cat > models/weekly_revenue.sql <<'SQL'
 MODEL (
+  description "Weekly revenue totals",
   materialized table,
 );
 

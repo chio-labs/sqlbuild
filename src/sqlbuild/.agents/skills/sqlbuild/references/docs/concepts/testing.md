@@ -346,6 +346,12 @@ Test SQL uses macros, enums, and constants available from the test file's direct
 defines `__expected__model_name` output for that model. Model-private values are not available to
 tests. See [How Visibility Works](declaration-scopes/visibility.md#tests-and-expected-output).
 
+A macro used only by tests must be private to them. Put it in `_sqlbuild/_macros/` in the tests'
+folder, such as `tests/unit/orders/_sqlbuild/_macros/`, or in the `_sqlbuild/_macros/` of a model
+the tests define `__expected__` output for. The project-wide `macros/` directory rejects a
+test-only macro with `S024`, which names the folder to use, and `tests/unit/_sqlbuild/` is rejected
+with `D013`.
+
 ## Macro mocking
 
 When a model uses macros that you want to control in tests (e.g. target-specific logic, dynamic SQL generation), you can override their output with `__macro__<name>` CTEs:
