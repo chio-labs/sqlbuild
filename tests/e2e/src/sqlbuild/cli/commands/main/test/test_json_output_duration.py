@@ -6,8 +6,12 @@ from subprocess import CompletedProcess
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import JsonDurationE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
+    JsonDurationE2ETestCase,
+    ParameterizedJsonE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
+    build_parameterized_test_project_files,
     build_shared_cte_name_chain_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -55,6 +59,45 @@ def test_given_sql_test_when_writing_json_output_then_check_reports_duration_ms(
     ], checks
     duration: object = checks[0].get("duration_ms")
     assert isinstance(duration, int) and duration >= 0, checks
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ParameterizedJsonE2ETestCase(
+            description="every parameterized case is a check with its duration",
+            expected_checks=(
+                ("customer_status", "customer_only"),
+                ("order_status", "closed_case"),
+                ("order_status", "open_case"),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_cases_when_writing_json_output_then_each_case_reports_duration_ms(
+    tmp_path: Path, test_case: ParameterizedJsonE2ETestCase
+) -> None:
+    project: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="json_cases",
+        repo_files=build_parameterized_test_project_files(),
+    )
+    json_path: Path = tmp_path / "result.json"
+
+    result: CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test", "--json-output", str(json_path)), project_dir=project
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    checks: list[dict[str, object]] = json.loads(json_path.read_text())["checks"]
+    assert sorted((str(check["parent_name"]), str(check["case_name"])) for check in checks) == list(
+        test_case.expected_checks
+    ), checks
+    for check in checks:
+        duration: object = check.get("duration_ms")
+        assert isinstance(duration, int) and duration >= 0, check
+        assert check["status"] == "pass", check
 
 
 if __name__ == "__main__":
