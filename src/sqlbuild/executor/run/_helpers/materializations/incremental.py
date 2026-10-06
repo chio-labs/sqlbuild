@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.relations.main.fit_auxiliary_relation_name import fit_auxiliary_relation_name
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -47,6 +48,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.constants import DELTA_RELATION_SUFFIX
 from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import (
     BoundViewGuard,
@@ -118,7 +120,11 @@ def execute_incremental_entry(
     target_qualified: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )
-    delta_table: str = f"{target_table}__delta"
+    delta_table: str = fit_auxiliary_relation_name(
+        base_name=target_table,
+        suffix=DELTA_RELATION_SUFFIX,
+        identifier_limit=adapter.maximum_identifier_length(),
+    )
     delta_qualified: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=target_database,

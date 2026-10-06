@@ -234,3 +234,12 @@ class PostgresDefaultPrivilegesE2ETestCase:
     role: str
     revoke_before_rebuild: bool
     expected_error: str
+
+
+@dataclass(frozen=True)
+class PostgresLongModelNameE2ETestCase:
+    description: str
+    model_name: str
+    model_columns: str
+    expected_exit_code: int
+    expected_scenario_fragments: tuple[str, ...]

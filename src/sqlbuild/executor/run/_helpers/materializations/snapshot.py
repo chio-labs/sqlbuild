@@ -13,6 +13,7 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
+from sqlbuild.adapter.relations.main.fit_auxiliary_relation_name import fit_auxiliary_relation_name
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -56,7 +57,10 @@ from sqlbuild.executor.run._helpers.materializations.full_refresh import (
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
-from sqlbuild.executor.run.constants import SNAPSHOT_ALL_CHECK_COLUMNS
+from sqlbuild.executor.run.constants import (
+    SNAPSHOT_ALL_CHECK_COLUMNS,
+    SNAPSHOT_DELTA_RELATION_SUFFIX,
+)
 from sqlbuild.executor.run.models import (
     FinalAuditRun,
     FullRefreshRelations,
@@ -100,7 +104,11 @@ def execute_snapshot_entry(  # noqa: PLR0915
     target_qualified: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )
-    delta_table: str = f"{target_table}__snapshot_delta"
+    delta_table: str = fit_auxiliary_relation_name(
+        base_name=target_table,
+        suffix=SNAPSHOT_DELTA_RELATION_SUFFIX,
+        identifier_limit=adapter.maximum_identifier_length(),
+    )
     delta_qualified: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=target_database,

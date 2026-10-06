@@ -7,6 +7,10 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import LoaderLogicalType
+from sqlbuild.adapter.relations.main.fit_auxiliary_relation_name import fit_auxiliary_relation_name
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.executor.load._helpers.rows import (
     build_rows_sql,
@@ -14,6 +18,7 @@ from sqlbuild.executor.load._helpers.rows import (
     update_loader_rows_schema,
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
+from sqlbuild.executor.run.constants import STAGING_RELATION_SUFFIX
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -99,3 +104,28 @@ def write_loader_rows_to_staging(
             statement_recorder=statement_recorder,
         )
     return rows_loaded
+
+
+def resolve_loader_relations(
+    *, adapter: BaseAdapter, source_entry: SourceEntry, destination_name: str
+) -> tuple[str, str]:
+    """Return the qualified loader destination and its fitted staging relation."""
+
+    return (
+        resolve_qualified_name_parts(
+            adapter=adapter,
+            database=source_entry.database,
+            schema=source_entry.schema,
+            name=destination_name,
+        ),
+        resolve_qualified_name_parts(
+            adapter=adapter,
+            database=source_entry.database,
+            schema=source_entry.schema,
+            name=fit_auxiliary_relation_name(
+                base_name=destination_name,
+                suffix=STAGING_RELATION_SUFFIX,
+                identifier_limit=adapter.maximum_identifier_length(),
+            ),
+        ),
+    )

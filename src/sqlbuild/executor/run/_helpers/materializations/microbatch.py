@@ -15,6 +15,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
+from sqlbuild.adapter.relations.main.fit_auxiliary_relation_name import fit_auxiliary_relation_name
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -100,6 +101,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.constants import DELTA_RELATION_SUFFIX
 from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import (
     BatchWindow,
@@ -1000,7 +1002,11 @@ def _publish_pending_reconciliation_events(
 def _resolve_microbatch_targets(*, context: ModelMaterializationContext) -> MicrobatchTargets:
     entry: ModelPlanEntry = context.entry
     target_table: str = entry.destination.name
-    delta_table: str = f"{target_table}__delta"
+    delta_table: str = fit_auxiliary_relation_name(
+        base_name=target_table,
+        suffix=DELTA_RELATION_SUFFIX,
+        identifier_limit=context.adapter.maximum_identifier_length(),
+    )
     return MicrobatchTargets(
         target_database=entry.destination.database,
         target_schema=entry.destination.schema,
@@ -1512,10 +1518,11 @@ def _targets_for_batch(
         f"{context.run_id}:{batch.index}:{render(value=batch.start)}:"
         f"{render(value=batch.end)}".encode()
     ).hexdigest()[:12]
-    suffix: str = f"__delta_{identity}"
-    max_length: int = context.adapter.maximum_identifier_length()
-    target_prefix: str = targets.target_table[: max(1, max_length - len(suffix))]
-    delta_table: str = f"{target_prefix}{suffix}"
+    delta_table: str = fit_auxiliary_relation_name(
+        base_name=targets.target_table,
+        suffix=f"{DELTA_RELATION_SUFFIX}_{identity}",
+        identifier_limit=context.adapter.maximum_identifier_length(),
+    )
     return replace(
         targets,
         delta_table=delta_table,
