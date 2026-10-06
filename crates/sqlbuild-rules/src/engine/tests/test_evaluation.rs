@@ -1363,3 +1363,29 @@ fn given_native_build_when_reading_cache_identity_then_version_carries_source_ha
         );
     }
 }
+
+#[test]
+fn given_workspace_checkout_when_deriving_build_identity_then_workspace_files_are_hashed() {
+    let test_cases = [
+        test_types::HashedWorkspaceFileTestCase {
+            description: "dependency features and build profiles change the identity",
+            workspace_file: "../../Cargo.toml",
+            expected_hashed: true,
+        },
+        test_types::HashedWorkspaceFileTestCase {
+            description: "resolved dependency versions change the identity",
+            workspace_file: "../../Cargo.lock",
+            expected_hashed: true,
+        },
+    ];
+    for test_case in &test_cases {
+        let hashed = env!("SQLBUILD_NATIVE_HASHED_WORKSPACE_FILES")
+            .split(',')
+            .any(|file| file == test_case.workspace_file);
+        assert_eq!(
+            hashed, test_case.expected_hashed,
+            "{}",
+            test_case.description
+        );
+    }
+}

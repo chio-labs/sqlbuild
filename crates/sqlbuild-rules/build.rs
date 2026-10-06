@@ -1,16 +1,18 @@
 //! Derive a content identity for this native build so local caches notice source changes.
 //!
 //! The identity hashes every file under the listed entries of every workspace crate plus the
-//! workspace lockfile, keyed by `/`-separated paths relative to the crates directory so it
-//! matches across platforms. Entries that do not exist (for example the lockfile outside a
-//! workspace checkout) are left out of both the hash and the `rerun-if-changed` list, because
-//! Cargo reruns a build script on every build when a watched path is missing.
+//! workspace manifest (dependency features and build profiles) and lockfile, keyed by
+//! `/`-separated paths relative to the crates directory so it matches across platforms. Entries
+//! that do not exist (for example the lockfile outside a workspace checkout) are left out of both
+//! the hash and the `rerun-if-changed` list, because Cargo reruns a build script on every build
+//! when a watched path is missing. The hashed workspace files are exported so tests can assert
+//! they are covered.
 
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
 
 const HASHED_ENTRIES: [&str; 3] = ["Cargo.toml", "src", "function_names"];
-const WORKSPACE_LOCKFILE: &str = "../../Cargo.lock";
+const WORKSPACE_FILES: [&str; 2] = ["../../Cargo.toml", "../../Cargo.lock"];
 
 fn main() -> Result<(), String> {
     let crate_dir =
@@ -30,10 +32,14 @@ fn main() -> Result<(), String> {
         }
     }
     files.sort();
-    let lockfile = crate_dir.join(WORKSPACE_LOCKFILE);
-    if lockfile.is_file() {
-        println!("cargo:rerun-if-changed={}", lockfile.display());
-        files.push((WORKSPACE_LOCKFILE.to_owned(), lockfile));
+    let mut workspace_files = Vec::new();
+    for label in WORKSPACE_FILES {
+        let path = crate_dir.join(label);
+        if path.is_file() {
+            println!("cargo:rerun-if-changed={}", path.display());
+            files.push((label.to_owned(), path));
+            workspace_files.push(label);
+        }
     }
     let mut digest = Sha256::new();
     for (label, file) in &files {
@@ -46,6 +52,10 @@ fn main() -> Result<(), String> {
     println!(
         "cargo:rustc-env=SQLBUILD_NATIVE_SOURCE_HASH={}",
         &identity[..16]
+    );
+    println!(
+        "cargo:rustc-env=SQLBUILD_NATIVE_HASHED_WORKSPACE_FILES={}",
+        workspace_files.join(",")
     );
     Ok(())
 }
