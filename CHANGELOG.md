@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.134.9](https://github.com/chio-labs/sqlbuild/compare/v0.134.8...v0.134.9) (2026-10-06)
+
+
+### Bug Fixes
+
+* make sqb lineage use the shared project selector parser ([#972](https://github.com/chio-labs/sqlbuild/issues/972)) ([306eceb](https://github.com/chio-labs/sqlbuild/commit/306ecebe853cb0804052cecd6e58539ce506fc50))
+
 ## [0.134.8](https://github.com/chio-labs/sqlbuild/compare/v0.134.7...v0.134.8) (2026-10-06)
 
 
