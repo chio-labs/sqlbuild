@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_NORMALIZATION_CHUNK_SIZE
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import (
     normalize_analysis_sql_results,
@@ -9,6 +10,7 @@ from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import (
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     NormalizationBatchFailureTestCase,
     NormalizationBatchTestCase,
+    NormalizationChunkTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main.helpers import (
     pool_catalog,
@@ -119,6 +121,49 @@ def test_given_failing_member_when_normalizing_batch_then_keeps_its_single_call_
     assert type(first_error) is type(raised.value)
     assert str(first_error) == str(raised.value)
     assert tuple(type(result).__name__ for result in results) == test_case.expected_result_types
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        NormalizationChunkTestCase(
+            description="failure on a chunk boundary in turn",
+            valid_count=ANALYSIS_NORMALIZATION_CHUNK_SIZE * 2 + 3,
+            failing_index=ANALYSIS_NORMALIZATION_CHUNK_SIZE,
+            catalog=without_catalog,
+            expected_error_type=ValueError,
+        ),
+        NormalizationChunkTestCase(
+            description="failure on a chunk boundary on the catalog pool",
+            valid_count=ANALYSIS_NORMALIZATION_CHUNK_SIZE * 2 + 3,
+            failing_index=ANALYSIS_NORMALIZATION_CHUNK_SIZE,
+            catalog=pool_catalog,
+            expected_error_type=ValueError,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_batch_beyond_one_chunk_when_normalizing_then_keeps_every_member_in_order(
+    test_case: NormalizationChunkTestCase,
+) -> None:
+    valid: list[str] = [
+        f"SELECT {index} AS order_id FROM orders" for index in range(test_case.valid_count)
+    ]
+    sqls: list[str] = [
+        *valid[: test_case.failing_index],
+        "SELECT 'unterminated FROM orders",
+        *valid[test_case.failing_index :],
+    ]
+
+    results: list[str | Exception] = normalize_analysis_sql_results(
+        dialect="snowflake",
+        requests=[(sql, None, None) for sql in sqls],
+        catalog=test_case.catalog("snowflake"),
+    )
+
+    assert len(results) == len(sqls)
+    assert isinstance(results[test_case.failing_index], test_case.expected_error_type)
+    assert [*results[: test_case.failing_index], *results[test_case.failing_index + 1 :]] == valid
 
 
 if __name__ == "__main__":

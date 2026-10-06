@@ -181,3 +181,4 @@ NATIVE_DIALECT_ALIASES: dict[str, str] = {
     "motherduck": "duckdb",
     "sqlserver": "tsql",
 }
+ANALYSIS_NORMALIZATION_CHUNK_SIZE: int = 256

@@ -71,3 +71,12 @@ class NormalizationBatchFailureTestCase:
     catalog: Callable[[str], NativeProjectCatalog | None]
     expected_error_type: type[Exception]
     expected_result_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NormalizationChunkTestCase:
+    description: str
+    valid_count: int
+    failing_index: int
+    catalog: Callable[[str], NativeProjectCatalog | None]
+    expected_error_type: type[Exception]
