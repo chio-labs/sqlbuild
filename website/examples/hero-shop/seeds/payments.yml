@@ -1,0 +1,10 @@
+seeds:
+  - name: payments
+    description: Successful payments.
+    columns:
+      - name: payment_id
+        type: INTEGER
+      - name: paid_at
+        type: TIMESTAMP
+      - name: amount_cents
+        type: INTEGER

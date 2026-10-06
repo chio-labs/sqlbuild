@@ -742,7 +742,7 @@ footer a {
 	margin-top: 0;
 }
 
-/* Hero visual: a model is moved and renamed, then sqb plan shows the migration. */
+/* Hero visual: sqb mv moves and renames a model, then sqb plan shows the migration. */
 .hero {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
@@ -754,7 +754,7 @@ footer a {
 	border: 1px solid var(--panel-border);
 	border-left: 1px solid var(--inner-line);
 	border-radius: var(--radius);
-	min-height: 236px;
+	min-height: 300px;
 }
 
 .hero-visual {
@@ -821,6 +821,27 @@ footer a {
 	100% {
 		opacity: 0;
 	}
+}
+
+@keyframes hv-l0 {
+	0%,
+	6% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	9%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l0 {
+	animation-name: hv-l0;
 }
 
 @keyframes hv-l1 {
@@ -949,6 +970,48 @@ footer a {
 	animation-name: hv-l6;
 }
 
+@keyframes hv-l7 {
+	0%,
+	45% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	48%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l7 {
+	animation-name: hv-l7;
+}
+
+@keyframes hv-l8 {
+	0%,
+	48% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	51%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l8 {
+	animation-name: hv-l8;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.hero-visual .hv-a,
 	.hero-visual .hv-b,
@@ -978,5 +1041,9 @@ footer a {
 
 	.hero-visual .hv-wide {
 		display: none;
+	}
+
+	.hero-visual .hv-break::after {
+		content: '\\\A     ';
 	}
 }
