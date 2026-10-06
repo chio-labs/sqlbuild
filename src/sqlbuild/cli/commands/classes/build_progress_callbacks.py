@@ -67,6 +67,7 @@ _TYPE_WIDTH: int = 10
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
 _SUB_INDENT: int = 2
+_TREE_CHILD_NAME_INDENT: int = _SUB_INDENT + 4
 _HOOK_PHASE_WIDTH: int = 10
 _HOOK_TYPE_WIDTH: int = 8
 _HOOK_MIN_LABEL_WIDTH: int = 24
@@ -242,13 +243,17 @@ class BuildProgressCallbacks:
                 if getattr(chain_step, "expected_cte_sql", None):
                     max_name_len = max(
                         max_name_len,
-                        len(format_expectation_name(str(getattr(chain_step, "model_name", "")))),
+                        _tree_child_name_length(
+                            format_expectation_name(str(getattr(chain_step, "model_name", "")))
+                        ),
                     )
             assertion: object
             for assertion in getattr(test_entry, "assertions", ()):
                 max_name_len = max(
                     max_name_len,
-                    len(format_expectation_name(f"assertion {getattr(assertion, 'name', '')}")),
+                    _tree_child_name_length(
+                        format_expectation_name(f"assertion {getattr(assertion, 'name', '')}")
+                    ),
                 )
         self._name_width: int = max(max_name_len + _NAME_PADDING, _MIN_NAME_WIDTH)
 
@@ -704,7 +709,7 @@ class BuildProgressCallbacks:
         )
         expectation_pad: str = " " * (self._prefix_width + _SUB_INDENT + 2)
         expectation_type_width: int = _TYPE_WIDTH - 2
-        sub_nw: int = self._name_width - _SUB_INDENT
+        tree_child_nw: int = self._name_width - _TREE_CHILD_NAME_INDENT
         step_result: StepResult
         for index, step_result in enumerate(test_result.step_results):
             expectation_status: str = self._style.status(
@@ -719,7 +724,7 @@ class BuildProgressCallbacks:
             self._stream.write(
                 f"{expectation_pad}{connector} "
                 f"{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
-                f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
+                f"{expectation_name:<{tree_child_nw}} {expectation_status}{expectation_detail}\n"
             )
         if test_result.error_message:
             self._write_error_detail(
@@ -784,7 +789,7 @@ class BuildProgressCallbacks:
         pad: str = " " * (self._prefix_width + child_offset)
         connector: str = tree_connector(style=self._style, last=True) if tree_child else ""
         connector_suffix: str = f"{connector} " if tree_child else ""
-        label_width: int = _TYPE_WIDTH - 4 if tree_child else _TYPE_WIDTH - 1
+        label_width: int = _TYPE_WIDTH - 3 if tree_child else _TYPE_WIDTH - 1
         label_padding: str = " " * max(0, label_width - len("error"))
         label: str = f"{self._style.error_muted('error')}{label_padding}"
         plain_prefix_width: int = len(pad) + (4 if tree_child else 0) + label_width + 1
@@ -1493,6 +1498,12 @@ def _format_display_sql(sql: str) -> str:
     if stripped.endswith(";"):
         return stripped
     return f"{stripped};"
+
+
+def _tree_child_name_length(name: str) -> int:
+    """Measure a tree child name so its status still fits the shared status column."""
+
+    return len(name) + _TREE_CHILD_NAME_INDENT - _NAME_PADDING
 
 
 def _truncate_name(*, name: str, width: int) -> str:

@@ -176,3 +176,12 @@ class NestedProgressConcurrentTestCase:
     description: str
     concurrency: int
     expected_output: str
+
+
+@dataclass(frozen=True)
+class SqlTestStatusAlignmentTestCase:
+    description: str
+    test_name: str
+    expected_models: tuple[str, ...]
+    assertion_names: tuple[str, ...]
+    expected_row_count: int

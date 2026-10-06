@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -14,9 +15,21 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    ChainStep,
+    ModelPlanEntry,
+    PlanOutput,
+    SqlTestAssertionStep,
+    SqlTestPlanEntry,
+)
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.testing.types import SqlTestOutcome
+
+_STATUS_TOKEN_PATTERN: re.Pattern[str] = re.compile(
+    r"^.*? (PASS|FAIL|ERROR|OK)(?= |$)", flags=re.MULTILINE
+)
 
 
 def write_spinner_line_and_release(
@@ -85,3 +98,54 @@ def build_progress_snapshot_plan_output(
         model_entries=(entry,),
         selected_keys=frozenset((entry.key,)),
     )
+
+
+def build_sql_test_plan_entry(
+    *, test_name: str, expected_models: tuple[str, ...], assertion_names: tuple[str, ...]
+) -> SqlTestPlanEntry:
+    return SqlTestPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
+        name=test_name,
+        chain=tuple(
+            ChainStep(
+                model_name=model_name,
+                resolved_sql="SELECT 1 AS order_id",
+                expected_cte_sql="SELECT 1 AS order_id",
+            )
+            for model_name in expected_models
+        ),
+        assertions=tuple(
+            SqlTestAssertionStep(name=assertion_name, resolved_sql="SELECT 1 AS order_id")
+            for assertion_name in assertion_names
+        ),
+    )
+
+
+def build_sql_test_result(
+    *,
+    test_name: str,
+    expected_models: tuple[str, ...],
+    assertion_names: tuple[str, ...],
+    outcome: SqlTestOutcome,
+) -> SqlTestExecutionResult:
+    first_step, *later_steps = (
+        *expected_models,
+        *(f"assertion {assertion_name}" for assertion_name in assertion_names),
+    )
+    return SqlTestExecutionResult(
+        test_name=test_name,
+        outcome=outcome,
+        step_results=(
+            StepResult(model_name=first_step, outcome=outcome),
+            *(
+                StepResult(model_name=step_name, outcome=SqlTestOutcome.PASS)
+                for step_name in later_steps
+            ),
+        ),
+    )
+
+
+def status_columns(output: str) -> tuple[int, ...]:
+    """Return the column of the first status token on every row that has one."""
+
+    return tuple(match.start(1) - match.start() for match in _STATUS_TOKEN_PATTERN.finditer(output))

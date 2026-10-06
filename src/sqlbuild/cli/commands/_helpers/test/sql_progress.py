@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from sqlbuild.cli.progress.constants import NESTED_CHILD_NAME_INDENT
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.cli.progress.models import NestedProgressChildRow
@@ -21,6 +22,7 @@ def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int:
     """Resolve one shared width for test rows and nested expectation rows."""
 
     names: list[str] = []
+    child_names: list[str] = []
     entry: SqlTestPlanEntry
     for entry in test_entries:
         names.append(
@@ -31,9 +33,15 @@ def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int:
                 parameter_values=entry.parameter_values,
             )
         )
-        names.extend(f"expected {step.model_name}" for step in entry.chain if step.expected_cte_sql)
-        names.extend(f"assertion {assertion.name}" for assertion in entry.assertions)
-    return resolve_name_column_width(names=names, min_width=50)
+        child_names.extend(
+            f"expected {step.model_name}" for step in entry.chain if step.expected_cte_sql
+        )
+        child_names.extend(f"assertion {assertion.name}" for assertion in entry.assertions)
+    child_name_length: int = max((len(name) for name in child_names), default=0)
+    return max(
+        resolve_name_column_width(names=names, min_width=50),
+        child_name_length + NESTED_CHILD_NAME_INDENT,
+    )
 
 
 def build_test_expectation_rows(

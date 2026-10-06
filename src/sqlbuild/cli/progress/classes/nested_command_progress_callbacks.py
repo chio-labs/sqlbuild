@@ -9,6 +9,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,
 )
+from sqlbuild.cli.progress.constants import NESTED_CHILD_NAME_INDENT
 from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
@@ -155,6 +156,7 @@ class NestedCommandProgressCallbacks:
         self._stream.write(
             f"    {self._label:<{_LABEL_WIDTH}}{item_name:<{self._name_width}} {status}{detail}\n"
         )
+        child_name_width: int = self._name_width - NESTED_CHILD_NAME_INDENT
         child_row: NestedProgressChildRow
         for index, child_row in enumerate(child_rows):
             child_status: str = self._style.status(status=child_row.status_text)
@@ -162,7 +164,7 @@ class NestedCommandProgressCallbacks:
             connector: str = tree_connector(style=self._style, last=last)
             self._stream.write(
                 f"      {connector} {child_row.label:<{_LABEL_WIDTH - 2}}"
-                f"{child_row.name:<{self._name_width}} "
+                f"{child_row.name:<{child_name_width}} "
                 f"{child_status}{child_row.detail}\n"
             )
         if error_message is not None:
