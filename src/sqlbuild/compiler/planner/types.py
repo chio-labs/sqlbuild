@@ -40,6 +40,7 @@ class SelectorKind(StrEnum):
     CHECK = "check"
     TAG = "tag"
     PATH = "path"
+    TEST = "test"
 
 
 class GraphResourceKind(StrEnum):

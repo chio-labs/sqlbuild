@@ -59,6 +59,7 @@ def _run_build_compile_pipeline(
             max_microbatches=request.max_microbatches,
             selection_diagnostics=request.selection_diagnostics,
             plan_sql_tests=request.run_tests,
+            accepts_unit_test_selectors=True,
         ),
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,

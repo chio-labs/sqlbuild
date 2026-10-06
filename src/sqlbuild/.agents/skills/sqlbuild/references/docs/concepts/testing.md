@@ -548,7 +548,11 @@ CTE prefixes from other modes are not allowed. For example, `__source__` in a ma
 
 ## Multiple tests per file
 
-A single test file can contain multiple `TEST()` blocks. Each block must have a unique `name`:
+A single test file can contain multiple `TEST()` blocks. A test's name is its `name`, or the file
+stem when `name` is omitted. Test names are globally unique: a test cannot share a name with another
+test, a scenario, a model, a source, a seed, a function, or a Python node. Name the file or the block
+after the behavior it checks, such as `orders_status_rules`, rather than after the model. The cases
+of one parameterized test share its name. Each block in a file must have its own `name`:
 
 ```sql
 TEST (name "completed_orders_only");

@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.classes.background_sql_test_planning import (
     BackgroundSqlTestPlanning,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import PlannedSqlTests, PlanWarning
+from sqlbuild.compiler.planner.models import PlannedSqlTests, PlanWarning, SqlTestSelection
 from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     BackgroundSqlTestPlanningTestCase,
@@ -45,15 +45,20 @@ def test_given_enabled_planning_when_joining_then_returns_planned_tests(
     calls: list[frozenset[CompiledObjectKey]] = []
 
     def plan(
-        *, project: object, adapter: object, selected_keys: frozenset[CompiledObjectKey]
+        *,
+        project: object,
+        adapter: object,
+        selected_keys: frozenset[CompiledObjectKey],
+        sql_test_selection: SqlTestSelection,
     ) -> PlannedSqlTests:
-        del project, adapter
+        del project, adapter, sql_test_selection
         calls.append(selected_keys)
         return _PLANNED
 
     monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
+        sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
@@ -82,15 +87,20 @@ def test_given_disabled_planning_when_joining_then_returns_empty_tests(
     calls: list[frozenset[CompiledObjectKey]] = []
 
     def plan(
-        *, project: object, adapter: object, selected_keys: frozenset[CompiledObjectKey]
+        *,
+        project: object,
+        adapter: object,
+        selected_keys: frozenset[CompiledObjectKey],
+        sql_test_selection: SqlTestSelection,
     ) -> PlannedSqlTests:
-        del project, adapter
+        del project, adapter, sql_test_selection
         calls.append(selected_keys)
         return _PLANNED
 
     monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
+        sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
@@ -118,14 +128,19 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
     test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def plan(
-        *, project: object, adapter: object, selected_keys: frozenset[CompiledObjectKey]
+        *,
+        project: object,
+        adapter: object,
+        selected_keys: frozenset[CompiledObjectKey],
+        sql_test_selection: SqlTestSelection,
     ) -> PlannedSqlTests:
-        del project, adapter, selected_keys
+        del project, adapter, selected_keys, sql_test_selection
         raise PlannerInputError(str(test_case.expected_error))
 
     monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
+        sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
@@ -153,9 +168,13 @@ def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
     release: threading.Event = threading.Event()
 
     def plan(
-        *, project: object, adapter: object, selected_keys: frozenset[CompiledObjectKey]
+        *,
+        project: object,
+        adapter: object,
+        selected_keys: frozenset[CompiledObjectKey],
+        sql_test_selection: SqlTestSelection,
     ) -> PlannedSqlTests:
-        del project, adapter
+        del project, adapter, sql_test_selection
         started.set()
         release.wait(timeout=5)
         return PlannedSqlTests(selected_keys=selected_keys)
@@ -163,6 +182,7 @@ def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
     monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
+        sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,

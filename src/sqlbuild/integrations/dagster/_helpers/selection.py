@@ -7,7 +7,11 @@ from typing import Any
 
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild.compiler.planner.constants import SELECTOR_KIND_SEPARATOR
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.selection.unit_test_selector_error import (
+    unit_test_selector_error,
+)
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
@@ -145,6 +149,10 @@ def _match_parsed_selector(
     dag: Mapping[str, Any],
     nodes_by_id: Mapping[str, Mapping[str, Any]],
 ) -> set[str]:
+    if parsed.kind == SelectorKind.TEST:
+        raise unit_test_selector_error(
+            selector=f"{SelectorKind.TEST}{SELECTOR_KIND_SEPARATOR}{parsed.value}"
+        )
     if parsed.kind == SelectorKind.TAG:
         return {
             node_id

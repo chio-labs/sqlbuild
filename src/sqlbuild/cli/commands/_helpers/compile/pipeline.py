@@ -47,6 +47,7 @@ from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryCacheRequest
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
 )
@@ -126,6 +127,7 @@ def _analyze_compile_project(
         ),
         declaration_reuse=COMPILE_RENDER_REUSE.claim_discovery(),
     )
+    reject_unit_test_selectors(select=select, exclude=exclude, discovered_inputs=discovered_inputs)
     discover_ms: int = elapsed_ms(discover_start)
     _ = complete_compile_phase(
         status=status, message=f"Discovered project. ({discover_ms / 1000:.2f}s)"

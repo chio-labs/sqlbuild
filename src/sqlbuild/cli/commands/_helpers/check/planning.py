@@ -13,6 +13,7 @@ from sqlbuild.cli.commands.models import CheckCommandRequest, CheckInvocation
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.main.static_command import compile_static_command_context
 from sqlbuild.compiler.pipeline.main.static_result import build_static_pipeline_result
 from sqlbuild.compiler.pipeline.models import (
@@ -34,6 +35,11 @@ def compile_check_plan(
 
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=invocation.discovered_inputs
+    )
+    reject_unit_test_selectors(
+        select=request.select,
+        exclude=request.exclude,
+        discovered_inputs=invocation.discovered_inputs,
     )
     check_names: frozenset[str] = resolve_selected_check_names(
         graph=python_graph,

@@ -32,6 +32,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main.unit_test_selection import split_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,
     ClonePipelineOptions,
@@ -44,7 +45,7 @@ from sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain import (
     resolve_skipped_view_chain,
 )
 from sqlbuild.compiler.planner.main.selection.scope import build_planner_scope
-from sqlbuild.compiler.planner.models import PlannerScope
+from sqlbuild.compiler.planner.models import PlannerScope, UnitTestSelectorSplit
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.main.build_destination_transient_models import (
     build_destination_transient_models,
@@ -173,6 +174,17 @@ def run_defer_clone_boundary_prephase(
 ) -> DeferClonePrephaseOutcome:
     """Resolve defer-clone boundaries and clone them before build planning."""
 
+    split: UnitTestSelectorSplit = split_unit_test_selectors(
+        select=request.select,
+        exclude=request.exclude,
+        discovered_inputs=invocation.discovered_inputs,
+    )
+    if not split.sql_test_selection.models_selected:
+        return DeferClonePrephaseOutcome(
+            destination_target_name=invocation.effective_target_name,
+            boundary_selectors=(),
+            view_chain_selectors=(),
+        )
     cloned_project: CompiledProject
     boundary_selectors: tuple[str, ...]
     view_chain_selectors: tuple[str, ...]
@@ -187,8 +199,8 @@ def run_defer_clone_boundary_prephase(
         selected_target=request.selected_target,
         no_sql_validation=request.no_sql_validation,
         no_cache=request.no_cache,
-        select=request.select,
-        exclude=request.exclude,
+        select=split.select,
+        exclude=split.exclude,
         cli_vars=request.cli_vars,
         project_dir=invocation.effective_project_dir,
         auto_load_sources=invocation.should_load_sources,
@@ -208,7 +220,7 @@ def run_defer_clone_boundary_prephase(
             no_sql_validation=request.no_sql_validation,
             no_cache=request.no_cache,
             select=(*boundary_selectors, *view_chain_selectors),
-            caused_by_names=request.select,
+            caused_by_names=split.select,
             cli_vars=request.cli_vars,
             connection_config=invocation.connection_config,
             project_dir=invocation.effective_project_dir,

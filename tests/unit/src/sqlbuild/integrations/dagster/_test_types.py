@@ -296,3 +296,11 @@ class DagsterAssetSelectionErrorTestCase:
     description: str
     select: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DagsterUnitTestSelectorTestCase:
+    description: str
+    select: str
+    expected_code: str
+    expected_message: str

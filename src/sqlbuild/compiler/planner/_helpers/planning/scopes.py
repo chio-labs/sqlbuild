@@ -30,6 +30,7 @@ def resolve_planner_scopes(
         auto_load_sources=policies.auto_load_sources,
         selected_keys=selection.selected_keys,
         python_read_source_names=selection.python_read_source_names,
+        sql_test_selection=selection.sql_test_selection,
     )
     full_scope: PlannerScope = build_planner_scope(
         project=project,

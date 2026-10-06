@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.rule_engine.main.build_catalogue import build_catalogue
@@ -127,6 +128,9 @@ def _run_rule_selection(
         return 2
     print(f"Evaluating rule selection {selector}...", file=sys.stderr)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    reject_unit_test_selectors(
+        select=request.select, exclude=request.exclude, discovered_inputs=discovered
+    )
     adapter: BaseAdapter = resolve_adapter(
         adapter_name=resolve_effective_adapter_name(
             project_config=discovered.project_config,

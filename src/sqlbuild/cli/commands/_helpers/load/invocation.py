@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.main.effective_config import build_effective_conn
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -32,6 +33,9 @@ def resolve_load_invocation(*, request: LoadCommandRequest) -> LoadInvocation:
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    reject_unit_test_selectors(
+        select=request.select, exclude=request.exclude, discovered_inputs=discovered_inputs
     )
     target_config: TargetConfig | None = build_effective_target_config(
         discovered_inputs=discovered_inputs,

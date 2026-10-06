@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer impo
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
@@ -61,6 +62,7 @@ def resolve_lint_inputs(
         sql_analysis_enabled_override=False,
         extract_output_column_locations=False,
     )
+    reject_unit_test_selectors(select=select, exclude=exclude, discovered_inputs=discovered)
     adapter = _resolve_discovered_adapter(
         project_dir=project_dir,
         discovered=discovered,

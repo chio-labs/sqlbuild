@@ -47,7 +47,10 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.main.build_semantic_uses import build_direct_semantic_uses
 from sqlbuild.compiler.lineage.models import DirectSemanticColumnUse
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.constants import UNKNOWN_SELECTOR_ERROR_CODE
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -112,6 +115,9 @@ def _prepare_graph(
         project_dir=project_dir,
         sql_analysis_enabled_override=(None if requires_compiled_graph else False),
         extract_output_column_locations=False,
+    )
+    reject_unit_test_selectors(
+        select=request.select, exclude=request.exclude, discovered_inputs=discovered
     )
     adapter: BaseAdapter = resolve_adapter(
         adapter_name=resolve_effective_adapter_name(
@@ -197,13 +203,28 @@ def _render_lineage(
             depth=parsed_depth,
         )
     else:
-        lineage_graph = select_selector_lineage(
-            graph=graph,
-            select=request.select,
-            exclude=request.exclude,
-            depth=parsed_depth,
-            direction=request.direction,
-        )
+        try:
+            lineage_graph = select_selector_lineage(
+                graph=graph,
+                select=request.select,
+                exclude=request.exclude,
+                depth=parsed_depth,
+                direction=request.direction,
+            )
+        except PlannerInputError as error:
+            if error.code == UNKNOWN_SELECTOR_ERROR_CODE and isinstance(
+                graph, RelationLineageIndex
+            ):
+                reject_unit_test_selectors(
+                    select=request.select,
+                    exclude=request.exclude,
+                    discovered_inputs=discover_project_inputs(
+                        project_dir=request.project_dir or Path.cwd(),
+                        sql_analysis_enabled_override=False,
+                        extract_output_column_locations=False,
+                    ),
+                )
+            raise
     return _format_graph(graph=lineage_graph, output_format=request.output_format)
 
 

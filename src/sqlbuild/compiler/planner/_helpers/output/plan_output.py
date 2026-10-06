@@ -58,6 +58,7 @@ from sqlbuild.compiler.planner.models import (
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
     SqlTestPlanResult,
+    SqlTestSelection,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import PlanReason
@@ -132,9 +133,16 @@ def build_plan_output(
         model_materializations=model_materializations,
     )
     planned_tests: PlannedSqlTests | None = resolved_extras.planned_sql_tests
-    if planned_tests is None or planned_tests.selected_keys != scope.selected_keys:
+    if (
+        planned_tests is None
+        or planned_tests.selected_keys != scope.selected_keys
+        or planned_tests.sql_test_selection != scope.sql_test_selection
+    ):
         planned_tests = plan_selected_sql_tests(
-            project=project, adapter=adapter, selected_keys=scope.selected_keys
+            project=project,
+            adapter=adapter,
+            selected_keys=scope.selected_keys,
+            sql_test_selection=scope.sql_test_selection,
         )
     test_entries: list[SqlTestPlanEntry] = list(planned_tests.entries)
     test_warnings: list[PlanWarning] = list(planned_tests.warnings)
@@ -449,16 +457,39 @@ def plan_selected_sql_tests(
     project: CompiledProject,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
 ) -> PlannedSqlTests:
-    """Plan SQL tests overlapping one selection into a reusable result."""
+    """Plan SQL tests selected by name or overlapping one selection into a reusable result."""
 
     entries: list[SqlTestPlanEntry]
     warnings: list[PlanWarning]
     entries, warnings = build_selected_test_entries(
-        project=project, adapter=adapter, selected_keys=selected_keys
+        project=project,
+        adapter=adapter,
+        selected_keys=selected_keys,
+        sql_test_selection=sql_test_selection,
     )
     return PlannedSqlTests(
-        selected_keys=selected_keys, entries=tuple(entries), warnings=tuple(warnings)
+        selected_keys=selected_keys,
+        sql_test_selection=sql_test_selection,
+        entries=tuple(entries),
+        warnings=tuple(warnings),
+    )
+
+
+def sql_test_is_selected(
+    *,
+    test: CompiledSqlTest,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> bool:
+    """Whether a test is named by the selection or covers a selected resource, and not excluded."""
+
+    name: str = test.parent_name or test.name
+    if name in sql_test_selection.excluded_names:
+        return False
+    return name in sql_test_selection.names or scope_overlaps(
+        scope_deps=test.scope_deps, selected_keys=selected_keys
     )
 
 
@@ -467,6 +498,7 @@ def build_selected_test_entries(
     project: CompiledProject,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
     case_name: str | None = None,
 ) -> tuple[list[SqlTestPlanEntry], list[PlanWarning]]:
     entries: list[SqlTestPlanEntry] = []
@@ -475,7 +507,9 @@ def build_selected_test_entries(
     selected_tests: list[CompiledSqlTest] = []
     sql_test: CompiledSqlTest
     for sql_test in project.sql_tests:
-        if not scope_overlaps(scope_deps=sql_test.scope_deps, selected_keys=selected_keys):
+        if not sql_test_is_selected(
+            test=sql_test, selected_keys=selected_keys, sql_test_selection=sql_test_selection
+        ):
             continue
         if case_name is not None and sql_test.case_name != case_name:
             continue

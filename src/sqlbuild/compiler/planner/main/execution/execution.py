@@ -98,6 +98,7 @@ def build_execution_plan(
             project=project,
             adapter=adapter,
             selected_keys=scopes.inspection_scope.selected_keys,
+            sql_test_selection=scopes.inspection_scope.sql_test_selection,
             enabled=policies.plan_sql_tests,
         ) as test_planning,
         open_inspection_catalog(adapter=adapter, connection=connection),

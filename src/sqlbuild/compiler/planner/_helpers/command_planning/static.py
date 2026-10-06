@@ -12,12 +12,12 @@ from sqlbuild.compiler.planner._helpers.identity.seed import build_seed_identity
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_planner_relations_context,
     extract_seed_columns,
-    scope_overlaps,
 )
 from sqlbuild.compiler.planner._helpers.output.plan_output import (
     build_selected_audit_entries,
     build_selected_test_entries,
     plan_function,
+    sql_test_is_selected,
 )
 from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
@@ -120,6 +120,7 @@ def build_test_command_plan_impl(
         project=project,
         adapter=adapter,
         selected_keys=scope.selected_keys,
+        sql_test_selection=scope.sql_test_selection,
         case_name=case_name,
     )
     available_test_case_names: tuple[str, ...] = tuple(
@@ -128,7 +129,11 @@ def build_test_command_plan_impl(
                 test.case_name
                 for test in project.sql_tests
                 if test.case_name is not None
-                and scope_overlaps(scope_deps=test.scope_deps, selected_keys=scope.selected_keys)
+                and sql_test_is_selected(
+                    test=test,
+                    selected_keys=scope.selected_keys,
+                    sql_test_selection=scope.sql_test_selection,
+                )
             }
         )
     )

@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixturePlanningContext,
     SqlTestPlanEntry,
+    SqlTestSelection,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SettingsConfig
@@ -107,6 +108,7 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
     entries: list[SqlTestPlanEntry]
     warnings: list[PlanWarning]
     entries, warnings = build_selected_test_entries(
+        sql_test_selection=SqlTestSelection(),
         project=test_project,
         adapter=PlannerTestAdapter(),
         selected_keys=frozenset((model.key,)),

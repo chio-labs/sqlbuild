@@ -14,6 +14,7 @@ from sqlbuild.cli.commands.models import CloneCommandRequest, CloneInvocation
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -38,6 +39,9 @@ def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation
         project_dir=effective_project_dir
     )
     progress.complete("Discovered project.")
+    reject_unit_test_selectors(
+        select=request.select, exclude=request.exclude, discovered_inputs=discovered_inputs
+    )
     destination_target_name: str | None = request.destination_target_name
     if destination_target_name is None:
         destination_target_name = resolve_target_name(
