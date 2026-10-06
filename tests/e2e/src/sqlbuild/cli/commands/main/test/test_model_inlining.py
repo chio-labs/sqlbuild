@@ -7,6 +7,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import ModelInliningE2ETestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
+    ORDER_TOTALS_EXPECTED_ROWS_SQL,
     build_shared_cte_name_chain_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -16,6 +17,8 @@ _SINGLE_OCCURRENCE_FRAGMENTS: tuple[str, ...] = (
     "__ref__order_totals AS (",
     "amount * 2 AS line_total",
     "line_total + 1 AS order_total",
+    "base_rows AS (SELECT 1 AS order_id, 10 AS amount)",
+    f"expected_rows AS ({ORDER_TOTALS_EXPECTED_ROWS_SQL})",
 )
 _EXPECTED_FRAGMENTS: tuple[str, ...] = (
     "__actual__order_lines AS (SELECT * FROM __ref__order_lines)",
@@ -85,6 +88,7 @@ def test_given_chained_models_sharing_cte_names_when_testing_then_each_model_is_
             assert sql.count(fragment) == 1, f"{fragment!r} in {artifact_root}:\n{sql}"
         for fragment in _EXPECTED_FRAGMENTS:
             assert fragment in sql, sql
+        assert "WITH expected_rows" not in sql, sql
 
 
 if __name__ == "__main__":

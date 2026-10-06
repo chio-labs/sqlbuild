@@ -2,10 +2,11 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use crate::compiler::_helpers::sql_tests::cte_sql::{parenthesized_sql, with_leading_ctes};
 use crate::compiler::_helpers::sql_tests::markers::{in_protected_range, protected_ranges};
 use crate::compiler::_helpers::sql_tests::planning::{
     DBT_REF_PREFIX, REF_PREFIX, SEED_PREFIX, SOURCE_PREFIX, SqlTestPatterns, TestFixtures,
-    compile_error, with_helper_ctes,
+    compile_error,
 };
 use crate::constants::{
     QUOTED_IDENTIFIER_DELIMITER_BYTES, SQL_TEST_ACTUAL_CTE, SQL_TEST_ACTUAL_CTE_PREFIX,
@@ -26,6 +27,13 @@ pub(crate) struct ScopeMock {
     tokens: Vec<String>,
 }
 
+/// One test CTE another test CTE reads: a mock, or a helper when `mock_name` is `None`.
+pub(crate) struct ScopeDependency<'a> {
+    pub(crate) generated_name: &'a str,
+    pub(crate) mock_name: Option<&'a str>,
+    pub(crate) sql: &'a str,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum ScopeNode {
     Helper(usize),
@@ -35,6 +43,7 @@ enum ScopeNode {
 /// Name references between one test's helper and mock CTEs, tokenized once per test.
 #[derive(Default)]
 pub(crate) struct ScopeGraph {
+    helpers: Vec<(String, String)>,
     helper_tokens: Vec<Vec<String>>,
     helper_indexes: HashMap<String, usize>,
     mocks: Vec<ScopeMock>,
@@ -83,12 +92,17 @@ impl ScopeGraph {
                 mocks.push(ScopeMock {
                     generated_name: format!("{prefix}{name}"),
                     mock_name: name.clone(),
-                    sql: with_helper_ctes(body, &fixtures.helpers),
+                    sql: body.clone(),
                     tokens: identifier_tokens(body, patterns),
                 });
             }
         }
         Self {
+            helpers: fixtures
+                .helpers
+                .iter()
+                .map(|cte| (cte.name.clone(), cte.sql_body.clone()))
+                .collect(),
             helper_tokens: fixtures
                 .helpers
                 .iter()
@@ -142,28 +156,82 @@ impl ScopeGraph {
         order.ordered
     }
 
-    /// The generated CTE body of one mock, with every helper CTE in scope.
+    /// The authored body of one mock, placed as its own top-level CTE.
     pub(crate) fn mock_sql(&self, generated_name: &str) -> Option<&str> {
         self.mocks_by_generated_name
             .get(generated_name)
             .map(|index| self.mocks[*index].sql.as_str())
     }
 
-    /// The parenthesized body of one mock inlined in place of its relation marker.
+    /// One mock inlined in model scope, carrying the helpers it reads so no model CTE shadows them.
     pub(crate) fn inlined_mock_sql(&self, generated_name: &str) -> Option<String> {
-        self.mock_sql(generated_name).map(|sql| format!("({sql})"))
+        let mock = &self.mocks[*self.mocks_by_generated_name.get(generated_name)?];
+        Some(parenthesized_sql(
+            &self.with_read_helpers(&mock.sql, &mock.tokens),
+        ))
     }
 
-    /// Mocks that one mock's body reads through helpers or by name, dependencies first.
-    pub(crate) fn mock_dependencies(&self, generated_name: &str) -> Vec<&ScopeMock> {
+    /// A table-function fixture inlined into model SQL, with the helpers it reads.
+    pub(crate) fn inlined_fixture_sql(&self, sql: &str, patterns: &SqlTestPatterns) -> String {
+        parenthesized_sql(&self.with_read_helpers(sql, &identifier_tokens(sql, patterns)))
+    }
+
+    fn with_read_helpers(&self, sql: &str, tokens: &[String]) -> String {
+        let helpers: Vec<(String, String)> = self
+            .closure(tokens)
+            .into_iter()
+            .filter_map(|node| match node {
+                ScopeNode::Helper(index) => Some(self.helpers[index].clone()),
+                ScopeNode::Mock(_) => None,
+            })
+            .collect();
+        with_leading_ctes(&helpers, sql)
+    }
+
+    /// Helpers and mocks one top-level mock reads, transitively and dependencies first.
+    pub(crate) fn mock_dependencies(&self, generated_name: &str) -> Vec<ScopeDependency<'_>> {
         let Some(root) = self.mocks_by_generated_name.get(generated_name).copied() else {
             return Vec::new();
         };
-        self.closure(&self.mocks[root].tokens)
+        self.dependencies(self.closure(&self.mocks[root].tokens), root)
+    }
+
+    /// Top-level CTEs an inlined mock needs: the mocks it reads and everything they read.
+    pub(crate) fn inlined_mock_dependencies(
+        &self,
+        generated_name: &str,
+    ) -> Vec<ScopeDependency<'_>> {
+        let Some(root) = self.mocks_by_generated_name.get(generated_name).copied() else {
+            return Vec::new();
+        };
+        let mut order = ScopeOrder {
+            graph: self,
+            visited: HashSet::new(),
+            ordered: Vec::new(),
+        };
+        for node in self.closure(&self.mocks[root].tokens) {
+            if matches!(node, ScopeNode::Mock(index) if index != root) {
+                order.visit(node);
+            }
+        }
+        self.dependencies(order.ordered, root)
+    }
+
+    fn dependencies(&self, nodes: Vec<ScopeNode>, root: usize) -> Vec<ScopeDependency<'_>> {
+        nodes
             .into_iter()
             .filter_map(|node| match node {
-                ScopeNode::Mock(index) if index != root => Some(&self.mocks[index]),
-                _ => None,
+                ScopeNode::Mock(index) if index == root => None,
+                ScopeNode::Mock(index) => Some(ScopeDependency {
+                    generated_name: &self.mocks[index].generated_name,
+                    mock_name: Some(&self.mocks[index].mock_name),
+                    sql: &self.mocks[index].sql,
+                }),
+                ScopeNode::Helper(index) => Some(ScopeDependency {
+                    generated_name: &self.helpers[index].0,
+                    mock_name: None,
+                    sql: &self.helpers[index].1,
+                }),
             })
             .collect()
     }

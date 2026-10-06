@@ -279,6 +279,12 @@ pub(crate) struct TestFixtures {
     assertions: Vec<(String, String)>,
 }
 
+impl TestFixtures {
+    fn is_helper(&self, name: &str) -> bool {
+        self.helpers.iter().any(|helper| helper.name == name)
+    }
+}
+
 struct DirectTestPlan {
     name: String,
     mode: String,
@@ -492,6 +498,13 @@ impl GeneratedCteState {
         Ok(())
     }
 
+    /// Add a test helper read by a mock; model CTEs of the same name stay nested apart from it.
+    fn insert_helper(&mut self, name: &str, sql: &str) {
+        if !self.generated.iter().any(|(existing, _)| existing == name) {
+            self.generated.push((name.to_string(), sql.to_string()));
+        }
+    }
+
     fn mock_target(&mut self, request: MockTargetRequest<'_>) -> Result<Option<String>, String> {
         if !request.mocks.contains_key(request.referenced_name) {
             return Ok(None);
@@ -511,10 +524,14 @@ impl GeneratedCteState {
             )));
         }
         for dependency in request.fixtures.scope.mock_dependencies(&generated_name) {
-            self.reachable.insert(dependency.mock_name.clone());
+            let Some(mock_name) = dependency.mock_name else {
+                self.insert_helper(dependency.generated_name, dependency.sql);
+                continue;
+            };
+            self.reachable.insert(mock_name.to_string());
             self.insert(
-                &dependency.generated_name,
-                &dependency.sql,
+                dependency.generated_name,
+                dependency.sql,
                 request.file_label,
             )?;
         }
@@ -805,7 +822,7 @@ fn plan_model_test(
         let (fixture_resolved_sql, reached_table_functions) = resolve_table_function_fixtures(
             query_sql,
             &fixtures.mock_table_functions,
-            &fixtures.helpers,
+            &fixtures.scope,
             &context.patterns,
         )?;
         reachable_mocks.extend(reached_table_functions);
@@ -878,7 +895,7 @@ fn plan_model_test(
         let (fixture_resolved_sql, reached_table_functions) = resolve_table_function_fixtures(
             assertion_sql,
             &fixtures.mock_table_functions,
-            &fixtures.helpers,
+            &fixtures.scope,
             &context.patterns,
         )?;
         reachable_mocks.extend(reached_table_functions);
@@ -1225,7 +1242,11 @@ fn analyze_and_resolve_sql(
         let target = if function_name == REF_FUNCTION {
             if let Some(chain_sql) = request.resolved_chain.get(&referenced_name) {
                 for (name, sql) in &chain_sql.generated_ctes {
-                    generated_state.insert(name, sql, request.file_label)?;
+                    if request.fixtures.is_helper(name) {
+                        generated_state.insert_helper(name, sql);
+                    } else {
+                        generated_state.insert(name, sql, request.file_label)?;
+                    }
                 }
                 let generated_name = format!("{REF_PREFIX}{referenced_name}");
                 generated_state.insert(
@@ -1405,7 +1426,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     let (table_resolved, table_reached) = resolve_table_function_fixtures(
         &result,
         &request.fixtures.mock_table_functions,
-        &request.fixtures.helpers,
+        &request.fixtures.scope,
         request.patterns,
     )?;
     reached.extend(table_reached);
@@ -1413,13 +1434,23 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     result = resolve_function_calls(&result, request.functions, true, request.patterns)?;
     let mut mock_ctes: Vec<(String, String)> = Vec::new();
     for generated_name in inlined {
-        let dependencies = request.fixtures.scope.mock_dependencies(&generated_name);
-        reached.extend(dependencies.iter().map(|mock| mock.mock_name.clone()));
+        let dependencies = request
+            .fixtures
+            .scope
+            .inlined_mock_dependencies(&generated_name);
+        reached.extend(
+            dependencies
+                .iter()
+                .filter_map(|dependency| dependency.mock_name.map(str::to_string)),
+        );
         mock_ctes = with_unique_ctes(
             mock_ctes,
-            dependencies
-                .into_iter()
-                .map(|mock| (mock.generated_name.clone(), mock.sql.clone())),
+            dependencies.into_iter().map(|dependency| {
+                (
+                    dependency.generated_name.to_string(),
+                    dependency.sql.to_string(),
+                )
+            }),
         );
     }
     Ok(TextualResolution {
@@ -1432,7 +1463,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
 fn resolve_table_function_fixtures(
     sql: &str,
     fixtures: &BTreeMap<String, String>,
-    helpers: &[CteInput],
+    scope: &ScopeGraph,
     patterns: &SqlTestPatterns,
 ) -> Result<(String, HashSet<String>), String> {
     if fixtures.is_empty() {
@@ -1445,7 +1476,7 @@ fn resolve_table_function_fixtures(
         |name, _call_suffix| {
             fixtures
                 .get(name)
-                .map(|body| (format!("({})", with_helper_ctes(body, helpers)), true))
+                .map(|body| (scope.inlined_fixture_sql(body, patterns), true))
         },
     )
 }
@@ -1658,8 +1689,8 @@ fn helper_with_clause(helpers: &[CteInput]) -> String {
     )
 }
 
-/// Prefix every helper CTE to a query; mock and direct-test bodies all see helpers this way.
-pub(crate) fn with_helper_ctes(sql: &str, helpers: &[CteInput]) -> String {
+/// Prefix every helper CTE to a direct test's actual and expected queries.
+fn with_helper_ctes(sql: &str, helpers: &[CteInput]) -> String {
     if helpers.is_empty() {
         sql.to_string()
     } else {
