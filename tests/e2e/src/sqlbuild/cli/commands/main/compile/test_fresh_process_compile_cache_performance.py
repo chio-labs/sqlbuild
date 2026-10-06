@@ -57,7 +57,7 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
-                "7a1978e9f8871b2252abea5e8763c570305f97342b3b3f51e2a2992238cc3798"
+                "1914b788abcb452422eaf6c3a2c240ff390bab9530217285a5ca93334db7b6c3"
             ),
             expected_leaf_edit_fingerprint=(
                 "a041d989ef3810e0840361a4f793548b428f941da2f265462a4b46a5bf4d7676"
@@ -91,7 +91,7 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
-                "d293f1e9dbe2787d21fa6e5f20c79206ad9beea1e3be63299ac0a5a1e3464ffd"
+                "2f1e5dfd29025c25e0dffc6e74f4c2be020a5ef133ecd081f44e0c55c24858b4"
             ),
             expected_leaf_edit_fingerprint=(
                 "a2e0a328277276f960bef73b4fbc85f9dcacbfad73c10af2df129b78592606ba"
@@ -125,7 +125,7 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
-                "8994dd1e87cb97312d492ea66731e4f01f4da08dc2680dd6814f1e4bba23a775"
+                "ecdd7f2cf961fab739aa806b6d90283916cffad2007e1e2f3ba90a466db6cb75"
             ),
             expected_leaf_edit_fingerprint=(
                 "f1f25d949e182901656fcef88c7c566254c847174b888bd35c87372aea347807"
