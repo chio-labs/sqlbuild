@@ -49,3 +49,9 @@ def substitute_static_project_vars(
 def extract_static_sql_references(
     sql: str,
 ) -> list[tuple[str, str, str | None, int | None]] | None: ...
+
+# Internal oracle hooks for tests that compare native foundations with Python; not an API.
+def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
+def _oracle_text_positions(
+    data: bytes, byte_offsets: list[int]
+) -> tuple[str, list[tuple[int, int, int] | None]]: ...

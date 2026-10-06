@@ -593,6 +593,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;
     module.add_function(wrap_pyfunction!(render_owned_skill, module)?)?;
     module.add_function(wrap_pyfunction!(skill_freshness, module)?)?;
+    crate::bindings::_helpers::oracles::register(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())
