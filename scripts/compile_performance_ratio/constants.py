@@ -4,6 +4,7 @@ import re
 
 DEFAULT_RUNS: int = 3
 DEFAULT_MAX_RATIO: float = 1.10
+NOISE_FLOOR_SECONDS: float = 0.2
 DENSE_KIND: str = "dense"
 FRESH_KIND: str = "fresh"
 PROJECT_KINDS: tuple[str, ...] = (DENSE_KIND, FRESH_KIND)
