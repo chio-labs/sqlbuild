@@ -27,6 +27,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             changed_maximum=3,
             expected_initial_rows=((1, 100), (2, 200)),
             expected_changed_rows=((1, 100), (2, 200), (3, 300)),
+            expected_plan_bounds=(
+                "bounds  computed at run time, once source raw_orders is up to date"
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -104,6 +107,13 @@ def test_given_managed_loader_watermark_when_reloaded_then_incremental_consumes_
         db_path=warehouse_path,
         sql="SELECT id, amount FROM main.raw_orders_incremental ORDER BY id",
     ) == list(test_case.expected_initial_rows)
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "+raw_orders_incremental"),
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    assert test_case.expected_plan_bounds in plan_result.stdout, plan_result.stdout
 
     maximum_path.write_text(str(test_case.changed_maximum), encoding="utf-8")
     changed_result: subprocess.CompletedProcess[str] = run_sqb(

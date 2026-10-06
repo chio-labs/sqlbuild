@@ -15,6 +15,7 @@ from sqlbuild.compiler.refactoring.models import (
 )
 from sqlbuild.compiler.refactoring.types import RefactorOperation, RefactorStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.presentation.main.tree_connector import tree_connector
 
 _CONTINUE: str = "\u2502   "
@@ -197,8 +198,7 @@ def _diagnostic_lines(*, style: CliStyle, diagnostics: tuple[CompilerDiagnostic,
 
 
 def _status_line(*, style: CliStyle, plan: RefactorPlan, status: RefactorStatus) -> str:
-    count: int = len(plan.changes)
-    files: str = f"{count} file{'s' if count != 1 else ''}"
+    files: str = format_count_noun(count=len(plan.changes), singular="file")
     if status == RefactorStatus.APPLIED:
         return style.success_strong(f"Compiled: ok, {files} changed")
     if status == RefactorStatus.DRY_RUN:

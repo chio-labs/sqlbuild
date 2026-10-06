@@ -550,6 +550,8 @@ class CursorInputRelation:
     is_runtime_produced: bool = False
     terminal_cursor_start: CursorScalar | None = None
     terminal_cursor_end: CursorScalar | None = None
+    input_name: str | None = None
+    input_kind: GraphResourceKind | None = None
 
     def __init__(
         self,
@@ -561,6 +563,8 @@ class CursorInputRelation:
         is_runtime_produced: bool = False,
         terminal_cursor_start: CursorScalar | str | None = None,
         terminal_cursor_end: CursorScalar | str | None = None,
+        input_name: str | None = None,
+        input_kind: GraphResourceKind | None = None,
     ) -> None:
         object.__setattr__(self, "relation", relation)
         object.__setattr__(self, "cursor_column", cursor_column)
@@ -569,6 +573,8 @@ class CursorInputRelation:
         object.__setattr__(self, "is_runtime_produced", is_runtime_produced)
         object.__setattr__(self, "terminal_cursor_start", terminal_cursor_start)
         object.__setattr__(self, "terminal_cursor_end", terminal_cursor_end)
+        object.__setattr__(self, "input_name", input_name)
+        object.__setattr__(self, "input_kind", input_kind)
         self.__post_init__()
 
     def __post_init__(self) -> None:

@@ -191,7 +191,7 @@ _FULL_HISTORY_RANGE: str = "range  2026-01-01 \u2192 2026-03-01"
             rebuild_command=(),
             expected_plan_fragments=(
                 "full rebuild",
-                "bounds  runtime-owned (model-backed cursor input)",
+                "bounds  computed at run time, once model stg_orders is up to date",
                 "policy  replay_on_change=full",
             ),
         ),

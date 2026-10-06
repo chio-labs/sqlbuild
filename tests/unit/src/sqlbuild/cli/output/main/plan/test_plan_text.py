@@ -13,9 +13,11 @@ from sqlbuild.compiler.planner.models import (
     ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
+    PlanOutput,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
+    GraphResourceKind,
     MaterializationType,
     PlanAction,
     PlanReason,
@@ -32,6 +34,7 @@ from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanColorTestCase,
     FormatPlanTestCase,
+    RuntimeBoundsLineTestCase,
 )
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_discovered_provider_usage,
@@ -213,7 +216,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "batches  3 x 1mo",
                 "bounds  planner-resolved",
             ),
-            unexpected_fragments=("resolved at runtime",),
+            unexpected_fragments=("at run time",),
         ),
         FormatPlanTestCase(
             description="runtime-owned microbatch marks range and count as deferred",
@@ -237,6 +240,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                                 cursor_grain="month",
                                 is_model_backed=True,
                                 is_runtime_produced=True,
+                                input_name="stg_events",
+                                input_kind=GraphResourceKind.MODEL,
                             ),
                         ),
                     ),
@@ -245,8 +250,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             expected_fragments=(
                 "grain  day -> month (effective)",
                 "batch size  effective -> 1mo",
-                "batches  resolved at runtime after upstream models complete",
-                "bounds  runtime-owned (model-backed cursor input)",
+                "batches  counted at run time, once model stg_events is up to date",
+                "bounds  computed at run time, once model stg_events is up to date",
             ),
             unexpected_fragments=("batches  3 x", "bounds  planner-resolved"),
         ),
@@ -1419,6 +1424,23 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
             ),
         ),
         FormatPlanColorTestCase(
+            description="leaf values mentioning runtime keep the plain value style",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="session_events",
+                        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                        reason=PlanReason.NORMAL_INCREMENTAL,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                        cursor_column="runtime_started_at",
+                        cursor_type="timestamp",
+                    ),
+                ),
+            ),
+            expected_fragments=("\033[2mcursor\033[0m  runtime_started_at (timestamp)",),
+        ),
+        FormatPlanColorTestCase(
             description="styles python dependency diff headers as metadata",
             plan_output=build_plan_output(),
             python_plan_entries=(
@@ -1475,3 +1497,114 @@ def test_given_plan_output_when_formatting_with_color_then_styles_semantic_parts
 
     for fragment in test_case.expected_fragments:
         assert fragment in result, f"Expected '{fragment}' in output:\n{result}"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeBoundsLineTestCase(
+            description="model cursor input",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="analytics.stg_payments",
+                    cursor_column="paid_at",
+                    is_model_backed=True,
+                    is_runtime_produced=True,
+                    input_name="stg_payments",
+                    input_kind=GraphResourceKind.MODEL,
+                ),
+            ),
+            expected_bounds_value="computed at run time, once model stg_payments is up to date",
+        ),
+        RuntimeBoundsLineTestCase(
+            description="seed cursor input",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="analytics.payments",
+                    cursor_column="paid_at",
+                    is_runtime_produced=True,
+                    input_name="payments",
+                    input_kind=GraphResourceKind.SEED,
+                ),
+            ),
+            expected_bounds_value="computed at run time, once seed payments is up to date",
+        ),
+        RuntimeBoundsLineTestCase(
+            description="source cursor input",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="raw.payments",
+                    cursor_column="paid_at",
+                    is_runtime_produced=True,
+                    input_name="raw_payments",
+                    input_kind=GraphResourceKind.SOURCE,
+                ),
+            ),
+            expected_bounds_value="computed at run time, once source raw_payments is up to date",
+        ),
+        RuntimeBoundsLineTestCase(
+            description="several cursor inputs name only those refreshed in this run",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="analytics.payments",
+                    cursor_column="paid_at",
+                    is_runtime_produced=True,
+                    input_name="payments",
+                    input_kind=GraphResourceKind.SEED,
+                ),
+                CursorInputRelation(
+                    relation="raw.refunds",
+                    cursor_column="refunded_at",
+                    is_runtime_produced=False,
+                    input_name="raw_refunds",
+                    input_kind=GraphResourceKind.SOURCE,
+                ),
+                CursorInputRelation(
+                    relation="analytics.stg_orders",
+                    cursor_column="ordered_at",
+                    is_model_backed=True,
+                    is_runtime_produced=True,
+                    input_name="stg_orders",
+                    input_kind=GraphResourceKind.MODEL,
+                ),
+            ),
+            expected_bounds_value=(
+                "computed at run time, once seed payments and model stg_orders are up to date"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cursor_input_refreshed_in_run_when_formatting_plan_then_bounds_line_names_input(
+    test_case: RuntimeBoundsLineTestCase,
+) -> None:
+    plan_output: PlanOutput = build_plan_output(
+        model_entries=(
+            build_model_entry(
+                name="daily_revenue",
+                action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                reason=PlanReason.NORMAL_INCREMENTAL,
+                materialization_type=MaterializationType.INCREMENTAL,
+                incremental_strategy="delete_insert",
+                cursor_column="revenue_date",
+                cursor_type="timestamp",
+                cursor_input_relations=test_case.cursor_input_relations,
+            ),
+        ),
+    )
+
+    plain: str = format_plan(plan=plan_output, use_color=False)
+    colored: str = format_plan(plan=plan_output, use_color=True)
+
+    assert f"bounds  {test_case.expected_bounds_value}" in plain, plain
+    assert "runtime-owned" not in plain
+    assert "model-backed" not in plain
+    colored_lines: list[str] = colored.splitlines()
+    assert (
+        f"    \033[2m\u2514\u2500\u2500\033[0m \033[2mbounds\033[0m  {test_case.expected_bounds_value}"
+        in colored_lines
+    ), colored
+    assert (
+        "    \033[2m\u251c\u2500\u2500\033[0m \033[2mcursor\033[0m  revenue_date (timestamp)"
+        in colored_lines
+    ), colored
