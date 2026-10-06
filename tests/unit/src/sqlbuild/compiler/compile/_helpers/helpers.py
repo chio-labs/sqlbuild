@@ -37,12 +37,14 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
     CompiledSqlTest,
+    CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
     CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
+    CompileSqlReference,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
     DeclarationRuntimeProjection,
@@ -90,6 +92,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,
     SourceEntry,
+    SourceLocation,
 )
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -760,4 +763,55 @@ def required_description_diagnostics(
         seed_inputs=inputs.seed_inputs,
         source_inputs=inputs.source_inputs,
         function_inputs=inputs.function_inputs,
+    )
+
+
+_CURSOR_MODEL_PATH: Path = Path("models/finance/daily_revenue.sql")
+_CURSOR_MODEL_CONTENTS: str = (
+    "MODEL (\n"
+    '  description "Daily revenue from successful payments",\n'
+    "  materialized incremental,\n"
+    "  incremental_strategy delete_insert,\n"
+    "  cursor revenue_date,\n"
+    "  cursor_type timestamp,\n"
+    "  cursor_grain day,\n"
+    ");\n\n"
+    "SELECT CAST('2026-04-01' AS DATE) AS revenue_date, 2850 AS total_revenue_cents\n"
+)
+
+
+def cursor_model_input(
+    *, config: dict[str, object], reference_kinds: tuple[str, ...]
+) -> CompileModelInput:
+    """Build the daily_revenue model input with the given config and reference kinds."""
+
+    return CompileModelInput(
+        model_file=DiscoveredSqlModelFile(
+            file_path=Path("/project") / _CURSOR_MODEL_PATH,
+            relative_path=_CURSOR_MODEL_PATH,
+            contents=_CURSOR_MODEL_CONTENTS,
+            header_values={},
+            header_column_locations={},
+            output_column_locations={},
+            query_sql="",
+        ),
+        config=CompileModelConfig(values=dict(config)),
+        references=tuple(
+            CompileSqlReference(ref_kind=kind, ref_name=f"input_{index}")
+            for index, kind in enumerate(reference_kinds)
+        ),
+    )
+
+
+def diagnostic_spans(
+    diagnostics: tuple[CompilerDiagnostic, ...],
+) -> tuple[tuple[str, int, int, int | None], ...]:
+    """Return each located diagnostic's path, line, column and end column."""
+
+    locations: tuple[SourceLocation, ...] = tuple(
+        cast(SourceLocation, diagnostic.location) for diagnostic in diagnostics
+    )
+    return tuple(
+        (location.path.as_posix(), location.line, location.column, location.end_column)
+        for location in locations
     )

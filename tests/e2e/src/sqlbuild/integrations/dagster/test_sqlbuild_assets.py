@@ -31,6 +31,12 @@ from sqlbuild.integrations.dagster import (
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    build_empty_cursor_project,
+    execute_empty_cursor_sql,
+    load_empty_cursor_payments,
+    prepare_empty_cursor_inputs_project,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,
     prepare_inline_project,
@@ -41,6 +47,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
     DagsterColumnAuditChecksE2ETestCase,
+    DagsterEmptyCursorInputsCheckE2ETestCase,
     DagsterPlaygroundE2ETestCase,
     DagsterPythonNodesArtifactE2ETestCase,
     DagsterSqlBuildE2ETestCase,
@@ -998,3 +1005,68 @@ def test_given_scenario_check_selection_when_executing_dagster_then_runs_only_se
             asset_key=test_case.scenario_order_prices_asset_key,
         )
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterEmptyCursorInputsCheckE2ETestCase(
+            description="incremental run with no input rows still reports declared audits",
+            model_sql=(
+                "MODEL (\n"
+                '  description "Daily revenue from payments",\n'
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor revenue_date,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  cursor_inputs (raw_payments paid_at),\n"
+                "  columns (total_revenue_cents (audits [not_null])),\n"
+                ");\n\n"
+                "SELECT CAST(paid_at AS DATE) AS revenue_date, "
+                "SUM(amount_cents) AS total_revenue_cents\n"
+                'FROM __source("raw_payments")\n'
+                "GROUP BY 1\n"
+            ),
+            asset_key=("main", "daily_revenue"),
+            expected_check_names=("audit__not_null__total_revenue_cents",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_emptied_cursor_inputs_when_executing_dagster_then_emits_declared_checks(
+    test_case: DagsterEmptyCursorInputsCheckE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_empty_cursor_inputs_project(
+        tmp_path=tmp_path, models={"models/daily_revenue.sql": test_case.model_sql}
+    )
+    load_empty_cursor_payments(project_dir=project_dir)
+    build_empty_cursor_project(project_dir=project_dir)
+    execute_empty_cursor_sql(project_dir=project_dir, sql="DELETE FROM main.raw_payments")
+    sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(sqb_executable),),
+    )
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_empty_inputs(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(["build"], context=context).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_empty_inputs],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+    )
+
+    assert result.success
+    assert AssetKey(list(test_case.asset_key)) in {
+        event.asset_key for event in result.get_asset_materialization_events()
+    }
+    assert check_names_for_asset(result=result, asset_key=test_case.asset_key) == frozenset(
+        test_case.expected_check_names
+    )
+    assert all(evaluation.passed for evaluation in result.get_asset_check_evaluations())

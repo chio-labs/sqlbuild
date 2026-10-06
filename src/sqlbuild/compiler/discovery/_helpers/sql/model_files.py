@@ -287,6 +287,33 @@ def model_header_columns_span(
     )
 
 
+def model_header_entry_span(*, contents: str, key: str) -> tuple[int, int] | None:
+    """Return authored byte offsets for one top-level `key value` MODEL header entry."""
+
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    if header_match is None:
+        return None
+    header_start: int = header_match.start("header")
+    tokens: list[_ModelHeaderToken] = _tokenize_model_header_for_spans(header_match.group("header"))
+    depth: int = 0
+    for index, token in enumerate(tokens):
+        if token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_OPEN_PAREN:
+            depth += 1
+        elif token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_CLOSE_PAREN:
+            depth -= 1
+        elif (
+            depth == 0
+            and token.kind == _MODEL_HEADER_WORD_TOKEN
+            and token.value == key
+            and index + 2 < len(tokens)
+        ):
+            entry_end: int = header_start + tokens[index + 2].position
+            while entry_end > header_start + token.position and contents[entry_end - 1].isspace():
+                entry_end -= 1
+            return header_start + token.position, entry_end
+    return None
+
+
 def model_header_body_span(*, contents: str) -> tuple[int, int] | None:
     """Return authored byte offsets for the MODEL header body."""
 

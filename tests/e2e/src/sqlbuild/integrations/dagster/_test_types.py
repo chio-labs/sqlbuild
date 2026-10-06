@@ -135,3 +135,13 @@ class DagsterSelectorParityE2ETestCase:
     description: str
     select: str
     expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterEmptyCursorInputsCheckE2ETestCase:
+    """Test case for audit checks on an incremental asset whose cursor inputs were emptied."""
+
+    description: str
+    model_sql: str
+    asset_key: tuple[str, ...]
+    expected_check_names: tuple[str, ...]

@@ -4,6 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBuildE2ETestCase,
@@ -883,3 +884,175 @@ def python_node_selection_project_files(*, orders_sql: str) -> dict[str, str]:
             'materialized table);\nSELECT count(*) AS order_count FROM __ref("orders")\n'
         ),
     }
+
+
+_EMPTY_CURSOR_DATABASE: str = "warehouse.duckdb"
+_EMPTY_CURSOR_PROJECT_TOML: str = (
+    'name = "empty_cursor_inputs"\nadapter = "duckdb"\n\n'
+    f'[connection]\ndatabase = "{_EMPTY_CURSOR_DATABASE}"\n'
+)
+_EMPTY_CURSOR_SOURCES_YML: str = dedent(
+    """
+    sources:
+      - name: raw_payments
+        description: Raw payments, one row per payment.
+        schema: main
+        table: raw_payments
+      - name: raw_refunds
+        description: Raw refunds, one row per refund.
+        schema: main
+        table: raw_refunds
+    """
+).lstrip()
+_CREATE_PAYMENTS_SQL: str = (
+    "CREATE TABLE main.raw_payments (payment_id INTEGER, paid_at TIMESTAMP, amount_cents INTEGER); "
+    "CREATE TABLE main.raw_refunds (refund_id INTEGER, refunded_at TIMESTAMP, amount_cents INTEGER)"
+)
+_INSERT_PAYMENTS_SQL: str = (
+    "INSERT INTO main.raw_payments VALUES "
+    "(1, '2026-04-01 09:00:00', 1200), (2, '2026-04-02 10:00:00', 1650)"
+)
+
+
+def prepare_empty_cursor_inputs_project(*, tmp_path: Path, models: dict[str, str]) -> Path:
+    """Write a project whose models read an initially empty payments source."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="empty_cursor_inputs",
+        repo_files={
+            "sqlbuild_project.toml": _EMPTY_CURSOR_PROJECT_TOML,
+            "sources/raw.yml": _EMPTY_CURSOR_SOURCES_YML,
+            **models,
+        },
+    )
+    execute_duckdb(db_path=project_dir / _EMPTY_CURSOR_DATABASE, sql=_CREATE_PAYMENTS_SQL)
+    return project_dir
+
+
+def execute_empty_cursor_sql(*, project_dir: Path, sql: str) -> None:
+    """Run warehouse SQL against the empty-cursor-inputs project database."""
+
+    execute_duckdb(db_path=project_dir / _EMPTY_CURSOR_DATABASE, sql=sql)
+
+
+def load_empty_cursor_payments(*, project_dir: Path) -> None:
+    """Load two days of payments into the source."""
+
+    execute_empty_cursor_sql(project_dir=project_dir, sql=_INSERT_PAYMENTS_SQL)
+
+
+def run_empty_cursor_command(
+    *, project_dir: Path, command: tuple[str, ...]
+) -> subprocess.CompletedProcess[str]:
+    """Run one sqb command without colour against the project."""
+
+    return run_sqb(command=("--no-color", *command), project_dir=project_dir)
+
+
+def build_empty_cursor_project(*, project_dir: Path) -> None:
+    """Run a build that must succeed."""
+
+    result: subprocess.CompletedProcess[str] = run_empty_cursor_command(
+        project_dir=project_dir, command=("build",)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def prepare_emptied_cursor_project(
+    *, tmp_path: Path, model_sql: str, changed_model_sql: str
+) -> Path:
+    """Build a model over loaded payments, then empty the source and write the next model SQL."""
+
+    project_dir: Path = prepare_empty_cursor_inputs_project(
+        tmp_path=tmp_path, models={"models/daily_revenue.sql": model_sql}
+    )
+    load_empty_cursor_payments(project_dir=project_dir)
+    build_empty_cursor_project(project_dir=project_dir)
+    execute_empty_cursor_sql(project_dir=project_dir, sql="DELETE FROM main.raw_payments")
+    (project_dir / "models" / "daily_revenue.sql").write_text(changed_model_sql, encoding="utf-8")
+    return project_dir
+
+
+def prepare_waiting_on_empty_input_project(*, tmp_path: Path, model_sql: str) -> Path:
+    """Build over payments and refunds, then empty refunds while new payments arrive."""
+
+    project_dir: Path = prepare_empty_cursor_inputs_project(
+        tmp_path=tmp_path, models={"models/daily_revenue.sql": model_sql}
+    )
+    execute_empty_cursor_sql(
+        project_dir=project_dir,
+        sql=(
+            "INSERT INTO main.raw_payments VALUES (1, '2026-04-01 09:00:00', 1200); "
+            "INSERT INTO main.raw_refunds VALUES (9, '2026-04-01 12:00:00', 300)"
+        ),
+    )
+    build_empty_cursor_project(project_dir=project_dir)
+    execute_empty_cursor_sql(
+        project_dir=project_dir,
+        sql=(
+            "DELETE FROM main.raw_refunds; "
+            "INSERT INTO main.raw_payments VALUES (2, '2026-04-02 10:00:00', 1650)"
+        ),
+    )
+    return project_dir
+
+
+def prepare_same_run_empty_inputs_project(
+    *, tmp_path: Path, models: dict[str, str], emptying_sql: str
+) -> Path:
+    """Build over payments and refunds, change the data, then touch the staging views."""
+
+    project_dir: Path = prepare_empty_cursor_inputs_project(tmp_path=tmp_path, models=models)
+    execute_empty_cursor_sql(
+        project_dir=project_dir,
+        sql=(
+            "INSERT INTO main.raw_payments VALUES (1, '2026-04-01 09:00:00', 1200); "
+            "INSERT INTO main.raw_refunds VALUES (9, '2026-04-01 12:00:00', 300)"
+        ),
+    )
+    build_empty_cursor_project(project_dir=project_dir)
+    execute_empty_cursor_sql(project_dir=project_dir, sql=emptying_sql)
+    view_path: Path
+    for view_path in sorted((project_dir / "models").glob("stg_*.sql")):
+        view_path.write_text(
+            view_path.read_text(encoding="utf-8").replace(
+                "amount_cents FROM", "amount_cents * 1 AS amount_cents FROM"
+            ),
+            encoding="utf-8",
+        )
+    return project_dir
+
+
+def empty_cursor_rows(*, project_dir: Path, sql: str) -> tuple[tuple[object, ...], ...]:
+    """Return warehouse rows as tuples."""
+
+    return tuple(
+        tuple(row) for row in query_duckdb(db_path=project_dir / _EMPTY_CURSOR_DATABASE, sql=sql)
+    )
+
+
+def empty_cursor_relation_exists(*, project_dir: Path, name: str) -> bool:
+    """Return whether a relation exists in the project's main schema."""
+
+    return bool(
+        empty_cursor_rows(
+            project_dir=project_dir,
+            sql=(
+                "SELECT 1 FROM information_schema.tables "
+                f"WHERE table_schema = 'main' AND table_name = '{name}'"
+            ),
+        )
+    )
+
+
+def named_json_entry(*, entries: list[dict[str, Any]], name: str) -> dict[str, Any]:
+    """Return the JSON entry with the given name."""
+
+    return {entry["name"]: entry for entry in entries}[name]
+
+
+def coded_json_diagnostic(*, document: dict[str, Any], code: str) -> dict[str, Any]:
+    """Return the first compile diagnostic with the given code."""
+
+    return {item["code"]: item for item in document["diagnostics"]}[code]

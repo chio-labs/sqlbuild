@@ -64,7 +64,7 @@ def test_given_concurrency_when_reading_cursor_bounds_then_matches_sequential_re
     )
     sequential: dict[str, CursorScalar] = _execute_cursor_queries(
         queries=queries, connection=None, execute=sequential_execute, on_progress=None
-    )
+    ).values
     parallel_execute: ConcurrencyTrackingCursorExecute = ConcurrencyTrackingCursorExecute(
         failing_relations=test_case.failing_relations, latency_seconds=_LATENCY_SECONDS
     )
@@ -76,7 +76,7 @@ def test_given_concurrency_when_reading_cursor_bounds_then_matches_sequential_re
         execute=parallel_execute,
         on_progress=progress.append,
         concurrency=test_case.concurrency,
-    )
+    ).values
 
     failures: tuple[str, ...] = tuple(
         filter(lambda message: message.startswith("Failed"), progress)

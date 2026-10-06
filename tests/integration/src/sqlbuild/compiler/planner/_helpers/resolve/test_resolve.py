@@ -18,12 +18,17 @@ from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ResolveAndExecuteTestCase,
     ResolveBoundedOverrideTestCase,
+    ResolveEmptyCursorInputsTestCase,
     ResolveSourceTestCase,
     ResolveWatermarkFailureTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve.helpers import (
     _ResolveResult,
+    build_empty_input_model,
+    build_empty_input_snapshot,
     build_model,
+    fact_events_relation,
+    raw_events_source_map,
     resolve_and_execute,
 )
 
@@ -363,7 +368,7 @@ def test_given_view_filter_and_physical_watermark_when_resolving_then_filters_on
         ResolveWatermarkFailureTestCase(
             description="partial planning watermark results fail before SQL execution",
             unavailable_tags=("fact_events__raw_events__max",),
-            expected_error_fragment="required cursor watermark bounds are unavailable",
+            expected_error_fragment="cannot work out its cursor window",
         )
     ],
     ids=lambda case: case.description,
@@ -406,6 +411,109 @@ def test_given_unavailable_planning_watermark_when_resolving_then_fails_closed(
             source_warehouse_columns={},
             connection=connection,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveEmptyCursorInputsTestCase(
+            description="incremental run reads no rows from the empty listed input",
+            target_max="2024-01-15 00:00:00",
+            target_relation="staging.fact_events",
+            existing_relations=fact_events_relation(schema="staging"),
+            replaces_relation=False,
+            cursor_start=None,
+            expected_window_fragment=(
+                "event_time >= TIMESTAMP '1970-01-01T00:00:00' "
+                "AND event_time < TIMESTAMP '1970-01-01T00:00:00'"
+            ),
+        ),
+        ResolveEmptyCursorInputsTestCase(
+            description="first build uses a zero-width window at cursor_start",
+            target_max=None,
+            target_relation=None,
+            existing_relations={},
+            replaces_relation=True,
+            cursor_start="2024-01-01",
+            expected_window_fragment=(
+                "event_time >= TIMESTAMP '2024-01-01' AND event_time < TIMESTAMP '2024-01-01'"
+            ),
+        ),
+        ResolveEmptyCursorInputsTestCase(
+            description="first build ignores a same-named table in another schema",
+            target_max=None,
+            target_relation="staging.fact_events",
+            existing_relations=fact_events_relation(schema="archive"),
+            replaces_relation=True,
+            cursor_start="2024-01-01",
+            expected_window_fragment=(
+                "event_time >= TIMESTAMP '2024-01-01' AND event_time < TIMESTAMP '2024-01-01'"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_empty_listed_input_when_resolving_then_window_selects_no_rows(
+    test_case: ResolveEmptyCursorInputsTestCase,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.raw_events (event_id INTEGER, event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.raw_events VALUES (1, '2024-01-20 00:00:00')")
+
+    result: _ResolveResult = resolve_and_execute(
+        model=build_empty_input_model(cursor_start=test_case.cursor_start),
+        snapshot=build_empty_input_snapshot(
+            target_max=test_case.target_max,
+            target_relation=test_case.target_relation,
+            existing_relations=test_case.existing_relations,
+        ),
+        model_locations={},
+        source_map=raw_events_source_map(),
+        source_warehouse_columns={},
+        connection=connection,
+        replaces_relation=test_case.replaces_relation,
+    )
+
+    assert test_case.expected_window_fragment in result.resolved_sql
+    assert result.rows == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveWatermarkFailureTestCase(
+            description="rebuilding an existing destination from empty inputs fails",
+            unavailable_tags=("fact_events__raw_events__max",),
+            expected_error_fragment=(
+                "model 'fact_events' was not rebuilt: its cursor inputs have no rows "
+                r"\(raw_events.event_time\)"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_empty_listed_input_when_replacing_existing_destination_then_fails(
+    test_case: ResolveWatermarkFailureTestCase,
+    connection: Any,
+) -> None:
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment) as exc_info:
+        resolve_and_execute(
+            model=build_empty_input_model(cursor_start=None),
+            snapshot=build_empty_input_snapshot(
+                target_max="2024-01-15 00:00:00",
+                target_relation="staging.fact_events",
+                existing_relations=fact_events_relation(schema="staging"),
+            ),
+            model_locations={},
+            source_map=raw_events_source_map(),
+            source_warehouse_columns={},
+            connection=connection,
+            replaces_relation=True,
+        )
+
+    assert exc_info.value.code == "S302"
+    assert exc_info.value.help is not None
+    assert "--start-cursor-ts and --end-cursor-ts" in exc_info.value.help
 
 
 @pytest.mark.parametrize(

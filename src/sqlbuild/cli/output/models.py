@@ -91,6 +91,8 @@ class CursorPlanDetails:
     declared_batch_size: str | None
     effective_batch_size: str | None
     planned_batch_count: int | None
+    empty_inputs: tuple[str, ...] = ()
+    waiting_on_empty_inputs: bool = False
 
 
 @dataclass(frozen=True)

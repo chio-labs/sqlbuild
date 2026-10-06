@@ -36,7 +36,9 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
 )
+from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
+from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
@@ -903,23 +905,37 @@ def test_given_multiple_runtime_inputs_when_resolving_then_uses_common_watermark
     "test_case",
     [
         RuntimeCursorFailureTestCase(
-            description="all mode fails closed for an empty required input",
-            slow_input_setup_sql="SELECT 1",
-            expected_error_fragment="required cursor watermark is empty",
+            description="all mode reports an empty required input",
+            fast_input_setup_sql="INSERT INTO fast_input VALUES (10), (200)",
+            expected_input_names=("stg_refunds.cursor_value",),
+            expected_waiting_on_empty_inputs=True,
+        ),
+        RuntimeCursorFailureTestCase(
+            description="legacy mode waits on an empty input like planned windows",
+            fast_input_setup_sql="INSERT INTO fast_input VALUES (10), (200)",
+            expected_input_names=("stg_refunds.cursor_value",),
+            expected_waiting_on_empty_inputs=True,
+            cursor_watermark_mode=RuntimeCursorWatermarkMode.LEGACY,
+        ),
+        RuntimeCursorFailureTestCase(
+            description="legacy mode reports inputs that are all empty",
+            fast_input_setup_sql="SELECT 1",
+            expected_input_names=("stg_payments.cursor_value", "stg_refunds.cursor_value"),
+            expected_waiting_on_empty_inputs=False,
+            cursor_watermark_mode=RuntimeCursorWatermarkMode.LEGACY,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_all_runtime_inputs_when_one_is_empty_then_resolution_fails_closed(
+def test_given_empty_runtime_inputs_when_resolving_then_reports_inputs_without_rows(
     test_case: RuntimeCursorFailureTestCase,
 ) -> None:
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     connection.execute("CREATE TABLE fast_input (cursor_value INTEGER)")
-    connection.execute("INSERT INTO fast_input VALUES (10), (200)")
+    connection.execute(test_case.fast_input_setup_sql)
     connection.execute("CREATE TABLE slow_input (cursor_value INTEGER)")
-    connection.execute(test_case.slow_input_setup_sql)
 
-    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+    with pytest.raises(EmptyCursorInputsError) as exc_info:
         resolve_runtime_cursor_bounds(
             adapter=cast(BaseAdapter, FakeCursorAdapter()),
             connection=connection,
@@ -932,12 +948,24 @@ def test_given_all_runtime_inputs_when_one_is_empty_then_resolution_fails_closed
                 cursor_type=CursorType.INTEGER,
                 cursor_grain=None,
                 cursor_start=None,
+                cursor_watermark_mode=test_case.cursor_watermark_mode,
                 cursor_input_relations=(
-                    RuntimeCursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
-                    RuntimeCursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
+                    RuntimeCursorInputRelation(
+                        relation="fast_input",
+                        cursor_column="cursor_value",
+                        input_name="stg_payments",
+                    ),
+                    RuntimeCursorInputRelation(
+                        relation="slow_input",
+                        cursor_column="cursor_value",
+                        input_name="stg_refunds",
+                    ),
                 ),
             ),
         )
+
+    assert exc_info.value.input_names == test_case.expected_input_names
+    assert exc_info.value.waiting_on_empty_inputs is test_case.expected_waiting_on_empty_inputs
 
 
 @pytest.mark.parametrize(

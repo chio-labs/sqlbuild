@@ -623,6 +623,8 @@ def _format_model_assets(
                     else None
                 ),
                 "warnings": result.warning_messages,
+                "empty_cursor_inputs": list(result.empty_cursor_inputs) or None,
+                "waiting_on_empty_inputs": result.waiting_on_empty_inputs or None,
                 "future_cursor_safety": serialize_future_cursor_safety(result.future_cursor_safety),
                 "maximum_start_safety": serialize_maximum_start_safety(result.maximum_start_safety),
                 "microbatch": _format_microbatch_result(result),

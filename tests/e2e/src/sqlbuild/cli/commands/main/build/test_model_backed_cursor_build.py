@@ -186,7 +186,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_absent_runtime_fragments=("__SQB_CURSOR_START__", "__SQB_CURSOR_END__"),
             expected_full_refresh_exit_code=1,
-            expected_full_refresh_error_fragment="required cursor watermark is empty",
+            expected_full_refresh_error_fragment=(
+                "model 'hourly_order_activity' was not rebuilt: its cursor inputs have no rows "
+                "(fact_orders.ordered_at)"
+            ),
             expected_full_refresh_counts=(
                 ("fact_orders", 0),
                 ("order_status_index", 0),

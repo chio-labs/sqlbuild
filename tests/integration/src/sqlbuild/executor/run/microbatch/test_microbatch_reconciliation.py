@@ -19,7 +19,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import BackfillAction, CursorWatermarkMode
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import IntegerValue
-from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.materializations.microbatch import (
     _clamp_intervals_to_model_domain,
     _count_unaccounted_intervals,
@@ -30,6 +29,7 @@ from sqlbuild.executor.run._helpers.materializations.microbatch import (
     execute_microbatch_entry,
 )
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
+from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import (
     MicrobatchLifecycleState,
     MicrobatchTargets,
@@ -345,13 +345,13 @@ def test_given_any_watermarks_when_one_input_is_empty_then_runtime_uses_populate
     "test_case",
     (
         MicrobatchBehaviorTestCase(
-            description="all_watermarks_when_one_input_is_empty_then_runtime_fails_closed",
-            expected_outcome="required cursor watermark is empty",
+            description="all_watermarks_when_one_input_is_empty_then_runtime_reports_it",
+            expected_outcome="cursor inputs have no rows: empty_events.event_time",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_all_watermarks_when_one_input_is_empty_then_runtime_fails_closed(
+def test_given_all_watermarks_when_one_input_is_empty_then_runtime_reports_it(
     adapter: DuckDbAdapter,
     connection: Any,
     test_case: MicrobatchBehaviorTestCase,
@@ -361,7 +361,7 @@ def test_given_all_watermarks_when_one_input_is_empty_then_runtime_fails_closed(
     connection.execute("CREATE TABLE main.live_events (event_time TIMESTAMP)")
     connection.execute("INSERT INTO main.live_events VALUES ('2026-07-02')")
 
-    with pytest.raises(ExecutorInputError, match=str(test_case.expected_outcome)):
+    with pytest.raises(EmptyCursorInputsError, match=str(test_case.expected_outcome)):
         resolve_runtime_cursor_bounds(
             adapter=adapter,
             connection=connection,

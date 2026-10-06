@@ -31,6 +31,9 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.execution.results import (
+    with_waiting_on_empty_inputs_warning as with_waiting_on_empty_inputs_warning,
+)
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 from sqlbuild.executor.run._helpers.execution.staging import create_staging_relation
 from sqlbuild.executor.run._helpers.execution.table_targets import resolve_table_targets
@@ -106,6 +109,13 @@ def execute_table_entry(
         )
     if cursor_resolution.bounds is not None:
         entry = replace(entry, cursor_bounds=cursor_resolution.bounds)
+        context = replace(context, entry=entry)
+    if cursor_resolution.empty_cursor_inputs:
+        entry = replace(
+            entry,
+            empty_cursor_inputs=cursor_resolution.empty_cursor_inputs,
+            waiting_on_empty_inputs=cursor_resolution.waiting_on_empty_inputs,
+        )
         context = replace(context, entry=entry)
     if cursor_resolution.warning is not None:
         warnings.append(cursor_resolution.warning)

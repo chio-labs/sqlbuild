@@ -40,12 +40,14 @@ from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_finger
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
+    cursor_window_unavailable_error,
     has_authoritative_cursor_override,
     has_runtime_owned_cursor_watermarks,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import (
     BoundViewGuard,
     FinalAuditRun,
@@ -74,6 +76,16 @@ class _DeltaPreparation:
 
     resolved_sql: str
     runtime_cursor_bounds: CursorBounds | None
+
+
+@dataclass(frozen=True)
+class _IncrementalTarget:
+    """Physical destination of one incremental model."""
+
+    database: str | None
+    schema: str | None
+    table: str
+    qualified: str
 
 
 @dataclass(frozen=True)
@@ -118,24 +130,19 @@ def execute_incremental_entry(
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
 
-    try:
-        preparation: _DeltaPreparation = _resolve_incremental_cursor_bounds(
-            context=context,
-            target_database=target_database,
-            target_schema=target_schema,
-            target_table=target_table,
-            target_qualified=target_qualified,
-        )
-    except Exception as exc:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.STAGING,
-            error=exc,
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
-        )
+    prepared: _DeltaPreparation | ModelExecutionResult = _prepare_cursor_window(
+        context=context,
+        targets=_IncrementalTarget(
+            database=target_database,
+            schema=target_schema,
+            table=target_table,
+            qualified=target_qualified,
+        ),
+        statement_recorder=statement_recorder,
+    )
+    if isinstance(prepared, ModelExecutionResult):
+        return prepared
+    preparation: _DeltaPreparation = prepared
     context = _context_with_runtime_cursor(context=context, preparation=preparation)
     entry = context.entry
     warnings.extend(_cursor_safety_warnings(entry.cursor_bounds))
@@ -414,6 +421,45 @@ def execute_incremental_entry(
     )
 
 
+def _no_input_rows_result(
+    *,
+    context: ModelMaterializationContext,
+    targets: _IncrementalTarget,
+    input_names: tuple[str, ...],
+    waiting_on_empty_inputs: bool,
+    statement_recorder: StatementRecorder,
+) -> ModelExecutionResult:
+    """Leave the destination unchanged when the cursor inputs have no rows, then audit it."""
+
+    entry: ModelPlanEntry = context.entry
+    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    if final_audit_run.has_error:
+        return replace(
+            build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.AUDIT,
+                error=f"final audit for '{entry.name}' failed with severity level: error",
+                promoted_relation=targets.qualified,
+                warnings=[],
+                audit_results=list(final_audit_run.results),
+                statement_recorder=statement_recorder,
+            ),
+            empty_cursor_inputs=input_names,
+            waiting_on_empty_inputs=waiting_on_empty_inputs,
+        )
+    return ModelExecutionResult(
+        model_name=entry.name,
+        status=ExecutionStatus.SUCCESS,
+        promoted_relation=targets.qualified,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+        empty_cursor_inputs=input_names,
+        waiting_on_empty_inputs=waiting_on_empty_inputs,
+        audit_results=final_audit_run.results,
+        lifecycle_events=statement_recorder.snapshot(),
+    )
+
+
 def _prepare_delta_relation(
     *,
     context: ModelMaterializationContext,
@@ -487,12 +533,72 @@ def _resolve_incremental_cursor_bounds(
         watermark_resolver=context.watermark_resolver,
     )
     if runtime_cursor_bounds is None:
-        raise ExecutorInputError(f"runtime cursor bounds could not be resolved for '{entry.name}'")
+        raise cursor_window_unavailable_error(entry=entry)
     return _DeltaPreparation(
         resolved_sql=substitute_cursor_sentinels(
             sql=entry.resolved_sql, bounds=runtime_cursor_bounds
         ),
         runtime_cursor_bounds=runtime_cursor_bounds,
+    )
+
+
+def _prepare_cursor_window(
+    *,
+    context: ModelMaterializationContext,
+    targets: _IncrementalTarget,
+    statement_recorder: StatementRecorder,
+) -> _DeltaPreparation | ModelExecutionResult:
+    """Settle the cursor window before hooks or staging, or return the run's final result."""
+
+    entry: ModelPlanEntry = context.entry
+    if entry.empty_cursor_inputs:
+        return _no_input_rows_result(
+            context=context,
+            targets=targets,
+            input_names=entry.empty_cursor_inputs,
+            waiting_on_empty_inputs=entry.waiting_on_empty_inputs,
+            statement_recorder=statement_recorder,
+        )
+    try:
+        preparation: _DeltaPreparation = _resolve_incremental_cursor_bounds(
+            context=context,
+            target_database=targets.database,
+            target_schema=targets.schema,
+            target_table=targets.table,
+            target_qualified=targets.qualified,
+        )
+        if _lacks_required_cursor_window(
+            entry=_context_with_runtime_cursor(context=context, preparation=preparation).entry
+        ):
+            raise cursor_window_unavailable_error(entry=entry)
+    except EmptyCursorInputsError as exc:
+        return _no_input_rows_result(
+            context=context,
+            targets=targets,
+            input_names=exc.input_names,
+            waiting_on_empty_inputs=exc.waiting_on_empty_inputs,
+            statement_recorder=statement_recorder,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.STAGING,
+            error=exc,
+            warnings=[],
+            audit_results=[],
+            statement_recorder=statement_recorder,
+            hook_results=[],
+        )
+    return preparation
+
+
+def _lacks_required_cursor_window(*, entry: ModelPlanEntry) -> bool:
+    """Return whether a cursor delete would have no window, before any staging work."""
+
+    return (
+        entry.incremental_strategy == IncrementalStrategy.DELETE_INSERT
+        and entry.cursor_column is not None
+        and entry.cursor_bounds is None
     )
 
 
@@ -772,11 +878,7 @@ def _execute_dml(
         cursor_column: str | None = entry.cursor_column
         if cursor_column is not None:
             if cursor_start is None or cursor_end is None:
-                raise ExecutorInputError(
-                    f"cursor-based delete_insert for '{entry.name}' requires both "
-                    f"cursor_start and cursor_end but got "
-                    f"cursor_start={cursor_start}, cursor_end={cursor_end}"
-                )
+                raise cursor_window_unavailable_error(entry=entry)
             return adapter.delete_insert_cursor(
                 connection=connection,
                 destination=target_qualified,

@@ -151,7 +151,33 @@ MODEL (
 
 SQLBuild uses these to determine the replay window. With multiple listed inputs, the end is the conservative common watermark: the minimum of their maxima. This prevents a faster input from advancing the model beyond data available from a slower input.
 
-On a first build, SQLBuild derives the interval from the declared cursor inputs and cursor policy. If it cannot establish a valid interval, the build fails before mutating the destination.
+On a first build, SQLBuild derives the interval from the declared cursor inputs and cursor policy. SQLBuild decides the window while planning, before any staging or delta relation is created. When an input is built earlier in the same run, the window is decided just before the model runs, still before any staging work.
+
+#### Models with no inputs
+
+A cursor-based model must read at least one input that can bound its window, either listed in `cursor_inputs` or read through `__ref()`, `__source()` or `__seed()`. A model that reads none of them could build once but could never work out a window afterwards, so compile rejects it with `P011`:
+
+```
+error[P011]: incremental model 'daily_revenue' reads no inputs, so builds after the first cannot work out their cursor window
+  --> models/finance/daily_revenue.sql:5:3
+    |
+  5 |   cursor revenue_date,
+    |   ^^^^^^^^^^^^^^^^^^^
+  = help: read the data through __ref(), __source() or __seed() so its cursor can bound the window, or use materialized table if the model has no upstream data
+```
+
+A `rolling_window` microbatch model takes its window from the invocation time, so it may read no inputs.
+
+#### Inputs with no rows
+
+Empty inputs are normal: a new development or CI environment, a source in the middle of a reload, or an upstream model that is legitimately empty. When a listed input has no rows, there is no new data to process:
+
+- On an incremental run, the model succeeds without changing its destination, and the plan and build output show the reason, for example `no input rows (stg_payments.paid_at)`. The model's audits still run against the unchanged destination, and downstream models continue. The `--json` build output lists the inputs as `empty_cursor_inputs`, and `sqb plan --json` reports `"resolution_status": "no_input_rows"` with the same inputs in `empty_inputs`.
+- When only some listed inputs are empty, the window still waits for them, so the model makes no progress even though other inputs have new rows. The plan and build output show this as a warning, for example `waiting on empty input stg_refunds.refunded_at; other inputs have new rows`. The build counts it in the summary's `WARN=` total and lists it in the asset's `warnings` in `--json` output, and the JSON output adds `"waiting_on_empty_inputs": true`. The exit code and model status do not change. A watermark microbatch model with `cursor_watermark_mode any` instead progresses from the inputs that have rows.
+- On a first build, the destination is created empty so that models that reference it can build. The next build derives its window from the inputs as usual.
+- A rebuild that would replace an existing destination, such as a query change with `replay_on_change full` or a microbatch `--full-refresh`, fails instead of leaving the table empty. Load the inputs first, or set the window explicitly with `--start-cursor-ts` and `--end-cursor-ts` (or the `-int` forms).
+
+Use [source freshness](/docs/concepts/sources) checks and source audits to catch an input that should not be empty. If SQLBuild cannot read the cursor bounds of an input at all, the plan fails with `S302`, naming the model and its inputs.
 
 ### Cursor bounds in model SQL
 

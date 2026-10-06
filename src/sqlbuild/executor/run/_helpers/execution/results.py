@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.compiler.planner.main.cursor_window.waiting_on_empty_inputs_display import (
+    format_waiting_on_empty_inputs,
+)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     FutureCursorSafetyEvidence,
@@ -188,3 +193,18 @@ def _fallback_code_for_phase(phase: ExecutionPhase) -> str:
     if phase == ExecutionPhase.CUSTOM_MATERIALIZATION:
         return RUN_CUSTOM_MATERIALIZATION_FAILED_CODE
     return RUN_UNKNOWN_FAILED_CODE
+
+
+def with_waiting_on_empty_inputs_warning(result: ModelExecutionResult) -> ModelExecutionResult:
+    """Count a cursor window stalled on empty inputs as a model warning."""
+
+    if (
+        result.status != ExecutionStatus.SUCCESS
+        or not result.waiting_on_empty_inputs
+        or not result.empty_cursor_inputs
+    ):
+        return result
+    message: str = format_waiting_on_empty_inputs(result.empty_cursor_inputs)
+    if message in result.warning_messages:
+        return result
+    return replace(result, warning_messages=(*result.warning_messages, message))

@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
@@ -24,6 +24,10 @@ from sqlbuild.compiler.planner._helpers.resolve.config import (
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
+    cursor_inputs_without_rows,
+    empty_cursor_window,
+    empty_input_rebuild_refusal,
+    unreadable_cursor_inputs_error,
     without_destination_cursor,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (
@@ -256,18 +260,40 @@ def _compute_model_cursor_bounds(
         set(resolve_cursor_input_roles(model=model).watermark_inputs)
         & runtime_cursor_producer_names
     )
-    if (
-        not full_refresh
-        and not runtime_owned
-        and cursor_snapshot is not None
-        and not cursor_snapshot.watermarks_available
-    ):
-        unavailable: str = ", ".join(cursor_snapshot.unavailable_watermark_tags)
-        raise PlannerInputError(
-            f"model '{model.name}': required cursor watermark bounds are unavailable: "
-            f"{unavailable}",
-            code="S302",
-        )
+    if not full_refresh and not runtime_owned and cursor_snapshot is not None:
+        empty_inputs: tuple[str, ...] = cursor_inputs_without_rows(
+            cursor_snapshot=cursor_snapshot
+        ).input_names
+        if (
+            empty_inputs
+            and replaces_relation
+            and (
+                _destination_exists(model=model, snapshot=snapshot)
+                or _history_redirected(model=model, cursor_snapshot=cursor_snapshot)
+            )
+        ):
+            message, help_text = empty_input_rebuild_refusal(
+                model_name=model.name,
+                input_names=empty_inputs,
+                cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+            )
+            raise PlannerInputError(message, code="S302", help=help_text)
+        if empty_inputs:
+            return empty_cursor_window(
+                cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+                cursor_start=get_config_cursor_bound(
+                    values=model.config.values, key="cursor_start"
+                ),
+            )
+        if not cursor_snapshot.watermarks_available:
+            raise unreadable_cursor_inputs_error(
+                model_name=model.name,
+                cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+                input_names=(
+                    cursor_snapshot.unreadable_input_names
+                    or cursor_snapshot.unavailable_watermark_tags
+                ),
+            )
 
     if full_refresh:
         return None
@@ -318,6 +344,26 @@ def _compute_model_cursor_bounds(
             start_cursor_override is not None and end_cursor_override is not None
         ),
         input_evidence=cursor_snapshot.input_evidence,
+    )
+
+
+def _destination_exists(*, model: CompiledModel, snapshot: WarehouseSnapshot) -> bool:
+    """Return whether the model's resolved destination, alias included, exists in full identity."""
+
+    relation: RelationInfo | None = snapshot.existing_relations.get(model.name)
+    return relation is not None and relation.identity == RelationLookup.key(
+        database=model.destination.database,
+        schema=model.destination.schema,
+        name=model.destination.name,
+    )
+
+
+def _history_redirected(*, model: CompiledModel, cursor_snapshot: ModelCursorSnapshot) -> bool:
+    """Return whether the model's cursor history lives in a relation other than its destination."""
+
+    return (
+        cursor_snapshot.target_relation is not None
+        and cursor_snapshot.target_relation != model.destination.qualified_name
     )
 
 

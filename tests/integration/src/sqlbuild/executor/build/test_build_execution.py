@@ -770,7 +770,11 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
                     "  cursor_type timestamp,\n"
                     "  cursor_grain second,\n"
                     ");\n\n"
-                    "SELECT * FROM raw_orders"
+                    'SELECT * FROM __source("raw_orders")'
+                ),
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+                    "    schema: main\n    table: raw_orders\n"
                 ),
             },
             setup_sql=(

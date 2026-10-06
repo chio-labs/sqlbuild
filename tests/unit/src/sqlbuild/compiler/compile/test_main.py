@@ -294,6 +294,11 @@ SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
             ),
             expected_model_references=((),),
             expected_audit_references=(),
+            expected_diagnostic_codes=("P011",),
+            expected_diagnostic_messages=(
+                "incremental model 'orders' reads no inputs, so builds after the first "
+                "cannot work out their cursor window",
+            ),
         ),
         BuildCompileInputsTestCase(
             description="does not require snapshot generated validity columns in enforced contract",
@@ -893,6 +898,11 @@ append_cursor_inclusive = false
             expected_effective_vars={},
             expected_model_references=((),),
             expected_audit_references=(),
+            expected_diagnostic_codes=("P011",),
+            expected_diagnostic_messages=(
+                "incremental model 'orders' reads no inputs, so builds after the first "
+                "cannot work out their cursor window",
+            ),
         ),
         BuildCompileInputsTestCase(
             description="merges row diff config from project defaults and model header",
@@ -1208,6 +1218,11 @@ select 1
             environment_variables={"CI": "1", "APPEND_INCLUSIVE": "0"},
             expected_model_references=((),),
             expected_audit_references=(),
+            expected_diagnostic_codes=("P011",),
+            expected_diagnostic_messages=(
+                "incremental model 'orders' reads no inputs, so builds after the first "
+                "cannot work out their cursor window",
+            ),
         ),
         BuildCompileInputsTestCase(
             description="expands config templates in model header metadata fields",

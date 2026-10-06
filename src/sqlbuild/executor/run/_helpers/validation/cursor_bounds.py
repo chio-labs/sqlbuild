@@ -12,6 +12,15 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
+from sqlbuild.compiler.planner.main.cursor_window.cursor_window_override_flags import (
+    cursor_window_override_flags,
+)
+from sqlbuild.compiler.planner.main.cursor_window.empty_cursor_input_decision import (
+    decide_empty_cursor_inputs,
+)
+from sqlbuild.compiler.planner.main.cursor_window.empty_input_rebuild_refusal import (
+    empty_input_rebuild_refusal,
+)
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import (
     apply_typed_cursor_replay_policy,
 )
@@ -22,6 +31,7 @@ from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     CursorInputRelation,
     Duration,
+    EmptyCursorInputDecision,
     MaximumStartPolicyInputs,
     ModelCursorSnapshot,
     ModelPlanEntry,
@@ -55,6 +65,7 @@ from sqlbuild.cursor_algebra.models import (
 )
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode, WatermarkResolver
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
@@ -92,6 +103,7 @@ def build_runtime_cursor_spec(
             RuntimeCursorInputRelation(
                 relation=relation.relation,
                 cursor_column=relation.cursor_column,
+                input_name=relation.input_name,
                 cursor_grain=relation.cursor_grain,
                 is_model_backed=relation.is_model_backed,
                 is_runtime_produced=relation.is_runtime_produced,
@@ -222,10 +234,6 @@ def resolve_runtime_cursor_bounds(
         if read_minimum and minimum is None and terminal_start is not None:
             minimum = terminal_start
         if maximum is None or (read_minimum and minimum is None):
-            if spec.cursor_watermark_mode == RuntimeCursorWatermarkMode.ALL:
-                raise ExecutorInputError(
-                    f"required cursor watermark is empty: {relation_column[0]}.{relation_column[1]}"
-                )
             continue
         if minimum is not None:
             upstream_mins.append(minimum)
@@ -252,6 +260,11 @@ def resolve_runtime_cursor_bounds(
                 maximum=maximum,
             )
         )
+    _raise_for_empty_inputs(
+        physical_inputs=physical_inputs,
+        input_evidence=input_evidence,
+        waits_for_every_input=_waits_for_every_input(spec=spec),
+    )
     if not upstream_maxes:
         return None
     upstream_min: CursorScalar | None = (
@@ -374,6 +387,76 @@ def resolve_runtime_cursor_bounds(
         cursor_end=spec.cursor_end,
         cursor_type=cursor_type,
     )
+
+
+def cursor_window_unavailable_error(*, entry: ModelPlanEntry) -> ExecutorInputError:
+    """Report a missing cursor window in terms of the model and its cursor inputs."""
+
+    input_names: str = ", ".join(
+        _input_display_name(relation=relation) for relation in entry.cursor_input_relations
+    )
+    return ExecutorInputError(
+        f"model '{entry.name}' cannot work out its cursor window: no cursor bounds were found "
+        f"for its inputs ({input_names or 'none'})",
+        help=(
+            "check that the inputs exist and have their cursor columns, or set the window "
+            f"explicitly with {cursor_window_override_flags(cursor_type=entry.cursor_type)}"
+        ),
+    )
+
+
+def empty_input_rebuild_error(
+    *, entry: ModelPlanEntry, input_names: tuple[str, ...]
+) -> ExecutorInputError:
+    """Refuse to replace an existing destination with the result of empty cursor inputs."""
+
+    message, help_text = empty_input_rebuild_refusal(
+        model_name=entry.name, input_names=input_names, cursor_type=entry.cursor_type
+    )
+    return ExecutorInputError(message, code="S302", help=help_text)
+
+
+def _raise_for_empty_inputs(
+    *,
+    physical_inputs: tuple[tuple[tuple[str, str], RuntimeCursorInputRelation], ...],
+    input_evidence: list[CursorInputEvidence],
+    waits_for_every_input: bool,
+) -> None:
+    """Signal empty inputs with the same decision the planner applies to its own windows."""
+
+    with_rows: set[tuple[str, str]] = {
+        (evidence.relation, evidence.cursor_column) for evidence in input_evidence
+    }
+    decision: EmptyCursorInputDecision = decide_empty_cursor_inputs(
+        empty_input_names=tuple(
+            _input_display_name(relation=cursor_input)
+            for relation_column, cursor_input in physical_inputs
+            if relation_column not in with_rows
+        ),
+        waits_for_every_input=waits_for_every_input,
+        inputs_with_rows=bool(with_rows),
+        has_window_start=bool(with_rows),
+    )
+    if decision.input_names:
+        raise EmptyCursorInputsError(
+            input_names=decision.input_names,
+            waiting_on_empty_inputs=decision.waiting_on_empty_inputs,
+        )
+
+
+def _waits_for_every_input(*, spec: RuntimeCursorSpec) -> bool:
+    """Return whether every cursor input must have rows, matching planner-owned windows."""
+
+    if spec.cursor_watermark_mode == RuntimeCursorWatermarkMode.ANY:
+        return False
+    return spec.microbatch_strategy != MicrobatchStrategy.ROLLING_WINDOW
+
+
+def _input_display_name(*, relation: CursorInputRelation | RuntimeCursorInputRelation) -> str:
+    """Label one cursor input by its project name, falling back to the physical relation."""
+
+    relation_name: str = relation.input_name or relation.relation.rsplit(".", 1)[-1].strip('"`[]')
+    return f"{relation_name}.{relation.cursor_column}"
 
 
 def _clamp_cursor_end(

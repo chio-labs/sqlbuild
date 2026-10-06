@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
+    EmptyCursorInputDecision,
     GraphIdentityNode,
     GraphNodeKey,
     MissingUpstream,
@@ -145,6 +146,7 @@ class CursorQueryFailureTestCase:
     expected_results: dict[str, str]
     expected_failure_progress: str
     expected_success_progress: str
+    expected_failed_tags: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -918,3 +920,13 @@ class MissingUpstreamMessageTestCase:
     missing: tuple[MissingUpstream, ...]
     edge_origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str]
     expected_message: str
+
+
+@dataclass(frozen=True)
+class EmptyCursorInputsSnapshotTestCase:
+    description: str
+    results: dict[str, str]
+    failed_tags: frozenset[str]
+    expected_empty_input_names: tuple[str, ...]
+    expected_unreadable_input_names: tuple[str, ...]
+    expected_decision: EmptyCursorInputDecision

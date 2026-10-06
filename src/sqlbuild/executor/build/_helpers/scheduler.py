@@ -43,6 +43,7 @@ from sqlbuild.executor.run.main._execute import (
     execute_snapshot_entry,
     execute_table_entry,
     execute_view_entry,
+    with_waiting_on_empty_inputs_warning,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -80,6 +81,35 @@ def _build_worker_failure_completion(
 
 
 def _dispatch_model(
+    *,
+    context: ModelMaterializationContext,
+    promotion_mode: TablePromotionMode,
+    snapshots: SnapshotsConfig,
+    allow_snapshot_schema_change: bool,
+    custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
+    target: str = "",
+    effective_vars: dict[str, object] | None = None,
+    warehouse_relations: dict[str, RelationInfo] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> ModelExecutionResult:
+    """Route a model to the correct executor, then report a stalled cursor window as a warning."""
+
+    return with_waiting_on_empty_inputs_warning(
+        _dispatch_model_entry(
+            context=context,
+            promotion_mode=promotion_mode,
+            snapshots=snapshots,
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
+            custom_materializations=custom_materializations,
+            target=target,
+            effective_vars=effective_vars,
+            warehouse_relations=warehouse_relations,
+            on_progress=on_progress,
+        )
+    )
+
+
+def _dispatch_model_entry(
     *,
     context: ModelMaterializationContext,
     promotion_mode: TablePromotionMode,

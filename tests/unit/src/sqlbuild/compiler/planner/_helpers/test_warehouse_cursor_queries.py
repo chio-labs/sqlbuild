@@ -4,16 +4,18 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.compiler.planner._helpers.resolve.cursor import cursor_inputs_without_rows
 from sqlbuild.compiler.planner._helpers.warehouse import snapshot as snapshot_module
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _assemble_cursor_snapshots,
     _build_cursor_queries,
     _CursorModelInfo,
+    _CursorQueryResults,
     _execute_cursor_queries,
     _PhysicalCursorQuery,
     _UpstreamCursorInfo,
 )
-from sqlbuild.compiler.planner.models import ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import EmptyCursorInputDecision, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorType
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
@@ -24,6 +26,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorQueryGroupingTestCase,
     CursorQueryShapeTestCase,
     CursorSnapshotAvailabilityTestCase,
+    EmptyCursorInputsSnapshotTestCase,
 )
 
 
@@ -235,7 +238,7 @@ def test_given_requested_bounds_when_executing_then_uses_one_standalone_query_wi
         connection=object(),
         execute=_execute,
         on_progress=progress.append,
-    )
+    ).values
 
     assert {
         key: render(value=value) for key, value in results.items()
@@ -260,6 +263,7 @@ def test_given_requested_bounds_when_executing_then_uses_one_standalone_query_wi
             expected_success_progress=(
                 "Inspected cursor bounds (2/2): schema.good.ts [min,max] (0.50s)"
             ),
+            expected_failed_tags=frozenset({"bad__max"}),
         )
     ],
     ids=lambda case: case.description,
@@ -287,7 +291,7 @@ def test_given_one_failed_physical_read_when_executing_then_reports_failure_and_
         ),
     ]
 
-    results: dict[str, CursorScalar] = _execute_cursor_queries(
+    query_results: _CursorQueryResults = _execute_cursor_queries(
         queries=queries,
         connection=object(),
         execute=execute,
@@ -295,8 +299,9 @@ def test_given_one_failed_physical_read_when_executing_then_reports_failure_and_
     )
 
     assert {
-        key: render(value=value) for key, value in results.items()
+        key: render(value=value) for key, value in query_results.values.items()
     } == test_case.expected_results
+    assert query_results.failed_tags == test_case.expected_failed_tags
     assert len(execute.sql) == 2
     assert progress[1] == test_case.expected_failure_progress
     assert progress[3] == test_case.expected_success_progress
@@ -346,7 +351,7 @@ def test_given_fetch_failure_when_executing_then_reports_failure_and_continues(
         connection=object(),
         execute=execute,
         on_progress=progress.append,
-    )
+    ).values
 
     assert {
         key: render(value=value) for key, value in results.items()
@@ -434,6 +439,93 @@ def test_given_partial_watermark_results_when_assembling_then_model_snapshot_fai
     assert snapshot.watermarks_available is test_case.expected_available
     assert snapshot.expected_watermark_count == 2
     assert snapshot.unavailable_watermark_tags == test_case.expected_unavailable_tags
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EmptyCursorInputsSnapshotTestCase(
+            description="one empty input leaves no cursor window",
+            results={"model__good__min": "2024-01-01", "model__good__max": "2024-02-01"},
+            failed_tags=frozenset(),
+            expected_empty_input_names=("bad_events.event_time",),
+            expected_unreadable_input_names=(),
+            expected_decision=EmptyCursorInputDecision(
+                input_names=("bad_events.event_time",), waiting_on_empty_inputs=True
+            ),
+        ),
+        EmptyCursorInputsSnapshotTestCase(
+            description="every input empty leaves no cursor window",
+            results={},
+            failed_tags=frozenset(),
+            expected_empty_input_names=("good_events.event_time", "bad_events.event_time"),
+            expected_unreadable_input_names=(),
+            expected_decision=EmptyCursorInputDecision(
+                input_names=("good_events.event_time", "bad_events.event_time")
+            ),
+        ),
+        EmptyCursorInputsSnapshotTestCase(
+            description="an unreadable input is a failure rather than an empty input",
+            results={},
+            failed_tags=frozenset({"model__bad__min", "model__bad__max"}),
+            expected_empty_input_names=("good_events.event_time",),
+            expected_unreadable_input_names=("bad_events.event_time",),
+            expected_decision=EmptyCursorInputDecision(),
+        ),
+        EmptyCursorInputsSnapshotTestCase(
+            description="inputs with rows are neither empty nor unreadable",
+            results={
+                "model__good__min": "2024-01-01",
+                "model__good__max": "2024-02-01",
+                "model__bad__min": "2024-01-02",
+                "model__bad__max": "2024-02-02",
+            },
+            failed_tags=frozenset(),
+            expected_empty_input_names=(),
+            expected_unreadable_input_names=(),
+            expected_decision=EmptyCursorInputDecision(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_empty_or_failed_watermark_reads_when_assembling_then_names_the_inputs(
+    test_case: EmptyCursorInputsSnapshotTestCase,
+) -> None:
+    info: _CursorModelInfo = _CursorModelInfo(
+        model_name="model",
+        target_tag=None,
+        target_relation=None,
+        cursor_column="event_time",
+        upstreams=(
+            _UpstreamCursorInfo(
+                tag_min="model__good__min",
+                tag_max="model__good__max",
+                relation="raw.good_events",
+                cursor_column="event_time",
+                input_name="good_events",
+            ),
+            _UpstreamCursorInfo(
+                tag_min="model__bad__min",
+                tag_max="model__bad__max",
+                relation="raw.bad_events",
+                cursor_column="event_time",
+                input_name="bad_events",
+            ),
+        ),
+    )
+
+    snapshot: ModelCursorSnapshot = _assemble_cursor_snapshots(
+        cursor_models=[info],
+        results={
+            key: parse(raw=value, cursor_type=CursorType.TIMESTAMP)
+            for key, value in test_case.results.items()
+        },
+        failed_tags=test_case.failed_tags,
+    )["model"]
+
+    assert snapshot.empty_input_names == test_case.expected_empty_input_names
+    assert snapshot.unreadable_input_names == test_case.expected_unreadable_input_names
+    assert cursor_inputs_without_rows(cursor_snapshot=snapshot) == test_case.expected_decision
 
 
 if __name__ == "__main__":

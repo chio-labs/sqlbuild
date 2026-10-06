@@ -22,6 +22,7 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild.compiler.planner.main.cursor_window.empty_cursor_window import empty_cursor_window
 from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
     aligned_timestamp_bounds,
 )
@@ -91,6 +92,7 @@ from sqlbuild.executor.run._helpers.materializations.incremental import (
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
+    empty_input_rebuild_error,
     has_authoritative_cursor_override,
     has_runtime_owned_cursor_watermarks,
     resolve_effective_timestamp_grain,
@@ -98,6 +100,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import (
     BatchWindow,
     FinalAuditRun,
@@ -165,8 +168,6 @@ from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
-_EMPTY_INTEGER_CURSOR_BOUND: str = "0"
-_EMPTY_TIMESTAMP_CURSOR_BOUND: str = "1970-01-01T00:00:00"
 _UNACCOUNTED_COUNT_CHUNK_SIZE: int = 100
 
 
@@ -180,6 +181,8 @@ class _MicrobatchPlan:
     early_exit: ModelExecutionResult | None = None
     runtime_discovery: bool = False
     resolved_intervals: tuple[MicrobatchInterval, ...] = ()
+    empty_cursor_inputs: tuple[str, ...] = ()
+    waiting_on_empty_inputs: bool = False
 
 
 @dataclass(frozen=True)
@@ -437,7 +440,7 @@ def execute_microbatch_entry(
     )
     history_context = replace(history_context, resolution_reason=resolution_reason)
     state = _with_reconciliation_warnings(context=context, state=state, history=history_context)
-    if not batch_plan.batches:
+    if not batch_plan.batches and not batch_plan.empty_cursor_inputs:
         state = replace(state, warnings=[*state.warnings, "no batches to process"])
     state, safety_failure = _enforce_microbatch_safety_limit(
         context=context, state=state, batch_plan=batch_plan
@@ -628,6 +631,8 @@ def execute_microbatch_entry(
         ),
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
+        empty_cursor_inputs=batch_plan.empty_cursor_inputs,
+        waiting_on_empty_inputs=batch_plan.waiting_on_empty_inputs,
         future_cursor_safety=(resolved_range.future_safety if resolved_range is not None else None),
         maximum_start_safety=(
             resolved_range.maximum_start_safety if resolved_range is not None else None
@@ -682,6 +687,8 @@ def _no_work_microbatch_result(
         ),
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
+        empty_cursor_inputs=batch_plan.empty_cursor_inputs,
+        waiting_on_empty_inputs=batch_plan.waiting_on_empty_inputs,
         warning_messages=tuple(state.warnings),
         lifecycle_events=state.statement_recorder.snapshot(),
         skip_reason=(
@@ -3198,6 +3205,8 @@ def _plan_microbatch_windows(
         or (is_full_refresh and entry.microbatch_strategy != MicrobatchStrategy.ROLLING_WINDOW)
     )
     microbatch_range: CursorBounds | None = entry.microbatch_range
+    empty_cursor_inputs: tuple[str, ...] = entry.empty_cursor_inputs
+    waiting_on_empty_inputs: bool = entry.waiting_on_empty_inputs
     if runtime_discovery:
         if entry.cursor_column is None:
             return _MicrobatchPlan(
@@ -3225,6 +3234,31 @@ def _plan_microbatch_windows(
                 on_progress=on_progress,
                 watermark_resolver=context.watermark_resolver,
             )
+        except EmptyCursorInputsError as exc:
+            if (
+                is_full_refresh
+                and entry.microbatch_strategy == MicrobatchStrategy.WATERMARK
+                and cached_relation_exists(
+                    adapter=adapter,
+                    connection=connection,
+                    database=entry.destination.database,
+                    schema=entry.destination.schema,
+                    name=entry.destination.name,
+                )
+            ):
+                return _MicrobatchPlan(
+                    early_exit=build_failed_result(
+                        entry=entry,
+                        phase=ExecutionPhase.STAGING,
+                        error=empty_input_rebuild_error(entry=entry, input_names=exc.input_names),
+                        warnings=warnings,
+                        audit_results=audit_results,
+                        statement_recorder=statement_recorder,
+                    )
+                )
+            microbatch_range = None
+            empty_cursor_inputs = exc.input_names
+            waiting_on_empty_inputs = exc.waiting_on_empty_inputs
         except Exception as exc:
             return _MicrobatchPlan(
                 early_exit=build_failed_result(
@@ -3305,6 +3339,8 @@ def _plan_microbatch_windows(
         effective_batch_size=effective_batch_size,
         resolved_range=resolved_range,
         runtime_discovery=runtime_discovery,
+        empty_cursor_inputs=empty_cursor_inputs,
+        waiting_on_empty_inputs=waiting_on_empty_inputs,
     )
 
 
@@ -3325,14 +3361,11 @@ def _batches_for_intervals(
 
 
 def _empty_microbatch_bound(*, entry: ModelPlanEntry) -> CursorScalar:
-    if entry.cursor_start is not None:
-        return parse(
-            raw=entry.cursor_start,
-            cursor_type=entry.cursor_type or CursorType.TIMESTAMP,
-        )
-    if entry.cursor_type == CursorType.INTEGER:
-        return IntegerValue(value=int(_EMPTY_INTEGER_CURSOR_BOUND))
-    return TimestampValue(value=datetime.fromisoformat(_EMPTY_TIMESTAMP_CURSOR_BOUND))
+    return _concrete_bound(
+        bound=empty_cursor_window(
+            cursor_type=entry.cursor_type, cursor_start=entry.cursor_start
+        ).start
+    )
 
 
 def _concrete_bound(*, bound: Bound) -> CursorScalar:
