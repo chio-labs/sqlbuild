@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.134.8](https://github.com/chio-labs/sqlbuild/compare/v0.134.7...v0.134.8) (2026-10-06)
+
+
+### Bug Fixes
+
+* **incremental:** reject cursor models with no inputs and allow empty cursor inputs ([#965](https://github.com/chio-labs/sqlbuild/issues/965)) ([a4b86c6](https://github.com/chio-labs/sqlbuild/commit/a4b86c6e17bfa1819739f3a71d92bc07d7c203e8))
+* make model: and column: prefixes optional in sqb rename and sqb mv ([#970](https://github.com/chio-labs/sqlbuild/issues/970)) ([0b11ca6](https://github.com/chio-labs/sqlbuild/commit/0b11ca63abadede9b0db4296cf45f3647fd909f3))
+* show statement and step progress rows only with --debug ([#967](https://github.com/chio-labs/sqlbuild/issues/967)) ([7e2fdd8](https://github.com/chio-labs/sqlbuild/commit/7e2fdd8f872d394ba8e5896c14e637170b29aea3))
+* **snowflake:** create state tables permanent with maximum time travel ([#964](https://github.com/chio-labs/sqlbuild/issues/964)) ([1293e5d](https://github.com/chio-labs/sqlbuild/commit/1293e5df0874b0d02d1dd1e5fb9685fa0795f6de))
+
+
+### Performance Improvements
+
+* **compile:** reuse discovery, analysis and writes after model-only edits ([#971](https://github.com/chio-labs/sqlbuild/issues/971)) ([372e0c1](https://github.com/chio-labs/sqlbuild/commit/372e0c1da8fefcfb383f8c441cc7cd6e5d8f2399))
+
 ## [0.134.7](https://github.com/chio-labs/sqlbuild/compare/v0.134.6...v0.134.7) (2026-10-06)
 
 
