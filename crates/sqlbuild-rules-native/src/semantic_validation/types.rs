@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 pub(crate) type Relations = HashMap<String, Columns>;
 pub(crate) type BindingRequest = (String, Vec<(String, bool)>, Relations);
+/// One analysis SQL with its relation stubs and placeholder defaults.
+pub(crate) type NormalizationRequest = (String, HashMap<String, String>, HashMap<String, String>);
 pub(crate) type DiagnosticRow = (
     String,
     String,

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from sqlbuild.compiler.sql_analysis.types import NativeProjectCatalog
 
 
 @dataclass(frozen=True)
@@ -47,3 +50,33 @@ class PolyglotExplicitGuardTestCase:
     function_depth: int
     maximum_function_depth: int
     expected_error_pattern: str
+
+
+@dataclass(frozen=True)
+class NormalizationBatchTestCase:
+    description: str
+    dialect: str
+    requests: tuple[tuple[str, dict[str, str], dict[str, str]], ...]
+    catalog: Callable[[str], NativeProjectCatalog | None]
+    expected_stubbed_sql: str
+
+
+@dataclass(frozen=True)
+class NormalizationBatchFailureTestCase:
+    description: str
+    dialect: str
+    before: tuple[str, ...]
+    failing: str
+    after: tuple[str, ...]
+    catalog: Callable[[str], NativeProjectCatalog | None]
+    expected_error_type: type[Exception]
+    expected_result_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NormalizationChunkTestCase:
+    description: str
+    valid_count: int
+    failing_index: int
+    catalog: Callable[[str], NativeProjectCatalog | None]
+    expected_error_type: type[Exception]

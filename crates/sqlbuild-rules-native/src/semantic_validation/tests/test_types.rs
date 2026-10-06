@@ -45,3 +45,10 @@ pub(crate) struct TypeLocationTestCase {
     pub(crate) findings: &'static [(&'static str, &'static str)],
     pub(crate) expected_starts: &'static [&'static str],
 }
+
+pub(crate) struct NormalizationBatchTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) requests: &'static [(&'static str, &'static [(&'static str, &'static str)])],
+    pub(crate) expected_failures: &'static [usize],
+}

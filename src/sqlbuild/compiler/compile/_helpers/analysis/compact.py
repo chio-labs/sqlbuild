@@ -33,6 +33,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
 from sqlbuild.compiler.compile._helpers.sharing.binding import (
     binding_query_fields,
     lineage_reference_map,
+    normalized_analysis_sql,
     prepare_binding_queries,
     relation_stubs_collide,
     remembered_shared_results,
@@ -171,7 +172,9 @@ from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._decode_schema_validation import decode_schema_validation
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
-from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import normalize_analysis_sqls
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import (
+    normalize_analysis_sql_results,
+)
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -666,11 +669,18 @@ def _compact_batch_context(
                 if name in inputs.column_nullability_by_table
             },
         )
-    normalized_sqls: list[str] = normalize_analysis_sqls(
-        sqls=inputs.query_sqls,
+    requests: list[tuple[str, None, dict[str, str] | None]] = [
+        (query_sql, None, query_placeholders)
+        for query_sql, query_placeholders in zip(
+            inputs.query_sqls, inputs.placeholders, strict=True
+        )
+    ]
+    results: list[str | Exception] = normalize_analysis_sql_results(
         dialect=dialect,
-        placeholders=inputs.placeholders,
+        requests=requests,
+        catalog=binding_catalog.native if binding_catalog is not None else None,
     )
+    normalized_sqls: list[str] = [normalized_analysis_sql(result) for result in results]
     binding_queries: tuple[PreparedBindingQuery | None, ...] = (
         prepare_binding_queries(
             binding_catalog=binding_catalog,
@@ -697,7 +707,6 @@ def _prepare_compact_analysis_batch(
 ) -> CompactBatchPreparation:
     query_sqls: tuple[str, ...] = inputs.query_sqls
     references: tuple[tuple[CompileSqlReference, ...], ...] = inputs.references
-    placeholders: tuple[dict[str, str] | None, ...] = inputs.placeholders
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
         inputs.column_nullability_by_table
     )
@@ -735,63 +744,40 @@ def _prepare_compact_analysis_batch(
     )
     binding_queries: tuple[PreparedBindingQuery | None, ...] = context.binding_queries
     shared_query_indexes: set[int] = set()
-    for (
-        query_sql,
+    members: list[tuple[dict[str, tuple[CompiledResourceType, str]], dict[str, str]]]
+    stubbed_sqls: dict[int, str | Exception]
+    members, stubbed_sqls = _member_analysis_stubs(
+        inputs=inputs,
+        context=context,
+        binding_schemas=member_binding_schemas,
+    )
+    for index, (
         cleaned_sql,
         query_references,
-        query_placeholders,
         query_recover_cte_facts,
         binding_schema,
         binding_query,
-    ) in zip(
-        query_sqls,
-        normalized_sqls,
-        references,
-        placeholders,
-        recover_cte_facts,
-        member_binding_schemas,
-        binding_queries,
-        strict=True,
-    ):
-        lineage_references: dict[str, tuple[CompiledResourceType, str]] = lineage_reference_map(
-            query_references
+        (lineage_references, canonical_stubs),
+    ) in enumerate(
+        zip(
+            normalized_sqls,
+            references,
+            recover_cte_facts,
+            member_binding_schemas,
+            binding_queries,
+            members,
+            strict=True,
         )
+    ):
         shared: SharedBindingQuery | None = (
             binding_query.shared if binding_query is not None else None
-        )
-        stubbed_reference_names: frozenset[str] = (
-            frozenset()
-            if binding_schema is not None
-            or relation_stubs_collide(cleaned_sql=cleaned_sql, names=lineage_references)
-            else frozenset(lineage_references)
-            - _qualified_reference_names(
-                query_sql=cleaned_sql,
-                reference_names=lineage_references.keys(),
-            )
-        )
-        canonical_stubs: dict[str, str] = (
-            shared.stubs
-            if shared is not None
-            else {
-                name: (
-                    f"{COMPACT_RELATION_STUB_PREFIX}{index}"
-                    if name in stubbed_reference_names
-                    else name
-                )
-                for index, name in enumerate(lineage_references)
-            }
         )
         analysis_sql: str = (
             shared.sql
             if shared is not None
             else cleaned_sql
             if binding_schema is not None
-            else _cleaned_analysis_sql(
-                query_sql=query_sql,
-                placeholders=query_placeholders,
-                dialect=dialect,
-                relation_stubs=canonical_stubs,
-            )
+            else normalized_analysis_sql(stubbed_sqls[index])
         )
         query: dict[str, object] = {
             "sql": analysis_sql,
@@ -918,6 +904,86 @@ def _prepare_compact_analysis_batch(
         binding_catalog=binding_catalog,
         shared_query_indexes=frozenset(shared_query_indexes),
     )
+
+
+def _member_analysis_stubs(
+    *,
+    inputs: CompactBatchInputs,
+    context: CompactBatchContext,
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...],
+) -> tuple[
+    list[tuple[dict[str, tuple[CompiledResourceType, str]], dict[str, str]]],
+    dict[int, str | Exception],
+]:
+    """Return each member's relation stubs and, in one native batch, its stubbed SQL."""
+
+    members: list[tuple[dict[str, tuple[CompiledResourceType, str]], dict[str, str]]] = []
+    stubbed_requests: dict[int, tuple[str, dict[str, str], dict[str, str] | None]] = {}
+    for index, (
+        query_sql,
+        cleaned_sql,
+        query_references,
+        query_placeholders,
+        member_schema,
+        member_query,
+    ) in enumerate(
+        zip(
+            inputs.query_sqls,
+            context.normalized_sqls,
+            inputs.references,
+            inputs.placeholders,
+            binding_schemas,
+            context.binding_queries,
+            strict=True,
+        )
+    ):
+        member: tuple[dict[str, tuple[CompiledResourceType, str]], dict[str, str]] = (
+            _member_relation_stubs(
+                cleaned_sql=cleaned_sql,
+                references=query_references,
+                binding_schema=member_schema,
+                binding_query=member_query,
+            )
+        )
+        members.append(member)
+        if member_schema is None and (member_query is None or member_query.shared is None):
+            stubbed_requests[index] = (query_sql, member[1], query_placeholders)
+    stubbed_sqls: list[str | Exception] = normalize_analysis_sql_results(
+        dialect=inputs.inference_profile.sql_analysis_dialect,
+        requests=tuple(stubbed_requests.values()),
+        catalog=(context.binding_catalog.native if context.binding_catalog is not None else None),
+    )
+    return members, dict(zip(stubbed_requests, stubbed_sqls, strict=True))
+
+
+def _member_relation_stubs(
+    *,
+    cleaned_sql: str,
+    references: tuple[CompileSqlReference, ...],
+    binding_schema: dict[str, dict[str, str]] | None,
+    binding_query: PreparedBindingQuery | None,
+) -> tuple[dict[str, tuple[CompiledResourceType, str]], dict[str, str]]:
+    """Return a member's lineage references and the relation names its analysis SQL uses."""
+
+    lineage_references: dict[str, tuple[CompiledResourceType, str]] = lineage_reference_map(
+        references
+    )
+    if binding_query is not None and binding_query.shared is not None:
+        return lineage_references, binding_query.shared.stubs
+    stubbed_reference_names: frozenset[str] = (
+        frozenset()
+        if binding_schema is not None
+        or relation_stubs_collide(cleaned_sql=cleaned_sql, names=lineage_references)
+        else frozenset(lineage_references)
+        - _qualified_reference_names(
+            query_sql=cleaned_sql,
+            reference_names=lineage_references.keys(),
+        )
+    )
+    return lineage_references, {
+        name: f"{COMPACT_RELATION_STUB_PREFIX}{index}" if name in stubbed_reference_names else name
+        for index, name in enumerate(lineage_references)
+    }
 
 
 def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> object:

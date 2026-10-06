@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from scripts.cold_compile_performance.models import RandomDagProject
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -393,6 +394,9 @@ class FunctionArgumentTypeCase:
 
 
 type CompileOutcome = tuple[int, dict[str, object], dict[str, bytes]]
+type PreparedCompile = tuple[
+    CompileOutcome, tuple[str, ...], dict[str, object | None], tuple[bytes, ...]
+]
 
 
 @dataclass(frozen=True)
@@ -477,3 +481,18 @@ class DataflowStartFailureCase:
     expected_error: str
     expected_live_workers: tuple[str, ...]
     expected_notices: int
+
+
+@dataclass(frozen=True)
+class BatchedPreparationCase:
+    description: str
+    write_project: Callable[[Path], tuple[str, ...]]
+    reshaped: tuple[int, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class PerturbedPreparationCase:
+    description: str
+    project: RandomDagProject
+    expected_payloads_match: bool

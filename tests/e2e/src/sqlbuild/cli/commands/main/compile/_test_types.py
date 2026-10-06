@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tests.integration.src.sqlbuild.compiler.pipeline._test_types import PreparedCompile
+
 
 @dataclass(frozen=True)
 class SourceSemanticBindingCase:
@@ -759,3 +761,13 @@ class RenderLoadNoticeTestCase:
     description: str
     notice_bytes: int
     expected_notice: bool
+
+
+@dataclass(frozen=True)
+class DenseBatchedPreparationTestCase:
+    description: str
+    model_count: int
+    expected_exit_code: int
+
+
+type DensePreparedCompile = PreparedCompile
