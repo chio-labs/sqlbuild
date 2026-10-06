@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from functools import lru_cache
 from inspect import cleandoc
 from pathlib import Path
 from typing import cast
@@ -32,6 +33,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestCase,
     SqlTestParameterDeclaration,
 )
+from sqlbuild.compiler.sql_analysis.constants import SQL_TEXT_START_CHARACTERS
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character,
 )
@@ -72,7 +74,10 @@ _TOP_LEVEL_ACTUAL_CTE_TOKEN_PATTERN: re.Pattern[str] = re.compile(
 _SQL_TEST_CONTEXT: str = "SQL test"
 _OPEN_PAREN: str = "("
 _CLOSE_PAREN: str = ")"
-_STATEMENT_TERMINATOR: str = ";"
+_TRAILING_TERMINATOR_CHARACTERS: str = " \t\r\n\f\v;"
+_LINE_FEED: str = "\n"
+_BLOCK_COMMENT_OPEN: str = "/*"
+_BLOCK_COMMENT_CLOSE: str = "*/"
 _TEST_NAME_HEADER_KEY: str = "name"
 _TEST_MODE_HEADER_KEY: str = "mode"
 _TEST_PARAMETERS_HEADER_KEY: str = "parameters"
@@ -141,38 +146,78 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
 def omitted_ceremonial_select_offset_impl(*, sql: str, syntax: SqlLexicalSyntax) -> int | None:
     """Return the offset after a body's last top-level `)` when only a terminator follows it."""
 
+    tail: str = sql.rstrip(_TRAILING_TERMINATOR_CHARACTERS)
+    if not tail.endswith(_CLOSE_PAREN) and not _may_end_with_comment(tail=tail, syntax=syntax):
+        return None
     first_code: int | None = None
     last_code: int | None = None
-    last_code_depth: int = 0
+    last_close_paren: int | None = None
     depth: int = 0
+    segment_start: int = 0
     index: int = 0
+    pattern: re.Pattern[str] = _code_boundary_pattern(syntax)
     try:
-        while index < len(sql):
+        while (match := pattern.search(sql, index)) is not None:
+            boundary: int = match.start()
             non_code_end: int | None = dialect_non_code_end(
-                sql=sql, start=index, syntax=syntax, context=_SQL_TEST_CONTEXT
+                sql=sql, start=boundary, syntax=syntax, context=_SQL_TEST_CONTEXT
             )
-            if non_code_end is not None:
-                index = non_code_end
+            if non_code_end is None:
+                if sql[boundary] == _OPEN_PAREN:
+                    depth += 1
+                elif sql[boundary] == _CLOSE_PAREN:
+                    depth -= 1
+                    last_close_paren = boundary if depth == 0 else None
+                index = boundary + 1
                 continue
-            character: str = sql[index]
-            if not character.isspace() and character != _STATEMENT_TERMINATOR:
-                first_code = index if first_code is None else first_code
-                depth += {_OPEN_PAREN: 1, _CLOSE_PAREN: -1}.get(character, 0)
-                last_code = index
-                last_code_depth = depth
-            index += 1
+            first_code, last_code = _code_segment_bounds(
+                sql=sql, start=segment_start, end=boundary, first=first_code, last=last_code
+            )
+            segment_start = index = non_code_end
     except CompileInputError:
         return None
-    if first_code is None or last_code is None:
+    first_code, last_code = _code_segment_bounds(
+        sql=sql, start=segment_start, end=len(sql), first=first_code, last=last_code
+    )
+    if first_code is None or last_code is None or last_code != last_close_paren:
         return None
     keyword_end: int = first_code + len(SQL_WITH_KEYWORD)
     if sql[first_code:keyword_end].upper() != SQL_WITH_KEYWORD or (
         keyword_end < len(sql) and is_identifier_character(sql[keyword_end])
     ):
         return None
-    if sql[last_code] != _CLOSE_PAREN or last_code_depth != 0:
-        return None
     return last_code + 1
+
+
+def _may_end_with_comment(*, tail: str, syntax: SqlLexicalSyntax) -> bool:
+    last_line: str = tail.rsplit(_LINE_FEED, 1)[-1]
+    return tail.endswith(_BLOCK_COMMENT_CLOSE) or any(
+        prefix in last_line for prefix in syntax.line_comment_prefixes
+    )
+
+
+@lru_cache(maxsize=16)
+def _code_boundary_pattern(syntax: SqlLexicalSyntax) -> re.Pattern[str]:
+    starts: tuple[str, ...] = (
+        _OPEN_PAREN,
+        _CLOSE_PAREN,
+        _BLOCK_COMMENT_OPEN,
+        *SQL_TEXT_START_CHARACTERS,
+        *syntax.line_comment_prefixes,
+    )
+    ordered: list[str] = sorted(starts, key=lambda start: len(start), reverse=True)
+    return re.compile("|".join(re.escape(start) for start in ordered))
+
+
+def _code_segment_bounds(
+    *, sql: str, start: int, end: int, first: int | None, last: int | None
+) -> tuple[int | None, int | None]:
+    segment: str = sql[start:end]
+    stripped: str = segment.rstrip(_TRAILING_TERMINATOR_CHARACTERS)
+    if not stripped.strip(_TRAILING_TERMINATOR_CHARACTERS):
+        return first, last
+    leading: int = len(segment) - len(segment.lstrip(_TRAILING_TERMINATOR_CHARACTERS))
+    return (start + leading if first is None else first), start + len(stripped) - 1
 
 
 def _parse_headerless_sql_test_file(*, file_path: Path, contents: str) -> DiscoveredSqlTestBlock:

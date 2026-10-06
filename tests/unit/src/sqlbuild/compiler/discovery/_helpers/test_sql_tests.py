@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock
@@ -14,6 +15,9 @@ from sqlbuild.compiler.discovery._helpers.sql.tests import (
     prepare_sql_test_file_headers,
 )
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
+from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
+    omitted_ceremonial_select_offset,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,
@@ -21,8 +25,10 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     SqlTestParameterDeclaration,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ExpectedCountTestCase,
+    OmittedSelectPerformanceTestCase,
     ParseSqlTestCursorWindowTestCase,
     ParseSqlTestFileErrorTestCase,
     ParseSqlTestFileTestCase,
@@ -33,6 +39,52 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     discovered_test_cases,
     discovered_test_parameters,
 )
+
+_FIXTURE_ROW: str = (
+    "  SELECT 1 AS order_id, 'it''s (open)' AS note, \"Qty\" AS qty -- row (comment)\n  UNION ALL\n"
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OmittedSelectPerformanceTestCase(
+            description="authored select one takes the constant-time path",
+            trailing_sql="SELECT 1\n",
+            fixture_rows=12_000,
+            expected_offset_found=False,
+            expected_max_seconds=0.05,
+        ),
+        OmittedSelectPerformanceTestCase(
+            description="omitted select one scans a megabyte body within budget",
+            trailing_sql="",
+            fixture_rows=12_000,
+            expected_offset_found=True,
+            expected_max_seconds=1.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_large_fixture_body_when_locating_omitted_select_then_completes_within_budget(
+    test_case: OmittedSelectPerformanceTestCase,
+) -> None:
+    sql: str = (
+        "WITH __source__orders AS (\n"
+        + _FIXTURE_ROW * test_case.fixture_rows
+        + "  SELECT 2 AS order_id, 'x' AS note, 3 AS qty\n),\n"
+        + "__expected__orders AS (SELECT 1 AS order_id)\n"
+        + test_case.trailing_sql
+    )
+    timings: list[float] = []
+    offset: int | None = None
+
+    for _ in range(3):
+        started: float = time.perf_counter()
+        offset = omitted_ceremonial_select_offset(sql=sql, syntax=SqlLexicalSyntax())
+        timings.append(time.perf_counter() - started)
+
+    assert (offset is not None) == test_case.expected_offset_found
+    assert min(timings) < test_case.expected_max_seconds
 
 
 @pytest.mark.parametrize(

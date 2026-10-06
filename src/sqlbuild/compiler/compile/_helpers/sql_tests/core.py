@@ -263,7 +263,6 @@ def complete_omitted_ceremonial_select(*, sql: str, syntax: SqlLexicalSyntax) ->
     return f"{sql[:offset]}{OMITTED_CEREMONIAL_SELECT_SQL}{sql[offset:]}"
 
 
-@lru_cache(maxsize=4096)
 def _scan_top_level_ctes(
     *,
     sql: str,
