@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -273,6 +274,7 @@ def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
         adapter=adapter,
         connection=connection,
         run_id="run-1",
+        promotion_mode=TablePromotionMode.STAGED,
     )
 
     assert tuple(result.status for result in results) == test_case.expected_statuses

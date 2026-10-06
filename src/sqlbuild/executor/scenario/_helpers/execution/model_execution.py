@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.main._execute import execute_scenario_model
@@ -20,6 +21,7 @@ def execute_scenario_models(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
+    promotion_mode: TablePromotionMode,
 ) -> tuple[ModelExecutionResult, ...]:
     """Execute scenario model entries in planned dependency order."""
 
@@ -38,6 +40,7 @@ def execute_scenario_models(
                 adapter=adapter,
                 connection=connection,
                 run_id=run_id,
+                promotion_mode=promotion_mode,
             )
             if result.status == ExecutionStatus.FAILED:
                 lifecycle.failed(error_code=result.error_code)

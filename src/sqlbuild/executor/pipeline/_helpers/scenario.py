@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,
@@ -23,6 +24,7 @@ from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
+from sqlbuild.executor.pipeline._helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
@@ -100,6 +102,9 @@ def run_scenario_test_pipeline(
         connection_config=connection_config,
         connection_hooks=connection_hooks,
     ) as connection:
+        promotion_mode: TablePromotionMode = resolve_promotion_mode(
+            settings=pipeline_result.project.settings, adapter=adapter
+        )
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioRunResult:
             return execute_scenario_run(
@@ -108,6 +113,7 @@ def run_scenario_test_pipeline(
                 connection=connection,
                 run_id=pipeline_result.project.run_id,
                 retain=retain,
+                promotion_mode=promotion_mode,
             )
 
         def failed(*, scenario_name: str, exc: Exception) -> ScenarioRunResult:
@@ -150,12 +156,17 @@ def run_scenario_local_test_pipeline(
 ) -> tuple[ScenarioRunResult, ...]:
     """Load selected local scenario snapshots into run-scoped DuckDB databases."""
 
+    promotion_mode: TablePromotionMode = resolve_promotion_mode(
+        settings=pipeline_result.project.settings, adapter=adapter
+    )
+
     def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioRunResult:
         return execute_local_scenario_load_only_run(
             project_dir=project_dir,
             scenario_plan=scenario_plan,
             adapter=adapter,
             strict=strict,
+            promotion_mode=promotion_mode,
             capture_adapter=replay_source.capture_adapter,
             capture_dialect=replay_source.capture_dialect,
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -42,6 +43,7 @@ def execute_scenario_run_steps(
     connection: Any,
     run_id: str,
     retain: bool,
+    promotion_mode: TablePromotionMode,
 ) -> ScenarioRunResult:
     """Execute a planned scenario and apply cleanup policy."""
 
@@ -52,6 +54,7 @@ def execute_scenario_run_steps(
             connection=connection,
             run_id=run_id,
             retain=retain,
+            promotion_mode=promotion_mode,
         )
 
 
@@ -62,6 +65,7 @@ def _execute_scenario_run_steps(
     connection: Any,
     run_id: str,
     retain: bool,
+    promotion_mode: TablePromotionMode,
 ) -> ScenarioRunResult:
 
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
@@ -127,6 +131,7 @@ def _execute_scenario_run_steps(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
+        promotion_mode=promotion_mode,
     )
     if _has_failed(model_results):
         return _finish_scenario(

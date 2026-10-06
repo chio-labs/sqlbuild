@@ -22,6 +22,7 @@ def execute_scenario_model(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
+    promotion_mode: TablePromotionMode,
 ) -> ModelExecutionResult:
     """Execute one scenario model entry against scenario-scoped relations."""
 
@@ -82,7 +83,7 @@ def execute_scenario_model(
                 hook_functions=scenario_plan.hook_functions,
             ),
             declared_columns=entry.declared_columns,
-            promotion_mode=TablePromotionMode.IMMEDIATE,
+            promotion_mode=TablePromotionMode.STAGED if entry.contract_enforced else promotion_mode,
         )
     )
 

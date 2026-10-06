@@ -13,6 +13,9 @@ from sqlbuild.executor.scenario._helpers.snapshots.core import (
     build_scenario_snapshot_input_fingerprint,
 )
 from sqlbuild.executor.scenario.models import ScenarioSnapshotInputSpec
+from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
+    ScenarioPromotionE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
@@ -571,3 +574,58 @@ def restamp_scenario_snapshot_capture_adapter(
         capture_dialect=capture_adapter,
     )
     manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+
+def build_promotion_project_files(test_case: ScenarioPromotionE2ETestCase) -> dict[str, str]:
+    """Build a one-model project whose scenario exercises table promotion settings."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "scenario_promotion"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_promotion.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+            f"{test_case.defaults_config}\n"
+            f"{test_case.settings_config}"
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: INTEGER\n"
+            "      - name: amount\n"
+            "        type: INTEGER\n"
+        ),
+        "models/order_totals.sql": (
+            "MODEL (\n"
+            "  description 'Order totals.',\n"
+            "  materialized table,\n"
+            "  sql_analysis false,\n"
+            f"{test_case.model_columns}"
+            ");\n\n"
+            "SELECT\n"
+            "  CAST(SUM(amount) AS BIGINT) AS total_amount,\n"
+            "  CAST(COUNT(*) AS BIGINT) AS order_count\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "tests/scenarios/order_totals_pass.sql": (
+            "SCENARIO (description 'Order totals scenario.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 10 AS amount\n"
+            "  UNION ALL\n"
+            "  SELECT 2 AS id, 5 AS amount\n"
+            "),\n"
+            "__expected__order_totals AS (\n"
+            "  SELECT 15 AS total_amount, 2 AS order_count\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+

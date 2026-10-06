@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
+from sqlbuild.executor.run.main._table_targets import resolve_table_targets
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
 
 
@@ -69,6 +70,18 @@ def collect_scenario_cleanup_targets(
                 materialization_type=materialization_type,
             )
         )
+        if model_entry is not None and MaterializationType.is_table_backed(
+            materialized=materialization_type
+        ):
+            candidates.append(
+                ScenarioCleanupTarget(
+                    kind=ScenarioArtifactKind.MODEL,
+                    logical_name=model_name,
+                    target_relation=resolve_table_targets(
+                        adapter=adapter, entry=model_entry
+                    ).staging_qualified,
+                )
+            )
 
     targets: list[ScenarioCleanupTarget] = []
     seen: set[str] = set()

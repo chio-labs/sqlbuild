@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
@@ -82,8 +83,9 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
         connection: Any,
         run_id: str,
         retain: bool,
+        promotion_mode: TablePromotionMode,
     ) -> ScenarioRunResult:
-        del adapter, connection, run_id, retain
+        del adapter, connection, run_id, retain, promotion_mode
         return ScenarioRunResult(
             scenario_name=scenario_plan.name,
             status=ExecutionStatus.SUCCESS,

@@ -180,3 +180,18 @@ class ScenarioLocalReplayProjectDialectE2ETestCase:
     source_fixture_sql: str
     assertion_sql: str
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioPromotionE2ETestCase:
+    """Test case for scenario table promotion matching build configuration."""
+
+    description: str
+    defaults_config: str
+    settings_config: str
+    model_columns: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expect_staged_promotion: bool
+    unexpected_stdout_fragments: tuple[str, ...] = ("K011", "R004")
+

@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
                 "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
                 "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
                 "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+                "scenario_schema.__sqb_51b385aebe20__model__daily_revenue__staging",
             ),
             unexpected_drop_targets=(
                 "scenario_schema.__sqb_51b385aebe20__model__stale_not_in_plan",
@@ -88,6 +89,7 @@ def test_given_view_model_in_scenario_plan_when_cleaning_up_then_drops_view(
     expected_target: str = test_case.expected_drop_targets[0]
     assert f"DROP VIEW IF EXISTS {expected_target}" in drop_sql
     assert f"DROP TABLE IF EXISTS {expected_target}" not in drop_sql
+    assert all("__staging" not in statement for statement in drop_sql)
 
 
 @pytest.mark.parametrize(
@@ -101,6 +103,7 @@ def test_given_view_model_in_scenario_plan_when_cleaning_up_then_drops_view(
                 "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
                 "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
                 "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+                "scenario_schema.__sqb_51b385aebe20__model__daily_revenue__staging",
             ),
             expected_error_fragment="failed target __sqb_51b385aebe20__seed__country_codes",
         )
