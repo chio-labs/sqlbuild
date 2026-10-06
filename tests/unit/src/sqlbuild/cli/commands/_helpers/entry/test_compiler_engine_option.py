@@ -66,7 +66,7 @@ def test_given_engine_selection_when_parsing_then_flag_value_is_recorded(
             argv=("compile", "--compiler-engine", "rust"),
             environment_value="",
             expected_exit_code=2,
-            expected_error="invalid choice: 'rust' (choose from 'python', 'native')",
+            expected_error="argument --compiler-engine: invalid choice: 'rust'",
         ),
         RejectedCompilerEngineTestCase(
             description="unknown_environment_value",
