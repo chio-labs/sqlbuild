@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.137.0](https://github.com/chio-labs/sqlbuild/compare/v0.136.2...v0.137.0) (2026-10-06)
+
+
+### Features
+
+* **test:** select unit tests by name and require unique test names ([#989](https://github.com/chio-labs/sqlbuild/issues/989)) ([896c452](https://github.com/chio-labs/sqlbuild/commit/896c4524542d259fd2fac7eb0ea9b5ed80c805af))
+
 ## [0.136.2](https://github.com/chio-labs/sqlbuild/compare/v0.136.1...v0.136.2) (2026-10-06)
 
 
