@@ -162,7 +162,7 @@ sqb build --select tag:exports             # by tag
 sqb build --select +orders_export           # with upstreams
 ```
 
-Names are globally unique across models, sources, seeds, functions, loaders, tasks, assets, checks, providers, and hooks.
+Names are globally unique across models, sources, seeds, functions, loaders, tasks, assets, checks, providers, hooks, unit tests, and scenarios.
 
 ## Lifecycle: run, build, check
 

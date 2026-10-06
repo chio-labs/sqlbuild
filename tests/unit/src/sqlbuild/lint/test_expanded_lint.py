@@ -97,12 +97,12 @@ def test_given_lint_context_when_building_then_project_is_discovered_once(
                 "sqlbuild_project.toml": PROJECT_TOML,
                 "models/domain/_constants/value.sql": "CONSTANT (name value, value 12);\n",
                 "models/domain/orders.sql": f"{HEADER}SELECT 1 AS value\n",
-                "tests/unit/other/orders.sql": (
+                "tests/unit/other/orders_test.sql": (
                     "TEST ();\nWITH __expected__orders AS "
                     '(SELECT @const("value") AS value) SELECT 1\n'
                 ),
             },
-            model_path="tests/unit/other/orders.sql",
+            model_path="tests/unit/other/orders_test.sql",
             authored_sql=('WITH __expected__orders AS (SELECT @const("value") AS value) SELECT 1'),
             expected_sql="WITH __expected__orders AS (SELECT 12 AS value) SELECT 1",
         ),

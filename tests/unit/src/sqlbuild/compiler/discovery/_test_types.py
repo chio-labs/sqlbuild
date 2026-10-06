@@ -97,3 +97,11 @@ class DiscoveryRelevantCountTestCase:
     description: str
     expected_item_count: int
     unexpected_root_pattern: str
+
+
+@dataclass(frozen=True)
+class DiscoverUniqueTestNameTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_test_block_names: tuple[str | None, ...]
+    expected_case_names: tuple[str, ...]

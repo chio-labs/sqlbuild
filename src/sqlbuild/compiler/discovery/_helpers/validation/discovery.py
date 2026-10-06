@@ -26,6 +26,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
@@ -644,6 +646,31 @@ def _validate_unique_project_resource_names(
             path=str(hook_function.relative_path),
         )
 
+    scenario_file: DiscoveredSqlScenarioFile
+    for scenario_file in discovered_inputs.scenario_files:
+        seen_names[scenario_file.name] = _validated_project_resource_entry(
+            seen_names=seen_names,
+            name=scenario_file.name,
+            kind="scenario",
+            path=str(scenario_file.relative_path),
+        )
+
+    test_names: set[str] = set()
+    test_file: DiscoveredSqlTestFile
+    for test_file in discovered_inputs.test_files:
+        block: DiscoveredSqlTestBlock
+        for block in test_file.blocks:
+            test_name: str = block.name or test_file.relative_path.stem
+            if test_name in test_names:
+                continue
+            test_names.add(test_name)
+            seen_names[test_name] = _validated_project_resource_entry(
+                seen_names=seen_names,
+                name=test_name,
+                kind="unit test",
+                path=str(test_file.relative_path),
+            )
+
 
 def _validated_project_resource_entry(
     *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
@@ -653,7 +680,8 @@ def _validated_project_resource_entry(
         raise DiscoveryConflictError(
             f"Project resource name '{name}' is declared as both {existing_entry[0]} "
             f"in {existing_entry[1]} and {kind} in {path}; model, source, seed, function, "
-            "loader, task, asset, check, provider, and hook names must be globally unique"
+            "loader, task, asset, check, provider, hook, unit test, and scenario names must be "
+            "globally unique"
         )
     return (kind, path)
 
