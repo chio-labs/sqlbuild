@@ -1,7 +1,7 @@
 //! CTE definition and leading-WITH assembly shared by SQL-test planning and rendering.
 
-use crate::sql_scan::main::comment_end::comment_end;
-use crate::sql_scan::main::skip_whitespace::skip_whitespace;
+use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
+use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
 
 /// Render one `name AS (body)` definition, closing a trailing line comment first.
 pub(crate) fn cte_definition_sql(name: &str, sql: &str) -> String {

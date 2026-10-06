@@ -3,11 +3,11 @@
 use std::collections::HashSet;
 
 use crate::compiler::_helpers::sql_tests::cte_sql::keyword_end;
-use crate::rules::main::quote_policy::quote_policy;
-use crate::sql_scan::main::comment_end::comment_end;
-use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::main::skip_whitespace::skip_whitespace;
-use crate::sql_scan::models::{QuotePolicy, Unclosed};
+use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
+use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
+use sqlbuild_sqltext::sql_scan::models::{QuotePolicy, Unclosed};
 
 /// Dialect lexical rules for slicing authored SQL.
 #[derive(Clone, Copy, Debug)]

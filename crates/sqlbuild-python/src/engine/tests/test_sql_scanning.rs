@@ -1,13 +1,14 @@
-use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::engine::tests::test_types::{
     DollarQuoteSiteTestCase, LintDialectSiteTestCase, SqlScannerTestCase,
 };
-use crate::rules::_helpers::evaluation::{normalize_rules_sql, rules_quote_policy};
+use crate::rules::_helpers::evaluation::normalize_rules_sql;
 use crate::rules::_helpers::numeric_decisions::compact_sql;
 use crate::sql_lint::_helpers::preparation::prepare;
-use crate::sql_scan::main::matching_paren::matching_paren;
-use crate::sql_scan::models::QuotePolicy;
-use crate::sql_scan::models::Unclosed;
+use sqlbuild_sqltext::compiler::_helpers::sql_references::extraction::extract;
+use sqlbuild_sqltext::sql_scan::_helpers::rules_dialect::rules_quote_policy;
+use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
+use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 #[test]
 fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scanner_is_characterised()

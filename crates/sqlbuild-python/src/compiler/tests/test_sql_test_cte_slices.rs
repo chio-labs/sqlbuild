@@ -1,6 +1,6 @@
 use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, split_top_level_with};
 use crate::compiler::tests::test_types::CteSliceTestCase;
-use crate::sql_scan::models::Unclosed;
+use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 #[test]
 fn given_leading_with_queries_when_splitting_then_authored_slices_or_none_are_returned() {

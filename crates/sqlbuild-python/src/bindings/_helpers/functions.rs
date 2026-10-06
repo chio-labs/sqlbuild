@@ -306,9 +306,9 @@ fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String
 
 fn authored_value_to_python(
     py: Python<'_>,
-    value: crate::compiler::models::AuthoredValue,
+    value: sqlbuild_sqltext::compiler::models::AuthoredValue,
 ) -> PyResult<Py<PyAny>> {
-    use crate::compiler::models::AuthoredValue;
+    use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
     match value {
         AuthoredValue::Null => Ok(py.None()),
@@ -352,7 +352,7 @@ fn authored_value_to_python(
 
 fn map_to_python(
     py: Python<'_>,
-    values: Vec<(String, crate::compiler::models::AuthoredValue)>,
+    values: Vec<(String, sqlbuild_sqltext::compiler::models::AuthoredValue)>,
 ) -> PyResult<Py<PyAny>> {
     let result = PyDict::new(py);
     for (key, value) in values {
@@ -373,7 +373,7 @@ fn hook_marker(
     py: Python<'_>,
     kind: &str,
     name: String,
-    kwargs: Vec<(String, crate::compiler::models::AuthoredValue)>,
+    kwargs: Vec<(String, sqlbuild_sqltext::compiler::models::AuthoredValue)>,
 ) -> PyResult<Py<PyAny>> {
     let payload = PyTuple::new(
         py,
@@ -387,7 +387,7 @@ fn hook_marker(
 
 fn optional_authored_value_to_python(
     py: Python<'_>,
-    value: Option<crate::compiler::models::AuthoredValue>,
+    value: Option<sqlbuild_sqltext::compiler::models::AuthoredValue>,
 ) -> PyResult<Option<Py<PyAny>>> {
     value
         .map(|item| authored_value_to_python(py, item))
@@ -403,7 +403,9 @@ type ParsedModelHeader = (
 #[pyfunction]
 fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<ParsedModelHeader>> {
     let parsed = py
-        .compiler_detach(|| crate::compiler::main::model_header_parsing::parse_batch(&headers))
+        .compiler_detach(|| {
+            sqlbuild_sqltext::compiler::main::model_header_parsing::parse_batch(&headers)
+        })
         .map_err(value_error)?;
     parsed
         .into_iter()
@@ -423,9 +425,7 @@ fn match_model_headers(
     contents: Vec<String>,
 ) -> PyResult<Vec<Option<(usize, usize, usize)>>> {
     py.compiler_detach(|| {
-        Ok(crate::compiler::main::model_header_matching::match_batch(
-            &contents,
-        ))
+        Ok(sqlbuild_sqltext::compiler::main::model_header_matching::match_batch(&contents))
     })
     .map_err(value_error)
 }
@@ -433,7 +433,8 @@ fn match_model_headers(
 #[pyfunction]
 fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
     compiler_guard(|| {
-        crate::compiler::main::model_header_tokenizing::tokenize_one(header).map_err(value_error)
+        sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one(header)
+            .map_err(value_error)
     })
 }
 
@@ -443,17 +444,25 @@ fn substitute_static_project_vars(
     variables: Vec<(String, String)>,
 ) -> PyResult<Vec<(u8, Option<String>)>> {
     compiler_guard(|| {
-        Ok(crate::compiler::main::sql_interpolation::substitute_batch(
-            &sqls, &variables,
-        ))
+        Ok(
+            sqlbuild_sqltext::compiler::main::sql_interpolation::substitute_batch(
+                &sqls, &variables,
+            ),
+        )
     })
 }
 
 #[pyfunction]
 fn extract_static_sql_references(
     sql: &str,
-) -> PyResult<Option<Vec<crate::compiler::_helpers::sql_references::extraction::StaticReference>>> {
-    compiler_guard(|| Ok(crate::compiler::main::sql_references::extract(sql)))
+) -> PyResult<
+    Option<Vec<sqlbuild_sqltext::compiler::_helpers::sql_references::extraction::StaticReference>>,
+> {
+    compiler_guard(|| {
+        Ok(sqlbuild_sqltext::compiler::main::sql_references::extract(
+            sql,
+        ))
+    })
 }
 
 #[pyfunction]

@@ -5,10 +5,10 @@ use std::collections::HashSet;
 use regex::{Captures, Regex};
 
 use crate::compiler::_helpers::sql_tests::planning::compile_error;
-use crate::sql_scan::main::dialect_matching_paren::dialect_matching_paren;
-use crate::sql_scan::main::dialect_non_code_ranges::dialect_non_code_ranges;
-use crate::sql_scan::main::skip_whitespace::skip_whitespace;
-use crate::sql_scan::models::{LexicalSyntax, Unclosed};
+use sqlbuild_sqltext::sql_scan::main::dialect_matching_paren::dialect_matching_paren;
+use sqlbuild_sqltext::sql_scan::main::dialect_non_code_ranges::dialect_non_code_ranges;
+use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
+use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, Unclosed};
 
 pub(crate) fn replace_callable_markers<F>(
     sql: &str,

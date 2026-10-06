@@ -4,7 +4,7 @@ use crate::compiler::_helpers::sql_tests::markers::{
     in_protected_range, marker_names, replace_named_markers,
 };
 use crate::compiler::tests::test_types::{MarkerNamesTestCase, ProtectedRangeTestCase};
-use crate::sql_scan::models::LexicalSyntax;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 #[test]
 fn given_markers_around_comments_and_strings_when_scanning_then_only_code_markers_are_used() {

@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use crate::constants::{
     DIRECT_DEPENDENCY_PATH_LENGTH, MACRO_TEST_MODE, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE,
 };
-use crate::sql_scan::main::comment_end::comment_end;
-use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
-use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::main::quote_end::quote_end;
-use crate::sql_scan::main::skip_whitespace::skip_whitespace;
-use crate::sql_scan::models::QuotePolicy;
-use crate::sql_scan::models::Unclosed;
+use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
+use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::main::quote_end::quote_end;
+use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
+use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 const MODEL_PREFIXES: [&str; 8] = [
     "__macro__",

@@ -13,18 +13,16 @@ use crate::rules::_helpers::{
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
-use crate::sql_scan::main::matching_paren::matching_paren;
-use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::models::QuotePolicy;
 use globset::{Glob, GlobSetBuilder};
+use sqlbuild_sqltext::sql_scan::_helpers::rules_dialect::{rules_dialect, rules_quote_policy};
+use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
 use sqlparser::ast::{
     BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
     SetExpr, Spanned, Statement, TableFactor, Value, Visit, Visitor,
 };
-use sqlparser::dialect::{
-    BigQueryDialect, ClickHouseDialect, DatabricksDialect, Dialect, DuckDbDialect, GenericDialect,
-    MsSqlDialect, PostgreSqlDialect, SnowflakeDialect,
-};
+use sqlparser::dialect::{Dialect, GenericDialect};
 use sqlparser::parser::{Parser, ParserError, ParserOptions};
 use sqlparser::tokenizer::{Token, Tokenizer};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -336,31 +334,6 @@ fn parse_with_dialect(sql: &str, dialect: &dyn Dialect) -> Result<Vec<Statement>
         .with_recursion_limit(RULES_PARSER_RECURSION_LIMIT)
         .try_with_sql(sql)?;
     parser.parse_statements()
-}
-
-pub(crate) fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
-    let dialect = rules_dialect(dialect_name);
-    let backslash_escapes = dialect.supports_string_literal_backslash_escape();
-    QuotePolicy {
-        backtick_identifiers: dialect.is_delimited_identifier_start('`'),
-        single_quote_backslash_escapes: backslash_escapes,
-        double_quote_backslash_escapes: backslash_escapes
-            && !dialect.is_delimited_identifier_start('"'),
-        dollar_quotes: false,
-    }
-}
-
-fn rules_dialect(name: &str) -> Box<dyn Dialect> {
-    match name.to_ascii_lowercase().as_str() {
-        "bigquery" => Box::new(BigQueryDialect {}),
-        "clickhouse" => Box::new(ClickHouseDialect {}),
-        "databricks" => Box::new(DatabricksDialect {}),
-        "duckdb" => Box::new(DuckDbDialect {}),
-        "postgres" | "postgresql" => Box::new(PostgreSqlDialect {}),
-        "mssql" | "sqlserver" | "tsql" => Box::new(MsSqlDialect {}),
-        "snowflake" => Box::new(SnowflakeDialect {}),
-        _ => Box::new(GenericDialect {}),
-    }
 }
 
 pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::sql_scan::models::Unclosed;
+use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 pub(crate) struct NativeEvaluationTestCase {
     pub(crate) description: &'static str,

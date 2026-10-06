@@ -27,7 +27,7 @@ use crate::compiler::_helpers::sql_tests::rendering::{
     rendered_chain_steps,
 };
 use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
-use crate::sql_scan::models::LexicalSyntax;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;

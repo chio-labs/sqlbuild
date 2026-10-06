@@ -635,10 +635,21 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlbuild-core",
+ "sqlbuild-sqltext",
  "sqlparser",
  "stacker",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "sqlbuild-sqltext"
+version = "0.135.0"
+dependencies = [
+ "rayon",
+ "serde",
+ "sqlbuild-core",
+ "sqlparser",
 ]
 
 [[package]]

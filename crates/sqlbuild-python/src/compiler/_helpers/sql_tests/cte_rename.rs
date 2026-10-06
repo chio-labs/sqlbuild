@@ -3,9 +3,9 @@
 use crate::compiler::_helpers::sql_tests::cte_slices::{
     SliceDialect, WithSlices, opaque_end, read_identifier,
 };
-use crate::sql_scan::main::comment_end::comment_end;
-use crate::sql_scan::main::skip_whitespace::skip_whitespace;
-use crate::sql_scan::models::Unclosed;
+use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
+use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
+use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 const DOT: &str = ".";
 

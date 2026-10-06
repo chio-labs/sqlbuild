@@ -1,9 +1,9 @@
 //! Analysis normalization with a character-offset provenance map.
 
-use crate::sql_scan::main::matching_paren::matching_paren;
-use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::models::QuotePolicy;
 use regex::Regex;
+use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 

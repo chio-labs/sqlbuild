@@ -2,11 +2,11 @@
 
 use crate::semantic_validation::models::FunctionProbes;
 use crate::semantic_validation::types::ProbeKey;
-use crate::sql_scan::main::comment_end::comment_end;
-use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::models::{QuotePolicy, Unclosed};
 use polyglot_sql::{Dialect, DialectType, Expression, ValidationError};
 use polyglot_sql_function_catalogs::{CatalogSink, FunctionNameCase, FunctionSignature};
+use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::models::{QuotePolicy, Unclosed};
 use std::collections::{HashMap, HashSet};
 use std::mem::Discriminant;
 use std::sync::{LazyLock, OnceLock, PoisonError};

@@ -1,6 +1,6 @@
-use crate::sql_scan::main::comment_end::comment_end;
-use crate::sql_scan::main::quote_end::quote_end;
-use crate::sql_scan::models::QuotePolicy;
+use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
+use sqlbuild_sqltext::sql_scan::main::quote_end::quote_end;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
 
 const CANONICAL_NUMERIC_DECISIONS: [&str; 3] = ["-1", "0", "1"];
 

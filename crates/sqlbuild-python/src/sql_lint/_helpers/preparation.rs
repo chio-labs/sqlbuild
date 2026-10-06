@@ -5,11 +5,11 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::rules::main::quote_policy::quote_policy;
 use crate::sql_lint::types::{InterpolationSite, PreparedSql};
-use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
-use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::models::QuotePolicy;
+use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
 
 static SITE_START: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
     Regex::new(r"^(?:@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\s*\()")
