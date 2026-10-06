@@ -5,6 +5,14 @@ MODEL (
   cursor revenue_date,
   cursor_type timestamp,
   cursor_grain day,
+  cursor_inputs (
+    payments paid_at,
+  ),
 );
 
-SELECT CAST('2026-04-01' AS DATE) AS revenue_date, 2850 AS total_revenue_cents
+SELECT
+  CAST(paid_at AS DATE) AS revenue_date,
+  SUM(amount_cents) AS total_revenue_cents
+FROM __seed("payments")
+GROUP BY
+  CAST(paid_at AS DATE)
