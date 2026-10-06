@@ -94,8 +94,11 @@ Rename model  stg_orders -> stg_order_lines
 ├── models/marts/fact_orders.sql
 │   └── 24:13   reference __ref("stg_orders")  ->  __ref("stg_order_lines")
 ├── models/staging/stg_order_lines.sql  (moved from models/staging/stg_orders.sql)
+│   └── 1:8     migration + migrate_from stg_orders
 └── tests/unit/test_fact_orders.sql
     └── 4:1     fixture   __ref__stg_orders  ->  __ref__stg_order_lines
+Migrations
+└── stg_order_lines  migrate_from stg_orders  keeps the relation's history and its old name working
 Compiled: ok, 3 files changed
 ```
 

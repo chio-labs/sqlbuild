@@ -156,9 +156,9 @@ audit factory that attaches it. A top-level generic audit used only by models un
 `models/marts/` fails to compile and names the folder it belongs in:
 
 ```
-error[P001]: Invalid declaration scope index:
-[S024] Declaration 'audit:non_negative' is currently project at 'audits/generic' ...
-Move it to 'models/marts/_sqlbuild/_audits/generic/'
+error[S024]: Declaration 'audit:non_negative' is currently project at 'audits/generic' (audits/generic/non_negative.sql); required exact-owner-private at 'models/marts'. Consumers: model:daily_revenue. Move it to 'models/marts/_sqlbuild/_audits/generic/'
+  audit: non_negative
+  --> audits/generic/non_negative.sql:1:1
 ```
 
 Attaching a scoped generic audit from a folder that cannot see it fails with `S006`. Built-in

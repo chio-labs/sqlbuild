@@ -26,7 +26,7 @@ Run the plan command with the same target and selectors you intend to build:
 
 ```bash
 sqb plan
-sqb --target dev plan --select +fact_orders
+sqb plan --target dev --select +fact_orders
 ```
 
 A plan answers four questions:
@@ -84,7 +84,7 @@ The plan assigns reasons to explain detected work:
 | Config changed | Version-relevant configuration differs |
 | Schema changed | A relevant warehouse or upstream schema changed |
 | Function changed | A function the model calls directly has a different definition |
-| Run despite unchanged | A table's explicit policy requires another run despite an unchanged identity |
+| Renamed | The model's relation moves from an old name through a [model migration](/docs/concepts/models/migrations) |
 
 These reasons explain the plan; they are not a promise that a build will skip entries labelled
 current. Builds execute the selected scope.

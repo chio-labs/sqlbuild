@@ -16,8 +16,7 @@ Put project-wide macros in Python files under the top-level `macros/` directory:
 ```text
 my_project/
 ├── macros/
-│   ├── currency.py
-│   └── test_helpers.py
+│   └── currency.py
 ├── models/
 └── sqlbuild_project.toml
 ```
@@ -147,10 +146,16 @@ Imported functions are not re-exported as new macros from the importing file.
 
 ## Use macros in tests
 
-Tests are SQL, so they can use macros as reusable fixture generators:
+Tests are SQL, so they can use macros as reusable fixture generators. A macro that only tests use
+follows the usual [placement](/docs/concepts/declaration-scopes/placement) rule: it must be private
+to the narrowest folder that contains its uses, so the project-wide `macros/` directory rejects it
+with `S024`. Put it in `_sqlbuild/_macros/` in the folder of the tests that call it, such as
+`tests/unit/orders/_sqlbuild/_macros/`, or, when those tests define `__expected__` output for a
+model, in that model's `_sqlbuild/_macros/`. The `S024` error names the folder to use.
+`tests/unit/_sqlbuild/` itself is rejected with `D013`.
 
 ```python
-# macros/test_helpers.py
+# tests/unit/orders/_sqlbuild/_macros/order_fixtures.py
 def mock_orders(count: int = 1) -> str:
     rows = [
         f"SELECT {i} AS id, {i * 100} AS customer_id, 'completed' AS status"

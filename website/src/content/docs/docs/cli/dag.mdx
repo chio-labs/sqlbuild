@@ -87,7 +87,7 @@ Each node represents a source, seed, model, or function:
 | Field | Description |
 |-------|-------------|
 | `id` | Unique identifier (`{kind}:{name}`) |
-| `kind` | `source`, `seed`, `model`, or `function` |
+| `kind` | `source`, `seed`, `model`, `udf` (scalar function), or `table_fn` (table function) |
 | `name` | Resource name |
 | `asset_key` | Tuple used as the Dagster asset key (typically `[schema, name]` or `[database, schema, name]`) |
 | `target` | Warehouse identity (database, schema, name, qualified_name) |

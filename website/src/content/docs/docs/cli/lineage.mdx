@@ -54,15 +54,15 @@ upstream
 ├── model  stg_payments  models/staging/stg_payments.sql
 │   └── source  raw__payments  sources/raw.yml
 ├── seed  waffle_types  seeds/waffle_types.csv
-└── function  udf__is_completed_order  functions/sql/udf__is_completed_order.sql
+└── udf  udf__is_completed_order
 downstream
 ├── model  customer_status_snapshot  models/intermediate/customer_status_snapshot.sql
 ├── model  hourly_order_activity  models/marts/hourly_order_activity.sql
 │   ├── model  daily_activity_rollup  models/marts/daily_activity_rollup.sql
 │   │   └── model  hourly_activity_with_daily_context  models/marts/hourly_activity_with_daily_context.sql
-│   │       └── model  hourly_order_activity  (already shown)
-│   └── model  hourly_activity_with_daily_context  (already shown)
-└── model  order_status_index  models/intermediate/order_status_index.sql
+│   └── model  hourly_activity_with_daily_context  models/marts/hourly_activity_with_daily_context.sql (already shown)
+├── model  order_status_index  models/intermediate/order_status_index.sql
+└── table_fn  table_fn__customer_orders
 ```
 
 Cycles and repeated nodes are annotated with "(already shown)" to avoid infinite recursion.
@@ -76,11 +76,12 @@ sqb lineage fact_orders --format list
 ```
 
 ```
-source:raw__orders    -> model:stg_orders
-source:raw__payments  -> model:stg_payments
-model:stg_orders     -> model:fact_orders
-model:stg_payments   -> model:fact_orders
-seed:waffle_types    -> model:fact_orders
+udf:udf__is_completed_order -> model:fact_orders
+model:stg_orders            -> model:fact_orders
+seed:waffle_types           -> model:fact_orders
+model:stg_payments          -> model:fact_orders
+source:raw__orders          -> model:stg_orders
+source:raw__payments        -> model:stg_payments
 ```
 
 ### JSON
@@ -140,8 +141,8 @@ sqb lineage fact_orders.total_cents
 ```
 Column trace  fact_orders.total_cents  upstream
 
-  <- stg_payments.amount_cents (expression)
-       <- raw__payments.amount_cents (direct)
+└── stg_payments.amount_cents (expression)
+    └── raw__payments.amount_cents (direct)
 ```
 
 ### List
@@ -153,8 +154,8 @@ sqb lineage fact_orders.total_cents --format list
 ```
 Column dependencies
 
-stg_payments.amount_cents -> fact_orders.total_cents  expression
-raw__payments.amount_cents -> stg_payments.amount_cents  direct
+stg_payments.amount_cents  -> fact_orders.total_cents   expression
+raw__payments.amount_cents -> stg_payments.amount_cents direct
 ```
 
 ### JSON
