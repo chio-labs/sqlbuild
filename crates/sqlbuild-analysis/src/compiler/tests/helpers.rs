@@ -24,6 +24,16 @@ pub(crate) fn mixed_expanded_tests_preserve_order_and_payloads() -> bool {
     true
 }
 
+pub(crate) fn trailing_ceremonial_select_is_optional() -> bool {
+    let response = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id); -- done","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("omitted select succeeds");
+    let payload: serde_json::Value = serde_json::from_str(&response).expect("valid JSON");
+    assert_eq!(payload[0]["expectedModels"][0], "orders");
+
+    let error = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id) SELECT * FROM __expected__orders","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect_err("other final statement is rejected");
+    assert!(error.contains("must end after its CTEs"));
+    true
+}
+
 pub(crate) fn dependent_assertion_returns_authoritative_error() -> bool {
     let error = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id), __assert__same AS (SELECT id FROM __expected__orders) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect_err("dependency is rejected");
     assert!(error.contains("'__assert__same' must not depend on '__expected__orders'"));
