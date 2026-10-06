@@ -109,7 +109,9 @@ def test_given_retrying_child_operation_when_projected_then_each_line_flushes_be
     test_case: RetryProjectionCase,
 ) -> None:
     stream: _FlushRecordingStream = _FlushRecordingStream()
-    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    projector: NativeProgressProjector = NativeProgressProjector(
+        stream=stream, use_color=False, debug=True
+    )
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
 
@@ -492,7 +494,9 @@ def test_given_missing_terminal_on_tty_when_closed_then_only_cursor_is_restored(
     test_case: CursorCleanupCase,
 ) -> None:
     stream: _FlushRecordingStream = _FlushRecordingStream(tty=True)
-    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    projector: NativeProgressProjector = NativeProgressProjector(
+        stream=stream, use_color=False, debug=True
+    )
     projector.consume(
         lifecycle_event(
             "resource_attempt_started",

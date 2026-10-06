@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     TerminalStatementRowsE2ETestCase,
+    TerminalStepRowsE2ETestCase,
     TerminalTestProgressE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -18,6 +19,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     render_terminal_screen,
     run_sqb,
     run_sqb_with_pty,
+)
+
+_STEP_ROW_FRAGMENTS: tuple[str, ...] = (
+    "START",
+    "Create staging relation",
+    "Promote relation",
+    "loader callable",
+    "Audit evaluation",
+    "SQL test assertion",
 )
 
 
@@ -131,6 +141,81 @@ def test_given_built_project_when_running_in_terminal_then_statement_rows_follow
     assert result.returncode == 0, rendered
     statement_row_count: int = sum(line.lstrip().startswith("statement  model=") for line in screen)
     assert (statement_row_count > 0) is test_case.expected_statement_rows_visible, rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TerminalStepRowsE2ETestCase(
+            description="passing build shows result rows without start or step rows",
+            columns=120,
+            command=("build",),
+            expected_absent_fragments=_STEP_ROW_FRAGMENTS,
+            expected_absent_line_prefixes=(),
+            expected_screen_fragments=(
+                "seed      waffle_types",
+                "✓ Completed successfully",
+            ),
+        ),
+        TerminalStepRowsE2ETestCase(
+            description="passing seed shows one result row per seed",
+            columns=120,
+            command=("seed",),
+            expected_absent_fragments=_STEP_ROW_FRAGMENTS,
+            expected_absent_line_prefixes=("  seed      waffle_types",),
+            expected_screen_fragments=("1/1  seed      waffle_types", "✓ Completed successfully"),
+        ),
+        TerminalStepRowsE2ETestCase(
+            description="passing test shows no start or step rows",
+            columns=120,
+            command=("test",),
+            expected_absent_fragments=_STEP_ROW_FRAGMENTS,
+            expected_absent_line_prefixes=(),
+            expected_screen_fragments=("PASS=",),
+        ),
+        TerminalStepRowsE2ETestCase(
+            description="debug build shows start and step rows",
+            columns=120,
+            command=("--debug", "build"),
+            expected_absent_fragments=(),
+            expected_absent_line_prefixes=(),
+            expected_screen_fragments=(
+                "Create staging relation  START",
+                "Create staging relation  OK",
+                "loader callable  START",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_built_project_when_running_in_terminal_then_step_rows_follow_debug_flag(
+    tmp_path: Path, test_case: TerminalStepRowsE2ETestCase
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    built: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb_with_pty(
+        command=test_case.command,
+        project_dir=project_dir,
+        columns=test_case.columns,
+        timeout_seconds=180.0,
+    )
+
+    assert built.returncode == 0, built.stdout + built.stderr
+    screen: tuple[str, ...] = render_terminal_screen(
+        output=result.stdout, columns=test_case.columns
+    )
+    rendered: str = "\n".join(screen)
+    assert result.returncode == 0, rendered
+    assert not any(fragment in rendered for fragment in test_case.expected_absent_fragments), (
+        rendered
+    )
+    assert not any(line.startswith(test_case.expected_absent_line_prefixes) for line in screen), (
+        rendered
+    )
+    assert all(fragment in rendered for fragment in test_case.expected_screen_fragments), rendered
 
 
 if __name__ == "__main__":

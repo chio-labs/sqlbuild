@@ -19,7 +19,10 @@ from sqlbuild.observability import (
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.runtime.observability.classes.statement_monitor import StatementMonitor
 from sqlbuild.runtime.observability.models import LifecycleEvent
-from tests.unit.src.sqlbuild.cli.progress.classes._test_types import StatementProgressCase
+from tests.unit.src.sqlbuild.cli.progress.classes._test_types import (
+    StatementProgressCase,
+    StepProgressCase,
+)
 
 
 class FakeSlowAdapter:
@@ -167,3 +170,56 @@ def run_monitor_capture_race(*, query_id: str) -> tuple[tuple[str, ...], int, bo
     provider.release.set()
     stopper.join(timeout=1.0)
     return tuple(submissions), provider.call_count, stopper.is_alive()
+
+
+class TerminalStream(StringIO):
+    """String stream reporting a configurable terminal state."""
+
+    def __init__(self, *, tty: bool) -> None:
+        super().__init__()
+        self._tty: bool = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
+def complete_step_normally(step: OperationLifecycle) -> None:
+    """Let the step operation exit without an explicit terminal call."""
+
+    del step
+
+
+def fail_step(step: OperationLifecycle) -> None:
+    """Mark the step operation failed."""
+
+    step.failed(error=RuntimeError("staging failed"))
+
+
+def project_resource_step(
+    *, test_case: StepProgressCase, finish_step: Callable[[OperationLifecycle], None]
+) -> tuple[str, ...]:
+    """Project one resource attempt containing one visible step operation."""
+
+    stream: TerminalStream = TerminalStream(tty=test_case.tty)
+    projector: NativeProgressProjector = NativeProgressProjector(
+        stream=stream, use_color=False, debug=test_case.debug
+    )
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
+    with (
+        invocation_scope("inv-step-progress"),
+        run_scope("run-step-progress"),
+        dispatcher_scope(dispatcher),
+        ResourceAttemptLifecycle(
+            resource_id="model:orders",
+            resource_kind="table",
+            resource_name="orders",
+        ),
+        OperationLifecycle(
+            operation_kind="warehouse",
+            operation_name="staging_creation",
+        ) as step,
+    ):
+        finish_step(step)
+    projector.close()
+    return tuple(stream.getvalue().splitlines())
