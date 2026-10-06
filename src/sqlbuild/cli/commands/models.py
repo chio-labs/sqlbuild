@@ -776,26 +776,6 @@ class LineageTarget:
 
 
 @dataclass(frozen=True)
-class ParsedLineageSelector:
-    """One parsed non-path lineage selector."""
-
-    kind: str
-    value: str
-    upstream: bool = False
-    downstream: bool = False
-
-
-@dataclass(frozen=True)
-class ParsedLineagePathSelector:
-    """One parsed path-between lineage selector."""
-
-    start_name: str
-    end_name: str
-    upstream: bool = False
-    downstream: bool = False
-
-
-@dataclass(frozen=True)
 class ColumnLineageTrace:
     """Selected column-level lineage trace."""
 

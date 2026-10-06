@@ -39,3 +39,19 @@ class DiamondLineageTreeCliTestCase:
     command: tuple[str, ...]
     expected_expanded_names: tuple[str, ...]
     expected_max_lines: int
+
+
+@dataclass(frozen=True)
+class SharedSelectorCliTestCase:
+    description: str
+    selector: str
+    expected_node_ids: tuple[str, ...]
+    expected_selected_models: int
+    expected_selected_functions: int
+
+
+@dataclass(frozen=True)
+class SharedSelectorErrorCliTestCase:
+    description: str
+    selector: str
+    expected_fragment: str

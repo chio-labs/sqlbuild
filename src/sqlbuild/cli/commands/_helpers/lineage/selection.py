@@ -10,13 +10,8 @@ from sqlbuild.cli.commands.constants import (
     COLUMN_TARGET_KIND,
     COLUMN_TARGET_SEPARATOR,
     DOWNSTREAM_DIRECTION,
-    PATH_BETWEEN_MARKER,
-    PATH_SEPARATOR,
     RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
-    SELECTOR_EXPANSION_MARKER,
     SELECTOR_INTERSECTION_MARKER,
-    SELECTOR_KIND_SEPARATOR,
-    SUPPORTED_TYPED_SELECTOR_KINDS,
     UNLIMITED_DEPTH_VALUE,
     UPSTREAM_DIRECTION,
 )
@@ -27,8 +22,6 @@ from sqlbuild.cli.commands.models import (
     LineageNode,
     LineageSelectionAnchors,
     LineageTarget,
-    ParsedLineagePathSelector,
-    ParsedLineageSelector,
     RelationLineageIndex,
 )
 from sqlbuild.compiler.compile.models import (
@@ -47,6 +40,13 @@ from sqlbuild.compiler.lineage.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.selection.selector_match import match_project_selector
+from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.selection.selector_tokens import (
+    resolve_project_selector_tokens,
+)
+from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.presentation.main.maybe_status import maybe_status
 
@@ -340,31 +340,26 @@ def select_selector_lineage(
     depth: int | None,
     direction: str | None = None,
 ) -> LineageGraph:
-    """Select lineage using selector semantics, expanding by direction when one is given."""
+    """Select lineage using the shared project selector syntax, expanding by direction if given."""
 
-    selected_keys: frozenset[CompiledObjectKey] = _resolve_selectors(
+    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=select,
         exclude=exclude,
         all_keys=graph.all_keys,
-        upstream=graph.upstream_deps,
-        downstream=graph.downstream_deps,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
         tag_index=graph.tag_index,
         path_index=graph.path_index,
     )
     if direction is not None:
-        excluded_keys: set[CompiledObjectKey] = set()
-        for raw_exclude in exclude:
-            for token in raw_exclude.split():
-                excluded_keys.update(
-                    _resolve_token(
-                        token=token,
-                        all_keys=graph.all_keys,
-                        upstream=graph.upstream_deps,
-                        downstream=graph.downstream_deps,
-                        tag_index=graph.tag_index,
-                        path_index=graph.path_index,
-                    )
-                )
+        excluded_keys: frozenset[CompiledObjectKey] = resolve_project_selector_tokens(
+            selectors=exclude,
+            all_keys=graph.all_keys,
+            upstream_deps=graph.upstream_deps,
+            downstream_deps=graph.downstream_deps,
+            tag_index=graph.tag_index,
+            path_index=graph.path_index,
+        )
         return build_lineage_graph(
             graph=graph,
             selected_keys=(
@@ -377,11 +372,7 @@ def select_selector_lineage(
         )
     anchors: LineageSelectionAnchors = _resolve_selector_anchors(
         select=select,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+        graph=graph,
         require_clear_anchors=depth is not None,
     )
     if depth is not None:
@@ -431,13 +422,11 @@ def build_lineage_graph(
 def _resolve_selector_anchors(
     *,
     select: tuple[str, ...],
-    all_keys: dict[str, CompiledObjectKey],
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
+    graph: ProjectGraph | RelationLineageIndex,
     require_clear_anchors: bool,
 ) -> LineageSelectionAnchors:
+    """Find depth anchors for selectors already validated by the shared resolver."""
+
     upstream_anchors: set[CompiledObjectKey] = set()
     downstream_anchors: set[CompiledObjectKey] = set()
     retained: set[CompiledObjectKey] = set()
@@ -449,43 +438,39 @@ def _resolve_selector_anchors(
                     "--depth cannot be combined with comma-intersection selectors",
                     code="C308",
                 )
-            parts: list[str] = token.split(SELECTOR_INTERSECTION_MARKER)
-            for part in parts:
-                parsed: ParsedLineageSelector | ParsedLineagePathSelector = _parse_selector(part)
-                if isinstance(parsed, ParsedLineagePathSelector):
-                    start_key: CompiledObjectKey = _lookup_name(
-                        name=parsed.start_name, all_keys=all_keys
-                    )
-                    end_key: CompiledObjectKey = _lookup_name(
-                        name=parsed.end_name, all_keys=all_keys
-                    )
+            for part in token.split(SELECTOR_INTERSECTION_MARKER):
+                parsed: ParsedSelector | PathSelector = parse_project_selector(part)
+                if isinstance(parsed, PathSelector):
+                    start_key: CompiledObjectKey = graph.all_keys[parsed.start_name]
+                    end_key: CompiledObjectKey = graph.all_keys[parsed.end_name]
                     retained.update(
-                        _find_path_keys(start=start_key, end=end_key, downstream=downstream_deps)
+                        path_nodes(start=start_key, end=end_key, downstream=graph.downstream_deps)
+                        or ()
                     )
                     upstream_anchors.add(start_key)
                     downstream_anchors.add(end_key)
                     continue
+                if parsed.kind in {SelectorKind.TAG, SelectorKind.PATH} and require_clear_anchors:
+                    raise CliUserError(
+                        "--depth requires name, source, seed, or path-between selectors",
+                        code="C309",
+                    )
+                matched: frozenset[CompiledObjectKey] = match_project_selector(
+                    parsed=parsed,
+                    all_keys=graph.all_keys,
+                    tag_index=graph.tag_index,
+                    path_index=graph.path_index,
+                )
                 if parsed.kind in {SelectorKind.TAG, SelectorKind.PATH}:
-                    if require_clear_anchors:
-                        raise CliUserError(
-                            "--depth requires name, source, seed, or path-between selectors",
-                            code="C309",
-                        )
-                    matched: frozenset[CompiledObjectKey]
-                    if parsed.kind == SelectorKind.TAG:
-                        matched = tag_index.get(parsed.value, frozenset())
-                    else:
-                        matched = _match_path(folder=parsed.value, path_index=path_index)
                     upstream_anchors.update(matched)
                     downstream_anchors.update(matched)
                     continue
-                key: CompiledObjectKey = _lookup_parsed_selector(parsed=parsed, all_keys=all_keys)
                 if parsed.upstream:
-                    upstream_anchors.add(key)
+                    upstream_anchors.update(matched)
                 if parsed.downstream:
-                    downstream_anchors.add(key)
+                    downstream_anchors.update(matched)
                 if not parsed.upstream and not parsed.downstream:
-                    retained.add(key)
+                    retained.update(matched)
     return LineageSelectionAnchors(
         upstream=frozenset(upstream_anchors),
         downstream=frozenset(downstream_anchors),
@@ -525,239 +510,6 @@ def _lookup_name(*, name: str, all_keys: dict[str, CompiledObjectKey]) -> Compil
     if key is None:
         raise _unknown_target_error(name)
     return key
-
-
-def _resolve_selectors(
-    *,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    selected: set[CompiledObjectKey] = set()
-    for raw_select in select:
-        for token in raw_select.split():
-            selected.update(
-                _resolve_token(
-                    token=token,
-                    all_keys=all_keys,
-                    upstream=upstream,
-                    downstream=downstream,
-                    tag_index=tag_index,
-                    path_index=path_index,
-                )
-            )
-    excluded: set[CompiledObjectKey] = set()
-    for raw_exclude in exclude:
-        for token in raw_exclude.split():
-            excluded.update(
-                _resolve_token(
-                    token=token,
-                    all_keys=all_keys,
-                    upstream=upstream,
-                    downstream=downstream,
-                    tag_index=tag_index,
-                    path_index=path_index,
-                )
-            )
-    scoped: set[CompiledObjectKey] = selected - excluded
-    for upstream_key in transitive_closure_many(
-        starts=tuple(scoped), edges=upstream, include_starts=False
-    ):
-        if upstream_key.resource_type in {
-            CompiledResourceType.UDF,
-            CompiledResourceType.TABLE_FN,
-        }:
-            scoped.add(upstream_key)
-    return frozenset(scoped)
-
-
-def _resolve_token(
-    *,
-    token: str,
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    parts: list[str] = token.split(SELECTOR_INTERSECTION_MARKER)
-    resolved_parts: list[frozenset[CompiledObjectKey]] = [
-        _resolve_single(
-            raw=part,
-            all_keys=all_keys,
-            upstream=upstream,
-            downstream=downstream,
-            tag_index=tag_index,
-            path_index=path_index,
-        )
-        for part in parts
-    ]
-    result: frozenset[CompiledObjectKey] = resolved_parts[0]
-    for subsequent in resolved_parts[1:]:
-        result = result & subsequent
-    return result
-
-
-def _resolve_single(
-    *,
-    raw: str,
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    parsed: ParsedLineageSelector | ParsedLineagePathSelector = _parse_selector(raw)
-    if isinstance(parsed, ParsedLineagePathSelector):
-        start_key: CompiledObjectKey = _lookup_name(name=parsed.start_name, all_keys=all_keys)
-        end_key: CompiledObjectKey = _lookup_name(name=parsed.end_name, all_keys=all_keys)
-        result: set[CompiledObjectKey] = set(
-            _find_path_keys(start=start_key, end=end_key, downstream=downstream)
-        )
-        if parsed.upstream:
-            result.update(transitive_closure(start=start_key, edges=upstream))
-        if parsed.downstream:
-            result.update(transitive_closure(start=end_key, edges=downstream))
-        return frozenset(result)
-    if parsed.kind == SelectorKind.TAG:
-        matched_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
-        if not matched_keys:
-            raise CliUserError(f"no models found with tag '{parsed.value}'", code="C310")
-        return _apply_selector_expansion(
-            matched_keys=matched_keys, parsed=parsed, upstream=upstream, downstream=downstream
-        )
-    if parsed.kind == SelectorKind.PATH:
-        matched_keys = _match_path(folder=parsed.value, path_index=path_index)
-        if not matched_keys:
-            raise CliUserError(f"no models found under path '{parsed.value}'", code="C311")
-        return _apply_selector_expansion(
-            matched_keys=matched_keys, parsed=parsed, upstream=upstream, downstream=downstream
-        )
-    key: CompiledObjectKey = _lookup_parsed_selector(parsed=parsed, all_keys=all_keys)
-    return _apply_selector_expansion(
-        matched_keys=frozenset({key}), parsed=parsed, upstream=upstream, downstream=downstream
-    )
-
-
-def _apply_selector_expansion(
-    *,
-    matched_keys: frozenset[CompiledObjectKey],
-    parsed: ParsedLineageSelector,
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    result: set[CompiledObjectKey] = set(matched_keys)
-    if parsed.upstream:
-        result.update(
-            transitive_closure_many(starts=matched_keys, edges=upstream, include_starts=False)
-        )
-    if parsed.downstream:
-        result.update(
-            transitive_closure_many(starts=matched_keys, edges=downstream, include_starts=False)
-        )
-    return frozenset(result)
-
-
-def _parse_selector(raw: str) -> ParsedLineageSelector | ParsedLineagePathSelector:
-    stripped: str = raw.strip()
-    if not stripped:
-        raise CliUserError("empty selector", code="C312")
-    upstream: bool = stripped.startswith(SELECTOR_EXPANSION_MARKER)
-    downstream: bool = stripped.endswith(SELECTOR_EXPANSION_MARKER)
-    core: str = stripped.lstrip(SELECTOR_EXPANSION_MARKER).rstrip(SELECTOR_EXPANSION_MARKER)
-    if PATH_BETWEEN_MARKER in core:
-        start_name, end_name = (part.strip() for part in core.split(PATH_BETWEEN_MARKER, 1))
-        if not start_name or not end_name:
-            raise CliUserError(
-                f"path selector '{stripped}' requires names on both sides of '~'",
-                code="C313",
-            )
-        return ParsedLineagePathSelector(
-            start_name=start_name,
-            end_name=end_name,
-            upstream=upstream,
-            downstream=downstream,
-        )
-    if not core:
-        raise CliUserError(
-            f"selector '{stripped}' has no name after removing '+' markers",
-            code="C314",
-        )
-    if SELECTOR_KIND_SEPARATOR in core:
-        prefix, value = core.split(SELECTOR_KIND_SEPARATOR, 1)
-        if prefix not in SUPPORTED_TYPED_SELECTOR_KINDS:
-            raise CliUserError(f"unknown selector type '{prefix}' in '{stripped}'", code="C315")
-        if not value:
-            raise CliUserError(f"selector '{stripped}' has empty value after ':'", code="C316")
-        return ParsedLineageSelector(
-            kind=prefix,
-            value=value,
-            upstream=upstream,
-            downstream=downstream,
-        )
-    if PATH_SEPARATOR in core:
-        return ParsedLineageSelector(
-            kind=SelectorKind.PATH,
-            value=core.strip(PATH_SEPARATOR),
-            upstream=upstream,
-            downstream=downstream,
-        )
-    return ParsedLineageSelector(
-        kind=SelectorKind.NAME,
-        value=core,
-        upstream=upstream,
-        downstream=downstream,
-    )
-
-
-def _lookup_parsed_selector(
-    *,
-    parsed: ParsedLineageSelector,
-    all_keys: dict[str, CompiledObjectKey],
-) -> CompiledObjectKey:
-    key: CompiledObjectKey | None = all_keys.get(parsed.value)
-    if key is None:
-        raise CliUserError(f"unknown lineage target '{parsed.value}'", code="C305")
-    if parsed.kind == SelectorKind.SOURCE and key.resource_type != CompiledResourceType.SOURCE:
-        raise CliUserError(f"unknown lineage source '{parsed.value}'", code="C317")
-    if parsed.kind == SelectorKind.SEED and key.resource_type != CompiledResourceType.SEED:
-        raise CliUserError(f"unknown lineage seed '{parsed.value}'", code="C318")
-    return key
-
-
-def _find_path_keys(
-    *,
-    start: CompiledObjectKey,
-    end: CompiledObjectKey,
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    path_keys: frozenset[CompiledObjectKey] | None = path_nodes(
-        start=start, end=end, downstream=downstream
-    )
-    if path_keys is None:
-        raise CliUserError(
-            f"'{end.resource_type}:{end.name}' is not downstream of "
-            f"'{start.resource_type}:{start.name}'",
-            code="C319",
-        )
-    return path_keys
-
-
-def _match_path(
-    *,
-    folder: str,
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    prefix: str = folder + "/"
-    return frozenset(
-        key
-        for key, model_folder in path_index.items()
-        if model_folder == folder or model_folder.startswith(prefix)
-    )
 
 
 def _build_node(

@@ -96,8 +96,22 @@ class LineagePathSelectorTestCase:
 class LineagePathSelectorErrorTestCase:
     description: str
     select: tuple[str, ...]
-    expected_error_code: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SharedSelectorParityTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_node_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SharedSelectorErrorParityTestCase:
+    description: str
+    select: tuple[str, ...]
+    expected_code: str
 
 
 @dataclass(frozen=True)
@@ -112,3 +126,11 @@ class NormalizeLineageTargetErrorTestCase:
     description: str
     target: str
     expected_code: str
+
+
+@dataclass(frozen=True)
+class SharedSelectorDepthTestCase:
+    description: str
+    select: tuple[str, ...]
+    direction: str | None
+    expected_node_ids: tuple[str, ...]

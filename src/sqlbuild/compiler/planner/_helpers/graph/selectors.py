@@ -120,38 +120,28 @@ def resolve_selectors(
     if not select and not exclude:
         return frozenset(all_keys.values())
 
-    selected: set[CompiledObjectKey] = set(all_keys.values()) if not select else set()
-    raw_select: str
-    for raw_select in select:
-        tokens: list[str] = raw_select.split()
-        token: str
-        for token in tokens:
-            resolved: frozenset[CompiledObjectKey] = _resolve_token(
-                token=token,
-                all_keys=all_keys,
-                upstream=upstream,
-                downstream=downstream,
-                tag_index=effective_tag_index,
-                path_index=effective_path_index,
-            )
-            selected.update(resolved)
+    selected: frozenset[CompiledObjectKey] = (
+        resolve_selector_tokens(
+            selectors=select,
+            all_keys=all_keys,
+            upstream=upstream,
+            downstream=downstream,
+            tag_index=effective_tag_index,
+            path_index=effective_path_index,
+        )
+        if select
+        else frozenset(all_keys.values())
+    )
+    excluded: frozenset[CompiledObjectKey] = resolve_selector_tokens(
+        selectors=exclude,
+        all_keys=all_keys,
+        upstream=upstream,
+        downstream=downstream,
+        tag_index=effective_tag_index,
+        path_index=effective_path_index,
+    )
 
-    excluded: set[CompiledObjectKey] = set()
-    raw_exclude: str
-    for raw_exclude in exclude:
-        tokens = raw_exclude.split()
-        for token in tokens:
-            resolved = _resolve_token(
-                token=token,
-                all_keys=all_keys,
-                upstream=upstream,
-                downstream=downstream,
-                tag_index=effective_tag_index,
-                path_index=effective_path_index,
-            )
-            excluded.update(resolved)
-
-    scoped: frozenset[CompiledObjectKey] = frozenset(selected - excluded)
+    scoped: frozenset[CompiledObjectKey] = selected - excluded
     return expand_required_build_resources(
         selected_keys=scoped,
         upstream=upstream,
@@ -160,6 +150,60 @@ def resolve_selectors(
         include_upstream_seeds=False,
         include_downstream_functions=False,
     )
+
+
+def resolve_selector_tokens(
+    *,
+    selectors: tuple[str, ...],
+    all_keys: dict[str, CompiledObjectKey],
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: dict[str, frozenset[CompiledObjectKey]],
+    path_index: dict[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]:
+    """Union the keys matched by whitespace-separated selector tokens, without build expansion."""
+
+    resolved: set[CompiledObjectKey] = set()
+    raw_selector: str
+    for raw_selector in selectors:
+        token: str
+        for token in raw_selector.split():
+            resolved.update(
+                _resolve_token(
+                    token=token,
+                    all_keys=all_keys,
+                    upstream=upstream,
+                    downstream=downstream,
+                    tag_index=tag_index,
+                    path_index=path_index,
+                )
+            )
+    return frozenset(resolved)
+
+
+def match_selector_keys(
+    *,
+    parsed: ParsedSelector,
+    all_keys: dict[str, CompiledObjectKey],
+    tag_index: dict[str, frozenset[CompiledObjectKey]],
+    path_index: dict[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]:
+    """Return the keys one parsed selector matches before `+` graph expansion."""
+
+    if parsed.kind == SelectorKind.TAG:
+        tagged_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
+        if not tagged_keys:
+            raise PlannerInputError(f"no models found with tag '{parsed.value}'", code="S008")
+        return tagged_keys
+
+    if parsed.kind == SelectorKind.PATH:
+        return _match_path(value=parsed.value, path_index=path_index)
+
+    keys: frozenset[CompiledObjectKey] = _lookup_keys(parsed=parsed, all_keys=all_keys)
+    if not keys:
+        label: str = "pattern" if _is_name_pattern(parsed.value) else "name"
+        raise PlannerInputError(f"unknown selector {label} '{parsed.value}'", code="S007")
+    return keys
 
 
 def expand_required_build_resources(
@@ -272,27 +316,12 @@ def _resolve_single(
             result.update(expand_downstream(key=end_key, downstream=downstream))
         return frozenset(result)
 
-    if parsed.kind == SelectorKind.TAG:
-        return _resolve_tag(
-            parsed=parsed,
-            tag_index=tag_index,
-            upstream=upstream,
-            downstream=downstream,
-        )
-
-    if parsed.kind == SelectorKind.PATH:
-        return _resolve_path(
-            parsed=parsed,
-            path_index=path_index,
-            upstream=upstream,
-            downstream=downstream,
-        )
-
-    keys: frozenset[CompiledObjectKey] = _lookup_keys(parsed=parsed, all_keys=all_keys)
-    if not keys:
-        label: str = "pattern" if _is_name_pattern(parsed.value) else "name"
-        raise PlannerInputError(f"unknown selector {label} '{parsed.value}'", code="S007")
-
+    keys: frozenset[CompiledObjectKey] = match_selector_keys(
+        parsed=parsed,
+        all_keys=all_keys,
+        tag_index=tag_index,
+        path_index=path_index,
+    )
     result: set[CompiledObjectKey] = set(keys)
     key: CompiledObjectKey
     if parsed.upstream:
@@ -304,40 +333,14 @@ def _resolve_single(
     return frozenset(result)
 
 
-def _resolve_tag(
+def _match_path(
     *,
-    parsed: ParsedSelector,
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    """Resolve a tag selector to matching keys with optional graph expansion."""
-
-    tagged_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
-    if not tagged_keys:
-        raise PlannerInputError(f"no models found with tag '{parsed.value}'", code="S008")
-
-    result: set[CompiledObjectKey] = set(tagged_keys)
-    key: CompiledObjectKey
-    if parsed.upstream:
-        for key in tagged_keys:
-            result.update(expand_upstream(key=key, upstream=upstream))
-    if parsed.downstream:
-        for key in tagged_keys:
-            result.update(expand_downstream(key=key, downstream=downstream))
-    return frozenset(result)
-
-
-def _resolve_path(
-    *,
-    parsed: ParsedSelector,
+    value: str,
     path_index: dict[CompiledObjectKey, str],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
-    """Resolve a path selector to matching keys with optional graph expansion."""
+    """Match a `models/`-rooted path selector against model folders."""
 
-    folder: str = _normalize_path_selector_value(parsed.value)
+    folder: str = _normalize_path_selector_value(value)
     selector_folder: str = _model_path_candidate(folder)
     matched_keys: frozenset[CompiledObjectKey] = frozenset(
         key
@@ -354,16 +357,7 @@ def _resolve_path(
             ),
             code="S009",
         )
-
-    result: set[CompiledObjectKey] = set(matched_keys)
-    key: CompiledObjectKey
-    if parsed.upstream:
-        for key in matched_keys:
-            result.update(expand_upstream(key=key, upstream=upstream))
-    if parsed.downstream:
-        for key in matched_keys:
-            result.update(expand_downstream(key=key, downstream=downstream))
-    return frozenset(result)
+    return matched_keys
 
 
 def _normalize_path_selector_value(value: str) -> str:
