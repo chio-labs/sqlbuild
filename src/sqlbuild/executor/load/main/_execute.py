@@ -11,9 +11,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import CursorKind
-from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
-    resolve_qualified_name_parts,
-)
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.cost.classes.cost_context import CostContext
@@ -34,7 +31,10 @@ from sqlbuild.executor.load._helpers.loader_invocation import (
     validate_source_write_strategy,
 )
 from sqlbuild.executor.load._helpers.schema import validate_and_evolve_existing_target
-from sqlbuild.executor.load._helpers.staging import write_loader_rows_to_staging
+from sqlbuild.executor.load._helpers.staging import (
+    resolve_loader_relations,
+    write_loader_rows_to_staging,
+)
 from sqlbuild.executor.load.models import (
     LoaderContext,
     LoaderDestination,
@@ -109,17 +109,10 @@ def _execute_source_load(
     destination_name: str = (
         source_entry.table if source_entry.table is not None else source_entry.name
     )
-    destination_relation: str = resolve_qualified_name_parts(
-        adapter=adapter,
-        database=source_entry.database,
-        schema=source_entry.schema,
-        name=destination_name,
-    )
-    staging: str = resolve_qualified_name_parts(
-        adapter=adapter,
-        database=source_entry.database,
-        schema=source_entry.schema,
-        name=f"{destination_name}__staging",
+    destination_relation: str
+    staging: str
+    destination_relation, staging = resolve_loader_relations(
+        adapter=adapter, source_entry=source_entry, destination_name=destination_name
     )
     destination: LoaderDestination = LoaderDestination(
         relation=destination_relation, name=destination_name

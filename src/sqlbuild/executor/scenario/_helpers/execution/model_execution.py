@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.exceptions import ScenarioStopRequested
 from sqlbuild.executor.scenario.main._execute import execute_scenario_model
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
@@ -20,12 +23,17 @@ def execute_scenario_models(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
+    promotion_mode: TablePromotionMode,
+    schema_prepared: bool = False,
+    stop_requested: threading.Event | None = None,
 ) -> tuple[ModelExecutionResult, ...]:
     """Execute scenario model entries in planned dependency order."""
 
     results: list[ModelExecutionResult] = []
     entry: ModelPlanEntry
     for entry in scenario_plan.model_entries:
+        if stop_requested is not None and stop_requested.is_set():
+            raise ScenarioStopRequested
         with ResourceAttemptLifecycle(
             resource_id=f"scenario:{scenario_plan.name}:model:{entry.name}",
             resource_kind=str(entry.materialization_type),
@@ -38,6 +46,8 @@ def execute_scenario_models(
                 adapter=adapter,
                 connection=connection,
                 run_id=run_id,
+                promotion_mode=promotion_mode,
+                schema_prepared=schema_prepared,
             )
             if result.status == ExecutionStatus.FAILED:
                 lifecycle.failed(error_code=result.error_code)

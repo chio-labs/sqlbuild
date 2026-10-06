@@ -30,7 +30,7 @@ FROM __ref("stg_orders")
 GROUP BY customer_id
 ```
 
-Projects may opt into `settings.table_promotion_mode = "immediate"`. Immediate promotion replaces the destination before audits, so a failed audit does not restore the old table. Immediate promotion rejects models that require declared-type enforcement or `contract enforced`; use staged promotion for those guarantees.
+Projects may opt into `settings.table_promotion_mode = "immediate"`. Immediate promotion replaces the destination before audits, so a failed audit does not restore the old table. Immediate promotion rejects models that require declared-type enforcement or `contract enforced`; use staged promotion for those guarantees. A table or incremental model with `contract enforced` under immediate promotion is a `K011` compile error, so `sqb compile`, `sqb plan`, `sqb build`, and `sqb scenario test` report it before any warehouse work.
 
 ## Incremental
 

@@ -12,6 +12,8 @@ from tests.unit.src.sqlbuild.adapter.relations.main.fit_artifact_logical_name._t
 )
 
 LONG_NAME: str = "customer_orders_" + "x" * 40
+MULTIBYTE_NAME: str = "kunde_" + "ä" * 13
+MULTIBYTE_NAME_HASH: str = hashlib.sha256(MULTIBYTE_NAME.encode("utf-8")).hexdigest()[:8]
 LONG_NAME_HASH: str = hashlib.sha256(LONG_NAME.encode("utf-8")).hexdigest()[:8]
 
 
@@ -31,6 +33,13 @@ LONG_NAME_HASH: str = hashlib.sha256(LONG_NAME.encode("utf-8")).hexdigest()[:8]
             fixed_prefix="__prefix__",
             identifier_limit=40,
             expected_name=f"{LONG_NAME[:21]}_{LONG_NAME_HASH}",
+        ),
+        FitArtifactLogicalNameTestCase(
+            description="multibyte name is fitted by UTF-8 bytes on a character boundary",
+            logical_name=MULTIBYTE_NAME,
+            fixed_prefix="__prefix__",
+            identifier_limit=40,
+            expected_name=f"kunde_{'ä' * 7}_{MULTIBYTE_NAME_HASH}",
         ),
     ],
     ids=lambda case: case.description,

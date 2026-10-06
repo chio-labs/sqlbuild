@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import signal
 import subprocess
+import sys
+import time
 from collections import defaultdict
+from itertools import takewhile
 from pathlib import Path
-from typing import cast
+from typing import IO, NamedTuple, cast
 
+from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario._helpers.snapshots.core import (
     build_scenario_snapshot_input_fingerprint,
 )
 from sqlbuild.executor.scenario.models import ScenarioSnapshotInputSpec
+from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
+    ScenarioPromotionE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
@@ -571,3 +581,277 @@ def restamp_scenario_snapshot_capture_adapter(
         capture_dialect=capture_adapter,
     )
     manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+
+def build_promotion_project_files(test_case: ScenarioPromotionE2ETestCase) -> dict[str, str]:
+    """Build a one-model project whose scenario exercises table promotion settings."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "scenario_promotion"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_promotion.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+            f"{test_case.defaults_config}\n"
+            f"{test_case.settings_config}"
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: INTEGER\n"
+            "      - name: amount\n"
+            "        type: INTEGER\n"
+        ),
+        "models/order_totals.sql": (
+            "MODEL (\n"
+            "  description 'Order totals.',\n"
+            "  materialized table,\n"
+            "  sql_analysis false,\n"
+            f"{test_case.model_columns}"
+            ");\n\n"
+            "SELECT\n"
+            "  CAST(SUM(amount) AS BIGINT) AS total_amount,\n"
+            "  CAST(COUNT(*) AS BIGINT) AS order_count\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "tests/scenarios/order_totals_pass.sql": (
+            "SCENARIO (description 'Order totals scenario.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 10 AS amount\n"
+            "  UNION ALL\n"
+            "  SELECT 2 AS id, 5 AS amount\n"
+            "),\n"
+            "__expected__order_totals AS (\n"
+            "  SELECT 15 AS total_amount, 2 AS order_count\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def scenario_result_lines(stdout: str) -> tuple[str, ...]:
+    """Return scenario result rows and expectation rows without timings, in output order."""
+
+    rows: list[str] = re.findall(
+        r"^(?:order_|orders_|    expect|    expected |    assertion ).*$", stdout, re.M
+    )
+    return tuple(re.sub(r"\s+\d+\.\d\ds$", "", row).rstrip() for row in rows)
+
+
+def build_empty_fixture_scenario_project_files(*, customer_columns_yaml: str) -> dict[str, str]:
+    """Build a scenario that mocks one source as empty through `__empty_fixture()`."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "scenario_empty_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_empty_fixture.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n\n'
+            "[rules]\n"
+            'select = ["SQBRSQL021"]\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: INTEGER\n"
+            "      - name: customer_id\n"
+            "        type: INTEGER\n"
+            "  - name: raw_customers\n"
+            "    description: Raw customers.\n"
+            "    schema: main\n"
+            "    table: raw_customers\n"
+            f"{customer_columns_yaml}"
+        ),
+        "models/customer_orders.sql": (
+            "MODEL (description 'Orders joined to known customers.', materialized table);\n\n"
+            "SELECT o.id AS order_id, c.name AS customer_name\n"
+            'FROM __source("raw_orders") AS o\n'
+            'JOIN __source("raw_customers") AS c ON c.id = o.customer_id\n'
+        ),
+        "tests/scenarios/orders_without_customers.sql": (
+            "SCENARIO (description 'Orders without known customers produce no rows.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 7 AS customer_id\n"
+            "),\n"
+            "__source__raw_customers AS (\n"
+            "  SELECT * FROM __empty_fixture()\n"
+            "),\n"
+            "__assert__no_unmatched_orders AS (\n"
+            '  SELECT order_id FROM __ref("customer_orders")\n'
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+INTERRUPT_HOOK_SECONDS_ENV_VAR: str = "SCENARIO_INTERRUPT_HOOK_SECONDS"
+
+
+class InterruptedScenarioRun(NamedTuple):
+    """Outcome of a scenario command interrupted through SIGINT."""
+
+    returncode: int
+    stdout: str
+    output: str
+    stop_seconds: float
+
+
+_ENDLESS_SUM: str = "(SELECT SUM(big.n) FROM range(1000000000000) AS big(n)) * 0"
+_FIXTURE_AMOUNTS: dict[bool, str] = {True: f"CAST(10 + {_ENDLESS_SUM} AS INTEGER)", False: "10"}
+_MODEL_TOTALS: dict[bool, str] = {True: f"SUM(o.amount) + {_ENDLESS_SUM}", False: "SUM(o.amount)"}
+_POST_HOOKS: dict[bool, str] = {True: ', post_hooks [python("pause_after_build")]', False: ""}
+_HOOK_FILES: dict[bool, dict[str, str]] = {
+    True: {
+        "hooks/python/slow_hooks.py": (
+            "import os\n"
+            "import time\n\n"
+            "from sqlbuild.hooks import hook\n\n\n"
+            "@hook\n"
+            "def pause_after_build(ctx):\n"
+            '    """Pause so an interrupt lands while scenarios run."""\n'
+            f"    time.sleep(float(os.environ.get('{INTERRUPT_HOOK_SECONDS_ENV_VAR}', '0')))\n"
+        )
+    },
+    False: {},
+}
+
+
+def build_interrupt_project_files(
+    *, scenario_count: int, long_model: bool, long_fixture: bool, slow_hook: bool
+) -> dict[str, str]:
+    """Build scenarios whose model, fixture, or post-hook runs until interrupted."""
+
+    scenario_sql: str = (
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        f"  SELECT 1 AS id, {_FIXTURE_AMOUNTS[long_fixture]} AS amount\n"
+        "),\n"
+        "__expected__order_totals AS (\n"
+        "  SELECT 10 AS total_amount\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return {
+        **_HOOK_FILES[slow_hook],
+        "sqlbuild_project.toml": (
+            'name = "scenario_interrupt"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_interrupt.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+        ),
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals.', materialized table, sql_analysis false"
+            f"{_POST_HOOKS[slow_hook]});\n\n"
+            f"SELECT {_MODEL_TOTALS[long_model]} AS total_amount "
+            'FROM __source("raw_orders") AS o\n'
+        ),
+        **{
+            f"tests/scenarios/slow_{index}.sql": (
+                f"SCENARIO (description 'Slow scenario {index}.');\n\n{scenario_sql}"
+            )
+            for index in range(scenario_count)
+        },
+    }
+
+
+def interrupt_scenario_run(
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    trigger: str,
+    trigger_stream: str,
+    interrupt_count: int,
+    hook_seconds: float = 0.0,
+) -> InterruptedScenarioRun:
+    """Interrupt a scenario command once ``trigger`` is printed on ``trigger_stream``."""
+
+    process: subprocess.Popen[str] = subprocess.Popen(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--no-color",
+            "--project-dir",
+            str(project_dir),
+            "scenario",
+            *args,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, INTERRUPT_HOOK_SECONDS_ENV_VAR: str(hook_seconds)},
+    )
+    streams: dict[str, IO[str] | None] = {"stdout": process.stdout, "stderr": process.stderr}
+    watched: IO[str] | None = streams[trigger_stream]
+    assert watched is not None
+    started: str = "".join(takewhile(lambda line: trigger not in line, watched))
+    time.sleep(1.0)
+    interrupted_at: float = time.monotonic()
+    for _ in range(interrupt_count):
+        process.send_signal(signal.SIGINT)
+        time.sleep(0.5)
+    stdout, stderr = process.communicate(timeout=120)
+    return InterruptedScenarioRun(
+        returncode=process.returncode,
+        stdout=stdout,
+        output=started + stdout + stderr,
+        stop_seconds=time.monotonic() - interrupted_at,
+    )
+
+
+def scenario_relation_names_if_present(*, db_path: Path) -> tuple[str, ...]:
+    """Return scenario-owned DuckDB relation names, or none when the database was never made."""
+
+    return {True: list_scenario_relation_names, False: lambda **_: ()}[db_path.exists()](
+        db_path=db_path
+    )
+
+
+COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
+
+
+def write_project_settings(*, project_dir: Path, base_toml: str, settings: str) -> None:
+    """Rewrite the project file with a settings block appended to its base content."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(base_toml + settings, encoding="utf-8")
+
+
+def run_reusable_compile(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Compile in a fresh process with whole-project compile reuse enabled."""
+
+    return subprocess.run(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--project-dir",
+            str(project_dir),
+            "--no-color",
+            "compile",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, REUSE_DISABLE_ENV_VAR: "0"},
+        check=False,
+    )

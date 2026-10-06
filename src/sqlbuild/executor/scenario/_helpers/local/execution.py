@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
@@ -81,6 +82,7 @@ def execute_local_scenario_load_only_run(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     strict: bool,
+    promotion_mode: TablePromotionMode,
     capture_adapter: str | None = None,
     capture_dialect: str | None = None,
 ) -> ScenarioRunResult:
@@ -155,6 +157,7 @@ def execute_local_scenario_load_only_run(
             adapter=adapter,
             connection=connection,
             run_id=f"local-{scenario_plan.name}",
+            promotion_mode=promotion_mode,
             duckdb_path=duckdb_path,
             loaded_relations=load_result.relations,
         )
@@ -288,6 +291,7 @@ def _execute_local_plan(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
+    promotion_mode: TablePromotionMode,
     duckdb_path: Path,
     loaded_relations: tuple[ScenarioLocalSnapshotLoadedRelation, ...],
 ) -> ScenarioRunResult:
@@ -317,6 +321,7 @@ def _execute_local_plan(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
+        promotion_mode=promotion_mode,
     )
     if _has_failed(model_results):
         local_model_results: tuple[ModelExecutionResult, ...] = _with_local_model_error_codes(

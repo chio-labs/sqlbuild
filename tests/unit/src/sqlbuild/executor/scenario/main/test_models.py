@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -46,6 +47,7 @@ def test_given_table_model_entry_when_executing_scenario_model_then_creates_tabl
         adapter=adapter,
         connection=object(),
         run_id="run-1",
+        promotion_mode=TablePromotionMode.IMMEDIATE,
     )
 
     assert result.status == test_case.expected_statuses[0]
@@ -84,6 +86,7 @@ def test_given_view_model_entry_when_executing_scenario_model_then_creates_view(
         adapter=adapter,
         connection=object(),
         run_id="run-1",
+        promotion_mode=TablePromotionMode.IMMEDIATE,
     )
 
     assert result.status == test_case.expected_statuses[0]
@@ -122,6 +125,7 @@ def test_given_incremental_model_entry_when_executing_scenario_model_then_create
         adapter=adapter,
         connection=object(),
         run_id="run-1",
+        promotion_mode=TablePromotionMode.IMMEDIATE,
     )
 
     assert result.status == test_case.expected_statuses[0]
@@ -163,6 +167,7 @@ def test_given_model_failure_when_executing_scenario_models_then_stops_before_ne
         adapter=adapter,
         connection=object(),
         run_id="run-1",
+        promotion_mode=TablePromotionMode.IMMEDIATE,
     )
 
     assert tuple(result.status for result in results) == test_case.expected_statuses

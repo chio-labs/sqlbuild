@@ -22,6 +22,8 @@ def execute_scenario_model(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
+    promotion_mode: TablePromotionMode,
+    schema_prepared: bool = False,
 ) -> ModelExecutionResult:
     """Execute one scenario model entry against scenario-scoped relations."""
 
@@ -58,6 +60,7 @@ def execute_scenario_model(
                     run_id=run_id,
                     query_change_tracking=False,
                     hook_functions=scenario_plan.hook_functions,
+                    schema_prepared=schema_prepared,
                 )
             )
         )
@@ -80,9 +83,10 @@ def execute_scenario_model(
                 run_id=run_id,
                 query_change_tracking=False,
                 hook_functions=scenario_plan.hook_functions,
+                schema_prepared=schema_prepared,
             ),
             declared_columns=entry.declared_columns,
-            promotion_mode=TablePromotionMode.IMMEDIATE,
+            promotion_mode=promotion_mode,
         )
     )
 

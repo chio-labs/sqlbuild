@@ -702,26 +702,6 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             expected_missing_relations=("main.orders",),
         ),
         BuildExecutionTestCase(
-            description="immediate table promotion rejects enforced contract before mutation",
-            project_files={
-                "sqlbuild_project.toml": _PROJECT_YML_IMMEDIATE,
-                "models/orders.sql": (
-                    "MODEL (description 'Test model orders.',\n"
-                    "  materialized table,\n"
-                    "  contract enforced,\n"
-                    "  columns (id (type INTEGER)),\n"
-                    ");\n\n"
-                    "SELECT 1 AS id"
-                ),
-            },
-            expected_status=BuildStatus.FAILED,
-            expected_failure_count=1,
-            expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
-            expected_model_error_fragments=(("orders", "requires staged table promotion"),),
-            expected_model_error_codes=(("orders", "K011"),),
-            expected_missing_relations=("main.orders",),
-        ),
-        BuildExecutionTestCase(
             description="snapshot runtime contract failure blocks target creation",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_YML,

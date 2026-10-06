@@ -7,8 +7,13 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.relations.main.fit_auxiliary_relation_name import fit_auxiliary_relation_name
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
+from sqlbuild.executor.run.constants import TYPE_ENFORCEMENT_RELATION_SUFFIX
 
 
 def enforce_types_staged(
@@ -59,7 +64,12 @@ def enforce_types_staged(
         produced_columns=produced_columns,
         declared_map=declared_map,
     )
-    enforced_qualified: str = f"{staging_qualified}__enforced"
+    enforced_qualified: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=staging_database,
+        schema=staging_schema,
+        name=type_enforcement_relation_name(adapter=adapter, staging_table=staging_table),
+    )
     adapter.create_table_as(
         connection=connection,
         destination=enforced_qualified,
@@ -105,3 +115,13 @@ def _build_type_enforcement_projection(
                 )
             )
     return ", ".join(projection_parts)
+
+
+def type_enforcement_relation_name(*, adapter: BaseAdapter, staging_table: str) -> str:
+    """Return the fitted name of the relation type enforcement rebuilds staging into."""
+
+    return fit_auxiliary_relation_name(
+        base_name=staging_table,
+        suffix=TYPE_ENFORCEMENT_RELATION_SUFFIX,
+        identifier_limit=adapter.maximum_identifier_length(),
+    )

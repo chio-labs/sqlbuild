@@ -364,7 +364,7 @@ def expand_file_bodies(
     allows_ceremonial_select: bool = any(
         header.kind in {HEADER_KIND_TEST, HEADER_KIND_SCENARIO} for header in headers
     )
-    allows_empty_fixture_star: bool = any(header.kind == HEADER_KIND_TEST for header in headers)
+    allows_empty_fixture_star: bool = allows_ceremonial_select
     body_start: int
     body_end: int
     try:

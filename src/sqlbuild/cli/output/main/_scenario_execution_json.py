@@ -14,9 +14,14 @@ def format_scenario_execution_json(
     local: bool = False,
     run_namespace: str | None = None,
     namespace_source: str = "unset",
+    duration_ms: float | None = None,
 ) -> str:
     """Format scenario test command execution results as JSON."""
 
     return _format_scenario_execution_json(
-        results=results, local=local, run_namespace=run_namespace, namespace_source=namespace_source
+        results=results,
+        local=local,
+        run_namespace=run_namespace,
+        namespace_source=namespace_source,
+        duration_ms=duration_ms,
     )

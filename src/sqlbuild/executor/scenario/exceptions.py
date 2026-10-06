@@ -13,3 +13,7 @@ class ExecutorJsonTypeError(TypeError):
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
+
+
+class ScenarioStopRequested(BaseException):  # noqa: N818 - a control signal, not an error
+    """Raised at a step boundary when an interrupt asked running scenarios to stop."""

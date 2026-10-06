@@ -79,6 +79,7 @@ def compile_project_phase(
                 for diagnostic in errors
             ),
             code=errors[0].code,
+            help=_shared_help(errors),
         )
     if on_progress is not None:
         on_progress(f"Compiled project. ({compile_seconds:.2f}s)")
@@ -87,3 +88,10 @@ def compile_project_phase(
         connection_config=effective_config,
         compile_seconds=compile_seconds,
     )
+
+
+def _shared_help(errors: tuple[CompilerDiagnostic, ...]) -> str | None:
+    """Return the help every error shares, so one remedy is shown once."""
+
+    helps: frozenset[str | None] = frozenset(diagnostic.help for diagnostic in errors)
+    return next(iter(helps)) if len(helps) == 1 else None

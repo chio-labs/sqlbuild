@@ -180,3 +180,72 @@ class ScenarioLocalReplayProjectDialectE2ETestCase:
     source_fixture_sql: str
     assertion_sql: str
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioPromotionE2ETestCase:
+    """Test case for scenario table promotion matching build configuration."""
+
+    description: str
+    defaults_config: str
+    settings_config: str
+    model_columns: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expect_staged_promotion: bool
+    unexpected_stdout_fragments: tuple[str, ...] = ("K011", "R004")
+
+
+@dataclass(frozen=True)
+class ScenarioConcurrencyE2ETestCase:
+    """Test case for concurrent scenario execution through the CLI."""
+
+    description: str
+    command_args: tuple[str, ...]
+    settings_config: str
+    expected_header: str
+
+
+@dataclass(frozen=True)
+class ScenarioEmptyFixtureE2ETestCase:
+    """Test case for `__empty_fixture()` mocks inside SQL scenarios."""
+
+    description: str
+    customer_columns_yaml: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioInterruptE2ETestCase:
+    """Test case for interrupting a running scenario command through the real CLI."""
+
+    description: str
+    args: tuple[str, ...]
+    trigger: str
+    trigger_stream: str = "stderr"
+    long_model: bool = False
+    long_fixture: bool = False
+    slow_hook_seconds: float = 0.0
+    interrupt_count: int = 1
+    expected_notice_counts: tuple[int, int] = (1, 0)
+    expected_max_stop_seconds: float = 15.0
+
+
+@dataclass(frozen=True)
+class PromotionConflictE2ETestCase:
+    """Test case for the compile-time enforced-contract promotion conflict."""
+
+    description: str
+    settings_config: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PromotionConflictReuseE2ETestCase:
+    """Test case for the promotion conflict across warm reused compiles."""
+
+    description: str
+    settings_steps: tuple[str, ...]
+    expected_exit_codes: tuple[int, ...]
+    expected_reused: tuple[bool, ...]

@@ -102,6 +102,16 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def interrupt_connection(self, connection: Any) -> bool:
+        """Cancel a connection's running statement from another thread; False if unsupported."""
+        ...
+
+    @abstractmethod
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        """Return whether ``list_relations`` reports every relation in this scope."""
+        ...
+
+    @abstractmethod
     def supports_concurrent_microbatch_dml(self) -> bool:
         """Return whether disjoint delete/insert microbatches may execute concurrently."""
         ...

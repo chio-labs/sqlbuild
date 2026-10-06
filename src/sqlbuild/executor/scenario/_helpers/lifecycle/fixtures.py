@@ -25,6 +25,7 @@ def execute_scenario_fixtures(
     fixture_plans: tuple[ScenarioFixturePlan, ...],
     adapter: BaseAdapter,
     connection: Any,
+    schema_prepared: bool = False,
 ) -> tuple[ScenarioFixtureExecutionResult, ...]:
     """Materialize scenario fixtures in planned order."""
 
@@ -36,6 +37,7 @@ def execute_scenario_fixtures(
             fixture_plan=fixture_plan,
             adapter=adapter,
             connection=connection,
+            schema_prepared=schema_prepared,
         )
         results.append(result)
         if result.status == ExecutionStatus.FAILED:

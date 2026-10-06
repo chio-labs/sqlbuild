@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
+from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -54,6 +54,62 @@ class ScenarioFixtureTestAdapter(BaseAdapter):
 
     def close(self, connection: object) -> None:
         del connection
+
+
+class ScenarioCatalogTestAdapter(ScenarioFixtureTestAdapter):
+    """Adapter whose catalog lists only the named scenario relations."""
+
+    adapter_name: ClassVar[str] = "scenario-catalog-test"
+
+    def __init__(
+        self,
+        *,
+        relation_types: dict[str, str],
+        fail_listing: bool = False,
+        interrupt_on_create: bool = False,
+        authoritative: bool = True,
+        catalog_schema: str = "scenario_schema",
+    ) -> None:
+        super().__init__()
+        self.relation_types: dict[str, str] = relation_types
+        self.fail_listing: bool = fail_listing
+        self.authoritative: bool = authoritative
+        self.catalog_schema: str = catalog_schema
+        self.interrupt_on_create: bool = interrupt_on_create
+        self.listing_count: int = 0
+
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        del database, schema
+        return self.authoritative
+
+    def list_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection
+        self.listing_count += 1
+        _CATALOG_LISTING_STRATEGIES[self.fail_listing]()
+        in_scope: bool = self.authoritative and self.catalog_schema in (schemas or ())
+        listed_names: set[str] = set(self.relation_types).intersection(
+            {True: names or (), False: ()}[in_scope]
+        )
+        return tuple(
+            RelationInfo(
+                database=database,
+                schema=self.catalog_schema,
+                name=name,
+                relation_type=self.relation_types[name],
+            )
+            for name in sorted(listed_names)
+        )
+
+    def _execute(self, connection: object, sql: str) -> object:
+        _CATALOG_CREATE_STRATEGIES[self.interrupt_on_create and sql.startswith("CREATE ")]()
+        return super()._execute(connection, sql)
 
 
 class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
@@ -189,7 +245,9 @@ def executed_drop_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
 
 
 def build_scenario_cleanup_test_plan(
-    *, model_materialization_type: MaterializationType = MaterializationType.TABLE
+    *,
+    model_materialization_type: MaterializationType = MaterializationType.TABLE,
+    model_target_name: str = "__sqb_51b385aebe20__model__daily_revenue",
 ) -> ScenarioExecutionPlan:
     source_fixture: ScenarioFixturePlan = build_scenario_fixture_plan()
     ref_fixture: ScenarioFixturePlan = build_scenario_fixture_plan(
@@ -207,8 +265,8 @@ def build_scenario_cleanup_test_plan(
     model_target: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema="scenario_schema",
-        name="__sqb_51b385aebe20__model__daily_revenue",
-        qualified_name="scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+        name=model_target_name,
+        qualified_name=f"scenario_schema.{model_target_name}",
     )
     return ScenarioExecutionPlan(
         key=CompiledObjectKey(
@@ -452,3 +510,39 @@ _CAPTURE_RELATION_COLUMNS: dict[
     (False, True, False): _constant_columns((ColumnInfo(name="customer_id", type="INTEGER"),)),
     (False, False, True): _constant_columns((ColumnInfo(name="country_code", type="VARCHAR"),)),
 }
+
+
+def _raise_catalog_unavailable() -> None:
+    raise RuntimeError("catalog unavailable")
+
+
+def _raise_interrupt() -> None:
+    raise KeyboardInterrupt
+
+
+_CATALOG_LISTING_STRATEGIES: dict[bool, Callable[[], None]] = {
+    True: _raise_catalog_unavailable,
+    False: lambda: None,
+}
+_CATALOG_CREATE_STRATEGIES: dict[bool, Callable[[], None]] = {
+    True: _raise_interrupt,
+    False: lambda: None,
+}
+
+
+class ScenarioInterruptTestAdapter(ScenarioFixtureTestAdapter):
+    """Adapter that records statement cancellation and connection closes."""
+
+    adapter_name: ClassVar[str] = "scenario-interrupt-test"
+
+    def __init__(self, *, cancellable: bool) -> None:
+        super().__init__()
+        self.cancellable: bool = cancellable
+        self.events: list[str] = []
+
+    def interrupt_connection(self, connection: Any) -> bool:
+        self.events.append(f"interrupt:{connection}")
+        return self.cancellable
+
+    def close(self, connection: object) -> None:
+        self.events.append(f"close:{connection}")

@@ -101,6 +101,12 @@ reason = "Each type-enforced expression source is its own query whose output col
 
 [[targets.python.rule_exceptions]]
 rule = "XSB051"
+path = "src/sqlbuild/executor/scenario/_helpers/lifecycle/cleanup.py"
+symbols = ["existing_scenario_cleanup_targets"]
+reason = "Scenario cleanup lists every scenario-owned relation in one batch per database instead of dropping each planned relation blindly."
+
+[[targets.python.rule_exceptions]]
+rule = "XSB051"
 path = "src/sqlbuild/executor/migrations/_helpers/columns.py"
 symbols = ["apply_model_column_renames"]
 reason = "Each in-place column rename must re-read live columns immediately before its ALTER so overlapping builds reconcile instead of failing."

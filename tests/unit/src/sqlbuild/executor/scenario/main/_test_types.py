@@ -68,3 +68,31 @@ class ScenarioExpectedComparisonSqlTestCase:
     description: str
     set_difference_operator: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioCatalogCleanupTestCase:
+    description: str
+    relation_types: dict[str, str]
+    expected_drop_sql: tuple[str, ...]
+    fail_listing: bool = False
+    authoritative: bool = True
+    catalog_schema: str = "scenario_schema"
+    expected_listing_count: int = 1
+
+
+@dataclass(frozen=True)
+class ScenarioAuxiliaryCleanupTargetTestCase:
+    description: str
+    model_target_name: str
+    expected_max_length: int
+    expected_suffixes: tuple[str, ...] = ("", "__staging", "__enforced")
+
+
+@dataclass(frozen=True)
+class RunningScenariosInterruptTestCase:
+    description: str
+    cancellable: bool
+    close_uncancellable: bool
+    expected_events: tuple[str, ...]
+    expected_closed_connection: bool

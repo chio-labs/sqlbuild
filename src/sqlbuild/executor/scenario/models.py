@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import (
     CompiledRelationLocation,
     ScenarioExecutionPlan,
@@ -15,6 +16,8 @@ from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifac
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas
+from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
@@ -35,6 +38,15 @@ class ScenarioFixtureExecutionResult:
 
 
 @dataclass(frozen=True)
+class ScenarioRunOptions:
+    """Invocation-wide settings shared by every warehouse scenario run."""
+
+    promotion_mode: TablePromotionMode
+    prepared_schemas: PreparedScenarioSchemas | None = None
+    interrupts: ScenarioInterrupts = field(default_factory=ScenarioInterrupts)
+
+
+@dataclass(frozen=True)
 class ScenarioCleanupTarget:
     """One planned scenario-owned relation selected for cleanup."""
 
@@ -42,6 +54,9 @@ class ScenarioCleanupTarget:
     logical_name: str
     target_relation: str
     materialization_type: MaterializationType = MaterializationType.TABLE
+    database: str | None = None
+    schema: str | None = None
+    name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -266,6 +281,7 @@ class ScenarioSnapshotCaptureRunResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+    duration_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -339,3 +355,4 @@ class ScenarioRunResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+    duration_ms: float | None = None

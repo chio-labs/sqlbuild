@@ -8,6 +8,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario._helpers.execution.interrupts import (
+    cleanup_interrupted_scenarios,
+)
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario._helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
@@ -18,7 +21,9 @@ from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
+from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
+from sqlbuild.executor.scenario.exceptions import ScenarioStopRequested
 from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
@@ -26,6 +31,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioExpectedExpectationExecutionResult,
     ScenarioFailureDetails,
     ScenarioFixtureExecutionResult,
+    ScenarioRunOptions,
     ScenarioRunResult,
     ScenarioStepResults,
 )
@@ -42,17 +48,31 @@ def execute_scenario_run_steps(
     connection: Any,
     run_id: str,
     retain: bool,
+    options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
     """Execute a planned scenario and apply cleanup policy."""
 
     with OperationLifecycle(operation_kind="scenario", operation_name="scenario_execution"):
-        return _execute_scenario_run_steps(
-            scenario_plan=scenario_plan,
-            adapter=adapter,
-            connection=connection,
-            run_id=run_id,
-            retain=retain,
-        )
+        try:
+            return _execute_scenario_run_steps(
+                scenario_plan=scenario_plan,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                retain=retain,
+                options=options,
+            )
+        except BaseException as error:
+            if isinstance(error, (KeyboardInterrupt, ScenarioStopRequested)):
+                options.interrupts.announce_stop()
+            if not retain:
+                cleanup_interrupted_scenarios(
+                    scenario_plans=(scenario_plan,),
+                    adapter=adapter,
+                    connection=connection,
+                    interrupts=options.interrupts,
+                )
+            raise
 
 
 def _execute_scenario_run_steps(
@@ -62,8 +82,10 @@ def _execute_scenario_run_steps(
     connection: Any,
     run_id: str,
     retain: bool,
+    options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
 
+    _raise_if_stop_requested(options)
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,
         adapter=adapter,
@@ -80,15 +102,23 @@ def _execute_scenario_run_steps(
             error_message=prepare_result.error_message,
         )
 
+    _raise_if_stop_requested(options)
+    schema_prepared: bool = options.prepared_schemas is not None and (
+        options.prepared_schemas.ensure(
+            scenario_plan=scenario_plan, adapter=adapter, connection=connection
+        )
+    )
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = execute_scenario_fixtures(
         scenario_name=scenario_plan.name,
         fixture_plans=scenario_plan.fixture_plans,
         adapter=adapter,
         connection=connection,
+        schema_prepared=schema_prepared,
     )
     if _has_failed(fixture_results):
         return _finish_scenario(
             scenario_plan=scenario_plan,
+            interrupts=options.interrupts,
             adapter=adapter,
             connection=connection,
             retain=retain,
@@ -99,6 +129,7 @@ def _execute_scenario_run_steps(
             ),
         )
 
+    _raise_if_stop_requested(options)
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
         scenario_name=scenario_plan.name,
         seed_entries=scenario_plan.seed_entries,
@@ -109,6 +140,7 @@ def _execute_scenario_run_steps(
     if _has_failed(seed_results):
         return _finish_scenario(
             scenario_plan=scenario_plan,
+            interrupts=options.interrupts,
             adapter=adapter,
             connection=connection,
             retain=retain,
@@ -122,15 +154,20 @@ def _execute_scenario_run_steps(
             ),
         )
 
+    _raise_if_stop_requested(options)
     model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
         run_id=run_id,
+        promotion_mode=options.promotion_mode,
+        schema_prepared=schema_prepared,
+        stop_requested=options.interrupts.stop_requested,
     )
     if _has_failed(model_results):
         return _finish_scenario(
             scenario_plan=scenario_plan,
+            interrupts=options.interrupts,
             adapter=adapter,
             connection=connection,
             retain=retain,
@@ -145,12 +182,14 @@ def _execute_scenario_run_steps(
             ),
         )
 
+    _raise_if_stop_requested(options)
     expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
     expected_results = execute_scenario_expected_expectations(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
     )
+    _raise_if_stop_requested(options)
     assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...]
     assertion_results = execute_scenario_assertion_expectations(
         scenario_plan=scenario_plan,
@@ -159,6 +198,7 @@ def _execute_scenario_run_steps(
     )
     return _finish_scenario(
         scenario_plan=scenario_plan,
+        interrupts=options.interrupts,
         adapter=adapter,
         connection=connection,
         retain=retain,
@@ -180,6 +220,7 @@ def _execute_scenario_run_steps(
 def _finish_scenario(
     *,
     scenario_plan: ScenarioExecutionPlan,
+    interrupts: ScenarioInterrupts,
     adapter: BaseAdapter,
     connection: Any,
     retain: bool,
@@ -200,7 +241,9 @@ def _finish_scenario(
         ExecutionStatus.FAILED if error_message is not None else ExecutionStatus.SUCCESS
     )
     cleanup_result: ScenarioCleanupExecutionResult | None = None
-    if not retain:
+    if interrupts.stop_requested.is_set():
+        interrupts.announce_stop()
+    if not retain and not interrupts.abandoned.is_set():
         cleanup_result = execute_scenario_cleanup(
             scenario_plan=scenario_plan,
             adapter=adapter,
@@ -254,6 +297,11 @@ def _scenario_failure(
         error_help=error_help,
         error_message=error_message,
     )
+
+
+def _raise_if_stop_requested(options: ScenarioRunOptions) -> None:
+    if options.interrupts.stop_requested.is_set():
+        raise ScenarioStopRequested
 
 
 def _has_failed(results: tuple[object, ...]) -> bool:

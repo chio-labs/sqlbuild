@@ -21,6 +21,7 @@ from sqlbuild.executor.scenario.constants import (
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
     ScenarioLocalReplaySource,
+    ScenarioRunOptions,
     ScenarioRunResult,
     ScenarioSnapshotStateResult,
 )
@@ -82,8 +83,9 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
         connection: Any,
         run_id: str,
         retain: bool,
+        options: ScenarioRunOptions,
     ) -> ScenarioRunResult:
-        del adapter, connection, run_id, retain
+        del adapter, connection, run_id, retain, options
         return ScenarioRunResult(
             scenario_name=scenario_plan.name,
             status=ExecutionStatus.SUCCESS,

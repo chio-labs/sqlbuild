@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario._helpers.local.execution import (
     execute_local_scenario_load_only_run as _execute_local_scenario_load_only_run,
@@ -18,6 +19,7 @@ def execute_local_scenario_load_only_run(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     strict: bool,
+    promotion_mode: TablePromotionMode,
     capture_adapter: str | None = None,
     capture_dialect: str | None = None,
 ) -> ScenarioRunResult:
@@ -28,6 +30,7 @@ def execute_local_scenario_load_only_run(
         scenario_plan=scenario_plan,
         adapter=adapter,
         strict=strict,
+        promotion_mode=promotion_mode,
         capture_adapter=capture_adapter,
         capture_dialect=capture_dialect,
     )

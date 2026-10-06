@@ -106,6 +106,10 @@ SELECT 1
 
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 
+To mock a contracted source, ref, or seed with no rows, use `SELECT * FROM __empty_fixture()` as
+the complete fixture body. SQLBuild expands it to the relation's declared, typed columns with a
+false filter, as in [unit tests](testing.md).
+
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
 
 Scenario SQL uses macros, enums, and constants available from the scenario file's directory under
@@ -145,13 +149,32 @@ Scenario artifacts are physically isolated from production:
 
 ### Execution flow
 
-1. Clean any existing scenario artifacts from a previous run in the effective run namespace
+1. Drop any scenario artifacts a previous run left in the effective run namespace (one catalog read finds them)
 2. Materialize source, ref, and seed fixtures as physical tables
 3. Load required project seeds
 4. Build required models in dependency order (incremental models run as full-refresh in scenarios)
 5. Run expected-output comparisons (order-insensitive)
 6. Run zero-row assertions
-7. Clean up this namespace's scenario-owned artifacts (unless `--retain`)
+7. Clean up this namespace's scenario-owned artifacts (unless `--retain`), including after a failure or Ctrl-C
+
+Table models use the same promotion as `sqb build`: the project's `table_promotion_mode`, or the
+adapter default (staged) when it is unset. An enforced contract needs staged promotion, so its
+runtime contract check runs before the scenario reaches its expectations; with
+`table_promotion_mode = "immediate"` such a model is a `K011` compile error, reported before any
+scenario runs, exactly as in `sqb compile`, `sqb plan`, and `sqb build`.
+
+Independent scenarios run concurrently, up to `--concurrency` or the project `concurrency`
+setting. Each scenario writes only its own prefixed relations, so concurrent scenarios never
+share an artifact. Results are reported in selection order with each scenario's wall time, and the
+summary includes the total time. On DuckDB, concurrent scenarios use separate connections to the
+same database file; an in-memory database (`:memory:`) gives each connection its own database, so
+fixtures still isolate every scenario.
+
+On Ctrl-C, SQLBuild prints one notice, cancels scenarios that have not started, cancels the
+statements running scenarios have in flight, drops their relations (unless `--retain`), and only
+then exits. A second Ctrl-C skips that cleanup and exits immediately; the next run of the same
+scenarios drops whatever they left behind. `--local` replay and `sqb scenario capture` run one
+scenario at a time.
 
 ### Parallel CI runs
 

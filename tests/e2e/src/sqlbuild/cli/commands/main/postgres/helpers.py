@@ -878,3 +878,64 @@ def revoke_view_select(*, view: str, role: str, revoke: bool, config: dict[str, 
     statement: str
     for statement in statements[revoke]:
         execute_postgres_sql(sql=statement, config=config)
+
+
+def build_long_model_name_project_files(
+    *, project_toml: str, schema_name: str, model_name: str, model_columns: str
+) -> dict[str, str]:
+    """Build a contracted table model whose name nearly fills the identifier limit."""
+
+    return {
+        "sqlbuild_project.toml": project_toml + 'contract = "enforced"\n',
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            f"    schema: {schema_name}\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: INTEGER\n"
+            "      - name: amount\n"
+            "        type: INTEGER\n"
+        ),
+        f"models/{model_name}.sql": (
+            "MODEL (\n"
+            "  description 'Order totals for a long-named model.',\n"
+            "  materialized table,\n"
+            "  sql_analysis false,\n"
+            f"  columns (\n{model_columns}  ),\n"
+            ");\n\n"
+            "SELECT CAST(SUM(amount) AS BIGINT) AS total_amount\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "tests/scenarios/long_name_totals.sql": (
+            "SCENARIO (description 'Totals for a long-named model.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 10 AS amount\n"
+            "),\n"
+            f"__expected__{model_name} AS (\n"
+            "  SELECT 10 AS total_amount\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def postgres_relation_names(
+    *, schema_name: str, name_prefix: str, config: dict[str, object]
+) -> tuple[str, ...]:
+    """Return the relation names in one Postgres schema that start with a literal prefix."""
+
+    return tuple(
+        str(row[0])
+        for row in fetch_postgres_rows(
+            sql=(
+                "SELECT table_name FROM information_schema.tables "
+                f"WHERE table_schema = '{schema_name}' "
+                f"AND starts_with(table_name, '{name_prefix}') ORDER BY table_name"
+            ),
+            config=config,
+        )
+    )

@@ -112,6 +112,18 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     )
     relation_grants_supported: ClassVar[bool] = False
 
+    def interrupt_connection(self, connection: Any) -> bool:
+        """Cancel a connection's running statement from another thread; False if unsupported."""
+
+        connection.interrupt()
+        return True
+
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        """Return whether ``list_relations`` reports every relation in this scope."""
+
+        del database, schema
+        return True
+
     def supports_zero_copy_clone(self) -> bool:
         return False
 
