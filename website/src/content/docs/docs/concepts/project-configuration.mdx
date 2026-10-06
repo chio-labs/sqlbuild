@@ -115,8 +115,7 @@ When the project defines exactly one named connection, across `sqlbuild_project.
 `sqlbuild_local.toml`, a target that does not set `connection` uses it. This default does not
 apply when either file has a legacy top-level `[connection]` block or the target sets an inline
 `[targets.<name>.connection]` block. With several named connections, every target must choose
-one; SQLBuild rejects a target without `connection` while loading configuration instead of
-falling back to an empty connection.
+one; SQLBuild rejects a target without `connection` while loading configuration.
 
 ```toml
 [connections.local]
@@ -124,6 +123,18 @@ database = "my_project.duckdb"
 
 [targets.dev]
 schema = "dev"    # uses connections.local, the only named connection
+```
+
+A command that needs the warehouse, such as `build`, `plan`, `query`, `diff`, or `debug`, fails
+with `D001` before connecting when no connection is configured at all: no named connection, no
+legacy `[connection]` block, and no inline target connection. Commands that do not connect,
+such as `compile`, `format`, `lineage`, `scope`, `rename`, and `mv`, keep working without one.
+SQLBuild never falls back to an implicit in-memory DuckDB database; to use one, set it
+explicitly:
+
+```toml
+[connections.memory]
+database = ":memory:"
 ```
 
 A `database` or `schema` present in a named connection is connection/session metadata only;
@@ -194,7 +205,9 @@ The active target is determined by (in order of precedence):
 1. `--target` on the command line (highest priority)
 2. `sqlbuild_local.toml` `target` field
 3. `default_target` in `sqlbuild_project.toml`
-4. No target (models build to the default schema)
+4. No target (models build to the default schema). Named connections are chosen through
+   targets, so warehouse commands fail with `D001` unless a target is selected or a legacy
+   top-level `[connection]` block exists.
 
 A typical developer keeps shared target definitions in `sqlbuild_project.toml` and selects
 their normal target once in the optional local file:

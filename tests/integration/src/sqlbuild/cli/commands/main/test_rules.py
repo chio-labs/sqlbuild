@@ -2513,7 +2513,8 @@ def test_given_typed_unselected_model_when_planning_selection_then_rules_use_sel
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
-        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRCONTRACT105"]\n',
+        'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'
+        '[rules]\nselect = ["SQBRCONTRACT105"]\n',
         encoding="utf-8",
     )
     sources: Path = tmp_path / "sources"

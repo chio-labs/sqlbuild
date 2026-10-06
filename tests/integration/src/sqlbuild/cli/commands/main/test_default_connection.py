@@ -38,6 +38,18 @@ _SEVERAL_CONNECTIONS_PROJECT: str = (
     "[targets.dev]\n"
     'schema = "dev"\n'
 )
+_NO_CONNECTION_PROJECT: str = (
+    'name = "shop"\nadapter = "duckdb"\ndefault_target = "dev"\n\n[targets.dev]\nschema = "dev"\n'
+)
+_MEMORY_CONNECTION_PROJECT: str = (
+    'name = "shop"\n'
+    'adapter = "duckdb"\n'
+    'default_target = "dev"\n\n'
+    "[connections.memory]\n"
+    'database = ":memory:"\n\n'
+    "[targets.dev]\n"
+    'schema = "main"\n'
+)
 
 
 @pytest.mark.parametrize(
@@ -92,6 +104,31 @@ def test_given_target_without_connection_when_building_then_only_named_connectio
                 "targets.dev does not set connection and several named connections are "
                 "defined (archive, local)",
             ),
+        ),
+        DefaultConnectionCliTestCase(
+            description="build fails before connecting without any connection",
+            project_toml=_NO_CONNECTION_PROJECT,
+            argv=("build",),
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "error[D001]",
+                "target dev has no connection; add [connections.<name>] (or set connection = "
+                '"<name>" on [targets.dev]) in sqlbuild_project.toml or sqlbuild_local.toml',
+            ),
+        ),
+        DefaultConnectionCliTestCase(
+            description="compile works without any connection",
+            project_toml=_NO_CONNECTION_PROJECT,
+            argv=("compile",),
+            expected_exit_code=0,
+            expected_output_fragments=("Project compiled",),
+        ),
+        DefaultConnectionCliTestCase(
+            description="build uses an explicit in-memory connection",
+            project_toml=_MEMORY_CONNECTION_PROJECT,
+            argv=("build",),
+            expected_exit_code=0,
+            expected_output_fragments=("Completed successfully",),
         ),
     ],
     ids=lambda case: case.description,

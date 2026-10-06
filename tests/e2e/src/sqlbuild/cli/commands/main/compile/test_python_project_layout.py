@@ -316,7 +316,9 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
         FactoryModuleNodePlanTestCase(
             description="factory returning its module-level task registers one node",
             repo_files={
-                "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
+                "sqlbuild_project.toml": (
+                    'name = "factory_layout"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+                ),
                 "python/factories/orders.py": (
                     "from sqlbuild.factories import factory\n"
                     "from sqlbuild.tasks import task\n\n\n"
@@ -333,7 +335,9 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
         FactoryModuleNodePlanTestCase(
             description="factory binding its generated task to a module global registers it",
             repo_files={
-                "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
+                "sqlbuild_project.toml": (
+                    'name = "factory_layout"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+                ),
                 "python/factories/orders.py": (
                     "from sqlbuild.factories import factory\n"
                     "from sqlbuild.tasks import task\n\n\n"
@@ -380,7 +384,9 @@ def test_given_factory_returning_module_node_when_planning_then_node_registers_o
         PythonProjectLayoutCompileTestCase(
             description="factory returning a distinct same-name task still conflicts",
             repo_files={
-                "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
+                "sqlbuild_project.toml": (
+                    'name = "factory_layout"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+                ),
                 "python/factories/orders.py": (
                     "from sqlbuild.factories import factory\n"
                     "from sqlbuild.tasks import task\n\n\n"
@@ -430,7 +436,9 @@ def test_given_factory_returning_distinct_same_name_node_when_planning_then_conf
                 "python/helpers.py": "raise RuntimeError('unrelated python package imported')\n",
             },
             repo_files={
-                "sqlbuild_project.toml": 'name = "python_collision"\nadapter = "duckdb"\n',
+                "sqlbuild_project.toml": (
+                    'name = "python_collision"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+                ),
                 "python/helpers/__init__.py": "",
                 "python/helpers/values.py": "STATUS = 'shipped'\n",
                 "python/helpers/clean.py": (

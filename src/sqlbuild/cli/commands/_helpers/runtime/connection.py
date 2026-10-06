@@ -8,6 +8,8 @@ from pathlib import Path
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.cli.commands._helpers.runtime.warehouses import apply_command_warehouse
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
+from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
+from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.main.profile.profile_connection import (
@@ -17,6 +19,9 @@ from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
 
 _DUCKDB_SNOWFLAKE_LIKE_WARNING_KEYS: frozenset[str] = frozenset(
     {"account", "authenticator", "role", "token", "warehouse"}
@@ -109,6 +114,11 @@ def resolve_project_connection_config(
 ) -> dict[str, object]:
     """Resolve the effective project connection config for CLI command execution."""
 
+    _require_configured_connection(
+        discovered_inputs=discovered_inputs,
+        project_dir=project_dir,
+        selected_target=selected_target,
+    )
     return resolve_connection_config(
         raw_config=build_effective_connection_config(
             discovered_inputs=discovered_inputs,
@@ -135,18 +145,46 @@ def resolve_target_connection_config(
 ) -> dict[str, object]:
     """Resolve the effective connection config for one named target."""
 
-    return resolve_connection_config(
-        raw_config=build_effective_connection_config(
-            discovered_inputs=discovered_inputs,
-            selected_target=target_name,
-            cli_vars=cli_vars,
-        ),
-        project_dir=project_dir,
-        adapter_name=resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
+    return resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
-        cli_vars=cli_vars,
+        project_dir=project_dir,
         selected_target=target_name,
+        cli_vars=cli_vars,
+    )
+
+
+def _require_configured_connection(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    selected_target: str | None,
+) -> None:
+    """Reject warehouse commands whose connection would come from no configuration at all."""
+
+    project_config: ProjectConfig = discovered_inputs.project_config
+    local_config: LocalConfig = discovered_inputs.local_config
+    if project_config.connection or local_config.connection:
+        return
+    target_name: str | None = resolve_target_name(
+        project_config=project_config,
+        local_config=local_config,
+        selected_target=selected_target,
+    )
+    if target_name is None:
+        raise ProjectConfigError(
+            f"{project_dir / PROJECT_CONFIG_FILENAME} no target is selected and no top-level "
+            "[connection] is configured; add [connections.<name>] and a [targets.<name>] that "
+            "uses it, then set default_target or pass --target"
+        )
+    target_config: TargetConfig = resolve_target_config(
+        project_config=project_config,
+        local_config=local_config,
+        target_name=target_name,
+    )
+    if target_config.connection_name is not None or target_config.connection:
+        return
+    raise ProjectConfigError(
+        f"{project_dir / PROJECT_CONFIG_FILENAME} target {target_name} has no connection; add "
+        f'[connections.<name>] (or set connection = "<name>" on [targets.{target_name}]) in '
+        "sqlbuild_project.toml or sqlbuild_local.toml"
     )

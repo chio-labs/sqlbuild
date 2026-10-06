@@ -12,6 +12,7 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_target_connection_config,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.contracts.models import (
@@ -21,6 +22,8 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
+    ExplicitMemoryConnectionTestCase,
+    MissingConnectionTestCase,
     NamedConnectionBehaviorTestCase,
     ResolveConnectionConfigWarningTestCase,
     ResolveDbtProfileConnectionConfigTestCase,
@@ -386,6 +389,161 @@ def test_given_target_connection_when_resolving_then_it_expands_effective_config
         discovered_inputs=discovered_inputs,
         project_dir=tmp_path,
         target_name=test_case.target_name,
+    )
+
+    assert connection == test_case.expected_connection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingConnectionTestCase(
+            description="default target without any connection",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                default_target="dev",
+                targets={"dev": TargetConfig(schema="dev")},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment=(
+                "target dev has no connection; add [connections.<name>] (or set connection = "
+                '"<name>" on [targets.dev]) in sqlbuild_project.toml or sqlbuild_local.toml'
+            ),
+        ),
+        MissingConnectionTestCase(
+            description="selected local target without any connection",
+            project_config=ProjectConfig(name="shop", adapter="duckdb"),
+            local_config=LocalConfig(targets={"scratch": LocalTargetConfig(schema="scratch")}),
+            selected_target="scratch",
+            expected_error_fragment="target scratch has no connection",
+        ),
+        MissingConnectionTestCase(
+            description="no target and no connection",
+            project_config=ProjectConfig(name="shop", adapter="duckdb"),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="no target is selected and no top-level [connection] is configured",
+        ),
+        MissingConnectionTestCase(
+            description="no target selected while only named connections exist",
+            project_config=ProjectConfig(
+                name="shop", adapter="duckdb", connections={"local": {"database": "shop.duckdb"}}
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="no target is selected and no top-level [connection] is configured",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_configured_connection_when_resolving_then_it_fails_before_connecting(
+    test_case: MissingConnectionTestCase, tmp_path: Path
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=test_case.project_config, local_config=test_case.local_config
+    )
+
+    with pytest.raises(ProjectConfigError) as error_info:
+        resolve_project_connection_config(
+            discovered_inputs=discovered_inputs,
+            project_dir=tmp_path,
+            selected_target=test_case.selected_target,
+        )
+
+    assert error_info.value.code == "D001"
+    assert test_case.expected_error_fragment in str(error_info.value)
+    assert str(tmp_path / "sqlbuild_project.toml") in str(error_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingConnectionTestCase(
+            description="named target without any connection",
+            project_config=ProjectConfig(
+                name="shop", adapter="duckdb", targets={"prod": TargetConfig(schema="prod")}
+            ),
+            local_config=LocalConfig(),
+            selected_target="prod",
+            expected_error_fragment="target prod has no connection",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_target_without_connection_when_resolving_target_then_it_fails_before_connecting(
+    test_case: MissingConnectionTestCase, tmp_path: Path
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=test_case.project_config, local_config=test_case.local_config
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        resolve_target_connection_config(
+            discovered_inputs=discovered_inputs,
+            project_dir=tmp_path,
+            target_name=str(test_case.selected_target),
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExplicitMemoryConnectionTestCase(
+            description="named in-memory connection",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                default_target="dev",
+                connections={"memory": {"database": ":memory:"}},
+                targets={"dev": TargetConfig(schema="main")},
+            ),
+            local_config=LocalConfig(),
+            expected_connection={"database": ":memory:"},
+        ),
+        ExplicitMemoryConnectionTestCase(
+            description="top level in-memory connection without a target",
+            project_config=ProjectConfig(
+                name="shop", adapter="duckdb", connection={"database": ":memory:"}
+            ),
+            local_config=LocalConfig(),
+            expected_connection={"database": ":memory:"},
+        ),
+        ExplicitMemoryConnectionTestCase(
+            description="local top level in-memory connection",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                default_target="dev",
+                targets={"dev": TargetConfig(schema="main")},
+            ),
+            local_config=LocalConfig(connection={"database": ":memory:"}),
+            expected_connection={"database": ":memory:"},
+        ),
+        ExplicitMemoryConnectionTestCase(
+            description="inline target in-memory connection",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                default_target="dev",
+                targets={"dev": TargetConfig(schema="main", connection={"database": ":memory:"})},
+            ),
+            local_config=LocalConfig(),
+            expected_connection={"database": ":memory:"},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_explicit_memory_connection_when_resolving_then_it_is_used(
+    test_case: ExplicitMemoryConnectionTestCase, tmp_path: Path
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=test_case.project_config, local_config=test_case.local_config
+    )
+
+    connection: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs, project_dir=tmp_path
     )
 
     assert connection == test_case.expected_connection
