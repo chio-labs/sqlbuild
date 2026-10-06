@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check \
+.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check check-native-layering \
 	check-e2e-shards test-e2e-duckdb test-e2e-duckdb-build-core \
 	test-e2e-duckdb-build-incremental \
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-inspection \
@@ -566,12 +566,16 @@ verify-quick:
 	exit $$status
 
 
-check-ci: check-e2e-shards
+check-ci: check-e2e-shards check-native-layering
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
 	uv run pytest tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py -q
 	uv run fensu check
+
+
+check-native-layering:
+	uv run python -m scripts.check_native_layering
 
 
 check-pr-metadata:

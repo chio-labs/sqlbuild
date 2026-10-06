@@ -8,6 +8,20 @@ members = [
 ]
 resolver = "2"
 
+# Native crates from the bottom up: each crate may depend only on crates listed before it.
+# `make check-ci` enforces this, keeps PyO3 in the Python boundary crate and keeps polyglot
+# out of every crate below the polyglot floor. See crates/README.md.
+[workspace.metadata.native-layers]
+order = [
+    "sqlbuild-core",
+    "sqlbuild-sqltext",
+    "sqlbuild-analysis",
+    "sqlbuild-rules",
+    "sqlbuild-python",
+]
+python-boundary = "sqlbuild-python"
+polyglot-floor = "sqlbuild-analysis"
+
 [workspace.package]
 version = "0.135.0"
 edition = "2024"
