@@ -1,0 +1,186 @@
+"""Stable constants for the compiler engine differential harness."""
+
+import re
+
+from scripts.compiler_differential.models import DifferentialCommand, ExpectedOutcome
+
+ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
+STAGE_CAPTURE_ENV_VAR: str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR"
+DEFAULT_ENGINES: tuple[str, str] = ("python", "native")
+SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
+EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
+    {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR}
+)
+EXCLUDED_ENVIRONMENT_PREFIX: str = "DBT_"
+PROJECT_CONFIG_FILE: str = "sqlbuild_project.toml"
+DUCKDB_ADAPTER: str = "duckdb"
+PROJECT_DIRECTORY: str = "project"
+CAPTURES_DIRECTORY: str = "captures"
+TARGET_DIRECTORY: str = "target"
+COMPILED_DIRECTORY: str = "target/compiled"
+MANIFEST_FILE: str = "target/manifest.json"
+DAG_FILE: str = "target/sqlbuild_dag.json"
+STRIPPED_REPORT_FIELDS: frozenset[str] = frozenset({"compile_timings", "compiler_engine"})
+MANIFEST_VOLATILE_METADATA: frozenset[str] = frozenset({"generated_at", "invocation_id"})
+INVOCATION_ID_PATTERN: re.Pattern[str] = re.compile(r"\b\d{8}T\d{6}Z_[0-9a-f]{12}\b")
+INVOCATION_ID_MASK: str = "<invocation-id>"
+ENGINE_NAMESPACE_PATTERN: re.Pattern[str] = re.compile(r"-native-v\d+\b")
+ELAPSED_TIME_PATTERN: re.Pattern[str] = re.compile(r"\b\d+(?:\.\d+)?\s?m?s\b")
+ELAPSED_TIME_MASK: str = "<elapsed>"
+COMMAND_TIMEOUT_SECONDS: float = 900.0
+VALUE_PREVIEW_CHARACTERS: int = 160
+MISSING_VALUE: str = "<missing>"
+DEFAULT_SEED_COUNT: int = 12
+PLAN_LABEL: str = "plan"
+ERROR_SEVERITY: str = "error"
+MODEL_RESOURCE_TYPE: str = "model"
+DEFAULT_DENSE_MODELS: int = 3000
+FIXTURE_ROOT: str = "tests/e2e/fixtures"
+EXAMPLE_ROOT: str = "website/examples"
+FIXTURE_PROJECT_SUBDIRECTORIES: dict[str, str] = {"dbt_interop": "sqlbuild_project"}
+EXPECT_SUCCESS: ExpectedOutcome = ExpectedOutcome()
+EXPECT_SUCCESS_VALUE: str = "success"
+EXPECT_FAILURE_PREFIX: str = "failure:"
+FIXTURE_EXPECTED_OUTCOMES: dict[str, ExpectedOutcome] = {
+    "dbt_interop": ExpectedOutcome(error_code="C214")
+}
+CORPUS_FIXTURES: str = "fixtures"
+CORPUS_EXAMPLES: str = "examples"
+CORPUS_SEEDS: str = "seeds"
+CORPUS_FAILURES: str = "failures"
+CORPUS_DENSE: str = "dense"
+CORPUS_NAMES: tuple[str, ...] = (
+    CORPUS_FIXTURES,
+    CORPUS_EXAMPLES,
+    CORPUS_SEEDS,
+    CORPUS_FAILURES,
+    CORPUS_DENSE,
+)
+PER_PULL_REQUEST_CORPORA: tuple[str, ...] = (
+    CORPUS_FIXTURES,
+    CORPUS_EXAMPLES,
+    CORPUS_SEEDS,
+    CORPUS_FAILURES,
+)
+CUSTOM_RULE_FILE: str = "rules/order_names.py"
+CUSTOM_RULE_SOURCE: str = """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+
+@rule(
+    code="XSQBRDIFF001",
+    message="Model names stay below sixty characters",
+    remediation="Rename the model.",
+)
+def short_model_names(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if len(model.name) < 60:
+        return []
+    return [ctx.finding(subject=model)]
+"""
+CUSTOM_RULE_THRESHOLDS: str = "\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
+COLD_COMPILE: DifferentialCommand = DifferentialCommand(
+    label="compile", arguments=("compile", "--json", "--manifest", "--dag")
+)
+WARM_COMPILE: DifferentialCommand = DifferentialCommand(
+    label="compile-warm", arguments=("compile", "--json")
+)
+PLAN: DifferentialCommand = DifferentialCommand(label=PLAN_LABEL, arguments=("plan", "--json"))
+
+GENERATOR_DOMAINS: tuple[str, ...] = ("sales", "inventory", "support", "fulfillment", "billing")
+GENERATOR_LAYERS: tuple[str, ...] = ("staging", "marts")
+GENERATOR_SOURCE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("id", "INTEGER"),
+    ("amount", "DOUBLE"),
+    ("status", "VARCHAR"),
+    ("created_at", "TIMESTAMP"),
+)
+GENERATOR_STATUS_VALUES: tuple[tuple[str, str], ...] = (
+    ("PLACED", "placed"),
+    ("SHIPPED", "expédié"),
+    ("CANCELLED", "取消"),
+    ("RETURNED", "returned ✓"),
+)
+GENERATOR_NON_ASCII_LABELS: tuple[str, ...] = (
+    "Zürich – depot",
+    "東京 warehouse",
+    "café ☕ counter",
+    "naïve résumé",
+    "Ελληνικά orders",
+)
+GENERATOR_FLOAT_VALUES: tuple[str, ...] = ("0.15", "1e-07", "12345.678", "0.1", "2.5e+20", "-3.75")
+GENERATOR_REGION_ENV_VAR: str = "SQB_DIFFERENTIAL_REGION"
+GENERATOR_INVALID_SHARE: float = 0.25
+GENERATOR_INVALID_CODES: dict[str, str] = {
+    "unknown_ref": "P001",
+    "unknown_macro": "P001",
+    "failing_macro": "P001",
+    "unknown_enum_member": "P001",
+    "unknown_constant": "P001",
+    "missing_description": "P010",
+    "duplicate_macro": "P001",
+    "header_syntax": "D002",
+    "over_broad_constant": "S024",
+}
+GENERATOR_HALF: float = 0.5
+GENERATOR_CROSS_DOMAIN_SHARE: float = 0.4
+GENERATOR_NON_ASCII_DESCRIPTION_SHARE: float = 0.3
+GENERATOR_VARIABLE_SHARE: float = 0.3
+
+FAILURE_BASE_CONFIG: str = (
+    'name = "failure_corpus"\nadapter = "duckdb"\n\n[connection]\ndatabase = "failure.duckdb"\n'
+)
+FAILURE_BASE_SOURCES: str = """sources:
+  - name: raw_orders
+    description: Orders feed.
+    expression: >-
+      (SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,
+      'placed' AS status)
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: customer_id
+        type: INTEGER
+      - name: amount
+        type: DOUBLE
+      - name: status
+        type: VARCHAR
+"""
+FAILURE_BASE_STAGING: str = """MODEL (
+  description "Staged orders",
+);
+
+SELECT order_id, customer_id, amount, status
+FROM __source("raw_orders")
+"""
+FAILURE_BASE_MART: str = """MODEL (
+  description "Order totals per customer",
+);
+
+SELECT customer_id, SUM(amount) AS total_amount
+FROM __ref("stg_orders")
+GROUP BY customer_id
+"""
+FAILURE_BASE_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": FAILURE_BASE_CONFIG,
+    "sources/raw.yml": FAILURE_BASE_SOURCES,
+    "models/staging/stg_orders.sql": FAILURE_BASE_STAGING,
+    "models/marts/customer_totals.sql": FAILURE_BASE_MART,
+}
+FAILURE_STAGING_PATH: str = "models/staging/stg_orders.sql"
+FAILURE_MART_PATH: str = "models/marts/customer_totals.sql"
+FAILURE_CONFIG_PATH: str = "sqlbuild_project.toml"
+FAILURE_SOURCES_PATH: str = "sources/raw.yml"
+GENERATOR_ENUM_KIND: str = "enum"
+GENERATOR_CONSTANT_KIND: str = "constant"
+GENERATOR_MACRO_KIND: str = "macro"
+GENERATOR_HOOK_KIND: str = "hook"
+GENERATOR_ROLES: dict[str, str] = {
+    GENERATOR_ENUM_KIND: "enums",
+    GENERATOR_CONSTANT_KIND: "constants",
+    GENERATOR_MACRO_KIND: "macros",
+    GENERATOR_HOOK_KIND: "hooks",
+}
+GENERATOR_SUFFIXES: dict[str, str] = {
+    GENERATOR_ENUM_KIND: ".sql",
+    GENERATOR_CONSTANT_KIND: ".sql",
+    GENERATOR_MACRO_KIND: ".py",
+}

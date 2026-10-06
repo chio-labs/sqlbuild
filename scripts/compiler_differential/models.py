@@ -1,0 +1,159 @@
+"""Typed records for the compiler engine differential harness."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class DifferentialCommand:
+    """One sqb invocation run identically under both engines."""
+
+    label: str
+    arguments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExpectedOutcome:
+    """What a corpus project must produce: success, or failure with one diagnostic code."""
+
+    error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class CorpusProject:
+    """One project compared across engines."""
+
+    name: str
+    commands: tuple[DifferentialCommand, ...]
+    expected: ExpectedOutcome
+    source_dir: Path | None = None
+    writer: Callable[[Path], None] | None = None
+    project_subdirectory: str | None = None
+
+
+@dataclass(frozen=True)
+class CommandOutcome:
+    """What one sqb invocation printed and returned."""
+
+    label: str
+    exit_code: int
+    stdout: str
+    stderr: str
+    timed_out: bool = False
+
+
+@dataclass(frozen=True)
+class EngineRun:
+    """Everything one engine produced for one corpus project."""
+
+    engine: str
+    outcomes: tuple[CommandOutcome, ...]
+    compiled: dict[str, bytes]
+    manifest: str | None
+    dag: str | None
+    captures: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Divergence:
+    """Where two values first differ, with short previews of both sides."""
+
+    location: str
+    left: str
+    right: str
+
+
+@dataclass(frozen=True)
+class Difference:
+    """The first observed divergence in one compared artifact."""
+
+    project: str
+    artifact: str
+    location: str
+    left: str
+    right: str
+    labels: tuple[str, str] | None = None
+
+
+@dataclass(frozen=True)
+class ProjectComparison:
+    """All differences found for one corpus project."""
+
+    project: str
+    differences: tuple[Difference, ...]
+    seconds: float
+
+
+@dataclass(frozen=True)
+class DifferentialOptions:
+    """Resolved harness settings."""
+
+    engines: tuple[str, str]
+    work_dir: Path
+    jobs: int
+    stage_captures: bool
+    python: Path
+    engine_environment: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True)
+class WritableProject:
+    """Project files that can be written below a fresh directory."""
+
+    files: dict[str, str]
+
+    def write(self, project_dir: Path) -> None:
+        """Write every UTF-8 file, creating parent directories."""
+
+        for relative_path, contents in sorted(self.files.items()):
+            path: Path = project_dir / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _ = path.write_text(contents, encoding="utf-8", newline="\n")
+
+
+@dataclass(frozen=True)
+class GeneratedProject(WritableProject):
+    """A deterministic random project and the error it was generated to produce, if any."""
+
+    seed: int
+    expected_error_code: str | None
+    features: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FailureCase(WritableProject):
+    """One minimal project that must fail compile with one diagnostic code."""
+
+    name: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class ModelPlan:
+    """One generated SQL model and the relations it reads."""
+
+    name: str
+    domain: str
+    layer: str
+    inputs: tuple[str, ...]
+    description: str
+
+    @property
+    def folder(self) -> str:
+        """Return the model's folder relative to the project root."""
+
+        return f"models/{self.domain}/{self.layer}"
+
+
+@dataclass(frozen=True)
+class DeclarationPlan:
+    """One generated enum, constant, macro, or named hook and the models that use it."""
+
+    kind: str
+    name: str
+    consumers: tuple[ModelPlan, ...]
+    body: str = ""
+    private: bool = False
