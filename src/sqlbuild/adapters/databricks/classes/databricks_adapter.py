@@ -54,6 +54,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -117,6 +118,8 @@ from sqlbuild.adapters.databricks.constants import (
     DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS,
     DELTA_DEFAULT_LOG_RETENTION_DAYS,
     DELTA_RELATION_FORMAT,
+    DESCRIBE_DETAIL_ROW_WIDTH,
+    DETAILED_TABLE_INFORMATION_MARKER,
     NON_ROW_RESULT_COLUMN_NAMES,
     RELATION_NOT_FOUND_ERROR_CLASSES,
     TABLE_RELATION_METADATA_TYPES,
@@ -2484,6 +2487,51 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement: str
         for statement in statements:
             self.execute(connection=connection, sql=statement)
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Read ``ANALYZE TABLE`` statistics; ``DESCRIBE DETAIL`` has no row count."""
+
+        target: str = ".".join(
+            self.render_identifier(part) for part in (database, schema, name) if part is not None
+        )
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(f"DESCRIBE TABLE EXTENDED {target}")
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        finally:
+            cursor.close()
+        labels: list[str] = [str(row[0]).strip().lower() if row else "" for row in rows]
+        detail_start: int = (
+            labels.index(DETAILED_TABLE_INFORMATION_MARKER) + 1
+            if DETAILED_TABLE_INFORMATION_MARKER in labels
+            else 0
+        )
+        details: dict[str, str] = {
+            str(row[0]).strip().lower(): str(row[1])
+            for row in rows[detail_start:]
+            if len(row) >= DESCRIBE_DETAIL_ROW_WIDTH and row[1] is not None
+        }
+        relation_type: str = details.get("type", "").strip().lower()
+        if relation_type not in TABLE_RELATION_METADATA_TYPES:
+            return RelationRowCountEstimate(
+                row_count=None, detail=f"no row count ({relation_type or 'unknown type'})"
+            )
+        statistics_match: re.Match[str] | None = re.search(
+            r"(\d+)\s+rows", details.get("statistics", "")
+        )
+        if statistics_match is None:
+            return RelationRowCountEstimate(
+                row_count=None,
+                detail="table statistics not collected; run ANALYZE TABLE ... COMPUTE STATISTICS",
+            )
+        return RelationRowCountEstimate(row_count=int(statistics_match.group(1)))
 
     def inspect_row_diff_coverage(
         self,

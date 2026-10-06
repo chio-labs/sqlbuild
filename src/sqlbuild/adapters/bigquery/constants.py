@@ -31,3 +31,4 @@ CLONE_REFUSAL_PHRASES: tuple[str, ...] = (
     "clone or snapshot",
 )
 MAX_CLONE_REFUSAL_ERROR_CHAIN: int = 8
+NATIVE_TABLE_TYPE: str = "TABLE"

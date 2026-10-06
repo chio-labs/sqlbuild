@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.models import (
     CursorValue,
+    RelationRowCountEstimate,
     RowDiffCoverage,
     RowDiffResult,
     RowDiffSampleRow,
@@ -73,6 +74,18 @@ class DiffMixin(ABC):
         end_cursor: CursorValue | None = None,
     ) -> RowDiffCoverage:
         """Return exact bounded row count and cursor extent for one relation."""
+        ...
+
+    @abstractmethod
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Return the metadata row count for one relation without scanning its data."""
         ...
 
     @abstractmethod

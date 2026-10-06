@@ -378,6 +378,33 @@ This permits an intentional developer override while keeping the shared target p
 `sqlbuild_project.toml`. Other target fields and any execution-limit fields omitted locally continue
 to inherit their project values.
 
+### Diff limits
+
+`sqb diff` without `--full`, `--bounded` or `--schema-only` runs a full comparison only when every
+selected table is small enough. Each target sets the largest table it will compare in full this
+way:
+
+```toml
+[targets.prod.diff]
+max_full_rows = 50_000_000
+
+[targets.dev.diff]
+max_full_rows = "unlimited"
+```
+
+`max_full_rows` is a positive integer or `"unlimited"`. When it is not set, the limit is
+10,000,000 rows. Each side of a comparison uses its own target's limit. See
+[`sqb diff`](/docs/cli/diff#size-guard) for how sizes are read and what happens when a table is too
+large.
+
+`sqlbuild_local.toml` accepts the same section, and a local value replaces the project value for
+that target:
+
+```toml
+[targets.dev.diff]
+max_full_rows = 100_000_000
+```
+
 ## Defaults
 
 Project-wide defaults for models, seeds, and functions:

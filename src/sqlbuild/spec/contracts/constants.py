@@ -17,3 +17,5 @@ TIME_TRAVEL_RETENTION_MATERIALIZATIONS: tuple[str, ...] = (
     "snapshot",
 )
 CONNECTION_WAREHOUSE_KEY: str = "warehouse"
+UNLIMITED_DIFF_FULL_ROWS: str = "unlimited"
+DEFAULT_DIFF_MAX_FULL_ROWS: int = 10_000_000

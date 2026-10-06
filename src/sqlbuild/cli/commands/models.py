@@ -75,7 +75,7 @@ from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.clone.models import CloneExecutionResult
-from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
 from sqlbuild.executor.janitor.models import JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
@@ -523,6 +523,7 @@ class DirectDiffPreparation:
     connection_config: dict[str, object]
     effective_max_column_examples: int
     effective_max_row_only_examples: int
+    full_size_limits: FullDiffSizeLimits | None = None
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditSeverity
@@ -104,6 +105,13 @@ class ExecutionLimitsConfig:
 
 
 @dataclass(frozen=True)
+class TargetDiffConfig:
+    """Optional target-scoped data-diff limits."""
+
+    max_full_rows: int | Literal["unlimited"] | None = None
+
+
+@dataclass(frozen=True)
 class TargetWarehousesConfig:
     """Optional per-command-group default warehouses for one target."""
 
@@ -142,6 +150,7 @@ class TargetConfig:
     time_travel_retention_decrease: RetentionDecreasePolicy = RetentionDecreasePolicy.DENY
     missing_migration_origin: MissingMigrationOriginPolicy = MissingMigrationOriginPolicy.ALLOW
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
+    diff: TargetDiffConfig = field(default_factory=TargetDiffConfig)
     warehouses: TargetWarehousesConfig = field(default_factory=TargetWarehousesConfig)
 
 
@@ -167,6 +176,7 @@ class LocalTargetConfig:
     time_travel_retention_decrease: RetentionDecreasePolicy | None = None
     missing_migration_origin: MissingMigrationOriginPolicy | None = None
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
+    diff: TargetDiffConfig = field(default_factory=TargetDiffConfig)
     warehouses: TargetWarehousesConfig = field(default_factory=TargetWarehousesConfig)
 
 

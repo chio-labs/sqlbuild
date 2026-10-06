@@ -52,6 +52,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -1896,6 +1897,26 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
+        return (
+            self._information_schema_table_row(
+                connection=connection,
+                database=database,
+                schema=schema,
+                name=name,
+                projection="1",
+            )
+            is not None
+        )
+
+    def _information_schema_table_row(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        database: str | None,
+        schema: str | None,
+        name: str,
+        projection: str,
+    ) -> tuple[Any, ...] | None:
         clauses: list[str] = ["table_name = %s"]
         params: list[str] = [self._information_schema_identifier(name)]
         if schema is not None:
@@ -1907,13 +1928,13 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         cursor: Any = connection.cursor()
         try:
             cursor.execute(
-                "SELECT 1 FROM "
+                f"SELECT {projection} FROM "
                 + self._information_schema_relation(database=database, name="tables")
                 + " WHERE "
                 + " AND ".join(clauses),
                 tuple(params),
             )
-            return cursor.fetchone() is not None
+            return cursor.fetchone()
         finally:
             cursor.close()
 
@@ -3218,6 +3239,29 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement: str
         for statement in statements:
             self.execute(connection=connection, sql=statement)
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Read ``ROW_COUNT`` from the information schema; views report no count."""
+
+        row: tuple[Any, ...] | None = self._information_schema_table_row(
+            connection=connection,
+            database=database,
+            schema=schema,
+            name=name,
+            projection="row_count",
+        )
+        if row is None:
+            return RelationRowCountEstimate(row_count=None, detail="relation not found")
+        if row[0] is None:
+            return RelationRowCountEstimate(row_count=None, detail="no row count (view)")
+        return RelationRowCountEstimate(row_count=int(row[0]))
 
     def inspect_row_diff_coverage(
         self,

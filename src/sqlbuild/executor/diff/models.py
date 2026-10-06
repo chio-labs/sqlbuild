@@ -53,6 +53,51 @@ class RowDiffSamplingOverride:
 
 
 @dataclass(frozen=True)
+class FullDiffSizeLimits:
+    """Per-side row limits guarding a default full comparison; ``None`` means unlimited."""
+
+    left_target: str
+    right_target: str
+    left_max_rows: int | None
+    right_max_rows: int | None
+
+
+@dataclass(frozen=True)
+class FullDiffSideSize:
+    """Metadata row count for one side of a guarded full comparison."""
+
+    target: str
+    relation: str
+    row_count: int | None
+    max_rows: int | None
+    detail: str | None = None
+
+    @property
+    def exceeds_limit(self) -> bool:
+        """Return whether this side blocks the comparison; unknown sizes count as over."""
+
+        return self.max_rows is not None and (
+            self.row_count is None or self.row_count > self.max_rows
+        )
+
+
+@dataclass(frozen=True)
+class FullDiffModelSize:
+    """Both sides' metadata row counts for one model in a guarded full comparison."""
+
+    name: str
+    left: FullDiffSideSize
+    right: FullDiffSideSize
+    has_cursor: bool
+
+    @property
+    def exceeds_limit(self) -> bool:
+        """Return whether either side blocks the comparison."""
+
+        return self.left.exceeds_limit or self.right.exceeds_limit
+
+
+@dataclass(frozen=True)
 class DiffExecutionOptions:
     """Row-diff mode, diagnostic, and invocation override options."""
 
@@ -69,6 +114,7 @@ class DiffExecutionOptions:
     excluded_columns_override: tuple[str, ...] = ()
     tolerance_overrides: RowDiffTolerances | None = None
     comparison_name: str | None = None
+    full_size_limits: FullDiffSizeLimits | None = None
 
 
 @dataclass(frozen=True)

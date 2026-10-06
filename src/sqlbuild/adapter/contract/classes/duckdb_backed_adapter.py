@@ -50,6 +50,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RowDiffColumnResult,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -2033,6 +2034,40 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             start_cursor=start_cursor,
             end_cursor=end_cursor,
         )
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Read DuckDB's estimated table size from the catalog."""
+
+        database_filter: str = (
+            "database_name = current_database()"
+            if database is None
+            else f"lower(database_name) = lower({_duckdb_string_literal(database)})"
+        )
+        schema_filter: str = (
+            "schema_name = current_schema()"
+            if schema is None
+            else f"lower(schema_name) = lower({_duckdb_string_literal(schema)})"
+        )
+        row: tuple[Any, ...] | None = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT estimated_size FROM duckdb_tables() WHERE "
+                f"{database_filter} AND {schema_filter} "
+                f"AND lower(table_name) = lower({_duckdb_string_literal(name)})"
+            ),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return RelationRowCountEstimate(
+                row_count=None, detail="no table size metadata (view or missing table)"
+            )
+        return RelationRowCountEstimate(row_count=int(row[0]))
 
     def diff_schema(
         self,

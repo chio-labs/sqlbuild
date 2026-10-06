@@ -52,21 +52,30 @@ def render_diff_json_output(
     )
 
 
-def render_diff_error_json(*, status: str, code: str, message: str) -> str:
+def render_diff_error_json(
+    *,
+    status: str,
+    code: str,
+    message: str,
+    help_text: str | None = None,
+    size_guard: dict[str, object] | None = None,
+) -> str:
     """Render a machine-readable incomplete or execution-failure outcome."""
 
-    return json.dumps(
-        {
-            "schema_version": 1,
-            "status": status,
-            "outcome": status,
-            "error": {"code": code, "message": message},
-            "models": [],
-            "query_comparisons": [],
-        },
-        indent=2,
-        sort_keys=True,
-    )
+    error: dict[str, object] = {"code": code, "message": message}
+    if help_text is not None:
+        error["help"] = help_text
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "status": status,
+        "outcome": status,
+        "error": error,
+        "models": [],
+        "query_comparisons": [],
+    }
+    if size_guard is not None:
+        payload["size_guard"] = size_guard
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def _json_safe_value(value: object) -> object:

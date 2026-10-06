@@ -47,9 +47,9 @@ def _validate_diff_request(*, request: DiffCommandRequest) -> None:
     selected_modes: int = (
         int(request.full) + int(request.schema_only) + int(request.bounded is not None)
     )
-    if selected_modes != 1 and not (query_mode and selected_modes == 0):
+    if selected_modes > 1:
         raise CliUserError(
-            "diff requires exactly one of --full, --schema-only, or --bounded",
+            "diff accepts at most one of --full, --schema-only, or --bounded",
             code="C201",
         )
     if request.max_column_examples is not None and request.max_column_examples <= 0:
@@ -152,8 +152,8 @@ def _validate_query_diff_request(*, request: DiffCommandRequest) -> None:
 
 
 def _validate_model_diff_request(*, request: DiffCommandRequest) -> None:
-    if request.from_name is None or request.to_name is None:
-        raise CliUserError("model diff requires FROM:TO", code="C224")
+    if request.from_name is None:
+        raise CliUserError("model diff requires FROM or FROM:TO", code="C224")
     if request.selected_target is not None:
         raise CliUserError("model diff does not accept --target", code="C225")
     if request.left_label is not None or request.right_label is not None:

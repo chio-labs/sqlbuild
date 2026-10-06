@@ -323,6 +323,14 @@ class RowDiffCoverage:
 
 
 @dataclass(frozen=True)
+class RelationRowCountEstimate:
+    """Metadata row count read without scanning data; ``row_count`` is None when unknown."""
+
+    row_count: int | None
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
 class RowDiffSampling:
     """Deterministic key-sampling policy for a row comparison."""
 

@@ -56,6 +56,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -127,6 +128,7 @@ from sqlbuild.adapters.bigquery.constants import (
     INTEGER_METADATA_TYPE_NAME,
     INTEGER_TYPE_TOKEN,
     INTEGER_WIRE_TYPE_NAME,
+    NATIVE_TABLE_TYPE,
     NOT_FOUND_ERROR_CLASS_NAME,
     SELECT_STATEMENT_TYPE,
     TABLE_NAME_WILDCARD,
@@ -2517,6 +2519,29 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: _BigQueryConnection,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Read ``numRows`` from the tables API; only native tables report a count."""
+
+        if schema is None:
+            return RelationRowCountEstimate(row_count=None, detail="relation has no dataset")
+        table: Any = connection.client.get_table(
+            self._build_table_id(database=database, schema=schema, name=name)
+        )
+        table_type: str = str(getattr(table, "table_type", NATIVE_TABLE_TYPE)).upper()
+        num_rows: object | None = getattr(table, "num_rows", None)
+        if table_type != NATIVE_TABLE_TYPE or not isinstance(num_rows, int):
+            return RelationRowCountEstimate(
+                row_count=None, detail=f"no row count ({table_type.lower()})"
+            )
+        return RelationRowCountEstimate(row_count=num_rows)
 
     def inspect_row_diff_coverage(
         self,
