@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.134.7](https://github.com/chio-labs/sqlbuild/compare/v0.134.6...v0.134.7) (2026-10-06)
+
+
+### Bug Fixes
+
+* no traceback after failed builds, and aligned test statuses ([#962](https://github.com/chio-labs/sqlbuild/issues/962)) ([12ce749](https://github.com/chio-labs/sqlbuild/commit/12ce749bb485c0255f21b4449a21254164605020))
+* singular file counts in sqb mv and sqb rename, plain cursor bounds wording in sqb plan ([#961](https://github.com/chio-labs/sqlbuild/issues/961)) ([ea7c27b](https://github.com/chio-labs/sqlbuild/commit/ea7c27b36048130b224938c241483c40cb93ef79))
+
 ## [0.134.6](https://github.com/chio-labs/sqlbuild/compare/v0.134.5...v0.134.6) (2026-10-06)
 
 
