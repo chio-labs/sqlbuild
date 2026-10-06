@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.136.0](https://github.com/chio-labs/sqlbuild/compare/v0.135.0...v0.136.0) (2026-10-06)
+
+
+### Features
+
+* shorter CLI forms for selection, global flags, JSON output, scope targets and cursors ([#980](https://github.com/chio-labs/sqlbuild/issues/980)) ([e9a7aa1](https://github.com/chio-labs/sqlbuild/commit/e9a7aa1fea71ddc8f5e94e6001b5fb5c06f6a307))
+
+
+### Performance Improvements
+
+* **rules:** cut custom-rule host overhead ([#981](https://github.com/chio-labs/sqlbuild/issues/981)) ([7000d36](https://github.com/chio-labs/sqlbuild/commit/7000d364f06b667c8c4a741fd5d252d54b9b9b85))
+
 ## [0.135.0](https://github.com/chio-labs/sqlbuild/compare/v0.134.9...v0.135.0) (2026-10-06)
 
 
