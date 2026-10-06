@@ -792,7 +792,8 @@ pub(crate) fn difference_sample_lifts_generated_ctes_and_bounds_rows() -> bool {
         limited["sql"],
         json!(
             "WITH __ref__stg_orders AS (SELECT 1 AS order_id),\n\
-             __actual AS (SELECT * FROM __ref__stg_orders),\n\
+             __ref__orders AS (SELECT * FROM __ref__stg_orders),\n\
+             __actual AS (SELECT * FROM __ref__orders),\n\
              __expected AS (SELECT 2 AS order_id)\n\
              SELECT * FROM (SELECT * FROM __expected EXCEPT SELECT * FROM __actual) \
              AS __sqlbuild_difference LIMIT 3"
@@ -1283,7 +1284,7 @@ pub(super) fn repeated_model_sql_renders_like_separate_batches() -> bool {
         })
 }
 
-pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
+pub(super) fn shared_model_cte_names_stay_nested_on_nested_with_dialects() -> bool {
     [
         ("duckdb", "final"),
         ("snowflake", "final"),
@@ -1300,7 +1301,12 @@ pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
         let sql = render_one(json!({
             "sqlAnalysisDialect": dialect,
             "chain": [
-                {"modelName": "stg_orders", "resolvedSql": upstream, "expectedCteSql": "SELECT 1 AS order_id"},
+                {
+                    "modelName": "stg_orders",
+                    "resolvedSql": upstream,
+                    "comparisonBodySql": upstream,
+                    "expectedCteSql": "SELECT 1 AS order_id"
+                },
                 {
                     "modelName": "orders",
                     "resolvedSql": format!("WITH __ref__stg_orders AS ({upstream}), {}", &downstream[5..]),
@@ -1310,11 +1316,14 @@ pub(super) fn colliding_model_ctes_nest_on_nested_with_dialects() -> bool {
                 }
             ]
         }))
-        .expect("nested fallback");
+        .expect("nested model scopes");
         sql.starts_with(&format!(
-            "WITH {name} AS (SELECT 1 AS order_id),\n__ref__stg_orders AS ({upstream}),\n"
-        )) && sql.contains(&format!("__actual__stg_orders AS (SELECT * FROM {name})"))
-            && sql.contains(&format!("__actual__orders AS ({downstream})"))
+            "WITH __ref__stg_orders AS ({upstream}),\n\
+             __ref__orders AS ({downstream}),\n\
+             __actual__stg_orders AS (SELECT * FROM __ref__stg_orders),\n"
+        )) && sql.contains("__actual__orders AS (SELECT * FROM __ref__orders)")
+            && sql.matches(&upstream).count() == 1
+            && sql.matches(&downstream).count() == 1
     })
 }
 
@@ -1322,8 +1331,9 @@ pub(super) fn generated_with_bodies_stay_nested_verbatim() -> bool {
     let sql = render_one(colliding_chain_request("duckdb", "final")).expect("render");
     sql.starts_with(
         "WITH __ref__stg_orders AS (WITH final AS (SELECT 1 AS order_id) SELECT * FROM final),\n\
-         final AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
-         __actual__orders AS (SELECT final.order_id FROM final),\n",
+         __ref__orders AS (WITH final AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders) \
+         SELECT final.order_id FROM final),\n\
+         __actual__orders AS (SELECT * FROM __ref__orders),\n",
     )
 }
 
@@ -1333,7 +1343,8 @@ pub(super) fn tsql_model_cte_collisions_are_renamed_by_token_span() -> bool {
         "WITH final AS (SELECT 1 AS order_id),\n\
          __ref__stg_orders AS (SELECT * FROM final),\n\
          __sqb_cte_0 AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders),\n\
-         __actual__orders AS (SELECT __sqb_cte_0.order_id FROM __sqb_cte_0),\n",
+         __ref__orders AS (SELECT __sqb_cte_0.order_id FROM __sqb_cte_0),\n\
+         __actual__orders AS (SELECT * FROM __ref__orders),\n",
     )
 }
 

@@ -692,7 +692,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
     "test_case",
     [
         SqlAnalysisChainCompileTargetIntegrationTestCase(
-            description="chain test compile target uses flat generated ctes",
+            description="chain test compile target defines each model once as a generated cte",
             project_files={
                 "sqlbuild_project.toml": (
                     'name = "demo"\n'
@@ -729,14 +729,17 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
                 "WITH __source__raw AS (",
                 "__ref__stg_orders AS (",
                 "FROM __source__raw",
-                "local_helper AS (SELECT 1 AS one),\n",
-                "__actual__fact_orders AS (SELECT id, amount + one AS adjusted "
-                "FROM __ref__stg_orders CROSS JOIN local_helper)",
+                "__ref__fact_orders AS (WITH local_helper AS (SELECT 1 AS one) "
+                "SELECT id, amount + one AS adjusted FROM __ref__stg_orders "
+                "CROSS JOIN local_helper),\n",
+                "__actual__stg_orders AS (SELECT * FROM __ref__stg_orders)",
+                "__actual__fact_orders AS (SELECT * FROM __ref__fact_orders)",
                 "FROM __ref__stg_orders",
                 "'stg_orders' AS model_name",
             ),
             unexpected_fragments=(
                 "__ref__stg_orders AS (WITH",
+                "\nlocal_helper AS (",
                 "__REF(",
                 "__SOURCE(",
                 "\n\nWITH",

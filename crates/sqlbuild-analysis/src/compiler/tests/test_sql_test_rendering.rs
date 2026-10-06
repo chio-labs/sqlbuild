@@ -6,10 +6,10 @@ use crate::compiler::tests::helpers::{
     sqlserver_difference_sample_projects_bracketed_columns,
 };
 use crate::compiler::tests::helpers::{
-    colliding_model_ctes_nest_on_nested_with_dialects, generated_with_bodies_stay_nested_verbatim,
-    repeated_model_sql_renders_like_separate_batches, snowflake_function_synonyms_stay_as_authored,
-    trailing_statement_terminators_are_dropped, tsql_distinct_ctes_lift_verbatim,
-    tsql_fixture_and_model_cte_collisions_are_refused,
+    generated_with_bodies_stay_nested_verbatim, repeated_model_sql_renders_like_separate_batches,
+    shared_model_cte_names_stay_nested_on_nested_with_dialects,
+    snowflake_function_synonyms_stay_as_authored, trailing_statement_terminators_are_dropped,
+    tsql_distinct_ctes_lift_verbatim, tsql_fixture_and_model_cte_collisions_are_refused,
     tsql_identical_helper_ending_in_line_comment_is_shared,
     tsql_model_cte_collisions_are_renamed_by_token_span,
     tsql_unprovable_cte_renames_are_refused_with_named_ctes,
@@ -20,8 +20,8 @@ use crate::compiler::tests::test_types::SqlTestRenderingTestCase;
 fn given_sql_rendering_cases_when_rendering_native_batches_then_expected_behavior_holds() {
     let test_cases = [
         SqlTestRenderingTestCase {
-            description: "colliding model CTEs use the nested fallback on nested-WITH dialects",
-            run: colliding_model_ctes_nest_on_nested_with_dialects,
+            description: "model CTEs sharing a name stay nested in each model's own CTE",
+            run: shared_model_cte_names_stay_nested_on_nested_with_dialects,
             expected_success: true,
         },
         SqlTestRenderingTestCase {

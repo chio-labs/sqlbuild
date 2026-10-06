@@ -5,10 +5,15 @@ use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
 
 /// Render one `name AS (body)` definition, closing a trailing line comment first.
 pub(crate) fn cte_definition_sql(name: &str, sql: &str) -> String {
+    format!("{name} AS {}", parenthesized_sql(sql))
+}
+
+/// Wrap a query in parentheses, closing a trailing line comment first.
+pub(crate) fn parenthesized_sql(sql: &str) -> String {
     let body = sql.trim_end();
     let final_line = body.rsplit_once('\n').map_or(body, |(_, line)| line);
     let terminator = if final_line.contains("--") { "\n" } else { "" };
-    format!("{name} AS ({body}{terminator})")
+    format!("({body}{terminator})")
 }
 
 /// Append CTEs whose names are not already present, keeping first definitions and order.

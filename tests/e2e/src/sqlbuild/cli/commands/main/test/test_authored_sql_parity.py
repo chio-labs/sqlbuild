@@ -20,24 +20,25 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
             description="comments and dollar quotes in CTE bodies",
             compiled_test_name="test_stg_orders.sql",
             expected_fragments=(
-                "base AS (\n  -- a comment with an unmatched ) parenthesis\n"
+                "__ref__stg_orders AS (WITH base AS (\n"
+                "  -- a comment with an unmatched ) parenthesis\n"
                 "  SELECT id AS order_id, amount, 'it''s (fine)' AS note /* ( */\n"
-                "  FROM __source__raw_orders)",
+                "  FROM __source__raw_orders\n),",
                 "tagged AS (SELECT order_id, amount, note, $$a ) b$$ AS tag FROM base)",
-                "__actual__stg_orders AS (SELECT order_id, amount, note, tag FROM tagged)",
+                "__actual__stg_orders AS (SELECT * FROM __ref__stg_orders)",
             ),
         ),
         AuthoredSqlParityTestCase(
-            description="nested WITH and a fixture CTE collision use the nested fallback",
+            description="nested WITH and a same-named fixture CTE keep separate scopes",
             compiled_test_name="test_orders.sql",
             expected_fragments=(
-                "totals AS (\n"
+                "__ref__orders AS (WITH totals AS (\n"
                 "  WITH ranked AS (SELECT order_id, amount, tag FROM __ref__stg_orders)\n"
-                "  SELECT order_id, amount * 2 AS doubled, tag FROM ranked)",
+                "  SELECT order_id, amount * 2 AS doubled, tag FROM ranked\n),\n"
                 "helper_rows AS (SELECT order_id, doubled, tag FROM totals)",
-                "__expected__orders AS (WITH helper_rows AS "
-                "(SELECT 1 AS order_id, 20 AS doubled, 'x' AS tag) "
-                "SELECT order_id, doubled, tag FROM helper_rows)",
+                "\nhelper_rows AS (SELECT 1 AS order_id, 20 AS doubled, 'x' AS tag),\n",
+                "__actual__orders AS (SELECT * FROM __ref__orders)",
+                "__expected__orders AS (SELECT order_id, doubled, tag FROM helper_rows)",
             ),
         ),
     ),
@@ -73,7 +74,10 @@ def test_given_authored_ctes_when_testing_then_passes_and_runs_the_authored_sql(
         AuthoredSqlParityTestCase(
             description="a WITH model ending in a statement terminator",
             compiled_test_name="test_m.sql",
-            expected_fragments=("__actual__m AS (SELECT id FROM a)",),
+            expected_fragments=(
+                "__ref__m AS (WITH a AS (SELECT id FROM __source__raw_orders)\nSELECT id FROM a)",
+                "__actual__m AS (SELECT * FROM __ref__m)",
+            ),
         ),
     ),
     ids=lambda case: case.description,

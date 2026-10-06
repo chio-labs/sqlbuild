@@ -10,8 +10,9 @@ use crate::compiler::_helpers::sql_tests::cte_slices::{
     used_ctes,
 };
 use crate::compiler::_helpers::sql_tests::cte_sql::{
-    cte_definition_sql, leading_with_prefix_end, with_leading_ctes,
+    cte_definition_sql, leading_with_prefix_end, parenthesized_sql, with_leading_ctes,
 };
+use crate::compiler::_helpers::sql_tests::planning::REF_PREFIX;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -195,22 +196,30 @@ impl RenderCteState {
         ))
     }
 
-    /// Place a chain step's generated CTEs at top level and return its comparison body.
-    fn actual_step_sql(&mut self, step: &ChainStep, enabled: bool) -> Result<String, String> {
+    /// Define a step's inputs and its model once at top level, the model as a nested `__ref__` CTE.
+    fn actual_step_sql(
+        &mut self,
+        step: &ChainStep,
+        suffix: &str,
+        enabled: bool,
+    ) -> Result<String, String> {
         let origin = format!("model '{}'", step.model_name);
-        if step.lifted_ctes.is_empty() {
+        let Some(body) = step.comparison_body_sql.as_deref() else {
             return self.lift(&step.resolved_sql, enabled, &origin);
+        };
+        let body = strip_statement_terminators(body, self.dialect);
+        let model_cte = model_cte_name(&step.model_name, suffix);
+        let mut ctes = step.lifted_ctes.clone();
+        ctes.push((model_cte.clone(), body.to_string()));
+        if let Some(collisions) = self.merge(&ctes, enabled, &origin)? {
+            return self.nested(
+                &nested_model_sql(&step.lifted_ctes, body),
+                enabled,
+                &origin,
+                &[collisions],
+            );
         }
-        if let Some(collisions) = self.merge(&step.lifted_ctes, enabled, &origin)? {
-            return self.nested(&step.resolved_sql, enabled, &origin, &[collisions]);
-        }
-        self.lift(
-            step.comparison_body_sql
-                .as_deref()
-                .unwrap_or(&step.resolved_sql),
-            enabled,
-            &origin,
-        )
+        Ok(format!("SELECT * FROM {model_cte}"))
     }
 
     /// Place an expected step's helper CTEs at top level and return its comparison body.
@@ -427,6 +436,30 @@ fn collision_message(origin: &str, collisions: &[(&str, &LiftedCte)]) -> String 
         .join("; ")
 }
 
+/// The `__ref__` CTE of a step's model, under the name downstream steps reference it by.
+fn model_cte_name(model_name: &str, suffix: &str) -> String {
+    let mut characters = model_name.chars();
+    let plain = characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_');
+    format!("{REF_PREFIX}{}", if plain { model_name } else { suffix })
+}
+
+/// A model body nested below its inputs, for a step whose inputs collide at top level.
+fn nested_model_sql(inputs: &[(String, String)], body: &str) -> String {
+    if inputs.is_empty() {
+        return body.to_string();
+    }
+    with_leading_ctes(
+        inputs,
+        &format!(
+            "SELECT * FROM {} AS __sqlbuild_model",
+            parenthesized_sql(body)
+        ),
+    )
+}
+
 /// Describe a generated CTE by what it stands in for: an upstream model, source or seed.
 fn generated_cte_origin(name: &str) -> String {
     for (prefix, kind) in [
@@ -535,7 +568,8 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest) -> Result<Str
     let enabled = request.sql_analysis_enabled;
     let mut cte_state =
         RenderCteState::new(SliceDialect::new(request.sql_analysis_dialect.as_deref()));
-    let actual_sql = cte_state.actual_step_sql(step, enabled)?;
+    let suffix = cte_state.unique_suffix(&step.model_name);
+    let actual_sql = cte_state.actual_step_sql(step, &suffix, enabled)?;
     let expected_sql = cte_state.expected_step_sql(step, expected_input, enabled)?;
     let mut cte_parts = cte_state.definitions();
     cte_parts.push(cte_definition_sql("__actual", &actual_sql));
@@ -590,7 +624,7 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest) -> Result<String, S
         if !rendered_steps[step_index] {
             continue;
         }
-        let actual_sql = cte_state.actual_step_sql(step, enabled)?;
+        let actual_sql = cte_state.actual_step_sql(step, &suffix, enabled)?;
         comparison_ctes.push(cte_definition_sql(&actual_cte, &actual_sql));
         if request.probe_step_index == Some(step_index) {
             probe_actual_cte = Some(actual_cte.clone());

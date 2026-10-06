@@ -1554,3 +1554,59 @@ def build_cte_scope_project_files(*, queries: tuple[str, ...], expected: str) ->
     for index, query in enumerate(queries):
         files[f"models/orders_{index}.sql"] = f"MODEL (description 'Test model.');\n{query}"
     return files
+
+
+ORDER_LINES_MODEL_SQL: str = (
+    'WITH base_rows AS (SELECT order_id, amount FROM __source("raw_orders")),\n'
+    "final AS (SELECT order_id, amount * 2 AS line_total FROM base_rows)\n"
+    "SELECT order_id, line_total FROM final"
+)
+ORDER_TOTALS_MODEL_SQL: str = (
+    "WITH final AS (\n"
+    "  SELECT order_id, line_total + 1 AS order_total, 'paid' AS status\n"
+    '  FROM __ref("order_lines")\n'
+    ")\n"
+    "SELECT order_id, order_total, status FROM final"
+)
+ORDER_TOTALS_EXPECTED_ROWS_SQL: str = "SELECT 1 AS order_id, 21 AS order_total"
+
+
+def build_shared_cte_name_chain_project_files(
+    *, sql_analysis_enabled: bool, expected_order_lines_sql: str
+) -> dict[str, str]:
+    """Build two chained models that both end in `final`, plus helpers shared by fixtures."""
+
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
+    return {
+        "sqlbuild_project.toml": (
+            'name = "model_inlining"\nadapter = "duckdb"\n\n[connection]\n'
+            'database = "model_inlining.duckdb"\n\n[settings]\n'
+            f"sql_analysis = {sql_analysis_value}\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n"
+        ),
+        "models/order_lines.sql": (
+            f"MODEL (description 'Order lines.');\n\n{ORDER_LINES_MODEL_SQL}\n"
+        ),
+        "models/order_totals.sql": (
+            f"MODEL (description 'Order totals.');\n\n{ORDER_TOTALS_MODEL_SQL}\n"
+        ),
+        "tests/unit/order_chain.sql": (
+            'TEST (name "order_chain");\n\n'
+            "WITH\n"
+            "base_rows AS (SELECT 1 AS order_id, 10 AS amount),\n"
+            "__source__raw_orders AS (SELECT order_id, amount FROM base_rows),\n"
+            f"expected_rows AS ({ORDER_TOTALS_EXPECTED_ROWS_SQL}),\n"
+            f"__expected__order_lines AS ({expected_order_lines_sql}),\n"
+            "__expected__order_totals AS (\n"
+            "  SELECT order_id, order_total, 'paid' AS status FROM expected_rows\n"
+            "),\n"
+            "__assert__totals_match AS (\n"
+            '  SELECT order_id, order_total FROM __ref("order_totals")\n'
+            "  EXCEPT SELECT order_id, order_total FROM expected_rows\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
