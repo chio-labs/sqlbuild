@@ -78,6 +78,19 @@ _INCREMENTAL_SQL: str = (
     "SELECT 1 AS order_id, 7 AS customer_id, 3 AS amount,"
     " TIMESTAMP '2026-01-01 00:00:00' AS order_date\n"
 )
+_CURSOR_INCREMENTAL_SQL: str = (
+    'SELECT order_id, customer_id, amount, order_date FROM __source("landing_order_events")\n'
+)
+_CURSOR_SOURCE_YML: str = (
+    "sources:\n"
+    "  - name: landing_order_events\n    description: Test source landing_order_events.\n"
+    "    schema: landing\n"
+    "    columns:\n"
+    "      - name: order_id\n        type: INTEGER\n"
+    "      - name: customer_id\n        type: INTEGER\n"
+    "      - name: amount\n        type: INTEGER\n"
+    "      - name: order_date\n        type: TIMESTAMP\n"
+)
 _SNAPSHOT_HEADER: str = (
     "MODEL (\n"
     '  description "Raw orders",\n'
@@ -192,9 +205,10 @@ def test_given_quality_rule_violations_when_compiling_and_fixing_then_findings_a
             upstream_header=_INCREMENTAL_HEADER_TEMPLATE.format(
                 strategy="merge", cursor=_CURSOR_CONFIG
             ),
-            upstream_sql=_INCREMENTAL_SQL,
+            upstream_sql=_CURSOR_INCREMENTAL_SQL,
             query_sql=_RENAMED_CHAIN_SQL,
             expected_codes=(),
+            extra_files=(("sources/landing_events.yml", _CURSOR_SOURCE_YML),),
         ),
         RankingKeyProofCase(
             description="a key-matched delete_insert unique_key proves the order",
@@ -210,9 +224,10 @@ def test_given_quality_rule_violations_when_compiling_and_fixing_then_findings_a
             upstream_header=_INCREMENTAL_HEADER_TEMPLATE.format(
                 strategy="delete_insert", cursor=_CURSOR_CONFIG
             ),
-            upstream_sql=_INCREMENTAL_SQL,
+            upstream_sql=_CURSOR_INCREMENTAL_SQL,
             query_sql=_RENAMED_CHAIN_SQL,
             expected_codes=("SQBRSQL018",),
+            extra_files=(("sources/landing_events.yml", _CURSOR_SOURCE_YML),),
         ),
         RankingKeyProofCase(
             description="a snapshot unique_key identifies entities, not versions",
