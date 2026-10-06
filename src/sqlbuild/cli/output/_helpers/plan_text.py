@@ -11,6 +11,7 @@ from typing import cast
 from sqlbuild.cli.output._helpers.cursor_plan import (
     append_microbatch_plan_detail,
     build_cursor_plan_details,
+    runtime_cursor_inputs_clause,
 )
 from sqlbuild.cli.output._helpers.selection_diagnostics import direct_selection_diagnostics_enabled
 from sqlbuild.cli.output.models import CursorPlanDetails
@@ -65,7 +66,6 @@ _ENTRY_ROW_PREFIX: str = "  "
 _LEAF_KEY_SEPARATOR: str = ": "
 _LEAF_ROW_PREFIX: str = "    "
 _NESTED_ROW_PREFIX: str = "      "
-_RUNTIME_PROMINENT_MARKERS: tuple[str, ...] = ("runtime", "deferred")
 _STALE_INPUT_WARNING_TITLE: str = "Stale inputs detected"
 _TREE_EXEMPT_CHARS: frozenset[str] = frozenset({" ", "."})
 
@@ -949,7 +949,9 @@ def _append_cursor_detail(
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
         lines = append_microbatch_plan_detail(lines=lines, details=details, entry=entry)
     if details.bounds_owner == CursorBoundsOwner.RUNTIME:
-        lines.append("    bounds: runtime-owned (model-backed cursor input)")
+        lines.append(
+            f"    bounds: computed at run time, {runtime_cursor_inputs_clause(entry=entry)}"
+        )
     elif details.resolution_status == CursorResolutionStatus.RESOLVED:
         lines.append("    bounds: planner-resolved")
     return lines
@@ -1645,10 +1647,7 @@ def _treeify_plan_lines(lines: list[str]) -> list[str]:
             )
             key, separator, value = content.partition(_LEAF_KEY_SEPARATOR)
             if separator:
-                rendered_value: str = value
-                if any(marker in value for marker in _RUNTIME_PROMINENT_MARKERS):
-                    rendered_value = style.section(value)
-                out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(key)}  {rendered_value}")
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(key)}  {value}")
             elif content.endswith(":"):
                 out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(content)}")
             else:

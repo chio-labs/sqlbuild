@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
+    CursorInputRelation,
     PlanOutput,
 )
 from sqlbuild.presentation.models import DisplayOptions
@@ -30,3 +31,10 @@ class FormatPlanColorTestCase:
     plan_output: PlanOutput
     expected_fragments: tuple[str, ...]
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class RuntimeBoundsLineTestCase:
+    description: str
+    cursor_input_relations: tuple[CursorInputRelation, ...]
+    expected_bounds_value: str

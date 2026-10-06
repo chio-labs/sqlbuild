@@ -12,7 +12,12 @@ from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
 from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
     resolve_effective_microbatch_batch_size,
 )
-from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    CursorBounds,
+    CursorInputRelation,
+    Duration,
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
@@ -136,6 +141,27 @@ def _count_batches(*, bounds: CursorBounds, batch_size: str, cursor_type: str) -
     return None
 
 
+def runtime_cursor_inputs_clause(*, entry: ModelPlanEntry) -> str:
+    """Name the cursor inputs this run brings up to date before the model's range is known."""
+
+    labels: list[str] = []
+    relation: CursorInputRelation
+    for relation in entry.cursor_input_relations:
+        if not relation.is_runtime_owned:
+            continue
+        name: str = relation.input_name or relation.relation
+        label: str = (
+            f"{relation.input_kind.value} {name}" if relation.input_kind is not None else name
+        )
+        if label not in labels:
+            labels.append(label)
+    if not labels:
+        return "once its inputs are up to date"
+    if len(labels) == 1:
+        return f"once {labels[0]} is up to date"
+    return f"once {', '.join(labels[:-1])} and {labels[-1]} are up to date"
+
+
 def append_microbatch_plan_detail(
     *, lines: list[str], details: CursorPlanDetails, entry: ModelPlanEntry
 ) -> list[str]:
@@ -160,7 +186,9 @@ def append_microbatch_plan_detail(
     if details.planned_batch_count is not None and details.effective_batch_size is not None:
         lines.append(f"    batches: {details.planned_batch_count} x {details.effective_batch_size}")
     if details.resolution_status == CursorResolutionStatus.DEFERRED:
-        lines.append("    batches: resolved at runtime after upstream models complete")
+        lines.append(
+            f"    batches: counted at run time, {runtime_cursor_inputs_clause(entry=entry)}"
+        )
     lines.append(f"    batch concurrency: {entry.batch_concurrency}")
     if entry.unaccounted_partition_policy is not None:
         lines.append(f"    unaccounted partition policy: {entry.unaccounted_partition_policy}")

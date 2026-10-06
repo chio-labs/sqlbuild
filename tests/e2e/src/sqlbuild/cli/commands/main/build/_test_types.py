@@ -72,6 +72,7 @@ class SeedWatermarkBuildE2ETestCase:
     changed_seed: str
     expected_initial_rows: tuple[tuple[object, ...], ...]
     expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_plan_bounds: str
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ class LoaderWatermarkBuildE2ETestCase:
     changed_maximum: int
     expected_initial_rows: tuple[tuple[object, ...], ...]
     expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_plan_bounds: str
 
 
 @dataclass(frozen=True)

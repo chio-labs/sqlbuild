@@ -1,0 +1,117 @@
+"""Progress messages of `sqb rename` and `sqb mv` against a real offline compile."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from sqlbuild.cli.commands._helpers.refactor.command import run_refactor_command
+from sqlbuild.cli.commands.models import RefactorCommandRequest
+from sqlbuild.cli.commands.types import CliCommand
+from tests.integration.src.sqlbuild.cli.commands._helpers.refactor._test_types import (
+    RefactorStatusMessagesTestCase,
+)
+
+_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders_project"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        '[connection]\ndatabase = "orders.duckdb"\n\n'
+        '[targets.dev]\nschema = "analytics"\n'
+    ),
+    "seeds/orders.csv": "order_id,amount\n1,25\n2,40\n",
+    "seeds/orders.yml": (
+        "seeds:\n"
+        "  - name: orders\n    description: Test seed orders.\n"
+        "    columns:\n"
+        "      - name: order_id\n        type: INTEGER\n"
+        "      - name: amount\n        type: INTEGER\n"
+    ),
+    "models/staging/stg_orders.sql": (
+        "MODEL (description 'Test model.',\n  materialized view,\n);\n\n"
+        'SELECT\n  order_id,\n  amount\nFROM __seed("orders")\n'
+    ),
+    "models/marts/fact_orders.sql": (
+        "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
+        'SELECT\n  order_id,\n  amount\nFROM __ref("stg_orders")\n'
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RefactorStatusMessagesTestCase(
+            description="moving a model nothing else names edits one file",
+            command=CliCommand.MV,
+            target="model:fact_orders",
+            new_name=None,
+            destination="models/finance/fact_orders.sql",
+            expected_lines=(
+                "Planned edits to 1 file.",
+                "Writing 1 file...",
+                "Wrote 1 file.",
+                "Compiled: ok, 1 file changed",
+            ),
+        ),
+        RefactorStatusMessagesTestCase(
+            description="renaming a column nothing downstream reads edits one file",
+            command=CliCommand.RENAME,
+            target="column:fact_orders.amount",
+            new_name="order_amount",
+            destination=None,
+            expected_lines=(
+                "Planned edits to 1 file.",
+                "Writing 1 file...",
+                "Wrote 1 file.",
+                "Compiled: ok, 1 file changed",
+            ),
+        ),
+        RefactorStatusMessagesTestCase(
+            description="renaming a model another model reads edits two files",
+            command=CliCommand.RENAME,
+            target="model:stg_orders",
+            new_name="stg_order_lines",
+            destination=None,
+            expected_lines=(
+                "Planned edits to 2 files.",
+                "Writing 2 files...",
+                "Wrote 2 files.",
+                "Compiled: ok, 2 files changed",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_refactor_when_running_then_progress_messages_agree_in_number(
+    test_case: RefactorStatusMessagesTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    relative_path: str
+    content: str
+    for relative_path, content in _PROJECT_FILES.items():
+        path: Path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+    exit_code: int = run_refactor_command(
+        request=RefactorCommandRequest(
+            command=test_case.command,
+            target=test_case.target,
+            new_name=test_case.new_name,
+            destination=test_case.destination,
+            project_dir=tmp_path,
+            no_color=True,
+        )
+    )
+
+    lines: list[str] = capsys.readouterr().out.splitlines()
+    assert exit_code == 0, lines
+    expected: str
+    for expected in test_case.expected_lines:
+        assert expected in lines, lines
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

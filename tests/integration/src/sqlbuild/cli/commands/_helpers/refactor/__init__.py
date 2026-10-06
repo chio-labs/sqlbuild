@@ -1,0 +1,1 @@
+"""Refactor command integration tests."""

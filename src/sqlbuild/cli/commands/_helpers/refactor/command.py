@@ -32,6 +32,7 @@ from sqlbuild.compiler.refactoring.main.with_model_migration import with_model_m
 from sqlbuild.compiler.refactoring.models import RefactorPlan, RefactorRequest
 from sqlbuild.compiler.refactoring.types import RefactorOperation, RefactorStatus
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.presentation.main.supports_color import supports_color
 
 _STAGING_PREFIX: str = "sqb-refactor-"
@@ -75,7 +76,7 @@ def _run(
         if refactor_request.operation == RefactorOperation.RENAME_COLUMN
         else plan_model_refactor(project=before.project, request=refactor_request)
     )
-    status.complete(message=f"Planned edits to {len(plan.changes)} files.")
+    status.complete(message=f"Planned edits to {_files(plan)}.")
     if plan.blocking or plan.manual:
         status.error("Refused: some references cannot be rewritten safely.")
         return _finish(
@@ -135,9 +136,9 @@ def _run(
             diagnostics=(),
             use_color=use_color,
         )
-    status.start(f"Writing {len(plan.changes)} files...")
+    status.start(f"Writing {_files(plan)}...")
     commit_refactor_plan(project_dir=project_dir, originals=originals, plan=plan)
-    status.complete(message=f"Wrote {len(plan.changes)} files.")
+    status.complete(message=f"Wrote {_files(plan)}.")
     return _finish(
         request=request,
         plan=plan,
@@ -164,6 +165,10 @@ def _finish(
     )
     _ = sys.stdout.write(output)
     return 0 if status in {RefactorStatus.APPLIED, RefactorStatus.DRY_RUN} else 1
+
+
+def _files(plan: RefactorPlan) -> str:
+    return format_count_noun(count=len(plan.changes), singular="file")
 
 
 def _refactor_request(*, request: RefactorCommandRequest) -> RefactorRequest:

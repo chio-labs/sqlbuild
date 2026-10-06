@@ -125,6 +125,7 @@ from sqlbuild.compiler.planner.types import (
     ContractPolicy,
     CursorGrain,
     CursorType,
+    GraphResourceKind,
     IncrementalMode,
     IncrementalStrategy,
     MaterializationType,
@@ -1582,6 +1583,8 @@ def _build_cursor_input_relations(
                         ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_locations
                     ),
                     is_runtime_produced=ref.ref_name in runtime_cursor_producer_names,
+                    input_name=ref.ref_name,
+                    input_kind=_cursor_input_kind(ref=ref, model_locations=model_locations),
                     terminal_cursor_start=(
                         parse(
                             raw=get_config_cursor_bound(
@@ -1761,6 +1764,22 @@ def _resolve_cursor_input_relation(
         if source is None:
             return None
         return render_source_relation(entry=source, adapter=adapter)
+    return None
+
+
+def _cursor_input_kind(
+    *, ref: CompileSqlReference, model_locations: dict[str, CompiledRelationLocation]
+) -> GraphResourceKind | None:
+    """Return the resource kind a resolved cursor input reference reads."""
+
+    if ref.ref_kind == SqlReferenceKind.REF:
+        return (
+            GraphResourceKind.MODEL if ref.ref_name in model_locations else GraphResourceKind.SEED
+        )
+    if ref.ref_kind == SqlReferenceKind.SEED:
+        return GraphResourceKind.SEED
+    if ref.ref_kind == SqlReferenceKind.SOURCE:
+        return GraphResourceKind.SOURCE
     return None
 
 

@@ -27,6 +27,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             changed_seed="id,amount\n1,100\n2,200\n3,300\n",
             expected_initial_rows=((1, 100), (2, 200)),
             expected_changed_rows=((1, 100), (2, 200), (3, 300)),
+            expected_plan_bounds=(
+                "bounds  computed at run time, once seed order_events is up to date"
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -91,6 +94,12 @@ def test_given_seed_watermark_when_seed_changes_then_incremental_consumes_new_hi
         db_path=warehouse_path,
         sql="SELECT id, amount FROM main.order_events_incremental ORDER BY id",
     ) == list(test_case.expected_initial_rows)
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"), project_dir=project_dir
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    assert test_case.expected_plan_bounds in plan_result.stdout, plan_result.stdout
 
     (project_dir / "seeds" / "order_events.csv").write_text(
         test_case.changed_seed, encoding="utf-8"
