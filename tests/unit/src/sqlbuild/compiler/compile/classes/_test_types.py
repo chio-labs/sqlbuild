@@ -1,4 +1,4 @@
-"""Test case types for the compile render reuse session."""
+"""Test case types for the compile render reuse session and stored model analyses."""
 
 from __future__ import annotations
 
@@ -46,3 +46,34 @@ class ReleasedRenderTestCase:
     retained_models: frozenset[str]
     expected_released: dict[str, bool]
     expected_query_sqls: dict[str, str]
+
+
+@dataclass(frozen=True)
+class DeclarationReuseTestCase:
+    """Paths changed since a stored compile, and whether its declaration files are reused."""
+
+    description: str
+    changed_paths: frozenset[str] | None
+    recorded_variant: str
+    expected_full_discoveries: int
+
+
+@dataclass(frozen=True)
+class StoredAnalysisScopeTestCase:
+    """Which renders a compile reused, how analyses were stored, and which may be served."""
+
+    description: str
+    reused_models: frozenset[str]
+    rekeyed_models: frozenset[str]
+    twinned_models: frozenset[str]
+    stored_column_types: dict[str, dict[str, str]]
+    expected_served: frozenset[str]
+
+
+@dataclass(frozen=True)
+class StaleServedAnalysisTestCase:
+    """Final parent signatures in this compile, and which served analyses they make stale."""
+
+    description: str
+    current_signatures: dict[str, str]
+    expected_stale: set[str]

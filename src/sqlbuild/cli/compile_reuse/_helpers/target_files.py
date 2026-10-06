@@ -32,11 +32,11 @@ def snapshot_target_files(
             if entry.is_dir(follow_symlinks=False):
                 pending.append(entry.path)
                 continue
-            stamp: FileStamp | None = _path_stamp(path=entry.path)
+            stamp: FileStamp | None = path_stamp(path=entry.path)
             if stamp is not None:
                 stamps[entry.path] = stamp
     for path in extra_paths:
-        extra: FileStamp | None = _path_stamp(path=path)
+        extra: FileStamp | None = path_stamp(path=path)
         if extra is not None:
             stamps[path] = extra
     return stamps
@@ -81,7 +81,7 @@ def _target_stamps(*, project_dir: str, paths: tuple[str, ...], tree: bool) -> d
     """Stamp the whole compiled tree plus extra paths, or only the given paths."""
 
     if not tree:
-        return {path: stamp for path in paths if (stamp := _path_stamp(path=path)) is not None}
+        return {path: stamp for path in paths if (stamp := path_stamp(path=path)) is not None}
     compiled_prefix: str = _compiled_root(project_dir=project_dir) + os.sep
     extra_paths: tuple[str, ...] = tuple(
         path for path in paths if not path.startswith(compiled_prefix)
@@ -103,7 +103,9 @@ def _compiled_root(*, project_dir: str) -> str:
     return os.path.join(project_dir, TARGET_DIRECTORY_NAME, COMPILED_DIRECTORY_NAME)
 
 
-def _path_stamp(*, path: str) -> FileStamp | None:
+def path_stamp(*, path: str) -> FileStamp | None:
+    """Return the stat identity of one path, or None when it cannot be stated."""
+
     try:
         status: os.stat_result = os.lstat(path)
     except OSError:

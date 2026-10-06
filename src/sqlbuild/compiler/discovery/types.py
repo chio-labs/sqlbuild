@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import Field
 from enum import StrEnum
 from pathlib import Path
@@ -10,6 +11,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, Protocol
 from sqlbuild.compiler.scopes.types import ScopeKind
 
 if TYPE_CHECKING:
+    from sqlbuild.compiler.discovery.models import (
+        DiscoveredDeclarationFiles,
+        DiscoveredSqlModelFile,
+    )
     from sqlbuild.provider.classes.provider import Provider
 
 type ProjectProvider = Provider
@@ -38,3 +43,17 @@ class DirectorySnapshotEntry(NamedTuple):
     name: str
     is_dir: bool
     is_walkable_dir: bool
+
+
+class DeclarationFilesReuse(Protocol):
+    """Reuse the non-model declaration files a previous compile parsed when only models changed."""
+
+    def declaration_files(
+        self,
+        *,
+        variant: str,
+        discover: Callable[[], DiscoveredDeclarationFiles],
+        discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
+    ) -> DiscoveredDeclarationFiles:
+        """Return stored declaration files with freshly discovered models, or discover all."""
+        ...

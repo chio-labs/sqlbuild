@@ -8,16 +8,22 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import collect_com
 from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import CompileModelInput
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import DiscoveredDeclarationFiles, DiscoveredSqlModelFile
 from tests.unit.src.sqlbuild.compiler.compile.classes._test_types import (
     CorruptRenderTestCase,
+    DeclarationReuseTestCase,
     ReleasedRenderTestCase,
     RenderReplayTestCase,
     ReusableModelsTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile.classes.helpers import (
+    DECLARATIONS_VARIANT,
+    OTHER_DECLARATIONS_VARIANT,
     REGION_ENV_VAR,
+    CountingDiscovery,
     corrupted_session,
+    declaration_files,
+    declarations_state,
     edited_session,
     missing_description,
     model_file,
@@ -182,6 +188,66 @@ def test_given_reused_render_when_storing_then_base_bytes_are_released_and_recov
 
     assert released == test_case.expected_released
     assert complete == test_case.expected_query_sqls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeclarationReuseTestCase(
+            description="model_edited",
+            changed_paths=frozenset({"models/customers.sql"}),
+            recorded_variant=DECLARATIONS_VARIANT,
+            expected_full_discoveries=0,
+        ),
+        DeclarationReuseTestCase(
+            description="model_added",
+            changed_paths=frozenset({"models/returns.sql"}),
+            recorded_variant=DECLARATIONS_VARIANT,
+            expected_full_discoveries=1,
+        ),
+        DeclarationReuseTestCase(
+            description="macro_edited",
+            changed_paths=frozenset({"macros/currency.py"}),
+            recorded_variant=DECLARATIONS_VARIANT,
+            expected_full_discoveries=1,
+        ),
+        DeclarationReuseTestCase(
+            description="changes_unknown",
+            changed_paths=None,
+            recorded_variant=DECLARATIONS_VARIANT,
+            expected_full_discoveries=1,
+        ),
+        DeclarationReuseTestCase(
+            description="declarations_stored_for_other_discovery",
+            changed_paths=frozenset({"models/customers.sql"}),
+            recorded_variant=OTHER_DECLARATIONS_VARIANT,
+            expected_full_discoveries=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stored_declarations_when_discovering_then_only_model_only_edits_reuse_them(
+    test_case: DeclarationReuseTestCase,
+) -> None:
+    current: tuple[DiscoveredSqlModelFile, ...] = (
+        model_file("orders"),
+        model_file("customers", "SELECT 2 AS customer_id"),
+    )
+    discovery: CountingDiscovery = CountingDiscovery(current)
+    session: CompileRenderReuseSession = CompileRenderReuseSession(
+        prior=declarations_state(recorded_variant=test_case.recorded_variant),
+        changed_paths=test_case.changed_paths,
+    )
+
+    with collect_compile_diagnostics():
+        discovered: DiscoveredDeclarationFiles = session.declaration_files(
+            variant=DECLARATIONS_VARIANT,
+            discover=discovery.discover,
+            discover_models=discovery.discover_models,
+        )
+
+    assert discovered == declaration_files(current)
+    assert discovery.full == test_case.expected_full_discoveries
 
 
 if __name__ == "__main__":

@@ -221,6 +221,7 @@ def test_given_edit_sequence_when_compiling_incrementally_then_each_step_matches
 
     for step in test_case.steps:
         step.edit(project_dir)
+        step.between(project_dir)
         comparison: IncrementalEditComparison = compare_incremental_compile(project_dir=project_dir)
 
         assert comparison.incremental.reused is False, step.description
@@ -256,6 +257,7 @@ def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_mat
         random_edit_plan(seed=test_case.seed, step_count=test_case.step_count)
     ):
         chain.apply(kind)
+        chain.intervene()
         comparison: IncrementalEditComparison = compare_incremental_compile(project_dir=project_dir)
 
         assert comparison.matches is test_case.expected_matches_uncached, (
@@ -265,6 +267,9 @@ def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_mat
             comparison.incremental.stderr,
         )
         assert (comparison.reused_renders > 0) is is_model_only_edit(kind), (step, kind)
+        assert (comparison.incremental.timings.get("analysis_reuse_hits", 0) > 0) is (
+            is_model_only_edit(kind)
+        ), (step, kind)
 
 
 @pytest.mark.parametrize(

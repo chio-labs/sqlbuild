@@ -1,4 +1,4 @@
-"""Shared builders for render reuse session unit tests."""
+"""Shared builders for render reuse session and stored model analysis unit tests."""
 
 from __future__ import annotations
 
@@ -12,18 +12,37 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     report_compile_diagnostic,
 )
 from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
+from sqlbuild.compiler.compile.classes.stored_model_analyses import (
+    StoredModelAnalyses,
+    analysis_reuse_context,
+)
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import (
+    AnalysisCacheContext,
     CompileModelInput,
     CompilerDiagnostic,
+    CompileSqlReference,
+    ModelAnalysisCaching,
+    ModelSqlAnalysisRequest,
+    PolyglotAnalysisResult,
     RenderReuseState,
+    StoredModelAnalysis,
     StoredRender,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey, DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredDeclarationFiles,
+    DiscoveredMacroFile,
+    DiscoveredSqlModelFile,
+)
 from sqlbuild.compiler.fact_cache.main._load_fact_payload import loaded_fact_payload
+from sqlbuild.compiler.references.types import SqlReferenceKind
 
 REGION_ENV_VAR: str = "ORDERS_REGION"
+ORDERS_CACHE: AnalysisCacheContext = AnalysisCacheContext(
+    root=Path("/orders/target/cache"), shared_fingerprint="orders-fingerprint"
+)
+RAW_ORDERS_TYPES: dict[str, dict[str, str]] = {"raw_orders": {"order_id": "INTEGER"}}
 
 
 def model_file(name: str, sql: str = "SELECT 1 AS order_id") -> DiscoveredSqlModelFile:
@@ -156,3 +175,168 @@ def stored_query_sqls(state: RenderReuseState | None) -> dict[str, str]:
 def _stored_query_sql(payload: memoryview) -> str:
     stored: StoredRender = cast(StoredRender, loaded_fact_payload(payload))
     return cast(CompileModelInput, stored.value).query_sql
+
+
+DECLARATIONS_VARIANT: str = "10"
+OTHER_DECLARATIONS_VARIANT: str = "01"
+
+
+def declaration_files(
+    model_files: tuple[DiscoveredSqlModelFile, ...],
+) -> DiscoveredDeclarationFiles:
+    """Return discovered declaration files holding one macro file and the given models."""
+
+    return DiscoveredDeclarationFiles(
+        source_files=(),
+        model_files=model_files,
+        enum_files=(),
+        constant_files=(),
+        model_schema_files=(),
+        sql_function_files=(),
+        sql_hook_files=(),
+        python_function_files=(),
+        schema_files=(),
+        seed_files=(),
+        test_files=(),
+        scenario_files=(),
+        audit_files=(),
+        macro_files=(
+            DiscoveredMacroFile(
+                file_path=Path("/orders/macros/currency.py"),
+                relative_path=Path("macros/currency.py"),
+                contents="def total(price: str) -> str:\n    return price\n",
+            ),
+        ),
+        adapter_file=None,
+    )
+
+
+class CountingDiscovery:
+    """Discover fixed declaration files and count full and model-only discoveries."""
+
+    def __init__(self, model_files: tuple[DiscoveredSqlModelFile, ...]) -> None:
+        self.model_files: tuple[DiscoveredSqlModelFile, ...] = model_files
+        self.full: int = 0
+
+    def discover(self) -> DiscoveredDeclarationFiles:
+        """Discover every declaration file."""
+
+        self.full += 1
+        return declaration_files(self.model_files)
+
+    def discover_models(self) -> tuple[DiscoveredSqlModelFile, ...]:
+        """Discover model files only."""
+
+        return self.model_files
+
+
+def declarations_state(*, recorded_variant: str) -> RenderReuseState:
+    """Return stored renders of two models, with declaration files discovered for one variant."""
+
+    stored: tuple[DiscoveredSqlModelFile, ...] = (model_file("orders"), model_file("customers"))
+    session: CompileRenderReuseSession = CompileRenderReuseSession(prior=None, changed_paths=None)
+    _ = session.declaration_files(
+        variant=recorded_variant,
+        discover=CountingDiscovery(stored).discover,
+        discover_models=CountingDiscovery(stored).discover_models,
+    )
+    session.plan_models(model_files=stored)
+    with collect_compile_diagnostics():
+        for item in stored:
+            _ = session.rendered_model(model_file=item, render=lambda item=item: _render(item))
+    state: RenderReuseState | None = session.stored_state()
+    assert state is not None
+    return state
+
+
+def analyzed_model(name: str, *upstream: str) -> CompileModelInput:
+    """Return one model input reading the given upstream models."""
+
+    model: DiscoveredSqlModelFile = model_file(name)
+    return CompileModelInput(
+        model_file=model,
+        query_sql=model.contents,
+        references=tuple(
+            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name=upstream_name)
+            for upstream_name in upstream
+        ),
+    )
+
+
+def stored_analysis(
+    *, name: str, context: str, dependencies: dict[str, str]
+) -> StoredModelAnalysis:
+    """Return the analysis a previous compile stored for one model."""
+
+    return StoredModelAnalysis(
+        context=context,
+        cache_key=f"{name}-key",
+        analysis=PolyglotAnalysisResult(analysis_succeeded=True),
+        output_signature=f"{name}-signature",
+        dependencies=dependencies,
+        signature=f"{name}-signature",
+    )
+
+
+def analysis_request(model_input: CompileModelInput, cache_key: str) -> ModelSqlAnalysisRequest:
+    """Return the analysis request of one model with the given cache key."""
+
+    return ModelSqlAnalysisRequest(
+        model_input=model_input,
+        query_sql=model_input.query_sql,
+        placeholders=None,
+        cache_key=cache_key,
+        binding_schema=None,
+    )
+
+
+def orders_analysis_context(
+    *, requests: tuple[ModelSqlAnalysisRequest, ...], column_types: dict[str, dict[str, str]]
+) -> str:
+    """Return the shared analysis inputs digest of the orders project with these source types."""
+
+    return analysis_reuse_context(
+        cache=ORDERS_CACHE,
+        model_names=frozenset(item.model_input.model_file.file_path.stem for item in requests),
+        column_types_by_table=column_types,
+        column_nullability_by_table={},
+        complete_binding_schemas={},
+    )
+
+
+def orders_stored_analyses(
+    *, requests: tuple[ModelSqlAnalysisRequest, ...], reuse: RecordingAnalysisReuse
+) -> StoredModelAnalyses:
+    """Return the stored analyses a compile of the orders project may serve."""
+
+    return StoredModelAnalyses(
+        caching=ModelAnalysisCaching(cache=ORDERS_CACHE, reuse=reuse),
+        requests=requests,
+        column_types_by_table=RAW_ORDERS_TYPES,
+        column_nullability_by_table={},
+        complete_binding_schemas={},
+    )
+
+
+class RecordingAnalysisReuse:
+    """Stored analyses and reused renders of a previous compile, recording new analyses."""
+
+    def __init__(self, *, reused: frozenset[str], stored: dict[str, StoredModelAnalysis]) -> None:
+        self._reused: frozenset[str] = reused
+        self._stored: dict[str, StoredModelAnalysis] = stored
+        self.recorded: dict[str, StoredModelAnalysis | None] | None = None
+
+    def reused_model_names(self) -> frozenset[str]:
+        """Return the names of models whose renders were reused."""
+
+        return self._reused
+
+    def stored_analyses(self) -> dict[str, StoredModelAnalysis]:
+        """Return the stored analyses by model name."""
+
+        return self._stored
+
+    def record_analyses(self, *, analyses: dict[str, StoredModelAnalysis | None]) -> None:
+        """Keep what the compile records."""
+
+        self.recorded = analyses

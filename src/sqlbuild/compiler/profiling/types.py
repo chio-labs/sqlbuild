@@ -22,6 +22,7 @@ type CompileMetric = Literal[
     "analysis_entry_cache_hits",
     "analysis_cache_misses",
     "analysis_cache_bypasses",
+    "analysis_reuse_hits",
     "fact_cache_hits",
     "fact_cache_misses",
     "render_reuse_hits",

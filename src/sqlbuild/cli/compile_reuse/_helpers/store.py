@@ -164,6 +164,11 @@ def _write_compile_entry(
             target_tree=artifacts_written,
             settings_inputs=settings.inputs,
             settings_digest=settings_inputs_digest(inputs=settings.inputs),
+            target_digests={
+                path: artifact.digest
+                for path, artifact in artifact_writes.artifacts.items()
+                if artifact.digest is not None and path in target_files
+            },
         ),
         output=StoredCompileOutput(
             stderr_lines=output.stderr_lines,

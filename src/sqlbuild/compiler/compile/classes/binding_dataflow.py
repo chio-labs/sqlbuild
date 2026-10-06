@@ -19,7 +19,9 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     published_model_shape,
     referenced_model_names,
 )
+from sqlbuild.compiler.compile.classes.stored_model_analyses import dependencies_current
 from sqlbuild.compiler.compile.models import (
+    DataflowReuse,
     ModelSqlAnalysis,
     ModelSqlAnalysisRequest,
     PolyglotAnalysisResult,
@@ -42,8 +44,7 @@ class BindingDataflow:
         *,
         requests: tuple[ModelSqlAnalysisRequest, ...],
         names: tuple[str, ...],
-        cached: dict[str, PolyglotAnalysisResult],
-        previous_signatures: dict[str, str],
+        reuse: DataflowReuse,
         shapes: dict[str, dict[str, str]],
         types: dict[str, dict[str, str]],
         nullability: dict[str, dict[str, InferredNullability]],
@@ -53,8 +54,15 @@ class BindingDataflow:
     ) -> None:
         self._requests: tuple[ModelSqlAnalysisRequest, ...] = requests
         self._names: tuple[str, ...] = names
-        self._cached: dict[str, PolyglotAnalysisResult] = cached
         self._by_name: dict[str, ModelSqlAnalysisRequest] = dict(zip(names, requests, strict=True))
+        served_keys: frozenset[str | None] = frozenset(
+            self._by_name[name].cache_key for name in reuse.served if name in self._by_name
+        )
+        self._cached: dict[str, PolyglotAnalysisResult] = {
+            key: analysis for key, analysis in reuse.cached.items() if key not in served_keys
+        }
+        self._served: dict[str, dict[str, str]] = reuse.served
+        self._signatures: dict[str, str] = {}
         available_names: frozenset[str] = frozenset(names)
         self._dependencies: dict[str, tuple[str, ...]] = {
             name: referenced_model_names(
@@ -62,11 +70,11 @@ class BindingDataflow:
             )
             for name, request in self._by_name.items()
         }
-        self._previous_signatures: dict[str, str] = previous_signatures
+        self._previous_signatures: dict[str, str] = reuse.previous_signatures
         self._complete_shapes: dict[str, dict[str, str]] = dict(shapes)
         self._available_types: dict[str, dict[str, str]] = dict(types)
         self._available_nullability: dict[str, dict[str, InferredNullability]] = dict(nullability)
-        self._reusable: dict[str, PolyglotAnalysisResult] = dict(cached)
+        self._reusable: dict[str, PolyglotAnalysisResult] = dict(reuse.cached)
         self._profile: ExpressionInferenceProfile = profile
         self._analyze: Callable[..., tuple[ModelSqlAnalysis, ...]] = analyze
         self._complete: Callable[..., tuple[ModelSqlAnalysis, ...]] = complete
@@ -251,6 +259,8 @@ class BindingDataflow:
                 self._changed.add(name)
                 if request.cache_key is not None:
                     self._reusable.pop(request.cache_key, None)
+            if not self._served_parents_final(name) and request.cache_key is not None:
+                self._reusable.pop(request.cache_key, None)
             bindings: dict[str, dict[str, str]] | None = (
                 None
                 if request.binding_schema is None
@@ -288,11 +298,24 @@ class BindingDataflow:
             self._results[name] = result
             self._publish(name=name, request=request, result=result)
 
+    def _served_parents_final(self, name: str) -> bool:
+        """Return whether a stored analysis, if served, was made from the parents' final state."""
+
+        dependencies: dict[str, str] | None = self._served.get(name)
+        return dependencies is None or dependencies_current(
+            dependencies=dependencies,
+            parent_signatures={
+                parent: self._signatures.get(parent) for parent in self._dependencies[name]
+            },
+        )
+
     def _publish(
         self, *, name: str, request: ModelSqlAnalysisRequest, result: ModelSqlAnalysis
     ) -> None:
         analysis: PolyglotAnalysisResult = result.polyglot_analysis
-        if model_analysis_output_signature(analysis) != self._previous_signatures.get(name):
+        signature: str = model_analysis_output_signature(analysis)
+        self._signatures[name] = signature
+        if signature != self._previous_signatures.get(name):
             self._changed.add(name)
         required: frozenset[str] = binding_relation_names(request.model_input.references)
         star_known: bool = not analysis.has_star or (

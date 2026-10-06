@@ -24,6 +24,7 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_SETTING_KEY,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryCacheRequest
+from sqlbuild.compiler.discovery.types import DeclarationFilesReuse
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
@@ -35,6 +36,7 @@ def discover_project_inputs(
     sql_analysis_enabled_override: bool | None = None,
     extract_output_column_locations: bool = True,
     cache_request: DiscoveryCacheRequest | None = None,
+    declaration_reuse: DeclarationFilesReuse | None = None,
 ) -> DiscoveredProjectInputs:
     """Load all raw project inputs from disk before semantic resolution."""
 
@@ -44,6 +46,7 @@ def discover_project_inputs(
             sql_analysis_enabled_override=sql_analysis_enabled_override,
             extract_output_column_locations=extract_output_column_locations,
             cache_request=cache_request,
+            declaration_reuse=declaration_reuse,
         )
 
 
@@ -53,6 +56,7 @@ def _discover_project_inputs(
     sql_analysis_enabled_override: bool | None,
     extract_output_column_locations: bool,
     cache_request: DiscoveryCacheRequest | None,
+    declaration_reuse: DeclarationFilesReuse | None,
 ) -> DiscoveredProjectInputs:
     with OperationLifecycle(operation_kind="project", operation_name="discovery_project_assembly"):
         return _assemble_discovered_project_inputs(
@@ -60,6 +64,7 @@ def _discover_project_inputs(
             sql_analysis_enabled_override=sql_analysis_enabled_override,
             extract_output_column_locations=extract_output_column_locations,
             cache_request=cache_request,
+            declaration_reuse=declaration_reuse,
         )
 
 
@@ -69,6 +74,7 @@ def _assemble_discovered_project_inputs(
     sql_analysis_enabled_override: bool | None,
     extract_output_column_locations: bool,
     cache_request: DiscoveryCacheRequest | None,
+    declaration_reuse: DeclarationFilesReuse | None,
 ) -> DiscoveredProjectInputs:
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
@@ -105,6 +111,7 @@ def _assemble_discovered_project_inputs(
             sql_analysis_enabled=sql_analysis_enabled,
             extract_output_column_locations=extract_output_column_locations,
             fact_cache=fact_cache,
+            declaration_reuse=declaration_reuse,
         )
     validate_discovered_inputs(discovered_inputs)
     from sqlbuild.runtime.event_exporting.main.configure_discovered_event_exporters import (

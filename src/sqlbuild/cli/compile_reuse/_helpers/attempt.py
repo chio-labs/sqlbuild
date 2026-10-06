@@ -106,6 +106,8 @@ def attempt_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt:
             attempt,
             prior_entry=True,
             prior_modules=header.inputs.modules,
+            prior_target_files=header.inputs.target_files,
+            prior_target_digests=header.inputs.target_digests,
             restamped=restamped_paths(stored=header.inputs.project_files, current=attempt.snapshot),
             render_state_path=(
                 None

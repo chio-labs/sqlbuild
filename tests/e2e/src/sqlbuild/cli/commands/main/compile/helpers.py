@@ -27,9 +27,15 @@ import pytest
 
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_render_reuse._helpers.load_notice as render_load_notice
+import sqlbuild.cli.compile_render_reuse.main._render_reuse_session as render_reuse_main
 import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
+import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
+import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+import sqlbuild.compiler.compile.classes.binding_dataflow as binding_dataflow
+import sqlbuild.compiler.compile.classes.render_reuse_session as render_reuse_session
+import sqlbuild.compiler.compile.classes.stored_model_analyses as stored_model_analyses
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
@@ -40,6 +46,7 @@ from sqlbuild.cli.compile_reuse._helpers.entry_file import (
     read_entry_stdout,
     write_entry,
 )
+from sqlbuild.cli.compile_reuse.classes.stored_artifacts import StoredArtifacts
 from sqlbuild.cli.compile_reuse.constants import (
     REUSE_DISABLE_ENV_VAR,
     REUSE_ENTRY_DIRECTORY_PARTS,
@@ -3332,6 +3339,18 @@ def compile_in_process(*, project_dir: Path) -> int:
         return main(["--project-dir", str(project_dir), "--no-color", "compile", "--json"])
 
 
+def compile_edit_without_reuse(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compile an edit with compile reuse disabled, so only the analysis cache sees it."""
+
+    monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, "1")
+    _ = compile_in_process(project_dir=project_dir)
+    monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, "0")
+
+
+def leave_edit_uncompiled(_project_dir: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave the edit for the compared compile to see first."""
+
+
 def write_before_reuse_store(
     *, monkeypatch: pytest.MonkeyPatch, project_dir: Path, write: Callable[[Path], None]
 ) -> None:
@@ -3434,12 +3453,12 @@ def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -
 
 
 def compile_in_process_output(
-    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str], args: tuple[str, ...] = ()
 ) -> tuple[int, str, str]:
     """Run one JSON compile in this process and return its exit code, stdout, and stderr."""
 
     _ = capsys.readouterr()
-    code: int = main(["--project-dir", str(project_dir), "--no-color", "compile", "--json"])
+    code: int = main(["--project-dir", str(project_dir), "--no-color", "compile", "--json", *args])
     out, err = capsys.readouterr()
     return code, out, err
 
@@ -3489,11 +3508,11 @@ def compare_incremental_compile(*, project_dir: Path) -> IncrementalEditComparis
 
 
 def in_process_reuse_run(
-    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str], args: tuple[str, ...] = ()
 ) -> CompileReuseRun:
     """Compile with --json in this process and capture output comparable with fresh processes."""
 
-    code, out, err = compile_in_process_output(project_dir=project_dir, capsys=capsys)
+    code, out, err = compile_in_process_output(project_dir=project_dir, capsys=capsys, args=args)
     payload: dict[str, object] = cast(dict[str, object], json.loads(out))
     return CompileReuseRun(
         returncode=code,
@@ -3505,6 +3524,8 @@ def in_process_reuse_run(
 
 
 GENERATED_EDIT_MODEL_PREFIX: str = "orders_step_"
+_STAR_MODEL_SHARE: float = 0.4
+_TWIN_MODEL_SHARE: float = 0.25
 _GENERATED_EDIT_COLUMNS: tuple[str, ...] = ("order_id", "customer_id", "quantity", "status")
 _PLAIN_QUANTITY: str = "  quantity,\n"
 _CAST_QUANTITY: str = "  CAST(quantity AS BIGINT) AS quantity,\n"
@@ -3516,22 +3537,37 @@ _RANDOM_EDIT_KINDS: tuple[str, ...] = (
     "type_change",
     "header_change",
     "introduce_error",
+    "drop_column",
     "add_model",
     "macro_edit",
     "test_edit",
 )
 _RANDOM_EDIT_FOLLOW_UPS: dict[str, tuple[str, ...]] = {
     "introduce_error": ("introduce_error", "fix_error"),
+    "drop_column": ("drop_column", "comment", "restore_column"),
 }
 _MODEL_ONLY_EDIT_KINDS: frozenset[str] = frozenset(
-    {"comment", "add_column", "type_change", "header_change", "introduce_error", "fix_error"}
+    {
+        "comment",
+        "add_column",
+        "type_change",
+        "header_change",
+        "introduce_error",
+        "fix_error",
+        "drop_column",
+        "restore_column",
+    }
 )
+_DROPPED_COLUMN: str = "  customer_id,\n"
+_KEPT_COLUMN: str = "  order_id,\n"
+_EDIT_ANCHORS: dict[str, str] = {"type_change": "  quantity", "drop_column": _DROPPED_COLUMN}
 
 
 def write_generated_edit_models(*, project_dir: Path, model_count: int, seed: int) -> None:
-    """Add a seeded chain of models over the staging orders, each reading an earlier one."""
+    """Add seeded models over the staging orders reading earlier ones, some with * or twins."""
 
     chooser: random.Random = random.Random(seed)
+    star_chooser: random.Random = random.Random(seed + 2)
     upstreams: tuple[str, ...] = (
         "stg_orders",
         *(
@@ -3539,12 +3575,27 @@ def write_generated_edit_models(*, project_dir: Path, model_count: int, seed: in
             for index in range(1, model_count)
         ),
     )
+    twin_chooser: random.Random = random.Random(seed + 3)
     for index, upstream in enumerate(upstreams):
-        write_project_file(
-            project_dir,
-            f"models/generated/{GENERATED_EDIT_MODEL_PREFIX}{index:03d}.sql",
-            _generated_edit_model_sql(upstream=upstream),
-        )
+        name: str = f"models/generated/{GENERATED_EDIT_MODEL_PREFIX}{index:03d}"
+        contents: str = (_generated_edit_model_sql, _generated_star_model_sql)[
+            star_chooser.random() < _STAR_MODEL_SHARE
+        ](upstream=upstream)
+        write_project_file(project_dir, f"{name}.sql", contents)
+        twins: tuple[str, ...] = (contents,) * (twin_chooser.random() < _TWIN_MODEL_SHARE)
+        for twin in twins:
+            write_project_file(
+                project_dir,
+                f"{name}_twin.sql",
+                twin.replace("MODEL (description '", "MODEL (description 'Twin. ", 1),
+            )
+
+
+def _generated_star_model_sql(*, upstream: str) -> str:
+    return (
+        "MODEL (description 'Generated order pass-through.', materialized view);\n\n"
+        f'SELECT\n  *\nFROM __ref("{upstream}")\n'
+    )
 
 
 def _generated_edit_model_sql(*, upstream: str) -> str:
@@ -3590,12 +3641,29 @@ class RandomEditChain:
         self._project_dir: Path = project_dir
         self._random: random.Random = random.Random(seed)
         self._broken: Path = project_dir / "models" / "generated" / "unbroken.sql"
+        self._dropped: Path = project_dir / "models" / "generated" / "undropped.sql"
         self._added: int = 0
+        self._interventions: random.Random = random.Random(seed + 1)
+
+    def intervene(self) -> None:
+        """Sometimes run another command over the edited project before it is compiled."""
+
+        commands: tuple[Callable[[Path], None], ...] = (
+            *INTERVENING_COMMANDS,
+            *(no_intervening_command,) * 3,
+        )
+        self._interventions.choice(commands)(self._project_dir)
 
     def apply(self, kind: str) -> None:
         """Apply one edit of the given kind to a randomly chosen generated model."""
 
-        models: list[Path] = sorted((self._project_dir / "models" / "generated").glob("*.sql"))
+        anchor: str = _EDIT_ANCHORS.get(kind, "")
+        models: list[Path] = list(
+            filter(
+                lambda model: anchor in model.read_text(encoding="utf-8"),
+                sorted((self._project_dir / "models" / "generated").glob("*.sql")),
+            )
+        )
         edit: Callable[[Path], None] = getattr(self, f"_{kind}")
         edit(self._random.choice(models))
 
@@ -3603,8 +3671,8 @@ class RandomEditChain:
         model.write_text(transform(model.read_text(encoding="utf-8")), encoding="utf-8")
 
     def _comment(self, model: Path) -> None:
-        note: str = f"-- note {self._random.random()}\nFROM __ref"
-        self._rewrite(model, lambda contents: contents.replace("FROM __ref", note))
+        note: str = f"-- note {self._random.random()}\nSELECT\n"
+        self._rewrite(model, lambda contents: contents.replace("SELECT\n", note, 1))
 
     def _add_column(self, model: Path) -> None:
         column: str = f",\n  status AS status_{self._random.randrange(1000)}\nFROM __ref"
@@ -3627,6 +3695,16 @@ class RandomEditChain:
 
     def _fix_error(self, _model: Path) -> None:
         self._rewrite(self._broken, lambda contents: contents.replace("  unknown_column,\n", ""))
+
+    def _drop_column(self, model: Path) -> None:
+        self._rewrite(model, lambda contents: contents.replace(_DROPPED_COLUMN, "", 1))
+        self._dropped = model
+
+    def _restore_column(self, _model: Path) -> None:
+        self._rewrite(
+            self._dropped,
+            lambda contents: contents.replace(_KEPT_COLUMN, _KEPT_COLUMN + _DROPPED_COLUMN, 1),
+        )
 
     def _add_model(self, model: Path) -> None:
         self._added += 1
@@ -3652,19 +3730,144 @@ class RandomEditChain:
 
 
 STG_ORDERS_MODEL: str = "models/staging/stg_orders.sql"
+STG_PAYMENTS_MODEL: str = "models/staging/stg_payments.sql"
 FACT_ORDERS_MODEL: str = "models/marts/fact_orders.sql"
+DIM_CUSTOMERS_ARTIFACT: str = "target/compiled/models/marts/dim_customers.sql"
+_FACT_QUANTITY_TYPE: str = "    quantity (type INTEGER),\n"
+_FACT_ORDER_ID_COLUMN: str = "    order_id (nullable false, audits [not_null]),\n"
 
 
-def model_edit_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
+def no_intervening_command(_root: Path) -> None:
+    """Compile the edit directly after making it."""
+
+
+def model_edit_step(
+    description: str,
+    edit: Callable[[Path], None],
+    between: Callable[[Path], None] = no_intervening_command,
+) -> IncrementalEditStep:
     """Return an edit to model files only, whose compile must reuse unaffected renders."""
 
-    return IncrementalEditStep(description=description, edit=edit, expected_render_reuse=True)
+    return IncrementalEditStep(
+        description=description, edit=edit, expected_render_reuse=True, between=between
+    )
 
 
 def full_edit_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
     """Return an edit beyond model contents, whose compile must render everything again."""
 
-    return IncrementalEditStep(description=description, edit=edit, expected_render_reuse=False)
+    return IncrementalEditStep(
+        description=description,
+        edit=edit,
+        expected_render_reuse=False,
+        between=no_intervening_command,
+    )
+
+
+def plan_between(root: Path) -> None:
+    """Plan the edited project before the compared compile."""
+
+    _ = run_installed_sqb(project_dir=root, args=("plan",), env=COMPILE_REUSE_ENV)
+
+
+def build_between(root: Path) -> None:
+    """Build the edited project before the compared compile."""
+
+    _ = run_installed_sqb(project_dir=root, args=("build",), env=COMPILE_REUSE_ENV)
+
+
+def other_target_build_between(root: Path) -> None:
+    """Build the edited project for another target before the compared default-target compile."""
+
+    _ = run_installed_sqb(
+        project_dir=root, args=("build", "--target", "prod"), env=COMPILE_REUSE_ENV
+    )
+
+
+def compile_without_reuse_between(root: Path) -> None:
+    """Compile the edited project with compile reuse disabled before the compared compile."""
+
+    _ = run_installed_sqb(
+        project_dir=root,
+        args=("compile", "--json"),
+        env={**COMPILE_REUSE_ENV, REUSE_DISABLE_ENV_VAR: "1"},
+    )
+
+
+INTERVENING_COMMANDS: tuple[Callable[[Path], None], ...] = (
+    plan_between,
+    build_between,
+    other_target_build_between,
+    compile_without_reuse_between,
+)
+_STAR_CHAIN_MODELS: dict[str, str] = {
+    "models/marts/chain_mid.sql": (
+        "MODEL (description 'Every staged order column.', materialized view);\n\n"
+        'SELECT * FROM __ref("stg_orders")\n'
+    ),
+    "models/marts/chain_leaf.sql": (
+        "MODEL (description 'Every chained order column.', materialized view);\n\n"
+        'SELECT * FROM __ref("chain_mid")\n'
+    ),
+}
+_STAGING_LAST_COLUMN: str = "  status\nFROM __source"
+
+
+_TWIN_MODEL: str = "models/marts/chain_a_twin.sql"
+
+
+def star_chain_with_twin_added(root: Path) -> None:
+    """Add the star chain and a twin of its leaf with the same SQL, so both share a cache key."""
+
+    star_chain_added(root)
+    write_project_file(root, _TWIN_MODEL, _STAR_CHAIN_MODELS["models/marts/chain_leaf.sql"])
+
+
+def twin_header_changed(root: Path) -> None:
+    """Change the twin's header only, so its render is not reused while its SQL is unchanged."""
+
+    replace_project_text(
+        root,
+        _TWIN_MODEL,
+        "'Every chained order column.'",
+        "'Every chained order column, twice.'",
+    )
+
+
+def analyze_one_model_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the binding dataflow with one worker taking one model at a time."""
+
+    for name in ("_DATAFLOW_WORKERS", "_DATAFLOW_BATCH_MIN", "_DATAFLOW_BATCH_LIMIT"):
+        monkeypatch.setattr(binding_waves, name, 1)
+
+
+def analyze_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Analyze every model in one batch, without dependency-ordered binding."""
+
+    monkeypatch.setattr(project_assembly, "binding_schema_for_model", lambda **_kwargs: None)
+
+
+def star_chain_added(root: Path) -> None:
+    """Add two models that each select every column of the one before, below staging orders."""
+
+    for relative_path, contents in _STAR_CHAIN_MODELS.items():
+        write_project_file(root, relative_path, contents)
+
+
+def staging_extra_flag(root: Path) -> None:
+    """Add an output column to the staging orders, which every star model passes on."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, _STAGING_LAST_COLUMN, "  status,\n  1 AS extra_flag\nFROM __source"
+    )
+
+
+def staging_extra_flag_removed(root: Path) -> None:
+    """Remove the added staging orders output column again."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, "  status,\n  1 AS extra_flag\nFROM __source", _STAGING_LAST_COLUMN
+    )
 
 
 def staging_comment(root: Path) -> None:
@@ -3738,6 +3941,114 @@ def fact_comment(root: Path) -> None:
     """Add a comment to the leaf fact orders model."""
 
     replace_project_text(root, FACT_ORDERS_MODEL, "FROM __ref", "-- leaf\nFROM __ref")
+
+
+def staging_column_removed(root: Path) -> None:
+    """Drop the quantity column from staging orders, which downstream models and tests read."""
+
+    replace_project_text(root, STG_ORDERS_MODEL, "  quantity,\n", "")
+
+
+def staging_column_restored(root: Path) -> None:
+    """Restore the staging orders quantity column."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, "  waffle_type_id,\n", "  waffle_type_id,\n  quantity,\n"
+    )
+
+
+def staging_column_renamed(root: Path) -> None:
+    """Rename the staging orders status column that audits, tests, and models read."""
+
+    replace_project_text(root, STG_ORDERS_MODEL, "  status\nFROM", "  status AS order_state\nFROM")
+
+
+def staging_rename_reverted(root: Path) -> None:
+    """Restore the staging orders status column name."""
+
+    replace_project_text(root, STG_ORDERS_MODEL, "  status AS order_state\nFROM", "  status\nFROM")
+
+
+def staging_quantity_text(root: Path) -> None:
+    """Turn the staging orders quantity into text, which violates a downstream declared type."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, "  quantity,\n", "  CAST(quantity AS VARCHAR) AS quantity,\n"
+    )
+
+
+def staging_quantity_restored(root: Path) -> None:
+    """Restore the staging orders quantity type."""
+
+    replace_project_text(
+        root, STG_ORDERS_MODEL, "  CAST(quantity AS VARCHAR) AS quantity,\n", "  quantity,\n"
+    )
+
+
+def fact_quantity_type_declared(root: Path) -> None:
+    """Declare the fact orders quantity type, which enforces it."""
+
+    replace_project_text(
+        root, FACT_ORDERS_MODEL, _FACT_ORDER_ID_COLUMN, _FACT_ORDER_ID_COLUMN + _FACT_QUANTITY_TYPE
+    )
+
+
+def fact_quantity_type_removed(root: Path) -> None:
+    """Remove the declared fact orders quantity type."""
+
+    replace_project_text(root, FACT_ORDERS_MODEL, _FACT_QUANTITY_TYPE, "")
+
+
+def payments_comment(root: Path) -> None:
+    """Add a comment to the staging payments model, unrelated to staging orders."""
+
+    anchor: str = 'FROM __source("raw__payments")'
+    replace_project_text(root, STG_PAYMENTS_MODEL, anchor, f"-- paid\n{anchor}")
+
+
+def compiled_artifact_tampered(root: Path) -> None:
+    """Overwrite an unchanged model's compiled artifact, then edit another model."""
+
+    artifact: Path = root / DIM_CUSTOMERS_ARTIFACT
+    artifact.write_bytes(artifact.read_bytes() + b"-- tampered\n")
+    staging_comment(root)
+
+
+def stg_orders_test_edit(root: Path) -> None:
+    """Change one expected value in the staging orders SQL test."""
+
+    replace_project_text(
+        root, "tests/unit/test_stg_orders.sql", "100 AS customer_id", "101 AS customer_id"
+    )
+
+
+def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave every incremental invalidation intact."""
+
+
+def skip_upstream_analysis_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve stored analyses even when an upstream model's final signature changed."""
+
+    for module in (stored_model_analyses, binding_dataflow):
+        monkeypatch.setattr(module, "dependencies_current", lambda **_kwargs: True)
+
+
+def reuse_declarations_after_any_edit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Load stored renders and reuse stored declaration files even after a non-model edit."""
+
+    read_render_state: Callable[..., object] = render_reuse_main.read_render_state
+    monkeypatch.setattr(
+        render_reuse_main,
+        "read_render_state",
+        lambda *, path, changed_paths: read_render_state(path=path, changed_paths=frozenset()),
+    )
+    monkeypatch.setattr(render_reuse_session, "edits_only_models", lambda **_kwargs: True)
+
+
+def trust_changed_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Trust stored artifact digests even when the artifact changed since it was stored."""
+
+    monkeypatch.setattr(StoredArtifacts, "unchanged_since_stored", lambda _self, **_kwargs: True)
 
 
 def disable_change_detection(monkeypatch: pytest.MonkeyPatch) -> None:

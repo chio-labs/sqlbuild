@@ -34,6 +34,7 @@ from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
+from sqlbuild.compiler.compile.constants import COMPILE_RENDER_REUSE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
@@ -123,6 +124,7 @@ def _analyze_compile_project(
         cache_request=DiscoveryCacheRequest(
             selected_target=selected_target, no_cache=analysis_selection.no_cache
         ),
+        declaration_reuse=COMPILE_RENDER_REUSE.claim_discovery(),
     )
     discover_ms: int = elapsed_ms(discover_start)
     _ = complete_compile_phase(
@@ -327,7 +329,7 @@ def write_compile_dag_artifact(
         python_graph=python_graph,
     )
     _ = resolved_dag_path.write_text(dag_json, encoding="utf-8")
-    COMPILE_ARTIFACT_WRITES.written(
+    _ = COMPILE_ARTIFACT_WRITES.written(
         path=resolved_dag_path, contents=dag_json.replace("\n", os.linesep).encode("utf-8")
     )
     _ = complete_compile_phase(

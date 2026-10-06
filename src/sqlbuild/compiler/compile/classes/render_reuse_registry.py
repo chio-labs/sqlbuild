@@ -39,3 +39,12 @@ class CompileRenderReuseRegistry:
             if session is None or not session.claim():
                 return None
             return session
+
+    def claim_discovery(self) -> CompileRenderReuseSession | None:
+        """Hand the active session to the first project discovery only, so it is used once."""
+
+        with self._lock:
+            session: CompileRenderReuseSession | None = self._session
+            if session is None or not session.claim_discovery():
+                return None
+            return session
