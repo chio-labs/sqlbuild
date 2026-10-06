@@ -36,29 +36,37 @@ sqb plan
 ```
 
 ```
-Plan ready (13 selected)
+Plan ready  15 selected, 2 sources to load
+
+Sources to load (2)
+├── raw__customers                     table
+└── raw__orders                        delete_insert (cursor: ordered_at)
+
+Changed functions (2)
+├── table_fn__customer_orders          table function
+└── udf__is_completed_order            sql udf
 
 First run (12)
-  stg_customers               view
-  stg_payments                view
-  stg_orders                  view
-  daily_order_partitioned     partition_tracked (custom)
-  daily_revenue               table
-  dim_customers               table
-  fact_orders                 table
-  customer_status_snapshot    merge (timestamp)
-  hourly_order_activity       delete_insert (timestamp, microbatch)
-  daily_activity_rollup       delete_insert (timestamp, microbatch)
-  hourly_activity_with_daily_context delete_insert (timestamp, microbatch)
-  order_status_index          delete_insert (integer)
+├── stg_customers                      view
+├── stg_payments                       view
+├── stg_orders                         view
+├── daily_order_partitioned            partition_tracked (custom)
+├── daily_revenue                      table
+├── dim_customers                      table
+├── fact_orders                        table
+├── customer_status_snapshot           merge (timestamp)
+├── hourly_order_activity              delete_insert (timestamp, microbatch)
+├── daily_activity_rollup              delete_insert (timestamp, microbatch)
+├── hourly_activity_with_daily_context delete_insert (timestamp, microbatch)
+└── order_status_index                 delete_insert (integer)
 
 Seeds (1)
-  waffle_types
+└── waffle_types  (first_run)
 
-✓ Plan complete  13 selected
+✓ Plan complete  15 selected, 2 sources to load
 ```
 
-Source data is defined as inline expressions in `sources/raw.yml`, so SQLBuild resolves everything at compile time - no seeding step needed.
+`raw__customers` and `raw__orders` are loaded by a Python loader (`sources/loaders/waffle_sources.py`) at the start of the build; `raw__payments` is an inline expression in `sources/raw.yml`. Incremental models also list their cursor and window under their row; they are left out here.
 
 ## 3. Build
 
@@ -140,23 +148,37 @@ sqb plan
 ```
 
 ```
-Plan ready (13 selected)
+Plan ready  15 selected, 2 sources to load
 
-Normal (12)
-    3 view
-    3 table
-    3 delete_insert (timestamp, microbatch)
-    1 partition_tracked (custom)
-    1 merge (timestamp)
-    1 delete_insert (integer)
+Sources to load (2)
+├── raw__customers                     table
+└── raw__orders                        delete_insert (cursor: ordered_at)
+
+Models (12)
+├── stg_customers                      view
+├── stg_payments                       view
+├── stg_orders                         view
+├── daily_order_partitioned            partition_tracked (custom)
+├── daily_revenue                      table
+├── dim_customers                      table
+├── fact_orders                        table
+├── customer_status_snapshot           merge (timestamp)
+├── hourly_order_activity              delete_insert (timestamp, microbatch)
+├── daily_activity_rollup              delete_insert (timestamp, microbatch)
+├── hourly_activity_with_daily_context delete_insert (timestamp, microbatch)
+└── order_status_index                 delete_insert (integer)
+
+Functions (2)
+├── table_fn__customer_orders          table function
+└── udf__is_completed_order            sql udf
 
 Seeds (1)
-  waffle_types
+└── waffle_types  (current)
 
-✓ Plan complete  13 selected
+✓ Plan complete  15 selected, 2 sources to load
 ```
 
-All models now show `Normal` instead of `First run`.
+The models and functions are no longer listed as first run, and the seed is current. The two loader-managed sources load on every build.
 
 ## 5. Common operations
 
