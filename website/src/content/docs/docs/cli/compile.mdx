@@ -116,9 +116,14 @@ line to stderr before the report.
 
 When the only changes since the stored compile are edits to existing model files, compile runs in
 full but reuses the stored render of every unchanged model, together with the diagnostics and
-environment reads that rendering reported. Only the edited models are rendered again. Analysis,
-contracts, rules, and artifact writes still run for the whole project, so downstream effects of an
-edit, such as a changed column type, are reported exactly as in an uncached compile. The output is
+environment reads that rendering reported. Only the edited models are rendered again. Declaration
+files other than models are not read again, and an unchanged model reuses its stored column
+analysis only when the analyses of its upstream models in this compile match the ones it was stored
+with. Contracts, semantic validation, and rules still run for the whole project, and a model whose
+upstream analyses changed is analyzed again, so downstream effects of an edit, such as a changed
+column type, are reported exactly as in an uncached compile, even when another command such as
+`sqb build` ran in between. Compiled
+files that still hold the bytes the stored compile wrote are not read or rewritten. The output is
 byte-identical to `sqb compile --no-cache`.
 
 Every other change renders the whole project: adding, removing, or renaming a model, and editing
@@ -154,7 +159,7 @@ A replayed JSON report is byte-identical to the previous one except for `compile
 holds `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses`,
 `project_reuse_check_ms`, and `total_ms`. Full compiles report the same reuse counters alongside
 the phase timings, plus `render_reuse_hits` and `render_reuse_misses` for model renders reused or
-rendered again after model-only edits. In text mode, a replayed compile does not print the per-phase progress lines.
+rendered again after model-only edits and `analysis_reuse_hits` for stored model analyses reused. In text mode, a replayed compile does not print the per-phase progress lines.
 Lifecycle sinks receive only the invocation events for a replayed compile; per-phase `operation`
 events are not emitted because no compile phase runs.
 </Note>

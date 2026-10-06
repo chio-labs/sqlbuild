@@ -32,6 +32,7 @@ from sqlbuild.cli.compile_render_reuse.main._activated_render_reuse import activ
 from sqlbuild.cli.compile_render_reuse.main._render_reuse_session import render_reuse_session
 from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
+from sqlbuild.cli.compile_reuse.classes.stored_artifacts import StoredArtifacts
 from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.compile_reuse.main._compile_reuse_timings import compile_reuse_timings
 from sqlbuild.cli.compile_reuse.main._write_reusable_compile import write_reusable_compile
@@ -77,7 +78,11 @@ def run_compile(
             with (
                 collect_compile_timings() as detailed_timings,
                 COMPILE_INPUT_READS.recording() as input_reads,
-                COMPILE_ARTIFACT_WRITES.recording() as artifact_writes,
+                COMPILE_ARTIFACT_WRITES.recording(
+                    stored=StoredArtifacts(
+                        stamps=attempt.prior_target_files, digests=attempt.prior_target_digests
+                    )
+                ) as artifact_writes,
                 activated_render_reuse(render_reuse=render_reuse),
                 PreparedCompileArtifacts(
                     enabled=not request.profile_flags.skip_write

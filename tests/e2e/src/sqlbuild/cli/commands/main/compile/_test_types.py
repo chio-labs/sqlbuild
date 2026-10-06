@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pytest
+
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import PreparedCompile
 
 
@@ -692,6 +694,7 @@ class IncrementalEditStep:
     description: str
     edit: Callable[[Path], None]
     expected_render_reuse: bool
+    between: Callable[[Path], None]
 
 
 @dataclass(frozen=True)
@@ -712,6 +715,18 @@ class RandomEditChainTestCase:
     model_count: int
     step_count: int
     expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class BrokenEditInvalidationTestCase:
+    """An incremental invalidation deliberately broken, and edits whose output it must change."""
+
+    description: str
+    compiled_edits: tuple[Callable[[Path], None], ...]
+    edit: Callable[[Path], None]
+    sabotage: Callable[[pytest.MonkeyPatch], None]
+    expected_matches_uncached: bool
+    after_edit: Callable[[Path, pytest.MonkeyPatch], None]
 
 
 @dataclass(frozen=True)
@@ -771,3 +786,12 @@ class DenseBatchedPreparationTestCase:
 
 
 type DensePreparedCompile = PreparedCompile
+
+
+@dataclass(frozen=True)
+class SharedCacheKeyTestCase:
+    """A model analysis schedule under which a model shares a served model's cache key."""
+
+    description: str
+    schedule: Callable[[pytest.MonkeyPatch], None]
+    expected_matches_uncached: bool = True

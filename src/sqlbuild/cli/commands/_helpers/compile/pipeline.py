@@ -329,7 +329,7 @@ def write_compile_dag_artifact(
         python_graph=python_graph,
     )
     _ = resolved_dag_path.write_text(dag_json, encoding="utf-8")
-    COMPILE_ARTIFACT_WRITES.written(
+    _ = COMPILE_ARTIFACT_WRITES.written(
         path=resolved_dag_path, contents=dag_json.replace("\n", os.linesep).encode("utf-8")
     )
     _ = complete_compile_phase(

@@ -254,6 +254,7 @@ def _payload(*, inputs: StoredCompileInputs, output: StoredCompileOutput) -> dic
             for path, item in inputs.project_files.items()
         },
         "target_files": {path: list(stamp) for path, stamp in inputs.target_files.items()},
+        "target_digests": inputs.target_digests,
         "stderr_lines": list(output.stderr_lines),
         "exit_code": output.exit_code,
         "timings_span": None if output.timings_span is None else list(output.timings_span),
@@ -309,6 +310,10 @@ def _header(*, payload: object) -> StoredCompileHeader:
                 _settings_inputs(item) for item in _list(fields["settings_inputs"])
             ),
             settings_digest=_string(fields["settings_digest"]),
+            target_digests={
+                _string(path): _string(digest)
+                for path, digest in _mapping(fields.get("target_digests", {})).items()
+            },
         ),
         output=StoredCompileOutput(
             stderr_lines=tuple(_string(line) for line in _list(fields["stderr_lines"])),

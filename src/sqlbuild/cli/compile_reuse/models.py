@@ -81,6 +81,7 @@ class StoredCompileInputs:
     target_tree: bool
     settings_inputs: tuple[SettingsEnvironmentInputs, ...]
     settings_digest: str
+    target_digests: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,8 @@ class CompileReuseAttempt:
     render_state_path: Path | None = None
     prior_entry: bool = False
     prior_modules: tuple[tuple[str, int, int], ...] = ()
+    prior_target_files: dict[str, FileStamp] = field(default_factory=dict)
+    prior_target_digests: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
