@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import stat
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledProject
@@ -21,6 +22,7 @@ class ProjectTree:
     def __init__(self, *, project_dir: Path, project: CompiledProject) -> None:
         self._root: Path = project_dir.resolve()
         self._discovered: tuple[ProjectPath, ...] | None = None
+        self._directories: dict[Path, Path | None] = {}
         self._resource_paths: dict[str, Model] = {
             item.relative_path.as_posix(): public_model(item) for item in project.models
         }
@@ -70,20 +72,45 @@ class ProjectTree:
 
     def read_text(self, path: str) -> str:
         self._validate_relative(path)
-        candidate: Path = (self._root / path).resolve()
-        if not candidate.is_relative_to(self._root) or not candidate.is_file():
+        regular: Path | None = self._regular_file(path)
+        candidate: Path = (self._root / path).resolve() if regular is None else regular
+        if regular is None and (
+            not candidate.is_relative_to(self._root) or not candidate.is_file()
+        ):
             raise RuleUsageError(f"project file does not exist: {path}")
         if candidate.suffix.lower() not in _TRACKED_TEXT_SUFFIXES:
             supported: str = ", ".join(sorted(_TRACKED_TEXT_SUFFIXES))
             raise RuleUsageError(
                 f"compiler rules input must be a tracked file type ({supported}): {path}"
             )
-        if candidate.is_symlink():
+        if regular is None and candidate.is_symlink():
             raise RuleUsageError(f"project file must not be a symlink: {path}")
         try:
             return candidate.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
             raise RuleUsageError(f"could not read project file {path}: {error}") from error
+
+    def _regular_file(self, path: str) -> Path | None:
+        """Resolve a regular, non-symlink file under the project through its cached directory."""
+
+        relative: Path = Path(path)
+        if not relative.name:
+            return None
+        directory: Path | None
+        if relative.parent in self._directories:
+            directory = self._directories[relative.parent]
+        else:
+            resolved: Path = (self._root / relative.parent).resolve()
+            directory = resolved if resolved.is_relative_to(self._root) else None
+            self._directories[relative.parent] = directory
+        if directory is None:
+            return None
+        candidate: Path = directory / relative.name
+        try:
+            regular: bool = stat.S_ISREG(os.lstat(candidate).st_mode)
+        except OSError:
+            return None
+        return candidate if regular else None
 
     def _discover(self) -> tuple[ProjectPath, ...]:
         nodes: list[ProjectPath] = []
