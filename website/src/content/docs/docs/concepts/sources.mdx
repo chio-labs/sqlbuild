@@ -137,13 +137,34 @@ sources:
       lag_tolerance: 15m
 ```
 
+When the column is declared with a type under `columns:`, `strategy` and `type` can be left out:
+
+```yaml
+sources:
+  - name: raw_events
+    schema: raw
+    table: events
+    columns:
+      - name: updated_at
+        type: timestamp
+    freshness:
+      column: updated_at   # strategy column, type timestamp
+      lag_tolerance: 15m
+```
+
 ### Strategies
 
 | Strategy | Description | Required fields |
 |----------|-------------|-----------------|
 | `adapter` | Uses warehouse metadata (e.g. Snowflake `LAST_ALTERED`). No query against the source table. | None |
-| `column` | Reads `MAX(column)` from the source table. | `column`, `type` |
+| `column` | Reads `MAX(column)` from the source table. | `column`, `type` (inferred from a typed column declaration) |
 | `sql` | Runs a custom query that returns a single scalar value. | `query`, `type` |
+
+`strategy` is optional. Without it, SQLBuild infers the strategy from the keys you set: `column`
+means `column`, `query` means `sql`, and neither means `adapter`, so `freshness: {}` observes
+warehouse metadata. Setting both `column` and `query` without a `strategy` is an error, as is
+setting `type` or `filter` without either. An explicit `strategy` keeps working and must agree
+with the keys present.
 
 #### adapter
 
@@ -163,7 +184,7 @@ freshness:
   type: timestamp
 ```
 
-Queries `MAX(column)` from the source table. The column must be a plain column name (no expressions; use `sql` strategy for those). Requires `type`.
+Queries `MAX(column)` from the source table. The column must be a plain column name (no expressions; use `sql` strategy for those). Requires `type`, unless the source declares the column with a type that SQLBuild can map (see [Type](#type)).
 
 #### sql
 
@@ -185,6 +206,19 @@ The `type` field declares the value kind for comparison:
 | `timestamp` | Datetime value. Supports `lag_tolerance`. |
 | `integer` | Integer value. Change detected by exact comparison. |
 | `string` | String value. Change detected by exact comparison. |
+
+For the `column` strategy, SQLBuild takes `type` from the column's declared type in the source's
+`columns:` when it can map it:
+
+| Declared column type | Freshness `type` |
+|----------------------|------------------|
+| `TIMESTAMP`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, `TIMESTAMP_TZ`, `TIMESTAMPTZ`, `TIMESTAMP WITH TIME ZONE`, `DATETIME`, `DATETIME2`, `DATETIMEOFFSET`, `SMALLDATETIME` | `timestamp` |
+| `INTEGER`, `INT`, `BIGINT`, `SMALLINT`, `TINYINT`, `INT2`, `INT4`, `INT8`, `INT64` | `integer` |
+| `VARCHAR`, `STRING`, `TEXT`, `CHAR`, `CHARACTER`, `CHARACTER VARYING`, `NCHAR`, `NVARCHAR` | `string` |
+
+Matching ignores case and length or precision arguments. Any other declared type, such as
+`DATE` or `NUMBER(38,0)`, needs an explicit `type`; a column declared with an unmapped type and no
+`type` is an error. An explicit `type` that contradicts a mapped declared type is also an error.
 
 ### Lag tolerance
 
