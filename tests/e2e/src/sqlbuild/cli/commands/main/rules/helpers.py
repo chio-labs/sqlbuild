@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -411,6 +412,121 @@ BUILT_IN_RULES_PROJECT: dict[str, str] = {
 }
 
 
+_ORDER_SLICE_COUNT: int = 45
+CUSTOM_RULES_EDIT_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        '[connection]\ndatabase = "warehouse.duckdb"\n\n'
+        '[rules]\nselect = ["XSQBR"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
+    ),
+    "sources/raw.yml": (
+        "sources:\n"
+        "  - name: raw_orders\n    description: Raw orders.\n"
+        '    expression: "(SELECT 1 AS id, CAST(10.5 AS DOUBLE) AS amount, 1 AS customer_id)"\n'
+        "  - name: raw_customers\n    description: Raw customers.\n"
+        '    expression: "(SELECT 1 AS customer_id)"\n'
+        "  - name: raw_products\n    description: Raw products.\n"
+        '    expression: "(SELECT 1 AS product_id)"\n'
+    ),
+    "models/staging/stg_orders.sql": (
+        'MODEL (description "Staged orders");\n\n'
+        'SELECT id AS order_id, amount, customer_id FROM __source("raw_orders")\n'
+    ),
+    "models/staging/stg_customers.sql": (
+        'MODEL (description "Staged customers");\n\n'
+        'SELECT customer_id FROM __source("raw_customers")\n'
+    ),
+    "models/marts/order_totals.sql": (
+        'MODEL (description "Order totals");\n\n'
+        'SELECT order_id, amount * 2 AS doubled_amount FROM __ref("stg_orders") WHERE amount > 7\n'
+    ),
+    **{
+        f"models/intermediate/orders_{index:03d}.sql": (
+            f'MODEL (description "Order slice {index}");\n\n'
+            'SELECT order_id FROM __ref("stg_orders")\n'
+        )
+        for index in range(_ORDER_SLICE_COUNT)
+    },
+    "rules/approved_sources.yaml": "raw_orders\nraw_customers\n",
+    "rules/orders.py": """from sqlbuild.rules import Finding, Model, Project, RuleContext, rule
+
+
+@rule(code="XSQBRORD101", message="Filters hard-code an amount", remediation="Use a constant.")
+def high_amount_filters(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    expanded: str = ctx.sql.for_model(model).expanded.source
+    return [ctx.finding(subject=model)] if "amount > 9" in expanded else []
+
+
+@rule(code="XSQBRORD102", message="Staging models need a consumer", remediation="Use it.")
+def staging_consumers(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if model.path.parent.name != "staging":
+        return []
+    return [] if ctx.graph.dependents(model) else [ctx.finding(subject=model)]
+
+
+@rule(code="XSQBRORD103", message="Marts must enforce a contract", remediation="Enforce it.")
+def mart_contracts(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if model.path.parent.name != "marts":
+        return []
+    return [] if ctx.contracts.enforced(model) else [ctx.finding(subject=model)]
+
+
+@rule(code="XSQBRORD201", message="Sources must be approved", remediation="Approve it.")
+def approved_sources(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    approved: set[str] = set(ctx.project.tree.read_text("rules/approved_sources.yaml").split())
+    names: list[str] = sorted(str(getattr(source, "name")) for source in ctx.project.sources)
+    return [
+        ctx.finding(subject="sources/raw.yml", message=f"Source {name} is not approved")
+        for name in names
+        if name not in approved
+    ]
+
+
+@rule(code="XSQBRORD202", message="Marts must stay few", remediation="Consolidate them.")
+def few_marts(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    marts: list[Model] = [item for item in ctx.project.models if item.path.parent.name == "marts"]
+    if len(marts) < 2:
+        return []
+    return [ctx.finding(subject=marts[0], message=f"{len(marts)} marts")]
+""",
+}
+STALE_SOURCE_FACTS_SITECUSTOMIZE: str = """from sqlbuild.rule_engine.classes import fact_digests
+
+_digest = fact_digests.FactDigests.digest
+
+
+def _stale_sources(self, key):
+    return "stale" if key == ("project.sources",) else _digest(self, key)
+
+
+fact_digests.FactDigests.digest = _stale_sources
+"""
+
+
+def custom_rules_edit_chain(
+    *, root: Path, edits: tuple[Any, ...], environment: tuple[tuple[str, str], ...] = ()
+) -> tuple[
+    tuple[int, str, str], tuple[tuple[int, str, str], ...], tuple[tuple[int, str, str], ...]
+]:
+    """Compile the custom-rule project cold, then after each edit beside a cache-free oracle."""
+
+    project_dir: Path = root / "orders"
+    write_project_files(project_dir=project_dir, files=CUSTOM_RULES_EDIT_PROJECT)
+    cold: tuple[int, str, str] = rules_compile_outcome(project_dir, environment=environment)
+    edited: list[tuple[int, str, str]] = []
+    oracles: list[tuple[int, str, str]] = []
+    for step, edit_case in enumerate(edits):
+        edit_case.edit(project_dir)
+        edited.append(rules_compile_outcome(project_dir, environment=environment))
+        oracle_dir: Path = root / f"oracle_{step}"
+        shutil.copytree(project_dir, oracle_dir, ignore=shutil.ignore_patterns("target"))
+        oracles.append(rules_compile_outcome(oracle_dir, "--no-cache"))
+    return cold, tuple(edited), tuple(oracles)
+
+
 def write_project_files(*, project_dir: Path, files: dict[str, str]) -> None:
     """Write authored project files beneath one project directory."""
 
@@ -420,7 +536,9 @@ def write_project_files(*, project_dir: Path, files: dict[str, str]) -> None:
         path.write_text(contents, encoding="utf-8")
 
 
-def rules_compile_outcome(project_dir: Path, *arguments: str) -> tuple[int, str, str]:
+def rules_compile_outcome(
+    project_dir: Path, *arguments: str, environment: tuple[tuple[str, str], ...] = ()
+) -> tuple[int, str, str]:
     """Compile in a fresh process and return its exit code, diagnostics, and artifacts digest."""
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
@@ -436,6 +554,7 @@ def rules_compile_outcome(project_dir: Path, *arguments: str) -> tuple[int, str,
         capture_output=True,
         text=True,
         check=False,
+        env={**os.environ, **dict(environment)},
     )
     payload: dict[str, Any] = json.loads(result.stdout or "{}")
     artifacts: Any = hashlib.sha256()
