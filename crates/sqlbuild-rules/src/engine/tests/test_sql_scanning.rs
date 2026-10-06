@@ -1,0 +1,406 @@
+use crate::engine::tests::test_types::{
+    DollarQuoteSiteTestCase, LintDialectSiteTestCase, SqlScannerTestCase,
+};
+use crate::rules::_helpers::evaluation::normalize_rules_sql;
+use crate::rules::_helpers::numeric_decisions::compact_sql;
+use crate::sql_lint::_helpers::preparation::prepare;
+use sqlbuild_sqltext::compiler::main::sql_references::extract;
+use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
+use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy as rules_quote_policy;
+use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
+use sqlbuild_sqltext::sql_scan::models::Unclosed;
+
+#[test]
+fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scanner_is_characterised()
+-> Result<(), String> {
+    let test_cases = [
+        SqlScannerTestCase {
+            description: "plain code",
+            fragment: "a",
+            expected_compiler_paren: Ok(4),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", a x, 1)",
+            expected_table_function_token: "SELECT a __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *               , a FROM t",
+            expected_snowflake_comma: "SELECT a a  FROM t",
+            expected_compact: "a=aandb",
+            expected_snowflake_compact: "a=aandb",
+            expected_lint_site: Some("@m(a x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "single quote containing open paren",
+            fragment: "'a(b'",
+            expected_compiler_paren: Ok(8),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'a(b' x, 1)",
+            expected_table_function_token: "SELECT 'a(b' __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                   , a FROM t",
+            expected_snowflake_comma: "SELECT 'a(b' a  FROM t",
+            expected_compact: "a='a(b'andb",
+            expected_snowflake_compact: "a='a(b'andb",
+            expected_lint_site: Some("@m('a(b' x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "single quote containing close paren",
+            fragment: "'a)b'",
+            expected_compiler_paren: Ok(8),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'a)b' x, 1)",
+            expected_table_function_token: "SELECT 'a)b' __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                   , a FROM t",
+            expected_snowflake_comma: "SELECT 'a)b' a  FROM t",
+            expected_compact: "a='a)b'andb",
+            expected_snowflake_compact: "a='a)b'andb",
+            expected_lint_site: Some("@m('a)b' x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "doubled single quote",
+            fragment: "'it''s )'",
+            expected_compiler_paren: Ok(12),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'it''s )' x, 1)",
+            expected_table_function_token: "SELECT 'it''s )' __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                       , a FROM t",
+            expected_snowflake_comma: "SELECT 'it''s )' a  FROM t",
+            expected_compact: "a='it''s )'andb",
+            expected_snowflake_compact: "a='it''s )'andb",
+            expected_lint_site: Some("@m('it''s )' x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "backslash escaped quote before close paren",
+            fragment: "'a\\')'",
+            expected_compiler_paren: Ok(5),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'a\\')' x)(1)",
+            expected_table_function_token: "SELECT 'a\\')' __table_fn(\"o\")(1)",
+            expected_snowflake_exclude: "SELECT *                    , a FROM t",
+            expected_snowflake_comma: "SELECT 'a\\')' a  FROM t",
+            expected_compact: "a='a\\')' and  b",
+            expected_snowflake_compact: "a='a\\')'andb",
+            expected_lint_site: Some("@m('a\\')' x)"),
+            expected_reference_fast_path: false,
+        },
+        SqlScannerTestCase {
+            description: "backslash escaped quote before open paren",
+            fragment: "'a\\'('",
+            expected_compiler_paren: Err(Unclosed::Quote),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'a\\'(' x)(1)",
+            expected_table_function_token: "SELECT 'a\\'(' __table_fn(\"o\")(1)",
+            expected_snowflake_exclude: "SELECT *                    , a FROM t",
+            expected_snowflake_comma: "SELECT 'a\\'(' a  FROM t",
+            expected_compact: "a='a\\'(' and  b",
+            expected_snowflake_compact: "a='a\\'('andb",
+            expected_lint_site: Some("@m('a\\'(' x)"),
+            expected_reference_fast_path: false,
+        },
+        SqlScannerTestCase {
+            description: "double quote containing close paren",
+            fragment: "\"a)b\"",
+            expected_compiler_paren: Ok(8),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", \"a)b\" x, 1)",
+            expected_table_function_token: "SELECT \"a)b\" __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                   , a FROM t",
+            expected_snowflake_comma: "SELECT \"a)b\" a  FROM t",
+            expected_compact: "a=\"a)b\"andb",
+            expected_snowflake_compact: "a=\"a)b\"andb",
+            expected_lint_site: Some("@m(\"a)b\" x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "backtick containing close paren",
+            fragment: "`a)b`",
+            expected_compiler_paren: Ok(8),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", `a)b` x, 1)",
+            expected_table_function_token: "SELECT `a)b` __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                   , a FROM t",
+            expected_snowflake_comma: "SELECT `a)b` a  FROM t",
+            expected_compact: "a=`a)b`andb",
+            expected_snowflake_compact: "a=`a)b`andb",
+            expected_lint_site: Some("@m(`a)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "doubled backtick",
+            fragment: "`a``)b`",
+            expected_compiler_paren: Ok(10),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", `a``)b` x, 1)",
+            expected_table_function_token: "SELECT `a``)b` __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                     , a FROM t",
+            expected_snowflake_comma: "SELECT `a``)b` a  FROM t",
+            expected_compact: "a=`a``)b`andb",
+            expected_snowflake_compact: "a=`a``)b`andb",
+            expected_lint_site: Some("@m(`a``)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "line comment",
+            fragment: "-- )\n",
+            expected_compiler_paren: Ok(8),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", -- )\n x, 1)",
+            expected_table_function_token: "SELECT -- )\n __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *              \n    , a FROM t",
+            expected_snowflake_comma: "SELECT -- )\n a  FROM t",
+            expected_compact: "a=andb",
+            expected_snowflake_compact: "a=andb",
+            expected_lint_site: Some("@m(-- )\n x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "block comment",
+            fragment: "/* ) */",
+            expected_compiler_paren: Ok(10),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", /* ) */ x, 1)",
+            expected_table_function_token: "SELECT /* ) */ __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                     , a FROM t",
+            expected_snowflake_comma: "SELECT /* ) */ a  FROM t",
+            expected_compact: "a=andb",
+            expected_snowflake_compact: "a=andb",
+            expected_lint_site: Some("@m(/* ) */ x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "nested block comment",
+            fragment: "/* /* ) */ ) */",
+            expected_compiler_paren: Ok(12),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", /* /* ) */ ) */ x)(1)",
+            expected_table_function_token: "SELECT /* /* ) */ ) */ __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                       */ x) , a FROM t",
+            expected_snowflake_comma: "SELECT /* /* ) */ ) */ a  FROM t",
+            expected_compact: "a=)*/andb",
+            expected_snowflake_compact: "a=)*/andb",
+            expected_lint_site: Some("@m(/* /* ) */ )"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "dollar quote",
+            fragment: "$$ ) $$",
+            expected_compiler_paren: Ok(10),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", $$ ) $$ x)(1)",
+            expected_table_function_token: "SELECT $$ ) $$ __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *               $$ x) , a FROM t",
+            expected_snowflake_comma: "SELECT $$ ) $$ a  FROM t",
+            expected_compact: "a=$$)$$andb",
+            expected_snowflake_compact: "a=$$)$$andb",
+            expected_lint_site: Some("@m($$ ) $$ x)"),
+            expected_reference_fast_path: true,
+        },
+        SqlScannerTestCase {
+            description: "unterminated quote",
+            fragment: "'abc",
+            expected_compiler_paren: Err(Unclosed::Quote),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'abc x)(1)",
+            expected_table_function_token: "SELECT 'abc __table_fn(\"o\")(1)",
+            expected_snowflake_exclude: "SELECT * EXCLUDE ('abc x) , a FROM t",
+            expected_snowflake_comma: "SELECT 'abc a, FROM t",
+            expected_compact: "a='abc and  b",
+            expected_snowflake_compact: "a='abc and  b",
+            expected_lint_site: Some(""),
+            expected_reference_fast_path: false,
+        },
+        SqlScannerTestCase {
+            description: "unterminated block comment",
+            fragment: "/* abc",
+            expected_compiler_paren: Err(Unclosed::BlockComment),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", /* abc x)(1)",
+            expected_table_function_token: "SELECT /* abc __table_fn(\"o\")(1)",
+            expected_snowflake_exclude: "SELECT * EXCLUDE (/* abc x) , a FROM t",
+            expected_snowflake_comma: "SELECT /* abc a, FROM t",
+            expected_compact: "a=",
+            expected_snowflake_compact: "a=",
+            expected_lint_site: Some(""),
+            expected_reference_fast_path: false,
+        },
+        SqlScannerTestCase {
+            description: "multibyte utf8",
+            fragment: "'é)ü' ñ",
+            expected_compiler_paren: Ok(13),
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", 'é)ü' ñ x, 1)",
+            expected_table_function_token: "SELECT 'é)ü' ñ __table_fn(\"o\", 1)",
+            expected_snowflake_exclude: "SELECT *                        , a FROM t",
+            expected_snowflake_comma: "SELECT 'é)ü' ñ a  FROM t",
+            expected_compact: "a='é)ü'ñandb",
+            expected_snowflake_compact: "a='é)ü'ñandb",
+            expected_lint_site: None,
+            expected_reference_fast_path: true,
+        },
+    ];
+
+    for test_case in test_cases {
+        let fragment = test_case.fragment;
+        assert_eq!(
+            matching_paren(
+                format!("({fragment} x) y").as_bytes(),
+                0,
+                QuotePolicy::COMPILER
+            ),
+            test_case.expected_compiler_paren,
+            "compiler matching paren: {}",
+            test_case.description
+        );
+        assert_eq!(
+            normalize_rules_sql(
+                "duckdb",
+                &format!("SELECT * FROM __table_fn(\"o\", {fragment} x)(1)")
+            ),
+            test_case.expected_table_function,
+            "rules table-function parenthesis: {}",
+            test_case.description
+        );
+        assert_eq!(
+            normalize_rules_sql("duckdb", &format!("SELECT {fragment} __table_fn(\"o\")(1)")),
+            test_case.expected_table_function_token,
+            "rules table-function token search: {}",
+            test_case.description
+        );
+        assert_eq!(
+            normalize_rules_sql(
+                "snowflake",
+                &format!("SELECT * EXCLUDE ({fragment} x) , a FROM t")
+            ),
+            test_case.expected_snowflake_exclude,
+            "rules Snowflake EXCLUDE parenthesis: {}",
+            test_case.description
+        );
+        assert_eq!(
+            normalize_rules_sql("snowflake", &format!("SELECT {fragment} a, FROM t")),
+            test_case.expected_snowflake_comma,
+            "rules Snowflake trailing comma: {}",
+            test_case.description
+        );
+        assert_eq!(
+            compact_sql(
+                &format!("A = {fragment} AND  B"),
+                rules_quote_policy("duckdb")
+            ),
+            test_case.expected_compact,
+            "rules numeric decision compaction: {}",
+            test_case.description
+        );
+        assert_eq!(
+            compact_sql(
+                &format!("A = {fragment} AND  B"),
+                rules_quote_policy("snowflake")
+            ),
+            test_case.expected_snowflake_compact,
+            "rules Snowflake numeric decision compaction: {}",
+            test_case.description
+        );
+        let lint_sql = format!("SELECT @m({fragment} x) AS y");
+        let lint_site = prepare(&lint_sql, &lint_sql, &[], "postgres")?.map(|prepared| {
+            prepared
+                .1
+                .first()
+                .map(|site| site.5.clone())
+                .unwrap_or_default()
+        });
+        assert_eq!(
+            lint_site.as_deref(),
+            test_case.expected_lint_site,
+            "SQL lint macro site: {}",
+            test_case.description
+        );
+        assert_eq!(
+            extract(&format!("SELECT {fragment} __ref('b')")).is_some(),
+            test_case.expected_reference_fast_path,
+            "SQL reference fast path: {}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_lint_dialect_when_preparing_macro_sites_then_backticks_follow_rules_quoting()
+-> Result<(), String> {
+    let test_cases = [
+        LintDialectSiteTestCase {
+            description: "databricks backtick containing close paren",
+            dialect: "databricks",
+            fragment: "`a)b`",
+            expected_lint_site: "@m(`a)b` x)",
+        },
+        LintDialectSiteTestCase {
+            description: "bigquery doubled backtick",
+            dialect: "bigquery",
+            fragment: "`a``)b`",
+            expected_lint_site: "@m(`a``)b` x)",
+        },
+        LintDialectSiteTestCase {
+            description: "databricks single quote inside backticks",
+            dialect: "databricks",
+            fragment: "`it's)`",
+            expected_lint_site: "@m(`it's)` x)",
+        },
+        LintDialectSiteTestCase {
+            description: "databricks backslash in single quote still escapes",
+            dialect: "databricks",
+            fragment: "'a\\')'",
+            expected_lint_site: "@m('a\\')' x)",
+        },
+        LintDialectSiteTestCase {
+            description: "postgres backtick remains code",
+            dialect: "postgres",
+            fragment: "`a)b`",
+            expected_lint_site: "@m(`a)",
+        },
+        LintDialectSiteTestCase {
+            description: "duckdb dollar quote hides an apostrophe and close paren",
+            dialect: "duckdb",
+            fragment: "$$Customer's order)$$",
+            expected_lint_site: "@m($$Customer's order)$$ x)",
+        },
+        LintDialectSiteTestCase {
+            description: "snowflake tagged dollar quote hides a nested dollar quote",
+            dialect: "snowflake",
+            fragment: "$note$ $$ ) $note$",
+            expected_lint_site: "@m($note$ $$ ) $note$ x)",
+        },
+        LintDialectSiteTestCase {
+            description: "sqlserver backtick remains code",
+            dialect: "tsql",
+            fragment: "`a)b`",
+            expected_lint_site: "@m(`a)",
+        },
+    ];
+    for test_case in test_cases {
+        let lint_sql = format!("SELECT @m({} x) AS y", test_case.fragment);
+        let lint_site = prepare(&lint_sql, &lint_sql, &[], test_case.dialect)?
+            .and_then(|prepared| prepared.1.first().map(|site| site.5.clone()))
+            .unwrap_or_default();
+        assert_eq!(
+            lint_site, test_case.expected_lint_site,
+            "SQL lint macro site: {}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_dollar_quoted_apostrophe_when_preparing_lint_sites_then_later_references_are_sites()
+-> Result<(), String> {
+    let test_cases = [
+        DollarQuoteSiteTestCase {
+            description: "duckdb untagged and tagged quotes",
+            dialect: "duckdb",
+            expected_sites: &["__ref(\"orders\")"],
+        },
+        DollarQuoteSiteTestCase {
+            description: "postgres untagged and tagged quotes",
+            dialect: "postgres",
+            expected_sites: &["__ref(\"orders\")"],
+        },
+        DollarQuoteSiteTestCase {
+            description: "snowflake untagged and tagged quotes",
+            dialect: "snowflake",
+            expected_sites: &["__ref(\"orders\")"],
+        },
+    ];
+    let sql = "SELECT $$Customer's order$$ AS note, $tag$it's$tag$ AS tag FROM __ref(\"orders\") o";
+    for test_case in test_cases {
+        let sites: Vec<String> = prepare(sql, sql, &[], test_case.dialect)?
+            .map(|prepared| prepared.1.into_iter().map(|site| site.5).collect())
+            .unwrap_or_default();
+        assert_eq!(sites, test_case.expected_sites, "{}", test_case.description);
+    }
+    Ok(())
+}

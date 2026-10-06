@@ -1,0 +1,11 @@
+pub(crate) const DATETIME_TYPE: &str = "DATETIME";
+pub(crate) const DIRECT_DEPENDENCY_PATH_LENGTH: usize = 2;
+pub(crate) const MACRO_TEST_MODE: &str = "macro";
+pub(crate) const QUOTED_IDENTIFIER_DELIMITER_BYTES: usize = 2;
+pub(crate) const SQL_TEST_ACTUAL_CTE: &str = "__actual";
+pub(crate) const SQL_TEST_EXPECTED_CTE: &str = "__expected";
+pub(crate) const SQL_TEST_ACTUAL_CTE_PREFIX: &str = "__actual__";
+pub(crate) const TABLE_FUNCTION_TEST_MODE: &str = "table_fn";
+pub(crate) const UDF_TEST_MODE: &str = "udf";
+pub(crate) const UNKNOWN_SQL_TYPE: &str = "UNKNOWN";
+pub(crate) const VARCHAR_SQL_TYPE: &str = "VARCHAR";

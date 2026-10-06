@@ -67,8 +67,8 @@
       "extra-files": [
         {
           "type": "toml",
-          "path": "crates/sqlbuild-rules-native/Cargo.toml",
-          "jsonpath": "$.package.version"
+          "path": "Cargo.toml",
+          "jsonpath": "$.workspace.package.version"
         },
         {
           "type": "toml",

@@ -1,0 +1,27 @@
+[package]
+name = "sqlbuild-analysis"
+version.workspace = true
+description = "Polyglot-based SQL analysis, binding and semantic validation for SQLBuild."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Expose test-only helpers to the tests of dependent crates.
+test-support = []
+
+[dependencies]
+polyglot-sql.workspace = true
+polyglot-sql-function-catalogs.workspace = true
+rayon.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlbuild-core.workspace = true
+sqlbuild-sqltext.workspace = true
+
+[lints]
+workspace = true

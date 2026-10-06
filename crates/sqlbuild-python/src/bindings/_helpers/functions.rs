@@ -1,0 +1,599 @@
+//! Register the versioned Python boundary for the native Rules engine.
+
+use pyo3::prelude::{
+    Bound, IntoPyObject, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyList, PyTuple};
+use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
+
+use crate::bindings::models::ParsedRulesRequest;
+use sqlbuild_rules::configuration::main::load;
+use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
+use sqlbuild_rules::engine::main::{evaluate, evaluate_parsed, parse_parts};
+use sqlbuild_rules::models::CatalogueResponse;
+use sqlbuild_rules::rules::main::{catalogue, selected_codes};
+use std::sync::Mutex;
+
+const SKILL_OWNER: &str = "sqlbuild";
+use crate::bindings::_helpers::panics::compiler_guard;
+use crate::bindings::types::CompilerDetach;
+const SKILL_IDENTITY: &str = "sqlbuild-rules";
+
+#[pyfunction]
+fn normalize_analysis_sql(
+    py: Python<'_>,
+    request: crate::bindings::models::NormalizationInput,
+) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::normalize::normalize_analysis_sql(
+            request.into(),
+        )
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn normalize_dialect_sql(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::normalize_dialect::normalize_dialect_sql(
+            sql, dialect,
+        )
+    })
+    .map_err(value_error)
+}
+
+/// Normalize a batch in one detached call; a failed member is returned as its exception.
+#[pyfunction]
+fn normalize_analysis_sqls(
+    py: Python<'_>,
+    dialect: &str,
+    requests: Vec<sqlbuild_analysis::semantic_validation::types::NormalizationRequest>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let results = py.compiler_detach(|| {
+        Ok(
+            sqlbuild_analysis::semantic_validation::main::normalize_batch::normalize_analysis_sqls(
+                dialect, requests, None,
+            ),
+        )
+    });
+    crate::bindings::_helpers::normalization_results::normalization_results(
+        py,
+        results.map_err(value_error)?,
+    )
+}
+
+#[pyfunction]
+fn binding_diagnostics(
+    py: Python<'_>,
+    sql: &str,
+    dialect: &str,
+    rows: Vec<sqlbuild_analysis::semantic_validation::types::DiagnosticRow>,
+) -> PyResult<Vec<sqlbuild_analysis::semantic_validation::types::DiagnosticRow>> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::diagnostics::binding_diagnostics(
+            sql, dialect, rows,
+        )
+    })
+    .map_err(value_error)
+}
+
+fn value_error(error: impl std::fmt::Display) -> PyErr {
+    crate::bindings::_helpers::panics::compiler_error(error)
+}
+
+#[pyfunction]
+fn evaluate_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| evaluate::evaluate_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn parse_rules_parts(
+    py: Python<'_>,
+    request_json: Bound<'_, PyBytes>,
+    model_jsons: Vec<Bound<'_, PyBytes>>,
+    model_digests: Vec<String>,
+) -> PyResult<ParsedRulesRequest> {
+    let request: &[u8] = request_json.as_bytes();
+    let models: Vec<&[u8]> = model_jsons.iter().map(|model| model.as_bytes()).collect();
+    let parsed = py
+        .compiler_detach(|| parse_parts::parse_parts(request, &models, &model_digests))
+        .map_err(value_error)?;
+    Ok(ParsedRulesRequest {
+        request: Mutex::new(Some(parsed)),
+    })
+}
+
+#[pyfunction]
+fn evaluate_parsed_rules(
+    py: Python<'_>,
+    parsed: &Bound<'_, ParsedRulesRequest>,
+) -> PyResult<String> {
+    let request = parsed
+        .borrow()
+        .request
+        .lock()
+        .map_err(|_| value_error("rules request lock is poisoned"))?
+        .take()
+        .ok_or_else(|| value_error("rules request was already evaluated"))?;
+    py.compiler_detach(|| evaluate_parsed::evaluate_parsed(request))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn run_custom_host_json(py: Python<'_>, spec_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_rules::engine::main::custom_host::run_custom_host_json(spec_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| sqlbuild_rules::sql_lint::main::engine::lint_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn finalize_rule_findings_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_rules::engine::main::finalize::finalize_findings_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+/// One SQL lint preparation request, read from a Python mapping.
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+struct LintPreparationRequest {
+    expanded: String,
+    before_expansion: String,
+    prior_sites: Vec<usize>,
+    dialect: String,
+}
+
+#[pyfunction]
+fn prepare_lint_sql(
+    py: Python<'_>,
+    request: LintPreparationRequest,
+) -> PyResult<Option<sqlbuild_rules::sql_lint::types::PreparedSql>> {
+    py.compiler_detach(|| {
+        sqlbuild_rules::sql_lint::main::preparation::prepare(
+            &request.expanded,
+            &request.before_expansion,
+            &request.prior_sites,
+            &request.dialect,
+        )
+    })
+    .map_err(value_error)
+}
+
+/// Prepare many bodies in one detached call; `false` marks a body to prepare again individually.
+#[pyfunction]
+fn prepare_lint_sql_batch(
+    py: Python<'_>,
+    requests: Vec<LintPreparationRequest>,
+) -> PyResult<Vec<(bool, Option<sqlbuild_rules::sql_lint::types::PreparedSql>)>> {
+    py.compiler_detach(|| {
+        Ok(requests
+            .iter()
+            .map(|request| {
+                sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic(|| {
+                    sqlbuild_rules::sql_lint::main::preparation::prepare(
+                        &request.expanded,
+                        &request.before_expansion,
+                        &request.prior_sites,
+                        &request.dialect,
+                    )
+                })
+                .map_or((false, None), |prepared| (true, prepared))
+            })
+            .collect())
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn lint_backtick_identifiers(dialect: &str) -> PyResult<bool> {
+    compiler_guard(|| {
+        Ok(sqlbuild_rules::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect))
+    })
+}
+
+#[pyfunction]
+fn lint_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_rules::sql_lint::main::batch_engine::lint_batch_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| sqlbuild_rules::sql_lint::main::formatter::format_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_rules::sql_lint::main::batch_formatter::format_batch_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn query_fingerprint(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint(sql, dialect)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction(name = "validate_sql_with_schema_json")]
+fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::validation_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction(name = "validate_sql_with_schemas_json")]
+fn schema_validations_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::semantic_validation::main::validations_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| sqlbuild_analysis::semantic_usage::main::analyze_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_column_references_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::column_references::main::analyze::analyze_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::query_analysis::main::analyze::analyze_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::query_analysis::main::analyze_project::analyze_project_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::query_analysis::main::analyze_project_compact::analyze_project_compact_json(
+            request_json,
+        )
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn render_sql_test_comparisons_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_test_rendering::render_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_test_planning::plan_and_render_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn resolve_sql_test_chains_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+            request_json,
+        )
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn render_sql_test_difference_sample_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            request_json,
+        )
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_test_extraction::extract_batch_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+fn authored_value_to_python(
+    py: Python<'_>,
+    value: sqlbuild_sqltext::compiler::models::AuthoredValue,
+) -> PyResult<Py<PyAny>> {
+    use sqlbuild_sqltext::compiler::models::AuthoredValue;
+
+    match value {
+        AuthoredValue::Null => Ok(py.None()),
+        AuthoredValue::Boolean(value) => {
+            Ok(value.into_pyobject(py)?.to_owned().unbind().into_any())
+        }
+        AuthoredValue::BareWord(value) => {
+            marker_to_python(py, "word", value.into_pyobject(py)?.unbind().into_any())
+        }
+        AuthoredValue::String(value) => Ok(value.into_pyobject(py)?.unbind().into_any()),
+        AuthoredValue::List(values) => {
+            let projected = values
+                .into_iter()
+                .map(|item| authored_value_to_python(py, item))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(PyList::new(py, projected)?.unbind().into_any())
+        }
+        AuthoredValue::Map(values) => map_to_python(py, values),
+        AuthoredValue::Set(values) => marker_to_python(
+            py,
+            "set",
+            authored_value_to_python(py, AuthoredValue::List(values))?,
+        ),
+        AuthoredValue::Tuple(values) => marker_to_python(
+            py,
+            "tuple",
+            authored_value_to_python(py, AuthoredValue::List(values))?,
+        ),
+        AuthoredValue::TypedConstant(values) => {
+            marker_to_python(py, "constant", map_to_python(py, values)?)
+        }
+        AuthoredValue::InlineSqlHook(statement) => marker_to_python(
+            py,
+            "inline_sql",
+            statement.into_pyobject(py)?.unbind().into_any(),
+        ),
+        AuthoredValue::NamedSqlHook(name, kwargs) => hook_marker(py, "sql", name, kwargs),
+        AuthoredValue::PythonHook(name, kwargs) => hook_marker(py, "python", name, kwargs),
+    }
+}
+
+fn map_to_python(
+    py: Python<'_>,
+    values: Vec<(String, sqlbuild_sqltext::compiler::models::AuthoredValue)>,
+) -> PyResult<Py<PyAny>> {
+    let result = PyDict::new(py);
+    for (key, value) in values {
+        result.set_item(key, authored_value_to_python(py, value)?)?;
+    }
+    Ok(result.unbind().into_any())
+}
+
+fn marker_to_python(py: Python<'_>, kind: &str, value: Py<PyAny>) -> PyResult<Py<PyAny>> {
+    Ok(
+        PyTuple::new(py, [kind.into_pyobject(py)?.unbind().into_any(), value])?
+            .unbind()
+            .into_any(),
+    )
+}
+
+fn hook_marker(
+    py: Python<'_>,
+    kind: &str,
+    name: String,
+    kwargs: Vec<(String, sqlbuild_sqltext::compiler::models::AuthoredValue)>,
+) -> PyResult<Py<PyAny>> {
+    let payload = PyTuple::new(
+        py,
+        [
+            name.into_pyobject(py)?.unbind().into_any(),
+            map_to_python(py, kwargs)?,
+        ],
+    )?;
+    marker_to_python(py, kind, payload.unbind().into_any())
+}
+
+fn optional_authored_value_to_python(
+    py: Python<'_>,
+    value: Option<sqlbuild_sqltext::compiler::models::AuthoredValue>,
+) -> PyResult<Option<Py<PyAny>>> {
+    value
+        .map(|item| authored_value_to_python(py, item))
+        .transpose()
+}
+
+type ParsedModelHeader = (
+    Option<Py<PyAny>>,
+    Option<Vec<(String, usize, usize)>>,
+    Option<String>,
+);
+
+#[pyfunction]
+fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<ParsedModelHeader>> {
+    let parsed = py
+        .compiler_detach(|| {
+            sqlbuild_sqltext::compiler::main::model_header_parsing::parse_batch(&headers)
+        })
+        .map_err(value_error)?;
+    parsed
+        .into_iter()
+        .map(|(value, offsets, error)| {
+            Ok((
+                optional_authored_value_to_python(py, value)?,
+                offsets,
+                error,
+            ))
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn match_model_headers(
+    py: Python<'_>,
+    contents: Vec<String>,
+) -> PyResult<Vec<Option<(usize, usize, usize)>>> {
+    py.compiler_detach(|| {
+        Ok(sqlbuild_sqltext::compiler::main::model_header_matching::match_batch(&contents))
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
+    compiler_guard(|| {
+        sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one(header)
+            .map_err(value_error)
+    })
+}
+
+#[pyfunction]
+fn substitute_static_project_vars(
+    sqls: Vec<String>,
+    variables: Vec<(String, String)>,
+) -> PyResult<Vec<(u8, Option<String>)>> {
+    compiler_guard(|| {
+        Ok(
+            sqlbuild_sqltext::compiler::main::sql_interpolation::substitute_batch(
+                &sqls, &variables,
+            ),
+        )
+    })
+}
+
+#[pyfunction]
+fn extract_static_sql_references(
+    sql: &str,
+) -> PyResult<Option<Vec<sqlbuild_sqltext::compiler::types::StaticReference>>> {
+    compiler_guard(|| {
+        Ok(sqlbuild_sqltext::compiler::main::sql_references::extract(
+            sql,
+        ))
+    })
+}
+
+#[pyfunction]
+fn load_config_json(project_dir: &str) -> PyResult<String> {
+    compiler_guard(|| {
+        load::load_config_json(std::path::Path::new(project_dir)).map_err(value_error)
+    })
+}
+
+#[pyfunction]
+fn catalogue_json() -> PyResult<String> {
+    compiler_guard(|| {
+        serde_json::to_string(&CatalogueResponse {
+            version: API_VERSION,
+            rules: catalogue::catalogue(),
+        })
+        .map_err(value_error)
+    })
+}
+
+#[pyfunction]
+fn selected_codes_json(request_json: &str) -> PyResult<String> {
+    compiler_guard(|| selected_codes::selected_codes_json(request_json).map_err(value_error))
+}
+
+#[pyfunction]
+fn render_owned_skill(content: &str, input_fingerprint: &str) -> PyResult<String> {
+    compiler_guard(|| {
+        fensu_policy::render_owned_skill(
+            SKILL_OWNER,
+            SKILL_IDENTITY,
+            input_fingerprint,
+            content.as_bytes(),
+        )
+        .map_err(value_error)
+        .and_then(|value| String::from_utf8(value).map_err(value_error))
+    })
+}
+
+#[pyfunction]
+fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
+    let freshness = fensu_policy::skill_freshness(
+        content.map(str::as_bytes),
+        SKILL_OWNER,
+        SKILL_IDENTITY,
+        input_fingerprint,
+    );
+    format!("{freshness:?}").to_lowercase()
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_rules_parts, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_parsed_rules, module)?)?;
+    module.add_class::<ParsedRulesRequest>()?;
+    module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
+    module.add_function(wrap_pyfunction!(run_custom_host_json, module)?)?;
+    module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
+    module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(prepare_lint_sql_batch, module)?)?;
+    module.add(
+        "NativeCompilerError",
+        module
+            .py()
+            .get_type::<crate::bindings::_helpers::panics::NativeCompilerError>(),
+    )?;
+    module.add_class::<crate::bindings::models::ProjectCatalog>()?;
+    module.add_class::<crate::bindings::models::CompactAnalysisJob>()?;
+    module.add_class::<crate::bindings::models::BindingPositions>()?;
+    module.add_function(wrap_pyfunction!(normalize_analysis_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(normalize_analysis_sqls, module)?)?;
+    module.add_function(wrap_pyfunction!(normalize_dialect_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(binding_diagnostics, module)?)?;
+    module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;
+    module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
+    module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
+    module.add_function(wrap_pyfunction!(query_fingerprint, module)?)?;
+    module.add_function(wrap_pyfunction!(format_sql_batch_json, module)?)?;
+    module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
+    module.add_function(wrap_pyfunction!(schema_validations_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_column_references_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_queries_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_project_queries_json, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        analyze_project_queries_compact_json,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(render_sql_test_comparisons_json, module)?)?;
+    module.add_function(wrap_pyfunction!(plan_and_render_sql_tests_json, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_sql_test_chains_json, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        render_sql_test_difference_sample_json,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(extract_sql_tests_json, module)?)?;
+    module.add_function(wrap_pyfunction!(match_model_headers, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_model_headers, module)?)?;
+    module.add_function(wrap_pyfunction!(tokenize_model_header, module)?)?;
+    module.add_function(wrap_pyfunction!(substitute_static_project_vars, module)?)?;
+    module.add_function(wrap_pyfunction!(extract_static_sql_references, module)?)?;
+    module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
+    module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
+    module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;
+    module.add_function(wrap_pyfunction!(render_owned_skill, module)?)?;
+    module.add_function(wrap_pyfunction!(skill_freshness, module)?)?;
+    module.add("API_VERSION", API_VERSION)?;
+    module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
+    Ok(())
+}

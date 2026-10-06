@@ -257,23 +257,33 @@ select = ["FPRS"]
 
 [[targets.rust.rule_exceptions]]
 rule = "FPRSR307"
-path = "crates/sqlbuild-rules-native/src/scope_metadata/main.rs"
+path = "crates/sqlbuild-rules/src/scope_metadata/main.rs"
 reason = "This focused serde boundary validates the scope metadata schema used by the crate-root wire models."
 
 [[targets.rust.rule_exceptions]]
 rule = "FPRSR307"
-path = "crates/sqlbuild-rules-native/src/semantic_usage/main.rs"
+path = "crates/sqlbuild-analysis/src/semantic_usage/main.rs"
 reason = "This module owns the existing coarse native SQL usage-analysis boundary exposed through PyO3."
 
 [[targets.rust.rule_exceptions]]
 rule = "FPRSR307"
-path = "crates/sqlbuild-rules-native/src/semantic_validation/main.rs"
+path = "crates/sqlbuild-analysis/src/semantic_validation/main.rs"
 reason = "This module owns the existing coarse native schema-validation boundary exposed through PyO3."
 
 [[targets.rust.rule_exceptions]]
 rule = "FPRSS201"
-path = "crates/sqlbuild-rules-native/src/semantic_validation/models.rs"
+path = "crates/sqlbuild-analysis/src/semantic_validation/models.rs"
 reason = "ProjectCatalog implements Debug manually because Polyglot SchemaValidationOptions does not implement Debug; other models derive it."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSS201"
+path = "crates/sqlbuild-python/src/bindings/models.rs"
+reason = "CompactAnalysisJob holds a prepared analysis closure, which cannot implement Debug; other models derive it."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSL105"
+path = "crates/sqlbuild-analysis/src/sql_tokens/main/builtin_function_names.rs"
+reason = "This test-support entry exists only for the SQL lint tests in sqlbuild-rules, which the analyzer does not count as importers."
 
 [targets.rust.rule_options.FPRSL301]
 forbidden_packages = [
@@ -283,12 +293,16 @@ forbidden_packages = [
 
 [targets.rust.rule_options.FPRSL102]
 packages = []
-restricted_paths = ["crates/sqlbuild-rules-native/src/rules"]
+restricted_paths = ["crates/sqlbuild-rules/src/rules"]
 remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
 
 [targets.rust.rule_options.FPRSL304]
 crate_names = [
-    "sqlbuild-rules-native",
+    "sqlbuild-analysis",
+    "sqlbuild-core",
+    "sqlbuild-python",
+    "sqlbuild-rules",
+    "sqlbuild-sqltext",
 ]
 
 [[dupes.contract_exemptions]]

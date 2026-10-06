@@ -47,7 +47,7 @@ def write_fixture_format_project(
 _RESERVED_KEYWORDS_DIR: Path = (
     Path(__file__).resolve().parents[5]
     / "crates"
-    / "sqlbuild-rules-native"
+    / "sqlbuild-analysis"
     / "src"
     / "sql_tokens"
     / "reserved_keywords"

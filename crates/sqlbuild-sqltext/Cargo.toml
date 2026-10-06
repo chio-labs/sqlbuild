@@ -1,0 +1,17 @@
+[package]
+name = "sqlbuild-sqltext"
+version.workspace = true
+description = "Lexical SQL scanning, model headers and static SQL text operations for SQLBuild."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rayon.workspace = true
+serde.workspace = true
+sqlbuild-core.workspace = true
+sqlparser.workspace = true
+
+[lints]
+workspace = true
