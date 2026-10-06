@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import pickle
 import shutil
 import sys
 import tempfile
+import uuid
+from collections.abc import Callable, Iterable
 from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor, wait
 from dataclasses import replace
 from pathlib import Path
@@ -17,6 +20,7 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
+    CUSTOM_HOST_ABANDONED_SUFFIX,
     CUSTOM_HOST_CANCELLED_MARKER,
     CUSTOM_HOST_LAUNCH_MODULE,
     CUSTOM_HOST_MAX_TRACKED_READS,
@@ -64,32 +68,59 @@ def run_custom_hosts(
     )
     input_dir: Path = project_dir / "target" / "rules-cache" / "host-inputs"
     input_dir.mkdir(parents=True, exist_ok=True)
-    input_path: Path | None = None
+    input_path: Path = input_dir / f"project-{uuid.uuid4().hex}.pickle"
+    abandoned: Path = input_path.with_suffix(CUSTOM_HOST_ABANDONED_SUFFIX)
+    payload: dict[str, object] = {
+        "project_pickle_path": str(input_path.resolve()),
+        "abandoned_marker": str(abandoned.resolve()),
+        "parent_pid": os.getpid(),
+        "project_dir": str(project_dir.resolve()),
+        "dialect": dialect,
+        "verify_determinism": verify_determinism,
+        "track_reads": track_reads,
+    }
     try:
-        with tempfile.NamedTemporaryFile(
-            dir=input_dir, prefix="project-", suffix=".pickle", delete=False
-        ) as handle:
-            input_path = Path(handle.name)
-            pickle.dump((project, config), handle)
-        payload: dict[str, object] = {
-            "project_pickle_path": str(input_path.resolve()),
-            "project_dir": str(project_dir.resolve()),
-            "dialect": dialect,
-            "verify_determinism": verify_determinism,
-            "track_reads": track_reads,
-        }
-        responses: list[CustomHostSlice] = (
-            [_run_host(payload={**payload, "plan": plan})]
-            if len(plans) == 1
-            else _run_partitions(payload=payload, plan=plan, plans=plans, input_dir=input_dir)
+        responses: list[CustomHostSlice] = _run_partitions(
+            payload=payload,
+            plan=plan,
+            plans=plans,
+            input_dir=input_dir,
+            write_inputs=lambda: _write_inputs(path=input_path, project=project, config=config),
         )
     finally:
-        if input_path is not None:
-            input_path.unlink(missing_ok=True)
+        input_path.unlink(missing_ok=True)
+        abandoned.unlink(missing_ok=True)
     return _merge(
         responses=responses,
         order={invocation: index for index, invocation in enumerate(invocations)},
     )
+
+
+def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+    """Publish the project payload atomically; hosts started earlier wait for it to appear."""
+
+    with tempfile.NamedTemporaryFile(
+        dir=path.parent, prefix="writing-", suffix=".pickle", delete=False
+    ) as handle:
+        partial: Path = Path(handle.name)
+        try:
+            pickle.dump((project, config), handle)
+        except BaseException:
+            handle.close()
+            partial.unlink(missing_ok=True)
+            raise
+    partial.replace(path)
+
+
+def _abandon_inputs(marker: Path) -> bool:
+    """Tell waiting hosts no payload will come; report whether they can see the signal."""
+
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        return False
+    return True
 
 
 def _run_partitions(
@@ -98,9 +129,17 @@ def _run_partitions(
     plan: CustomHostPlan,
     plans: tuple[CustomHostPlan, ...],
     input_dir: Path,
+    write_inputs: Callable[[], None],
 ) -> list[CustomHostSlice]:
-    """Run partitions; failures and rules with module state fall back to one host."""
+    """Start hosts while the payload is written; failures and module state fall back to one host."""
 
+    if len(plans) == 1:
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-host") as pool:
+            single: Future[CustomHostSlice] = pool.submit(
+                _run_host, payload={**payload, "plan": plan}
+            )
+            _publish(write_inputs=write_inputs, payload=payload, futures=(single,))
+            return [single.result()]
     cancel_dir: Path = Path(tempfile.mkdtemp(dir=input_dir, prefix="hosts-"))
     marker: Path = cancel_dir / CUSTOM_HOST_CANCELLED_MARKER
     futures: list[Future[CustomHostSlice]] = []
@@ -120,6 +159,7 @@ def _run_partitions(
                 )
                 for partition in plans
             ]
+            _publish(write_inputs=write_inputs, payload=payload, futures=futures)
             done: set[Future[CustomHostSlice]] = wait(futures, return_when=FIRST_EXCEPTION).done
             failed = any(future.exception() is not None for future in done)
             if failed:
@@ -132,13 +172,29 @@ def _run_partitions(
     stateful: frozenset[str] = frozenset().union(*(item.stateful for item in slices))
     if not stateful:
         return slices
-    single: CustomHostSlice = _run_host(
+    rerun: CustomHostSlice = _run_host(
         payload={
             **payload,
             "plan": {code: plan[code] if code in stateful else [] for code in plan},
         },
     )
-    return [*(_without_codes(response=item, codes=stateful) for item in slices), single]
+    return [*(_without_codes(response=item, codes=stateful) for item in slices), rerun]
+
+
+def _publish(
+    *,
+    write_inputs: Callable[[], None],
+    payload: dict[str, object],
+    futures: Iterable[Future[CustomHostSlice]],
+) -> None:
+    """Write the payload or release hosts; if release fails, the error waits for their deadline."""
+
+    try:
+        write_inputs()
+    except BaseException:
+        if _abandon_inputs(Path(str(payload["abandoned_marker"]))):
+            _ = wait(tuple(futures))
+        raise
 
 
 def _cancel_hosts(marker: Path) -> None:

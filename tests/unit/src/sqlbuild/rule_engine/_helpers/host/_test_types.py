@@ -88,3 +88,35 @@ class StateDetectorCostCase:
     rule_count: int
     model_count: int
     expected_min_speedup: float
+
+
+@dataclass(frozen=True)
+class HostInputsTestCase:
+    """Hosts started before their project payload is published, or abandoned without one."""
+
+    description: str
+    model_count: int
+    hosts: int
+    write_delay_seconds: float
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
+class AwaitInputsTestCase:
+    """One wait for a host payload with a given parent, cancel signal, and payload state."""
+
+    description: str
+    reported_parent_pid: int
+    existing_files: tuple[str, ...]
+    expected_error: type[Exception]
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
+class AwaitPublishedInputsTestCase:
+    """One wait for a payload that is already published while the parent still runs."""
+
+    description: str
+    reported_parent_pid: int
+    existing_files: tuple[str, ...]
+    expected_max_seconds: float
