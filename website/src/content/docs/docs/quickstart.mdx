@@ -66,7 +66,7 @@ Seeds (1)
 ✓ Plan complete  15 selected, 2 sources to load
 ```
 
-`raw__customers` and `raw__orders` are loaded by a Python loader (`sources/loaders/waffle_sources.py`) at the start of the build; `raw__payments` is an inline expression in `sources/raw.yml`. Incremental models also list their cursor and window under their row; they are left out here.
+`raw__customers` and `raw__orders` are loaded by a Python loader (`python/loaders/waffle_sources.py`) at the start of the build; `raw__payments` is an inline expression in `sources/raw.yml`. Incremental models also list their cursor and window under their row; they are left out here.
 
 ## 3. Build
 
@@ -263,15 +263,15 @@ waffle-shop/
       hourly_activity_with_daily_context.sql # microbatch incremental
       daily_activity_rollup.sql # microbatch incremental
       _sqlbuild/
+        _audits/
+          generic/
+            expression_is_true.sql # custom generic audit
         _macros/                # visible only to models directly in marts/
           currency.py           # cents_to_dollars macro
           datetime.py           # adapter-portable timestamp_trunc
     intermediate/
       customer_status_snapshot.sql  # merge incremental
       order_status_index.sql       # integer cursor incremental
-  audits/
-    generic/
-      expression_is_true.sql    # custom generic audit
   tests/
     unit/
       test_stg_orders.sql              # model unit test

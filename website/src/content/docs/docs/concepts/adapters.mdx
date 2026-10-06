@@ -46,7 +46,7 @@ The most common case is extending an existing adapter with custom behavior. Subc
 
 ```python
 # adapters/duckdb_plus.py
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 class DuckDbPlusAdapter(DuckDbAdapter):
     adapter_name = "duckdb_plus"
@@ -54,7 +54,7 @@ class DuckDbPlusAdapter(DuckDbAdapter):
     def connect(self, config):
         connection = super().connect(config)
         # custom setup - load extensions, set pragmas, etc.
-        self.execute(connection, "SET enable_progress_bar = true")
+        self.execute(connection=connection, sql="SET enable_progress_bar = true")
         return connection
 ```
 
@@ -74,7 +74,7 @@ For a database engine with no built-in support, subclass `BaseAdapter`. It provi
 
 ```python
 # adapters/my_database.py
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 class MyDatabaseAdapter(BaseAdapter):
     adapter_name = "my_database"
@@ -83,7 +83,7 @@ class MyDatabaseAdapter(BaseAdapter):
     def connect(self, config):
         ...
 
-    def execute(self, connection, sql):
+    def execute(self, *, connection, sql):
         ...
 
     def close(self, connection):
@@ -99,7 +99,7 @@ For full control with no inherited defaults, subclass `StrictAdapter` instead. E
 - SQLBuild discovers all `.py` files under `adapters/` recursively (excluding `__init__.py` and files starting with `_`)
 - Each file is scanned for classes that define a string `adapter_name` and subclass `StrictAdapter` (or any of its subclasses like `BaseAdapter` or a built-in adapter)
 - Adapter names must be unique across all adapter files - duplicates raise an error
-- Custom adapter names cannot shadow built-in names (`duckdb`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlserver`)
+- Custom adapter names cannot shadow built-in names (`duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlserver`)
 
 ### Adapter class hierarchy
 
@@ -107,6 +107,7 @@ For full control with no inherited defaults, subclass `StrictAdapter` instead. E
 StrictAdapter          (fully abstract - all methods must be implemented)
   └── BaseAdapter      (ANSI SQL defaults - override only what differs)
         ├── DuckDbAdapter
+        ├── MotherDuckAdapter
         ├── SnowflakeAdapter
         ├── BigQueryAdapter
         ├── DatabricksAdapter
@@ -117,6 +118,6 @@ StrictAdapter          (fully abstract - all methods must be implemented)
 `StrictAdapter` composes four mixins that define the full adapter contract:
 
 - **ConnectionMixin** - `connect`, `close`, `begin`, `commit`, `rollback`
-- **SchemaMixin** - `relation_exists`, `list_relations`, `describe_relation`, `ensure_schema`
-- **MaterializationMixin** - `create_table_as`, `create_view`, `drop`, `rename`, `swap`, `load_seed`
+- **SchemaMixin** - `relation_exists`, `list_relations`, `get_columns`, `ensure_schema`
+- **MaterializationMixin** - `create_table_as`, `create_view_as`, `drop`, `rename`, `swap`, `load_seed`
 - **DiffMixin** - `diff_schema`, `diff_rows`, `sample_unequal_rows`, `sample_side_only_rows`
