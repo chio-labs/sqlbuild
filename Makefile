@@ -6,7 +6,8 @@ SHELL := /bin/bash
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-inspection \
 	test-e2e-duckdb-integrations test-e2e-performance \
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
-	test-e2e-dense-compile-performance test-e2e-varied-cache-performance
+	test-e2e-dense-compile-performance test-e2e-varied-cache-performance \
+	compiler-differential compiler-differential-dense
 
 format:
 	uv run ruff format .
@@ -130,6 +131,7 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \
 	tests/e2e/scripts/compile_performance_ratio \
+	tests/e2e/scripts/compiler_differential \
 	tests/e2e/scripts/release_performance \
 	tests/e2e/src/sqlbuild/cli/commands/main/adapters \
 	tests/e2e/src/sqlbuild/cli/commands/main/audit \
@@ -284,6 +286,21 @@ test-e2e-varied-cache-performance:
 		-n auto --dist loadfile -m cache_compile_performance \
 		-vv -rP --log-level=INFO --log-cli-level=INFO --color=yes
 
+
+COMPILER_DIFFERENTIAL_JOBS ?= 4
+COMPILER_DIFFERENTIAL_SEEDS ?= 12
+COMPILER_DIFFERENTIAL_DENSE_MODELS ?= 3000
+COMPILER_DIFFERENTIAL_ARGS ?=
+
+compiler-differential:
+	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
+		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SEEDS) \
+		$(COMPILER_DIFFERENTIAL_ARGS)
+
+compiler-differential-dense:
+	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
+		--corpus dense --dense-models $(COMPILER_DIFFERENTIAL_DENSE_MODELS) \
+		--jobs $(COMPILER_DIFFERENTIAL_JOBS) $(COMPILER_DIFFERENTIAL_ARGS)
 
 
 skills:

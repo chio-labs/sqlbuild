@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       checks: ${{ steps.scope.outputs.checks }}
+      compiler_differential: ${{ steps.scope.outputs.compiler_differential }}
       duckdb: ${{ steps.scope.outputs.duckdb }}
       postgres: ${{ steps.scope.outputs.postgres }}
       performance: ${{ steps.scope.outputs.performance }}
@@ -43,11 +44,12 @@ jobs:
               echo "rules_performance=$5"
               echo "checks=$6"
               echo "wheels=$7"
+              echo "compiler_differential=$8"
             } >> "${GITHUB_OUTPUT}"
           }
 
           if [[ "${EVENT_NAME}" != "pull_request" ]]; then
-            write_scope true true true true true true true
+            write_scope true true true true true true true true
             exit 0
           fi
 
@@ -57,6 +59,7 @@ jobs:
           format_performance=false
           rules_performance=false
           wheels=false
+          compiler_differential=false
           broad=false
           changed=false
           # A change that only touches the website, root-level Markdown, the README demo GIFs or the
@@ -75,6 +78,11 @@ jobs:
             case "${path}" in
               crates/*|Cargo.toml|Cargo.lock|pyproject.toml|.github/workflows/verify.yml)
                 wheels=true
+                ;;
+            esac
+            case "${path}" in
+              scripts/compiler_differential/*|scripts/run_compiler_differential.py|tests/*/scripts/compiler_differential/*|.github/workflows/verify.yml|Makefile)
+                compiler_differential=true
                 ;;
             esac
             case "${path}" in
@@ -132,7 +140,7 @@ jobs:
           done < <(git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}")
 
           if [[ "${changed}" != "true" ]]; then
-            write_scope true true true true true true true
+            write_scope true true true true true true true true
             exit 0
           fi
 
@@ -145,6 +153,7 @@ jobs:
             duckdb=true
             postgres=true
             format_performance=true
+            compiler_differential=true
           fi
           write_scope \
             "${duckdb}" \
@@ -153,7 +162,8 @@ jobs:
             "${format_performance}" \
             "${rules_performance}" \
             "${checks}" \
-            "${wheels}"
+            "${wheels}" \
+            "${compiler_differential}"
 
   lockfile:
     name: Lockfile consistency
@@ -257,6 +267,31 @@ jobs:
           PY
       - name: Run DuckDB E2E shard
         run: make ${{ matrix.target }}
+
+  compiler_differential:
+    name: Compiler engine differential
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.compiler_differential == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Compare fixtures, examples, generated seeds and the failure corpus
+        run: make compiler-differential COMPILER_DIFFERENTIAL_ARGS=--stage-captures
 
   format_performance:
     name: Formatter performance guards
@@ -675,6 +710,7 @@ jobs:
         lockfile,
         checks,
         e2e_shards,
+        compiler_differential,
         format_performance,
         performance,
         cold_compile_performance,
@@ -694,6 +730,7 @@ jobs:
           LOCKFILE_RESULT: ${{ needs.lockfile.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
+          COMPILER_DIFFERENTIAL_RESULT: ${{ needs.compiler_differential.result }}
           FORMAT_PERFORMANCE_RESULT: ${{ needs.format_performance.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           COLD_COMPILE_PERFORMANCE_RESULT: ${{ needs.cold_compile_performance.result }}
@@ -715,6 +752,7 @@ jobs:
           fi
           for result in \
             "${E2E_SHARDS_RESULT}" \
+            "${COMPILER_DIFFERENTIAL_RESULT}" \
             "${FORMAT_PERFORMANCE_RESULT}" \
             "${PERFORMANCE_RESULT}" \
             "${COLD_COMPILE_PERFORMANCE_RESULT}" \
