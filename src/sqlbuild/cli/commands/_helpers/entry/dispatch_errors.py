@@ -10,7 +10,11 @@ from sqlbuild.cli.commands._helpers.entry.errors import (
 )
 from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffExecutionError
+from sqlbuild.cli.commands.exceptions import (
+    CliUserError,
+    QueryDiffExecutionError,
+    QueryDiffOutcomeError,
+)
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import (
     dispatch_with_observability,
 )
@@ -51,9 +55,8 @@ def dispatch_and_handle_errors(
             if output_error is not None:
                 effective_error = output_error
         _write_compile_machine_error(args=args, error=effective_error, fallback_code="C000")
-        outcome_status: object | None = getattr(effective_error, "status", None)
-        if outcome_status is not None:
-            print(f"Query diff outcome  {outcome_status}", file=sys.stderr)
+        if isinstance(effective_error, QueryDiffOutcomeError):
+            print(f"Query diff outcome  {effective_error.status}", file=sys.stderr)
         print(
             format_expected_error(error=effective_error, fallback_code="C000", use_color=use_color),
             file=sys.stderr,
@@ -162,6 +165,8 @@ def _write_diff_machine_error(
         status=str(getattr(error, "status", "execution_failed")),
         code=error.code,
         message=error.message,
+        help_text=error.help,
+        size_guard=getattr(error, "details", None),
     )
     if json_path is not None:
         try:

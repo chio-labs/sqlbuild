@@ -23,7 +23,8 @@ Online: https://sqlbuild.com/docs/concepts/diff/
 
 SQLBuild can compare schemas and row-level data between two targets. This lets you validate that changes produce the expected results before they reach production.
 
-`sqb diff FROM:TO` compares two targets, for example `prod:dev`.
+`sqb diff FROM:TO` compares two targets, for example `prod:dev`. `sqb diff FROM` compares `FROM`
+with the active target, the same default `sqb clone --from` uses.
 
 `FROM` and `TO` resolve the authoritative database/schema namespaces to compare.
 SQLBuild uses the `TO` target's named connection for the complete comparison and accesses both
@@ -37,7 +38,7 @@ sqb diff prod:dev --full --select customer_status_snapshot
 
 ## Comparison modes
 
-Every diff requires exactly one mode:
+A diff takes at most one mode flag. Without one, it runs a full diff guarded by table size.
 
 ### Full diff
 
@@ -46,6 +47,13 @@ Compares both schema and row-level data for the selected models:
 ```bash
 sqb diff prod:dev --full --select fact_orders
 ```
+
+Leaving out the mode flag also runs a full diff, but only after a size check. Before reading any
+table data, SQLBuild reads each selected table's row count from warehouse metadata on both sides.
+If a table is larger than that side's
+[`max_full_rows`](project-configuration.md#diff-limits) limit (10,000,000 rows unless
+configured), or its size is unknown, the diff stops without scanning. See
+[size guard](../cli/diff.md#size-guard) for details. `--full` skips the check.
 
 Rows are joined on the model's `unique_key` and compared column by column. The output shows:
 - Row counts for each side
@@ -387,4 +395,4 @@ reconciliation, inspection, materialization, comparison, cleanup, and total dura
 
 ## Exit codes
 
-In model mode, `sqb diff` returns exit code `0` when all selected models have no differences, and `1` when any model has schema or row differences. Raw-query mode uses the exit codes in [Query output and exit codes](#query-output-and-exit-codes). This makes it usable in CI pipelines as a validation gate.
+In model mode, `sqb diff` returns exit code `0` when all selected models have no differences, `1` when any model has schema or row differences, and `2` when the size guard stopped a default full diff before reading data. Raw-query mode uses the exit codes in [Query output and exit codes](#query-output-and-exit-codes). This makes it usable in CI pipelines as a validation gate.

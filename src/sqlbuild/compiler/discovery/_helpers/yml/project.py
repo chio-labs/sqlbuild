@@ -20,6 +20,7 @@ from sqlbuild.compiler.authored_values.main._change_policy_toml_help import (
 )
 from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY, TEMPLATE_OPEN_TOKEN
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import unsupported_keys_help
+from sqlbuild.compiler.discovery._helpers.yml.target_diff import load_target_diff
 from sqlbuild.compiler.discovery._helpers.yml.target_warehouses import (
     load_target_warehouses,
     reject_unsupported_target_warehouses,
@@ -1332,6 +1333,7 @@ def _project_target(local: LocalTargetConfig) -> TargetConfig:
         missing_migration_origin=local.missing_migration_origin
         or defaults.missing_migration_origin,
         execution_limits=local.execution_limits,
+        diff=local.diff,
         warehouses=local.warehouses,
     )
 
@@ -1420,6 +1422,9 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 policy=MissingMigrationOriginPolicy,
             ),
             execution_limits=execution_limits,
+            diff=load_target_diff(
+                payload=target_mapping.get("diff"), target_name=target_name, file_path=file_path
+            ),
             warehouses=load_target_warehouses(
                 payload=target_mapping.get("warehouses"),
                 target_name=target_name,
@@ -1497,6 +1502,7 @@ def _validate_target_keys(
                 "missing_migration_origin",
                 "clone",
                 "execution_limits",
+                "diff",
                 "warehouses",
             }
         ),

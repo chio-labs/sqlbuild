@@ -70,3 +70,21 @@ class QueryDiffExecutionError(QueryDiffOutcomeError):
             code=code,
             help=help,
         )
+
+
+class DiffSizeGuardError(CliUserError):
+    """A default full model diff stopped before reading data because of table sizes."""
+
+    status: str = "incomplete"
+    exit_code: int = 2
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: dict[str, object],
+        code: str | None = None,
+        help: str | None = None,
+    ) -> None:
+        super().__init__(message, code=code, help=help)
+        self.details = details

@@ -12,6 +12,10 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.cli.commands._helpers.diff.size_guard import (
+    build_diff_size_guard_error,
+    resolve_full_diff_size_limits,
+)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -37,6 +41,7 @@ from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
+from sqlbuild.executor.diff.exceptions import FullDiffSizeGuardError
 from sqlbuild.executor.diff.main.config import parse_cli_tolerance_overrides
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.main.execute_query import (
@@ -53,6 +58,7 @@ from sqlbuild.executor.diff.models import (
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 
 
 def prepare_direct_diff(
@@ -60,10 +66,12 @@ def prepare_direct_diff(
 ) -> DirectDiffPreparation:
     """Resolve direct target diff adapter, compiled projects, and limits."""
 
-    if request.from_name is None or request.to_name is None:
-        raise CliUserError("model diff requires FROM:TO", code="C224")
+    if request.from_name is None:
+        raise CliUserError("model diff requires FROM or FROM:TO", code="C224")
     from_target: str = request.from_name
-    to_target: str = request.to_name
+    to_target: str = _resolve_diff_to_target(
+        request=request, invocation=invocation, from_target=from_target
+    )
     if from_target not in invocation.discovered_inputs.project_config.targets:
         raise CliUserError(f"unknown diff FROM target '{from_target}'", code="C205")
     if to_target not in invocation.discovered_inputs.project_config.targets:
@@ -115,7 +123,38 @@ def prepare_direct_diff(
         effective_max_row_only_examples=_effective_max_examples(
             explicit_value=request.max_row_only_examples, verbose=request.verbose
         ),
+        full_size_limits=resolve_full_diff_size_limits(
+            request=request,
+            discovered_inputs=invocation.discovered_inputs,
+            from_target=from_target,
+            to_target=to_target,
+        ),
     )
+
+
+def _resolve_diff_to_target(
+    *, request: DiffCommandRequest, invocation: DiffInvocation, from_target: str
+) -> str:
+    if request.to_name is not None:
+        return request.to_name
+    active_target: str | None = resolve_target_name(
+        project_config=invocation.discovered_inputs.project_config,
+        local_config=invocation.discovered_inputs.local_config,
+        selected_target=None,
+    )
+    if active_target is None:
+        raise CliUserError(
+            "model diff requires FROM:TO when the project has no active target",
+            code="C271",
+            help="set default_target, or pass both targets as FROM:TO",
+        )
+    if active_target == from_target:
+        raise CliUserError(
+            f"diff FROM '{from_target}' is the active target, so there is nothing to compare",
+            code="C272",
+            help="pass both targets as FROM:TO",
+        )
+    return active_target
 
 
 def execute_direct_diff(
@@ -146,8 +185,16 @@ def execute_direct_diff(
                 tolerance_overrides=parse_cli_tolerance_overrides(
                     values=request.tolerance_overrides
                 ),
+                full_size_limits=preparation.full_size_limits,
             ),
         )
+    except FullDiffSizeGuardError as error:
+        raise build_diff_size_guard_error(
+            request=request,
+            from_target=preparation.from_target,
+            to_target=preparation.to_target,
+            error=error,
+        ) from error
     finally:
         preparation.adapter.close(connection)
 

@@ -43,6 +43,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RowDiffCoverage,
     RowDiffPreparedRelations,
     RowDiffResult,
@@ -1568,6 +1569,21 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
+        )
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Report an unknown row count for custom adapters without metadata support."""
+
+        return RelationRowCountEstimate(
+            row_count=None,
+            detail=f"adapter '{self.adapter_name}' does not report row counts from metadata",
         )
 
     def _build_row_diff_relation_ctes(

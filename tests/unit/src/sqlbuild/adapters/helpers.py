@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -73,3 +74,68 @@ def grant_execute(connection: GrantConnection) -> Callable[..., GrantRows]:
 
     del connection
     return execute
+
+
+class MetadataCursor:
+    """A cursor that records metadata SQL and returns fixed rows."""
+
+    def __init__(self, *, rows: tuple[tuple[object, ...], ...], executed: list[str]) -> None:
+        self._rows: tuple[tuple[object, ...], ...] = rows
+        self._executed: list[str] = executed
+
+    def execute(self, sql: str, params: tuple[object, ...] | None = None) -> MetadataCursor:
+        self._executed.append(f"{sql} {params or ()}")
+        return self
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return next(iter(self._rows), None)
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return list(self._rows)
+
+    def close(self) -> None:
+        return None
+
+
+class MetadataConnection:
+    """A connection whose cursors share one SQL log and fixed rows."""
+
+    def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
+        self.rows: tuple[tuple[object, ...], ...] = rows
+        self.executed: list[str] = []
+
+    def cursor(self) -> MetadataCursor:
+        return MetadataCursor(rows=self.rows, executed=self.executed)
+
+
+@dataclass(frozen=True)
+class FakeBigQueryTable:
+    """BigQuery tables API metadata."""
+
+    table_type: str
+    num_rows: int | None
+
+
+class FakeBigQueryClient:
+    """BigQuery client that records requested table ids."""
+
+    def __init__(self, table: FakeBigQueryTable) -> None:
+        self.table: FakeBigQueryTable = table
+        self.requested: list[str] = []
+
+    def get_table(self, table_id: str) -> FakeBigQueryTable:
+        self.requested.append(table_id)
+        return self.table
+
+
+@dataclass(frozen=True)
+class FakeBigQueryConnection:
+    """BigQuery connection holding a fake client."""
+
+    client: FakeBigQueryClient
+
+
+def execute_through_cursor(*, connection: MetadataConnection, sql: str) -> MetadataCursor:
+    """Adapter execute stub that runs SQL on a fresh fake cursor."""
+
+    return connection.cursor().execute(sql)

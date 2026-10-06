@@ -55,6 +55,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RowDiffColumnResult,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -105,6 +106,7 @@ from sqlbuild.adapters.sqlserver.constants import (
     DIFF_UNSUPPORTED_COMPARISON_TYPES,
     INFORMATION_SCHEMA_NULLABLE_VALUE,
     INTEGER_TYPE_TOKEN,
+    USER_TABLE_OBJECT_TYPE,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
@@ -1281,6 +1283,40 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             stmt: str
             for stmt in statements:
                 self.execute(connection=connection, sql=stmt)
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Sum heap or clustered-index partition row counts from the catalog."""
+
+        catalog: str = "" if database is None else f"{self.render_identifier(database)}."
+        schema_filter: str = (
+            "schemas.name = SCHEMA_NAME()"
+            if schema is None
+            else f"schemas.name = N{_quote_sql_string(schema)}"
+        )
+        row: tuple[Any, ...] | None = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT objects.type, SUM(partitions.rows) "
+                f"FROM {catalog}sys.objects AS objects "
+                f"JOIN {catalog}sys.schemas AS schemas ON schemas.schema_id = objects.schema_id "
+                f"LEFT JOIN {catalog}sys.partitions AS partitions "
+                "ON partitions.object_id = objects.object_id AND partitions.index_id IN (0, 1) "
+                f"WHERE {schema_filter} AND objects.name = N{_quote_sql_string(name)} "
+                "GROUP BY objects.type"
+            ),
+        ).fetchone()
+        if row is None:
+            return RelationRowCountEstimate(row_count=None, detail="relation not found")
+        if str(row[0]).strip().upper() != USER_TABLE_OBJECT_TYPE or row[1] is None:
+            return RelationRowCountEstimate(row_count=None, detail="no row count (view)")
+        return RelationRowCountEstimate(row_count=int(row[1]))
 
     def inspect_row_diff_coverage(
         self,

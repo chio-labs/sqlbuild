@@ -11,6 +11,7 @@ from sqlbuild.spec.contracts.models import (
     LocalTargetConfig,
     ProjectConfig,
     TargetConfig,
+    TargetDiffConfig,
     TargetWarehousesConfig,
 )
 
@@ -125,6 +126,13 @@ def resolve_target_config(
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,
+        ),
+        diff=TargetDiffConfig(
+            max_full_rows=(
+                local_target.diff.max_full_rows
+                if local_target.diff.max_full_rows is not None
+                else project_target.diff.max_full_rows
+            )
         ),
         warehouses=TargetWarehousesConfig(
             build=(

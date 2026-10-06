@@ -8,6 +8,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.execution import execute_model_diff
 from sqlbuild.executor.diff._helpers.selection import is_disabled
+from sqlbuild.executor.diff._helpers.size_guard import enforce_full_diff_size_limits
 from sqlbuild.executor.diff.models import DiffExecutionOptions, DiffExecutionResult, ModelDiffResult
 
 
@@ -34,7 +35,7 @@ def execute_diff(
             f"{options.max_models}",
             code="X303",
         )
-    results: list[ModelDiffResult] = []
+    model_pairs: list[tuple[str, Any, Any]] = []
     name: str
     for name in selected_names:
         left_model: Any | None = left_models.get(name)
@@ -44,15 +45,23 @@ def execute_diff(
                 f"diff selected model '{name}' does not exist in both environments",
                 code="X301",
             )
-
-        results.append(
-            execute_model_diff(
-                adapter=adapter,
-                connection=connection,
-                name=name,
-                left_model=left_model,
-                right_model=right_model,
-                options=options,
-            )
+        model_pairs.append((name, left_model, right_model))
+    if options.full_size_limits is not None:
+        enforce_full_diff_size_limits(
+            adapter=adapter,
+            connection=connection,
+            model_pairs=tuple(model_pairs),
+            limits=options.full_size_limits,
         )
+    results: list[ModelDiffResult] = [
+        execute_model_diff(
+            adapter=adapter,
+            connection=connection,
+            name=pair_name,
+            left_model=left_model,
+            right_model=right_model,
+            options=options,
+        )
+        for pair_name, left_model, right_model in model_pairs
+    ]
     return DiffExecutionResult(model_results=tuple(results))

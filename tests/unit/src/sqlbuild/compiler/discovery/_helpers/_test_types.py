@@ -1005,3 +1005,19 @@ class TargetWarehousesDiscoveryTestCase:
     expected_build: str | None
     local_contents: str = ""
     adapter_file_contents: str = ""
+
+
+@dataclass(frozen=True)
+class TargetDiffConfigTestCase:
+    description: str
+    project_contents: str
+    expected_max_full_rows: int | str | None
+    local_contents: str = ""
+
+
+@dataclass(frozen=True)
+class TargetDiffConfigErrorTestCase:
+    description: str
+    project_contents: str
+    expected_error_fragment: str
+    local_contents: str = ""

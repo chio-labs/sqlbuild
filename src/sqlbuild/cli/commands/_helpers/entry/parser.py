@@ -441,7 +441,7 @@ def _add_data_parsers(
     clone_parser.add_argument("--event-output", type=Path, default=None, help=argparse.SUPPRESS)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
-    diff_parser.add_argument("target_range", nargs="?", metavar="FROM:TO")
+    diff_parser.add_argument("target_range", nargs="?", metavar="FROM[:TO]")
     _add_sql_analysis_override(diff_parser)
     diff_parser.add_argument("--full", action="store_true", default=False)
     diff_parser.add_argument("--schema-only", action="store_true", default=False)
@@ -472,7 +472,11 @@ def _add_data_parsers(
         "--right-label", default=None, help="display label for the right query"
     )
     diff_parser.add_argument(
-        "--key", action="append", default=[], help="row identity column; repeat for composite keys"
+        "--key",
+        nargs="+",
+        action="extend",
+        default=[],
+        help="row identity columns; several values or repeated flags form a composite key",
     )
     diff_parser.add_argument(
         "--unkeyed",
@@ -481,7 +485,11 @@ def _add_data_parsers(
         help="compare exact full-row multiplicities without a key",
     )
     diff_parser.add_argument(
-        "--exclude-column", action="append", default=[], help="column to omit from row comparison"
+        "--exclude-column",
+        nargs="+",
+        action="extend",
+        default=[],
+        help="columns to omit from row comparison; takes several values or repeated flags",
     )
     diff_parser.add_argument(
         "--tolerance",

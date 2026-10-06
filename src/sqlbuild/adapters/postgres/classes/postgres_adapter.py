@@ -53,6 +53,7 @@ from sqlbuild.adapter.contract.models import (
     RelationGrant,
     RelationInfo,
     RelationReadProbe,
+    RelationRowCountEstimate,
     RowDiffColumnResult,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -98,7 +99,10 @@ from sqlbuild.adapters.postgres._helpers.grants import (
 )
 from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
-from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
+from sqlbuild.adapters.postgres.constants import (
+    ROW_COUNT_RELATION_KINDS,
+    TABLE_FUNCTION_RETURN_TYPE,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -2245,6 +2249,46 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
+        )
+
+    def estimate_relation_row_count(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> RelationRowCountEstimate:
+        """Read the planner's ``reltuples`` estimate, treating unanalyzed data as unknown."""
+
+        del database
+        schema_filter: str = (
+            "namespace.nspname = current_schema()"
+            if schema is None
+            else f"namespace.nspname = {_quote_sql_string(schema)}"
+        )
+        row: tuple[Any, ...] | None = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT relation.relkind, relation.reltuples, pg_relation_size(relation.oid) "
+                "FROM pg_class AS relation "
+                "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+                f"WHERE {schema_filter} AND relation.relname = {_quote_sql_string(name)}"
+            ),
+        ).fetchone()
+        if row is None:
+            return RelationRowCountEstimate(row_count=None, detail="relation not found")
+        if str(row[0]) not in ROW_COUNT_RELATION_KINDS:
+            return RelationRowCountEstimate(
+                row_count=None, detail="no table statistics (view or partitioned table)"
+            )
+        estimated_rows: float = float(row[1])
+        if estimated_rows > 0:
+            return RelationRowCountEstimate(row_count=int(estimated_rows))
+        if int(row[2]) == 0:
+            return RelationRowCountEstimate(row_count=0)
+        return RelationRowCountEstimate(
+            row_count=None, detail="table statistics not collected; run ANALYZE"
         )
 
     def diff_schema(

@@ -81,3 +81,18 @@ class DiffJsonOutputE2ETestCase:
     expected_scope: str
     expected_population: int
     expected_compared: int
+
+
+@dataclass(frozen=True)
+class DefaultFullDiffE2ETestCase:
+    """One model diff without a mode flag, a defaulted TO target, or multi-value flags."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    local_config_suffix: str = ""
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_status: str | None = None
+    expected_json_blocked_models: tuple[str, ...] = field(default_factory=tuple)

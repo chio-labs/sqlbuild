@@ -133,3 +133,34 @@ class AdapterStateTableDdlTestCase:
     adapter: StrictAdapter
     render_method: str
     expected_create_fragment: str
+
+
+@dataclass(frozen=True)
+class RelationRowCountEstimateTestCase:
+    description: str
+    adapter: BaseAdapter
+    metadata_rows: tuple[tuple[object, ...], ...]
+    expected_row_count: int | None
+    expected_detail: str | None
+    expected_sql_fragment: str
+    database: str | None = "analytics"
+    schema: str | None = "dev"
+
+
+@dataclass(frozen=True)
+class BigQueryRowCountEstimateTestCase:
+    description: str
+    table_type: str
+    num_rows: int | None
+    expected_row_count: int | None
+    expected_table_id: str = "proj.dev.orders"
+
+
+@dataclass(frozen=True)
+class DuckDbRowCountEstimateTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    schema: str | None
+    name: str
+    expected_row_count: int | None
+    expected_detail: str | None = None
