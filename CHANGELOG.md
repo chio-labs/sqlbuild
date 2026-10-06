@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.136.1](https://github.com/chio-labs/sqlbuild/compare/v0.136.0...v0.136.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **scenario:** honour promotion mode and run scenarios concurrently ([#984](https://github.com/chio-labs/sqlbuild/issues/984)) ([b625100](https://github.com/chio-labs/sqlbuild/commit/b62510038de0fa1cce22d300212b7a865bb59cfd))
+
 ## [0.136.0](https://github.com/chio-labs/sqlbuild/compare/v0.135.0...v0.136.0) (2026-10-06)
 
 
