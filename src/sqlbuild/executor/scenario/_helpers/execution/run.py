@@ -8,6 +8,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario._helpers.execution.interrupts import (
+    cleanup_interrupted_scenarios,
+)
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario._helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
@@ -18,6 +21,7 @@ from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
+from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.executor.scenario.exceptions import ScenarioStopRequested
 from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
@@ -58,10 +62,15 @@ def execute_scenario_run_steps(
                 retain=retain,
                 options=options,
             )
-        except BaseException:
+        except BaseException as error:
+            if isinstance(error, (KeyboardInterrupt, ScenarioStopRequested)):
+                options.interrupts.announce_stop()
             if not retain:
-                _ = execute_scenario_cleanup(
-                    scenario_plan=scenario_plan, adapter=adapter, connection=connection
+                cleanup_interrupted_scenarios(
+                    scenario_plans=(scenario_plan,),
+                    adapter=adapter,
+                    connection=connection,
+                    interrupts=options.interrupts,
                 )
             raise
 
@@ -109,6 +118,7 @@ def _execute_scenario_run_steps(
     if _has_failed(fixture_results):
         return _finish_scenario(
             scenario_plan=scenario_plan,
+            interrupts=options.interrupts,
             adapter=adapter,
             connection=connection,
             retain=retain,
@@ -130,6 +140,7 @@ def _execute_scenario_run_steps(
     if _has_failed(seed_results):
         return _finish_scenario(
             scenario_plan=scenario_plan,
+            interrupts=options.interrupts,
             adapter=adapter,
             connection=connection,
             retain=retain,
@@ -151,11 +162,12 @@ def _execute_scenario_run_steps(
         run_id=run_id,
         promotion_mode=options.promotion_mode,
         schema_prepared=schema_prepared,
-        stop_requested=options.stop_requested,
+        stop_requested=options.interrupts.stop_requested,
     )
     if _has_failed(model_results):
         return _finish_scenario(
             scenario_plan=scenario_plan,
+            interrupts=options.interrupts,
             adapter=adapter,
             connection=connection,
             retain=retain,
@@ -186,6 +198,7 @@ def _execute_scenario_run_steps(
     )
     return _finish_scenario(
         scenario_plan=scenario_plan,
+        interrupts=options.interrupts,
         adapter=adapter,
         connection=connection,
         retain=retain,
@@ -207,6 +220,7 @@ def _execute_scenario_run_steps(
 def _finish_scenario(
     *,
     scenario_plan: ScenarioExecutionPlan,
+    interrupts: ScenarioInterrupts,
     adapter: BaseAdapter,
     connection: Any,
     retain: bool,
@@ -227,7 +241,9 @@ def _finish_scenario(
         ExecutionStatus.FAILED if error_message is not None else ExecutionStatus.SUCCESS
     )
     cleanup_result: ScenarioCleanupExecutionResult | None = None
-    if not retain:
+    if interrupts.stop_requested.is_set():
+        interrupts.announce_stop()
+    if not retain and not interrupts.abandoned.is_set():
         cleanup_result = execute_scenario_cleanup(
             scenario_plan=scenario_plan,
             adapter=adapter,
@@ -284,7 +300,7 @@ def _scenario_failure(
 
 
 def _raise_if_stop_requested(options: ScenarioRunOptions) -> None:
-    if options.stop_requested is not None and options.stop_requested.is_set():
+    if options.interrupts.stop_requested.is_set():
         raise ScenarioStopRequested
 
 

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import logging
 import queue
-import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, wait
 from contextlib import contextmanager
-from contextvars import copy_context
+from contextvars import Context, copy_context
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar, Protocol, cast
+from typing import Any, ClassVar, Protocol
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
@@ -36,6 +36,8 @@ from sqlbuild.executor.pipeline._helpers.connections import (
 )
 from sqlbuild.executor.pipeline._helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas
+from sqlbuild.executor.scenario.classes.running_scenarios import RunningScenarios
+from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
@@ -43,6 +45,7 @@ from sqlbuild.executor.scenario.constants import (
 from sqlbuild.executor.scenario.main._capture_steps import (
     execute_scenario_snapshot_capture_run,
 )
+from sqlbuild.executor.scenario.main._cleanup_interrupted import cleanup_interrupted_scenarios
 from sqlbuild.executor.scenario.main._local import execute_local_scenario_load_only_run
 from sqlbuild.executor.scenario.main._run import execute_scenario_run
 from sqlbuild.executor.scenario.main._snapshots import classify_scenario_snapshot_state
@@ -56,9 +59,6 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.presentation.main.transient_line_coordinator import (
-    shared_transient_line_coordinator,
-)
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
@@ -69,7 +69,6 @@ from sqlbuild.spec.contracts.main.scenario_local_type_overrides_for_dialect impo
 )
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
-_INTERRUPT_NOTICE: str = "Interrupted; cleaning up running scenarios...\n"
 _STOP_POLL_SECONDS: float = 0.05
 _SCENARIO_INTERNAL_ERROR_HELP: str = (
     "This is likely a SQLBuild bug. Please file an issue with the scenario name."
@@ -79,7 +78,8 @@ _SCENARIO_INTERNAL_ERROR_HELP: str = (
 @dataclass(frozen=True)
 class _ScenarioScheduling:
     worker_count: int = 1
-    stop_requested: threading.Event = field(default_factory=threading.Event)
+    interrupts: ScenarioInterrupts = field(default_factory=ScenarioInterrupts)
+    running: RunningScenarios | None = None
 
 
 @dataclass(frozen=True)
@@ -132,23 +132,32 @@ def run_scenario_test_pipeline(
     """Execute selected scenarios from a compiled project."""
 
     worker_count: int = max(1, min(concurrency, len(scenarios)))
+    running: RunningScenarios = RunningScenarios(adapter=adapter)
+    scheduling: _ScenarioScheduling = _ScenarioScheduling(
+        worker_count=worker_count,
+        interrupts=ScenarioInterrupts(
+            cancel_statements=partial(running.interrupt, close_uncancellable=False)
+        ),
+        running=running,
+    )
     with _scenario_target_connections(
         adapter=adapter,
         connection_config=connection_config,
         connection_hooks=connection_hooks,
         connection_count=worker_count,
+        abandoned=scheduling.interrupts.abandoned,
     ) as connection_pool:
-        stop_requested: threading.Event = threading.Event()
         options: ScenarioRunOptions = ScenarioRunOptions(
             promotion_mode=resolve_promotion_mode(
                 settings=pipeline_result.project.settings, adapter=adapter
             ),
             prepared_schemas=PreparedScenarioSchemas(),
-            stop_requested=stop_requested,
+            interrupts=scheduling.interrupts,
         )
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioRunResult:
             connection: Any = connection_pool.get()
+            running.start(scenario_plan=scenario_plan, connection=connection)
             try:
                 return execute_scenario_run(
                     scenario_plan=scenario_plan,
@@ -159,6 +168,7 @@ def run_scenario_test_pipeline(
                     options=options,
                 )
             finally:
+                running.finish(connection=connection)
                 connection_pool.put(connection)
 
         def failed(*, scenario_name: str, exc: Exception) -> ScenarioRunResult:
@@ -171,20 +181,61 @@ def run_scenario_test_pipeline(
                 error_message=error_message(exc),
             )
 
-        return _run_scenarios(
-            pipeline_result=pipeline_result,
-            scenarios=scenarios,
+        try:
+            return _run_scenarios(
+                pipeline_result=pipeline_result,
+                scenarios=scenarios,
+                adapter=adapter,
+                project_name=project_name,
+                source_lexical_syntax=adapter.sql_lexical_syntax,
+                execute=execute,
+                failed=failed,
+                on_scenario_start=on_scenario_start,
+                on_scenario_complete=on_scenario_complete,
+                scheduling=scheduling,
+            )
+        except BaseException:
+            if worker_count > 1 and not retain:
+                _sweep_interrupted_scenarios(
+                    running=running,
+                    interrupts=scheduling.interrupts,
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection_pool=connection_pool,
+                )
+            raise
+
+
+def _sweep_interrupted_scenarios(
+    *,
+    running: RunningScenarios,
+    interrupts: ScenarioInterrupts,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection_pool: queue.SimpleQueue[Any],
+) -> None:
+    """Drop started scenarios' relations once workers stop, on a connection still valid."""
+
+    if interrupts.abandoned.is_set():
+        return
+    if not running.closed_connection:
+        cleanup_interrupted_scenarios(
+            scenario_plans=running.started_plans,
             adapter=adapter,
-            project_name=project_name,
-            source_lexical_syntax=adapter.sql_lexical_syntax,
-            execute=execute,
-            failed=failed,
-            on_scenario_start=on_scenario_start,
-            on_scenario_complete=on_scenario_complete,
-            scheduling=_ScenarioScheduling(
-                worker_count=worker_count, stop_requested=stop_requested
-            ),
+            connection=connection_pool.get(),
+            interrupts=interrupts,
         )
+        return
+    connection: Any = adapter.connect(connection_config)
+    try:
+        cleanup_interrupted_scenarios(
+            scenario_plans=running.started_plans,
+            adapter=adapter,
+            connection=connection,
+            interrupts=interrupts,
+        )
+    finally:
+        adapter.close(connection)
 
 
 def run_scenario_local_test_pipeline(
@@ -196,7 +247,6 @@ def run_scenario_local_test_pipeline(
     project_name: str,
     strict: bool,
     replay_source: ScenarioLocalReplaySource,
-    concurrency: int = 1,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
@@ -241,7 +291,6 @@ def run_scenario_local_test_pipeline(
         failed=failed,
         on_scenario_start=on_scenario_start,
         on_scenario_complete=on_scenario_complete,
-        scheduling=_ScenarioScheduling(worker_count=max(1, min(concurrency, len(scenarios)))),
     )
 
 
@@ -270,20 +319,25 @@ def run_scenario_capture_pipeline(
         connection_count=1,
     ) as connection_pool:
         connection: Any = connection_pool.get()
+        running: RunningScenarios = RunningScenarios(adapter=adapter)
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioSnapshotCaptureRunResult:
-            return execute_scenario_snapshot_capture_run(
-                project_dir=project_dir,
-                scenario_plan=scenario_plan,
-                adapter=adapter,
-                connection=connection,
-                run_id=pipeline_result.project.run_id,
-                settings=settings,
-                local_type_overrides=scenario_local_type_overrides_for_dialect(
-                    scenario_config=pipeline_result.project.scenario,
-                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
-                ),
-            )
+            running.start(scenario_plan=scenario_plan, connection=connection)
+            try:
+                return execute_scenario_snapshot_capture_run(
+                    project_dir=project_dir,
+                    scenario_plan=scenario_plan,
+                    adapter=adapter,
+                    connection=connection,
+                    run_id=pipeline_result.project.run_id,
+                    settings=settings,
+                    local_type_overrides=scenario_local_type_overrides_for_dialect(
+                        scenario_config=pipeline_result.project.scenario,
+                        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+                    ),
+                )
+            finally:
+                running.finish(connection=connection)
 
         def failed(*, scenario_name: str, exc: Exception) -> ScenarioSnapshotCaptureRunResult:
             return ScenarioSnapshotCaptureRunResult(
@@ -305,6 +359,11 @@ def run_scenario_capture_pipeline(
             failed=failed,
             on_scenario_start=on_scenario_start,
             on_scenario_complete=on_scenario_complete,
+            scheduling=_ScenarioScheduling(
+                interrupts=ScenarioInterrupts(
+                    cancel_statements=partial(running.interrupt, close_uncancellable=False)
+                )
+            ),
         )
 
 
@@ -315,6 +374,7 @@ def _scenario_target_connections(
     connection_config: dict[str, object],
     connection_hooks: ConnectionHooks | None,
     connection_count: int,
+    abandoned: threading.Event | None = None,
 ) -> Iterator[queue.SimpleQueue[Any]]:
     hooks: ConnectionHooks = connection_hooks if connection_hooks is not None else ConnectionHooks()
     if hooks.on_connection_start is not None:
@@ -346,7 +406,8 @@ def _scenario_target_connections(
         active_error = error
         raise
     finally:
-        close_connections(adapter=adapter, connections=connections, active_error=active_error)
+        if abandoned is None or not abandoned.is_set():
+            close_connections(adapter=adapter, connections=connections, active_error=active_error)
 
 
 def _run_scenarios[ResultT: _ScenarioPipelineResult](
@@ -399,55 +460,145 @@ def _run_scenarios[ResultT: _ScenarioPipelineResult](
             scenario_name=scenario.name,
             has_completion_callback=on_scenario_complete is not None,
         )
+    interrupts: ScenarioInterrupts = resolved_scheduling.interrupts
+    try:
+        with interrupts.handle_sigint():
+            if resolved_scheduling.worker_count <= 1:
+                return _run_sequentially(
+                    scenarios=scenarios, run=run, complete=complete, interrupts=interrupts
+                )
+            return _run_concurrently(
+                scenarios=scenarios,
+                run=run,
+                complete=complete,
+                on_scenario_start=on_scenario_start,
+                scheduling=resolved_scheduling,
+            )
+    except BaseException as error:
+        if interrupts.abandoned.is_set():
+            interrupts.abandon()
+        elif isinstance(error, KeyboardInterrupt):
+            interrupts.announce_stop()
+        raise
+
+
+def _run_sequentially[OutcomeT, ResultT](
+    *,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    run: Callable[..., OutcomeT],
+    complete: Callable[[OutcomeT], ResultT],
+    interrupts: ScenarioInterrupts,
+) -> tuple[ResultT, ...]:
+    """Run on the calling thread so Ctrl-C reaches the in-flight statement directly."""
+
     results: list[ResultT] = []
-    with ThreadPoolExecutor(max_workers=max(1, resolved_scheduling.worker_count)) as pool:
-        futures: tuple[Future[_ScenarioOutcome[ResultT]], ...] = tuple(
-            cast(
-                Future[_ScenarioOutcome[ResultT]],
-                pool.submit(copy_context().run, run, scenario=scenario, notify_start=False),
-            )
-            for scenario in scenarios
-        )
-        try:
-            index: int
-            future: Future[_ScenarioOutcome[ResultT]]
-            for index, future in enumerate(futures):
-                if on_scenario_start is not None:
-                    on_scenario_start(scenarios[index])
-                results.append(complete(future.result()))
-        except BaseException as error:
-            _stop_scenarios(
-                error=error,
-                futures=futures,
-                stop_requested=resolved_scheduling.stop_requested,
-            )
-            raise
+    scenario: CompiledSqlScenario
+    for scenario in scenarios:
+        results.append(complete(run(scenario=scenario, notify_start=True)))
+        if interrupts.stop_requested.is_set():
+            interrupts.announce_stop()
+            raise KeyboardInterrupt
     return tuple(results)
+
+
+def _run_concurrently[OutcomeT, ResultT](
+    *,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    run: Callable[..., OutcomeT],
+    complete: Callable[[OutcomeT], ResultT],
+    on_scenario_start: Callable[[CompiledSqlScenario], None] | None,
+    scheduling: _ScenarioScheduling,
+) -> tuple[ResultT, ...]:
+    futures: tuple[Future[OutcomeT], ...] = tuple(Future() for _ in scenarios)
+    results: list[ResultT] = []
+    try:
+        _start_scenario_workers(
+            scenarios=scenarios,
+            futures=futures,
+            run=run,
+            worker_count=scheduling.worker_count,
+        )
+        index: int
+        future: Future[OutcomeT]
+        for index, future in enumerate(futures):
+            if on_scenario_start is not None:
+                on_scenario_start(scenarios[index])
+            results.append(complete(future.result()))
+    except BaseException as error:
+        _stop_scenarios(error=error, futures=futures, scheduling=scheduling)
+        raise
+    return tuple(results)
+
+
+def _start_scenario_workers[OutcomeT](
+    *,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    futures: tuple[Future[OutcomeT], ...],
+    run: Callable[..., OutcomeT],
+    worker_count: int,
+) -> None:
+    """Start daemon workers so an abandoned run never blocks interpreter exit."""
+
+    queued: queue.SimpleQueue[int] = queue.SimpleQueue()
+    index: int
+    for index in range(len(scenarios)):
+        queued.put(index)
+
+    def work() -> None:
+        while True:
+            try:
+                position: int = queued.get_nowait()
+            except queue.Empty:
+                return
+            future: Future[OutcomeT] = futures[position]
+            if not future.set_running_or_notify_cancel():
+                continue
+            try:
+                future.set_result(
+                    copy_context().run(run, scenario=scenarios[position], notify_start=False)
+                )
+            except BaseException as exc:  # noqa: BLE001 - delivered through the future
+                future.set_exception(exc)
+
+    context: Context = copy_context()
+    worker: int
+    for worker in range(worker_count):
+        threading.Thread(
+            target=context.copy().run,
+            args=(work,),
+            name=f"sqlbuild-scenario-{worker}",
+            daemon=True,
+        ).start()
 
 
 def _stop_scenarios[OutcomeT](
     *,
     error: BaseException,
     futures: tuple[Future[OutcomeT], ...],
-    stop_requested: threading.Event,
+    scheduling: _ScenarioScheduling,
 ) -> None:
-    """Cancel queued scenarios and await running ones' cleanup, absorbing repeat interrupts."""
+    """Cancel queued scenarios and in-flight statements; a repeat interrupt abandons cleanup."""
 
-    if not isinstance(error, Exception):
-        shared_transient_line_coordinator().write_persistent(
-            stream=sys.stderr, text=_INTERRUPT_NOTICE
-        )
-    stop_requested.set()
+    interrupts: ScenarioInterrupts = scheduling.interrupts
+    if isinstance(error, KeyboardInterrupt):
+        interrupts.announce_stop()
+    interrupts.request_stop()
     future: Future[OutcomeT]
     for future in futures:
         _ = future.cancel()
     pending: tuple[Future[OutcomeT], ...] = futures
-    while pending:
-        try:
+    try:
+        if scheduling.running is not None:
+            scheduling.running.interrupt()
+        while pending and not interrupts.abandoned.is_set():
             _ = wait(pending, timeout=_STOP_POLL_SECONDS)
-        except KeyboardInterrupt:
-            continue
-        pending = tuple(future for future in pending if not future.done())
+            pending = tuple(item for item in pending if not item.done())
+    except KeyboardInterrupt:
+        interrupts.abandon()
+        raise
+    if interrupts.abandoned.is_set():
+        interrupts.abandon()
+        raise KeyboardInterrupt
 
 
 def _run_scenario[ResultT: _ScenarioPipelineResult](

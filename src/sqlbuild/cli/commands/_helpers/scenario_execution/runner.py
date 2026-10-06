@@ -179,7 +179,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         stream=progress_stream,
         command="sqb scenario test --local" if local else "sqb scenario test",
         target=target_label,
-        concurrency=concurrency,
+        concurrency=1 if local else concurrency,
         use_color=use_color,
     )
 
@@ -275,7 +275,6 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         adapter=adapter,
         project_name=discovered_inputs.project_config.name,
         strict=strict,
-        concurrency=concurrency,
         replay_source=ScenarioLocalReplaySource(
             lexical_syntax=project_adapter.sql_lexical_syntax,
             capture_adapter=project_adapter_name,

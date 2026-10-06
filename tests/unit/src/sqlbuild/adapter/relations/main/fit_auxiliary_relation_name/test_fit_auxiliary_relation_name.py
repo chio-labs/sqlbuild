@@ -18,6 +18,8 @@ _HASHES: dict[int, str] = {
     length: hashlib.sha256(_LONG_BASE[:length].encode("utf-8")).hexdigest()[:8]
     for length in (55, 60, 63, 128, 255, 1024)
 }
+_MULTIBYTE_BASE: str = "a" * 44 + "ü" * 10
+_MULTIBYTE_HASH: str = hashlib.sha256(_MULTIBYTE_BASE.encode("utf-8")).hexdigest()[:8]
 _SIBLING_HASH: str = hashlib.sha256(f"{_LONG_BASE[:62]}x".encode()).hexdigest()[:8]
 
 
@@ -80,6 +82,13 @@ _SIBLING_HASH: str = hashlib.sha256(f"{_LONG_BASE[:62]}x".encode()).hexdigest()[
             identifier_limit=1024,
             expected_name=f"{_LONG_BASE[:1006]}_{_HASHES[1024]}__staging",
         ),
+        FitAuxiliaryRelationNameTestCase(
+            description="name fitting by characters but not bytes is cut on a character boundary",
+            base_name=_MULTIBYTE_BASE,
+            suffix="__staging",
+            identifier_limit=63,
+            expected_name=f"{'a' * 44}_{_MULTIBYTE_HASH}__staging",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -93,7 +102,7 @@ def test_given_identifier_limit_when_fitting_auxiliary_name_then_returns_expecte
     )
 
     assert fitted == test_case.expected_name
-    assert len(fitted) <= test_case.identifier_limit
+    assert len(fitted.encode("utf-8")) <= test_case.identifier_limit
     assert fitted != test_case.base_name
 
 

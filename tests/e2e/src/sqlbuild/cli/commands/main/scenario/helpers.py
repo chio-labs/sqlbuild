@@ -12,7 +12,7 @@ import time
 from collections import defaultdict
 from itertools import takewhile
 from pathlib import Path
-from typing import cast
+from typing import IO, NamedTuple, cast
 
 from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
@@ -700,13 +700,47 @@ def build_empty_fixture_scenario_project_files(*, customer_columns_yaml: str) ->
     }
 
 
-def build_slow_scenario_project_files(*, scenario_count: int) -> dict[str, str]:
-    """Build scenarios whose first model pauses in a Python post-hook."""
+INTERRUPT_HOOK_SECONDS_ENV_VAR: str = "SCENARIO_INTERRUPT_HOOK_SECONDS"
+
+
+class InterruptedScenarioRun(NamedTuple):
+    """Outcome of a scenario command interrupted through SIGINT."""
+
+    returncode: int
+    stdout: str
+    output: str
+    stop_seconds: float
+
+
+_ENDLESS_SUM: str = "(SELECT SUM(big.n) FROM range(1000000000000) AS big(n)) * 0"
+_FIXTURE_AMOUNTS: dict[bool, str] = {True: f"CAST(10 + {_ENDLESS_SUM} AS INTEGER)", False: "10"}
+_MODEL_TOTALS: dict[bool, str] = {True: f"SUM(o.amount) + {_ENDLESS_SUM}", False: "SUM(o.amount)"}
+_POST_HOOKS: dict[bool, str] = {True: ', post_hooks [python("pause_after_build")]', False: ""}
+_HOOK_FILES: dict[bool, dict[str, str]] = {
+    True: {
+        "hooks/python/slow_hooks.py": (
+            "import os\n"
+            "import time\n\n"
+            "from sqlbuild.hooks import hook\n\n\n"
+            "@hook\n"
+            "def pause_after_build(ctx):\n"
+            '    """Pause so an interrupt lands while scenarios run."""\n'
+            f"    time.sleep(float(os.environ.get('{INTERRUPT_HOOK_SECONDS_ENV_VAR}', '0')))\n"
+        )
+    },
+    False: {},
+}
+
+
+def build_interrupt_project_files(
+    *, scenario_count: int, long_model: bool, long_fixture: bool, slow_hook: bool
+) -> dict[str, str]:
+    """Build scenarios whose model, fixture, or post-hook runs until interrupted."""
 
     scenario_sql: str = (
         "WITH\n"
         "__source__raw_orders AS (\n"
-        "  SELECT 1 AS id, 10 AS amount\n"
+        f"  SELECT 1 AS id, {_FIXTURE_AMOUNTS[long_fixture]} AS amount\n"
         "),\n"
         "__expected__order_totals AS (\n"
         "  SELECT 10 AS total_amount\n"
@@ -714,6 +748,7 @@ def build_slow_scenario_project_files(*, scenario_count: int) -> dict[str, str]:
         "SELECT 1\n"
     )
     return {
+        **_HOOK_FILES[slow_hook],
         "sqlbuild_project.toml": (
             'name = "scenario_interrupt"\n'
             'adapter = "duckdb"\n\n'
@@ -729,22 +764,11 @@ def build_slow_scenario_project_files(*, scenario_count: int) -> dict[str, str]:
             "    schema: main\n"
             "    table: raw_orders\n"
         ),
-        "hooks/python/slow_hooks.py": (
-            "import time\n\n"
-            "from sqlbuild.hooks import hook\n\n\n"
-            "@hook\n"
-            "def pause_after_build(ctx):\n"
-            "    '''Pause so an interrupt lands while scenarios run.'''\n"
-            "    time.sleep(3.0)\n"
-        ),
-        "models/orders.sql": (
-            "MODEL (description 'Orders.', materialized table, "
-            'post_hooks [python("pause_after_build")]);\n\n'
-            'SELECT id AS order_id, amount FROM __source("raw_orders")\n'
-        ),
         "models/order_totals.sql": (
-            "MODEL (description 'Order totals.', materialized table);\n\n"
-            'SELECT SUM(amount) AS total_amount FROM __ref("orders")\n'
+            "MODEL (description 'Order totals.', materialized table, sql_analysis false"
+            f"{_POST_HOOKS[slow_hook]});\n\n"
+            f"SELECT {_MODEL_TOTALS[long_model]} AS total_amount "
+            'FROM __source("raw_orders") AS o\n'
         ),
         **{
             f"tests/scenarios/slow_{index}.sql": (
@@ -756,9 +780,15 @@ def build_slow_scenario_project_files(*, scenario_count: int) -> dict[str, str]:
 
 
 def interrupt_scenario_run(
-    *, project_dir: Path, concurrency: int, interrupt_count: int
-) -> tuple[subprocess.CompletedProcess[str], float]:
-    """Interrupt a JSON scenario run once its first model starts; return output and stop time."""
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    trigger: str,
+    trigger_stream: str,
+    interrupt_count: int,
+    hook_seconds: float = 0.0,
+) -> InterruptedScenarioRun:
+    """Interrupt a scenario command once ``trigger`` is printed on ``trigger_stream``."""
 
     process: subprocess.Popen[str] = subprocess.Popen(
         [
@@ -767,31 +797,36 @@ def interrupt_scenario_run(
             "--project-dir",
             str(project_dir),
             "scenario",
-            "test",
-            "--concurrency",
-            str(concurrency),
-            "--json",
+            *args,
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env={**os.environ, INTERRUPT_HOOK_SECONDS_ENV_VAR: str(hook_seconds)},
     )
-    assert process.stderr is not None
-    started: list[str] = list(takewhile(lambda line: "/orders START" not in line, process.stderr))
-    time.sleep(0.5)
+    streams: dict[str, IO[str] | None] = {"stdout": process.stdout, "stderr": process.stderr}
+    watched: IO[str] | None = streams[trigger_stream]
+    assert watched is not None
+    started: str = "".join(takewhile(lambda line: trigger not in line, watched))
+    time.sleep(1.0)
     interrupted_at: float = time.monotonic()
     for _ in range(interrupt_count):
         process.send_signal(signal.SIGINT)
-        time.sleep(0.3)
+        time.sleep(0.5)
     stdout, stderr = process.communicate(timeout=120)
-    return (
-        subprocess.CompletedProcess(
-            args=process.args,
-            returncode=process.returncode,
-            stdout=stdout,
-            stderr="".join(started) + stderr,
-        ),
-        time.monotonic() - interrupted_at,
+    return InterruptedScenarioRun(
+        returncode=process.returncode,
+        stdout=stdout,
+        output=started + stdout + stderr,
+        stop_seconds=time.monotonic() - interrupted_at,
+    )
+
+
+def scenario_relation_names_if_present(*, db_path: Path) -> tuple[str, ...]:
+    """Return scenario-owned DuckDB relation names, or none when the database was never made."""
+
+    return {True: list_scenario_relation_names, False: lambda **_: ()}[db_path.exists()](
+        db_path=db_path
     )
 
 

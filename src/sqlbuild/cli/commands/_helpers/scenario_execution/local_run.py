@@ -27,7 +27,6 @@ def run_local_scenarios(
     adapter: BaseAdapter,
     project_name: str,
     strict: bool,
-    concurrency: int,
     replay_source: ScenarioLocalReplaySource,
     target_dir: Path,
     output_context: ScenarioRunOutputContext,
@@ -44,7 +43,6 @@ def run_local_scenarios(
         adapter=adapter,
         project_name=project_name,
         strict=strict,
-        concurrency=concurrency,
         replay_source=replay_source,
         on_scenario_start=lambda _scenario: (
             presentation.scenario_status.start(presentation.activity)

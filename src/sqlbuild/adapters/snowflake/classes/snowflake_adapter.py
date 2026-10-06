@@ -2843,6 +2843,12 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             return f"'{escaped_value}'"
         return f"'{value}'"
 
+    def interrupt_connection(self, connection: Any) -> bool:
+        """Cancel a connection's running statement from another thread; False if unsupported."""
+
+        del connection
+        return False
+
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""
 

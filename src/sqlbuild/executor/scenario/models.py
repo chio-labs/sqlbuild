@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas
+from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
@@ -43,7 +43,7 @@ class ScenarioRunOptions:
 
     promotion_mode: TablePromotionMode
     prepared_schemas: PreparedScenarioSchemas | None = None
-    stop_requested: threading.Event | None = None
+    interrupts: ScenarioInterrupts = field(default_factory=ScenarioInterrupts)
 
 
 @dataclass(frozen=True)

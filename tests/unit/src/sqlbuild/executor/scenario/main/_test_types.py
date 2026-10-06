@@ -87,3 +87,12 @@ class ScenarioAuxiliaryCleanupTargetTestCase:
     model_target_name: str
     expected_max_length: int
     expected_suffixes: tuple[str, ...] = ("", "__staging", "__enforced")
+
+
+@dataclass(frozen=True)
+class RunningScenariosInterruptTestCase:
+    description: str
+    cancellable: bool
+    close_uncancellable: bool
+    expected_events: tuple[str, ...]
+    expected_closed_connection: bool

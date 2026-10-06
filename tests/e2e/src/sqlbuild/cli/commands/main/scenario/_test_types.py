@@ -218,13 +218,18 @@ class ScenarioEmptyFixtureE2ETestCase:
 
 @dataclass(frozen=True)
 class ScenarioInterruptE2ETestCase:
-    """Test case for interrupting concurrent scenarios through the real CLI."""
+    """Test case for interrupting a running scenario command through the real CLI."""
 
     description: str
-    scenario_count: int
-    concurrency: int
-    interrupt_count: int
-    expected_notice: str
+    args: tuple[str, ...]
+    trigger: str
+    trigger_stream: str = "stderr"
+    long_model: bool = False
+    long_fixture: bool = False
+    slow_hook_seconds: float = 0.0
+    interrupt_count: int = 1
+    expected_notice_counts: tuple[int, int] = (1, 0)
+    expected_max_stop_seconds: float = 15.0
 
 
 @dataclass(frozen=True)

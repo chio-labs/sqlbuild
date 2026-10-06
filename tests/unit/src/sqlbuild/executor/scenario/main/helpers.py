@@ -528,3 +528,21 @@ _CATALOG_CREATE_STRATEGIES: dict[bool, Callable[[], None]] = {
     True: _raise_interrupt,
     False: lambda: None,
 }
+
+
+class ScenarioInterruptTestAdapter(ScenarioFixtureTestAdapter):
+    """Adapter that records statement cancellation and connection closes."""
+
+    adapter_name: ClassVar[str] = "scenario-interrupt-test"
+
+    def __init__(self, *, cancellable: bool) -> None:
+        super().__init__()
+        self.cancellable: bool = cancellable
+        self.events: list[str] = []
+
+    def interrupt_connection(self, connection: Any) -> bool:
+        self.events.append(f"interrupt:{connection}")
+        return self.cancellable
+
+    def close(self, connection: object) -> None:
+        self.events.append(f"close:{connection}")

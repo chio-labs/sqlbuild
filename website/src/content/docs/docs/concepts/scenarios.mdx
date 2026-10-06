@@ -158,9 +158,11 @@ summary includes the total time. On DuckDB, concurrent scenarios use separate co
 same database file; an in-memory database (`:memory:`) gives each connection its own database, so
 fixtures still isolate every scenario.
 
-On Ctrl-C, SQLBuild prints one notice, cancels scenarios that have not started, stops running
-scenarios at their next step, drops their relations (unless `--retain`), and only then exits.
-Further Ctrl-C presses during that cleanup are ignored.
+On Ctrl-C, SQLBuild prints one notice, cancels scenarios that have not started, cancels the
+statements running scenarios have in flight, drops their relations (unless `--retain`), and only
+then exits. A second Ctrl-C skips that cleanup and exits immediately; the next run of the same
+scenarios drops whatever they left behind. `--local` replay and `sqb scenario capture` run one
+scenario at a time.
 
 ### Parallel CI runs
 

@@ -102,6 +102,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def interrupt_connection(self, connection: Any) -> bool:
+        """Cancel a connection's running statement from another thread; False if unsupported."""
+        ...
+
+    @abstractmethod
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""
         ...
