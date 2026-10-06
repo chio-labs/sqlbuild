@@ -1,5 +1,7 @@
 """Process-wide ordering of stage captures."""
 
+from __future__ import annotations
+
 import itertools
 import threading
 from typing import ClassVar
