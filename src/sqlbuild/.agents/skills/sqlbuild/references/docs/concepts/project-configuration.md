@@ -92,7 +92,12 @@ materialized = "view"
 |-------|-------------|
 | `name` | Project name. Used in fingerprint tracking and manifest generation. |
 | `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, or `sqlserver`. See [Adapters](adapters.md). |
-| `default_target` | Name of the target to build against when none is selected (see [Targets](#targets)). |
+
+### Optional fields
+
+| Field | Description |
+|-------|-------------|
+| `default_target` | Name of the target to build against when none is selected (see [Selecting a target](#selecting-a-target)). |
 
 ### Named connections
 
@@ -129,6 +134,21 @@ database = "ANALYTICS"
 schema = "DEV_ALICE"
 ```
 
+When the project defines exactly one named connection, across `sqlbuild_project.toml` and
+`sqlbuild_local.toml`, a target that does not set `connection` uses it. This default does not
+apply when either file has a legacy top-level `[connection]` block or the target sets an inline
+`[targets.<name>.connection]` block. With several named connections, every target must choose
+one; SQLBuild rejects a target without `connection` while loading configuration instead of
+falling back to an empty connection.
+
+```toml
+[connections.local]
+database = "my_project.duckdb"
+
+[targets.dev]
+schema = "dev"    # uses connections.local, the only named connection
+```
+
 A `database` or `schema` present in a named connection is connection/session metadata only;
 it does not satisfy the mandatory namespace strategy for a named target. Put the target's
 authoritative database and schema on `[targets.<name>]`. SQLBuild validates connection
@@ -141,14 +161,14 @@ forms are compatibility syntax, not the canonical format for new or updated proj
 
 ## Targets
 
-A target is a named build context - the database and schema you build into, plus execution policy (for example `dev` and `prod`). Each target references a named connection and can configure:
+A target is a named build context - the database and schema you build into, plus execution policy (for example `dev` and `prod`). Each target references a named connection (or uses the only one defined; see [Named connections](#named-connections)) and can configure:
 
 | Field | Description |
 |-------|-------------|
 | `schema` | Schema for all models in this target; required for named targets |
 | `loader_schema` | Default write schema for managed source loaders; falls back to `schema` |
 | `database` | Database for all models in this target |
-| `connection` | Name from `[connections.<name>]` used for endpoint, authentication, and compute |
+| `connection` | Name from `[connections.<name>]` used for endpoint, authentication, and compute; optional when exactly one named connection is defined |
 | `vars` | Target-specific project variables |
 | `defer_sources_to` | Target name to read managed source data from (see [Loaders](python-nodes/loaders.md#source-deferral)) |
 | `clone` | Clone policy (see below) |

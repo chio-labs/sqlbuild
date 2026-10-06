@@ -74,3 +74,20 @@ class TargetWarehousesResolutionTestCase:
     project_warehouses: TargetWarehousesConfig
     local_warehouses: TargetWarehousesConfig
     expected_warehouses: TargetWarehousesConfig
+
+
+@dataclass(frozen=True)
+class TargetConnectionDefaultTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    expected_connection_name: str | None
+    expected_inline_connection: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AmbiguousTargetConnectionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    expected_error_fragment: str

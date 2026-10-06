@@ -1029,3 +1029,24 @@ class ReusedCompileImportFootprintTestCase:
     expected_exit_code: int
     expected_reuse_message: str
     forbidden_modules: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DefaultConnectionCliTestCase:
+    """One CLI command against a project whose target does not set connection."""
+
+    description: str
+    project_toml: str
+    argv: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_order_rows: tuple[tuple[object, ...], ...] | None = None
+
+
+@dataclass(frozen=True)
+class InferredFreshnessCliTestCase:
+    """One source whose freshness strategy and type come from its declaration."""
+
+    description: str
+    sources_yaml: str
+    expected_sources: tuple[tuple[object, ...], ...]

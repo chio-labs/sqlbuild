@@ -780,3 +780,14 @@ def write_snowflake_warehouse_project(
         "MODEL (description 'Orders.', materialized table);\nSELECT 1 AS order_id\n",
         encoding="utf-8",
     )
+
+
+def write_default_connection_project(*, project_dir: Path, project_toml: str) -> None:
+    """Write a one-model DuckDB project with the given project config."""
+
+    (project_dir / "models").mkdir()
+    _ = (project_dir / "sqlbuild_project.toml").write_text(project_toml, encoding="utf-8")
+    _ = (project_dir / "models" / "orders.sql").write_text(
+        'MODEL (description "Orders.", materialized table);\n\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )

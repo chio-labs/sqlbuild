@@ -13,6 +13,9 @@ from sqlbuild.compiler.discovery._helpers.filesystem.python_paths import (
     validate_project_python_paths,
 )
 from sqlbuild.compiler.discovery._helpers.validation.discovery import validate_discovered_inputs
+from sqlbuild.compiler.discovery._helpers.validation.target_connections import (
+    validate_target_connections,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
@@ -102,6 +105,9 @@ def _assemble_discovered_project_inputs(
         project_dir=project_dir, project_config=project_config, local_config=local_config
     )
     validate_target_warehouses_adapter(
+        project_dir=project_dir, project_config=project_config, local_config=local_config
+    )
+    validate_target_connections(
         project_dir=project_dir, project_config=project_config, local_config=local_config
     )
     validate_project_python_paths(project_dir=project_dir)

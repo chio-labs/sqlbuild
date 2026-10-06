@@ -6,7 +6,7 @@ from unittest.mock import call, patch
 
 import pytest
 
-from sqlbuild.compiler.discovery.exceptions import ProjectPythonPathError
+from sqlbuild.compiler.discovery.exceptions import ProjectConfigError, ProjectPythonPathError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestBlock
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
@@ -700,6 +700,55 @@ def test_given_python_in_removed_root_when_discovering_inputs_then_d016_is_raise
     assert f"Unsupported project Python path(s): {test_case.expected_error_fragment}" in str(
         error_info.value
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoverProjectInputsErrorTestCase(
+            description="unselected project target without connection among several",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+                    '[connections.local]\ndatabase = "demo.duckdb"\n\n'
+                    '[connections.archive]\ndatabase = "archive.duckdb"\n\n'
+                    '[targets.dev]\nconnection = "local"\nschema = "dev"\n\n'
+                    '[targets.prod]\nschema = "prod"\n'
+                )
+            },
+            expected_error_fragment=(
+                "targets.prod does not set connection and several named connections "
+                "are defined (archive, local)"
+            ),
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="local connection makes a project target ambiguous",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n'
+                    '[connections.local]\ndatabase = "demo.duckdb"\n\n'
+                    '[targets.dev]\nschema = "dev"\n'
+                ),
+                "sqlbuild_local.toml": '[connections.scratch]\ndatabase = "scratch.duckdb"\n',
+            },
+            expected_error_fragment="several named connections are defined (local, scratch)",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_ambiguous_target_connection_when_discovering_then_config_error_is_raised(
+    test_case: DiscoverProjectInputsErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    with pytest.raises(ProjectConfigError) as error_info:
+        discover_project_inputs(project_dir=tmp_path)
+
+    assert error_info.value.code == "D001"
+    assert test_case.expected_error_fragment in str(error_info.value)
+    assert str(tmp_path / "sqlbuild_project.toml") in str(error_info.value)
 
 
 @pytest.mark.parametrize(
