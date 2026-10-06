@@ -102,6 +102,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        """Return whether ``list_relations`` reports every relation in this scope."""
+        ...
+
+    @abstractmethod
     def supports_concurrent_microbatch_dml(self) -> bool:
         """Return whether disjoint delete/insert microbatches may execute concurrently."""
         ...

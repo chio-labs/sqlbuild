@@ -149,6 +149,12 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def supports_table_functions(self) -> bool:
         return False
 
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        """Return whether ``list_relations`` reports every relation in this scope."""
+
+        del database, schema
+        return False
+
     def supports_concurrent_microbatch_dml(self) -> bool:
         """Return whether disjoint same-target delete/insert batches may run concurrently."""
 

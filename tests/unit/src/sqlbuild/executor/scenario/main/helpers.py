@@ -67,12 +67,20 @@ class ScenarioCatalogTestAdapter(ScenarioFixtureTestAdapter):
         relation_types: dict[str, str],
         fail_listing: bool = False,
         interrupt_on_create: bool = False,
+        authoritative: bool = True,
+        catalog_schema: str = "scenario_schema",
     ) -> None:
         super().__init__()
         self.relation_types: dict[str, str] = relation_types
         self.fail_listing: bool = fail_listing
+        self.authoritative: bool = authoritative
+        self.catalog_schema: str = catalog_schema
         self.interrupt_on_create: bool = interrupt_on_create
         self.listing_count: int = 0
+
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        del database, schema
+        return self.authoritative
 
     def list_relations(
         self,
@@ -85,15 +93,18 @@ class ScenarioCatalogTestAdapter(ScenarioFixtureTestAdapter):
         del connection
         self.listing_count += 1
         _CATALOG_LISTING_STRATEGIES[self.fail_listing]()
-        del schemas
+        in_scope: bool = self.authoritative and self.catalog_schema in (schemas or ())
+        listed_names: set[str] = set(self.relation_types).intersection(
+            {True: names or (), False: ()}[in_scope]
+        )
         return tuple(
             RelationInfo(
                 database=database,
-                schema="scenario_schema",
+                schema=self.catalog_schema,
                 name=name,
                 relation_type=self.relation_types[name],
             )
-            for name in sorted(set(self.relation_types).intersection(names or ()))
+            for name in sorted(listed_names)
         )
 
     def _execute(self, connection: object, sql: str) -> object:
@@ -234,7 +245,9 @@ def executed_drop_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
 
 
 def build_scenario_cleanup_test_plan(
-    *, model_materialization_type: MaterializationType = MaterializationType.TABLE
+    *,
+    model_materialization_type: MaterializationType = MaterializationType.TABLE,
+    model_target_name: str = "__sqb_51b385aebe20__model__daily_revenue",
 ) -> ScenarioExecutionPlan:
     source_fixture: ScenarioFixturePlan = build_scenario_fixture_plan()
     ref_fixture: ScenarioFixturePlan = build_scenario_fixture_plan(
@@ -252,8 +265,8 @@ def build_scenario_cleanup_test_plan(
     model_target: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema="scenario_schema",
-        name="__sqb_51b385aebe20__model__daily_revenue",
-        qualified_name="scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+        name=model_target_name,
+        qualified_name=f"scenario_schema.{model_target_name}",
     )
     return ScenarioExecutionPlan(
         key=CompiledObjectKey(

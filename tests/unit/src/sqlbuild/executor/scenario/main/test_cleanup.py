@@ -10,6 +10,7 @@ from sqlbuild.executor.scenario.models import ScenarioCleanupExecutionResult, Sc
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ExecuteScenarioCleanupTestCase,
+    ScenarioAuxiliaryCleanupTargetTestCase,
     ScenarioCatalogCleanupTestCase,
 )
 from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
@@ -21,6 +22,14 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
 )
 
 _CATALOG_PREFIX: str = "scenario_schema.__sqb_51b385aebe20"
+_ALL_PLANNED_DROPS: tuple[str, ...] = (
+    f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__source__raw__orders",
+    f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__ref__stg_customers",
+    f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__seed__country_codes",
+    f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__model__daily_revenue",
+    f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__model__daily_revenue__staging",
+    f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__model__daily_revenue__staging__enforced",
+)
 
 
 @pytest.mark.parametrize(
@@ -35,6 +44,7 @@ _CATALOG_PREFIX: str = "scenario_schema.__sqb_51b385aebe20"
                 "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
                 "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
                 "scenario_schema.__sqb_51b385aebe20__model__daily_revenue__staging",
+                "scenario_schema.__sqb_51b385aebe20__model__daily_revenue__staging__enforced",
             ),
             unexpected_drop_targets=(
                 "scenario_schema.__sqb_51b385aebe20__model__stale_not_in_plan",
@@ -110,6 +120,7 @@ def test_given_view_model_in_scenario_plan_when_cleaning_up_then_drops_view(
                 "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
                 "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
                 "scenario_schema.__sqb_51b385aebe20__model__daily_revenue__staging",
+                "scenario_schema.__sqb_51b385aebe20__model__daily_revenue__staging__enforced",
             ),
             expected_error_fragment="failed target __sqb_51b385aebe20__seed__country_codes",
         )
@@ -193,16 +204,23 @@ def test_given_unmocked_project_seed_when_cleaning_up_then_drops_seed_target(
             expected_drop_sql=(),
         ),
         ScenarioCatalogCleanupTestCase(
+            description="matches a catalog that folds schema and name case",
+            relation_types={"__SQB_51B385AEBE20__SOURCE__RAW__ORDERS": "BASE TABLE"},
+            catalog_schema="SCENARIO_SCHEMA",
+            expected_drop_sql=(f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__source__raw__orders",),
+        ),
+        ScenarioCatalogCleanupTestCase(
+            description="drops every target when the listing is not authoritative",
+            relation_types={},
+            authoritative=False,
+            expected_listing_count=0,
+            expected_drop_sql=_ALL_PLANNED_DROPS,
+        ),
+        ScenarioCatalogCleanupTestCase(
             description="drops every planned target when the catalog cannot be read",
             relation_types={},
             fail_listing=True,
-            expected_drop_sql=(
-                f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__source__raw__orders",
-                f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__ref__stg_customers",
-                f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__seed__country_codes",
-                f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__model__daily_revenue",
-                f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__model__daily_revenue__staging",
-            ),
+            expected_drop_sql=_ALL_PLANNED_DROPS,
         ),
     ],
     ids=lambda case: case.description,
@@ -211,7 +229,10 @@ def test_given_catalog_state_when_cleaning_up_then_drops_only_existing_relations
     test_case: ScenarioCatalogCleanupTestCase,
 ) -> None:
     adapter: ScenarioCatalogTestAdapter = ScenarioCatalogTestAdapter(
-        relation_types=test_case.relation_types, fail_listing=test_case.fail_listing
+        relation_types=test_case.relation_types,
+        fail_listing=test_case.fail_listing,
+        authoritative=test_case.authoritative,
+        catalog_schema=test_case.catalog_schema,
     )
 
     result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
@@ -221,7 +242,7 @@ def test_given_catalog_state_when_cleaning_up_then_drops_only_existing_relations
     )
 
     assert result.status == ExecutionStatus.SUCCESS
-    assert adapter.listing_count == 1
+    assert adapter.listing_count == test_case.expected_listing_count
     assert executed_drop_sql(adapter) == test_case.expected_drop_sql
 
 
@@ -258,3 +279,41 @@ def test_given_interrupt_during_scenario_when_running_then_cleans_up_and_reraise
 
     assert adapter.listing_count == 2
     assert executed_drop_sql(adapter) == test_case.expected_drop_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioAuxiliaryCleanupTargetTestCase(
+            description="target at the identifier limit",
+            model_target_name="__sqb_51b385aebe20__model__" + "regional_order_totals_" * 2,
+            expected_max_length=63,
+        ),
+        ScenarioAuxiliaryCleanupTargetTestCase(
+            description="staging suffix overflows the identifier limit",
+            model_target_name="__sqb_51b385aebe20__model__regional_order_totals_by_cust",
+            expected_max_length=63,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_long_model_target_when_collecting_cleanup_then_auxiliary_names_fit_and_differ(
+    test_case: ScenarioAuxiliaryCleanupTargetTestCase,
+) -> None:
+    adapter: ScenarioFixtureTestAdapter = ScenarioFixtureTestAdapter()
+    target_name: str = test_case.model_target_name[: test_case.expected_max_length]
+
+    result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
+        scenario_plan=build_scenario_cleanup_test_plan(model_target_name=target_name),
+        adapter=adapter,
+        connection=object(),
+    )
+
+    model_names: tuple[str, ...] = tuple(str(target.name) for target in result.targets[-3:])
+    assert model_names[0] == target_name
+    assert len(set(model_names)) == len(test_case.expected_suffixes)
+    assert max(len(name) for name in model_names) <= test_case.expected_max_length
+    assert all(
+        name.endswith(suffix)
+        for name, suffix in zip(model_names, test_case.expected_suffixes, strict=True)
+    )

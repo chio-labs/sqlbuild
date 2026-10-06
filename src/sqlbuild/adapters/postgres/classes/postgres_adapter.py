@@ -140,6 +140,12 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         historical_insert=HistoricalSnapshotInsertStyle.WITH_INSERT,
     )
 
+    def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
+        """Return whether ``list_relations`` reports every relation in this scope."""
+
+        del database, schema
+        return True
+
     def supports_zero_copy_clone(self) -> bool:
         return False
 

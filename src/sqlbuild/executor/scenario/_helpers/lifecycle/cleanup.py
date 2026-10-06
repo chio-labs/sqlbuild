@@ -10,6 +10,9 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.contract.types import RelationType
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
@@ -24,6 +27,9 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.run.main._table_targets import resolve_table_targets
+from sqlbuild.executor.run.main._type_enforcement_relation_name import (
+    resolve_type_enforcement_relation_name,
+)
 from sqlbuild.executor.run.models import TableTargets
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
 
@@ -96,6 +102,24 @@ def collect_scenario_cleanup_targets(
                     name=table_targets.staging_table,
                 )
             )
+            enforced_table: str = resolve_type_enforcement_relation_name(
+                adapter=adapter, staging_table=table_targets.staging_table
+            )
+            candidates.append(
+                ScenarioCleanupTarget(
+                    kind=ScenarioArtifactKind.MODEL,
+                    logical_name=model_name,
+                    target_relation=resolve_qualified_name_parts(
+                        adapter=adapter,
+                        database=table_targets.target_database,
+                        schema=table_targets.target_schema,
+                        name=enforced_table,
+                    ),
+                    database=table_targets.target_database,
+                    schema=table_targets.target_schema,
+                    name=enforced_table,
+                )
+            )
 
     targets: list[ScenarioCleanupTarget] = []
     seen: set[str] = set()
@@ -136,36 +160,36 @@ def existing_scenario_cleanup_targets(
     adapter: BaseAdapter,
     connection: Any,
 ) -> tuple[ScenarioCleanupTarget, ...]:
-    """Return existing targets typed by the catalog, or every target when it cannot be read."""
+    """Return targets to drop: catalogued ones typed by the catalog, plus every unlistable one."""
 
+    listed_targets: tuple[ScenarioCleanupTarget, ...] = tuple(
+        target for target in targets if _authoritatively_listable(target=target, adapter=adapter)
+    )
     names_by_database: defaultdict[str | None, set[str]] = defaultdict(set)
     schemas_by_database: defaultdict[str | None, set[str]] = defaultdict(set)
     target: ScenarioCleanupTarget
-    for target in targets:
-        if target.name is None:
-            continue
-        names_by_database[target.database].update((target.name, target.name.lower()))
-        if target.schema is not None:
-            schemas_by_database[target.database].add(target.schema)
-    existing_types: dict[tuple[str | None, str | None, str], str] = {}
+    for target in listed_targets:
+        names_by_database[target.database].update(_case_variants(str(target.name)))
+        schemas_by_database[target.database].update(_case_variants(str(target.schema)))
+    exact_types: dict[tuple[str | None, str | None, str], str] = {}
+    folded_types: dict[tuple[str | None, str | None, str], str] = {}
     try:
         database: str | None
         names: set[str]
         for database, names in names_by_database.items():
-            schemas: set[str] = schemas_by_database[database]
             relation: RelationInfo
             for relation in adapter.list_relations(
                 connection=connection,
                 database=database,
-                schemas=tuple(sorted(schemas)) if schemas else None,
+                schemas=tuple(sorted(schemas_by_database[database])),
                 names=tuple(sorted(names)),
             ):
-                existing_types[
-                    _lookup_key(database=database, schema=relation.schema, name=relation.name)
+                exact_types[(database, relation.schema, relation.name)] = relation.relation_type
+                folded_types[
+                    RelationLookup.key(
+                        database=database, schema=relation.schema, name=relation.name
+                    )
                 ] = relation.relation_type
-                existing_types[_lookup_key(database=database, schema=None, name=relation.name)] = (
-                    relation.relation_type
-                )
     except Exception as exc:
         log_debug_event(
             logger=_DEBUG_LOGGER,
@@ -175,11 +199,15 @@ def existing_scenario_cleanup_targets(
         return targets
     existing: list[ScenarioCleanupTarget] = []
     for target in targets:
-        if target.name is None:
+        if target not in listed_targets:
             existing.append(target)
             continue
-        relation_type: str | None = existing_types.get(
-            _lookup_key(database=target.database, schema=target.schema, name=target.name)
+        relation_type: str | None = exact_types.get(
+            (target.database, target.schema, str(target.name))
+        ) or folded_types.get(
+            RelationLookup.key(
+                database=target.database, schema=target.schema, name=str(target.name)
+            )
         )
         if relation_type is None:
             continue
@@ -196,7 +224,13 @@ def existing_scenario_cleanup_targets(
     return tuple(existing)
 
 
-def _lookup_key(
-    *, database: str | None, schema: str | None, name: str
-) -> tuple[str | None, str | None, str]:
-    return RelationLookup.key(database=database, schema=schema, name=name)
+def _authoritatively_listable(*, target: ScenarioCleanupTarget, adapter: BaseAdapter) -> bool:
+    return (
+        target.name is not None
+        and target.schema is not None
+        and adapter.lists_relations_authoritatively(database=target.database, schema=target.schema)
+    )
+
+
+def _case_variants(value: str) -> tuple[str, ...]:
+    return (value, value.lower(), value.upper())

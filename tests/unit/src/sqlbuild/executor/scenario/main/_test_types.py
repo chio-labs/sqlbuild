@@ -76,3 +76,14 @@ class ScenarioCatalogCleanupTestCase:
     relation_types: dict[str, str]
     expected_drop_sql: tuple[str, ...]
     fail_listing: bool = False
+    authoritative: bool = True
+    catalog_schema: str = "scenario_schema"
+    expected_listing_count: int = 1
+
+
+@dataclass(frozen=True)
+class ScenarioAuxiliaryCleanupTargetTestCase:
+    description: str
+    model_target_name: str
+    expected_max_length: int
+    expected_suffixes: tuple[str, ...] = ("", "__staging", "__enforced")
