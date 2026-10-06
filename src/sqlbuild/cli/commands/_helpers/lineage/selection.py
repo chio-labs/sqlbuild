@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from sqlbuild.cli.commands.constants import (
     BOTH_DIRECTIONS,
+    COLUMN_TARGET_KIND,
     COLUMN_TARGET_SEPARATOR,
     DOWNSTREAM_DIRECTION,
     PATH_BETWEEN_MARKER,
@@ -25,6 +26,7 @@ from sqlbuild.cli.commands.models import (
     LineageGraph,
     LineageNode,
     LineageSelectionAnchors,
+    LineageTarget,
     ParsedLineagePathSelector,
     ParsedLineageSelector,
     RelationLineageIndex,
@@ -64,6 +66,7 @@ _TARGET_KINDS: frozenset[str] = frozenset(
         str(CompiledResourceType.SEED),
         str(CompiledResourceType.UDF),
         str(CompiledResourceType.TABLE_FN),
+        COLUMN_TARGET_KIND,
     }
 )
 
@@ -85,14 +88,39 @@ def parse_depth(raw_depth: str) -> int | None:
 def normalize_lineage_target(*, graph: ProjectGraph | RelationLineageIndex, target: str) -> str:
     """Strip a printed kind prefix such as `model:` after checking it matches the resource."""
 
-    kind, separator, remainder = target.partition(_KIND_SEPARATOR)
-    if not separator or kind not in _TARGET_KINDS:
+    resolved: LineageTarget = resolve_lineage_target(all_keys=graph.all_keys, target=target)
+    if resolved.kind is None:
         return target
-    name: str = remainder.split(COLUMN_TARGET_SEPARATOR, maxsplit=1)[0]
-    key: CompiledObjectKey | None = graph.all_keys.get(name)
-    if key is None or str(key.resource_type) != kind:
+    if not resolved.kind_matches:
         raise _unknown_target_error(target)
-    return remainder
+    return resolved.name
+
+
+def resolve_lineage_target(*, all_keys: dict[str, CompiledObjectKey], target: str) -> LineageTarget:
+    """Resolve `[kind:]<name>` or `[kind:]<model>.<column>` against project resource names."""
+
+    kind, separator, remainder = target.partition(_KIND_SEPARATOR)
+    written_kind: str | None = kind if separator and kind in _TARGET_KINDS else None
+    name: str = remainder if written_kind is not None else target
+    resource_name, column_separator, column_name = name.partition(COLUMN_TARGET_SEPARATOR)
+    key: CompiledObjectKey | None = all_keys.get(resource_name)
+    column: str | None = column_name if column_separator else None
+    kind_matches: bool
+    if written_kind is None:
+        kind_matches = True
+    elif written_kind == COLUMN_TARGET_KIND:
+        kind_matches = (
+            key is not None and key.resource_type == CompiledResourceType.MODEL and bool(column)
+        )
+    else:
+        kind_matches = key is not None and str(key.resource_type) == written_kind
+    return LineageTarget(
+        kind=written_kind,
+        name=name,
+        key=key,
+        column_name=column,
+        kind_matches=kind_matches,
+    )
 
 
 def select_target_lineage(

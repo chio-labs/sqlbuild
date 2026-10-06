@@ -52,7 +52,7 @@ cd waffle-shop
 mv models/marts/daily_order_rollup.sql models/marts/daily_activity_rollup.sql
 sed -i 's/daily_order_rollup/daily_activity_rollup/g' models/marts/hourly_activity_with_daily_context.sql
 sqb build
-sqb rename model:daily_activity_rollup daily_order_rollup
+sqb rename daily_activity_rollup daily_order_rollup
 sqb plan
 ```
 
@@ -65,7 +65,7 @@ cd hero-shop
 mkdir -p models/marts
 mv models/finance/daily_revenue.sql models/marts/revenue.sql
 sqb build
-sqb mv model:revenue models/finance/daily_revenue.sql
+sqb mv revenue models/finance/daily_revenue.sql
 sqb plan
 ```
 

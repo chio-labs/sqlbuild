@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.cli.commands._helpers.lineage.selection import (
+    normalize_lineage_target,
     select_column_target_lineage,
     select_selector_lineage,
     select_target_lineage,
@@ -25,6 +26,8 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
     LineagePathSelectorTestCase,
     LineageSelectionTestCase,
     LineageSelectorDepthErrorTestCase,
+    NormalizeLineageTargetErrorTestCase,
+    NormalizeLineageTargetTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage.helpers import (
     build_lineage_test_graph,
@@ -334,3 +337,81 @@ def test_given_unreachable_path_selector_when_selecting_lineage_then_raises_user
 
     assert error.value.code == test_case.expected_error_code
     assert test_case.expected_error_fragment in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NormalizeLineageTargetTestCase(
+            description="bare model is unchanged",
+            target="stg_orders",
+            expected_target="stg_orders",
+        ),
+        NormalizeLineageTargetTestCase(
+            description="model prefix is stripped",
+            target="model:stg_orders",
+            expected_target="stg_orders",
+        ),
+        NormalizeLineageTargetTestCase(
+            description="model prefix on a column keeps the column",
+            target="model:stg_orders.amount",
+            expected_target="stg_orders.amount",
+        ),
+        NormalizeLineageTargetTestCase(
+            description="column prefix is stripped",
+            target="column:stg_orders.amount",
+            expected_target="stg_orders.amount",
+        ),
+        NormalizeLineageTargetTestCase(
+            description="source prefix is stripped",
+            target="source:raw_orders",
+            expected_target="raw_orders",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_target_when_normalizing_then_strips_matching_kind_prefix(
+    test_case: NormalizeLineageTargetTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    assert (
+        normalize_lineage_target(graph=graph, target=test_case.target) == test_case.expected_target
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NormalizeLineageTargetErrorTestCase(
+            description="prefix naming another kind is unknown",
+            target="source:stg_orders",
+            expected_code="C305",
+        ),
+        NormalizeLineageTargetErrorTestCase(
+            description="column prefix without a column is unknown",
+            target="column:stg_orders",
+            expected_code="C305",
+        ),
+        NormalizeLineageTargetErrorTestCase(
+            description="column prefix on a source column is unknown",
+            target="column:raw_orders.id",
+            expected_code="C305",
+        ),
+        NormalizeLineageTargetErrorTestCase(
+            description="prefixed missing model is unknown",
+            target="model:missing",
+            expected_code="C305",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mismatched_kind_prefix_when_normalizing_then_raises_unknown_target(
+    test_case: NormalizeLineageTargetErrorTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    with pytest.raises(CliUserError) as raised:
+        _ = normalize_lineage_target(graph=graph, target=test_case.target)
+
+    assert raised.value.code == test_case.expected_code

@@ -82,7 +82,7 @@ the trigger applies.
 | Know what a model can see: which macros, enums and constants are visible, used, or unavailable | `sqb scope model:<name>` |
 | Fix "unknown macro/enum/constant", or decide where a declaration should live | `sqb scope model:<name> --explain macro:<name>` |
 | Preview whether moving a file breaks declaration visibility | `sqb scope model:<name> --as-path <new/path.sql>` |
-| Rename a model, move a model file, or rename a column | `sqb rename model:<old> <new>`, `sqb mv model:<name> <path/or/folder/>`, `sqb rename column:<model>.<column> <new>` |
+| Rename a model, move a model file, or rename a column | `sqb rename <old> <new>`, `sqb mv <name> <path/or/folder/>`, `sqb rename <model>.<column> <new>` (`model:`/`column:` prefixes optional) |
 | Find what a model depends on, or what breaks if it changes | `sqb lineage <model> --direction both` |
 | Trace where a column comes from, or who consumes it before renaming or dropping it | `sqb lineage <model>.<column> --direction downstream` |
 | See which intermediate models a SQL test will really execute | `sqb test --select <model> --inspect` |

@@ -24,18 +24,20 @@ Nothing is written until the edited project compiles. The command applies its ed
 ## Usage
 
 ```bash
-sqb rename model:<name> <new_name> [flags]
-sqb mv model:<name> <path/to/new_file.sql | folder/> [flags]
-sqb rename column:<model>.<column> <new_name> [--cascade] [flags]
+sqb rename <model> <new_name> [flags]
+sqb mv <model> <path/to/new_file.sql | folder/> [flags]
+sqb rename <model>.<column> <new_name> [--cascade] [flags]
 ```
 
 ```bash
-sqb rename model:stg_orders stg_order_lines
-sqb mv model:fact_orders models/reporting/            # keeps the name
-sqb mv model:fact_orders models/reporting/order_facts.sql   # moves and renames
-sqb rename column:stg_orders.amount revenue
-sqb rename column:stg_orders.amount revenue --cascade
+sqb rename stg_orders stg_order_lines
+sqb mv fact_orders models/reporting/            # keeps the name
+sqb mv fact_orders models/reporting/order_facts.sql   # moves and renames
+sqb rename stg_orders.amount revenue
+sqb rename stg_orders.amount revenue --cascade
 ```
+
+Targets are written the way [`sqb lineage`](lineage.md) reads them: a bare name is a model, and `<model>.<column>` is one of its columns. The `model:` and `column:` prefixes are optional, so `sqb rename model:stg_orders stg_order_lines` and `sqb rename column:stg_orders.amount revenue` still work. A target that names a source, seed, or function is refused, because those are not renamed by these commands.
 
 A model rename keeps the file in its folder and renames it to `<new_name>.sql`. `sqb mv` takes a new file path, which also sets the model name, or a folder ending in `/`, which keeps it.
 

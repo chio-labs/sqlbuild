@@ -66,7 +66,7 @@ The playground runs on local DuckDB, with no warehouse credentials.
   update every reference, and the next build
   [migrates](https://sqlbuild.com/docs/concepts/models/migrations/) the existing table instead of
   rebuilding it. The old name keeps working through a compatibility view.
-  `sqb rename column:<model>.<column>` renames an incremental model's column in place.
+  `sqb rename <model>.<column>` renames an incremental model's column in place.
 - **Replay on change.** When a model's SQL changes, choose how far back to reprocess, from only the
   new data to the last 14 days to a full rebuild, with
   [`replay_on_change`](https://sqlbuild.com/docs/concepts/incremental/#replay-on-change).

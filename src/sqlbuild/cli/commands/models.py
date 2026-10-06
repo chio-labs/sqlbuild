@@ -765,6 +765,17 @@ class LineageSelectionAnchors:
 
 
 @dataclass(frozen=True)
+class LineageTarget:
+    """One positional target, `[kind:]<name>` or `[kind:]<model>.<column>`, resolved by name."""
+
+    kind: str | None
+    name: str
+    key: CompiledObjectKey | None
+    column_name: str | None
+    kind_matches: bool
+
+
+@dataclass(frozen=True)
 class ParsedLineageSelector:
     """One parsed non-path lineage selector."""
 

@@ -42,6 +42,7 @@ SELECTOR_KIND_SEPARATOR: str = ":"
 PATH_SEPARATOR: str = "/"
 SELECTOR_EXPANSION_MARKER: str = "+"
 COLUMN_TARGET_SEPARATOR: str = "."
+COLUMN_TARGET_KIND: str = "column"
 SUPPORTED_TYPED_SELECTOR_KINDS: frozenset[str] = frozenset(
     {
         SelectorKind.SEED,
