@@ -358,7 +358,7 @@ An audit whose query raises a warehouse error, for example because a relation it
 fails whatever its severity: the build reports the error message and fails, and everything
 downstream of the audit's target is blocked, the same as when a model audit raises.
 
-Set the default severity in `sqlbuild_project.toml`:
+Audits are `error` by default. Set a different default severity in `sqlbuild_project.toml`:
 
 ```toml
 [settings]
@@ -379,8 +379,8 @@ Audits on incremental models can run at different lifecycle phases:
 
 | Scope | Behavior |
 |-------|----------|
-| `final` | Run once against the staged table before promotion (default). |
-| `delta_and_final` | Run against each delta batch before DML, then again against the target after all batches complete. |
+| `final` | Run once against the staged table before promotion. |
+| `delta_and_final` | Run against each delta batch before DML, then again against the target after all batches complete (default). |
 
 ```sql
 MODEL (

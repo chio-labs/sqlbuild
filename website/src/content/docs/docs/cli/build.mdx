@@ -68,7 +68,7 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 ## Execution order
 
 1. Managed sources are loaded (unless `--no-load`)
-2. Seeds are loaded (if changed)
+2. Selected seeds are loaded
 3. Source audits run before their dependent models (unless `--no-audits`)
 4. SQL unit tests run before their target model (unless `--no-tests`)
 5. Models are materialized in DAG topological order
