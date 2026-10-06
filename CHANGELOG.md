@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.135.0](https://github.com/chio-labs/sqlbuild/compare/v0.134.9...v0.135.0) (2026-10-06)
+
+
+### Features
+
+* default sqb diff to the active target and a size-guarded full comparison ([#976](https://github.com/chio-labs/sqlbuild/issues/976)) ([92cb04e](https://github.com/chio-labs/sqlbuild/commit/92cb04eee890eb6777f354b1e8af2659ff63bd47))
+
 ## [0.134.9](https://github.com/chio-labs/sqlbuild/compare/v0.134.8...v0.134.9) (2026-10-06)
 
 
