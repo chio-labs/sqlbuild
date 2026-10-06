@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.138.0](https://github.com/chio-labs/sqlbuild/compare/v0.137.0...v0.138.0) (2026-10-06)
+
+
+### Features
+
+* **compiler:** add compiler engine switch and differential harness ([#987](https://github.com/chio-labs/sqlbuild/issues/987)) ([94683ca](https://github.com/chio-labs/sqlbuild/commit/94683ca41c1319dff0897988cd0480e49a30bfc2))
+
 ## [0.137.0](https://github.com/chio-labs/sqlbuild/compare/v0.136.2...v0.137.0) (2026-10-06)
 
 
