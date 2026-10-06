@@ -639,3 +639,56 @@ def scenario_result_lines(stdout: str) -> tuple[str, ...]:
     )
     return tuple(re.sub(r"\s+\d+\.\d\ds$", "", row).rstrip() for row in rows)
 
+
+def build_empty_fixture_scenario_project_files(*, customer_columns_yaml: str) -> dict[str, str]:
+    """Build a scenario that mocks one source as empty through `__empty_fixture()`."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "scenario_empty_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_empty_fixture.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n\n'
+            "[rules]\n"
+            'select = ["SQBRSQL021"]\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: INTEGER\n"
+            "      - name: customer_id\n"
+            "        type: INTEGER\n"
+            "  - name: raw_customers\n"
+            "    description: Raw customers.\n"
+            "    schema: main\n"
+            "    table: raw_customers\n"
+            f"{customer_columns_yaml}"
+        ),
+        "models/customer_orders.sql": (
+            "MODEL (description 'Orders joined to known customers.', materialized table);\n\n"
+            "SELECT o.id AS order_id, c.name AS customer_name\n"
+            'FROM __source("raw_orders") AS o\n'
+            'JOIN __source("raw_customers") AS c ON c.id = o.customer_id\n'
+        ),
+        "tests/scenarios/orders_without_customers.sql": (
+            "SCENARIO (description 'Orders without known customers produce no rows.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 7 AS customer_id\n"
+            "),\n"
+            "__source__raw_customers AS (\n"
+            "  SELECT * FROM __empty_fixture()\n"
+            "),\n"
+            "__assert__no_unmatched_orders AS (\n"
+            '  SELECT order_id FROM __ref("customer_orders")\n'
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }

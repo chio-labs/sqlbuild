@@ -205,3 +205,12 @@ class ScenarioConcurrencyE2ETestCase:
     settings_config: str
     expected_header: str
 
+
+@dataclass(frozen=True)
+class ScenarioEmptyFixtureE2ETestCase:
+    """Test case for `__empty_fixture()` mocks inside SQL scenarios."""
+
+    description: str
+    customer_columns_yaml: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]

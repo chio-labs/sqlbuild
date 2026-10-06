@@ -106,6 +106,10 @@ SELECT 1
 
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 
+To mock a contracted source, ref, or seed with no rows, use `SELECT * FROM __empty_fixture()` as
+the complete fixture body. SQLBuild expands it to the relation's declared, typed columns with a
+false filter, as in [unit tests](testing.md).
+
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
 
 Scenario SQL uses macros, enums, and constants available from the scenario file's directory under
