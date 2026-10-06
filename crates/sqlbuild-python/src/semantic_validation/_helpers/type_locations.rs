@@ -1,7 +1,8 @@
 //! Authored locations for native cast and set-operation findings that carry no span.
 
-use crate::constants::{DATETIME_TYPE, TIMESTAMP_TYPE};
+use crate::constants::DATETIME_TYPE;
 use polyglot_sql::tokens::{Token, TokenType};
+use sqlbuild_core::constants::TIMESTAMP_TYPE;
 
 use crate::sql_tokens::main::projection_spans::projection_spans;
 use polyglot_sql::{Dialect, DialectType, ValidationError};

@@ -3,9 +3,12 @@
 use pyo3::Python;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::{PyErr, create_exception};
+use sqlbuild_core::panics::main::{PANIC_MESSAGE, catch_compiler_panic, is_compiler_panic};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+use crate::bindings::types::CompilerDetach;
 
 create_exception!(_native, NativeCompilerError, PyRuntimeError);
-const PANIC_MESSAGE: &str = "NativeCompilerError: native SQL compilation panicked";
 
 pub(crate) fn compiler_error(error: impl std::fmt::Display) -> PyErr {
     let message = error.to_string();
@@ -24,9 +27,6 @@ pub(crate) fn compiler_guard<T>(
         Err(_) => Err(NativeCompilerError::new_err(PANIC_MESSAGE)),
     }
 }
-use std::panic::{AssertUnwindSafe, catch_unwind};
-
-use crate::bindings::types::CompilerDetach;
 
 impl CompilerDetach for Python<'_> {
     fn compiler_detach<T: Send, F: FnOnce() -> Result<T, String> + Send>(
@@ -35,17 +35,4 @@ impl CompilerDetach for Python<'_> {
     ) -> Result<T, String> {
         self.detach(|| catch_compiler_panic(operation))
     }
-}
-
-pub(crate) fn catch_compiler_panic<T>(
-    operation: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
-    match catch_unwind(AssertUnwindSafe(operation)) {
-        Ok(result) => result,
-        Err(_) => Err(PANIC_MESSAGE.to_owned()),
-    }
-}
-
-pub(crate) fn is_compiler_panic(message: &str) -> bool {
-    message == PANIC_MESSAGE
 }

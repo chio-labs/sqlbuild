@@ -1,5 +1,6 @@
-use crate::constants::{BOOLEAN_TYPE, DATE_TYPE, TIMESTAMP_TYPE};
+use crate::constants::{BOOLEAN_TYPE, DATE_TYPE};
 use crate::models::{Column, RulesConfig};
+use sqlbuild_core::constants::TIMESTAMP_TYPE;
 
 const BOOLEAN_COLUMN_RULE: &str = "SQBRCONTRACT102";
 const TIMESTAMP_COLUMN_RULE: &str = "SQBRCONTRACT103";

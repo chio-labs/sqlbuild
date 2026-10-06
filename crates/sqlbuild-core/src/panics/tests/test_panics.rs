@@ -1,5 +1,5 @@
-use crate::bindings::_helpers::panics::{catch_compiler_panic, is_compiler_panic};
-use crate::bindings::tests::test_types::PanicTestCase;
+use crate::panics::main::{catch_compiler_panic, is_compiler_panic};
+use crate::panics::tests::test_types::PanicTestCase;
 
 #[test]
 fn given_native_failure_when_crossing_python_boundary_then_only_unwinds_become_named_compiler_errors()

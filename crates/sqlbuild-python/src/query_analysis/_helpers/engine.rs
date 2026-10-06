@@ -12,7 +12,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
 
-use crate::constants::{SQL_WILDCARD, UNKNOWN_SQL_TYPE, VARCHAR_SQL_TYPE};
+use crate::constants::{UNKNOWN_SQL_TYPE, VARCHAR_SQL_TYPE};
+use sqlbuild_core::constants::SQL_WILDCARD;
 
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;

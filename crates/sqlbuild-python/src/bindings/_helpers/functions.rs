@@ -168,7 +168,7 @@ fn prepare_lint_sql_batch(
         Ok(requests
             .iter()
             .map(|request| {
-                crate::bindings::_helpers::panics::catch_compiler_panic(|| {
+                sqlbuild_core::panics::main::catch_compiler_panic(|| {
                     crate::sql_lint::main::preparation::prepare(
                         &request.expanded,
                         &request.before_expansion,

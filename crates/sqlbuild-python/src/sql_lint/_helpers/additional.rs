@@ -2,16 +2,14 @@ use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::tokens::{Span, Token, TokenType};
 
-use crate::constants::{
-    CLOSE_PAREN, EMPTY_FIXTURE_QUERY_TOKEN_COUNT, ENCLOSING_CTE_TOKEN_COUNT, OPEN_PAREN,
-    SQL_WILDCARD,
-};
+use crate::constants::{EMPTY_FIXTURE_QUERY_TOKEN_COUNT, ENCLOSING_CTE_TOKEN_COUNT};
 use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
 };
 use crate::sql_lint::constants::RELATION_MODIFIER_KEYWORDS;
 use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
+use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN, SQL_WILDCARD};
 
 const COUNT_ONE_LITERAL: &str = "1";
 const QUALIFIED_REFERENCE_LENGTH: usize = 3;

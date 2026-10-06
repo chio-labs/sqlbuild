@@ -5,9 +5,9 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use crate::compiler::models::AuthoredValue;
 use crate::constants::{
-    CLOSE_PAREN, COLUMNS_KEY, CONSTANT_CALL, INLINE_SQL_HOOK, OPEN_PAREN, OUTSIDE_KEY, SQL_HOOK,
-    THRESHOLDS_KEY, TYPE_KEY,
+    COLUMNS_KEY, CONSTANT_CALL, INLINE_SQL_HOOK, OUTSIDE_KEY, SQL_HOOK, THRESHOLDS_KEY, TYPE_KEY,
 };
+use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN};
 
 pub(crate) const MAX_TOKENIZER_WORKERS: usize = 4;
 pub(crate) const TOKENIZER_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
