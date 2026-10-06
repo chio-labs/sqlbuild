@@ -200,6 +200,14 @@ class TerminalTestProgressE2ETestCase:
 
 
 @dataclass(frozen=True)
+class TerminalStatementRowsE2ETestCase:
+    description: str
+    columns: int
+    command: tuple[str, ...]
+    expected_statement_rows_visible: bool
+
+
+@dataclass(frozen=True)
 class ChainCteScopeTestCase:
     description: str
     queries: tuple[str, ...]
@@ -222,3 +230,13 @@ class CommentedFixtureE2ETestCase:
     test_files: dict[str, str]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TerminalStepRowsE2ETestCase:
+    description: str
+    columns: int
+    command: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
+    expected_absent_line_prefixes: tuple[str, ...]
+    expected_screen_fragments: tuple[str, ...]

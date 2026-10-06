@@ -90,8 +90,9 @@ _STATEMENT_TERMINALS: frozenset[str] = frozenset({"statement_completed", "statem
 class NativeProgressProjector:
     """Project canonical starts and correlate enriched terminal presentation."""
 
-    def __init__(self, *, stream: TextIO, use_color: bool) -> None:
+    def __init__(self, *, stream: TextIO, use_color: bool, debug: bool = False) -> None:
         self._stream: TextIO = stream
+        self._debug: bool = debug
         self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
@@ -104,6 +105,7 @@ class NativeProgressProjector:
         self._resource_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
         self._rendered_terminal_ids: set[str] = set()
         self._operation_starts: dict[str, LifecycleEvent] = {}
+        self._quiet_operation_ids: set[str] = set()
         self._enriched_resource_names: set[str] = set()
         self._resource_names: dict[str, str] = {}
         self._statement_starts: dict[str, LifecycleEvent] = {}
@@ -249,7 +251,7 @@ class NativeProgressProjector:
         self._resource_names[resource_id] = resource_name
         self._render_prior_attempts(resource_id=resource_id, resource_name=resource_name)
         self._attempts_by_id[attempt_id] = event
-        if self._is_tty and resource_name in self._enriched_resource_names:
+        if self._is_tty and (resource_name in self._enriched_resource_names or not self._debug):
             return
         ordinal: int | None = self._resource_ordinals.get(resource_name)
         counter: str = ""
@@ -367,6 +369,9 @@ class NativeProgressProjector:
         ):
             return
         self._operation_starts[operation_id] = event
+        if event.resource_attempt_id is not None and not self._debug:
+            self._quiet_operation_ids.add(operation_id)
+            return
         status: str = self._style.status(status="START")
         prefix: str = "    " if event.resource_attempt_id is not None else ""
         attempt: str = _operation_attempt_label(event)
@@ -378,9 +383,14 @@ class NativeProgressProjector:
             return
         start: LifecycleEvent = self._operation_starts.pop(operation_id)
         operation_name: object = start.payload.get("operation_name")
+        failed: bool = event.event_type.endswith("failed")
+        if operation_id in self._quiet_operation_ids:
+            self._quiet_operation_ids.discard(operation_id)
+            if not failed:
+                return
         if not isinstance(operation_name, str):
             return
-        status_text: str = "FAIL" if event.event_type.endswith("failed") else "OK"
+        status_text: str = "FAIL" if failed else "OK"
         status: str = self._style.status(status=status_text)
         duration: object = event.payload.get("duration_ms")
         elapsed: str = (
@@ -413,7 +423,8 @@ class NativeProgressProjector:
         if statement_id is None or event.resource_id not in self._resource_names:
             return
         self._statement_starts[statement_id] = event
-        self._write(f"    statement  {self._statement_context(event)}  START")
+        if self._debug:
+            self._write(f"    statement  {self._statement_context(event)}  START")
 
     def _consume_statement_submitted(self, event: LifecycleEvent) -> None:
         statement_id: str | None = event.statement_id
@@ -427,6 +438,8 @@ class NativeProgressProjector:
         if self._statement_query_ids.get(statement_id) == query_id:
             return
         self._statement_query_ids[statement_id] = query_id
+        if not self._debug:
+            return
         start: LifecycleEvent = self._statement_starts.get(statement_id, event)
         self._write(f"    statement  {self._statement_context(start)}  query_id={query_id}")
 

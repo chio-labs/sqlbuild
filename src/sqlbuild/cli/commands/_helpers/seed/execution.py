@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import TextIO
 
 from sqlbuild.cli.commands.models import (
@@ -13,6 +14,10 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
@@ -82,7 +87,17 @@ def _build_on_complete(
     event_writer: ExecutionEventWriter,
     plan: PlanOutput,
 ) -> Callable[[SeedExecutionResult], None]:
+    projector: NativeProgressProjector | None = current_native_progress_projector()
+    if projector is not None:
+        projector.configure_resources(ordinals=seed_order, total=total_count)
+
     def _on_complete(result: SeedExecutionResult) -> None:
+        if projector is not None:
+            canonical_duration_ms: float | None = projector.consume_resource_terminal(
+                resource_name=result.seed_name, resource_id=f"seed:{result.seed_name}"
+            )
+            if canonical_duration_ms is not None:
+                result = replace(result, duration_ms=int(canonical_duration_ms))
         status_text: str = "OK" if result.status == ExecutionStatus.SUCCESS else "FAIL"
         style: CliStyle = CliStyle(use_color=use_color)
         status: str = style.status(status=status_text)

@@ -90,6 +90,7 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
         if machine_output or args.debug or args.command == DEBUG_COMMAND
         else sys.stdout,
         use_color=not machine_output and not args.no_color and supports_color(),
+        debug=args.debug,
     )
     unsubscribe_progress: Unsubscribe = dispatcher.subscribe_lifecycle(
         subscriber=projector.consume,

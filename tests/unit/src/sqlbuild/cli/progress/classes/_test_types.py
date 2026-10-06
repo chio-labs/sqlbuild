@@ -47,6 +47,7 @@ class StatementProgressCase:
     adapter: str
     query_id: str | None
     expected_context: str
+    debug: bool
 
 
 @dataclass(frozen=True)
@@ -71,3 +72,11 @@ class FreshnessMetadataProjectionCase:
     terminal_event_type: str
     terminal_payload: dict[str, object]
     expected_terminal_line: str
+
+
+@dataclass(frozen=True)
+class StepProgressCase:
+    description: str
+    tty: bool
+    debug: bool
+    expected_line_prefixes: tuple[str, ...]
