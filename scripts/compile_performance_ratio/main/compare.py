@@ -19,6 +19,7 @@ from scripts.compile_performance_ratio.constants import (
     COMPILE_MODES,
     DEFAULT_MAX_RATIO,
     DEFAULT_RUNS,
+    NOISE_FLOOR_SECONDS,
     PROJECT_KINDS,
 )
 from scripts.compile_performance_ratio.models import CompileComparison
@@ -59,7 +60,10 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             modes=modes,
         )
     failures: tuple[str, ...] = ratio_failures(
-        comparisons=comparisons, modes=modes, max_ratio=args.max_ratio
+        comparisons=comparisons,
+        modes=modes,
+        max_ratio=args.max_ratio,
+        noise_floor_seconds=args.noise_floor_seconds,
     )
     markdown: str = comparison_markdown(
         comparisons=comparisons,
@@ -100,4 +104,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS)
     parser.add_argument("--max-ratio", type=float, default=DEFAULT_MAX_RATIO)
+    parser.add_argument(
+        "--noise-floor-seconds",
+        type=float,
+        default=NOISE_FLOOR_SECONDS,
+        help="Seconds of slack added to the ratio allowance before a slowdown fails.",
+    )
     return parser.parse_args(argv)

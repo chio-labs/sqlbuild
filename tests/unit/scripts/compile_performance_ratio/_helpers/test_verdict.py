@@ -3,7 +3,7 @@
 import pytest
 
 from scripts.compile_performance_ratio._helpers.verdict import ratio_failures
-from scripts.compile_performance_ratio.constants import COMPILE_MODES
+from scripts.compile_performance_ratio.constants import COMPILE_MODES, NOISE_FLOOR_SECONDS
 from tests.unit.scripts.compile_performance_ratio._helpers._test_types import (
     RatioFailuresTestCase,
 )
@@ -98,7 +98,10 @@ def test_given_mode_comparisons_when_judging_then_reports_each_failed_limit(
     test_case: RatioFailuresTestCase,
 ) -> None:
     failures: tuple[str, ...] = ratio_failures(
-        comparisons=test_case.comparisons, modes=test_case.modes, max_ratio=test_case.max_ratio
+        comparisons=test_case.comparisons,
+        modes=test_case.modes,
+        max_ratio=test_case.max_ratio,
+        noise_floor_seconds=NOISE_FLOOR_SECONDS,
     )
 
     assert failures == test_case.expected_failures

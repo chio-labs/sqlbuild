@@ -81,6 +81,8 @@ def test_given_two_builds_when_comparing_compile_performance_then_enforces_ratio
             sys.executable,
             "--max-ratio",
             test_case.max_ratio,
+            "--noise-floor-seconds",
+            "0",
         ],
         cwd=_REPO_ROOT,
         capture_output=True,
