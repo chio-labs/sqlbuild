@@ -4,9 +4,39 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 import duckdb
+
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    execute_duckdb,
+    prepare_inline_project,
+)
+
+_OPTIONAL_CEREMONY_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "optional_ceremony"\nadapter = "duckdb"\n\n'
+        '[connection]\ndatabase = "optional_ceremony.duckdb"\n\n'
+        '[defaults]\nmaterialized = "table"\n'
+    ),
+    "macros/status.py": (
+        'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
+    ),
+    "sources/raw_orders.yml": (
+        "sources:\n"
+        "  - name: raw_orders\n    description: Test source raw_orders.\n"
+        "    schema: main\n"
+        "    table: raw_orders\n"
+        "    columns:\n"
+        "      - name: order_id\n        type: INTEGER\n"
+        "      - name: status\n        type: VARCHAR\n"
+    ),
+    "models/orders.sql": (
+        "MODEL (description 'Test model orders.');\n\n"
+        'SELECT order_id, @normalize_status("status") AS status FROM __source("raw_orders")\n'
+    ),
+}
 
 
 def build_dynamic_pivot_test_project_files() -> dict[str, str]:
@@ -1680,3 +1710,18 @@ def build_lookup_project_files(*, sql_analysis_enabled: bool) -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def prepare_optional_ceremony_project(*, tmp_path: Path, test_files: dict[str, str]) -> Path:
+    """Write the optional-ceremony DuckDB project with the given SQL test files."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="optional_ceremony",
+        repo_files={**_OPTIONAL_CEREMONY_PROJECT_FILES, **test_files},
+    )
+    execute_duckdb(
+        db_path=project_dir / "optional_ceremony.duckdb",
+        sql="CREATE TABLE raw_orders AS SELECT 1 AS order_id, 'paid' AS status",
+    )
+    return project_dir

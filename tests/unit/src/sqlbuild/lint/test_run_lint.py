@@ -12,6 +12,7 @@ from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from tests.unit.src.sqlbuild.lint._test_types import (
+    FixtureCeremonyFormatTestCase,
     FormatDescriptionResolutionTestCase,
     FormatNewlineTestCase,
     FormatProjectTestCase,
@@ -22,6 +23,13 @@ from tests.unit.src.sqlbuild.lint._test_types import (
 CLEAN_MODEL: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\nSELECT 1 AS x FROM t\n'
 NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FROM t\n"
 PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
+_FIXTURE_CTES: str = (
+    "with __source__orders as (select 1 as id),\n__expected__orders as (select 1 as id)"
+)
+_FORMATTED_FIXTURE_CTES: str = (
+    "WITH __source__orders AS (\n  SELECT 1 AS id\n),\n\n"
+    "__expected__orders AS (\n  SELECT 1 AS id\n)"
+)
 
 
 @pytest.mark.parametrize(
@@ -331,6 +339,60 @@ def test_given_commented_body_when_formatting_then_comment_is_preserved_in_canon
     assert written == (
         'MODEL (description "ok");\nSELECT\n  a, /* preserve exactly */\n  b\nFROM items\n'
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FixtureCeremonyFormatTestCase(
+            description="headerless test without a trailing select stays without one",
+            relative_path="tests/unit/test_orders.sql",
+            contents=f"{_FIXTURE_CTES}\n",
+            expected_contents=f"{_FORMATTED_FIXTURE_CTES}\n",
+        ),
+        FixtureCeremonyFormatTestCase(
+            description="semicolon and trailing comment after the last cte are kept",
+            relative_path="tests/unit/test_orders.sql",
+            contents=f"{_FIXTURE_CTES}; -- done\n",
+            expected_contents=f"{_FORMATTED_FIXTURE_CTES}; -- done\n",
+        ),
+        FixtureCeremonyFormatTestCase(
+            description="explicit header and trailing select are kept",
+            relative_path="tests/unit/test_orders.sql",
+            contents=f"TEST();\n{_FIXTURE_CTES}\nselect 1\n",
+            expected_contents=f"TEST();\n{_FORMATTED_FIXTURE_CTES}\n\nSELECT 1\n",
+        ),
+        FixtureCeremonyFormatTestCase(
+            description="scenario without a trailing select stays without one",
+            relative_path="tests/scenarios/orders.sql",
+            contents=(
+                'SCENARIO (description "Orders");\n'
+                + _FIXTURE_CTES.replace("__source__", "__ref__")
+                + "\n"
+            ),
+            expected_contents=(
+                'SCENARIO (description "Orders");\n'
+                + _FORMATTED_FIXTURE_CTES.replace("__source__", "__ref__")
+                + "\n"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_fixture_ceremony_variants_when_formatting_and_linting_then_forms_are_kept(
+    test_case: FixtureCeremonyFormatTestCase, tmp_path: Path
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    target: Path = tmp_path / test_case.relative_path
+    target.parent.mkdir(parents=True)
+    _ = target.write_text(test_case.contents, encoding="utf-8")
+
+    formatted: LintRunResult = run_format(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
+    linted: LintRunResult = run_lint(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
+
+    assert formatted.violations == ()
+    assert target.read_text(encoding="utf-8") == test_case.expected_contents
+    assert linted.violations == ()
 
 
 @pytest.mark.parametrize(

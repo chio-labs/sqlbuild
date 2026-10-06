@@ -40,6 +40,7 @@ class LintFileRole:
     declaration_kind: DeclarationKind | None = None
     in_project: bool = False
     in_hook_directory: bool = False
+    in_sql_test_directory: bool = False
 
 
 @dataclass(frozen=True)

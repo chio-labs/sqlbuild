@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.constants import (
     MACRO_ACTUAL_TEST_CTE_NAME,
     MACRO_EXPECTED_TEST_CTE_NAME,
     MACRO_TEST_CTE_PREFIX,
+    OMITTED_CEREMONIAL_SELECT_SQL,
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
@@ -27,6 +28,10 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import MappedOffset
+from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
+    omitted_ceremonial_select_offset,
+)
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint._helpers.native import source_line_starts, source_position
 from sqlbuild.lint._helpers.sqlbuild_tokens import interpolation_text_at
 from sqlbuild.lint.classes.stop_context import LintStopContext
@@ -41,6 +46,7 @@ from sqlbuild.lint.exceptions import LintStoppedError, NativeLintError
 from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 
 _NATIVE_LINT_API_VERSION: int = 1
+_GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 _UNUSED_CTE_CODE: str = "SQBRSQL005"
 _LONG_LITERAL_CODE: str = "SQBRSQL044"
 _PARSE_ERROR_POSITION_PATTERN: re.Pattern[str] = re.compile(
@@ -90,13 +96,22 @@ def run_native_sql_lint(
     violations_by_file: dict[Path, list[LintViolation]] = {}
     line_starts_by_path: dict[Path, tuple[int, ...]] = {}
     requests: dict[_NativeCacheKey, dict[str, object]] = {}
+    omitted_select_offsets: dict[str, int | None] = {}
     for body in bodies:
         cache_key: _NativeCacheKey = _native_cache_key(body=body, config=config)
         if cache_key in requests:
             continue
+        omitted_select_offset: int | None = _omitted_select_offset(
+            body=body, offsets=omitted_select_offsets
+        )
         payload: dict[str, object] = {
             "version": _NATIVE_LINT_API_VERSION,
-            "sql": body.lint_text,
+            "sql": (
+                body.lint_text
+                if omitted_select_offset is None
+                else f"{body.lint_text[:omitted_select_offset]}{OMITTED_CEREMONIAL_SELECT_SQL}"
+                f"{body.lint_text[omitted_select_offset:]}"
+            ),
             "dialect": config.dialect,
         }
         if config.enabled_native_rules is not None:
@@ -142,6 +157,13 @@ def run_native_sql_lint(
         raw_diagnostics: object = response.get("diagnostics")
         if not isinstance(raw_diagnostics, list):
             raise NativeLintError("native lint response is missing a diagnostics list")
+        body_omitted_select_offset: int | None = _omitted_select_offset(
+            body=body, offsets=omitted_select_offsets
+        )
+        if body_omitted_select_offset is not None:
+            raw_diagnostics = _authored_prefix_diagnostics(
+                raw_diagnostics=raw_diagnostics, offset=body_omitted_select_offset
+            )
         for raw_diagnostic in raw_diagnostics:
             try:
                 violation: LintViolation | None = _authored_violation(
@@ -158,6 +180,45 @@ def run_native_sql_lint(
             if violation is not None:
                 violations_by_file.setdefault(body.file_path, []).append(violation)
     return {path: tuple(entries) for path, entries in violations_by_file.items()}
+
+
+def _omitted_select_offset(*, body: LintBody, offsets: dict[str, int | None]) -> int | None:
+    """Where a fixture body omits its ceremonial `SELECT 1`, so the parser sees one statement."""
+
+    if not body.allows_ceremonial_select:
+        return None
+    if body.lint_text not in offsets:
+        offsets[body.lint_text] = omitted_ceremonial_select_offset(
+            sql=body.lint_text,
+            syntax=_GENERIC_SQL_SYNTAX,
+        )
+    return offsets[body.lint_text]
+
+
+def _authored_prefix_diagnostics(*, raw_diagnostics: list[object], offset: int) -> list[object]:
+    """Keep diagnostics on authored SQL before the added `SELECT 1`, clamped to end there."""
+
+    kept: list[object] = []
+    for raw_diagnostic in raw_diagnostics:
+        if not isinstance(raw_diagnostic, dict):
+            kept.append(raw_diagnostic)
+            continue
+        diagnostic: dict[str, object] = dict(cast("dict[str, object]", raw_diagnostic))
+        start: object = diagnostic.get("start")
+        end: object = diagnostic.get("end")
+        if isinstance(start, int) and start >= offset:
+            continue
+        if isinstance(end, int) and end > offset:
+            diagnostic["end"] = offset
+        fix: object = diagnostic.get("fix")
+        fix_end: object = (
+            cast("dict[str, object]", fix).get("end") if isinstance(fix, dict) else None
+        )
+        if isinstance(fix_end, int) and fix_end > offset:
+            diagnostic["fix"] = None
+            diagnostic["fix_unavailable_reason"] = "fix overlaps generated SQL"
+        kept.append(diagnostic)
+    return kept
 
 
 def check_lint_not_stopped() -> None:

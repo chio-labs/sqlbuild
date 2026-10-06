@@ -110,8 +110,6 @@ A test first sees declarations available from its own folder tree. It may also u
 macros, enums, and constants available to a model for which it defines expected output.
 
 ```sql
-TEST();
-
 WITH
 __expected__orders AS (
   SELECT
@@ -119,7 +117,6 @@ __expected__orders AS (
     @normalize_order_status("'completed'") AS normalized_status,
     @enum("order_status").COMPLETED AS status
 )
-SELECT 1
 ```
 
 Because the test defines `__expected__orders`, the test may use file-based macros, enums, and

@@ -55,5 +55,3 @@ __assert__no_negative_revenue AS (
   FROM __ref("daily_revenue")
   WHERE total_revenue_cents < 0
 )
-
-SELECT 1

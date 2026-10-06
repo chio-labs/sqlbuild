@@ -24,6 +24,7 @@ from sqlbuild.compiler.compile.constants import (
     MACRO_ACTUAL_TEST_CTE_NAME,
     MACRO_EXPECTED_TEST_CTE_NAME,
     MACRO_TEST_CTE_PREFIX,
+    OMITTED_CEREMONIAL_SELECT_SQL,
     REF_TEST_CTE_PREFIX,
     RESERVED_SQL_TEST_CTE_NAMES,
     SEED_TEST_CTE_PREFIX,
@@ -52,6 +53,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
+    omitted_ceremonial_select_offset,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
@@ -229,7 +233,46 @@ def extract_top_level_ctes_with_scanner[CteT](
     cte_type: Callable[..., CteT],
     syntax: SqlLexicalSyntax,
 ) -> tuple[CteT, ...]:
-    """Scan top-level `WITH` CTEs followed by the ceremonial `SELECT 1` of a test file."""
+    """Scan top-level `WITH` CTEs, optionally followed by the ceremonial `SELECT 1`."""
+
+    ctes: tuple[tuple[str, str], ...]
+    index: int
+    ctes, index = _scan_top_level_ctes(
+        sql=sql,
+        file_label=file_label,
+        context_label=context_label,
+        with_requirement=with_requirement,
+        syntax=syntax,
+    )
+    _validate_ceremonial_select(
+        sql=sql,
+        start=index,
+        file_label=file_label,
+        context_label=context_label,
+        syntax=syntax,
+    )
+    return tuple(cte_type(name=name, sql_body=body) for name, body in ctes)
+
+
+def complete_omitted_ceremonial_select(*, sql: str, syntax: SqlLexicalSyntax) -> str:
+    """Return test or scenario SQL as one statement, adding an omitted trailing `SELECT 1`."""
+
+    offset: int | None = omitted_ceremonial_select_offset(sql=sql, syntax=syntax)
+    if offset is None:
+        return sql
+    return f"{sql[:offset]}{OMITTED_CEREMONIAL_SELECT_SQL}{sql[offset:]}"
+
+
+@lru_cache(maxsize=4096)
+def _scan_top_level_ctes(
+    *,
+    sql: str,
+    file_label: str,
+    context_label: str,
+    with_requirement: str,
+    syntax: SqlLexicalSyntax,
+) -> tuple[tuple[tuple[str, str], ...], int]:
+    """Return top-level CTEs and the first code position after them."""
 
     with_end: int | None = _try_consume_keyword(
         sql=sql,
@@ -238,7 +281,8 @@ def extract_top_level_ctes_with_scanner[CteT](
     )
     if with_end is None:
         raise CompileInputError(
-            f"{context_label} '{file_label}' must declare {with_requirement} before `SELECT 1`"
+            f"{context_label} '{file_label}' must declare {with_requirement} in a top-level "
+            "WITH clause"
         )
     index: int = _skip_ignorable(
         sql=sql, start=with_end, context_label=context_label, syntax=syntax
@@ -249,7 +293,7 @@ def extract_top_level_ctes_with_scanner[CteT](
             sql=sql, start=recursive_end, context_label=context_label, syntax=syntax
         )
 
-    ctes: list[CteT] = []
+    ctes: list[tuple[str, str]] = []
     seen_cte_names: set[str] = set()
     while True:
         cte_name, index = _read_identifier(
@@ -288,7 +332,7 @@ def extract_top_level_ctes_with_scanner[CteT](
         cte_body_end: int = find_matching_paren(
             sql=sql, open_paren_index=index, context=context_label, syntax=syntax
         )
-        ctes.append(cte_type(name=cte_name, sql_body=sql[cte_body_start:cte_body_end].strip()))
+        ctes.append((cte_name, sql[cte_body_start:cte_body_end].strip()))
         index = _skip_ignorable(
             sql=sql, start=cte_body_end + 1, context_label=context_label, syntax=syntax
         )
@@ -297,16 +341,7 @@ def extract_top_level_ctes_with_scanner[CteT](
                 sql=sql, start=index + 1, context_label=context_label, syntax=syntax
             )
             continue
-        break
-
-    _validate_ceremonial_select(
-        sql=sql,
-        start=index,
-        file_label=file_label,
-        context_label=context_label,
-        syntax=syntax,
-    )
-    return tuple(ctes)
+        return tuple(ctes), index
 
 
 def _classify_sql_test_ctes(
@@ -902,13 +937,15 @@ def _validate_ceremonial_select(
     syntax: SqlLexicalSyntax,
     context_label: str = _CONTEXT,
 ) -> None:
-    if _is_ceremonial_select_statement(
+    if _is_statement_end(
+        sql=sql, start=start, context_label=context_label, syntax=syntax
+    ) or _is_ceremonial_select_statement(
         sql=sql, start=start, context_label=context_label, syntax=syntax
     ):
         return
     raise CompileInputError(
-        f"{context_label} '{file_label}' must end with a ceremonial top-level `SELECT 1` "
-        "after its CTEs"
+        f"{context_label} '{file_label}' must end after its CTEs; only an optional "
+        "ceremonial top-level `SELECT 1` may follow them"
     )
 
 

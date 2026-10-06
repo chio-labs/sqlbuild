@@ -37,8 +37,6 @@ A test file defines mock inputs and expected outputs using CTEs. SQLBuild substi
 
 ```sql
 -- tests/unit/test_stg_orders.sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT
@@ -58,7 +56,6 @@ __expected__stg_orders AS (
     '2026-04-01 10:00:00' AS ordered_at,
     'completed' AS status
 )
-SELECT 1
 ```
 
 The test:
@@ -84,7 +81,28 @@ that read them. Statically provable collection-versus-scalar type conflicts iden
 column and suggest explicit `CAST`, `ARRAY_CONSTRUCT`, or `PARSE_JSON` expressions. SQLBuild never
 invents missing values.
 
-The trailing `SELECT 1` is required as a ceremonial closing statement.
+A test file needs no header and no closing statement: a file that holds one test can be just its
+CTEs. Add a `TEST (...)` header to name the test, set a cursor window, declare parameters, or turn
+off SQL analysis, and on every block of a file that holds several tests. The `TEST();` header and
+the trailing `SELECT 1` that earlier releases required are still accepted, so this file is
+equivalent to the first example:
+
+```sql
+TEST();
+
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
+         '2026-04-01 10:00:00' AS ordered_at, 'completed' AS status
+),
+__expected__stg_orders AS (
+  SELECT 1 AS order_id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
+         '2026-04-01 10:00:00' AS ordered_at, 'completed' AS status
+)
+SELECT 1
+```
+
+Nothing other than `SELECT 1` may follow the last CTE.
 
 ## CTE conventions
 
@@ -121,8 +139,6 @@ expected rows can therefore live in one helper that both an `__expected__` CTE a
 read:
 
 ```sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 3 AS quantity UNION ALL SELECT 2 AS id, 5 AS quantity
@@ -138,7 +154,6 @@ __assert__no_unexpected_order_ids AS (
   EXCEPT
   SELECT order_id FROM expected_orders
 )
-SELECT 1
 ```
 
 SQLBuild emits each helper and mock a query needs once, in dependency order, including mocks that
@@ -151,8 +166,6 @@ Tests can span multiple models in a single file. Mock your sources, define an ex
 ```sql
 -- Mock two sources, assert on the final mart.
 -- stg_orders and stg_payments resolve automatically from their real SQL.
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
@@ -166,7 +179,6 @@ __expected__fact_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 1500 AS payment_amount_cents,
          'credit_card' AS payment_method
 )
-SELECT 1
 ```
 
 SQLBuild topologically sorts the expected models, resolves each intermediate model's real SQL with mocks substituted, and chains the outputs forward. Every model between the mocked sources and the expected model is computed automatically.
@@ -187,8 +199,6 @@ dependency errors.
 You can mock models directly with `__ref__<name>` and seeds with `__seed__<name>`, not just sources. This skips the model's real SQL (or the seed's real CSV data) and provides controlled data instead:
 
 ```sql
-TEST();
-
 WITH
 __ref__stg_orders AS (
   SELECT
@@ -231,7 +241,6 @@ __expected__fact_orders AS (
     'success' AS payment_status,
     2850 AS payment_amount_cents
 )
-SELECT 1
 ```
 
 You can mix `__source__`, `__ref__`, and `__seed__` mocks in the same test. As long as every leaf dependency is satisfied (either by a source mock, a ref mock, a seed mock, or by being in the expected chain), the test resolves.
@@ -260,8 +269,6 @@ expressions, with the fixture relation. The mocked function is not deployed as a
 ```sql
 -- models/customer_order_totals.sql reads:
 -- __table_fn("customer_orders")(42)
-TEST();
-
 WITH
 fixture_orders AS (
   SELECT 101 AS order_id, 42 AS customer_id, 2500 AS amount_cents
@@ -272,7 +279,6 @@ __table_fn__customer_orders AS (
 __expected__customer_order_totals AS (
   SELECT 42 AS customer_id, 2500 AS total_cents
 )
-SELECT 1
 ```
 
 The fixture name must match a declared table function. Helper CTEs are available inside the fixture,
@@ -288,8 +294,6 @@ compares the real function.
 A single test can assert on multiple models. SQLBuild resolves and compares each one independently:
 
 ```sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
@@ -310,7 +314,6 @@ __expected__fact_orders AS (
 __expected__dim_customers AS (
   SELECT 100 AS customer_id, 1 AS total_orders, 1500 AS lifetime_spend_cents
 )
-SELECT 1
 ```
 
 If the expected models form a chain (e.g. `stg_orders` feeds into `fact_orders` which feeds into `dim_customers`), SQLBuild resolves them in dependency order, using the output of earlier steps as input to later ones.
@@ -326,8 +329,6 @@ Only explicit expected CTEs create grants. A matching test filename, `__ref__` m
 Because unit tests are written in SQL, they support macro calls. This lets you write reusable mock generators instead of copy-pasting mock data across test files:
 
 ```sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   @mock_orders()
@@ -339,7 +340,6 @@ __expected__fact_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 1500 AS total_cents,
          'credit_card' AS payment_method
 )
-SELECT 1
 ```
 
 The `@mock_orders()` call expands at compile time to whatever SQL the Python macro function returns.
@@ -360,8 +360,6 @@ with `D013`.
 When a model uses macros that you want to control in tests (e.g. target-specific logic, dynamic SQL generation), you can override their output with `__macro__<name>` CTEs:
 
 ```sql
-TEST();
-
 WITH
 __macro__country_filter AS (
   SELECT 'country_code = ''US'''
@@ -372,7 +370,6 @@ __source__raw__orders AS (
 __expected__stg_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 'completed' AS status
 )
-SELECT 1
 ```
 
 When a `__macro__` mock is defined, every call to `@country_filter(...)` in any model SQL resolved by the test is replaced with the mock value (`country_code = 'US'`). The macro's actual Python function is not called, and the arguments are ignored.
@@ -389,8 +386,6 @@ This is useful for:
 Unit tests can include `__assert__<name>` CTEs for property-based checks. An assertion passes if the query returns zero rows - any returned rows are failing examples.
 
 ```sql
-TEST();
-
 WITH
 __ref__stg_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 3 AS quantity,
@@ -399,7 +394,6 @@ __ref__stg_orders AS (
 __assert__order_ids_are_not_null AS (
   SELECT * FROM __ref("stg_orders") WHERE order_id IS NULL
 )
-SELECT 1
 ```
 
 Assertions can be mixed with `__expected__` CTEs in the same test, or used on their own. They are useful when the natural check is "no rows should violate this rule" rather than "the output should exactly equal these rows" - for example, duplicate checks, negative-value constraints, or conditional business rules.
@@ -448,7 +442,6 @@ __source__raw__orders AS (
 __expected__order_summary AS (
   SELECT 0 AS order_count, 0 AS total_amount
 )
-SELECT 1
 ```
 
 Assertions that filter for invalid rows, compare against expected rows, aggregate, or limit their
@@ -457,7 +450,11 @@ project file; see [Rule options](rules/configuration-and-selection.md#rule-optio
 
 ## Test modes
 
-By default, `TEST()` runs in model mode - mocking sources/refs and comparing model outputs. Three additional modes let you test reusable logic directly without needing a model chain.
+Model tests mock sources and refs and compare model outputs. Three more modes test reusable logic
+directly, without a model chain. SQLBuild infers the mode from the test's CTEs: a test that defines
+`__macro_actual__` is a macro test, `__udf_actual__` a UDF test, `__table_fn_actual__` a table
+function test, and any other test a model test. `TEST (mode ...)` states the mode explicitly; an
+explicit mode that contradicts the CTEs is a compile error.
 
 ### Macro tests
 
@@ -477,7 +474,6 @@ __macro_actual__ AS (
 __macro_expected__ AS (
   SELECT 2850 AS line_total_cents
 )
-SELECT 1
 ```
 
 Macros are compile-time code, so macro tests expand the macro at compile time and compare the results. During `sqb build`, macro tests run before any model that uses the tested macro.
@@ -487,7 +483,7 @@ Macros are compile-time code, so macro tests expand the macro at compile time an
 Test scalar UDFs by calling them in `__udf_actual__` and comparing against `__udf_expected__`:
 
 ```sql
-TEST (mode udf, name "detects_completed_orders");
+TEST (name "detects_completed_orders");
 
 WITH
 input_values AS (
@@ -506,7 +502,6 @@ __udf_expected__ AS (
   UNION ALL
   SELECT 'pending' AS order_status, FALSE AS is_completed_order
 )
-SELECT 1
 ```
 
 UDFs are warehouse objects, so the function is created before the test runs. During `sqb build`, UDF tests run after the function is created but before any model that uses it.
@@ -516,7 +511,7 @@ UDFs are warehouse objects, so the function is created before the test runs. Dur
 Test table functions by calling them in `__table_fn_actual__` and comparing against `__table_fn_expected__`:
 
 ```sql
-TEST (mode table_fn, name "returns_customer_orders");
+TEST (name "returns_customer_orders");
 
 WITH
 __table_fn_actual__ AS (
@@ -528,7 +523,6 @@ __table_fn_expected__ AS (
   UNION ALL
   SELECT 2 AS order_id, 'completed' AS order_status, TRUE AS is_completed_order
 )
-SELECT 1
 ```
 
 Table function tests run after the function is created. Since table functions are terminal (models cannot depend on them), these tests validate the function independently.
@@ -539,20 +533,21 @@ Each mode has strict CTE validation:
 
 | Mode | Actual CTE | Expected CTE | Allowed |
 |------|-----------|--------------|---------|
-| `model` (default) | existing model-chain syntax | `__expected__<model>` | `__source__`, `__ref__`, `__seed__`, `__assert__`, `__macro__` |
+| `model` (no actual CTE) | existing model-chain syntax | `__expected__<model>` | `__source__`, `__ref__`, `__seed__`, `__assert__`, `__macro__` |
 | `macro` | `__macro_actual__` | `__macro_expected__` | Helper CTEs, `@macro()` calls in actual |
 | `udf` | `__udf_actual__` | `__udf_expected__` | Helper CTEs, `__udf()` calls in actual |
 | `table_fn` | `__table_fn_actual__` | `__table_fn_expected__` | Helper CTEs, `__table_fn()` calls in actual |
 
-CTE prefixes from other modes are not allowed. For example, `__source__` in a macro test or `__macro_actual__` in a model test will produce a clear error pointing you to the right mode. Expected CTEs must not call macros, UDFs, or table functions - they should be independent, inspectable expected data.
+CTE prefixes from other modes are not allowed. For example, `__source__` in a macro test or `__macro_actual__` in a test declared `TEST (mode model)` will produce a clear error pointing you to the right mode. Expected CTEs must not call macros, UDFs, or table functions - they should be independent, inspectable expected data.
 
 ## Multiple tests per file
 
 A single test file can contain multiple `TEST()` blocks. A test's name is its `name`, or the file
-stem when `name` is omitted. Test names are globally unique: a test cannot share a name with another
-test, a scenario, a model, a source, a seed, a function, or a Python node. Name the file or the block
-after the behavior it checks, such as `orders_status_rules`, rather than after the model. The cases
-of one parameterized test share its name. Each block in a file must have its own `name`:
+stem when `name` or the whole header is omitted. Test names are globally unique: a test cannot share
+a name with another test, a scenario, a model, a source, a seed, a function, or a Python node. Name
+the file or the block after the behavior it checks, such as `orders_status_rules`, rather than after
+the model. The cases of one parameterized test share its name. Every block in a multi-test file needs
+its own `TEST (...)` header with a unique `name`:
 
 ```sql
 TEST (name "completed_orders_only");
@@ -564,7 +559,6 @@ __source__raw__orders AS (
 __expected__stg_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 'completed' AS status
 )
-SELECT 1
 
 TEST (name "cancelled_orders_excluded");
 
@@ -575,10 +569,10 @@ __source__raw__orders AS (
 __expected__stg_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 'cancelled' AS status
 )
-SELECT 1
 ```
 
-A file with a single test can omit the `name` field. Files with multiple tests require names on every block.
+A file with a single test can omit the `name` field, or the whole header. Files with multiple tests
+require a header with a name on every block.
 
 ## Repeating test logic
 
@@ -615,7 +609,6 @@ __source__raw__orders AS (
 __expected__stg_orders AS (
   SELECT 1 AS id, @param("expected_status") AS status
 )
-SELECT 1
 ```
 
 The cases report independently as `order status: maps source states [completed]`, `[cancelled]`,
@@ -683,7 +676,6 @@ WITH cases(case_name, source_status, expected_status) AS (
 __expected__status_mapping AS (
   SELECT case_name, expected_status FROM cases
 )
-SELECT 1
 ```
 
 This produces one aggregate test result. Use native cases when each row must pass or fail

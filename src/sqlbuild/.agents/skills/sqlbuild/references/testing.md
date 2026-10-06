@@ -21,8 +21,10 @@
 
 ## Writing a unit test
 
-Files live under `tests/unit/` (any subfolder). Each file is a `TEST();` header, CTEs, and a
-required closing `SELECT 1`.
+Files live under `tests/unit/` (any subfolder). A file with one test is just its CTEs; add a
+`TEST (...)` header only to set a name, cursor window, parameters or `sql_analysis false`, and on
+every block of a file with several tests. The older `TEST();` header and trailing `SELECT 1` are
+still accepted but not needed.
 A test's name is its `name` or the file stem. Test names are globally unique across tests,
 scenarios, models, sources, seeds, functions and Python nodes, so never name a test file after its
 model (`test_stg_orders.sql`, not `stg_orders.sql`). Run one test with `sqb test <test name>` or
@@ -30,8 +32,6 @@ model (`test_stg_orders.sql`, not `stg_orders.sql`). Run one test with `sqb test
 
 ```sql
 -- tests/unit/test_stg_orders.sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 'completed' AS status,
@@ -44,7 +44,6 @@ __expected__stg_orders AS (
 __assert__no_null_ids AS (
   SELECT * FROM __ref("stg_orders") WHERE order_id IS NULL
 )
-SELECT 1
 ```
 
 | CTE prefix | Meaning |
@@ -67,7 +66,8 @@ Helper CTEs can read other helpers and mocks by CTE name (for example `__ref__st
 shared expected rows can live in one helper that both an `__expected__` CTE and an assertion use.
 
 Macros work inside tests, so reusable mock generators such as `@mock_orders(count=5)` are normal.
-Tests can also target a macro, UDF or table function directly; see
+Tests can also target a macro, UDF or table function directly: defining `__macro_actual__`,
+`__udf_actual__` or `__table_fn_actual__` selects that mode without a `TEST (mode ...)` header; see
 [docs/concepts/testing.md](docs/concepts/testing.md) for those modes.
 
 ## Empty-input tests
@@ -92,7 +92,6 @@ __source__raw__orders AS (
 __expected__order_summary AS (
   SELECT 0 AS order_count, 0 AS total_amount
 )
-SELECT 1
 ```
 
 Reviewed exceptions go in `sqlbuild_project.toml` under `[rules.rule_options.SQBRTEST203]` as

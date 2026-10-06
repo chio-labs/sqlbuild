@@ -175,8 +175,6 @@ A test mocks the sources and asserts on the model, resolving every model in betw
 SQL:
 
 ```sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT
@@ -199,7 +197,6 @@ __source__raw__payments AS (
 __expected__fact_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 1500 AS total_cents, 15.00 AS total_dollars
 )
-SELECT 1
 ```
 
 ## Warehouses

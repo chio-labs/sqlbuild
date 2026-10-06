@@ -8,7 +8,14 @@ from inspect import cleandoc
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
+from sqlbuild.compiler.compile.constants import (
+    DEFAULT_SQL_TEST_MODE,
+    MACRO_ACTUAL_TEST_CTE_NAME,
+    SQL_WITH_KEYWORD,
+    TABLE_FN_ACTUAL_TEST_CTE_NAME,
+    UDF_ACTUAL_TEST_CTE_NAME,
+)
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
@@ -25,6 +32,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestCase,
     SqlTestParameterDeclaration,
 )
+from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
+    is_identifier_character,
+)
+from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.sql_values.exceptions import SqlValueValidationError
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from sqlbuild.sql_values.models import SqlValue
@@ -38,6 +50,29 @@ _TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*TEST\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*",
     re.DOTALL | re.MULTILINE,
 )
+_TEST_HEADER_START_PATTERN: re.Pattern[str] = re.compile(r"\s*TEST\s*\(")
+_MODE_BY_ACTUAL_CTE_NAME: dict[str, SqlTestMode] = {
+    MACRO_ACTUAL_TEST_CTE_NAME: SqlTestMode.MACRO,
+    UDF_ACTUAL_TEST_CTE_NAME: SqlTestMode.UDF,
+    TABLE_FN_ACTUAL_TEST_CTE_NAME: SqlTestMode.TABLE_FN,
+}
+_ACTUAL_CTE_NAME_MARKER: str = "_actual__"
+_TOP_LEVEL_ACTUAL_CTE_TOKEN_PATTERN: re.Pattern[str] = re.compile(
+    r"--[^\n]*"
+    r"|/\*[\s\S]*?(?:\*/|\Z)"
+    r"|'(?:''|[^'])*(?:'|\Z)"
+    r'|"(?:""|[^"])*(?:"|\Z)'
+    r"|`[^`]*(?:`|\Z)"
+    r"|(?P<open>\()"
+    r"|(?P<close>\))"
+    r"|(?<![\w$])(?P<name>"
+    + "|".join(re.escape(name) for name in _MODE_BY_ACTUAL_CTE_NAME)
+    + r")(?![\w$])(?=\s*(?:\([^()]*\)\s*)?(?i:AS)(?![\w$]))"
+)
+_SQL_TEST_CONTEXT: str = "SQL test"
+_OPEN_PAREN: str = "("
+_CLOSE_PAREN: str = ")"
+_STATEMENT_TERMINATOR: str = ";"
 _TEST_NAME_HEADER_KEY: str = "name"
 _TEST_MODE_HEADER_KEY: str = "mode"
 _TEST_PARAMETERS_HEADER_KEY: str = "parameters"
@@ -83,10 +118,7 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
         file_path=file_path, contents=contents
     )
     if not raw_test_blocks:
-        raise SqlTestParseError(
-            f"SQL test '{file_path}' must start with a TEST() header as the first "
-            "non-whitespace content"
-        )
+        return (_parse_headerless_sql_test_file(file_path=file_path, contents=contents),)
 
     discovered_blocks: list[DiscoveredSqlTestBlock] = []
     test_index: int
@@ -106,6 +138,84 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
     return tuple(discovered_blocks)
 
 
+def omitted_ceremonial_select_offset_impl(*, sql: str, syntax: SqlLexicalSyntax) -> int | None:
+    """Return the offset after a body's last top-level `)` when only a terminator follows it."""
+
+    first_code: int | None = None
+    last_code: int | None = None
+    last_code_depth: int = 0
+    depth: int = 0
+    index: int = 0
+    try:
+        while index < len(sql):
+            non_code_end: int | None = dialect_non_code_end(
+                sql=sql, start=index, syntax=syntax, context=_SQL_TEST_CONTEXT
+            )
+            if non_code_end is not None:
+                index = non_code_end
+                continue
+            character: str = sql[index]
+            if not character.isspace() and character != _STATEMENT_TERMINATOR:
+                first_code = index if first_code is None else first_code
+                depth += {_OPEN_PAREN: 1, _CLOSE_PAREN: -1}.get(character, 0)
+                last_code = index
+                last_code_depth = depth
+            index += 1
+    except CompileInputError:
+        return None
+    if first_code is None or last_code is None:
+        return None
+    keyword_end: int = first_code + len(SQL_WITH_KEYWORD)
+    if sql[first_code:keyword_end].upper() != SQL_WITH_KEYWORD or (
+        keyword_end < len(sql) and is_identifier_character(sql[keyword_end])
+    ):
+        return None
+    if sql[last_code] != _CLOSE_PAREN or last_code_depth != 0:
+        return None
+    return last_code + 1
+
+
+def _parse_headerless_sql_test_file(*, file_path: Path, contents: str) -> DiscoveredSqlTestBlock:
+    if _TEST_HEADER_START_PATTERN.match(contents) is not None:
+        raise SqlTestParseError(
+            f"SQL test '{file_path}' starts with a TEST header that is not a complete "
+            "TEST(...); statement; close the header with `);` or omit it"
+        )
+    sql_body: str = cleandoc(contents)
+    if not sql_body.strip():
+        raise SqlTestParseError(f"SQL test '{file_path}' must define SQL")
+    return DiscoveredSqlTestBlock(
+        test_index=1,
+        header_values={},
+        sql_body=sql_body,
+        mode=_infer_sql_test_mode(sql_body=sql_body, file_path=file_path),
+    )
+
+
+def _infer_sql_test_mode(*, sql_body: str, file_path: Path) -> SqlTestMode:
+    """Infer a TEST block's mode from the direct-logic actual CTE it defines, if any."""
+
+    if _ACTUAL_CTE_NAME_MARKER not in sql_body:
+        return DEFAULT_SQL_TEST_MODE
+    depth: int = 0
+    inferred_modes: dict[SqlTestMode, None] = {}
+    match: re.Match[str]
+    for match in _TOP_LEVEL_ACTUAL_CTE_TOKEN_PATTERN.finditer(sql_body):
+        if match.group("open") is not None:
+            depth += 1
+        elif match.group("close") is not None:
+            depth = max(depth - 1, 0)
+        elif match.group("name") is not None and depth == 0:
+            inferred_modes[_MODE_BY_ACTUAL_CTE_NAME[match.group("name")]] = None
+    if len(inferred_modes) > 1:
+        names: str = ", ".join(mode.value for mode in inferred_modes)
+        raise SqlTestParseError(
+            f"SQL test '{file_path}' defines actual CTEs for several test modes ({names}); "
+            "each TEST block tests one kind of logic"
+        )
+    return next(iter(inferred_modes), DEFAULT_SQL_TEST_MODE)
+
+
 def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[tuple[str, int], ...]:
     matches: tuple[re.Match[str], ...] = tuple(_TEST_HEADER_ONLY_PATTERN.finditer(contents))
     if not matches:
@@ -113,7 +223,7 @@ def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[tuple[str
     if contents[: matches[0].start()].strip():
         raise SqlTestParseError(
             f"SQL test '{file_path}' must start with a TEST() header as the first "
-            "non-whitespace content"
+            "non-whitespace content; only a file with a single test may omit its header"
         )
 
     raw_blocks: list[tuple[str, int]] = []
@@ -154,8 +264,12 @@ def _parse_single_sql_test_block(
 
     name_value: object | None = header_values.get("name")
     test_name: str | None = cast(str | None, name_value)
-    mode_value: object = header_values.get("mode", DEFAULT_SQL_TEST_MODE.value)
-    test_mode: SqlTestMode = SqlTestMode(str(mode_value))
+    mode_value: object | None = header_values.get(_TEST_MODE_HEADER_KEY)
+    test_mode: SqlTestMode = (
+        _infer_sql_test_mode(sql_body=sql_body, file_path=file_path)
+        if mode_value is None
+        else SqlTestMode(str(mode_value))
+    )
     parameters, cases = _parse_test_parameters_and_cases(
         header_values=header_values,
         file_path=file_path,
