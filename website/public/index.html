@@ -18,7 +18,7 @@
 		<meta property="og:image" content="https://sqlbuild.com/assets/og-sqlbuild.png" />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
-		<meta property="og:image:alt" content="SQLBuild: the refactorable warehouse. A model file is moved and renamed." />
+		<meta property="og:image:alt" content="SQLBuild: the refactorable warehouse. sqb rename renames a model, and sqb plan migrates its table from prod.revenue to prod.daily_revenue. History kept. Nothing rebuilt." />
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:image" content="https://sqlbuild.com/assets/og-sqlbuild.png" />
 		<link rel="icon" type="image/png" href="assets/icon.png" />
@@ -76,13 +76,13 @@
 				<div
 					class="terminal hero-visual"
 					role="img"
-					aria-label="A model file is moved and renamed, and sqb plan shows a migration of the existing table instead of a rebuild."
-				><span class="hv-stack"><span class="hv-a"><span class="tree"><span class="dim">models</span>
+					aria-label="sqb mv moves and renames a model file, and sqb plan shows a migration of the existing table instead of a rebuild, with a view keeping the old name working."
+				><span class="hv-l hv-l0"><span class="cmd">sqb mv model:revenue<span class="hv-break"> </span>models/finance/daily_revenue.sql</span></span><span class="hv-stack"><span class="hv-a"><span class="tree"><span class="dim">models</span>
 <span class="dim">└──</span> marts
     <span class="dim">└──</span> revenue.sql</span></span><span class="hv-b"><span class="tree"><span class="dim">models</span>
 <span class="dim">└──</span> finance
     <span class="dim">└──</span> <span class="info">daily_revenue.sql</span></span></span></span>
-<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2"><span class="strong">Migrations</span> <span class="dim">(1)</span></span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  <span class="info strong">migrate</span><span class="hv-wide">  <span class="dim">prod.revenue -&gt;</span> prod.daily_revenue</span></span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> <span class="dim">compatibility</span>  <span class="ok">compatible</span></span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> <span class="dim">transfer</span>  physical copy<span class="hv-wide">, promote by staged rename</span></span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> <span class="dim">discovery</span>  automatic</span></div>
+<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2"><span class="strong">Migrations</span> <span class="dim">(1)</span></span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  <span class="info strong">migrate</span><span class="hv-wide">  <span class="dim">prod.revenue -&gt;</span> prod.daily_revenue</span></span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> <span class="dim">compatibility</span>  <span class="ok">compatible</span></span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> <span class="dim">transfer</span>  physical copy<span class="hv-wide">, promote by staged rename</span></span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> <span class="dim">old name</span>  prod.revenue</span><span class="hv-l hv-l7"><span class="tree">        <span class="dim">├──</span></span> <span class="dim">view</span>  until 2026-11-05</span><span class="hv-l hv-l8"><span class="tree">        <span class="dim">└──</span></span> <span class="dim">old table</span>  archived</span></div>
 			</div>
 
 			<section>
@@ -190,7 +190,7 @@
 								<h3>Reorganise without breaking anything</h3>
 								<p>
 									
-									Declarations live next to the models that use them, and the compiler enforces who can see them. <code>sqb scope</code> shows what a move would break.
+									Declarations live next to the models that use them, and the compiler enforces who can see them. <code>sqb scope</code> shows what a move would break, and <code>sqb mv</code> moves the model's private macros, enums and constants with it.
 								</p>
 							</div>
 <pre class="terminal"><span class="tree">models/marts/
@@ -322,15 +322,24 @@ lifetime_orders
 								<h3>Rename models without rebuilding history</h3>
 								<p>
 									
-									A renamed incremental model keeps its table instead of starting again. If the logic changed too, declare <code>migrate_from</code>.
+									<code>sqb rename</code> and <code>sqb mv</code> update every reference and keep the existing table, so an incremental model doesn't start again. The old name keeps working as a view. Renamed columns keep their history too.
 								</p>
 							</div>
-<pre class="terminal"><span class="cmd">sqb plan</span>
+<pre class="terminal"><span class="cmd">sqb rename model:daily_activity_rollup daily_order_rollup</span>
+<span class="info strong">Rename model  daily_activity_rollup -&gt; daily_order_rollup</span>
+<span class="dim">├──</span> models/marts/daily_order_rollup.sql<span class="dim">  (moved from models/marts/daily_activity_rollup.sql)</span>
+<span class="dim">└──</span> models/marts/hourly_activity_with_daily_context.sql
+<span class="dim">    └──</span> 36:19   reference __ref(&quot;daily_activity_rollup&quot;)  -&gt;  __ref(&quot;daily_order_rollup&quot;)
+<span class="ok strong">Compiled: ok, 2 files changed</span>
+
+<span class="cmd">sqb plan</span>
 <span class="strong">Migrations</span> <span class="dim">(1)</span>
 <span class="dim">└──</span> daily_order_rollup  <span class="info strong">migrate</span>  <span class="dim">dev.daily_activity_rollup -&gt;</span> dev.daily_order_rollup
     <span class="dim">├── compatibility</span>  <span class="ok">compatible</span>
     <span class="dim">├── transfer</span>  physical copy, promote by staged rename
-    <span class="dim">└── discovery</span>  automatic</pre>
+    <span class="dim">└── old name</span>  dev.daily_activity_rollup
+        <span class="dim">├── view</span>  until 2026-11-05
+        <span class="dim">└── old table</span>  archived</pre>
 						</div>
 						<div class="step">
 							<div class="step-text">

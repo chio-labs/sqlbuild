@@ -42,6 +42,20 @@ rm models/weekly_revenue.sql
 sqb janitor
 ```
 
+## Step 07: rename
+
+`waffle-shop` shows the state after the rename. Give the model its old name, build it, then rename
+it back:
+
+```bash
+cd waffle-shop
+mv models/marts/daily_order_rollup.sql models/marts/daily_activity_rollup.sql
+sed -i 's/daily_order_rollup/daily_activity_rollup/g' models/marts/hourly_activity_with_daily_context.sql
+sqb build
+sqb rename model:daily_activity_rollup daily_order_rollup
+sqb plan
+```
+
 ## Hero: move and rename
 
 `hero-shop` shows the state after the move. The model started as `models/marts/revenue.sql`:
@@ -51,6 +65,9 @@ cd hero-shop
 mkdir -p models/marts
 mv models/finance/daily_revenue.sql models/marts/revenue.sql
 sqb build
-mv models/marts/revenue.sql models/finance/daily_revenue.sql
+sqb mv model:revenue models/finance/daily_revenue.sql
 sqb plan
 ```
+
+`sqb rename` and `sqb mv` add `migrate_from` to the model header; the example projects leave it out,
+so they can be set up again.

@@ -19,11 +19,11 @@ Python data pipelines, and it keeps its state in append-only tables in your own 
 external state database, no manifest files and no paid tier.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rename.gif" alt="Moving and renaming an incremental model: sqb plan migrates the existing table instead of rebuilding it" width="100%">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rename.gif" alt="Moving and renaming an incremental model with sqb mv: sqb plan migrates the existing table instead of rebuilding it" width="100%">
 </p>
 
-Move an incremental model to a new folder and name, and `sqb plan` migrates its table instead of
-rebuilding it.
+Move an incremental model to a new folder and name with `sqb mv`, and `sqb plan` migrates its table
+instead of rebuilding it.
 
 ## Quick start
 
@@ -62,9 +62,11 @@ The playground runs on local DuckDB, with no warehouse credentials.
 
 ### Change it without rebuilding everything
 
-- **Renames keep their history.** Rename or move an incremental or snapshot model and SQLBuild
+- **Renames keep their history.** [`sqb rename` and `sqb mv`](https://sqlbuild.com/docs/cli/rename/)
+  update every reference, and the next build
   [migrates](https://sqlbuild.com/docs/concepts/models/migrations/) the existing table instead of
-  rebuilding it.
+  rebuilding it. The old name keeps working through a compatibility view.
+  `sqb rename column:<model>.<column>` renames an incremental model's column in place.
 - **Replay on change.** When a model's SQL changes, choose how far back to reprocess, from only the
   new data to the last 14 days to a full rebuild, with
   [`replay_on_change`](https://sqlbuild.com/docs/concepts/incremental/#replay-on-change).

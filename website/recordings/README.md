@@ -6,7 +6,7 @@ scripts are the source; the rendered GIF, MP4 and PNG files go to `out/`, which 
 
 | Demo | Shows |
 |------|-------|
-| `rename` | A model is moved and renamed, and `sqb plan` migrates the existing table. |
+| `rename` | `sqb mv` moves and renames a model, and `sqb plan` migrates the existing table. |
 | `contract` | A renamed column fails `sqb compile` against an enforced contract. |
 | `rules` | A custom rule and a missing test mock fail `sqb compile`. |
 | `scope` | `sqb scope --as-path` previews what a move would lose. |

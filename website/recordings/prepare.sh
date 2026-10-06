@@ -9,11 +9,12 @@ rm -rf "$dir"
 mkdir -p "$here/scratch"
 case "$demo" in
   rename)
-    # Build the model under its old name, so the tape can move it back to models/finance.
+    # Build the model under its old name, so the tape can move it back to models/finance with sqb mv.
     cp -r "$examples/hero-shop" "$dir"
     cd "$dir"
     mkdir -p models/marts
     mv models/finance/daily_revenue.sql models/marts/revenue.sql
+    rmdir models/finance
     sqb build >/dev/null ;;
   contract)
     # Give daily_revenue an enforced contract, then rename one of its columns in the SELECT.

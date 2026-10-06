@@ -1,5 +1,5 @@
 Source tapes/common.tape
-Set Height 800
+Set Height 1080
 Output out/rename.gif
 Output out/rename.mp4
 Hide
@@ -10,10 +10,11 @@ Show
 Type "tree --noreport models"
 Enter
 Sleep 1500ms
-Type "mv models/marts/revenue.sql models/finance/daily_revenue.sql"
+Type "sqb mv model:revenue models/finance/daily_revenue.sql"
 Sleep 300ms
 Enter
-Sleep 800ms
+Wait@60s /\$\s*$/
+Sleep 1500ms
 Type "sqb plan"
 Sleep 300ms
 Enter
