@@ -14,6 +14,8 @@ from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
     ParsedCliInvocation,
 )
+from sqlbuild.compiler.frontier.main.compiler_engine_override import compiler_engine_override
+from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.observability.main.invocation_external_context_scope import (
@@ -61,13 +63,16 @@ def _main_with_dependencies(
                 dispatch_with_compute_logs,
             )
 
-            return dispatch_with_compute_logs(
-                args=args,
-                identity=identity,
-                operation=lambda: dispatch_and_handle_errors(
+            with compiler_engine_override(
+                None if args.compiler_engine is None else CompilerEngine(args.compiler_engine)
+            ):
+                return dispatch_with_compute_logs(
                     args=args,
-                    invocation=invocation,
-                    handlers=handlers,
-                    use_color=use_color,
-                ),
-            )
+                    identity=identity,
+                    operation=lambda: dispatch_and_handle_errors(
+                        args=args,
+                        invocation=invocation,
+                        handlers=handlers,
+                        use_color=use_color,
+                    ),
+                )

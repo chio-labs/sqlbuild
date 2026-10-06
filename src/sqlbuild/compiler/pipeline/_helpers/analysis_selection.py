@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
     CompiledProject,
+    CompileProjectInputs,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions
@@ -99,3 +102,27 @@ def resolve_configured_rule_selection(
         policies=PlannerPolicies(auto_load_sources=analysis_selection.auto_load_sources),
     )
     return frozenset(model.key for model in scopes.stale_warning_scope.models_by_name.values())
+
+
+def resolve_analysis_model_names(
+    *,
+    compile_inputs: CompileProjectInputs,
+    inference_profile: ExpressionInferenceProfile,
+    selection: CompileAnalysisSelection | None,
+) -> frozenset[str] | None:
+    """Return the models selected for deep analysis, or None to analyse every model."""
+
+    if selection is None or (not selection.select and not selection.exclude):
+        return None
+    structural_project: CompiledProject = assemble_project(
+        inputs=compile_inputs,
+        inference_profile=inference_profile,
+        skip_column_inference=True,
+        analysis_model_names=frozenset(),
+    )
+    scopes: PlannerScopeResolution = resolve_planner_scopes(
+        project=structural_project,
+        selection=PlannerSelection(select=selection.select, exclude=selection.exclude),
+        policies=PlannerPolicies(auto_load_sources=selection.auto_load_sources),
+    )
+    return frozenset(scopes.stale_warning_scope.models_by_name)

@@ -320,7 +320,7 @@ pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, Strin
         .transpose()?
         .unwrap_or_default();
     let cache = cache_enabled
-        .then(|| Cache::open(Path::new(&request.project_dir)))
+        .then(|| Cache::open(Path::new(&request.project_dir), &request.rules_cache_path))
         .transpose()?;
     let built_in_started = Instant::now();
     let mut raw_faults = request.initial_findings.clone();

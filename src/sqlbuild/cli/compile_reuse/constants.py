@@ -7,9 +7,19 @@ from typing import Literal
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_write_registry import (
     CompileArtifactWriteRegistry,
 )
+from sqlbuild.compiler.frontier.constants import (
+    COMPILER_ENGINE_ENV_VAR,
+    STAGE_CAPTURE_DIR_ENV_VAR,
+)
 
 REUSE_FORMAT_VERSION: int = 1
-REUSE_ENTRY_DIRECTORY_PARTS: tuple[str, ...] = ("target", "cache", "compiler", "project-reuse-v1")
+REUSE_ENTRY_DIRECTORY_NAME: str = "project-reuse-v1"
+REUSE_ENTRY_DIRECTORY_PARTS: tuple[str, ...] = (
+    "target",
+    "cache",
+    "compiler",
+    REUSE_ENTRY_DIRECTORY_NAME,
+)
 REUSE_ENTRY_MAGIC: bytes = b"SQBREUSE1\n"
 REUSE_ENTRY_SUFFIX: str = ".entry"
 REUSE_STDOUT_SUFFIX: str = ".stdout"
@@ -25,6 +35,9 @@ REUSE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_REUSE"
 REUSE_DISABLE_VALUE: str = "1"
 REUSE_LOGGER_NAME: str = "sqlbuild.compile.reuse"
 TRACKED_ENVIRONMENT_PREFIXES: tuple[str, ...] = ("SQLBUILD_", "SQB_")
+UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
+    {COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR}
+)
 MISSING_ENVIRONMENT_VALUE: str = "\0missing"
 MISSING_FILE_DIGEST: str = "\0missing"
 PROJECT_CONFIG_FILENAMES: tuple[str, ...] = ("sqlbuild_project.toml", "sqlbuild_project.yml")

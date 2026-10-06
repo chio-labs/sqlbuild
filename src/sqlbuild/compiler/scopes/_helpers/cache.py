@@ -16,12 +16,13 @@ from sqlbuild.compiler.discovery.constants import (
     LOCAL_CONFIG_FILENAME,
     PROJECT_CONFIG_FILENAME,
 )
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.scopes._helpers.lookup import build_lookup
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.constants import (
     GLOBAL_DECLARATION_DIRECTORIES,
     GLOBAL_NAMED_DECLARATION_DIRECTORIES,
-    SCOPE_CACHE_DIRECTORY,
+    SCOPE_CACHE_DIRECTORY_NAME,
     SCOPE_CACHE_FILENAME,
     SCOPE_CACHE_MAX_BYTES,
     SCOPE_CACHE_SCHEMA_VERSION,
@@ -575,7 +576,9 @@ def scope_index_fingerprint(*, project_dir: Path) -> str:
 def read_cached_scope_index(*, project_dir: Path, fingerprint: str) -> ScopeIndex | None:
     """Read a verified index; every storage or validation fault is a cache miss."""
 
-    path: Path = project_dir / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME
+    path: Path = (
+        compiler_cache_directory(project_dir) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME
+    )
     try:
         if path.stat().st_size > SCOPE_CACHE_MAX_BYTES:
             return None
@@ -612,7 +615,7 @@ def write_cached_scope_index(*, project_dir: Path, fingerprint: str, index: Scop
                 "schema_version": SCOPE_CACHE_SCHEMA_VERSION,
             }
         )
-        directory: Path = project_dir / SCOPE_CACHE_DIRECTORY
+        directory: Path = compiler_cache_directory(project_dir) / SCOPE_CACHE_DIRECTORY_NAME
         directory.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(prefix=".scope-index-", dir=directory)
         temporary_path: Path = Path(temporary_name)

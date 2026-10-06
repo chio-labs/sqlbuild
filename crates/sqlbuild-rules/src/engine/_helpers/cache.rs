@@ -16,21 +16,24 @@ pub(crate) struct RuleCacheEntry {
 }
 
 pub(crate) struct Cache {
-    root: PathBuf,
+    native_rules_path: PathBuf,
 }
 
 impl Cache {
-    pub(crate) fn open(project_dir: &Path) -> Result<Self, String> {
-        Ok(Self {
-            root: project_dir.join("target/rules-cache"),
-        })
+    pub(crate) fn open(project_dir: &Path, rules_cache_path: &str) -> Result<Self, String> {
+        let native_rules_path = if rules_cache_path.is_empty() {
+            project_dir.join("target/rules-cache/bulk/native.json")
+        } else {
+            PathBuf::from(rules_cache_path)
+        };
+        Ok(Self { native_rules_path })
     }
 
     pub(crate) fn native_rules_bucket(
         &self,
         ruleset_identity: &str,
     ) -> Result<RuleCacheBucket, String> {
-        read_bucket(&self.root.join("bulk/native.json"), ruleset_identity)
+        read_bucket(&self.native_rules_path, ruleset_identity)
     }
 
     pub(crate) fn put_native_rules_bucket(
@@ -38,11 +41,7 @@ impl Cache {
         ruleset_identity: &str,
         bucket: &RuleCacheBucket,
     ) -> Result<(), String> {
-        write_bucket(
-            &self.root.join("bulk/native.json"),
-            ruleset_identity,
-            bucket,
-        )
+        write_bucket(&self.native_rules_path, ruleset_identity, bucket)
     }
 }
 

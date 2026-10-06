@@ -242,6 +242,13 @@ pub(crate) struct ModelCacheReuseTestCase {
     pub(crate) expected_misses: u64,
 }
 
+pub(crate) struct ConfiguredCachePathTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) cache_file: &'static str,
+    pub(crate) expected_default_cache_exists: bool,
+    pub(crate) expected_warm_hits: u64,
+}
+
 pub(crate) struct CachePruningTestCase {
     pub(crate) description: &'static str,
     pub(crate) expected_paths: &'static [&'static str],

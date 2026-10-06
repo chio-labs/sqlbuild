@@ -17,8 +17,10 @@ from sqlbuild.cli.compile_reuse.constants import (
     PROJECT_ROOT_PATH_MTIME_NS,
     REUSE_FORMAT_VERSION,
     TRACKED_ENVIRONMENT_PREFIXES,
+    UNTRACKED_ENVIRONMENT_NAMES,
 )
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest, SettingsEnvironmentInputs
+from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
 
 
 def runtime_identity() -> dict[str, str]:
@@ -96,10 +98,12 @@ def module_stamps_unchanged(*, stamps: tuple[tuple[str, int, int], ...]) -> bool
 
 
 def tracked_environment_names(*, template_names: tuple[str, ...]) -> tuple[str, ...]:
-    """Return SQLBuild-prefixed variables plus the variables templates read."""
+    """Return tracked SQLBuild variables (not engine or capture settings) plus template reads."""
 
     prefixed: set[str] = {
-        name for name in os.environ if name.startswith(TRACKED_ENVIRONMENT_PREFIXES)
+        name
+        for name in os.environ
+        if name.startswith(TRACKED_ENVIRONMENT_PREFIXES) and name not in UNTRACKED_ENVIRONMENT_NAMES
     }
     return tuple(sorted(prefixed.union(template_names)))
 
@@ -155,6 +159,7 @@ def invocation_digest(*, request: CompileReuseRequest, project_dir: str, use_col
         "exclude": list(request.exclude),
         "cli_vars": request.cli_vars,
         "sys_path": list(sys.path),
+        "compiler_engine": resolve_compiler_engine().value,
     }
     encoded: bytes = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), default=repr

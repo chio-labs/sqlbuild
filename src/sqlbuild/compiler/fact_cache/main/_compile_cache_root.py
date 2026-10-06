@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_ENV_VAR,
     COMPILE_CACHE_DISABLE_VALUE,
 )
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.spec.contracts.models import TargetConfig
 
 
@@ -24,4 +25,4 @@ def compile_cache_root(
         or os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE
     ):
         return None
-    return project_dir / "target" / "cache" / "compiler"
+    return compiler_cache_directory(project_dir)

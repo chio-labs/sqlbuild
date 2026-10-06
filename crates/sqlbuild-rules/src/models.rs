@@ -729,6 +729,7 @@ pub struct EvaluateRequest {
     pub initial_findings: Vec<Fault>,
     pub defer_suppressions: bool,
     pub custom_rules: Vec<CustomRule>,
+    pub rules_cache_path: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -765,6 +766,7 @@ impl Default for EvaluateRequest {
             initial_findings: vec![],
             defer_suppressions: false,
             custom_rules: vec![],
+            rules_cache_path: String::new(),
         }
     }
 }

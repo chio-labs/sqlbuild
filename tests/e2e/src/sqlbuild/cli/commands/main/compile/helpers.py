@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import os
@@ -4141,3 +4142,56 @@ def json_report_keys(stdout: str) -> tuple[str, ...]:
     """Parse a JSON compile report and return its top-level keys."""
 
     return tuple(cast(dict[str, object], json.loads(stdout)))
+
+
+_COMPILER_ENGINE_LINE: re.Pattern[str] = re.compile(r'\n  "compiler_engine": "([a-z]+)",')
+
+
+def copy_compile_project(*, source: Path, destination: Path) -> Path:
+    """Copy a prepared project to a new directory and return the copy."""
+
+    _ = shutil.copytree(source, destination)
+    return destination
+
+
+def engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
+    """Compile with reuse enabled under one engine selected by the hidden flag."""
+
+    return run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
+
+
+def engine_compile_and_rules(*, project_dir: Path, engine: str, rules_selector: str) -> int:
+    """Compile and run Rules under one engine; return the Rules exit code."""
+
+    _ = engine_reuse_compile(project_dir=project_dir, engine=engine)
+    return run_installed_sqb(
+        project_dir=project_dir,
+        args=("--compiler-engine", engine, "rules", "run", rules_selector),
+        env=COMPILE_REUSE_ENV,
+    ).returncode
+
+
+def report_engine(run: CompileReuseRun) -> str:
+    """Return the engine named in a JSON compile report."""
+
+    match: re.Match[str] | None = _COMPILER_ENGINE_LINE.search(run.report)
+    assert match is not None
+    return match.group(1)
+
+
+def report_without_engine(run: CompileReuseRun) -> str:
+    """Return a JSON compile report without its timings and engine fields."""
+
+    return _COMPILER_ENGINE_LINE.sub("", run.report)
+
+
+def store_digests(*, project_dir: Path, stores: tuple[str, ...]) -> dict[str, str]:
+    """Hash every file below the given project-relative store directories."""
+
+    files: list[Path] = []
+    for store in stores:
+        files.extend(filter(Path.is_file, sorted((project_dir / store).rglob("*"))))
+    return {
+        path.relative_to(project_dir).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in files
+    }

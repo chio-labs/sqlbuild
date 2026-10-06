@@ -26,6 +26,7 @@ from sqlbuild.rule_engine._helpers.host.custom_host_pool import (
     finding_payload,
     run_custom_hosts,
 )
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine.classes.fact_digests import FactDigests
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
 from sqlbuild.rule_engine.constants import (
@@ -119,7 +120,9 @@ def evaluate_custom_rules_cached(
         )
         for rule in custom
     }
-    cache_path: Path = project_dir / CUSTOM_RULES_CACHE_FILE
+    cache_path: Path = rules_bulk_cache_path(
+        project_dir=project_dir, file_name=CUSTOM_RULES_CACHE_FILE
+    )
     stored: dict[str, _RuleCache] = _read_cache(cache_path)
     results: dict[tuple[str, str], tuple[dict[str, object], ...]] = {}
     plan: dict[str, list[str] | None] = {}
