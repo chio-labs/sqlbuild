@@ -39,10 +39,12 @@ open(path, "w").write(text)
 PY
     ;;
   rules)
-    # Make a mart read a raw source directly, which the project's layering rule forbids.
+    # Make a mart read a raw source directly, which the project's layering rule forbids. The raw
+    # source calls the column status, so alias it to keep the mart's columns valid.
     cp -r "$examples/waffle-shop" "$dir"
     cd "$dir"
-    sed -i 's/LEFT JOIN __ref("stg_payments") p/LEFT JOIN __source("raw__payments") p/' \
+    sed -i -e 's/LEFT JOIN __ref("stg_payments") p/LEFT JOIN __source("raw__payments") p/' \
+      -e 's/  p\.payment_status,/  p.status AS payment_status,/' \
       models/marts/fact_orders.sql ;;
   scope)
     cp -r "$examples/waffle-shop" "$dir"
