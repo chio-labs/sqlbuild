@@ -111,9 +111,12 @@ it arrived as a quoted string argument such as `@wrap('__ref("stg_orders")')`:
 
 ```
 error[P006]: model:order_summary depends on model:stg_orders through macro orders_base()
+  model: order_summary
   --> models/marts/_sqlbuild/_macros/orders.py
   = help: write the reference in the model, or pass it in: @orders_base(__ref("stg_orders"))
-  = help: while migrating a project, allow macro-generated references with [references] enforce_explicit = false in sqlbuild_project.toml
+  = help: the current value is [references] enforce_explicit = true (from sqlbuild_project.toml or its default); while migrating a project, to allow macro-generated references, set this in sqlbuild_project.toml:
+            [references]
+            enforce_explicit = false
 ```
 
 A dependency hidden inside a macro is invisible to reviewers of the model file and bypasses
