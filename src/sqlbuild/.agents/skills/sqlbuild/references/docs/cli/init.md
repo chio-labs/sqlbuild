@@ -18,12 +18,14 @@ No flags. Run in the directory where you want to create the project.
 
 ## Project layout
 
-`sqb init` creates the configuration, linter settings, and empty resource directories needed for a standalone project:
+`sqb init` creates the configuration, empty resource directories needed for a standalone project,
+and the SQLBuild agent skill (see [`sqb skills`](skills.md)):
 
 ```text
 my-project/
   sqlbuild_project.toml
-  .sqruff
+  .agents/skills/sqlbuild/
+  .claude/skills/sqlbuild/
   models/
     staging/
     marts/
@@ -55,23 +57,31 @@ These top-level roles are project-wide. Once an audit, schema, hook, or macro is
 one folder, such as `models/marts/`, SQLBuild requires it to move into that folder's `_sqlbuild/`
 directory; see [Where to Put Declarations](../concepts/declaration-scopes/placement.md).
 
-The generated project uses DuckDB, creates a named `local` connection shared by `dev` and
-`prod`, and defaults models to table materialization. Its configuration follows this shape:
+The generated project uses DuckDB, creates a named `developer` connection shared by `dev` and
+`prod`, defaults models to table materialization, and makes audits warn by default. Its
+configuration follows this shape:
 
 ```toml
+name = "my_project"
 adapter = "duckdb"
 default_target = "dev"
 
-[connections.local]
+[connections.developer]
 database = "my_project.duckdb"
 
-[targets.dev]
-connection = "local"
-schema = "dev"
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
 
 [targets.prod]
-connection = "local"
+connection = "developer"
 schema = "prod"
+
+[targets.dev]
+connection = "developer"
+schema = "dev"
 ```
 
 The project name is derived from the current directory name, with hyphens converted to

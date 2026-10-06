@@ -28,8 +28,7 @@ Put project-wide macros in Python files under the top-level `macros/` directory:
 ```text
 my_project/
 ├── macros/
-│   ├── currency.py
-│   └── test_helpers.py
+│   └── currency.py
 ├── models/
 └── sqlbuild_project.toml
 ```
@@ -123,9 +122,12 @@ it arrived as a quoted string argument such as `@wrap('__ref("stg_orders")')`:
 
 ```
 error[P006]: model:order_summary depends on model:stg_orders through macro orders_base()
+  model: order_summary
   --> models/marts/_sqlbuild/_macros/orders.py
   = help: write the reference in the model, or pass it in: @orders_base(__ref("stg_orders"))
-  = help: while migrating a project, allow macro-generated references with [references] enforce_explicit = false in sqlbuild_project.toml
+  = help: the current value is [references] enforce_explicit = true (from sqlbuild_project.toml or its default); while migrating a project, to allow macro-generated references, set this in sqlbuild_project.toml:
+            [references]
+            enforce_explicit = false
 ```
 
 A dependency hidden inside a macro is invisible to reviewers of the model file and bypasses
@@ -156,10 +158,16 @@ Imported functions are not re-exported as new macros from the importing file.
 
 ## Use macros in tests
 
-Tests are SQL, so they can use macros as reusable fixture generators:
+Tests are SQL, so they can use macros as reusable fixture generators. A macro that only tests use
+follows the usual [placement](declaration-scopes/placement.md) rule: it must be private
+to the narrowest folder that contains its uses, so the project-wide `macros/` directory rejects it
+with `S024`. Put it in `_sqlbuild/_macros/` in the folder of the tests that call it, such as
+`tests/unit/orders/_sqlbuild/_macros/`, or, when those tests define `__expected__` output for a
+model, in that model's `_sqlbuild/_macros/`. The `S024` error names the folder to use.
+`tests/unit/_sqlbuild/` itself is rejected with `D013`.
 
 ```python
-# macros/test_helpers.py
+# tests/unit/orders/_sqlbuild/_macros/order_fixtures.py
 def mock_orders(count: int = 1) -> str:
     rows = [
         f"SELECT {i} AS id, {i * 100} AS customer_id, 'completed' AS status"

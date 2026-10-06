@@ -28,7 +28,7 @@ sqb --project-dir <path> load [flags]
 | `--end-cursor-int` | Override end cursor for integer-based loaders |
 | `--json` | Output results as JSON |
 | `--json-output` | Write JSON results to a file path |
-| `--var` | Set project variables (`--var key=value`) |
+| `--vars` | Override project variables with a JSON object (`--vars '{"key": "value"}'`) |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ## Examples
@@ -59,21 +59,21 @@ Intermediate loaders (those referenced only via `depends_on` without a direct so
 ## Output
 
 ```
-Load ready (3 selected)
+Load ready  2 selected
 
-Sources (3)
-  raw_customers
-  raw_orders
-  raw_payments
+Sources (2)
+├── raw__customers
+└── raw__orders
 
 Execution  sqb load  (concurrency: 1)
 
-  1/3  source    raw_customers                  OK     0.05s  rows=5
-  2/3  source    raw_orders                     OK     0.03s  rows=10
-  3/3  source    raw_payments                   OK     0.02s  rows=8
+Connecting to duckdb...
+✓ Warehouse connected  duckdb  (0.05s)
 
-Completed successfully.
-PASS=3  WARN=0  FAIL=0  SKIP=0  TOTAL=3  (0.12s)
+  1/2  source    raw__customers                 OK 0.04s  rows=5
+  2/2  source    raw__orders                    OK 0.03s  rows=10
+
+✓ Completed successfully  PASS=2  WARN=0  FAIL=0  SKIP=0  TOTAL=2  (0.15s)
 ```
 
 ## Auto-load during builds

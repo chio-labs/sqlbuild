@@ -42,6 +42,18 @@ Warnings (1)
 
 The model stays current rather than being rebuilt on a stale input, and the warning tells you exactly which upstreams changed and how to pull them in.
 
+`sqb plan` and `sqb build` work differently: they run every selected model, even when an
+unselected upstream changed. Pass `--selection-diagnostics` to list those stale upstreams. After
+changing `stg_orders`, `sqb plan --select fact_orders --selection-diagnostics` shows:
+
+```
+Warnings (1)
+└── fact_orders
+    ├── selected model 'fact_orders' will build on 1 stale upstream(s) not selected for rebuild:
+    ├──     - stg_orders
+    └──     rebuild the closure to refresh them: --select +fact_orders
+```
+
 ## Incorporating the changed upstreams
 
 Use a closure selector to include the changed upstreams in the run. With `+agg_daily_revenue`, SQLBuild pulls in the changed `stg_orders`, cascades the change through the intermediate models, and rebuilds:

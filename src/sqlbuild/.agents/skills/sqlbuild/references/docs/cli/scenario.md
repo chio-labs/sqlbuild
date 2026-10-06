@@ -39,7 +39,6 @@ sqb scenario test [flags]
 | `--max-snapshot-total-rows` | Override total row limit for capture |
 | `--max-snapshot-bytes` | Override per-relation byte limit for capture |
 | `--max-snapshot-total-bytes` | Override total byte limit for capture |
-| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ### Selectors
@@ -95,8 +94,8 @@ Remote scenarios report per-scenario PASS/FAIL with nested check rows:
 
 ```
 daily_revenue_minimal                                            PASS
-    check     expected daily_revenue                             PASS
-    check     assertion no_negative_revenue                      PASS
+    expect    expected daily_revenue                             PASS
+    expect    assertion no_negative_revenue                      PASS
 
 PASS=1  FAIL=0  TOTAL=1
 ```
@@ -130,7 +129,6 @@ sqb scenario capture [flags]
 | `--max-snapshot-total-rows` | Override total row limit |
 | `--max-snapshot-bytes` | Override per-relation byte limit |
 | `--max-snapshot-total-bytes` | Override total byte limit |
-| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
 ### Examples
@@ -167,7 +165,7 @@ target/run/scenarios/daily_revenue_minimal/
     ref__stg_payments.sql
   models/
     marts/daily_revenue.sql
-  checks/
+  expectations/
     expected__daily_revenue.sql
     assertion__no_negative_revenue.sql
 ```

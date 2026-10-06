@@ -43,7 +43,7 @@ sqb --project-dir <path> compile [flags]
 ## What compile does
 
 1. **Discovery** - finds `sqlbuild_project.toml`, scans for models, sources, seeds, functions, audits, tests, and macros
-2. **Graph resolution** - resolves `ref()` and `source()` calls, expands macros, orders models by dependency
+2. **Graph resolution** - resolves `__ref()`, `__source()`, and `__seed()` references, expands macros, orders models by dependency
 3. **SQL validation** - validates SQL syntax (when SQL analysis is enabled)
 4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
 5. **Contract validation** - checks declared column contracts against inferred query output
@@ -217,17 +217,17 @@ sqb compile
 ```
 
 ```
-Compile ready (12 models)
+Compile ready  12 models
 
-  stg_customers              OK  3 columns
-  stg_orders                 OK  5 columns
-  stg_payments               OK  4 columns
-  fact_orders                OK  6 columns
-  dim_customers              OK  4 columns
-  daily_revenue              OK  3 columns
-  ...
+├── daily_revenue                      OK   6 columns
+├── dim_customers                      OK   7 columns
+├── fact_orders                        OK   13 columns
+├── stg_customers                      OK   5 columns
+├── stg_orders                         OK   6 columns
+└── stg_payments                       OK   6 columns
+...
 
-  Compiled: 12 models, 1 seed, 5 functions, 0 errors, 0 warnings
+✓ Project compiled  12 models, 1 seed, 2 functions, 0 errors, 0 warnings
   Wrote: target/compiled/
 ```
 
