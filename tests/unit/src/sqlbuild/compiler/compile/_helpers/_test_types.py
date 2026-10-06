@@ -1137,3 +1137,14 @@ class DialectSetOperationSplitTestCase:
     sql: str
     syntax: SqlLexicalSyntax | None
     expected_branches: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CursorModelWithoutInputsCase:
+    """One model header and query checked by the cursor-input compile check (P011)."""
+
+    description: str
+    config: dict[str, object]
+    reference_kinds: tuple[str, ...]
+    expected_codes: tuple[str, ...]
+    expected_locations: tuple[tuple[str, int, int, int], ...] = ()

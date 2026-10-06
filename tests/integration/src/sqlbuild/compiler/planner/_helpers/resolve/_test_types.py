@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, field
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -36,6 +36,17 @@ class ResolveWatermarkFailureTestCase:
     description: str
     unavailable_tags: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ResolveEmptyCursorInputsTestCase:
+    description: str
+    target_max: str | None
+    target_relation: str | None
+    existing_relations: dict[str, RelationInfo]
+    replaces_relation: bool
+    cursor_start: str | None
+    expected_window_fragment: str
 
 
 @dataclass(frozen=True)

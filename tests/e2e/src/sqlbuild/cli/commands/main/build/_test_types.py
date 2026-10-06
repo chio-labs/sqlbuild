@@ -1217,3 +1217,91 @@ class TerminalBuildFailureE2ETestCase:
     model_replacements: tuple[tuple[str, str, str], ...]
     expected_screen_fragments: tuple[str, ...]
     columns: int = 120
+
+
+@dataclass(frozen=True)
+class EmptyCursorInputsFirstBuildE2ETestCase:
+    """A first build over empty cursor inputs, followed by a build once data arrives."""
+
+    description: str
+    model_sql: str
+    rows_sql: str
+    expected_reason: str
+    expected_rows_after_load: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class EmptyCursorInputsIncrementalE2ETestCase:
+    """An incremental run after the cursor inputs were emptied."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+    expected_json_empty_inputs: tuple[str, ...] | None
+
+
+@dataclass(frozen=True)
+class CursorModelWithoutInputsCompileE2ETestCase:
+    """A cursor-based incremental model that reads no inputs."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+    expected_json_location: tuple[int, int, int] | None
+
+
+@dataclass(frozen=True)
+class DeltaFailureRetentionE2ETestCase:
+    """A real incremental build failure after the delta relation was created."""
+
+    description: str
+    failing_rows_sql: str
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EmptyCursorInputsRebuildRefusalE2ETestCase:
+    """A rebuild that would replace a loaded destination with the result of empty inputs."""
+
+    description: str
+    model_sql: str
+    changed_model_sql: str
+    command: tuple[str, ...]
+    rows_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_output_fragments: tuple[str, ...]
+    expected_json_error_code: str | None
+
+
+@dataclass(frozen=True)
+class WaitingOnEmptyInputsE2ETestCase:
+    """An incremental run where one cursor input is empty while another has new rows."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+    expected_json_empty_inputs: tuple[str, ...] | None
+
+
+@dataclass(frozen=True)
+class EmptyRuntimeInputLabelE2ETestCase:
+    """An empty cursor input rebuilt in the same run, labelled by its project name."""
+
+    description: str
+    changed_upstream_sql: str
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SameRunEmptyInputsE2ETestCase:
+    """Empty cursor inputs whose staging views are rebuilt earlier in the same run."""
+
+    description: str
+    emptying_sql: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...]
+    expected_json_empty_inputs: tuple[str, ...] | None
+    expected_json_waiting_on_empty_inputs: bool | None
+    expected_json_warnings: tuple[str, ...]

@@ -60,8 +60,10 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
             batch_size=effective_batch_size,
             cursor_type=entry.cursor_type,
         )
-    if resolved_bounds is not None:
-        resolution_status: CursorResolutionStatus = CursorResolutionStatus.RESOLVED
+    if entry.empty_cursor_inputs:
+        resolution_status: CursorResolutionStatus = CursorResolutionStatus.NO_INPUT_ROWS
+    elif resolved_bounds is not None:
+        resolution_status = CursorResolutionStatus.RESOLVED
     elif runtime_owned:
         resolution_status = CursorResolutionStatus.DEFERRED
     else:
@@ -77,6 +79,8 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
         declared_batch_size=entry.batch_size,
         effective_batch_size=effective_batch_size,
         planned_batch_count=planned_batch_count,
+        empty_inputs=entry.empty_cursor_inputs,
+        waiting_on_empty_inputs=entry.waiting_on_empty_inputs,
     )
 
 

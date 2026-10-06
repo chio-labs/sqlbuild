@@ -22,6 +22,9 @@ from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_t
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
+from sqlbuild.compiler.compile._helpers.config.cursor_inputs import (
+    cursor_model_without_inputs_diagnostics,
+)
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     with_collected_compile_diagnostics,
 )
@@ -197,6 +200,7 @@ def build_compile_inputs(
             source_inputs=source_inputs,
             function_inputs=sql_function_inputs,
         ),
+        *cursor_model_without_inputs_diagnostics(model_inputs=model_build.inputs),
     )
     return CompileProjectInputs(
         project_config=discovered_inputs.project_config,

@@ -284,6 +284,14 @@ class PathSelector:
     downstream: bool = False
 
 
+@dataclass(frozen=True)
+class EmptyCursorInputDecision:
+    """Cursor inputs whose lack of rows leaves no window, and whether other inputs have rows."""
+
+    input_names: tuple[str, ...] = ()
+    waiting_on_empty_inputs: bool = False
+
+
 @dataclass(frozen=True, kw_only=True, init=False)
 class ModelCursorSnapshot:
     """Cursor MIN/MAX values gathered from warehouse for one incremental model."""
@@ -303,6 +311,8 @@ class ModelCursorSnapshot:
     upstream_terminal_ends: tuple[CursorScalar, ...] = ()
     upstream_end_inputs: tuple[tuple[CursorScalar | None, CursorScalar | None], ...] = ()
     upstream_availability_ends: tuple[CursorScalar, ...] = ()
+    empty_input_names: tuple[str, ...] = field(default=(), compare=False)
+    unreadable_input_names: tuple[str, ...] = field(default=(), compare=False)
 
     def __init__(self, **values: Any) -> None:
         defaults: dict[str, object] = {
@@ -318,6 +328,8 @@ class ModelCursorSnapshot:
             "upstream_terminal_ends": (),
             "upstream_end_inputs": (),
             "upstream_availability_ends": (),
+            "empty_input_names": (),
+            "unreadable_input_names": (),
         }
         defaults.update(values)
         field_name: str
@@ -1138,6 +1150,8 @@ class ModelPlanEntry:
     cursor_end: str | None = None
     lookback: str | None = None
     cursor_bounds: CursorBounds | None = None
+    empty_cursor_inputs: tuple[str, ...] = ()
+    waiting_on_empty_inputs: bool = False
     cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None
     batch_concurrency: int = 1

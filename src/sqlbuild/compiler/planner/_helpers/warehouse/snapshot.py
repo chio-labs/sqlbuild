@@ -130,6 +130,14 @@ class _CursorQueryOutcome:
 
 
 @dataclass(frozen=True)
+class _CursorQueryResults:
+    """Merged cursor values plus the tags of physical reads that failed."""
+
+    values: dict[str, CursorScalar]
+    failed_tags: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class _UpstreamCursorInfo:
     """Pre-resolved upstream cursor metadata for one ref."""
 
@@ -137,6 +145,7 @@ class _UpstreamCursorInfo:
     tag_max: str
     relation: str
     cursor_column: str
+    input_name: str = ""
     cursor_grain: CursorGrain | None = None
     terminal_cursor_start: CursorScalar | None = None
     terminal_cursor_end: CursorScalar | None = None
@@ -816,16 +825,16 @@ def _gather_cursor_snapshots(
     queries: list[_PhysicalCursorQuery] = _build_cursor_queries(cursor_models)
     cursor_start: float = time.monotonic()
     concurrency: int = _inspection_concurrency(adapter=adapter, connection=connection)
-    results: dict[str, CursorScalar] = _execute_cursor_queries(
+    query_results: _CursorQueryResults = _execute_cursor_queries(
         queries=queries,
         connection=connection,
         execute=execute,
         on_progress=on_progress,
         concurrency=concurrency,
     )
-    results = _gather_eligible_target_maxes(
+    results: dict[str, CursorScalar] = _gather_eligible_target_maxes(
         cursor_models=cursor_models,
-        results=results,
+        results=query_results.values,
         adapter=adapter,
         connection=connection,
         execute=execute,
@@ -839,7 +848,9 @@ def _gather_cursor_snapshots(
             f"{physical_total} physical relation reads). ({time.monotonic() - cursor_start:.2f}s)"
         )
 
-    return _assemble_cursor_snapshots(cursor_models=cursor_models, results=results)
+    return _assemble_cursor_snapshots(
+        cursor_models=cursor_models, results=results, failed_tags=query_results.failed_tags
+    )
 
 
 def _collect_cursor_models(
@@ -974,6 +985,7 @@ def _collect_cursor_models(
                     tag_max=f"{model.name}__{ref.ref_name}__max",
                     relation=upstream_relation,
                     cursor_column=upstream_cursor_col,
+                    input_name=ref.ref_name,
                     cursor_grain=(
                         CursorGrain(input_grain)
                         if (input_grain := _cursor_input_grain(ref=ref, model_map=model_map))
@@ -1142,12 +1154,12 @@ def _execute_cursor_queries(
     execute: AdapterExecute[Any, Any],
     on_progress: Callable[[str], None] | None,
     concurrency: int = 1,
-) -> dict[str, CursorScalar]:
+) -> _CursorQueryResults:
     """Run one unmerged MIN/MAX statement per relation, bounded-parallel, merged in query order."""
 
     total: int = len(queries)
     if concurrency <= 1 or total <= 1:
-        results: dict[str, CursorScalar] = {}
+        sequential_outcomes: list[_CursorQueryOutcome] = []
         query_index: int
         query: _PhysicalCursorQuery
         for query_index, query in enumerate(queries, start=1):
@@ -1160,8 +1172,8 @@ def _execute_cursor_queries(
             _report_cursor_query(
                 query=query, outcome=outcome, identity=identity, on_progress=on_progress
             )
-            results.update(_fan_out_cursor_row(query=query, row=outcome.row))
-        return results
+            sequential_outcomes.append(outcome)
+        return _merge_cursor_outcomes(queries=queries, outcomes=sequential_outcomes)
     if on_progress is not None:
         on_progress(
             f"Inspecting cursor bounds for {total} relations "
@@ -1178,11 +1190,21 @@ def _execute_cursor_queries(
         concurrency=concurrency,
         on_complete=progress.report,
     )
+    return _merge_cursor_outcomes(queries=queries, outcomes=outcomes)
+
+
+def _merge_cursor_outcomes(
+    *, queries: list[_PhysicalCursorQuery], outcomes: list[_CursorQueryOutcome]
+) -> _CursorQueryResults:
     merged: dict[str, CursorScalar] = {}
-    outcome_item: _CursorQueryOutcome
-    for query, outcome_item in zip(queries, outcomes, strict=True):
-        merged.update(_fan_out_cursor_row(query=query, row=outcome_item.row))
-    return merged
+    failed_tags: set[str] = set()
+    query: _PhysicalCursorQuery
+    outcome: _CursorQueryOutcome
+    for query, outcome in zip(queries, outcomes, strict=True):
+        if outcome.error is not None:
+            failed_tags.update((*query.min_tags, *query.max_tags))
+        merged.update(_fan_out_cursor_row(query=query, row=outcome.row))
+    return _CursorQueryResults(values=merged, failed_tags=frozenset(failed_tags))
 
 
 class _CursorBoundsProgress:
@@ -1442,6 +1464,7 @@ def _assemble_cursor_snapshots(
     *,
     cursor_models: list[_CursorModelInfo],
     results: dict[str, CursorScalar],
+    failed_tags: frozenset[str] = frozenset(),
 ) -> dict[str, ModelCursorSnapshot]:
     """Fan batch query results back into per-model cursor snapshots."""
 
@@ -1458,10 +1481,20 @@ def _assemble_cursor_snapshots(
         terminal_ends: list[CursorScalar] = []
         end_inputs: list[tuple[CursorScalar | None, CursorScalar | None]] = []
         availability_ends: list[CursorScalar] = []
+        empty_input_names: list[str] = []
+        unreadable_input_names: list[str] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
             min_val: CursorScalar | None = results.get(upstream.tag_min)
             max_val: CursorScalar | None = results.get(upstream.tag_max)
+            if max_val is None and upstream.terminal_cursor_end is None:
+                input_label: str = (
+                    f"{upstream.input_name or upstream.relation}.{upstream.cursor_column}"
+                )
+                if upstream.tag_max in failed_tags:
+                    unreadable_input_names.append(input_label)
+                else:
+                    empty_input_names.append(input_label)
             effective_max: CursorScalar | None = (
                 exclusive_to_inclusive(
                     value=upstream.terminal_cursor_end,
@@ -1539,6 +1572,8 @@ def _assemble_cursor_snapshots(
             upstream_terminal_ends=tuple(terminal_ends),
             upstream_end_inputs=tuple(end_inputs) if terminal_ends else (),
             upstream_availability_ends=tuple(availability_ends),
+            empty_input_names=tuple(empty_input_names),
+            unreadable_input_names=tuple(unreadable_input_names),
         )
 
     return snapshots

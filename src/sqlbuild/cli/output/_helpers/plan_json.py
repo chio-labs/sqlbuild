@@ -231,6 +231,8 @@ def _serialize_cursor_details(*, details: CursorPlanDetails) -> dict[str, object
         "declared_batch_size": details.declared_batch_size,
         "effective_batch_size": details.effective_batch_size,
         "planned_batch_count": details.planned_batch_count,
+        "empty_inputs": list(details.empty_inputs),
+        "waiting_on_empty_inputs": details.waiting_on_empty_inputs,
     }
 
 

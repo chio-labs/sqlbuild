@@ -1016,7 +1016,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
     [
         ProviderHookMaterializationE2ETestCase(
             description="incremental python hooks use provider injection",
-            command=("--no-color", "build", "--select", "incremental_orders"),
+            command=("--no-color", "build", "--select", "+incremental_orders"),
             model_relative_path="models/incremental_orders.sql",
             model_sql=dedent(
                 """
@@ -1029,11 +1029,14 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
                   post_hooks [python("mark_hook")]
                 );
 
-                SELECT 1 AS order_id
+                SELECT order_id FROM __ref("order_rows")
                 """
             ).strip()
             + "\n",
-            extra_repo_files={},
+            extra_repo_files={
+                "models/order_rows.sql": 'MODEL (description "Test model order_rows.");\n\n'
+                "SELECT 1 AS order_id\n"
+            },
             expected_marker_entries=(
                 "setup",
                 "incremental_orders:pre_hooks",

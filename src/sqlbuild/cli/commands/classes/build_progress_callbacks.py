@@ -22,6 +22,10 @@ from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.main.cursor_window.no_input_rows_display import format_no_input_rows
+from sqlbuild.compiler.planner.main.cursor_window.waiting_on_empty_inputs_display import (
+    format_waiting_on_empty_inputs,
+)
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.materialization_type_display import (
@@ -597,9 +601,17 @@ class BuildProgressCallbacks:
                 elif event.kind == LifeCycleEventKind.LOG:
                     self._write_log_block(event.content)
 
-        batch_line: str | None = _format_streaming_batch_summary(model_result=model_result)
+        batch_line: str | None = _format_streaming_batch_summary(
+            model_result=model_result
+        ) or _format_empty_cursor_inputs(model_result=model_result)
         if batch_line is not None:
             self._stream.write(f"{self._style.muted(batch_line)}\n")
+            self._stream.flush()
+        if model_result.waiting_on_empty_inputs and model_result.empty_cursor_inputs:
+            waiting_line: str = (
+                f"         {format_waiting_on_empty_inputs(model_result.empty_cursor_inputs)}"
+            )
+            self._stream.write(f"{self._style.warning(waiting_line)}\n")
             self._stream.flush()
 
         sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
@@ -1524,7 +1536,11 @@ def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> st
     if model_result.batch_size is not None:
         count_text = f"{count_text} ({model_result.batch_size})"
     parts: list[str] = [count_text]
-    if model_result.cursor_range_start is not None and model_result.cursor_range_end is not None:
+    if (
+        model_result.cursor_range_start is not None
+        and model_result.cursor_range_end is not None
+        and not model_result.empty_cursor_inputs
+    ):
         start: str = cursor_bound_display(
             value=model_result.cursor_range_start,
             cursor_type=model_result.cursor_type,
@@ -1538,6 +1554,8 @@ def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> st
         parts.append(f"range {start} \u2192 {end}")
     if model_result.rows_affected is not None:
         parts.append(_format_abbreviated_rows(count=model_result.rows_affected))
+    if model_result.empty_cursor_inputs and not model_result.waiting_on_empty_inputs:
+        parts.append(format_no_input_rows(model_result.empty_cursor_inputs))
     if model_result.microbatch_recovery_batch_count:
         parts.append(f"{model_result.microbatch_recovery_batch_count} recovery")
     if model_result.microbatch_synthetic_completion_count:
@@ -1545,6 +1563,14 @@ def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> st
     if model_result.microbatch_replay_requirement_state is not None:
         parts.append(f"replay {model_result.microbatch_replay_requirement_state}")
     return f"         {'    '.join(parts)}"
+
+
+def _format_empty_cursor_inputs(*, model_result: ModelExecutionResult) -> str | None:
+    """Return why a cursor window selected no rows, if its inputs were empty."""
+
+    if not model_result.empty_cursor_inputs or model_result.waiting_on_empty_inputs:
+        return None
+    return f"         {format_no_input_rows(model_result.empty_cursor_inputs)}"
 
 
 def _format_abbreviated_rows(*, count: int) -> str:

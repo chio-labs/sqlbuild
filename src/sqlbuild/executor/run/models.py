@@ -169,6 +169,8 @@ class ModelExecutionResult:
     cursor_range_end: str | None = None
     cursor_type: str | None = None
     cursor_grain: str | None = None
+    empty_cursor_inputs: tuple[str, ...] = ()
+    waiting_on_empty_inputs: bool = False
     future_cursor_safety: FutureCursorSafetyEvidence | None = None
     maximum_start_safety: MaximumStartSafetyEvidence | None = None
     audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
@@ -320,6 +322,7 @@ class RuntimeCursorInputRelation:
     is_runtime_produced: bool = False
     terminal_cursor_start: CursorScalar | None = None
     terminal_cursor_end: CursorScalar | None = None
+    input_name: str | None = None
 
     def __init__(
         self,
@@ -331,7 +334,9 @@ class RuntimeCursorInputRelation:
         is_runtime_produced: bool = False,
         terminal_cursor_start: CursorScalar | str | None = None,
         terminal_cursor_end: CursorScalar | str | None = None,
+        input_name: str | None = None,
     ) -> None:
+        object.__setattr__(self, "input_name", input_name)
         object.__setattr__(self, "relation", relation)
         object.__setattr__(self, "cursor_column", cursor_column)
         object.__setattr__(
@@ -438,6 +443,7 @@ class RuntimeCursorSpec:
             RuntimeCursorInputRelation(
                 relation=relation.relation,
                 cursor_column=relation.cursor_column,
+                input_name=relation.input_name,
                 cursor_grain=(
                     CursorGrain(str(relation.cursor_grain))
                     if relation.cursor_grain is not None
@@ -618,6 +624,8 @@ class TableCursorResolution:
     bounds: CursorBounds | None
     warning: str | None = None
     error: str | None = None
+    empty_cursor_inputs: tuple[str, ...] = ()
+    waiting_on_empty_inputs: bool = False
 
 
 @dataclass(frozen=True)

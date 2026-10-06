@@ -25,6 +25,7 @@ class CursorResolutionStatus(StrEnum):
     DEFERRED = "deferred"
     RESOLVED = "resolved"
     UNAVAILABLE = "unavailable"
+    NO_INPUT_ROWS = "no_input_rows"
 
 
 class PlanRowKind(StrEnum):

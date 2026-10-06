@@ -36,7 +36,11 @@ _PROJECT_FILES: dict[str, str] = {
         "  cursor_type timestamp,\n"
         "  cursor_grain second,\n"
         ");\n\n"
-        "SELECT id, customer_id, amount, updated_at FROM raw_orders"
+        'SELECT id, customer_id, amount, updated_at FROM __source("raw_orders")'
+    ),
+    "sources/raw.yml": (
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+        "    schema: main\n    table: raw_orders\n"
     ),
 }
 _SETUP_SQL: str = (
@@ -55,7 +59,7 @@ _NEW_ORDER_SQL: str = "INSERT INTO raw_orders VALUES (3, 11, 4, TIMESTAMP '2024-
             conversion_error=None,
             expected_exit_code=0,
             expected_conversions=(("orders", 2),),
-            expected_order_rows=5,
+            expected_order_rows=4,
         )
     ],
     ids=lambda case: case.description,

@@ -19,6 +19,10 @@ from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus,
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.constants import SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
+from sqlbuild.compiler.planner.main.cursor_window.no_input_rows_display import format_no_input_rows
+from sqlbuild.compiler.planner.main.cursor_window.waiting_on_empty_inputs_display import (
+    format_waiting_on_empty_inputs,
+)
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
@@ -942,6 +946,14 @@ def _append_cursor_detail(
         requested_start: str = details.requested_start or "earliest available"
         requested_end: str = details.requested_end or "latest available"
         lines.append(f"    requested: {requested_start} -> {requested_end}")
+    if details.empty_inputs and details.waiting_on_empty_inputs:
+        lines.append(
+            CliStyle(use_color=True).warning(
+                f"    window: {format_waiting_on_empty_inputs(details.empty_inputs)}"
+            )
+        )
+    elif details.empty_inputs:
+        lines.append(f"    window: {format_no_input_rows(details.empty_inputs)}")
     if show_range and details.resolved_bounds is not None:
         lines.append(
             f"    range: {_format_cursor_range(bounds=details.resolved_bounds, entry=entry)}"
