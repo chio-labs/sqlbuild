@@ -245,10 +245,12 @@
 <span class="kw">SELECT</span> <span class="num">1</span>
 
 <span class="cmd">sqb build --select daily_revenue</span>
-test  test_daily_revenue_chain           <span class="bad">FAIL</span>
-├── expect  expected daily_revenue       <span class="bad">FAIL</span>  unexpected=1; missing=1
-│     differing column total_revenue_cents: actual=3700, expected=2850
-└── error   [T003] test 'test_daily_revenue_chain' failed
+test      test_daily_revenue_chain                      <span class="bad">FAIL</span>
+    ├── expect  expected daily_revenue                  <span class="bad">FAIL</span>
+    │     unexpected=1; missing=1; <span class="dim">…</span>
+    │     differing column total_revenue_cents: actual=3700, expected=2850
+    ├── expect  assertion daily_revenue_is_non_negative <span class="ok">PASS</span>
+    └── error   [T003] test 'test_daily_revenue_chain' failed <span class="dim">…</span>
 <span class="bad">✗ Completed with errors</span>  PASS=0  FAIL=1  SKIP=1</pre>
 						</div>
 
