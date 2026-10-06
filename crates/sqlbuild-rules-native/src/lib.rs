@@ -7,6 +7,8 @@ mod configuration;
 mod constants;
 mod engine;
 mod models;
+#[cfg(feature = "poc")]
+pub mod poc;
 mod query_analysis;
 mod rules;
 mod scope_metadata;

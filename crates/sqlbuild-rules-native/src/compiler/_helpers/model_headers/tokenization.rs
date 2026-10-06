@@ -40,6 +40,14 @@ pub(crate) fn parse_batch(headers: &[String]) -> Result<Vec<HeaderParseResult>, 
     }))
 }
 
+/// PoC-only: parse one header on the calling thread (no per-call pool).
+#[cfg(feature = "poc")]
+pub(crate) fn parse_one(header: &str) -> Result<AuthoredValue, String> {
+    tokenize(header)
+        .and_then(HeaderParser::parse)
+        .map(|(value, _)| value)
+}
+
 pub(crate) fn tokenize_one(header: &str) -> Result<Vec<HeaderToken>, String> {
     tokenize(header)
 }

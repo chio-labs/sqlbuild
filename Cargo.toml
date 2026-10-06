@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/sqlbuild-rules-native",
+    "poc/sqlbuild-floor",
 ]
 resolver = "2"
 

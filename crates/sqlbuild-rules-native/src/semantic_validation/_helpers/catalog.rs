@@ -650,3 +650,56 @@ fn has_exact_columns(table: &SchemaTable) -> bool {
         .iter()
         .any(|column| column.name.starts_with('"'))
 }
+
+/// PoC-only hooks: drive the catalog from pure Rust without a Python interpreter.
+#[cfg(feature = "poc")]
+impl ProjectCatalog {
+    pub(crate) fn poc_new(input: CatalogInput) -> Result<Self, String> {
+        Self::new(input).map_err(|error| format!("{error:?}"))
+    }
+
+    pub(crate) fn poc_update_relations(&mut self, relations: Relations) {
+        self.update_relations(relations);
+    }
+
+    pub(crate) fn poc_update_analysis(&mut self, relations: HashMap<String, (Columns, Columns)>) {
+        self.update_analysis(relations);
+    }
+
+    pub(crate) fn poc_register_override(&mut self, relations: Relations) -> usize {
+        self.register_override(relations)
+    }
+
+    pub(crate) fn poc_with_relations(&self, relations: Relations) -> Self {
+        self.with_relations(relations)
+    }
+
+    /// Make every view of this catalog analyse on `pool`.
+    pub(crate) fn poc_set_pool(&self, pool: Arc<rayon::ThreadPool>) {
+        *self
+            .analysis_pool
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(pool);
+    }
+
+    /// The body of `binding_results`, run on the caller's current rayon pool.
+    pub(crate) fn poc_binding_results(
+        &self,
+        requests: Vec<BindingRequest>,
+    ) -> Result<Vec<Vec<DiagnosticRow>>, String> {
+        requests
+            .into_par_iter()
+            .map(|(sql, references, overrides)| {
+                let schema = self.schema(&references, overrides)?;
+                let result = self.validate(&sql, &schema)?;
+                let result = diagnostics::map_diagnostics(
+                    &sql,
+                    self.dialect,
+                    result,
+                    &self.function_probes,
+                )?;
+                Ok(result.errors.into_iter().map(diagnostic_row).collect())
+            })
+            .collect()
+    }
+}

@@ -13,6 +13,8 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = []
 extension-module = ["pyo3/extension-module"]
+# Proof-of-concept facade for out-of-tree benchmarks; never enabled in shipped builds.
+poc = []
 
 [dependencies]
 fensu-policy.workspace = true
