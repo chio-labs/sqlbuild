@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
@@ -11,6 +13,12 @@ from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledProject,
     CompileProjectInputs,
+)
+from sqlbuild.compiler.contracts.main.promotion_conflicts import promotion_conflict_diagnostics
+from sqlbuild.compiler.discovery.constants import (
+    LOCAL_CONFIG_FILENAME,
+    PROJECT_CONFIG_FILENAME,
+    TABLE_PROMOTION_MODE_SETTING_KEY,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -120,7 +128,22 @@ def build_compiled_project(
         ),
         project=project,
     )
-    return project
+    return replace(
+        project,
+        diagnostics=(
+            *project.diagnostics,
+            *promotion_conflict_diagnostics(
+                project=project,
+                adapter_default=adapter.default_table_promotion_mode(),
+                settings_file=(
+                    LOCAL_CONFIG_FILENAME
+                    if TABLE_PROMOTION_MODE_SETTING_KEY
+                    in discovered_inputs.local_config.setting_overrides
+                    else PROJECT_CONFIG_FILENAME
+                ),
+            ),
+        ),
+    )
 
 
 def _resolve_analysis_model_names(

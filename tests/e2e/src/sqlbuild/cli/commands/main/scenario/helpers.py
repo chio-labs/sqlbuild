@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import signal
 import subprocess
@@ -13,6 +14,7 @@ from itertools import takewhile
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario._helpers.snapshots.core import (
     build_scenario_snapshot_input_fingerprint,
@@ -790,4 +792,31 @@ def interrupt_scenario_run(
             stderr="".join(started) + stderr,
         ),
         time.monotonic() - interrupted_at,
+    )
+
+
+COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
+
+
+def write_project_settings(*, project_dir: Path, base_toml: str, settings: str) -> None:
+    """Rewrite the project file with a settings block appended to its base content."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(base_toml + settings, encoding="utf-8")
+
+
+def run_reusable_compile(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Compile in a fresh process with whole-project compile reuse enabled."""
+
+    return subprocess.run(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--project-dir",
+            str(project_dir),
+            "--no-color",
+            "compile",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, REUSE_DISABLE_ENV_VAR: "0"},
+        check=False,
     )

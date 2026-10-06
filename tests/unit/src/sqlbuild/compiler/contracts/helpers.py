@@ -116,3 +116,36 @@ def _column_audits(
     *, name: str, not_null_audit_columns: tuple[str, ...]
 ) -> tuple[SchemaAuditInstance, ...]:
     return ((), (SchemaAuditInstance(definition_name="not_null"),))[name in not_null_audit_columns]
+
+
+def make_promotion_project(
+    *,
+    model_configs: tuple[tuple[str, dict[str, object]], ...],
+    table_promotion_mode: str | None,
+) -> CompiledProject:
+    """Build a compiled project of models with the given configs and promotion setting."""
+
+    return CompiledProject(
+        run_id="run-1",
+        effective_target_name="dev",
+        effective_connection={},
+        effective_vars={},
+        settings=SettingsConfig(table_promotion_mode=table_promotion_mode),
+        models=tuple(
+            CompiledModel(
+                key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
+                deps=(),
+                name=name,
+                relative_path=Path(f"models/{name}.sql"),
+                query_sql="SELECT 1 AS id",
+                config=CompileModelConfig(values=values),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="analytics",
+                    name=name,
+                    qualified_name=f"analytics.{name}",
+                ),
+            )
+            for name, values in model_configs
+        ),
+    )

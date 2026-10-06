@@ -52,3 +52,14 @@ class DynamicContractValidationTestCase:
     failure_reason: str | None
     expected_code: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class PromotionConflictTestCase:
+    description: str
+    model_configs: tuple[tuple[str, dict[str, object]], ...]
+    table_promotion_mode: str | None
+    adapter_default: str
+    settings_file: str
+    expected_resource_names: tuple[str, ...]
+    expected_help_fragments: tuple[str, ...] = ()

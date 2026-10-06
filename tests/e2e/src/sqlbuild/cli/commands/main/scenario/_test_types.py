@@ -225,3 +225,22 @@ class ScenarioInterruptE2ETestCase:
     concurrency: int
     interrupt_count: int
     expected_notice: str
+
+
+@dataclass(frozen=True)
+class PromotionConflictE2ETestCase:
+    """Test case for the compile-time enforced-contract promotion conflict."""
+
+    description: str
+    settings_config: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PromotionConflictReuseE2ETestCase:
+    """Test case for the promotion conflict across warm reused compiles."""
+
+    description: str
+    settings_steps: tuple[str, ...]
+    expected_exit_codes: tuple[int, ...]
+    expected_reused: tuple[bool, ...]

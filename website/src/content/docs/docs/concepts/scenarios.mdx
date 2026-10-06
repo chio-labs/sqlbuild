@@ -148,7 +148,8 @@ Scenario artifacts are physically isolated from production:
 Table models use the same promotion as `sqb build`: the project's `table_promotion_mode`, or the
 adapter default (staged) when it is unset. An enforced contract needs staged promotion, so its
 runtime contract check runs before the scenario reaches its expectations; with
-`table_promotion_mode = "immediate"` such a model fails with `K011`, exactly as in `sqb build`.
+`table_promotion_mode = "immediate"` such a model is a `K011` compile error, reported before any
+scenario runs, exactly as in `sqb compile`, `sqb plan`, and `sqb build`.
 
 Independent scenarios run concurrently, up to `--concurrency` or the project `concurrency`
 setting. Each scenario writes only its own prefixed relations, so concurrent scenarios never
