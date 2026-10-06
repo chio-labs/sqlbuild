@@ -3,6 +3,7 @@
 use crate::compiler::_helpers::sql_tests::cte_slices::{
     SliceDialect, WithSlices, opaque_end, read_identifier,
 };
+use crate::constants::{WITH_KEYWORD, WITH_LIST_ENDING_CLAUSES};
 use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
 use sqlbuild_sqltext::sql_scan::main::skip_whitespace::skip_whitespace;
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
@@ -140,28 +141,6 @@ pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<S
     Some(keys)
 }
 
-/// Clause keywords that end a WITH list at their parenthesis depth.
-const LIST_ENDING_CLAUSES: &[&str] = &[
-    "select",
-    "from",
-    "where",
-    "group",
-    "having",
-    "qualify",
-    "order",
-    "limit",
-    "window",
-    "union",
-    "except",
-    "intersect",
-    "minus",
-    "values",
-    "insert",
-    "update",
-    "delete",
-    "merge",
-];
-
 /// Whether each token sits directly in a WITH list, so a comma there separates CTEs.
 fn with_list_commas(sql: &str, code: &[&Token]) -> Vec<bool> {
     let mut lists: Vec<bool> = vec![false];
@@ -176,9 +155,9 @@ fn with_list_commas(sql: &str, code: &[&Token]) -> Vec<bool> {
             }
             _ => {
                 if let (Some(key), Some(current)) = (token.key.as_deref(), lists.last_mut()) {
-                    if key == "with" {
+                    if key == WITH_KEYWORD {
                         *current = true;
-                    } else if LIST_ENDING_CLAUSES.contains(&key) {
+                    } else if WITH_LIST_ENDING_CLAUSES.contains(&key) {
                         *current = false;
                     }
                 }

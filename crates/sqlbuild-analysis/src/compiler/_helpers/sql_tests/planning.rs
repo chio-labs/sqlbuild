@@ -798,11 +798,14 @@ fn reserved_cte_name(query_sql: &str, dialect: SliceDialect) -> Option<String> {
     defined_cte_keys(query_sql, dialect)
         .unwrap_or_default()
         .into_iter()
-        .find(|key| {
-            key == SQL_TEST_ACTUAL_CTE
-                || key == SQL_TEST_EXPECTED_CTE
-                || prefixes.iter().any(|prefix| key.starts_with(prefix))
-        })
+        .find(|key| is_reserved_cte_key(key, &prefixes))
+}
+
+fn is_reserved_cte_key(key: &str, prefixes: &[&str]) -> bool {
+    if key == SQL_TEST_ACTUAL_CTE || key == SQL_TEST_EXPECTED_CTE {
+        return true;
+    }
+    prefixes.iter().any(|prefix| key.starts_with(prefix))
 }
 
 fn plan_model_test(

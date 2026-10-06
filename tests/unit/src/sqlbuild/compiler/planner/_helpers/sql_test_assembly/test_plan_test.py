@@ -1320,7 +1320,7 @@ def test_given_sql_analysis_enabled_when_planning_test_then_it_uses_top_level_ge
             helper_ctes={},
             expected_model_names=("orders",),
             expected_chain_length=1,
-            expected_error_fragments=("conflicts with the generated source CTE",),
+            expected_error_fragments=("names starting with a SQLBuild test prefix",),
             expected_cte_bodies={"orders": "SELECT 1 AS id"},
         )
     ],
