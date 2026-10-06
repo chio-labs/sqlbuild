@@ -156,9 +156,19 @@ MODEL (
 SELECT
   o.order_id,
   o.customer_id,
-  p.amount_cents AS total_cents
+  p.amount_cents AS total_cents,
+  @cents_to_dollars("p.amount_cents") AS total_dollars
 FROM __ref("stg_orders") o
 JOIN __ref("stg_payments") p USING (order_id)
+```
+
+Macros are plain Python functions that return SQL, kept next to the models that use them:
+
+```python
+# models/marts/_sqlbuild/_macros/currency.py
+def cents_to_dollars(column: str) -> str:
+    """Convert a cents integer column to a dollars decimal with two decimal places."""
+    return f"ROUND(({column}) / 100.0, 2)"
 ```
 
 A test mocks the sources and asserts on the model, resolving every model in between from its real
@@ -169,17 +179,25 @@ TEST();
 
 WITH
 __source__raw__orders AS (
-  @mock_orders()
+  SELECT
+    1 AS id,
+    100 AS customer_id,
+    2 AS waffle_type_id,
+    3 AS quantity,
+    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
+    'completed' AS status
 ),
 __source__raw__payments AS (
   SELECT
-    1 AS payment_id,
+    10 AS id,
     1 AS order_id,
     1500 AS amount_cents,
-    'credit_card' AS method
+    'credit_card' AS payment_method,
+    CAST('2026-04-01 10:05:00' AS TIMESTAMP) AS paid_at,
+    'success' AS status
 ),
 __expected__fact_orders AS (
-  SELECT 1 AS order_id, 100 AS customer_id, 1500 AS total_cents
+  SELECT 1 AS order_id, 100 AS customer_id, 1500 AS total_cents, 15.00 AS total_dollars
 )
 SELECT 1
 ```
