@@ -12,7 +12,9 @@
 use _native::poc::{self, Catalog, Cols, Relations};
 use rayon::prelude::*;
 use serde_json::{Value, json};
-use sqlbuild_floor::{load_average, measure, median, pool, process_cpu_seconds};
+use sqlbuild_floor::{
+    load_average, measure, median, pool, process_cpu_seconds, thread_cpu_seconds,
+};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
@@ -582,6 +584,7 @@ fn run_analysis(replay: &Replay, threads: usize, keep_outputs: bool) -> RunResul
     let outputs: Vec<Mutex<Option<String>>> =
         replay.units.iter().map(|_| Mutex::new(None)).collect();
     let unit_seconds: Vec<Mutex<f64>> = replay.units.iter().map(|_| Mutex::new(0.0)).collect();
+    let unit_cpu_seconds: Vec<Mutex<f64>> = replay.units.iter().map(|_| Mutex::new(0.0)).collect();
     let errors = AtomicUsize::new(0);
     let mut phase_walls = Vec::new();
     for phase in &replay.phases {
@@ -609,9 +612,12 @@ fn run_analysis(replay: &Replay, threads: usize, keep_outputs: bool) -> RunResul
         }
         let remaining = AtomicUsize::new(phase.units.len());
         let signal = Condvar::new();
-        thread_pool.scope(|scope| {
+        // Drainers are plain threads: they block on the ready queue, which must never happen on
+        // a rayon worker (a waiting worker may steal a drainer and deadlock). Each analysis
+        // runs as one job injected into the pool, so at most `threads` run at once.
+        std::thread::scope(|scope| {
             for _ in 0..threads {
-                scope.spawn(|_| {
+                scope.spawn(|| {
                     loop {
                         let next = {
                             let mut heap = ready.lock().expect("lock");
@@ -631,11 +637,14 @@ fn run_analysis(replay: &Replay, threads: usize, keep_outputs: bool) -> RunResul
                         };
                         let unit = &replay.units[index];
                         let unit_start = Instant::now();
+                        let unit_cpu = thread_cpu_seconds();
                         let prepared = catalog.read().expect("lock").prepare_compact(&unit.payload);
                         let view = catalog.read().expect("lock").view();
                         let result = prepared.and_then(|job| job.run(&view));
                         *unit_seconds[index].lock().expect("lock") =
                             unit_start.elapsed().as_secs_f64();
+                        *unit_cpu_seconds[index].lock().expect("lock") =
+                            thread_cpu_seconds() - unit_cpu;
                         match result {
                             Ok(text) => {
                                 if keep_outputs {
@@ -712,6 +721,63 @@ fn verify(replay: &Replay, run: &RunResult) -> (usize, usize, Vec<String>) {
         }
     }
     (equal, different, examples)
+}
+
+/// Greedy list schedule of the measured single-thread unit times on `workers` (phase barriers).
+fn list_schedule(replay: &Replay, seconds: &[f64], workers: usize) -> f64 {
+    use std::cmp::Reverse;
+    let mut total = 0.0f64;
+    for phase in &replay.phases {
+        let in_phase: HashSet<usize> = phase.units.iter().copied().collect();
+        let mut pending: HashMap<usize, usize> = phase
+            .units
+            .iter()
+            .map(|u| {
+                (
+                    *u,
+                    replay.units[*u]
+                        .deps
+                        .iter()
+                        .filter(|d| in_phase.contains(d))
+                        .count(),
+                )
+            })
+            .collect();
+        let mut ready: BinaryHeap<Ready> = phase
+            .units
+            .iter()
+            .filter(|u| pending[u] == 0)
+            .map(|u| Ready(replay.units[*u].priority, *u))
+            .collect();
+        // Min-heap of (finish time in ns, unit).
+        let mut running: BinaryHeap<Reverse<(u64, usize)>> = BinaryHeap::new();
+        let mut now = 0u64;
+        let mut free = workers;
+        loop {
+            while free > 0 {
+                let Some(Ready(_, unit)) = ready.pop() else {
+                    break;
+                };
+                running.push(Reverse((now + (seconds[unit] * 1e9) as u64, unit)));
+                free -= 1;
+            }
+            let Some(Reverse((time, unit))) = running.pop() else {
+                break;
+            };
+            now = time;
+            free += 1;
+            for child in &replay.units[unit].dependents {
+                if let Some(count) = pending.get_mut(child) {
+                    *count -= 1;
+                    if *count == 0 {
+                        ready.push(Ready(replay.units[*child].priority, *child));
+                    }
+                }
+            }
+        }
+        total += now as f64 / 1e9;
+    }
+    total
 }
 
 /// Critical path through the unit DAG using measured single-thread unit times.
@@ -858,6 +924,7 @@ fn main() {
         let mut loads = Vec::new();
         let mut phase_walls: Vec<Vec<f64>> = Vec::new();
         let mut critical = Vec::new();
+        let mut schedules: std::collections::BTreeMap<usize, Vec<f64>> = Default::default();
         let mut unit_sum = Vec::new();
         for _ in 0..runs {
             loads.push(load_average());
@@ -868,6 +935,28 @@ fn main() {
             unit_sum.push(run.unit_seconds.iter().sum::<f64>());
             if thread_count == 1 {
                 critical.push(critical_path(&replay, &run.unit_seconds));
+                if let Ok(name) = std::env::var("POC_UNIT_NAME") {
+                    let mut sorted = run.unit_seconds.clone();
+                    sorted.sort_by(f64::total_cmp);
+                    let named = replay
+                        .units
+                        .iter()
+                        .position(|unit| unit.produces.contains(&name))
+                        .map(|index| run.unit_seconds[index]);
+                    println!(
+                        "  unit seconds: median {:.4} p90 {:.4} max {:.4}; named model unit {named:?}",
+                        sorted[sorted.len() / 2],
+                        sorted[sorted.len() * 9 / 10],
+                        sorted[sorted.len() - 1]
+                    );
+                }
+                for workers in [1usize, 2, 4, 8] {
+                    schedules.entry(workers).or_default().push(list_schedule(
+                        &replay,
+                        &run.unit_seconds,
+                        workers,
+                    ));
+                }
             }
         }
         let (n_wall, n_cpu) = side_phase(&replay, thread_count, runs, true);
@@ -879,7 +968,7 @@ fn main() {
             })
             .collect();
         println!(
-            "threads {thread_count}: analysis wall {:.3}s cpu {:.3}s (phases {}) unit-time sum {:.3}s{} | normalize wall {n_wall:.3} cpu {n_cpu:.3} | binding_results wall {b_wall:.3} cpu {b_cpu:.3} | load {:.2}-{:.2}",
+            "threads {thread_count}: analysis wall {:.3}s cpu {:.3}s (phases {}) unit wall sum {:.3}s{} | normalize wall {n_wall:.3} cpu {n_cpu:.3} | binding_results wall {b_wall:.3} cpu {b_cpu:.3} | load {:.2}-{:.2}",
             median(&mut walls),
             median(&mut cpus),
             phases.join("+"),
@@ -892,6 +981,15 @@ fn main() {
             loads.iter().copied().fold(f64::INFINITY, f64::min),
             loads.iter().copied().fold(0.0, f64::max),
         );
+        for (workers, values) in &mut schedules {
+            println!(
+                "  simulated list schedule of measured unit times on {workers} workers: {:.3}s",
+                median(values)
+            );
+        }
+        let mut sorted_walls = walls.clone();
+        sorted_walls.sort_by(f64::total_cmp);
+        println!("  analysis walls (all runs): {sorted_walls:.3?}");
     }
 }
 
