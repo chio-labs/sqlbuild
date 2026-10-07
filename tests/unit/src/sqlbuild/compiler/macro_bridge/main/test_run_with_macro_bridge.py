@@ -4,7 +4,8 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeRenderMismatchError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge import run_with_macro_bridge
 from tests.unit.src.sqlbuild.compiler.macro_bridge.main._test_types import (
@@ -58,7 +59,7 @@ def test_given_succeeding_stage_when_running_with_macro_bridge_then_runs_once_br
             description="native-only failure is reported as a divergence",
             stage_with_bridge=failed,
             stage_without_bridge=rendered,
-            expected_error=NativeRenderMismatchError,
+            expected_error=NativeStageMismatchError,
             expected_bridged_runs=[True, False],
         ),
     ],

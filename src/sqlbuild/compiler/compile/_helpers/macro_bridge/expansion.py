@@ -14,12 +14,13 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 )
 from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
-from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeRenderMismatchError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     ExpansionSpan,
     MacroExpansionState,
 )
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
     ARGUMENT_REFERENCE_EVENT,
@@ -139,7 +140,7 @@ def _bridged_call_output(  # noqa: PLR0913
             "directly in SQL"
         )
     if next_index != site.end:
-        raise NativeRenderMismatchError(
+        raise NativeStageMismatchError(
             f"Native macro call scan of '{consumer_path}' ended at {site.end}, Python at "
             f"{next_index}"
         )
@@ -177,7 +178,7 @@ def _replay_macro_call_event(
         )
     elif tag == DECLARATION_READ_EVENT:
         if declarations is None:
-            raise NativeRenderMismatchError("Replayed a declaration read without declarations")
+            raise NativeStageMismatchError("Replayed a declaration read without declarations")
         _record_macro_declaration_usage(
             name=second, kind=DeclarationKind(first), declarations=declarations, state=state
         )
@@ -198,4 +199,4 @@ def _replay_macro_call_event(
             (SqlResourceRef(kind=SqlResourceRefKind(first), name=second),)
         )
     else:
-        raise NativeRenderMismatchError(f"Unknown macro call event {tag}")
+        raise NativeStageMismatchError(f"Unknown macro call event {tag}")

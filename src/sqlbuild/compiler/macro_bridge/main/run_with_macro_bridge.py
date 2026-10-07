@@ -9,7 +9,7 @@ from collections.abc import Callable
 from contextvars import Token
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.exceptions import NativeRenderMismatchError
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
 
@@ -46,7 +46,7 @@ def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
     finally:
         ACTIVE_MACRO_BRIDGE.reset(token)
     _ = stage()
-    raise NativeRenderMismatchError(
+    raise NativeStageMismatchError(
         "The native macro bridge failed where the Python render succeeded; "
         "run with SQLBUILD_COMPILER_ENGINE=python"
     ) from native_error
