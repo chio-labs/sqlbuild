@@ -136,6 +136,10 @@ def _seed_project(seed: int) -> CorpusProject:
     return CorpusProject(
         name=f"seed/{seed}",
         commands=(COLD_COMPILE, PLAN),
-        expected=ExpectedOutcome(error_code=generated.expected_error_code),
+        expected=ExpectedOutcome(
+            error_code=generated.expected_error_code,
+            succeeding_commands=generated.succeeding_commands,
+        ),
         writer=generated.write,
+        discovery_coverage=True,
     )

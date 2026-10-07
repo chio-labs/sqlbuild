@@ -9,8 +9,12 @@ import tempfile
 import time
 from pathlib import Path
 
+from scripts.compiler_differential._helpers.coverage.discovery import required_discovery_kinds
 from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
-from scripts.compiler_differential._helpers.running.report import format_summary
+from scripts.compiler_differential._helpers.running.report import (
+    format_discovery_coverage,
+    format_summary,
+)
 from scripts.compiler_differential._helpers.running.run import (
     compare_corpus,
     differential_options,
@@ -18,6 +22,7 @@ from scripts.compiler_differential._helpers.running.run import (
 )
 from scripts.compiler_differential.constants import (
     CORPUS_NAMES,
+    CORPUS_SEEDS,
     DEFAULT_DENSE_MODELS,
     DEFAULT_ENGINES,
     DEFAULT_SEED_COUNT,
@@ -39,14 +44,24 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
         comparisons: list[ProjectComparison] = compare_corpus(
             corpus=selected_corpus(args=args, repo_root=repo_root), options=options
         )
+    missing_coverage: tuple[str, ...] = ()
+    if options.stage_captures and CORPUS_SEEDS in args.corpus:
+        covered: frozenset[str] = frozenset().union(
+            *(comparison.discovered_kinds for comparison in comparisons)
+        )
+        required: tuple[str, ...] = required_discovery_kinds()
+        print(format_discovery_coverage(covered=covered, required=required))
+        if options.require_discovery_coverage:
+            missing_coverage = tuple(kind for kind in required if kind not in covered)
     print(
         format_summary(
             comparisons=comparisons,
             engines=options.engines,
             seconds=time.monotonic() - started,
+            missing_coverage=missing_coverage,
         )
     )
-    return 1 if any(comparison.differences for comparison in comparisons) else 0
+    return 1 if missing_coverage or any(comparison.differences for comparison in comparisons) else 0
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -80,6 +95,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="also dump and diff every frontier object to localise a mismatch to a stage",
     )
     parser.add_argument(
+        "--require-discovery-coverage",
+        action="store_true",
+        help="fail unless the seed corpus exercises every discovery input kind (needs captures)",
+    )
+    parser.add_argument(
         "--engine-env",
         action="append",
         default=[],
@@ -88,4 +108,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--work-dir", type=Path, default=None, help="keep run directories here")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
-    return parser.parse_args(argv)
+    args: argparse.Namespace = parser.parse_args(argv)
+    if args.require_discovery_coverage and not (
+        args.stage_captures and CORPUS_SEEDS in args.corpus
+    ):
+        parser.error("--require-discovery-coverage needs --stage-captures and the seeds corpus")
+    return args

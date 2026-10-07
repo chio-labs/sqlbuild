@@ -28,6 +28,7 @@ def differential_options(*, args: argparse.Namespace, work_dir: Path) -> Differe
         stage_captures=args.stage_captures,
         python=args.python,
         engine_environment=parse_engine_environment(args.engine_env),
+        require_discovery_coverage=args.require_discovery_coverage,
     )
 
 

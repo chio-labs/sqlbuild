@@ -45,3 +45,24 @@ class FailureCaseWriteTestCase:
     description: str
     case: FailureCase
     expected_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FeatureBlockWindowTestCase:
+    """A window of consecutive seeds and the feature blocks it must force."""
+
+    description: str
+    seeds: range
+    expected_blocks: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RareFeatureSeedTestCase:
+    """A seed carrying a rare block and the outcome it must declare."""
+
+    description: str
+    seed: int
+    expected_feature: str
+    expected_error_code: str
+    expected_succeeding_commands: tuple[str, ...]
+    other_seeds: tuple[int, ...]

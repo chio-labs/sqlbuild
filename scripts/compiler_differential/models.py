@@ -17,9 +17,10 @@ class DifferentialCommand:
 
 @dataclass(frozen=True)
 class ExpectedOutcome:
-    """What a corpus project must produce: success, or failure with one diagnostic code."""
+    """Success, or failure with one code; `succeeding_commands` must still exit 0."""
 
     error_code: str | None = None
+    succeeding_commands: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class CorpusProject:
     source_dir: Path | None = None
     writer: Callable[[Path], None] | None = None
     project_subdirectory: str | None = None
+    discovery_coverage: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,7 @@ class ProjectComparison:
     project: str
     differences: tuple[Difference, ...]
     seconds: float
+    discovered_kinds: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,7 @@ class DifferentialOptions:
     stage_captures: bool
     python: Path
     engine_environment: dict[str, dict[str, str]]
+    require_discovery_coverage: bool = False
 
 
 @dataclass(frozen=True)
@@ -121,6 +125,7 @@ class GeneratedProject(WritableProject):
     seed: int
     expected_error_code: str | None
     features: tuple[str, ...]
+    succeeding_commands: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

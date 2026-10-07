@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from scripts.compiler_differential.constants import CONFIG_ONLY_KINDS
 from scripts.compiler_differential.models import Difference, ProjectComparison
 
 
@@ -20,20 +21,43 @@ def format_comparison(*, comparison: ProjectComparison, engines: tuple[str, str]
 
 
 def format_summary(
-    *, comparisons: list[ProjectComparison], engines: tuple[str, str], seconds: float
+    *,
+    comparisons: list[ProjectComparison],
+    engines: tuple[str, str],
+    seconds: float,
+    missing_coverage: tuple[str, ...] = (),
 ) -> str:
-    """Summarize the run, naming the first difference of the first differing project."""
+    """Summarize the run; any difference or required-but-missing coverage reports FAILED."""
 
     differing: list[ProjectComparison] = [item for item in comparisons if item.differences]
     left_engine, right_engine = engines
-    if not differing:
+    if not differing and not missing_coverage:
         return (
             f"Compiler differential passed: {len(comparisons)} projects identical "
             f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
         )
-    first: Difference = differing[0].differences[0]
-    return (
+    lines: list[str] = [
         f"Compiler differential FAILED: {len(differing)} of {len(comparisons)} projects differ "
-        f"({left_engine} vs {right_engine}) in {seconds:.1f}s\n"
-        f"First difference: {first.project}: {first.artifact} at {first.location}"
+        f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
+    ]
+    if differing:
+        first: Difference = differing[0].differences[0]
+        lines.append(f"First difference: {first.project}: {first.artifact} at {first.location}")
+    if missing_coverage:
+        lines.append(f"Required discovery coverage missing: {', '.join(missing_coverage)}")
+    return "\n".join(lines)
+
+
+def format_discovery_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:
+    """Report how many required discovery input kinds the seed corpus exercised."""
+
+    missing: list[str] = [kind for kind in required if kind not in covered]
+    line: str = (
+        f"Discovery coverage: {len(required) - len(missing)} of {len(required)} input kinds "
+        "exercised by the seed corpus"
     )
+    config_only: str = "; ".join(
+        f"{kind} (only proves {meaning})" for kind, meaning in CONFIG_ONLY_KINDS.items()
+    )
+    line = f"{line}\n  config-only kinds: {config_only}"
+    return line if not missing else f"{line}\n  missing: {', '.join(missing)}"

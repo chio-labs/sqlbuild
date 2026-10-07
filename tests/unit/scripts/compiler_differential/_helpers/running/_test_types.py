@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from scripts.compiler_differential.models import ExpectedOutcome
+from scripts.compiler_differential.models import ExpectedOutcome, ProjectComparison
 
 
 @dataclass(frozen=True)
@@ -41,3 +41,24 @@ class ExpectedOutcomeErrorTestCase:
     description: str
     value: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class CoverageReportTestCase:
+    """Covered kinds and the coverage report lines the harness must print."""
+
+    description: str
+    covered: frozenset[str]
+    required: tuple[str, ...]
+    expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SummaryTestCase:
+    """Project results, missing required coverage, and the summary the harness must print."""
+
+    description: str
+    comparisons: list[ProjectComparison]
+    missing_coverage: tuple[str, ...]
+    expected_lines: tuple[str, ...]
+    expected_absent: tuple[str, ...]

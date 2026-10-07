@@ -6,7 +6,12 @@ import random
 from collections.abc import Callable
 from dataclasses import replace
 
+from scripts.compiler_differential.classes.discovery_features import (
+    DiscoveryFeatureWriter,
+    feature_blocks_for_seed,
+)
 from scripts.compiler_differential.constants import (
+    DUCKDB_ADAPTER,
     GENERATOR_CONSTANT_KIND,
     GENERATOR_CROSS_DOMAIN_SHARE,
     GENERATOR_DOMAINS,
@@ -20,6 +25,7 @@ from scripts.compiler_differential.constants import (
     GENERATOR_MACRO_KIND,
     GENERATOR_NON_ASCII_DESCRIPTION_SHARE,
     GENERATOR_NON_ASCII_LABELS,
+    GENERATOR_RARE_FEATURE_BLOCKS,
     GENERATOR_REGION_ENV_VAR,
     GENERATOR_ROLES,
     GENERATOR_SOURCE_COLUMNS,
@@ -36,8 +42,9 @@ _MARTS: str = GENERATOR_LAYERS[1]
 class ProjectBuilder:
     """Accumulate the files of one generated project from a seeded random source."""
 
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, *, blocks: tuple[str, ...] | None = None) -> None:
         self._seed: int = seed
+        self._forced_blocks: tuple[str, ...] | None = blocks
         self._random: random.Random = random.Random(seed)
         self._files: dict[str, str] = {}
         self._features: set[str] = set()
@@ -62,9 +69,15 @@ class ProjectBuilder:
             self._plan_constant(index=index)
         for index in range(self._random.randint(1, 3)):
             self._plan_macro(index=index)
+        blocks: tuple[str, ...] = (
+            feature_blocks_for_seed(seed=self._seed, rng=self._random)
+            if self._forced_blocks is None
+            else self._forced_blocks
+        )
         invalid_kind: str | None = (
             self._random.choice(sorted(GENERATOR_INVALID_CODES))
             if self._random.random() < GENERATOR_INVALID_SHARE
+            and not set(blocks) & set(GENERATOR_RARE_FEATURE_BLOCKS)
             else None
         )
         self._write_declarations()
@@ -73,16 +86,28 @@ class ProjectBuilder:
         self._write_python_nodes()
         self._write_tests_and_scenarios()
         self._write_singular_audit()
-        self._write_config(domains=domains)
+        extras: DiscoveryFeatureWriter = DiscoveryFeatureWriter(
+            blocks=blocks,
+            rng=self._random,
+            files=self._files,
+            features=self._features,
+            staging=[model for model in self._models if model.layer == _STAGING],
+            label=self._label,
+        )
+        extras.write()
+        self._write_config(domains=domains, adapter=extras.adapter, extra_lines=extras.config_lines)
         if invalid_kind is not None:
             self._inject_invalid(kind=invalid_kind)
         return GeneratedProject(
             files=dict(sorted(self._files.items())),
             seed=self._seed,
             expected_error_code=(
-                None if invalid_kind is None else GENERATOR_INVALID_CODES[invalid_kind]
+                GENERATOR_INVALID_CODES[invalid_kind]
+                if invalid_kind is not None
+                else extras.expected_error_code
             ),
             features=tuple(sorted(self._features)),
+            succeeding_commands=extras.succeeding_commands,
         )
 
     def _chance(self, share: float) -> bool:
@@ -91,10 +116,12 @@ class ProjectBuilder:
     def _label(self) -> str:
         return self._random.choice(GENERATOR_NON_ASCII_LABELS)
 
-    def _write_config(self, *, domains: list[str]) -> None:
+    def _write_config(
+        self, *, domains: list[str], adapter: str | None, extra_lines: list[str]
+    ) -> None:
         lines: list[str] = [
             f'name = "generated_{self._seed}"',
-            'adapter = "duckdb"',
+            f'adapter = "{adapter or DUCKDB_ADAPTER}"',
             'default_target = "dev"',
             "",
             "[connection]",
@@ -130,6 +157,7 @@ class ProjectBuilder:
                     ]
                 )
         self._features.add("path_defaults_wildcard")
+        lines.extend(extra_lines)
         self._files["sqlbuild_project.toml"] = "\n".join(lines) + "\n"
 
     def _write_sources(self) -> None:

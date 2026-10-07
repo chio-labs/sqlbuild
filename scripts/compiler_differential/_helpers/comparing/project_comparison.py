@@ -10,6 +10,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
     compare_engine_runs,
     diagnostic_codes,
 )
+from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.models import (
     CommandOutcome,
@@ -57,6 +58,11 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         project=project.name,
         differences=tuple(differences),
         seconds=time.monotonic() - started,
+        discovered_kinds=(
+            project_discovery_kinds(captures=left.captures, source_dir=source_dir)
+            if project.discovery_coverage and options.stage_captures
+            else frozenset()
+        ),
     )
 
 
@@ -76,7 +82,7 @@ def _corpus_differences(*, project: CorpusProject, run: EngineRun) -> list[Diffe
     if expected_code is not None:
         codes: tuple[str, ...] = diagnostic_codes(outcome=first, errors_only=False)
         met: bool = first.exit_code != 0 and bool(errors) and expected_code in codes
-        return (
+        failed: list[Difference] = (
             []
             if met
             else [
@@ -88,6 +94,16 @@ def _corpus_differences(*, project: CorpusProject, run: EngineRun) -> list[Diffe
                 )
             ]
         )
+        return failed + [
+            _expectation_difference(
+                project=project,
+                location=f"`{outcome.label}` expected success",
+                expected="exit 0",
+                actual=f"exit {outcome.exit_code}",
+            )
+            for outcome in run.outcomes
+            if outcome.label in project.expected.succeeding_commands and outcome.exit_code != 0
+        ]
     problems: list[str] = [
         f"`{outcome.label}` exit {outcome.exit_code}"
         for outcome in run.outcomes
