@@ -91,12 +91,52 @@ pub(super) fn junction_walk() -> Vec<String> {
     .expect("walk")
 }
 
-/// Python's code points for a segment, decoding a raw segment's bytes by `surrogateescape`.
-pub(super) fn segment_points(segment: &str) -> Vec<u32> {
-    crate::tree::_helpers::raw_names::segment_code_points(segment)
+/// Python's code points for a segment whose raw name was listed on Windows or elsewhere.
+pub(super) fn segment_points(segment: &str, windows: bool) -> Vec<u32> {
+    crate::tree::_helpers::raw_names::segment_code_points_on(segment, windows)
 }
 
 /// Owned copies of borrowed texts.
 pub(super) fn owned<'a>(texts: impl Iterator<Item = &'a str>) -> Vec<String> {
     texts.map(str::to_owned).collect()
+}
+
+/// Walk files named by UTF-16 units: displayed paths, whether each fails when read, and its text.
+#[cfg(windows)]
+pub(super) fn wide_name_walk(
+    test_case: &crate::tree::tests::test_types::WideNameWalkTestCase,
+) -> (Vec<String>, Vec<bool>, Vec<String>) {
+    use std::os::windows::ffi::OsStringExt;
+    let project = tempfile::tempdir().expect("temporary project");
+    let models = project.path().join("models");
+    fs::create_dir_all(&models).expect("models directory");
+    for (index, name) in test_case.names.iter().enumerate() {
+        fs::write(
+            models.join(std::ffi::OsString::from_wide(name)),
+            format!("file {index}"),
+        )
+        .expect("file");
+    }
+    let tree = ProjectTree::new(project.path());
+    let root = crate::models::ProjectRoot {
+        directory: project.path().to_path_buf(),
+        display_prefix: String::new(),
+    };
+    let paths: Vec<String> =
+        rglob(&tree, "models", |entry| entry.name.ends_with(".sql")).expect("walk");
+    let failures: Vec<bool> = paths
+        .iter()
+        .map(|path| {
+            crate::_helpers::reading::undecodable_path_failure(&root, &tree, path).is_some()
+        })
+        .collect();
+    let contents: Vec<String> = paths
+        .iter()
+        .map(|path| fs::read_to_string(tree.absolute(path)).expect("resolved file"))
+        .collect();
+    let shown: Vec<String> = paths
+        .iter()
+        .map(|path| crate::tree::main::display_text::display_text(path).into_owned())
+        .collect();
+    (shown, failures, contents)
 }

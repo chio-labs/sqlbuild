@@ -51,6 +51,8 @@ pub(super) struct JunctionWalkTestCase {
 
 pub(super) struct RawSegmentTestCase {
     pub(super) description: &'static str,
+    /// Whether the raw name was listed on Windows (UTF-16 unit hex) rather than POSIX (byte hex).
+    pub(super) windows: bool,
     pub(super) segment: &'static str,
     pub(super) expected_display: &'static str,
     pub(super) expected_code_points: &'static [u32],
@@ -60,4 +62,14 @@ pub(super) struct WideUnitsTestCase {
     pub(super) description: &'static str,
     pub(super) units: &'static [u32],
     pub(super) expected_code_points: &'static [u32],
+}
+
+/// Files named by UTF-16 units below `models/`, walked for `*.sql` on Windows.
+#[cfg(windows)]
+pub(super) struct WideNameWalkTestCase {
+    pub(super) description: &'static str,
+    pub(super) names: &'static [&'static [u16]],
+    pub(super) expected_paths: &'static [&'static str],
+    pub(super) expected_failures: &'static [bool],
+    pub(super) expected_contents: &'static [&'static str],
 }

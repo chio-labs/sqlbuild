@@ -42,6 +42,7 @@ _DECODE_ENCODING: str = "utf-8"
 _DECODE_READ_KIND: str = "decode"
 _NATIVE_TREE_MEMO_KEY: str = "native_project_tree"
 _PROJECT_PATH_KIND: str = "project_path"
+_NAMES_ARE_BYTES: bool = os.supports_bytes_environ
 _SURROGATE_ESCAPE_BASE: int = 0xDC00
 _ESCAPED_BYTE_FIRST: int = 0xDC80
 _ESCAPED_BYTE_LAST: int = 0xDCFF
@@ -247,7 +248,7 @@ def _escaped(text: str) -> str:
 
 def _escaped_character(character: str) -> str:
     code_point: int = ord(character)
-    if _ESCAPED_BYTE_FIRST <= code_point <= _ESCAPED_BYTE_LAST:
+    if _NAMES_ARE_BYTES and _ESCAPED_BYTE_FIRST <= code_point <= _ESCAPED_BYTE_LAST:
         return f"\\x{code_point - _SURROGATE_ESCAPE_BASE:02x}"
     if _SURROGATE_FIRST <= code_point <= _SURROGATE_LAST:
         return f"\\u{code_point:04x}"

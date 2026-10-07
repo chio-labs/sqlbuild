@@ -1,4 +1,4 @@
-use crate::tree::_helpers::raw_names::{display_text, escaped_wide};
+use crate::tree::_helpers::raw_names::{display_text_on, escaped_wide};
 use crate::tree::tests::helpers::segment_points;
 use crate::tree::tests::test_types::{RawSegmentTestCase, WideUnitsTestCase};
 
@@ -7,28 +7,52 @@ fn given_raw_segments_when_displaying_and_decoding_then_python_sees_its_own_stri
     let test_cases = [
         RawSegmentTestCase {
             description: "a valid name is unchanged",
+            windows: false,
             segment: "orders.sql",
             expected_display: "orders.sql",
             expected_code_points: &[0x6F, 0x72, 0x64, 0x65, 0x72, 0x73, 0x2E, 0x73, 0x71, 0x6C],
         },
         RawSegmentTestCase {
-            description: "an invalid byte is surrogate-escaped and shown lossily",
+            description: "a POSIX invalid byte is surrogate-escaped and shown as a byte",
+            windows: false,
             segment: "a\u{FFFD}\u{0}61e9\u{0}",
             expected_display: "a\\xe9",
             expected_code_points: &[0x61, 0xDCE9],
         },
         RawSegmentTestCase {
-            description: "a cut sequence escapes each of its bytes",
+            description: "a POSIX cut sequence escapes each of its bytes",
+            windows: false,
             segment: "\u{FFFD}\u{0}e282\u{0}",
             expected_display: "\\xe2\\x82",
             expected_code_points: &[0xDCE2, 0xDC82],
+        },
+        RawSegmentTestCase {
+            description: "a Windows lone high surrogate is kept and shown as a unit",
+            windows: true,
+            segment: "a\u{FFFD}.sql\u{0}0061d800002e00730071006c\u{0}",
+            expected_display: "a\\ud800.sql",
+            expected_code_points: &[0x61, 0xD800, 0x2E, 0x73, 0x71, 0x6C],
+        },
+        RawSegmentTestCase {
+            description: "a Windows lone low surrogate is a unit, never a byte",
+            windows: true,
+            segment: "a\u{FFFD}\u{0}0061dce9\u{0}",
+            expected_display: "a\\udce9",
+            expected_code_points: &[0x61, 0xDCE9],
+        },
+        RawSegmentTestCase {
+            description: "a Windows pair outside the BMP decodes to one code point",
+            windows: true,
+            segment: "\u{1F600}\u{0}d83dde00\u{0}",
+            expected_display: "\u{1F600}",
+            expected_code_points: &[0x1F600],
         },
     ];
     for test_case in test_cases {
         assert_eq!(
             (
-                display_text(test_case.segment).into_owned(),
-                segment_points(test_case.segment)
+                display_text_on(test_case.segment, test_case.windows).into_owned(),
+                segment_points(test_case.segment, test_case.windows)
             ),
             (
                 test_case.expected_display.to_owned(),

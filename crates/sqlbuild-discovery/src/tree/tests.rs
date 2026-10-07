@@ -16,3 +16,6 @@ mod undecodable_names;
 #[cfg(windows)]
 #[path = "tests/test_windows_junctions.rs"]
 mod windows_junctions;
+#[cfg(windows)]
+#[path = "tests/test_windows_undecodable_names.rs"]
+mod windows_undecodable_names;

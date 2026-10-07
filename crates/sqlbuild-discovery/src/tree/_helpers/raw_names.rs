@@ -23,8 +23,13 @@ pub(crate) fn has_raw_segment(text: &str) -> bool {
     text.contains(RAW_MARKER)
 }
 
-/// Text as a user sees it: each raw name with its invalid bytes as `\\xNN` escapes.
+/// Text as a user sees it: each raw name with its invalid bytes or units escaped.
 pub(crate) fn display_text(text: &str) -> Cow<'_, str> {
+    display_text_on(text, cfg!(windows))
+}
+
+/// `display_text` for raw names listed on Windows (UTF-16 units) or elsewhere (bytes).
+pub(crate) fn display_text_on(text: &str, windows: bool) -> Cow<'_, str> {
     if !has_raw_segment(text) {
         return Cow::Borrowed(text);
     }
@@ -32,10 +37,10 @@ pub(crate) fn display_text(text: &str) -> Cow<'_, str> {
     let mut shown = String::new();
     for (index, part) in parts.iter().enumerate() {
         if index % 2 == 1 {
-            let points: Vec<u32> = hex_code_points(part);
-            shown.push_str(&escaped_text(&points));
+            let points: Vec<u32> = hex_code_points(part, windows);
+            shown.push_str(&escaped_text(&points, windows));
         } else if index + 1 < parts.len() {
-            let lossy: String = lossy_text(parts[index + 1]);
+            let lossy: String = lossy_text(parts[index + 1], windows);
             shown.push_str(part.strip_suffix(lossy.as_str()).unwrap_or(part));
         } else {
             shown.push_str(part);
@@ -44,9 +49,9 @@ pub(crate) fn display_text(text: &str) -> Cow<'_, str> {
     Cow::Owned(shown)
 }
 
-/// Python's code points for a raw name's hex, decoded for this platform.
-fn hex_code_points(hex: &str) -> Vec<u32> {
-    if cfg!(windows) {
+/// Python's code points for a raw name's hex: UTF-16 units on Windows, bytes elsewhere.
+fn hex_code_points(hex: &str, windows: bool) -> Vec<u32> {
+    if windows {
         escaped_wide(&hex_units(hex, WIDE_HEX_DIGITS))
     } else {
         escaped_bytes(&hex_units(hex, BYTE_HEX_DIGITS))
@@ -54,8 +59,8 @@ fn hex_code_points(hex: &str) -> Vec<u32> {
 }
 
 /// The lossy name listing gave for a raw name's hex (`to_string_lossy`).
-fn lossy_text(hex: &str) -> String {
-    if cfg!(windows) {
+fn lossy_text(hex: &str, windows: bool) -> String {
+    if windows {
         let units: Vec<u16> = hex_units(hex, WIDE_HEX_DIGITS)
             .into_iter()
             .map(|unit| u16::try_from(unit).unwrap_or(u16::MAX))
@@ -70,13 +75,13 @@ fn lossy_text(hex: &str) -> String {
     }
 }
 
-/// Code points as text, each escaped byte as `\xNN` and any other surrogate as `\uXXXX`.
-pub(crate) fn escaped_text(points: &[u32]) -> String {
+/// Code points as text: an escaped byte as `\xNN`, a Windows lone surrogate as `\uXXXX`.
+fn escaped_text(points: &[u32], windows: bool) -> String {
     points
         .iter()
         .map(|point| match char::from_u32(*point) {
             Some(character) => character.to_string(),
-            None if (ESCAPED_BYTE_FIRST..=ESCAPED_BYTE_LAST).contains(point) => {
+            None if !windows && (ESCAPED_BYTE_FIRST..=ESCAPED_BYTE_LAST).contains(point) => {
                 format!("\\x{:02x}", point - SURROGATE_ESCAPE_BASE)
             }
             None => format!("\\u{point:04x}"),
@@ -86,8 +91,13 @@ pub(crate) fn escaped_text(points: &[u32]) -> String {
 
 /// The code points of Python's `str` for one segment, with raw names surrogate-escaped.
 pub(crate) fn segment_code_points(segment: &str) -> Vec<u32> {
+    segment_code_points_on(segment, cfg!(windows))
+}
+
+/// `segment_code_points` for raw names listed on Windows or elsewhere.
+pub(crate) fn segment_code_points_on(segment: &str, windows: bool) -> Vec<u32> {
     match segment.split(RAW_MARKER).nth(1) {
-        Some(hex) => hex_code_points(hex),
+        Some(hex) => hex_code_points(hex, windows),
         None => segment.chars().map(u32::from).collect(),
     }
 }
