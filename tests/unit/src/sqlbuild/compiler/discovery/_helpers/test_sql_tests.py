@@ -122,9 +122,7 @@ def test_given_batch_preparation_failure_when_discovering_tolerantly_then_report
 ) -> None:
     tests_dir: Path = tmp_path / "tests" / "unit"
     tests_dir.mkdir(parents=True)
-    (tests_dir / "a_invalid.sql").write_text(
-        'TEST (name "unterminated")\nSELECT 1', encoding="utf-8"
-    )
+    (tests_dir / "a_invalid.sql").write_text("SELECT 1", encoding="utf-8")
     (tests_dir / "b_valid.sql").write_text('TEST (name "valid_order");\nSELECT 1', encoding="utf-8")
     preparation: Mock = Mock(side_effect=ValueError("invalid batch projection"))
     monkeypatch.setattr(test_file_discovery, "prepare_sql_test_file_headers", preparation)
@@ -161,23 +159,6 @@ def test_given_batch_preparation_failure_when_discovering_tolerantly_then_report
             expected_names=(None,),
             expected_sql_bodies=(
                 "WITH\n__source__orders AS (\n  SELECT 1 AS order_id\n)\nSELECT 1",
-            ),
-            expected_test_indexes=(1,),
-            expected_header_values=({},),
-        ),
-        ParseSqlTestFileTestCase(
-            description="treats a headerless file as one unnamed test block",
-            contents="""
-        -- Orders keep their identifiers.
-        WITH
-        __source__orders AS (
-          SELECT 1 AS order_id
-        )
-        """,
-            expected_names=(None,),
-            expected_sql_bodies=(
-                "-- Orders keep their identifiers.\nWITH\n__source__orders AS (\n"
-                "  SELECT 1 AS order_id\n)",
             ),
             expected_test_indexes=(1,),
             expected_header_values=({},),
@@ -340,23 +321,37 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
     "test_case",
     [
         ParseSqlTestFileErrorTestCase(
-            description="raises when a headerless body precedes another test block",
+            description="raises when the file does not start with a test header",
+            contents="SELECT 1\n",
+            expected_error_fragment="must start with a TEST",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="raises when a single-test file of ctes omits its test header",
+            contents=(
+                "WITH __source__orders AS (SELECT 1 AS id),\n"
+                "__expected__orders AS (SELECT 1 AS id)\n"
+            ),
+            expected_error_fragment=r"must start with a TEST\(\) header",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="raises when a body precedes another test block",
             contents='SELECT 1;\n\nTEST (name "second");\n\nSELECT 1\n',
-            expected_error_fragment="only a file with a single test may omit its header",
+            expected_error_fragment="must start with a TEST",
         ),
         ParseSqlTestFileErrorTestCase(
             description="raises when a test header is not terminated",
             contents='TEST (name "orders")\n\nWITH __source__orders AS (SELECT 1 AS id)\n',
-            expected_error_fragment=r"not a complete TEST\(\.\.\.\); statement",
+            expected_error_fragment="must start with a TEST",
         ),
         ParseSqlTestFileErrorTestCase(
-            description="raises when a headerless file is empty",
+            description="raises when the file is empty",
             contents="\n  \n",
-            expected_error_fragment="must define SQL",
+            expected_error_fragment="must start with a TEST",
         ),
         ParseSqlTestFileErrorTestCase(
             description="raises when one block defines actual CTEs for several modes",
             contents=(
+                "TEST();\n"
                 "WITH __macro_actual__ AS (SELECT 1 AS a),\n__udf_actual__ AS (SELECT 1 AS a)\n"
             ),
             expected_error_fragment=r"actual CTEs for several test modes \(macro, udf\)",
@@ -536,13 +531,14 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
     [
         ParseSqlTestModeTestCase(
             description="defaults to model mode without direct-logic actual CTEs",
-            contents="WITH __source__orders AS (SELECT 1 AS id),\n__expected__orders AS (SELECT 1 AS id)",
+            contents="TEST();\nWITH __source__orders AS (SELECT 1 AS id),\n__expected__orders AS (SELECT 1 AS id)",
             expected_modes=("model",),
             expected_header_values=({},),
         ),
         ParseSqlTestModeTestCase(
-            description="infers macro mode in a headerless file",
+            description="infers macro mode under an empty header",
             contents=(
+                "TEST();\n"
                 "WITH __macro_actual__ AS (SELECT @double(1) AS value),\n"
                 "__macro_expected__ AS (SELECT 2 AS value)"
             ),
@@ -563,6 +559,7 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
         ParseSqlTestModeTestCase(
             description="infers table function mode from a lower-case as keyword",
             contents=(
+                "TEST();\n"
                 "WITH __table_fn_actual__ as (SELECT 1 AS value),\n"
                 "__table_fn_expected__ as (SELECT 1 AS value)"
             ),
@@ -585,6 +582,7 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
         ParseSqlTestModeTestCase(
             description="ignores actual CTE names in comments, strings and nested queries",
             contents=(
+                "TEST();\n"
                 "-- __macro_actual__ AS (\n"
                 "WITH __source__orders AS (\n"
                 "  WITH __udf_actual__ AS (SELECT 1 AS id) SELECT id FROM __udf_actual__\n"

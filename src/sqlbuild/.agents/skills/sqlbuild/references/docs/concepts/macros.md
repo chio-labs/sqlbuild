@@ -177,6 +177,8 @@ def mock_orders(count: int = 1) -> str:
 ```
 
 ```sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   @mock_orders(3)

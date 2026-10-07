@@ -1,3 +1,5 @@
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT

@@ -1,4 +1,4 @@
-"""E2E coverage for SQL tests without a TEST header, mode, or trailing SELECT 1."""
+"""E2E coverage for SQL tests without an explicit mode or trailing SELECT 1."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
-_HEADERLESS_MODEL_TEST: str = (
+_MODEL_TEST_CTES: str = (
     "WITH\n"
     "__source__raw_orders AS (\n"
     "  SELECT 1 AS order_id, ' PAID ' AS status\n"
@@ -24,7 +24,7 @@ _HEADERLESS_MODEL_TEST: str = (
     "  SELECT 1 AS order_id, 'paid' AS status\n"
     ")\n"
 )
-_HEADERLESS_MACRO_TEST: str = (
+_MACRO_TEST_CTES: str = (
     "WITH\n"
     "input_values AS (\n"
     "  SELECT '  PAID  ' AS raw_status\n"
@@ -37,17 +37,17 @@ _HEADERLESS_MACRO_TEST: str = (
     "  SELECT 'paid' AS status\n"
     ")\n"
 )
+_SHORT_MODEL_TEST: str = "TEST();\n\n" + _MODEL_TEST_CTES
+_SHORT_MACRO_TEST: str = "TEST();\n\n" + _MACRO_TEST_CTES
 _EXPLICIT_MACRO_TEST: str = (
-    'TEST (mode macro, name "normalizes_status_explicitly");\n\n'
-    + _HEADERLESS_MACRO_TEST
-    + "SELECT 1\n"
+    'TEST (mode macro, name "normalizes_status_explicitly");\n\n' + _MACRO_TEST_CTES + "SELECT 1\n"
 )
-_EXPLICIT_MODEL_TEST: str = "TEST();\n\n" + _HEADERLESS_MODEL_TEST + "SELECT 1\n"
+_EXPLICIT_MODEL_TEST: str = "TEST();\n\n" + _MODEL_TEST_CTES + "SELECT 1\n"
 _NAMED_BLOCKS_TEST: str = (
     'TEST (name "orders_keep_paid");\n\n'
-    + _HEADERLESS_MODEL_TEST
+    + _MODEL_TEST_CTES
     + '\nTEST (name "orders_keep_void");\n\n'
-    + _HEADERLESS_MODEL_TEST.replace("' PAID '", "'void'").replace("'paid'", "'void'")
+    + _MODEL_TEST_CTES.replace("' PAID '", "'void'").replace("'paid'", "'void'")
 )
 
 
@@ -55,10 +55,10 @@ _NAMED_BLOCKS_TEST: str = (
     "test_case",
     [
         OptionalTestCeremonyE2ETestCase(
-            description="headerless and explicit test forms run, lint, and stay formatted",
+            description="short and explicit test forms run, lint, and stay formatted",
             test_files={
-                "tests/unit/test_orders.sql": _HEADERLESS_MODEL_TEST,
-                "tests/unit/test_normalize_status.sql": _HEADERLESS_MACRO_TEST,
+                "tests/unit/test_orders.sql": _SHORT_MODEL_TEST,
+                "tests/unit/test_normalize_status.sql": _SHORT_MACRO_TEST,
                 "tests/unit/test_orders_explicit.sql": _EXPLICIT_MODEL_TEST,
                 "tests/unit/test_normalize_status_explicit.sql": _EXPLICIT_MACRO_TEST,
                 "tests/unit/test_orders_named_blocks.sql": _NAMED_BLOCKS_TEST,
@@ -115,7 +115,7 @@ def test_given_optional_test_ceremony_when_testing_then_short_and_explicit_forms
             description="an explicit mode that contradicts the ctes is rejected",
             test_files={
                 "tests/unit/test_normalize_status.sql": (
-                    "TEST (mode model);\n\n" + _HEADERLESS_MACRO_TEST
+                    "TEST (mode model);\n\n" + _MACRO_TEST_CTES
                 ),
             },
             expected_exit_code=1,
@@ -128,6 +128,39 @@ def test_given_optional_test_ceremony_when_testing_then_short_and_explicit_forms
     ids=lambda case: case.description,
 )
 def test_given_contradicting_explicit_mode_when_testing_then_compile_rejects_it(
+    test_case: OptionalTestCeremonyE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_optional_ceremony_project(
+        tmp_path=tmp_path, test_files=test_case.test_files
+    )
+
+    tested: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"), project_dir=project_dir
+    )
+
+    output: str = tested.stdout + tested.stderr
+    assert tested.returncode == test_case.expected_exit_code, output
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OptionalTestCeremonyE2ETestCase(
+            description="a test file without a TEST header is rejected",
+            test_files={"tests/unit/test_orders.sql": _MODEL_TEST_CTES},
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "D003",
+                "must start with a TEST() header as the first non-whitespace content",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_test_file_without_header_when_testing_then_discovery_rejects_it(
     test_case: OptionalTestCeremonyE2ETestCase,
     tmp_path: Path,
 ) -> None:

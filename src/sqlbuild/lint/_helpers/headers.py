@@ -7,7 +7,6 @@ from functools import cache
 from pathlib import Path, PurePath
 
 from sqlbuild.compiler.compile.constants import HOOK_DIRECTORY_NAME
-from sqlbuild.compiler.discovery.constants import SQL_TESTS_OWNERSHIP_ROOT
 from sqlbuild.compiler.discovery.main.named_declaration_role_kind import (
     named_declaration_role_kind,
 )
@@ -45,7 +44,6 @@ def lint_file_role(
         declaration_kind=named_declaration_role_kind(relative_path=relative_path),
         in_project=True,
         in_hook_directory=relative_path.is_relative_to(HOOK_DIRECTORY_NAME),
-        in_sql_test_directory=relative_path.is_relative_to(SQL_TESTS_OWNERSHIP_ROOT),
     )
 
 
