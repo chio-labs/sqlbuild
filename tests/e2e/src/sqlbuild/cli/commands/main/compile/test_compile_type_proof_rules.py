@@ -18,7 +18,8 @@ _SKIPPED_NOTE: str = (
     "note: skipped type-proof rules (SQBRCONTRACT105) because SQL analysis is disabled"
 )
 _PROJECT_TOML: str = (
-    'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRCONTRACT105"]\n'
+    'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'
+    '[rules]\nselect = ["SQBRCONTRACT105"]\n'
 )
 _ORDERS_MODEL: str = (
     "MODEL (\n"

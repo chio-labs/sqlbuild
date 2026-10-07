@@ -20,6 +20,7 @@ def resolve_adapter_connection_context(
     effective_project_dir: Path,
     selected_target: str | None,
     cli_vars: dict[str, object] | None,
+    require_connection: bool = True,
 ) -> AdapterConnectionContext:
     """Resolve the effective adapter and project connection configuration."""
 
@@ -36,6 +37,7 @@ def resolve_adapter_connection_context(
         project_dir=effective_project_dir,
         selected_target=selected_target,
         cli_vars=cli_vars,
+        require_connection=require_connection,
     )
     return AdapterConnectionContext(
         adapter_name=adapter_name,

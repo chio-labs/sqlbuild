@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
@@ -44,6 +46,53 @@ def resolve_target_config(
 ) -> TargetConfig:
     """Merge project target config with local developer overrides."""
 
+    return _apply_default_connection(
+        project_config=project_config,
+        local_config=local_config,
+        target_name=target_name,
+        target_config=_merge_target_config(
+            project_config=project_config,
+            local_config=local_config,
+            target_name=target_name,
+        ),
+    )
+
+
+def _apply_default_connection(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    target_name: str,
+    target_config: TargetConfig,
+) -> TargetConfig:
+    """Select the only named connection for a target that does not choose one."""
+
+    if (
+        target_config.connection_name is not None
+        or target_config.connection
+        or project_config.connection
+        or local_config.connection
+    ):
+        return target_config
+    connection_names: list[str] = sorted({*project_config.connections, *local_config.connections})
+    if not connection_names:
+        return target_config
+    if len(connection_names) > 1:
+        names: str = ", ".join(connection_names)
+        raise SpecConfigError(
+            f"targets.{target_name} does not set connection and several named connections "
+            f'are defined ({names}); set connection = "<name>" on [targets.{target_name}] in '
+            "sqlbuild_project.toml or sqlbuild_local.toml"
+        )
+    return replace(target_config, connection_name=connection_names[0])
+
+
+def _merge_target_config(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    target_name: str,
+) -> TargetConfig:
     project_target: TargetConfig = project_config.targets.get(target_name, TargetConfig())
     local_target: LocalTargetConfig | None = local_config.targets.get(target_name)
     if local_target is None:

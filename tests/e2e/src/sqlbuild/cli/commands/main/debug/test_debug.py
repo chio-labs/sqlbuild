@@ -145,6 +145,9 @@ def test_given_local_default_and_explicit_target_when_debugging_text_then_report
                 adapter = "duckdb"
                 default_target = "dev"
 
+                [connections.local]
+                database = "debug.duckdb"
+
                 [targets.dev]
                 database = "dev.duckdb"
                 schema = "dev_orders"
@@ -178,7 +181,7 @@ def test_given_local_default_and_explicit_target_when_debugging_text_then_report
     assert (
         "  adapter: duckdb [OK found]\n"
         "  target: test [OK resolved]\n"
-        "  connection: inline [OK resolved]\n"
+        "  connection: local [OK resolved]\n"
         "  database: local-test.duckdb [OK resolved]\n"
         "  schema: local_test_orders [OK resolved]\n"
     ) in result.stdout
@@ -208,6 +211,9 @@ def test_given_local_default_and_explicit_target_when_debugging_json_then_report
                 name = "debug_target_json_project"
                 adapter = "duckdb"
                 default_target = "dev"
+
+                [connections.local]
+                database = "debug.duckdb"
 
                 [targets.dev]
                 database = "dev.duckdb"
@@ -248,7 +254,7 @@ def test_given_local_default_and_explicit_target_when_debugging_json_then_report
         "project": "debug_target_json_project",
         "adapter": "duckdb",
         "target": "test",
-        "connection": "inline",
+        "connection": "local",
         "database": "local-test.duckdb",
         "schema": "local_test_orders",
     }

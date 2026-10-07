@@ -287,6 +287,117 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import expected
             expected_freshness_age_policy_error_afters=(None, "24h", None, None, "1d"),
         ),
         ParseSourcesYamlTestCase(
+            description="infers source freshness strategy and type from keys and columns",
+            contents="""
+        sources:
+          - name: raw_orders
+            schema: public
+            table: orders
+            freshness: {}
+          - name: raw_events
+            schema: public
+            table: events
+            columns:
+              - name: Updated_At
+                type: timestamp_ntz(9)
+            freshness:
+              column: updated_at
+              lag_tolerance: 15m
+          - name: raw_customers
+            schema: public
+            table: customers
+            freshness:
+              query: SELECT MAX(version) FROM raw.public.customers
+              type: integer
+          - name: raw_clicks
+            schema: public
+            table: clicks
+            columns:
+              - name: batch_id
+                type: BIGINT
+            freshness:
+              strategy: column
+              column: batch_id
+          - name: raw_tags
+            schema: public
+            table: tags
+            columns:
+              - name: tag_version
+                type: character varying(32)
+            freshness:
+              column: tag_version
+          - name: raw_shipments
+            schema: public
+            table: shipments
+            columns:
+              - name: shipped_on
+                type: date
+            freshness:
+              column: loaded_at
+              type: timestamp
+          - name: raw_returns
+            schema: public
+            table: returns
+            columns:
+              - name: returned_at
+                type: timestamp with time zone
+            freshness:
+              strategy: column
+              column: returned_at
+              type: timestamp
+        """,
+            expected_source_names=(
+                "raw_orders",
+                "raw_events",
+                "raw_customers",
+                "raw_clicks",
+                "raw_tags",
+                "raw_shipments",
+                "raw_returns",
+            ),
+            expected_column_names=(
+                (),
+                ("Updated_At",),
+                (),
+                ("batch_id",),
+                ("tag_version",),
+                ("shipped_on",),
+                ("returned_at",),
+            ),
+            expected_type_enforcement_values=(None, True, None, True, True, True, True),
+            expected_contract_values=(None,) * 7,
+            expected_expressions=(None,) * 7,
+            expected_source_audit_names=((),) * 7,
+            expected_column_audit_names=((), ((),), (), ((),), ((),), ((),), ((),)),
+            expected_freshness_strategies=(
+                "adapter",
+                "column",
+                "sql",
+                "column",
+                "column",
+                "column",
+                "column",
+            ),
+            expected_freshness_value_kinds=(
+                None,
+                "timestamp",
+                "integer",
+                "integer",
+                "string",
+                "timestamp",
+                "timestamp",
+            ),
+            expected_freshness_columns=(
+                None,
+                "updated_at",
+                None,
+                "batch_id",
+                "tag_version",
+                "loaded_at",
+                "returned_at",
+            ),
+        ),
+        ParseSourcesYamlTestCase(
             description="allows empty sources files with no declarations",
             contents="{}\n",
             expected_source_names=(),
@@ -1053,6 +1164,84 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
               column: updated_at
         """,
             expected_error_fragment="source freshness strategy column requires type",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when implied column freshness has an untyped column",
+            contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: updated_at
+            freshness:
+              column: updated_at
+        """,
+            expected_error_fragment="source freshness strategy column requires type",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when freshness column type cannot be inferred",
+            contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: ordered_on
+                type: date
+            freshness:
+              column: ordered_on
+        """,
+            expected_error_fragment=(
+                "source freshness cannot infer type from column 'ordered_on' declared as date"
+            ),
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when explicit freshness type contradicts the declared column",
+            contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: updated_at
+                type: timestamp
+            freshness:
+              column: updated_at
+              type: integer
+        """,
+            expected_error_fragment=(
+                "source freshness type integer contradicts column 'updated_at' declared as "
+                "timestamp; remove type or set it to timestamp"
+            ),
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when freshness sets column and query without a strategy",
+            contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              column: updated_at
+              query: SELECT MAX(updated_at) FROM raw.orders
+              type: timestamp
+        """,
+            expected_error_fragment="source freshness cannot set both column and query",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when freshness sets type without column or query",
+            contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              type: timestamp
+        """,
+            expected_error_fragment="source freshness type and filter require column or query",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when explicit freshness strategy contradicts implied keys",
+            contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              query: SELECT MAX(updated_at) FROM raw.orders
+              type: timestamp
+        """,
+            expected_error_fragment="source freshness strategy column requires column",
         ),
         ParseSourcesYamlErrorTestCase(
             description="raises when sql freshness has no query",

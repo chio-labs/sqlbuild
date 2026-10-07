@@ -1,7 +1,12 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.cli.commands.types import CliCommand
-from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    LocalTargetConfig,
+    ProjectConfig,
+    TargetWarehousesConfig,
+)
 from sqlbuild.spec.contracts.types import WarehouseGroup
 
 
@@ -96,3 +101,28 @@ class CommandWarehouseGroupTestCase:
     description: str
     command: CliCommand
     expected_group: WarehouseGroup
+
+
+@dataclass(frozen=True)
+class MissingConnectionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    selected_target: str | None
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExplicitMemoryConnectionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    expected_connection: dict[str, object]
+
+
+@dataclass(frozen=True)
+class OfflineConnectionResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    expected_connection: dict[str, object]

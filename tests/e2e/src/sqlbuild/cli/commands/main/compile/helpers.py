@@ -1460,6 +1460,9 @@ def _layered_write_project_config(*, project_dir: Path) -> None:
 adapter = "duckdb"
 default_target = "dev"
 
+[connections.local]
+database = ":memory:"
+
 [settings]
 column_contract_mode = "explicit"
 
