@@ -117,7 +117,7 @@ def test_given_perturbed_native_engine_when_comparing_then_every_artifact_is_loc
             expected_lines=("DIFF project/waffle_shop",),
             expected_patterns=(
                 r"- stage capture 0-compile/001-discovered_project_inputs\.json at /model_files/0/",
-                r"- stage capture 2-plan/001-discovered_project_inputs\.json at /model_files/0/",
+                r"- stage capture 3-plan/001-discovered_project_inputs\.json at /model_files/0/",
             ),
             expected_absent=(),
         )
@@ -151,7 +151,9 @@ def test_given_perturbed_native_discovery_when_comparing_then_discovery_capture_
             expected_patterns=(
                 r"- stage capture 0-compile/002-compile_project_inputs\.json at "
                 r"/model_inputs/0/macro_deps/",
-                r"- stage capture 2-plan/002-compile_project_inputs\.json at "
+                r"- stage capture 2-compile-store-warm/002-compile_project_inputs\.json at "
+                r"/model_inputs/0/macro_deps/",
+                r"- stage capture 3-plan/002-compile_project_inputs\.json at "
                 r"/model_inputs/0/macro_deps/",
             ),
             expected_absent=("001-discovered_project_inputs.json",),

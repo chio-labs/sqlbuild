@@ -15,7 +15,7 @@ from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
 
 
 def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
-    """Run `stage` with the bridge; a failure re-runs Python, which raises the exact error."""
+    """Run `stage` with the bridge, storing calls on success; a failure re-runs Python."""
 
     python_version: tuple[int, int] = (sys.version_info[0], sys.version_info[1])
     if not _native.native_text_supported(python_version, unicodedata.unidata_version):
@@ -30,12 +30,17 @@ def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
     except Exception as error:
         native_error = error
     else:
+        bridge.save_store()
         hits, misses, recorded = bridge.stats()
+        store_hits, store_records = bridge.store_stats()
         logging.getLogger(__name__).debug(
-            "Native macro bridge: %d memo hits, %d misses, %d recorded calls",
+            "Native macro bridge: %d memo hits, %d store hits, %d misses, %d recorded calls, "
+            "%d stored calls",
             hits,
+            store_hits,
             misses,
             recorded,
+            store_records,
         )
         return result
     finally:

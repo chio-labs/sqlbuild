@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_fu
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_table_function_call_arities,
 )
-from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
@@ -30,6 +29,9 @@ from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.descriptions import (
     missing_description_diagnostics,
+)
+from sqlbuild.compiler.compile._helpers.macro_bridge.call_store import (
+    target_context_with_macro_call_store,
 )
 from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.compile._helpers.render.declarations import (
@@ -93,10 +95,12 @@ def build_compile_inputs(
     effective_target_name: str | None
     effective_target: TargetConfig | None
     compile_cache_dir: Path | None
-    effective_target_name, effective_target, compile_cache_dir = build_compile_target_context(
-        discovered_inputs=discovered_inputs,
-        selected_target=selected_target,
-        no_cache=no_cache,
+    effective_target_name, effective_target, compile_cache_dir = (
+        target_context_with_macro_call_store(
+            discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
+            no_cache=no_cache,
+        )
     )
 
     effective_vars: dict[str, object] = build_effective_vars(

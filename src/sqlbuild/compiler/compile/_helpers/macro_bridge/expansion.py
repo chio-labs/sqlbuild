@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Hashable
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.render.macros import (
@@ -28,7 +27,7 @@ from sqlbuild.compiler.macro_bridge.constants import (
     GENERATED_SQL_EVENT,
     MACRO_USE_EVENT,
 )
-from sqlbuild.compiler.macro_bridge.models import MacroCallSite
+from sqlbuild.compiler.macro_bridge.models import MacroCallClass, MacroCallSite
 from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.compiler.scopes.types import DeclarationKind
@@ -51,9 +50,9 @@ def expand_bridged_sql_macros(
         state=state, consumer_path=consumer_path
     )
     sites: tuple[MacroCallSite, ...] | None = bridge.scan(sql)
-    call_classes: list[Hashable] = []
+    call_classes: list[MacroCallClass] = []
     for site in sites or ():
-        call_class: Hashable | None = bridge.call_class(
+        call_class: MacroCallClass | None = bridge.call_class(
             site=site,
             declarations=declarations,
             loaded_macros=state.loaded_macros,
@@ -94,7 +93,7 @@ def _bridged_call_output(  # noqa: PLR0913
     declarations: DeclarationResolutionContext | None,
     bridge: MacroBridge,
     site: MacroCallSite,
-    call_class: Hashable,
+    call_class: MacroCallClass,
 ) -> str:
     facts: MacroExpansionFacts = state.facts
     call_text: str = sql[site.start : site.end]

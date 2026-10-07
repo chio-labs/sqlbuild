@@ -894,3 +894,33 @@ class NativeModelLoopParityTestCase:
     engines: tuple[str, str]
     expected_exit_codes: tuple[int, int]
     expected_report_text: str
+
+
+@dataclass(frozen=True)
+class MacroCallStoreEditStep:
+    """One edit compiled with the macro call store, and the executions it expects."""
+
+    description: str
+    edit: Callable[[Path], object]
+    expected_logged_calls: int
+    args: tuple[str, ...] = ()
+    env: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class MacroCallStoreEditSequenceTestCase:
+    """Edits applied in order, each compiled with the macro call store and with --no-cache."""
+
+    description: str
+    project_reuse: bool
+    steps: tuple[MacroCallStoreEditStep, ...]
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class BrokenMacroCallStoreKeyTestCase:
+    """An edit the store key no longer covers, which the --no-cache oracle must catch."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_matches_uncached: bool

@@ -37,6 +37,7 @@ import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile.classes.binding_dataflow as binding_dataflow
 import sqlbuild.compiler.compile.classes.render_reuse_session as render_reuse_session
 import sqlbuild.compiler.compile.classes.stored_model_analyses as stored_model_analyses
+import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
@@ -63,6 +64,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     SetOperationModel,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+from tests.integration.src.sqlbuild.compiler.compile.helpers import (
+    MACRO_BRIDGE_PROJECT_FILES,
+    MACRO_CALL_LOG_ENV_VAR,
+)
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
@@ -4263,3 +4268,138 @@ def prepare_reference_call_project(*, tmp_path: Path, staging_from: str, mart_fr
     )
     assert seeded.returncode == 0, seeded.stdout + seeded.stderr
     return project_dir
+
+
+MACRO_CALL_STORE_ENGINE: str = "native"
+STORE_ENVIRONMENT_REGION_VAR: str = "SQB_STORE_TEST_REGION"
+_REUSE_DISABLED_VALUES: dict[bool, str] = {True: "0", False: "1"}
+_SOUTH_MODEL: str = "models/south/orders_south.sql"
+_STORE_EXTERNAL_MODULE: str = "store_flavor_values"
+_STORE_PROJECT_EXTRA_FILES: dict[str, str] = {
+    "macros/context_labels.py": (
+        '"""Macros that read the target, the environment and an outside module."""\n\n'
+        "import os\n\n\n"
+        "def env_region() -> str:\n"
+        '    """Return the region from the environment."""\n'
+        f'    return repr(os.environ.get("{STORE_ENVIRONMENT_REGION_VAR}", "none"))\n\n\n'
+        "def target_label(ctx) -> str:\n"
+        '    """Name the compile target."""\n'
+        "    return repr(ctx.target_name)\n\n\n"
+        "def flavor() -> str:\n"
+        '    """Return a value from a module outside the project, imported while rendering."""\n'
+        f"    import {_STORE_EXTERNAL_MODULE}\n\n"
+        f"    return repr({_STORE_EXTERNAL_MODULE}.VALUE)\n"
+    ),
+    "macros/_label_values.py": (
+        'def label_value() -> str:\n    """Return the label literal."""\n    return "\'first\'"\n'
+    ),
+    "macros/labels.py": (
+        "from macros._label_values import label_value\n\n\n"
+        'def label() -> str:\n    """Return the label from a helper module."""\n'
+        "    return label_value()\n"
+    ),
+}
+
+
+class MacroCallStoreRun(NamedTuple):
+    """A compile with the macro call store, its --no-cache reference, and macro executions."""
+
+    incremental: CompileReuseRun
+    reference: CompileReuseRun
+    logged_calls: int
+
+    @property
+    def matches(self) -> bool:
+        """Return whether exit code, report, and every compiled artifact are byte-identical."""
+
+        return _edit_outcome(self.incremental) == _edit_outcome(self.reference)
+
+
+def prepare_macro_call_store_project(*, project_dir: Path, extlib: Path) -> None:
+    """Write a macro-heavy project whose macros read vars, target, constants and enums."""
+
+    for relative_path, content in MACRO_BRIDGE_PROJECT_FILES.items():
+        write_project_file(
+            project_dir, relative_path, content.replace("WHERE id IN @generated_join()\n", "")
+        )
+    for relative_path, content in _STORE_PROJECT_EXTRA_FILES.items():
+        write_project_file(project_dir, relative_path, content)
+    replace_project_text(
+        project_dir,
+        "sqlbuild_project.toml",
+        '[targets.dev]\nschema = "analytics"\n',
+        '[targets.dev]\nschema = "analytics"\n\n[targets.prod]\nschema = "analytics"\n',
+    )
+    replace_project_text(
+        project_dir,
+        _SOUTH_MODEL,
+        '  description "South orders",\n',
+        '  description "South orders",\n  constants (_south_bonus 3),\n',
+    )
+    replace_project_text(
+        project_dir,
+        _SOUTH_MODEL,
+        "  'quoted @cents(1)' AS quoted",
+        "  @target_label() AS target_label,\n  @flavor() AS flavor,\n  @label() AS label,\n"
+        "  @env_region() AS env_region,\n"
+        "  'quoted @cents(1)' AS quoted",
+    )
+    write_store_flavor(extlib=extlib, value="sweet")
+
+
+def write_store_flavor(*, extlib: Path, value: str) -> None:
+    """Write, or rewrite in place, the outside module the flavor macro imports."""
+
+    extlib.mkdir(parents=True, exist_ok=True)
+    (extlib / f"{_STORE_EXTERNAL_MODULE}.py").write_text(f"VALUE = {value!r}\n", encoding="utf-8")
+
+
+def edit_label_helper(project_dir: Path, value: str) -> None:
+    """Change the literal the helper module behind the label macro returns."""
+
+    replace_project_text(project_dir, "macros/_label_values.py", "'first'", f"'{value}'")
+
+
+def edit_south_model(project_dir: Path, old: str, new: str) -> None:
+    """Replace text in the south orders model."""
+
+    replace_project_text(project_dir, _SOUTH_MODEL, old, new)
+
+
+def macro_call_store_compile(
+    *,
+    project_dir: Path,
+    extlib: Path,
+    log_path: Path,
+    project_reuse: bool,
+    args: tuple[str, ...] = (),
+    extra_env: tuple[tuple[str, str], ...] = (),
+) -> MacroCallStoreRun:
+    """Compile with the macro call store, count macro executions, then compile with --no-cache."""
+
+    env: dict[str, str] = {
+        REUSE_DISABLE_ENV_VAR: _REUSE_DISABLED_VALUES[project_reuse],
+        MACRO_CALL_LOG_ENV_VAR: str(log_path),
+        "PYTHONPATH": str(extlib),
+        "PYTHONDONTWRITEBYTECODE": "1",
+        **dict(extra_env),
+    }
+    global_args: tuple[str, ...] = ("--compiler-engine", MACRO_CALL_STORE_ENGINE)
+    _ = log_path.write_text("", encoding="utf-8")
+    incremental: CompileReuseRun = run_reuse_compile(
+        project_dir=project_dir, env=env, args=args, global_args=global_args
+    )
+    logged_calls: int = len(log_path.read_text(encoding="utf-8").splitlines())
+    reference: CompileReuseRun = run_reuse_compile(
+        project_dir=project_dir, env=env, args=(*args, "--no-cache"), global_args=global_args
+    )
+    return MacroCallStoreRun(
+        incremental=incremental, reference=reference, logged_calls=logged_calls
+    )
+
+
+def freeze_macro_call_store_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Break the store key: every project and module state looks like the first one."""
+
+    monkeypatch.setattr(macro_bridge_class, "store_environment", lambda **_kwargs: "frozen")
+    monkeypatch.setattr(macro_bridge_class, "unchanged_module_stamps", lambda _metadata: {})
