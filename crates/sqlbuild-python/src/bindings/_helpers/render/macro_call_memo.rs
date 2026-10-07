@@ -1,19 +1,27 @@
-//! Python methods of the in-compile macro call memo.
+//! The macro call memo class: one compile's recorded calls and its optional native store.
 
 use pyo3::exceptions::{PyOSError, PyRuntimeError, PyValueError};
 use pyo3::prelude::Python;
-use pyo3::{PyResult, pymethods};
+use pyo3::{PyResult, pyclass, pymethods};
 use sqlbuild_cache::store::main::open_native_store::open_native_store;
 use sqlbuild_cache::store::models::NativeStore;
 use sqlbuild_render::macro_calls::models::MacroCallEntry;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crate::bindings::types::CompilerDetach;
-use crate::macro_bridge::constants::MACRO_CALL_STORE_KIND;
 
-use crate::macro_bridge::_helpers::rows::{event_from_row, event_row};
-use crate::macro_bridge::models::MacroCallMemo;
-use crate::macro_bridge::types::EntryRow;
+use crate::bindings::_helpers::render::macro_call_rows::{EntryRow, event_from_row, event_row};
+
+/// The native store kind holding recorded macro calls.
+const MACRO_CALL_STORE_KIND: &str = "macro-calls";
+
+/// The macro call results one compile records and replays, keyed by call class and call text.
+#[pyclass(module = "sqlbuild._native", frozen)]
+#[derive(Debug, Default)]
+pub(crate) struct MacroCallMemo {
+    pub(crate) inner: Mutex<sqlbuild_render::macro_calls::models::MacroCallMemo>,
+}
 
 fn poisoned<T>(_: T) -> pyo3::PyErr {
     PyValueError::new_err("macro call memo is poisoned")

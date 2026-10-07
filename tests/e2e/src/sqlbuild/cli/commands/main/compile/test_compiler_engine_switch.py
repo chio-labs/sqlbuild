@@ -121,7 +121,7 @@ def test_given_macro_heavy_project_when_compiling_with_each_engine_then_outputs_
     )
     native_run: CompileReuseRun = engine_reuse_compile(
         project_dir=write_project(root=tmp_path / "native", files=test_case.files),
-        engine="native",
+        engine="native-preview",
     )
     compiled_text: str = b"".join(python_run.compiled.values()).decode()
 

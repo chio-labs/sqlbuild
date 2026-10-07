@@ -924,3 +924,13 @@ class BrokenMacroCallStoreKeyTestCase:
     description: str
     edit: Callable[[Path], None]
     expected_matches_uncached: bool
+
+
+@dataclass(frozen=True)
+class EngineMacroCallGateTestCase:
+    """Repeated full compiles under one engine and whether the bridge and store took part."""
+
+    description: str
+    engine: str
+    expected_logged_calls: tuple[int, ...]
+    expected_store_files: tuple[str, ...]

@@ -57,6 +57,7 @@ from sqlbuild.cli.compile_reuse.constants import (
 from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     IncrementalEditStep,
@@ -4270,8 +4271,9 @@ def prepare_reference_call_project(*, tmp_path: Path, staging_from: str, mart_fr
     return project_dir
 
 
-MACRO_CALL_STORE_ENGINE: str = "native"
+MACRO_CALL_STORE_ENGINE: str = "native-preview"
 STORE_ENVIRONMENT_REGION_VAR: str = "SQB_STORE_TEST_REGION"
+STORE_ARGUMENT_ENV_VAR: str = "STORE_TEST_ARGUMENT"
 _REUSE_DISABLED_VALUES: dict[bool, str] = {True: "0", False: "1"}
 _SOUTH_MODEL: str = "models/south/orders_south.sql"
 _STORE_EXTERNAL_MODULE: str = "store_flavor_values"
@@ -4382,6 +4384,7 @@ def macro_call_store_compile(
         MACRO_CALL_LOG_ENV_VAR: str(log_path),
         "PYTHONPATH": str(extlib),
         "PYTHONDONTWRITEBYTECODE": "1",
+        STORE_ARGUMENT_ENV_VAR: "first",
         **dict(extra_env),
     }
     global_args: tuple[str, ...] = ("--compiler-engine", MACRO_CALL_STORE_ENGINE)
@@ -4403,3 +4406,41 @@ def freeze_macro_call_store_environment(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(macro_bridge_class, "store_environment", lambda **_kwargs: "frozen")
     monkeypatch.setattr(macro_bridge_class, "unchanged_module_stamps", lambda _metadata: {})
+
+
+class EngineMacroCallRuns(NamedTuple):
+    """Full compiles under one engine: exit codes, macro executions, and macro call stores."""
+
+    returncodes: tuple[int, ...]
+    logged_calls: tuple[int, ...]
+    store_files: tuple[str, ...]
+
+
+def engine_macro_call_runs(
+    *, project_dir: Path, extlib: Path, log_path: Path, engine: str, runs: int
+) -> EngineMacroCallRuns:
+    """Compile fully `runs` times under an engine selected by environment; empty is the default."""
+
+    env: dict[str, str] = {
+        COMPILER_ENGINE_ENV_VAR: engine,
+        REUSE_DISABLE_ENV_VAR: "1",
+        MACRO_CALL_LOG_ENV_VAR: str(log_path),
+        "PYTHONPATH": str(extlib),
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    returncodes: list[int] = []
+    logged_calls: list[int] = []
+    for _ in range(runs):
+        _ = log_path.write_text("", encoding="utf-8")
+        returncodes.append(run_reuse_compile(project_dir=project_dir, env=env).returncode)
+        logged_calls.append(len(log_path.read_text(encoding="utf-8").splitlines()))
+    return EngineMacroCallRuns(
+        returncodes=tuple(returncodes),
+        logged_calls=tuple(logged_calls),
+        store_files=tuple(
+            sorted(
+                path.relative_to(project_dir).as_posix()
+                for path in (project_dir / "target").rglob(MACRO_CALL_STORE_FILE_NAME)
+            )
+        ),
+    )

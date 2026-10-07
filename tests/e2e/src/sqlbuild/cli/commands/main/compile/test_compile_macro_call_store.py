@@ -8,16 +8,20 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     BrokenMacroCallStoreKeyTestCase,
+    EngineMacroCallGateTestCase,
     MacroCallStoreEditSequenceTestCase,
     MacroCallStoreEditStep,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     MACRO_CALL_STORE_ENGINE,
+    STORE_ARGUMENT_ENV_VAR,
     STORE_ENVIRONMENT_REGION_VAR,
     CompileReuseRun,
+    EngineMacroCallRuns,
     MacroCallStoreRun,
     edit_label_helper,
     edit_south_model,
+    engine_macro_call_runs,
     freeze_macro_call_store_environment,
     in_process_reuse_run,
     macro_call_store_compile,
@@ -65,9 +69,24 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
         args=("--target", "prod"),
     ),
     MacroCallStoreEditStep(
+        description="model_adds_env_interpolated_argument",
+        edit=lambda root: edit_south_model(
+            root,
+            "  @target_label()",
+            f'  @logged("@@ENV:{STORE_ARGUMENT_ENV_VAR}") AS logged_env,\n  @target_label()',
+        ),
+        expected_logged_calls=1,
+    ),
+    MacroCallStoreEditStep(
+        description="env_interpolated_argument_changes_call_text",
+        edit=lambda _root: None,
+        expected_logged_calls=1,
+        env=((STORE_ARGUMENT_ENV_VAR, "second"),),
+    ),
+    MacroCallStoreEditStep(
         description="environment_variable_read_by_macro",
         edit=lambda _root: None,
-        expected_logged_calls=2,
+        expected_logged_calls=3,
         env=((STORE_ENVIRONMENT_REGION_VAR, "south"),),
     ),
     MacroCallStoreEditStep(
@@ -75,33 +94,33 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
         edit=lambda root: replace_project_text(
             root, "sqlbuild_project.toml", 'region = "north"', 'region = "east"'
         ),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="constant_file_edit",
         edit=lambda root: replace_project_text(
             root, "constants/base_rate.sql", "value 1)", "value 5)"
         ),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="enum_edit",
         edit=lambda root: replace_project_text(
             root, "enums/order_status.sql", 'PLACED "placed"', 'PLACED "open"'
         ),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="macro_body_edit",
         edit=lambda root: replace_project_text(
             root, "macros/common.py", 'return f"{column} * 100"', 'return f"{column} * 1000"'
         ),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="helper_module_edit",
         edit=lambda root: edit_label_helper(root, "other"),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="macro_file_added",
@@ -113,7 +132,7 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
             ),
             edit_south_model(root, "  @label() AS label,\n", "  @badge() AS badge,\n"),
         ),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="macro_file_removed",
@@ -121,12 +140,12 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
             edit_south_model(root, "  @badge() AS badge,\n", ""),
             (root / "macros/badges.py").unlink(),
         ),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="outside_module_rewritten_in_place",
         edit=lambda root: write_store_flavor(extlib=root.parent / "extlib", value="salty"),
-        expected_logged_calls=2,
+        expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="model_comment_after_every_edit",
@@ -217,3 +236,53 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
 
     assert (broken.returncode, reference.returncode) == (0, 0)
     assert (broken.compiled == reference.compiled) is test_case.expected_matches_uncached
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EngineMacroCallGateTestCase(
+            description="default_engine",
+            engine="",
+            expected_logged_calls=(3, 3),
+            expected_store_files=(),
+        ),
+        EngineMacroCallGateTestCase(
+            description="python",
+            engine="python",
+            expected_logged_calls=(3, 3),
+            expected_store_files=(),
+        ),
+        EngineMacroCallGateTestCase(
+            description="native",
+            engine="native",
+            expected_logged_calls=(3, 3),
+            expected_store_files=(),
+        ),
+        EngineMacroCallGateTestCase(
+            description="native_preview",
+            engine="native-preview",
+            expected_logged_calls=(1, 0),
+            expected_store_files=("target/cache/compiler-native-preview-v1/macro-calls.bin",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_stores_macro_calls(
+    tmp_path: Path, test_case: EngineMacroCallGateTestCase
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    extlib: Path = tmp_path / "extlib"
+    prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
+
+    runs: EngineMacroCallRuns = engine_macro_call_runs(
+        project_dir=project_dir,
+        extlib=extlib,
+        log_path=tmp_path / "macro-calls.log",
+        engine=test_case.engine,
+        runs=2,
+    )
+
+    assert runs.returncodes == (0, 0)
+    assert runs.logged_calls == test_case.expected_logged_calls
+    assert runs.store_files == test_case.expected_store_files

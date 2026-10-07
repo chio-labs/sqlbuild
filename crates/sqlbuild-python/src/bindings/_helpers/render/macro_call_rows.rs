@@ -1,13 +1,23 @@
-//! Conversions between native macro bridge models and their Python rows.
+//! Python rows of macro call sites, splice spans and recorded call events.
 
 use pyo3::PyResult;
 use pyo3::exceptions::PyValueError;
 use sqlbuild_render::macro_calls::models::{MacroCallEvent, MacroCallSite, MacroSpliceSpan};
 
-use crate::macro_bridge::constants::{
-    ARGUMENT_REFERENCE, DECLARATION_READ, GENERATED_SQL, MACRO_USE,
-};
-use crate::macro_bridge::types::{EventRow, SiteRow, SpanRow};
+/// Event tags shared with `sqlbuild.compiler.macro_bridge.constants`.
+const MACRO_USE: u8 = 0;
+const DECLARATION_READ: u8 = 1;
+const GENERATED_SQL: u8 = 2;
+const ARGUMENT_REFERENCE: u8 = 3;
+
+/// One call site: start, end, name, tree names and whether typed reference text appears.
+pub(crate) type SiteRow = (usize, usize, String, Vec<String>, bool);
+/// One substitution span: source start and end, output start and end.
+pub(crate) type SpanRow = (usize, usize, usize, usize);
+/// One recorded event: its tag and two text fields.
+pub(crate) type EventRow = (u8, String, String);
+/// One recorded call: its SQL, added relations and events.
+pub(crate) type EntryRow = (String, Vec<(String, String)>, Vec<EventRow>);
 
 pub(crate) fn site_row(site: MacroCallSite) -> SiteRow {
     (

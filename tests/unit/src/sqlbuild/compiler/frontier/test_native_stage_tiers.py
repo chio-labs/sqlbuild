@@ -103,6 +103,42 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             stage=NativeStage.MODEL_LOOP,
             expected_enabled=True,
         ),
+        NativeStageTierTestCase(
+            description="python_macro_calls",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.MACRO_CALLS,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="python_macro_call_store",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.MACRO_CALL_STORE,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_macro_calls",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.MACRO_CALLS,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_macro_call_store",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.MACRO_CALL_STORE,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_macro_calls",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.MACRO_CALLS,
+            expected_enabled=True,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_macro_call_store",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.MACRO_CALL_STORE,
+            expected_enabled=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

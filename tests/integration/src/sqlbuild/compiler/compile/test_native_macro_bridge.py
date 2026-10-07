@@ -78,7 +78,9 @@ def test_given_macro_heavy_project_when_rendering_with_each_engine_then_inputs_a
         render_compile_inputs(project_dir=project_dir, engine="python", monkeypatch=monkeypatch)
     )
     native_capture: str = comparable_capture(
-        render_compile_inputs(project_dir=project_dir, engine="native", monkeypatch=monkeypatch)
+        render_compile_inputs(
+            project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
+        )
     )
 
     assert native_capture == python_capture
@@ -102,7 +104,7 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
 ) -> None:
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
     executions: dict[str, int] = {}
-    for engine in ("python", "native"):
+    for engine in ("python", "native-preview"):
         log_path: Path = tmp_path / f"{engine}.log"
         monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
         _ = render_compile_inputs(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
@@ -110,7 +112,7 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
 
     assert executions == {
         "python": test_case.expected_python_executions,
-        "native": test_case.expected_native_executions,
+        "native-preview": test_case.expected_native_executions,
     }
 
 
@@ -171,7 +173,7 @@ def test_given_failing_render_when_rendering_natively_then_raises_the_python_err
         project_dir=project_dir, engine="python", monkeypatch=monkeypatch
     )
     native_error: tuple[type[BaseException], str, type[object]] = render_error(
-        project_dir=project_dir, engine="native", monkeypatch=monkeypatch
+        project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
     )
 
     assert native_error == python_error

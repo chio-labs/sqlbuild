@@ -6,6 +6,8 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.spec.contracts.models import TargetConfig
@@ -29,7 +31,12 @@ def target_context_with_macro_call_store(
     bridge: MacroBridge | None = active_macro_bridge()
     project_dir: Path | None = discovered_inputs.project_dir
     compile_cache_dir: Path | None = target_context[2]
-    if bridge is not None and compile_cache_dir is not None and project_dir is not None:
+    if (
+        bridge is not None
+        and compile_cache_dir is not None
+        and project_dir is not None
+        and native_stage_enabled(NativeStage.MACRO_CALL_STORE)
+    ):
         bridge.attach_store(
             cache_dir=compile_cache_dir,
             project_dir=project_dir,
