@@ -24,6 +24,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     DataflowStartFailureCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
+    CompiledProjectRun,
     analysis_pool_thread_ids,
     compile_outcome,
     compiled_project_capture,
@@ -39,7 +40,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
 )
 
 _PROJECT: RandomDagProject = RandomDagProject(seed=97, model_count=40, errors=True)
-_SHARED_ANALYSIS_SEED: int = 29
+_SHARED_ANALYSIS_SEED: int = 34
 _CAPTURE_SCHEDULES: tuple[DataflowScheduleCase, ...] = (
     DataflowScheduleCase("one worker with single models", 1, 1, 0.0),
     DataflowScheduleCase("four workers with small batches", 4, 2, 0.004),
@@ -100,11 +101,17 @@ def test_given_perturbed_schedule_when_compiling_repeatedly_then_output_is_ident
             "random dag",
             random_dag_writer(_PROJECT),
             _CAPTURE_SCHEDULES,
+            expected_exit_code=1,
+            expected_minimum_shareable_members=0,
+            expected_minimum_shared_reuse=0,
         ),
         DataflowCaptureCase(
             "differential seed with shared analyses",
             generate_project(seed=_SHARED_ANALYSIS_SEED).write,
             _CAPTURE_SCHEDULES,
+            expected_exit_code=0,
+            expected_minimum_shareable_members=1,
+            expected_minimum_shared_reuse=1,
         ),
     ],
     ids=lambda case: case.description,
@@ -119,7 +126,7 @@ def test_given_perturbed_schedule_when_capturing_compiled_project_then_capture_i
     _ = test_case.write_project(project_dir)
     with monkeypatch.context() as waves_patch:
         use_wave_analysis(waves_patch)
-        reference: Path = compiled_project_capture(
+        reference: CompiledProjectRun = compiled_project_capture(
             project_dir=project_dir,
             capture_dir=tmp_path / "reference",
             capsys=capsys,
@@ -128,15 +135,28 @@ def test_given_perturbed_schedule_when_capturing_compiled_project_then_capture_i
     for index, schedule in enumerate(test_case.schedules):
         with monkeypatch.context() as schedule_patch:
             perturb_dataflow_schedule(monkeypatch=schedule_patch, case=schedule, seed=index)
-            actual: Path = compiled_project_capture(
+            actual: CompiledProjectRun = compiled_project_capture(
                 project_dir=project_dir,
                 capture_dir=tmp_path / f"schedule-{index}",
                 capsys=capsys,
                 monkeypatch=monkeypatch,
             )
 
-        difference: Divergence | None = first_capture_difference(left=reference, right=actual)
+        difference: Divergence | None = first_capture_difference(
+            left=reference.capture, right=actual.capture
+        )
         assert getattr(difference, "location", None) == test_case.expected_difference, schedule
+        assert (
+            actual.exit_code,
+            actual.shareable_members >= test_case.expected_minimum_shareable_members,
+            actual.shared_reuse
+            >= test_case.expected_minimum_shared_reuse * (schedule.workers == 1),
+        ) == (test_case.expected_exit_code, True, True), (schedule, actual)
+    assert (
+        reference.exit_code,
+        reference.shareable_members >= test_case.expected_minimum_shareable_members,
+        reference.shared_reuse >= test_case.expected_minimum_shared_reuse,
+    ) == (test_case.expected_exit_code, True, True), reference
 
 
 @pytest.mark.parametrize(

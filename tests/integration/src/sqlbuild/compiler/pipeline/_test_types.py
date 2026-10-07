@@ -445,6 +445,9 @@ class DataflowCaptureCase:
     description: str
     write_project: Callable[[Path], object]
     schedules: tuple[DataflowScheduleCase, ...]
+    expected_exit_code: int
+    expected_minimum_shareable_members: int
+    expected_minimum_shared_reuse: int
     expected_difference: str | None = None
 
 

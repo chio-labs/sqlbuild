@@ -10,6 +10,7 @@ from scripts.compiler_differential.constants import (
     FAILURE_BASE_MART,
     FAILURE_BASE_STAGING,
     FAILURE_MART_PATH,
+    GENERATOR_MISSING_ENV_VAR,
 )
 from scripts.compiler_differential.models import FailureCase
 
@@ -59,7 +60,13 @@ def _staging_columns(*, columns: str, files: dict[str, str] | None = None) -> di
 def render_failure_cases() -> tuple[FailureCase, ...]:
     """Return the render-time failure cases in a stable order."""
 
-    return (*_macro_cases(), *_interpolation_cases(), *_reference_cases(), *_attachment_cases())
+    return (
+        *_macro_cases(),
+        *_interpolation_cases(),
+        *_reference_cases(),
+        *_attachment_cases(),
+        *_model_config_cases(),
+    )
 
 
 def _macro_cases() -> tuple[FailureCase, ...]:
@@ -350,5 +357,52 @@ def _attachment_cases() -> tuple[FailureCase, ...]:
                 "constants/limits.sql": "CONSTANT (name minimum_amount, value 1);\n",
                 **staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
             },
+        ),
+    )
+
+
+def _model_config_cases() -> tuple[FailureCase, ...]:
+    return (
+        failure_case(
+            name="model-column-audit-unknown-severity",
+            expected_code="P001",
+            expected_message="severity",
+            files=_staging_header("  columns (amount (audits [not_null (severity fatal)])),"),
+        ),
+        failure_case(
+            name="model-duplicate-column",
+            expected_code="P001",
+            expected_message="duplicate",
+            files=_staging_header("  columns (amount (type DOUBLE), AMOUNT (type DOUBLE)),"),
+        ),
+        failure_case(
+            name="model-blank-column-type",
+            expected_code="P001",
+            expected_message="non-empty string",
+            files=_staging_header('  columns (amount (type " ")),'),
+        ),
+        failure_case(
+            name="model-nullable-column-with-not-null",
+            expected_code="P002",
+            expected_message="not_null",
+            files=_staging_header("  columns (amount (nullable true, audits [not_null])),"),
+        ),
+        failure_case(
+            name="model-template-missing-environment",
+            expected_code="P001",
+            expected_message="missing ENV variable",
+            files=_staging_header(f'  schema "${{ENV:{GENERATOR_MISSING_ENV_VAR}}}",'),
+        ),
+        failure_case(
+            name="model-template-unknown-function",
+            expected_code="P001",
+            expected_message="unsupported template function",
+            files=_staging_header("  schema \"${upper('orders')}\","),
+        ),
+        failure_case(
+            name="model-template-unterminated-string",
+            expected_code="P001",
+            expected_message="unterminated",
+            files=_staging_header('  schema "${coalesce(\'orders)}",'),
         ),
     )
