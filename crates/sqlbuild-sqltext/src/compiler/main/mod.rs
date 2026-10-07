@@ -1,3 +1,4 @@
+pub mod declaration_references;
 pub mod model_header_byte_matching;
 pub mod model_header_matching;
 pub mod model_header_parsing;

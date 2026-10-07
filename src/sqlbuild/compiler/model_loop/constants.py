@@ -8,3 +8,4 @@ DECLARATION_KIND_CODES: dict[DeclarationKind, int] = {
     DeclarationKind.MACRO: 2,
 }
 NO_DECLARATION_KIND: int = 255
+ENUM_REFERENCE_KIND_CODE: int = DECLARATION_KIND_CODES[DeclarationKind.ENUM]

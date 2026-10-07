@@ -5,7 +5,8 @@ use crate::compiler::_helpers::sql_interpolation::substitution::{
     FALLBACK, SUBSTITUTED, UNCHANGED, substitute_batch,
 };
 use crate::compiler::_helpers::sql_references::extraction::extract;
-use crate::compiler::models::AuthoredValue;
+use crate::compiler::main::declaration_references::scan_declaration_references;
+use crate::compiler::models::{AuthoredValue, DeclarationReference};
 
 pub(crate) fn scalar_variables_preserve_lexical_boundaries() -> bool {
     let sqls = vec![
@@ -211,4 +212,30 @@ pub(crate) fn batch_sizes_bound_workers_by_contract() -> bool {
     }
     assert_eq!(TOKENIZER_WORKER_STACK_BYTES, 16 * 1024 * 1024);
     true
+}
+
+/// Scan one SQL string and spell its references as `kind:name[.member]@start..end, ...`.
+pub(crate) fn scanned_references(sql: &str) -> Option<String> {
+    let references: Vec<DeclarationReference> = scan_declaration_references(&[sql.to_owned()])
+        .pop()
+        .flatten()?;
+    Some(
+        references
+            .iter()
+            .map(|reference| {
+                let member: String = reference
+                    .member
+                    .as_ref()
+                    .map_or_else(String::new, |member| format!(".{member}"));
+                format!(
+                    "{}:{}{member}@{}..{}",
+                    reference.kind.keyword(),
+                    reference.name,
+                    reference.start,
+                    reference.end
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(", "),
+    )
 }

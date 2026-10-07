@@ -175,6 +175,9 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...
+def scan_sql_declaration_references(
+    sqls: list[str],
+) -> list[list[tuple[int, str, str | None, int, int]] | None]: ...
 def substitute_static_project_vars(
     sqls: list[str], variables: list[tuple[str, str]]
 ) -> list[tuple[int, str | None]]: ...

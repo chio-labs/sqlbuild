@@ -1,3 +1,5 @@
+#[path = "tests/test_declaration_references.rs"]
+mod declaration_references;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_model_header_matching.rs"]

@@ -15,3 +15,10 @@ pub(crate) struct ModelHeaderMatchTestCase {
     pub(crate) contents: &'static str,
     pub(crate) expected_offsets: Option<(usize, usize, usize)>,
 }
+
+pub(crate) struct DeclarationReferenceScanTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    /// References spelled `kind:name[.member]@start..end, ...` in code points.
+    pub(crate) expected_references: Option<&'static str>,
+}

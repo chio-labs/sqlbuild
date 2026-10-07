@@ -33,9 +33,11 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_loop.constants import ENUM_REFERENCE_KIND_CODE
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
+from sqlbuild.compiler.model_loop.types import NativeDeclarationReference
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.scopes.constants import QUALIFIED_IDENTITY_SEPARATOR
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
@@ -658,19 +660,11 @@ def expand_declaration_references_result(
             )
             visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
             member = None
-        if declarations.consumer is not None:
-            for visible in usage_visibility(
-                visibility=visibility,
-                consumer=declarations.consumer,
-            ):
-                usages.append(
-                    UsageRecord(
-                        consumer=declarations.consumer,
-                        declaration=visible.declaration,
-                        through=visible.through,
-                        enum_member=member,
-                    )
-                )
+        usages.extend(
+            declaration_reference_usages(
+                declarations=declarations, visibility=visibility, enum_member=member
+            )
+        )
         rendered_parts.append(replacement)
         spans.append(
             ExpansionSpan(
@@ -687,6 +681,127 @@ def expand_declaration_references_result(
         spans=tuple(spans),
         usages=tuple(dict.fromkeys(usages)),
     )
+
+
+def declaration_reference_usages(
+    *,
+    declarations: DeclarationResolutionContext,
+    visibility: tuple[VisibilityRecord, ...],
+    enum_member: str | None,
+) -> tuple[UsageRecord, ...]:
+    """Usage records one resolved `@enum`/`@const` reference adds for the context's consumer."""
+
+    consumer: ResourceIdentity | DeclarationIdentity | None = declarations.consumer
+    if consumer is None:
+        return ()
+    return tuple(
+        UsageRecord(
+            consumer=consumer,
+            declaration=visible.declaration,
+            through=visible.through,
+            enum_member=enum_member,
+        )
+        for visible in usage_visibility(visibility=visibility, consumer=consumer)
+    )
+
+
+def expand_scanned_declaration_references(  # noqa: PLR0913
+    *,
+    sql: str,
+    references: tuple[NativeDeclarationReference, ...] | None,
+    file_path: Path,
+    declarations: DeclarationResolutionContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+) -> DeclarationExpansionResult | None:
+    """Splice natively scanned references, or return None when Python must expand and report."""
+
+    if references is None:
+        return None
+    if not references:
+        return DeclarationExpansionResult(sql=sql, spans=(), usages=())
+    parts: list[str] = []
+    spans: list[ExpansionSpan] = []
+    usages: list[UsageRecord] = []
+    cursor: int = 0
+    output_length: int = 0
+    for kind, name, member, start, end in references:
+        resolved: tuple[str, tuple[VisibilityRecord, ...]] | None = (
+            _scanned_enum_member_text(declarations=declarations, name=name, member=member)
+            if kind == ENUM_REFERENCE_KIND_CODE
+            else _scanned_constant_text(
+                declarations=declarations,
+                name=name,
+                file_path=file_path,
+                value_renderer=value_renderer,
+                collection_rendering=collection_rendering,
+            )
+        )
+        if resolved is None:
+            return None
+        replacement, visibility = resolved
+        parts.append(sql[cursor:start])
+        output_length += start - cursor
+        usages.extend(
+            declaration_reference_usages(
+                declarations=declarations, visibility=visibility, enum_member=member
+            )
+        )
+        parts.append(replacement)
+        spans.append(
+            ExpansionSpan(
+                source_start=start,
+                source_end=end,
+                output_start=output_length,
+                output_end=output_length + len(replacement),
+            )
+        )
+        output_length += len(replacement)
+        cursor = end
+    parts.append(sql[cursor:])
+    return DeclarationExpansionResult(
+        sql="".join(parts), spans=tuple(spans), usages=tuple(dict.fromkeys(usages))
+    )
+
+
+def _scanned_enum_member_text(
+    *, declarations: DeclarationResolutionContext, name: str, member: str | None
+) -> tuple[str, tuple[VisibilityRecord, ...]] | None:
+    declaration: EnumDeclaration | None = declarations.enums.get(name)
+    if declaration is None:
+        return None
+    matched: EnumMember | None = next(
+        (candidate for candidate in declaration.members if candidate.name == member), None
+    )
+    if matched is None:
+        return None
+    return (
+        render_enum_member_value(value=matched.value),
+        declarations.enum_visibility.get(name, ()),
+    )
+
+
+def _scanned_constant_text(
+    *,
+    declarations: DeclarationResolutionContext,
+    name: str,
+    file_path: Path,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+) -> tuple[str, tuple[VisibilityRecord, ...]] | None:
+    declaration: ConstantDeclaration | None = declarations.constants.get(name)
+    if declaration is None:
+        return None
+    try:
+        rendered: str = render_constant_declaration(
+            declaration=declaration,
+            value_renderer=value_renderer,
+            collection_rendering=collection_rendering,
+            file_path=file_path,
+        )
+    except CompileInputError:
+        return None
+    return rendered, declarations.constant_visibility.get(name, ())
 
 
 def usage_visibility(
