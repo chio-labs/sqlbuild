@@ -1,0 +1,133 @@
+//! The Python template evaluator: references, `if`, `eq`, `ne` and `coalesce`.
+
+use crate::templates::models::{
+    ContextValue, Expression, Scalar, TemplateFailure, TemplateOptions,
+};
+use crate::templates::types::TemplateHost;
+
+const TRUE_LITERAL: &str = "true";
+const FALSE_LITERAL: &str = "false";
+const NULL_LITERAL: &str = "null";
+const FALSE_VALUES: [&str; 3] = ["", "0", "false"];
+const ENVIRONMENT_NAMESPACE: &str = "ENV";
+const IF_FUNCTION: &str = "if";
+const EQ_FUNCTION: &str = "eq";
+const NE_FUNCTION: &str = "ne";
+const COALESCE_FUNCTION: &str = "coalesce";
+const CONTEXT_NAMESPACE: &str = "CTX";
+
+/// Evaluate one expression to the value Python's resolver returns.
+pub(crate) fn evaluate<H: TemplateHost>(
+    host: &H,
+    expression: &Expression,
+    options: TemplateOptions,
+) -> Result<H::Value, TemplateFailure> {
+    match expression {
+        Expression::Text(text) => host.text(text),
+        Expression::Reference(reference) => evaluate_reference(host, reference, options),
+        Expression::Function { name, arguments } => {
+            evaluate_function(host, name, arguments, options)
+        }
+    }
+}
+
+/// Render a value as interpolated text, as `render_project_var_text` does for scalars.
+pub(crate) fn render_text<H: TemplateHost>(
+    host: &H,
+    value: &H::Value,
+) -> Result<String, TemplateFailure> {
+    comparison_text(host, value)
+}
+
+fn evaluate_reference<H: TemplateHost>(
+    host: &H,
+    reference: &str,
+    options: TemplateOptions,
+) -> Result<H::Value, TemplateFailure> {
+    match reference {
+        TRUE_LITERAL => return host.boolean(true),
+        FALSE_LITERAL => return host.boolean(false),
+        NULL_LITERAL => return Ok(host.null()),
+        _ => {}
+    }
+    let Some((namespace, name)) = reference.split_once(':') else {
+        return host.variable(reference)?.ok_or(TemplateFailure::Missing);
+    };
+    match namespace {
+        ENVIRONMENT_NAMESPACE => host.environment(name)?.ok_or(TemplateFailure::Missing),
+        CONTEXT_NAMESPACE if !options.allow_context => {
+            if options.preserve_context_tokens {
+                host.text(&format!("${{{reference}}}"))
+            } else {
+                Err(TemplateFailure::Invalid)
+            }
+        }
+        CONTEXT_NAMESPACE => match host.context(name)? {
+            ContextValue::Value(value) => Ok(value),
+            ContextValue::Unknown if options.preserve_unknown_context => {
+                host.text(&format!("${{{CONTEXT_NAMESPACE}:{name}}}"))
+            }
+            ContextValue::Unknown | ContextValue::Unavailable => Err(TemplateFailure::Missing),
+        },
+        _ => Err(TemplateFailure::Invalid),
+    }
+}
+
+fn evaluate_function<H: TemplateHost>(
+    host: &H,
+    name: &str,
+    arguments: &[Expression],
+    options: TemplateOptions,
+) -> Result<H::Value, TemplateFailure> {
+    match (name, arguments) {
+        (IF_FUNCTION, [condition, when_true, when_false]) => {
+            let condition = evaluate(host, condition, options)?;
+            if truthiness(host, &condition)? {
+                evaluate(host, when_true, options)
+            } else {
+                evaluate(host, when_false, options)
+            }
+        }
+        (EQ_FUNCTION | NE_FUNCTION, [left, right]) => {
+            let left = evaluate(host, left, options)?;
+            let right = evaluate(host, right, options)?;
+            let equal = comparison_text(host, &left)? == comparison_text(host, &right)?;
+            host.boolean(equal == (name == EQ_FUNCTION))
+        }
+        (COALESCE_FUNCTION, [.., last]) => {
+            for argument in arguments {
+                match evaluate(host, argument, options) {
+                    Ok(value) if truthiness(host, &value)? => return Ok(value),
+                    Ok(_) | Err(TemplateFailure::Missing) => {}
+                    Err(failure) => return Err(failure),
+                }
+            }
+            evaluate(host, last, options)
+        }
+        _ => Err(TemplateFailure::Invalid),
+    }
+}
+
+fn comparison_text<H: TemplateHost>(host: &H, value: &H::Value) -> Result<String, TemplateFailure> {
+    match host.scalar(value).ok_or(TemplateFailure::Unsupported)? {
+        Scalar::Null => Ok(String::new()),
+        Scalar::Bool(flag) => Ok(if flag { TRUE_LITERAL } else { FALSE_LITERAL }.to_owned()),
+        Scalar::Text(text) => Ok(text),
+    }
+}
+
+fn truthiness<H: TemplateHost>(host: &H, value: &H::Value) -> Result<bool, TemplateFailure> {
+    match host.scalar(value).ok_or(TemplateFailure::Unsupported)? {
+        Scalar::Null => Ok(false),
+        Scalar::Bool(flag) => Ok(flag),
+        Scalar::Text(text) if text.is_ascii() => {
+            let normalized = text
+                .trim_matches(
+                    |character: char| matches!(character, '\t'..='\r' | '\u{1c}'..='\u{1f}' | ' '),
+                )
+                .to_ascii_lowercase();
+            Ok(!FALSE_VALUES.contains(&normalized.as_str()))
+        }
+        Scalar::Text(_) => Err(TemplateFailure::Unsupported),
+    }
+}

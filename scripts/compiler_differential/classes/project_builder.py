@@ -24,6 +24,7 @@ from scripts.compiler_differential.constants import (
     GENERATOR_INVALID_SHARE,
     GENERATOR_LAYERS,
     GENERATOR_MACRO_KIND,
+    GENERATOR_MISSING_ENV_VAR,
     GENERATOR_NON_ASCII_DESCRIPTION_SHARE,
     GENERATOR_NON_ASCII_LABELS,
     GENERATOR_RARE_FEATURE_BLOCKS,
@@ -110,6 +111,7 @@ class ProjectBuilder:
             domains=domains,
             adapter=extras.adapter,
             extra_lines=[*extras.config_lines, *rendering.config_lines],
+            templated_target=rendering.templated_target,
         )
         if invalid_kind is not None:
             self._inject_invalid(kind=invalid_kind)
@@ -125,6 +127,11 @@ class ProjectBuilder:
             succeeding_commands=extras.succeeding_commands,
         )
 
+    def _target_schema(self, *, schema: str, templated: bool) -> str:
+        if not templated:
+            return schema
+        return f"${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, '{schema}')}}"
+
     def _chance(self, share: float) -> bool:
         return self._random.random() < share
 
@@ -132,7 +139,12 @@ class ProjectBuilder:
         return self._random.choice(GENERATOR_NON_ASCII_LABELS)
 
     def _write_config(
-        self, *, domains: list[str], adapter: str | None, extra_lines: list[str]
+        self,
+        *,
+        domains: list[str],
+        adapter: str | None,
+        extra_lines: list[str],
+        templated_target: bool,
     ) -> None:
         lines: list[str] = [
             f'name = "generated_{self._seed}"',
@@ -148,7 +160,11 @@ class ProjectBuilder:
             f'site_label = "{self._label()}"',
             "",
             "[targets.dev]",
-            f'schema = "{self._random.choice(("analytics", "main"))}"',
+            'schema = "{}"'.format(
+                self._target_schema(
+                    schema=self._random.choice(("analytics", "main")), templated=templated_target
+                )
+            ),
             "",
             "[settings]",
             f'default_audit_severity = "{self._random.choice(("warn", "error"))}"',

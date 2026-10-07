@@ -16,6 +16,7 @@ class NativeStage(StrEnum):
 
     DISCOVERY = "discovery"
     DECLARATION_SCOPES = "declaration_scopes"
+    MODEL_CONFIG = "model_config"
 
 
 class NativeStageTier(StrEnum):

@@ -1,6 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 BUILD_IDENTITY: str
 
@@ -127,6 +127,16 @@ def build_native_scope_index(
         ]
     ],
 ) -> NativeScopeIndex | None: ...
+def parse_model_header_metadata(
+    requests: list[tuple[object, object, dict[str, Any]]], classes: dict[str, object]
+) -> list[tuple[tuple[Any, ...], tuple[Any, ...]] | str]: ...
+def config_contains_template(value: object) -> bool | None: ...
+def config_contains_macro_call(value: object) -> bool | None: ...
+def expand_config_templates(
+    value: object,
+    sources: tuple[dict[str, object], object, dict[str, str | None]],
+    flags: tuple[bool, bool, bool],
+) -> tuple[object, list[tuple[str, str]]] | str: ...
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...

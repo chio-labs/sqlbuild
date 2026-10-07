@@ -60,6 +60,8 @@ _CONSUMER_COLLECTIONS: dict[str, str] = {
 }
 _REFERENCE_COLLECTIONS: tuple[str, ...] = ("model_inputs", "sql_function_inputs", "audit_inputs")
 _RELATION_REFERENCE_KINDS: frozenset[str] = frozenset({"ref", "source", "seed"})
+_TEMPLATE_OPEN: str = "${"
+_TARGET_NAMESPACE_KEYS: tuple[str, ...] = ("database", "schema")
 
 
 def required_render_kinds() -> tuple[str, ...]:
@@ -111,6 +113,7 @@ def rendered_input_kinds(capture_text: str) -> frozenset[str]:
     kinds.update(_hook_kinds(capture))
     kinds.update(_reference_kinds(capture))
     kinds.update(_attachment_kinds(capture))
+    kinds.update(_model_config_kinds(capture))
     return frozenset(kinds)
 
 
@@ -418,4 +421,23 @@ def _attachment_kinds(capture: dict[str, object]) -> set[str]:
         config: dict[str, object] = as_json_object(model.get("config")) or {}
         if config.get("matched_path_default") is not None:
             kinds.add("path_default")
+    return kinds
+
+
+def _model_config_kinds(capture: dict[str, object]) -> set[str]:
+    kinds: set[str] = set()
+    target: dict[str, object] = as_json_object(capture.get("effective_target")) or {}
+    if any(_TEMPLATE_OPEN in str(target.get(key)) for key in _TARGET_NAMESPACE_KEYS):
+        kinds.add("target_namespace_template")
+    for model in records(capture.get("model_inputs")):
+        model_file: dict[str, object] = as_json_object(model.get("model_file")) or {}
+        header: dict[str, object] = as_json_object(model_file.get("header_values")) or {}
+        if any(_TEMPLATE_OPEN in json.dumps(value) for value in header.values()):
+            kinds.add("model_header_template")
+        schema_entry: dict[str, object] = as_json_object(model.get("schema_entry")) or {}
+        for column in records(schema_entry.get("columns")):
+            if column.get("type") is not None and any(
+                audit.get("severity") is not None for audit in records(column.get("audits"))
+            ):
+                kinds.add("model_column_audit_options")
     return kinds

@@ -15,6 +15,7 @@ from scripts.compiler_differential.constants import (
     GENERATOR_FEATURE_BLOCKS,
     GENERATOR_FEATURE_FOLDER,
     GENERATOR_FEATURE_STRIDE,
+    GENERATOR_MISSING_ENV_VAR,
     GENERATOR_OPTIONAL_FEATURE_SHARE,
     GENERATOR_PROJECT_ADAPTER,
     GENERATOR_RARE_FEATURE_BLOCKS,
@@ -491,7 +492,14 @@ class DiscoveryFeatureWriter:
     def _target_override(self) -> None:
         self._features.add("target_override")
         self.config_lines.extend(
-            ["", "[targets.ci]", 'schema = "ci_checks"', "", "[targets.ci.vars]", 'region = "west"']
+            [
+                "",
+                "[targets.ci]",
+                f"schema = \"${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, 'ci_checks')}}\"",
+                "",
+                "[targets.ci.vars]",
+                'region = "west"',
+            ]
         )
         self._files.setdefault("sqlbuild_local.toml", "")
         self._files["sqlbuild_local.toml"] = (

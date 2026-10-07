@@ -3,7 +3,9 @@ use pyo3::pymodule;
 use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
-use crate::bindings::_helpers::{analysis, boundary, discovery, rules, scopes, sqltext};
+use crate::bindings::_helpers::{
+    analysis, boundary, discovery, model_config, rules, scopes, sqltext,
+};
 use crate::bindings::models;
 
 #[pymodule]
@@ -28,6 +30,9 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     discovery::project_files::register(module)?;
     scopes::scope_index::register(module)?;
     scopes::relationship_names::register(module)?;
+    model_config::header_metadata::register(module)?;
+    model_config::config_presence::register(module)?;
+    model_config::config_templates::register(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())

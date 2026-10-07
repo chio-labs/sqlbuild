@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from scripts.compiler_differential.constants import (
     GENERATOR_CHANNEL_ENV_VAR,
+    GENERATOR_MISSING_ENV_VAR,
     GENERATOR_RENDER_FOLDER,
     GENERATOR_RENDER_TEST_FOLDER,
 )
@@ -35,6 +36,7 @@ class RenderFeatureWriter:
         self._sources: list[str] = sources
         self._label: Callable[[], str] = label
         self.config_lines: list[str] = []
+        self.templated_target: bool = False
 
     def write(self) -> None:
         """Write the selected rendering blocks in their canonical order."""
@@ -49,6 +51,7 @@ class RenderFeatureWriter:
             "macros_across_resources": self._macros_across_resources,
             "enum_column_contract": self._enum_column_contract,
             "resource_audits": self._resource_audits,
+            "model_config": self._model_config,
         }
         for block in self._blocks:
             writer: Callable[[], None] | None = writers.get(block)
@@ -414,4 +417,35 @@ class RenderFeatureWriter:
                 'JOIN __seed("channel_codes") c ON e.id = c.id\n'
                 "GROUP BY c.label\n"
             ),
+        )
+
+    def _model_config(self) -> None:
+        self._features.add("model_config")
+        self.templated_target = True
+        base: ModelPlan = self._base()
+        self._files[self._owned(role="audits/generic", name="configured_floor.sql")] = (
+            'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE amount < @minimum\n'
+        )
+        self._model(
+            name=f"configured_{base.name}",
+            description=f"Configured copy of {base.name} (réglé)",
+            header=(
+                "  materialized table,\n"
+                f'  schema "${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, '
+                f"'configured')}}_${{CTX:run.target}}\",\n"
+                "  tags [\"${if(eq(CTX:run.target, 'dev'), 'development', 'release')}\"],\n"
+                "  audits [\n"
+                f"    configured_floor (minimum {self._random.randint(-40, -2)}, severity warn,\n"
+                '      name configured_amount_floor, description "Amounts stay above the floor"),\n'
+                "  ],\n"
+                "  columns (\n"
+                '    id (type INTEGER, nullable false, description "Row key",\n'
+                "      audits [not_null (severity error, name configured_id_present),\n"
+                "        unique (always_run true)]),\n"
+                '    amount (type DOUBLE, description "Montant réglé"),\n'
+                '    status (audits [accepted_values (values ["placed", "shipped"],\n'
+                '      severity warn, description "Known statuses")]),\n'
+                "  ),\n"
+            ),
+            body=f'SELECT id, amount, status\nFROM __ref("{base.name}")\n',
         )

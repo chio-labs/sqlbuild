@@ -2966,6 +2966,7 @@ _COMPILE_REUSE_RULES_CONFIG: str = (
     '\n[rules]\nselect = ["XSQBR"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
 )
 _FUTURE_MTIME_OFFSET_NS: int = 5_000_000_000
+_PHASE_DURATION: re.Pattern[str] = re.compile(r"  \(\d+\.\d+s\)")
 _PROGRESS_LINE: re.Pattern[str] = re.compile(r".+  (START|OK  \(\d+\.\d+s\))")
 _COMPILE_TIMINGS_PATTERN: re.Pattern[str] = re.compile(r'\n  "compile_timings": \{[^{}]*\n  \}')
 _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
@@ -3091,6 +3092,12 @@ def compile_reuse_hit_count(*, report_path: Path) -> int:
         dict[str, object], json.loads(report_path.read_text(encoding="utf-8"))
     )
     return cast(dict[str, int], payload["compile_timings"])["project_reuse_hits"]
+
+
+def stderr_without_durations(*, stderr: str) -> str:
+    """Return compile stderr without its phase durations."""
+
+    return _PHASE_DURATION.sub("", stderr)
 
 
 def compile_notes(*, stderr: str) -> list[str]:

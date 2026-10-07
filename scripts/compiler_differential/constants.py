@@ -191,6 +191,7 @@ GENERATOR_RENDER_BLOCKS: tuple[str, ...] = (
     "macros_across_resources",
     "enum_column_contract",
     "resource_audits",
+    "model_config",
 )
 GENERATOR_FEATURE_BLOCKS: tuple[str, ...] = (
     "incremental_append",
@@ -231,6 +232,7 @@ GENERATOR_FEATURE_FOLDER: str = "models/features"
 GENERATOR_RENDER_FOLDER: str = "models/rendering"
 GENERATOR_RENDER_TEST_FOLDER: str = "tests/unit/rendering"
 GENERATOR_CHANNEL_ENV_VAR: str = "SQB_DIFFERENTIAL_CHANNEL"
+GENERATOR_MISSING_ENV_VAR: str = "SQB_DIFFERENTIAL_UNSET"
 GENERATOR_ENVIRONMENT: dict[str, str] = {GENERATOR_CHANNEL_ENV_VAR: "web-orders"}
 GENERATOR_PROJECT_ADAPTER: str = "generated_duckdb"
 GENERATOR_CRLF: str = "\r\n"
@@ -451,6 +453,9 @@ RENDER_DETAIL_KINDS: tuple[str, ...] = (
     "source_column_audit",
     "seed_column_audit",
     "path_default",
+    "model_header_template",
+    "target_namespace_template",
+    "model_column_audit_options",
 )
 RENDER_INDIRECT_KINDS: dict[str, str] = {
     kind: "the used macro's own function source reads it; the capture does not record context reads"

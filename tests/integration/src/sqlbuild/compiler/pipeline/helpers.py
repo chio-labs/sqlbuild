@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 import orjson
 import pytest
@@ -57,6 +57,23 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     PreparedCompile,
     SharedBindingQueryCase,
 )
+
+
+class CompiledProjectRun(NamedTuple):
+    """One cold compile's exit code, compiled-project capture and shared-analysis reuse."""
+
+    exit_code: int
+    capture: Path
+    shareable_members: int
+    deduplicated_queries: int
+    shared_memo_hits: int
+
+    @property
+    def shared_reuse(self) -> int:
+        """Return how many member analyses were served by another member's analysis."""
+
+        return self.deduplicated_queries + self.shared_memo_hits
+
 
 _REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
 _NORMALIZATION_MODULES: tuple[ModuleType, ...] = (normalize_batch, binding_sharing, compact)
@@ -314,14 +331,62 @@ def compiled_project_capture(
     capture_dir: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
-) -> Path:
-    """Cold-compile once with stage captures; return the compiled-project capture file."""
+) -> CompiledProjectRun:
+    """Cold-compile once with stage captures, counting how often shared analyses were reused."""
 
+    keys: list[object] = []
+    deduplicated: list[int] = []
+    memo_hits: list[int] = []
     with monkeypatch.context() as capture_patch:
         capture_patch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(capture_dir))
-        _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+        record_shared_analysis_reuse(
+            monkeypatch=capture_patch, keys=keys, deduplicated=deduplicated, memo_hits=memo_hits
+        )
+        exit_code: int = main(
+            ["--project-dir", str(project_dir), "compile", "--json", "--no-cache"]
+        )
     _ = capsys.readouterr()
-    return next(capture_dir.glob(f"*-{CompilerStage.COMPILED_PROJECT.value}.json"))
+    return CompiledProjectRun(
+        exit_code=exit_code,
+        capture=next(capture_dir.glob(f"*-{CompilerStage.COMPILED_PROJECT.value}.json")),
+        shareable_members=len(keys) - len(set(keys)),
+        deduplicated_queries=sum(deduplicated),
+        shared_memo_hits=sum(memo_hits),
+    )
+
+
+def record_shared_analysis_reuse(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    keys: list[object],
+    deduplicated: list[int],
+    memo_hits: list[int],
+) -> None:
+    """Record shared-result keys, each batch's deduplicated queries and its memo hits."""
+
+    member_keys: Callable[..., tuple[object, ...]] = compact.shared_result_keys
+
+    def counted_keys(**kwargs: Any) -> tuple[object, ...]:
+        computed: tuple[object, ...] = member_keys(**kwargs)
+        keys.extend(filter(None, computed))
+        return computed
+
+    prepare: Callable[..., CompactBatchPreparation] = compact._prepare_compact_analysis_batch
+    reuse: Callable[..., Mapping[int, object]] = compact.reused_shared_results
+
+    def counted_prepare(**kwargs: Any) -> CompactBatchPreparation:
+        preparation: CompactBatchPreparation = prepare(**kwargs)
+        deduplicated.append(len(preparation.cleaned_sql) - len(preparation.queries))
+        return preparation
+
+    def counted_reuse(**kwargs: Any) -> Mapping[int, object]:
+        reused: Mapping[int, object] = reuse(**kwargs)
+        memo_hits.append(len(reused))
+        return reused
+
+    monkeypatch.setattr(compact, "_prepare_compact_analysis_batch", counted_prepare)
+    monkeypatch.setattr(compact, "reused_shared_results", counted_reuse)
+    monkeypatch.setattr(compact, "shared_result_keys", counted_keys)
 
 
 def reshape_models(*, project_dir: Path, names: tuple[str, ...], indexes: tuple[int, ...]) -> None:
