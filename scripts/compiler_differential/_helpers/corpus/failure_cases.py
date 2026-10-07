@@ -1,44 +1,27 @@
 """Minimal failing projects, each derived from the shared base project."""
 
+from scripts.compiler_differential._helpers.corpus.case_builder import (
+    failure_case,
+    mart_body_files,
+    staging_files,
+)
 from scripts.compiler_differential._helpers.corpus.discovery_failure_cases import (
     discovery_failure_cases,
 )
+from scripts.compiler_differential._helpers.corpus.render_failure_cases import (
+    render_failure_cases,
+)
 from scripts.compiler_differential.constants import (
     FAILURE_BASE_CONFIG,
-    FAILURE_BASE_FILES,
     FAILURE_BASE_MART,
     FAILURE_BASE_STAGING,
     FAILURE_CONFIG_PATH,
     FAILURE_MART_PATH,
     FAILURE_SOURCES_PATH,
-    FAILURE_STAGING_PATH,
 )
 from scripts.compiler_differential.models import FailureCase
 
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'
-
-
-def _case(
-    *,
-    name: str,
-    expected_code: str,
-    files: dict[str, str],
-    expected_warning_code: str | None = None,
-) -> FailureCase:
-    return FailureCase(
-        files={**FAILURE_BASE_FILES, **files},
-        name=name,
-        expected_code=expected_code,
-        expected_warning_code=expected_warning_code,
-    )
-
-
-def _staging(sql: str) -> dict[str, str]:
-    return {FAILURE_STAGING_PATH: sql}
-
-
-def _mart_body(body: str) -> dict[str, str]:
-    return {FAILURE_MART_PATH: 'MODEL (\n  description "Order totals per customer",\n);\n\n' + body}
 
 
 def _rules(*codes: str) -> dict[str, str]:
@@ -50,82 +33,84 @@ def _rules(*codes: str) -> dict[str, str]:
 def all_failure_cases() -> tuple[FailureCase, ...]:
     """Return every failure case in a stable order."""
 
-    return (*_compile_failure_cases(), *discovery_failure_cases())
+    return (*_compile_failure_cases(), *discovery_failure_cases(), *render_failure_cases())
 
 
 def _compile_failure_cases() -> tuple[FailureCase, ...]:
     return (
-        _case(
+        failure_case(
             name="config-toml-syntax",
             expected_code="D001",
             files={
                 FAILURE_CONFIG_PATH: FAILURE_BASE_CONFIG + "[defaults\nmaterialized = 'table'\n"
             },
         ),
-        _case(
+        failure_case(
             name="config-unknown-default-key",
             expected_code="D001",
             files={
                 FAILURE_CONFIG_PATH: FAILURE_BASE_CONFIG + '\n[defaults]\ndescription = "Shared"\n'
             },
         ),
-        _case(
+        failure_case(
             name="config-unknown-adapter",
             expected_code="C601",
             files={FAILURE_CONFIG_PATH: FAILURE_BASE_CONFIG.replace('"duckdb"', '"warehouse9000"')},
         ),
-        _case(
+        failure_case(
             name="model-header-syntax",
             expected_code="D002",
-            files=_staging(
+            files=staging_files(
                 FAILURE_BASE_STAGING.replace(
                     '"Staged orders",', '"Staged orders",\n  materialized (,'
                 )
             ),
         ),
-        _case(
+        failure_case(
             name="model-sql-syntax",
             expected_code="P001",
-            files=_staging(FAILURE_BASE_STAGING.replace("SELECT order_id,", "SELECT order_id,, ")),
+            files=staging_files(
+                FAILURE_BASE_STAGING.replace("SELECT order_id,", "SELECT order_id,, ")
+            ),
         ),
-        _case(
+        failure_case(
             name="test-parse",
             expected_code="D003",
             files={"tests/unit/test_stg_orders.sql": "TEST(\n\nSELECT 1\n"},
         ),
-        _case(
+        failure_case(
             name="audit-parse",
             expected_code="D004",
             files={
                 "models/marts/_sqlbuild/audits/singular/broken.sql": "AUDIT (name);\n\nSELECT 1\n"
             },
         ),
-        _case(
+        failure_case(
             name="schema-unterminated-declaration",
             expected_code="D013",
             files={"models/staging/_sqlbuild/_schemas/orders.sql": "SCHEMA (\n  name orders,\n"},
         ),
-        _case(
+        failure_case(
             name="source-parse",
             expected_code="D006",
             files={FAILURE_SOURCES_PATH: "sources:\n  - name: raw_orders\n    columns: [\n"},
         ),
-        _case(
+        failure_case(
             name="duplicate-model",
             expected_code="D007",
             files={"models/marts/stg_orders.sql": FAILURE_BASE_STAGING},
         ),
-        _case(
+        failure_case(
             name="seed-without-header",
             expected_code="D008",
             files={"seeds/lookups.csv": ""},
         ),
-        _case(
+        failure_case(
             name="scenario-parse",
             expected_code="D009",
             files={"tests/scenarios/orders.sql": "SCENARIO (\n\nSELECT 1\n"},
         ),
-        _case(
+        failure_case(
             name="python-node-missing-description",
             expected_code="P010",
             files={
@@ -135,22 +120,22 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="enum-parse",
             expected_code="D013",
             files={"enums/order_status.sql": "ENUM (\n  name order_status,\n  members [,\n);\n"},
         ),
-        _case(
+        failure_case(
             name="hook-without-header",
             expected_code="D014",
             files={"hooks/sql/record_refresh.sql": "SELECT 1\n"},
         ),
-        _case(
+        failure_case(
             name="invalid-resource-name",
             expected_code="D016",
             files={"models/marts/order-totals.sql": FAILURE_BASE_MART},
         ),
-        _case(
+        failure_case(
             name="built-in-audit-shadow",
             expected_code="S010",
             expected_warning_code="P003",
@@ -160,7 +145,7 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="singular-audit-one-resource",
             expected_code="P004",
             files={
@@ -170,7 +155,7 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="macro-generated-reference",
             expected_code="P006",
             files={
@@ -179,40 +164,42 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                     '    """Return the staged orders relation."""\n'
                     "    return '__ref(\"stg_orders\")'\n"
                 ),
-                **_mart_body(
+                **mart_body_files(
                     "SELECT customer_id, SUM(amount) AS total_amount\n"
                     "FROM @staged_orders()\nGROUP BY customer_id\n"
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="missing-description",
             expected_code="P010",
-            files=_staging(FAILURE_BASE_STAGING.replace('  description "Staged orders",\n', "")),
+            files=staging_files(
+                FAILURE_BASE_STAGING.replace('  description "Staged orders",\n', "")
+            ),
         ),
-        _case(
+        failure_case(
             name="unknown-ref",
             expected_code="P001",
-            files=_mart_body(
+            files=mart_body_files(
                 'SELECT customer_id, SUM(amount) AS total_amount\nFROM __ref("stg_payments")\n'
                 "GROUP BY customer_id\n"
             ),
         ),
-        _case(
+        failure_case(
             name="unknown-source",
             expected_code="P001",
-            files=_staging(
+            files=staging_files(
                 FAILURE_BASE_STAGING.replace('__source("raw_orders")', '__source("raw_payments")')
             ),
         ),
-        _case(
+        failure_case(
             name="unknown-macro",
             expected_code="P001",
-            files=_staging(
+            files=staging_files(
                 FAILURE_BASE_STAGING.replace("amount, status", '@cents("amount") AS amount, status')
             ),
         ),
-        _case(
+        failure_case(
             name="failing-macro",
             expected_code="P001",
             files={
@@ -221,41 +208,41 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                     '    """Refuse every input."""\n'
                     '    raise ValueError(f"cannot convert {expression}")\n'
                 ),
-                **_staging(
+                **staging_files(
                     FAILURE_BASE_STAGING.replace(
                         "amount, status", '@cents("amount") AS amount, status'
                     )
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="unknown-enum-member",
             expected_code="P001",
             files={
                 "models/staging/_sqlbuild/_enums/order_status.sql": (
                     "ENUM (\n  name order_status,\n  members [PLACED, SHIPPED],\n);\n"
                 ),
-                **_staging(
+                **staging_files(
                     FAILURE_BASE_STAGING + 'WHERE status = @enum("order_status").RETURNED\n'
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="unknown-constant",
             expected_code="P001",
-            files=_staging(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
+            files=staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
         ),
-        _case(
+        failure_case(
             name="invalid-decimal-constant",
             expected_code="D013",
             files={
                 "models/staging/_sqlbuild/_constants/limits.sql": (
                     'CONSTANT (name minimum_amount, type decimal, value "ten");\n'
                 ),
-                **_staging(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
+                **staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
             },
         ),
-        _case(
+        failure_case(
             name="duplicate-declaration",
             expected_code="P001",
             files={
@@ -263,28 +250,28 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                     "CONSTANT (name minimum_amount, value 1);\n"
                     "CONSTANT (name minimum_amount, value 2);\n"
                 ),
-                **_staging(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
+                **staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
             },
         ),
-        _case(
+        failure_case(
             name="inaccessible-declaration",
             expected_code="P001",
             files={
                 "models/marts/_sqlbuild/_constants/limits.sql": (
                     "CONSTANT (name minimum_amount, value 1);\n"
                 ),
-                **_staging(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
+                **staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
             },
         ),
-        _case(
+        failure_case(
             name="over-broad-global",
             expected_code="S024",
             files={
                 "constants/limits.sql": "CONSTANT (name minimum_amount, value 1);\n",
-                **_staging(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
+                **staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("minimum_amount")\n'),
             },
         ),
-        _case(
+        failure_case(
             name="unused-declaration",
             expected_code="S010",
             files={
@@ -293,7 +280,7 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="macro-import-cycle",
             expected_code="P001",
             files={
@@ -311,10 +298,10 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="contract-missing-column",
             expected_code="K001",
-            files=_staging(
+            files=staging_files(
                 'MODEL (\n  description "Staged orders",\n  contract enforced,\n'
                 "  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n"
                 "    amount (type DOUBLE),\n    status (type VARCHAR),\n"
@@ -323,51 +310,51 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 'SELECT order_id, customer_id, amount, status\nFROM __source("raw_orders")\n'
             ),
         ),
-        _case(
+        failure_case(
             name="contract-type-mismatch",
             expected_code="K002",
-            files=_staging(
+            files=staging_files(
                 'MODEL (\n  description "Staged orders",\n  contract enforced,\n'
                 "  columns (\n    order_id (type VARCHAR),\n    customer_id (type INTEGER),\n"
                 "    amount (type DOUBLE),\n    status (type VARCHAR),\n  ),\n);\n\n"
                 'SELECT order_id, customer_id, amount, status\nFROM __source("raw_orders")\n'
             ),
         ),
-        _case(
+        failure_case(
             name="set-operation-width",
             expected_code="B216",
-            files=_mart_body(
+            files=mart_body_files(
                 'SELECT customer_id, amount FROM __ref("stg_orders")\n'
                 'UNION ALL\nSELECT customer_id FROM __ref("stg_orders")\n'
             ),
         ),
-        _case(
+        failure_case(
             name="comparison-type",
             expected_code="B217",
-            files=_mart_body(
+            files=mart_body_files(
                 "SELECT customer_id, SUM(amount) AS total_amount\n"
                 "FROM __ref(\"stg_orders\")\nWHERE amount = DATE '2026-01-01'\n"
                 "GROUP BY customer_id\n"
             ),
         ),
-        _case(
+        failure_case(
             name="unknown-column",
             expected_code="B002",
-            files=_mart_body(
+            files=mart_body_files(
                 'SELECT customer_id, SUM(discount) AS total_amount\nFROM __ref("stg_orders")\n'
                 "GROUP BY customer_id\n"
             ),
         ),
-        _case(
+        failure_case(
             name="ungrouped-column",
             expected_code="B230",
-            files=_mart_body(
+            files=mart_body_files(
                 "SELECT customer_id, status, SUM(amount) AS total_amount\n"
                 'FROM __ref("stg_orders")\n'
                 "GROUP BY customer_id\n"
             ),
         ),
-        _case(
+        failure_case(
             name="test-expected-unknown-column",
             expected_code="B302",
             files={
@@ -380,19 +367,19 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="rule-unused-cte",
             expected_code="SQBRSQL005",
             files={
                 **_rules("SQBRSQL005"),
-                **_mart_body(
+                **mart_body_files(
                     "WITH spare AS (SELECT 1 AS one)\n"
                     "SELECT customer_id, SUM(amount) AS total_amount\n"
                     'FROM __ref("stg_orders")\nGROUP BY customer_id\n'
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="rule-custom-finding",
             expected_code="XSQBRDIFF001",
             files={
@@ -410,11 +397,13 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="multiple-errors-order",
             expected_code="P010",
             files={
-                **_staging(FAILURE_BASE_STAGING.replace('  description "Staged orders",\n', "")),
+                **staging_files(
+                    FAILURE_BASE_STAGING.replace('  description "Staged orders",\n', "")
+                ),
                 FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
                     '  description "Order totals per customer",\n', ""
                 ),
@@ -424,29 +413,29 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="contract-extra-column",
             expected_code="K005",
-            files=_staging(
+            files=staging_files(
                 'MODEL (\n  description "Staged orders",\n  contract enforced,\n'
                 "  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n"
                 "    amount (type DOUBLE),\n  ),\n);\n\n"
                 'SELECT order_id, customer_id, amount, status\nFROM __source("raw_orders")\n'
             ),
         ),
-        _case(
+        failure_case(
             name="contract-unknown-type",
             expected_code="K002",
-            files=_staging(
+            files=staging_files(
                 'MODEL (\n  description "Staged orders",\n'
                 "  columns (\n    order_id (type MYSTERY_TYPE),\n  ),\n);\n\n"
                 'SELECT order_id, customer_id, amount, status\nFROM __source("raw_orders")\n'
             ),
         ),
-        _case(
+        failure_case(
             name="cursor-unknown-column",
             expected_code="B300",
-            files=_mart_body(
+            files=mart_body_files(
                 "SELECT customer_id, SUM(amount) AS total_amount\n"
                 'FROM __ref("stg_orders")\nGROUP BY customer_id\n'
             )
@@ -461,7 +450,7 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="cursor-model-without-inputs",
             expected_code="P011",
             files={
@@ -473,22 +462,22 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="invalid-declaration-name",
             expected_code="D016",
             files={
                 "models/staging/_sqlbuild/_constants/limits.sql": (
                     "CONSTANT (name MinimumAmount, value 1);\n"
                 ),
-                **_staging(FAILURE_BASE_STAGING + 'WHERE amount > @const("MinimumAmount")\n'),
+                **staging_files(FAILURE_BASE_STAGING + 'WHERE amount > @const("MinimumAmount")\n'),
             },
         ),
-        _case(
+        failure_case(
             name="python-node-syntax",
             expected_code="D011",
             files={"python/tasks/exports.py": "def broken(:\n    pass\n"},
         ),
-        _case(
+        failure_case(
             name="hook-unknown-argument",
             expected_code="P001",
             files={
@@ -501,20 +490,20 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="model-private-enum-misuse",
             expected_code="P001",
-            files=_staging(
+            files=staging_files(
                 'MODEL (\n  description "Staged orders",\n'
                 "  enums (\n    _state [OPEN, CLOSED],\n  ),\n);\n\n"
                 "SELECT order_id, customer_id, amount, status\n"
                 'FROM __source("raw_orders")\nWHERE status = @enum("_state").PENDING\n'
             ),
         ),
-        _case(
+        failure_case(
             name="variable-not-defined",
             expected_code="P001",
-            files=_staging(
+            files=staging_files(
                 FAILURE_BASE_STAGING.replace("status\n", "status, '@@region' AS region\n", 1)
             ),
         ),

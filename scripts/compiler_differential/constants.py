@@ -457,3 +457,39 @@ RENDER_INDIRECT_KINDS: dict[str, str] = {
     for kind in RENDER_MACRO_SOURCE_READS
 }
 RENDER_CONFIG_ONLY_KINDS: dict[str, str] = {}
+DIAGNOSTIC_CODE_PATTERN: re.Pattern[str] = re.compile(r"[A-Z][0-9]{3}")
+RENDER_RAISED_CODES: frozenset[str] = frozenset({"C214", "C216", "K012"})
+RENDER_CODE_SCAN_EXCLUDED: dict[str, str] = {
+    "_helpers/assembly": "semantic and metadata validation of the assembled CompiledProject (M4)",
+    "_helpers/analysis": "SQL analysis of rendered SQL, after the CompileProjectInputs frontier",
+}
+_SCOPE_QUERY_ONLY: str = "reported only by sqb scope queries, never by compile"
+_TOLERANT_SCOPE_ONLY: str = (
+    "reported only by the tolerant index sqb scope builds; compile discovery fails first "
+    "with a D-code"
+)
+_NEVER_EMITTED: str = "defined in ScopeDiagnosticCode but no compiler path reports it"
+_FOLDED_INTO_P001: str = (
+    "compile raises the strict scope index error, which reports it inside a P001 "
+    "'Invalid declaration scope index' message"
+)
+RENDER_UNREACHABLE_CODES: dict[str, str] = {
+    "S001": _SCOPE_QUERY_ONLY,
+    "S002": _SCOPE_QUERY_ONLY,
+    "S003": _FOLDED_INTO_P001,
+    "S004": "discovery rejects the identity first with D016",
+    "S005": "discovery rejects the identity first with D016",
+    "S011": _SCOPE_QUERY_ONLY,
+    "S012": _NEVER_EMITTED,
+    "S013": _SCOPE_QUERY_ONLY,
+    "S014": _SCOPE_QUERY_ONLY,
+    "S015": _NEVER_EMITTED,
+    "S016": _NEVER_EMITTED,
+    "S017": _NEVER_EMITTED,
+    "S018": "discovery rejects the duplicate resource first with D007",
+    "S019": _TOLERANT_SCOPE_ONLY,
+    "S020": _TOLERANT_SCOPE_ONLY,
+    "S021": _TOLERANT_SCOPE_ONLY,
+    "S022": _TOLERANT_SCOPE_ONLY,
+    "S023": _TOLERANT_SCOPE_ONLY,
+}

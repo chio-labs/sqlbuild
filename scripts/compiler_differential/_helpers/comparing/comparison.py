@@ -72,14 +72,28 @@ def compare_engine_runs(*, project: str, left: EngineRun, right: EngineRun) -> l
 def diagnostic_codes(*, outcome: CommandOutcome, severity: str | None) -> tuple[str, ...]:
     """Return a JSON compile report's diagnostic codes in order, optionally of one severity."""
 
+    return tuple(
+        str(diagnostic.get("code"))
+        for diagnostic in _diagnostics(outcome=outcome, severity=severity)
+    )
+
+
+def first_diagnostic_message(*, outcome: CommandOutcome, severity: str) -> str | None:
+    """Return the message of a JSON compile report's first diagnostic of one severity."""
+
+    diagnostics: list[dict[str, object]] = _diagnostics(outcome=outcome, severity=severity)
+    return str(diagnostics[0].get("message")) if diagnostics else None
+
+
+def _diagnostics(*, outcome: CommandOutcome, severity: str | None) -> list[dict[str, object]]:
     payload: dict[str, object] = as_json_object(_loads(outcome.stdout)) or {}
     diagnostics: object = payload.get("diagnostics")
-    found: list[str] = []
+    found: list[dict[str, object]] = []
     for raw_diagnostic in diagnostics if isinstance(diagnostics, list) else ():
         diagnostic: dict[str, object] | None = as_json_object(raw_diagnostic)
         if diagnostic is not None and (severity is None or diagnostic.get("severity") == severity):
-            found.append(str(diagnostic.get("code")))
-    return tuple(found)
+            found.append(diagnostic)
+    return found
 
 
 def _command_differences(

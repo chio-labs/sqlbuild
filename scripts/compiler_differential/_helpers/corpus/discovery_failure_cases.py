@@ -1,5 +1,9 @@
 """Minimal projects that fail inside project discovery, one per diagnostic family."""
 
+from scripts.compiler_differential._helpers.corpus.case_builder import (
+    config_files,
+    failure_case,
+)
 from scripts.compiler_differential.constants import (
     FAILURE_BASE_CONFIG,
     FAILURE_BASE_FILES,
@@ -33,16 +37,6 @@ _SEED_DECLARATION: str = (
 )
 
 
-def _case(*, name: str, expected_code: str, files: dict[str, str]) -> FailureCase:
-    return FailureCase(
-        files={**FAILURE_BASE_FILES, **files}, name=name, expected_code=expected_code
-    )
-
-
-def _config(extra: str) -> dict[str, str]:
-    return {FAILURE_CONFIG_PATH: FAILURE_BASE_CONFIG + extra}
-
-
 def discovery_failure_cases() -> tuple[FailureCase, ...]:
     """Return the discovery-time failure cases in a stable order."""
 
@@ -58,47 +52,47 @@ def discovery_failure_cases() -> tuple[FailureCase, ...]:
 
 def _config_cases() -> tuple[FailureCase, ...]:
     return (
-        _case(
+        failure_case(
             name="config-bom",
             expected_code="D001",
             files={FAILURE_CONFIG_PATH: GENERATOR_BOM + FAILURE_BASE_CONFIG},
         ),
-        _case(
+        failure_case(
             name="local-config-unknown-key",
             expected_code="D001",
             files={"sqlbuild_local.toml": "[settings]\nsql_analysiss = false\n"},
         ),
-        _case(
+        failure_case(
             name="target-unknown-key",
             expected_code="D001",
-            files=_config('\n[targets.ci]\nschema = "ci"\nwarehouse_size = "large"\n'),
+            files=config_files('\n[targets.ci]\nschema = "ci"\nwarehouse_size = "large"\n'),
         ),
-        _case(
+        failure_case(
             name="dbt-unknown-key",
             expected_code="D001",
-            files=_config('\n[dbt]\nproject_dir = "dbt"\nmanifest = "dbt/manifest.json"\n'),
+            files=config_files('\n[dbt]\nproject_dir = "dbt"\nmanifest = "dbt/manifest.json"\n'),
         ),
-        _case(
+        failure_case(
             name="path-defaults-unmatched",
             expected_code="D007",
-            files=_config('\n[path_defaults."reporting/finance"]\nmaterialized = "table"\n'),
+            files=config_files('\n[path_defaults."reporting/finance"]\nmaterialized = "table"\n'),
         ),
     )
 
 
 def _sql_file_cases() -> tuple[FailureCase, ...]:
     return (
-        _case(
+        failure_case(
             name="model-bom",
             expected_code="D002",
             files={FAILURE_STAGING_PATH: GENERATOR_BOM + FAILURE_BASE_STAGING},
         ),
-        _case(
+        failure_case(
             name="model-missing-header",
             expected_code="D002",
             files={FAILURE_STAGING_PATH: 'SELECT order_id\nFROM __source("raw_orders")\n'},
         ),
-        _case(
+        failure_case(
             name="model-unknown-header-key",
             expected_code="D002",
             files={
@@ -107,12 +101,12 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="model-reserved-name",
             expected_code="D016",
             files={"models/marts/_chain_.sql": FAILURE_BASE_MART},
         ),
-        _case(
+        failure_case(
             name="test-case-missing-parameter",
             expected_code="D003",
             files={
@@ -127,7 +121,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="generic-audit-header",
             expected_code="D004",
             files={
@@ -136,7 +130,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="list-constant-mixed-types",
             expected_code="D013",
             files={
@@ -145,7 +139,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="enum-duplicate-member",
             expected_code="D013",
             files={
@@ -154,7 +148,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="sql-hook-unknown-key",
             expected_code="D014",
             files={
@@ -163,7 +157,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="sql-function-header",
             expected_code="D002",
             files={
@@ -173,7 +167,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="column-nullable-not-null",
             expected_code="P002",
             files={
@@ -189,7 +183,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
 
 def _layout_cases() -> tuple[FailureCase, ...]:
     return tuple(
-        _case(name=name, expected_code="D013", files={path: contents})
+        failure_case(name=name, expected_code="D013", files={path: contents})
         for name, path, contents in (
             ("scoped-root-at-project-root", "_enums/order_status.sql", ""),
             ("declaration-group-below-root", "models/_sqlbuild/macros/money.py", _MACRO_MODULE),
@@ -205,7 +199,7 @@ def _layout_cases() -> tuple[FailureCase, ...]:
 
 def _yaml_file_cases() -> tuple[FailureCase, ...]:
     return (
-        _case(
+        failure_case(
             name="schema-yml-model-metadata",
             expected_code="D005",
             files={
@@ -214,7 +208,7 @@ def _yaml_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="seed-yaml-extension",
             expected_code="D005",
             files={
@@ -222,7 +216,7 @@ def _yaml_file_cases() -> tuple[FailureCase, ...]:
                 "seeds/order_channels.csv": "id,label\n1,web\n",
             },
         ),
-        _case(
+        failure_case(
             name="source-unknown-key",
             expected_code="D006",
             files={
@@ -232,12 +226,12 @@ def _yaml_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="seed-declaration-without-csv",
             expected_code="D008",
             files={"seeds/order_channels.yml": _SEED_DECLARATION},
         ),
-        _case(
+        failure_case(
             name="seed-header-mismatch",
             expected_code="D008",
             files={
@@ -250,12 +244,12 @@ def _yaml_file_cases() -> tuple[FailureCase, ...]:
 
 def _conflict_cases() -> tuple[FailureCase, ...]:
     return (
-        _case(
+        failure_case(
             name="duplicate-source",
             expected_code="D007",
             files={"sources/more.yml": FAILURE_BASE_FILES[FAILURE_SOURCES_PATH]},
         ),
-        _case(
+        failure_case(
             name="duplicate-scenario",
             expected_code="D007",
             files={
@@ -269,7 +263,7 @@ def _conflict_cases() -> tuple[FailureCase, ...]:
                 for folder in ("north", "south")
             },
         ),
-        _case(
+        failure_case(
             name="resource-name-collision",
             expected_code="D007",
             files={
@@ -277,7 +271,7 @@ def _conflict_cases() -> tuple[FailureCase, ...]:
                 "seeds/stg_orders.csv": "id,label\n1,web\n",
             },
         ),
-        _case(
+        failure_case(
             name="managed-source-without-loader",
             expected_code="D007",
             files={
@@ -287,7 +281,7 @@ def _conflict_cases() -> tuple[FailureCase, ...]:
                 "    columns:\n      - name: id\n        type: INTEGER\n"
             },
         ),
-        _case(
+        failure_case(
             name="duplicate-python-node",
             expected_code="D007",
             files={
@@ -295,7 +289,7 @@ def _conflict_cases() -> tuple[FailureCase, ...]:
                 "python/tasks/second.py": _TASK_MODULE,
             },
         ),
-        _case(
+        failure_case(
             name="check-depends-on-check",
             expected_code="D007",
             files={
@@ -313,12 +307,12 @@ def _conflict_cases() -> tuple[FailureCase, ...]:
 
 def _python_cases() -> tuple[FailureCase, ...]:
     return (
-        _case(
+        failure_case(
             name="python-node-import-error",
             expected_code="D011",
             files={"python/tasks/exports.py": "import missing_orders_client\n" + _TASK_MODULE},
         ),
-        _case(
+        failure_case(
             name="duplicate-hook",
             expected_code="D011",
             files={
@@ -326,7 +320,7 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 "hooks/python/second.py": _HOOK_MODULE,
             },
         ),
-        _case(
+        failure_case(
             name="provider-invalid-settings",
             expected_code="D012",
             files={
@@ -338,7 +332,7 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="duplicate-provider",
             expected_code="D012",
             files={
@@ -351,12 +345,12 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 for module in ("first", "second")
             },
         ),
-        _case(
+        failure_case(
             name="legacy-event-exporters-directory",
             expected_code="D015",
             files={"event_exporters/publish.py": "VALUE = 1\n"},
         ),
-        _case(
+        failure_case(
             name="lifecycle-sink-default-parameter",
             expected_code="D015",
             files={
@@ -368,7 +362,7 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="lifecycle-sink-unknown-provider",
             expected_code="D015",
             files={
@@ -380,7 +374,7 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="command-output-sink-unknown-provider",
             expected_code="D015",
             files={
@@ -392,7 +386,7 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
-        _case(
+        failure_case(
             name="materialization-import-error",
             expected_code="D011",
             files={
@@ -403,7 +397,7 @@ def _python_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
-        _case(
+        failure_case(
             name="python-outside-extension-root",
             expected_code="D016",
             files={"helpers/formatting.py": "VALUE = 1\n"},

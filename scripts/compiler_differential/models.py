@@ -138,6 +138,7 @@ class FailureCase(WritableProject):
     name: str
     expected_code: str
     expected_warning_code: str | None = None
+    expected_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,7 @@ class EmittedCodes:
 
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
+    first_error_message: str | None = None
 
     @property
     def first_error(self) -> str | None:
