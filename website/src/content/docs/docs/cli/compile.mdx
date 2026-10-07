@@ -100,7 +100,9 @@ anywhere, and these folders at the project root: `.cache`, `.fensu`, `.hg`, `.id
 files count only by presence.
 
 Reuse assumes macros, hooks, providers, adapters, and custom rules are deterministic: the same inputs
-must produce the same output. A compile whose templates read `run.id` is never reused.
+must produce the same output. Macro results are also reused within a compile and may be kept between
+compiles; see [Macros must be deterministic](/docs/concepts/macros#macros-must-be-deterministic). A
+compile whose templates read `run.id` is never reused.
 
 Compile always runs in full with `--no-cache`, `--manifest`, `--debug`, or a profiling flag, when
 `SQLBUILD_DISABLE_COMPILE_CACHE=1` or `SQLBUILD_DISABLE_COMPILE_REUSE=1` is set, when the project has

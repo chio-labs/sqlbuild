@@ -204,6 +204,28 @@ SELECT 1 AS id
 
 See [SQL Hooks](/docs/concepts/models/hooks/sql) for hook lifecycle and context syntax.
 
+## Macros must be deterministic
+
+A macro must return the same result whenever it is called with the same arguments and sees the same
+context. Avoid module-level state such as counters, random values, the current time, and reads of
+files or environment variables that the call does not receive.
+
+SQLBuild relies on this contract to reuse macro results:
+
+- [Compile reuse](/docs/cli/compile) replays stored renders without running macros again.
+- A compile may run each distinct macro call once and reuse its result for identical calls
+  elsewhere in the project.
+- Macro call results may be kept between compiles under `target/cache/`. They are recomputed when
+  macro or other Python files, configuration, declarations, seeds, sources, variables, the target,
+  the adapter, the installed packages, or the SQLBuild version change. Editing only model SQL keeps
+  them, and a changed call is always run again.
+
+Pass configuration through what SQLBuild compares: macro arguments (including `@@ENV:NAME` and
+`@@var` values written in the calling SQL), `ctx.vars`, `ctx.target_name`, `ctx.adapter_name`,
+and visible constants and enums. Environment variables a macro reads directly, for example with
+`os.environ`, are compared only when their names start with `SQLBUILD_` or `SQB_`, the same set
+compile reuse tracks. A macro whose result changes for any other reason may return a stale result.
+
 ## Where macros work
 
 Macros are supported in:
