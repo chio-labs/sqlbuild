@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.139.0](https://github.com/chio-labs/sqlbuild/compare/v0.138.0...v0.139.0) (2026-10-07)
+
+
+### Features
+
+* make TEST headers, test modes and trailing SELECT 1 optional ([#978](https://github.com/chio-labs/sqlbuild/issues/978)) ([e1e7e62](https://github.com/chio-labs/sqlbuild/commit/e1e7e624819d0d3b3a69b63ace3c9e85e1fceeb4))
+* **native:** add core types, exact JSON emitter and config parsing ([#992](https://github.com/chio-labs/sqlbuild/issues/992)) ([6794064](https://github.com/chio-labs/sqlbuild/commit/679406499e67a3abec08d923eed45a2f7604a6cd))
+* **native:** discover declarations, SQL tests and YAML files natively ([#999](https://github.com/chio-labs/sqlbuild/issues/999)) ([c0b546f](https://github.com/chio-labs/sqlbuild/commit/c0b546f3dc7ab4cec004da64910f3aede3d6df71))
+* **native:** discover models natively behind the compiler engine switch ([#995](https://github.com/chio-labs/sqlbuild/issues/995)) ([d4c7157](https://github.com/chio-labs/sqlbuild/commit/d4c71572807e8b6d006b88f07fd929ea6d720693))
+
+
+### Bug Fixes
+
+* default targets to the only connection and infer source freshness settings ([#973](https://github.com/chio-labs/sqlbuild/issues/973)) ([a811140](https://github.com/chio-labs/sqlbuild/commit/a811140d5f87a99c475cd3def13768e38d76125e))
+* require a TEST() header in SQL test files again ([#1000](https://github.com/chio-labs/sqlbuild/issues/1000)) ([9742975](https://github.com/chio-labs/sqlbuild/commit/97429757124295bc92a0d1ff691ebd6e0a8e28b1))
+
 ## [0.138.0](https://github.com/chio-labs/sqlbuild/compare/v0.137.0...v0.138.0) (2026-10-06)
 
 
