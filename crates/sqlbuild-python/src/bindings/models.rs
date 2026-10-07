@@ -21,7 +21,7 @@ pub(crate) struct CatalogInput {
     pub(crate) quoted_ignore_case: bool,
     pub(crate) known_functions: Vec<String>,
     pub(crate) known_types: Vec<String>,
-    #[pyo3(from_py_with = crate::bindings::_helpers::conversions::relations)]
+    #[pyo3(from_py_with = crate::bindings::_helpers::analysis::conversions::relations)]
     pub(crate) relations: Relations,
 }
 

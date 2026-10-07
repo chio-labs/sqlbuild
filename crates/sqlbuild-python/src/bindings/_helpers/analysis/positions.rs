@@ -1,6 +1,6 @@
 //! Python methods of authored binding positions.
 
-use crate::bindings::_helpers::panics::compiler_guard;
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::models::{BindingPositions, PositionInput};
 use pyo3::exceptions::PyValueError;
 use pyo3::{PyResult, pymethods};

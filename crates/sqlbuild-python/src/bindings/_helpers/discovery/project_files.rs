@@ -27,8 +27,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::bindings::_helpers::config_values::config_value_to_python;
-use crate::bindings::_helpers::functions::map_to_python;
+use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
+use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{ModelDiscoveryRequest, NativeProjectTree, SqlTestDiscoveryRequest};
 use crate::bindings::types::CompilerDetach;
 
@@ -178,7 +178,7 @@ fn discover_model_files(
     };
     let discovered: Result<Vec<DiscoveredFile<DiscoveredModelFile>>, StageDeferral> = py
         .compiler_detach(|| Ok(discover_models(&root, &tree.inner, &options)))
-        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
     match discovered {
         Ok(files) => Ok(Some(files_object(py, files, model_object)?)),
         Err(_deferral) => Ok(None),
@@ -193,7 +193,7 @@ fn discover_declaration_layout(
 ) -> PyResult<Option<DeclarationLayoutRows>> {
     let layout: Result<DeclarationLayout, StageDeferral> = py
         .compiler_detach(|| Ok(declaration_layout(&tree.inner)))
-        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
     match layout {
         Ok(layout) => Ok(Some((
             valid_rows(layout.file_facts, fact_row),
@@ -286,7 +286,7 @@ fn discover_sql_test_files(
     };
     let discovered: Result<Vec<DiscoveredFile<DiscoveredSqlTestFile>>, StageDeferral> = py
         .compiler_detach(|| Ok(discover_tests(&root, &tree.inner, &options)))
-        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
     match discovered {
         Ok(files) => Ok(Some(files_object(py, files, test_file_object)?)),
         Err(_deferral) => Ok(None),
@@ -305,7 +305,7 @@ fn discover_scenario_files(
     };
     let discovered: Result<Vec<DiscoveredFile<DiscoveredScenarioFile>>, StageDeferral> = py
         .compiler_detach(|| Ok(discover_scenarios(&root, &tree.inner, &options)))
-        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
     match discovered {
         Ok(files) => Ok(Some(files_object(py, files, scenario_object)?)),
         Err(_deferral) => Ok(None),
@@ -337,7 +337,7 @@ fn load_yaml_files(
 ) -> PyResult<Option<Vec<PyObject>>> {
     let loaded: Result<Vec<YamlFileOutcome>, StageDeferral> = py
         .compiler_detach(|| Ok(load_yaml(&tree.inner, &relative_paths)))
-        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
     match loaded {
         Ok(outcomes) => Ok(Some(
             outcomes

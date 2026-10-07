@@ -1,10 +1,6 @@
-mod allocator;
-mod catalog;
-mod config_values;
-pub(crate) mod conversions;
-mod discovery;
-pub(crate) mod functions;
-mod oracles;
-pub(crate) mod panics;
-mod positions;
-mod scopes;
+pub(crate) mod analysis;
+pub(crate) mod boundary;
+pub(crate) mod discovery;
+pub(crate) mod rules;
+pub(crate) mod scopes;
+pub(crate) mod sqltext;

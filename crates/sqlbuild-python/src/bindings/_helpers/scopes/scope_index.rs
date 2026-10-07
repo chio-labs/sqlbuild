@@ -14,7 +14,7 @@ use sqlbuild_scopes::scope_index::models::{
     DeclarationKind, ResourceKind, ResourceRoot, ScopeKind,
 };
 
-use crate::bindings::_helpers::panics::compiler_error;
+use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
 type IdentityRow = (String, String);
