@@ -12,12 +12,14 @@ import json
 import math
 import re
 import types
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from pathlib import PurePath
 from typing import Any
 
 from sqlbuild.compiler.frontier.constants import (
+    STAGE_CAPTURE_DECODED_SEQUENCES,
+    STAGE_CAPTURE_OMITTED_ATTRIBUTES,
     STAGE_CAPTURE_SKIPPED_SLOTS,
     STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
@@ -59,6 +61,9 @@ class StageCaptureEncoder:
             self._active.discard(identity)
 
     def _encode_container(self, value: object) -> object:
+        type_name: str = qualified_name(type(value))
+        if type_name in STAGE_CAPTURE_DECODED_SEQUENCES and isinstance(value, Sequence):
+            return [self.encode(item) for item in value]
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
             return {
                 "__type__": qualified_name(type(value)),
@@ -80,15 +85,16 @@ class StageCaptureEncoder:
                 "keywords": self.encode(value.keywords),
             }
         attributes: dict[str, object] | None = _instance_attributes(value)
-        type_name: str = qualified_name(type(value))
         if attributes is None:
             return {"__opaque__": type_name}
         unordered: frozenset[str] = STAGE_CAPTURE_UNORDERED_ATTRIBUTES.get(type_name, frozenset())
+        omitted: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(type_name, frozenset())
         return {
             "__type__": type_name,
             **{
                 name: self._encode_attribute(value=item, unordered=name in unordered)
                 for name, item in attributes.items()
+                if name not in omitted
             },
         }
 

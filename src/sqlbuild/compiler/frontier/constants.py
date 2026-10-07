@@ -15,6 +15,17 @@ STAGE_CAPTURE_SUFFIX: str = ".json"
 STAGE_CAPTURE_SKIPPED_SLOTS: frozenset[str] = frozenset({"__dict__", "__weakref__"})
 STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(
-        {"schemas", "analysis_shapes", "expression_shapes", "shared_analyses"}
+        {"schemas", "analysis_shapes", "expression_shapes"}
     )
 }
+# The shared-analysis memo is a reuse cache whose representatives and lazily filled caches
+# depend on analysis batching; compact lineage facts index a batch-wide string pool, so they
+# are captured by their decoded facts.
+STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
+    "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(
+        {"shared_analyses"}
+    )
+}
+STAGE_CAPTURE_DECODED_SEQUENCES: frozenset[str] = frozenset(
+    {"sqlbuild.compiler.compile.models:CompactLineageFacts"}
+)

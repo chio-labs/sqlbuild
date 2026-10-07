@@ -271,6 +271,47 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
 @pytest.mark.parametrize(
     "test_case",
     [
+        HarnessRunTestCase(
+            description="shared_analysis_seed_against_itself",
+            extra_arguments=(
+                "--corpus",
+                "seeds",
+                "--seed-start",
+                "29",
+                "--seeds",
+                "1",
+                "--engines",
+                "python",
+                "python",
+                "--stage-captures",
+            ),
+            expected_exit_code=0,
+            expected_lines=(
+                "OK   seed/29",
+                "Compiler differential passed: 1 projects identical (python vs python)",
+            ),
+            expected_patterns=(),
+            expected_absent=("DIFF",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_engine_twice_when_capturing_stages_then_captures_are_identical(
+    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code: int = run_compiler_differential(
+        ["--jobs", "1", "--work-dir", str(tmp_path / "work"), *test_case.extra_arguments]
+    )
+
+    output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code, output
+    assert all(line in output for line in test_case.expected_lines), output
+    assert not any(text in output for text in test_case.expected_absent), output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         ProjectExpectationTestCase(
             description="expected_code_only_reported_as_warning",
             extra_arguments=("--expect", "failure:P003"),

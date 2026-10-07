@@ -20,6 +20,7 @@ import sqlbuild._native as _native
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.cold_compile_performance._helpers.random_dag_project import write_random_dag_project
 from scripts.cold_compile_performance.models import RandomDagProject
+from scripts.compiler_differential._helpers.comparing.normalize import normalize_artifact_text
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
@@ -41,6 +42,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
+from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -306,6 +309,23 @@ def timed_compile_outcome(
     ), timings
 
 
+def compiled_project_capture(
+    *,
+    project_dir: Path,
+    capture_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
+    """Cold-compile once with stage captures; return the normalized compiled-project capture."""
+
+    with monkeypatch.context() as capture_patch:
+        capture_patch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(capture_dir))
+        _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+    _ = capsys.readouterr()
+    capture: Path = next(capture_dir.glob(f"*-{CompilerStage.COMPILED_PROJECT.value}.json"))
+    return normalize_artifact_text(capture.read_text(encoding="utf-8"))
+
+
 def reshape_models(*, project_dir: Path, names: tuple[str, ...], indexes: tuple[int, ...]) -> None:
     """Reshape the models at `indexes` of the generated topological name order."""
 
@@ -317,6 +337,14 @@ def use_wave_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
     """Analyze one topological level at a time, the reference schedule."""
 
     monkeypatch.setattr(project_assembly, "analyze_binding_dataflow", analyze_binding_waves)
+
+
+def analyze_single_model_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Analyze every model in its own native batch on one worker."""
+
+    monkeypatch.setattr(binding_waves, "_DATAFLOW_WORKERS", 1)
+    monkeypatch.setattr(binding_waves, "_DATAFLOW_BATCH_MIN", 1)
+    monkeypatch.setattr(binding_waves, "_DATAFLOW_BATCH_LIMIT", 1)
 
 
 def perturb_dataflow_schedule(

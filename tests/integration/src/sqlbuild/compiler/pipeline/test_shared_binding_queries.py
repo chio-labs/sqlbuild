@@ -10,6 +10,7 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.models import CompactBatchPreparation
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import SharedBindingQueryCase
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
+    analyze_single_model_batches,
     trace_native_compact_batches,
     write_shared_binding_project,
 )
@@ -221,6 +222,57 @@ def test_given_later_wave_members_with_equal_keys_when_compiling_then_reuses_sha
                     "upstream",
                     "--depth",
                     "1",
+                ]
+            )
+            == 0
+        )
+        lineage: dict[str, Any] = json.loads(capsys.readouterr().out)
+        assert [step["source"]["resource_name"] for step in lineage["trace"]] == [upstream]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedBindingQueryCase(
+            description="members analyzed in separate batches keep their own sources",
+            orders_summary_sql='MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("orders")',
+            customers_summary_sql=(
+                'MODEL (description "Test model.", materialized view); SELECT id, amount FROM __ref("customers")'
+            ),
+            expected_shared_queries=0,
+            expected_lineage=(
+                ("orders_summary", "orders"),
+                ("customers_summary", "customers"),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_equal_keys_in_separate_batches_when_tracing_lineage_then_each_model_keeps_its_source(
+    test_case: SharedBindingQueryCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_shared_binding_project(project_dir=tmp_path, test_case=test_case)
+    analyze_single_model_batches(monkeypatch)
+
+    for model, upstream in test_case.expected_lineage:
+        assert (
+            main(
+                [
+                    "--project-dir",
+                    str(tmp_path),
+                    "lineage",
+                    f"{model}.amount",
+                    "--format",
+                    "json",
+                    "--direction",
+                    "upstream",
+                    "--depth",
+                    "1",
+                    "--mode",
+                    "fast",
                 ]
             )
             == 0

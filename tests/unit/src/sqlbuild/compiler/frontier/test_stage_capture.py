@@ -27,7 +27,13 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
     memo_catalog,
     order_line,
     order_total,
+    orders_binding_catalog,
+    orders_lineage,
 )
+
+_COMPILE_MODELS: str = "sqlbuild.compiler.compile.models"
+_COMPILE_TYPES: str = "sqlbuild.compiler.compile.types"
+_LINEAGE_TYPES: str = "sqlbuild.compiler.lineage.types"
 
 
 @pytest.mark.parametrize(
@@ -66,6 +72,30 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
                 "name": "customer",
                 "peer": {"__cycle__": f"{HELPERS_MODULE}:LinkedCustomer"},
             },
+        ),
+        StageCaptureTestCase(
+            description="compact_lineage_is_captured_as_decoded_facts",
+            value=lambda: orders_lineage(
+                string_pool=("customers", "order_id", "source", "orders"), source_index=3
+            ),
+            expected_capture=[
+                {
+                    "__type__": f"{_COMPILE_MODELS}:CompiledLineageColumnFact",
+                    "output_column": "order_id",
+                    "upstream_columns": [
+                        {
+                            "__type__": f"{_COMPILE_MODELS}:CompiledLineageSourceFact",
+                            "resource_type": {
+                                "__enum__": f"{_COMPILE_TYPES}:CompiledResourceType.SOURCE"
+                            },
+                            "resource_name": "orders",
+                            "column_name": "order_id",
+                        }
+                    ],
+                    "transform_kind": {"__enum__": f"{_LINEAGE_TYPES}:ColumnTransformKind.DIRECT"},
+                    "confidence": {"__enum__": f"{_LINEAGE_TYPES}:ColumnLineageConfidence.HIGH"},
+                }
+            ],
         ),
         StageCaptureTestCase(
             description="non_finite_float_and_bytes",
@@ -113,6 +143,50 @@ def test_given_frontier_value_when_rendering_capture_then_json_is_canonical(
             first=lambda: frozenset(("orders", "customers", "products")),
             second=lambda: frozenset(("products", "customers", "orders")),
             expected_identical=True,
+        ),
+        StageCaptureOrderTestCase(
+            description="batch_string_pool_layout_is_not_visible",
+            first=lambda: orders_lineage(
+                string_pool=("order_id", "source", "orders"), source_index=2
+            ),
+            second=lambda: orders_lineage(
+                string_pool=("customers", "source", "orders", "amount", "order_id"),
+                source_index=2,
+            ),
+            expected_identical=True,
+        ),
+        StageCaptureOrderTestCase(
+            description="decoded_lineage_source_is_visible",
+            first=lambda: orders_lineage(
+                string_pool=("order_id", "source", "orders", "customers"), source_index=2
+            ),
+            second=lambda: orders_lineage(
+                string_pool=("order_id", "source", "orders", "customers"), source_index=3
+            ),
+            expected_identical=False,
+        ),
+        StageCaptureOrderTestCase(
+            description="shared_analysis_memo_fill_is_not_visible",
+            first=lambda: orders_binding_catalog(
+                shared_analyses=(("orders_key", "orders"), ("customers_key", "customers")),
+                relations=("orders", "customers"),
+            ),
+            second=lambda: orders_binding_catalog(
+                shared_analyses=(
+                    ("customers_key", "customers_copy"),
+                    ("orders_key", "orders_copy"),
+                ),
+                relations=("customers", "orders"),
+            ),
+            expected_identical=True,
+        ),
+        StageCaptureOrderTestCase(
+            description="binding_catalog_relations_stay_visible",
+            first=lambda: orders_binding_catalog(
+                shared_analyses=(), relations=("orders", "customers")
+            ),
+            second=lambda: orders_binding_catalog(shared_analyses=(), relations=("orders",)),
+            expected_identical=False,
         ),
     ],
     ids=lambda case: case.description,

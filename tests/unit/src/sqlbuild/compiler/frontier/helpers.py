@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
+from sqlbuild.compiler.compile.models import CompactLineageFacts
 from sqlbuild.compiler.fact_cache.main._compile_cache_root import compile_cache_root
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME
+from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 
 HELPERS_MODULE: str = "tests.unit.src.sqlbuild.compiler.frontier.helpers"
@@ -66,6 +68,39 @@ def memo_catalog(*, memo_keys: tuple[str, ...], ordered_keys: tuple[str, ...]) -
         memo={key: len(key) for key in memo_keys},
         ordered={key: len(key) for key in ordered_keys},
     )
+
+
+def orders_lineage(*, string_pool: tuple[str, ...], source_index: int) -> CompactLineageFacts:
+    """Return `order_id` read directly from a source, indexed into a batch-wide string pool."""
+
+    position: dict[str, int] = {value: index for index, value in enumerate(string_pool)}
+    return CompactLineageFacts(
+        string_pool=string_pool,
+        rows=(
+            (
+                position["order_id"],
+                0,
+                1,
+                ((position["source"], source_index, position["order_id"]),),
+            ),
+        ),
+    )
+
+
+def orders_binding_catalog(
+    *, shared_analyses: tuple[tuple[str, str], ...], relations: tuple[str, ...]
+) -> BindingCatalog:
+    """Return a catalog whose memo and relation map were filled in the given orders."""
+
+    catalog: BindingCatalog = BindingCatalog(
+        dialect="duckdb",
+        quoted_ignore_case=False,
+        known_functions=(),
+        known_types=(),
+        relations={name: {"order_id": "INTEGER"} for name in relations},
+    )
+    catalog.shared_analyses.update(shared_analyses)
+    return catalog
 
 
 def order_line() -> OrderLine:
