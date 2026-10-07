@@ -9,9 +9,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 )
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
-from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_model_sql
-from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
-from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
@@ -22,6 +19,11 @@ from sqlbuild.compiler.discovery.models import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectConfigTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import (
+    parse_model_sql,
+    parse_sql_scenario_file,
+    parse_sql_test_file,
 )
 
 _DECLARATION_CONTENTS_BY_KIND: dict[str, tuple[str, str]] = {

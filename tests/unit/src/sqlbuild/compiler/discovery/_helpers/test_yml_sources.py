@@ -5,7 +5,6 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
@@ -19,6 +18,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSourcesYamlTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import expected_or_actual
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import parse_sources_yml
 
 
 @pytest.mark.parametrize(

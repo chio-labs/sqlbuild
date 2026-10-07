@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
 from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSqlScenarioFileErrorTestCase,
     ParseSqlScenarioFileTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import parse_sql_scenario_file
 
 
 @pytest.mark.parametrize(

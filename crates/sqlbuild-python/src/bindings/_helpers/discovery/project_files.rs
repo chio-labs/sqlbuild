@@ -11,6 +11,7 @@ use sqlbuild_discovery::declarations::models::{
     DeclarationFileFact, DeclarationGroup, DeclarationKind, DeclarationLayout,
 };
 use sqlbuild_discovery::model_files::main::discover_model_files::discover_model_files as discover_models;
+use sqlbuild_discovery::model_files::main::parse_model_text::parse_model_text;
 use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use sqlbuild_discovery::models::{
     DiscoveredFile, DiscoveryFailure, FailureKind, FileOutcome, LineColumnSpan, ProjectRoot,
@@ -36,8 +37,8 @@ use std::sync::Mutex;
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{
-    ModelDiscoveryRequest, NativeProjectTree, SqlTestDiscoveryRequest, SqlTestTextRequest,
-    YamlDiscoveryRequest,
+    ModelDiscoveryRequest, ModelTextRequest, NativeProjectTree, SqlTestDiscoveryRequest,
+    SqlTestTextRequest, YamlDiscoveryRequest,
 };
 use crate::bindings::types::CompilerDetach;
 
@@ -331,6 +332,29 @@ fn discover_model_files(
     files_object(py, &tree.inner, discovered, model_object)
 }
 
+/// Parse in-memory SQL model contents into the payload model discovery returns for a file.
+#[pyfunction]
+fn parse_model_contents(
+    py: Python<'_>,
+    request: ModelTextRequest,
+    contents: String,
+) -> PyResult<PyObject> {
+    let options = ModelFileOptions {
+        supported_keys: request.supported_keys,
+        removed_keys: request.removed_keys,
+        extract_implicit_alias_columns: request.extract_implicit_alias_columns,
+        extract_output_column_locations: request.extract_output_column_locations,
+        python: python_semantics(request.python_version, &request.unicode_version)?,
+    };
+    let parsed = py
+        .compiler_detach(|| Ok(parse_model_text(&request.file_path, contents, &options)))
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
+    match parsed {
+        Ok(model) => model_object(py, model),
+        Err(failure) => failure_object(py, failure),
+    }
+}
+
 /// The declaration file facts (of one kind, if given) and named groups, or the stage failure.
 #[pyfunction]
 #[pyo3(signature = (tree, kind=None))]
@@ -572,6 +596,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_scenario_contents, module)?)?;
     module.add_class::<NativeProjectTree>()?;
     module.add_function(wrap_pyfunction!(discover_model_files, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_model_contents, module)?)?;
     module.add_function(wrap_pyfunction!(discover_declaration_layout, module)?)?;
     Ok(())
 }

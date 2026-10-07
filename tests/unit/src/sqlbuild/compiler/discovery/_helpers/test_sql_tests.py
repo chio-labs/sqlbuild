@@ -3,17 +3,10 @@ from __future__ import annotations
 import time
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.filesystem import core as filesystem_core
-from sqlbuild.compiler.discovery._helpers.filesystem import sql_test_files as test_file_discovery
-from sqlbuild.compiler.discovery._helpers.sql import model_files as model_file_helpers
-from sqlbuild.compiler.discovery._helpers.sql.tests import (
-    parse_sql_test_file,
-    prepare_sql_test_file_headers,
-)
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import discover_native_test_files
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
@@ -39,6 +32,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     discovered_test_cases,
     discovered_test_parameters,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import parse_sql_test_file
 
 _FIXTURE_ROW: str = (
     "  SELECT 1 AS order_id, 'it''s (open)' AS note, \"Qty\" AS qty -- row (comment)\n  UNION ALL\n"
@@ -89,51 +83,24 @@ def test_given_large_fixture_body_when_locating_omitted_select_then_completes_wi
 
 @pytest.mark.parametrize(
     "test_case",
-    (ExpectedCountTestCase(description="two headers use one batch", expected_count=2),),
-    ids=lambda case: case.description,
-)
-def test_given_multiple_test_files_when_preparing_headers_then_uses_one_native_batch(
-    monkeypatch: pytest.MonkeyPatch,
-    test_case: ExpectedCountTestCase,
-) -> None:
-    parser: Mock = Mock(wraps=model_file_helpers._native.parse_model_headers)
-    monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", parser)
-
-    prepare_sql_test_file_headers(
-        [
-            'TEST (name "native_batch_guard_alpha");\nSELECT 1',
-            'TEST (name "native_batch_guard_beta");\nSELECT 2',
-        ]
-    )
-
-    assert parser.call_count == 1
-    assert len(parser.call_args.args[0]) == test_case.expected_count
-
-
-@pytest.mark.parametrize(
-    "test_case",
     (ExpectedCountTestCase(description="one invalid file reports one fault", expected_count=1),),
     ids=lambda case: case.description,
 )
-def test_given_batch_preparation_failure_when_discovering_tolerantly_then_reports_file_faults(
+def test_given_invalid_test_file_when_discovering_tolerantly_then_reports_file_fault(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: ExpectedCountTestCase,
 ) -> None:
     tests_dir: Path = tmp_path / "tests" / "unit"
     tests_dir.mkdir(parents=True)
     (tests_dir / "a_invalid.sql").write_text("SELECT 1", encoding="utf-8")
     (tests_dir / "b_valid.sql").write_text('TEST (name "valid_order");\nSELECT 1', encoding="utf-8")
-    preparation: Mock = Mock(side_effect=ValueError("invalid batch projection"))
-    monkeypatch.setattr(test_file_discovery, "prepare_sql_test_file_headers", preparation)
     faults: list[DiscoveryFileFault] = []
 
-    discovered: tuple[DiscoveredSqlTestFile, ...] = filesystem_core.discover_test_files(
+    discovered: tuple[DiscoveredSqlTestFile, ...] = discover_native_test_files(
         project_dir=tmp_path,
         on_fault=faults.append,
     )
 
-    assert preparation.call_count == 1
     assert len(faults) == test_case.expected_count
     assert faults[0].path == Path("tests/unit/a_invalid.sql")
     discovered_names: list[str | None] = []

@@ -5,33 +5,33 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
+from functools import partial
 from itertools import compress
 from pathlib import Path
+from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery._helpers.filesystem import aggregation
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
     discover_macro_files,
-    discover_model_files,
     discover_model_schema_files,
-    discover_schema_files,
     discover_seed_files,
     discover_sql_function_files,
     discover_sql_hook_files,
-    discover_test_files,
 )
-from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    match_model_header,
-    match_model_headers,
-)
+from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import discover_native_test_files
+from sqlbuild.compiler.discovery._helpers.native.yaml_files import discover_native_schema_files
+from sqlbuild.compiler.discovery._helpers.sql.model_files import match_model_header
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, ModelHeaderMatch
 
 _DIRECTORY_NAMES: tuple[str, ...] = (
     "orders",
@@ -53,15 +53,19 @@ _FILE_NAMES: tuple[str, ...] = (
 _LINK_NAMES: tuple[str, ...] = ("shared", "enums_link", "_sqlbuild_link")
 _PATTERNS: tuple[str, ...] = ("*", "*.sql", "*.py", "*.yml", "schema.yml", "_sqlbuild", "enums")
 _ISOLATED_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
-    "model_files": discover_model_files,
+    "model_files": partial(
+        discover_native_model_files,
+        extract_implicit_alias_columns=True,
+        extract_output_column_locations=True,
+    ),
     "enum_files": discover_enum_files,
     "constant_files": discover_constant_files,
     "model_schema_files": discover_model_schema_files,
     "sql_function_files": discover_sql_function_files,
     "sql_hook_files": discover_sql_hook_files,
-    "schema_files": discover_schema_files,
+    "schema_files": discover_native_schema_files,
     "seed_files": discover_seed_files,
-    "test_files": discover_test_files,
+    "test_files": discover_native_test_files,
     "audit_files": discover_audit_files,
     "macro_files": discover_macro_files,
 }
@@ -188,11 +192,28 @@ def header_match_mismatches(*, seed: int, count: int) -> tuple[str, ...]:
         compress(
             contents,
             [
-                native != match_model_header(value)
-                for value, native in zip(contents, match_model_headers(contents), strict=True)
+                native != _python_header_offsets(value)
+                for value, native in zip(
+                    contents, _native.match_model_headers(contents), strict=True
+                )
             ],
         )
     )
+
+
+def _python_header_offsets(contents: str) -> tuple[int, int, int] | None:
+    return _mapped_offsets(match_model_header(contents))
+
+
+def _mapped_offsets(header_match: ModelHeaderMatch | None) -> tuple[int, int, int] | None:
+    return {
+        True: lambda: None,
+        False: lambda: (
+            cast(ModelHeaderMatch, header_match).header_start,
+            cast(ModelHeaderMatch, header_match).header_end,
+            cast(ModelHeaderMatch, header_match).sql_start,
+        ),
+    }[header_match is None]()
 
 
 def _random_model_file(rng: random.Random) -> str:

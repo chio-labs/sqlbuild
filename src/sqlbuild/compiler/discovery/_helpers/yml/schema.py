@@ -15,12 +15,10 @@ from sqlbuild.compiler.authored_values.main._optional_string_tuple import option
 from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
     require_non_empty_string,
 )
-from sqlbuild.compiler.discovery._helpers.native.payloads import load_native_yaml_document
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
     reject_unknown_mapping_keys,
 )
 from sqlbuild.compiler.discovery.constants import (
-    NATIVE_SCHEMA_YAML_KIND,
     NOT_NULL_AUDIT_NAME,
     SEEDS_DIRECTORY_NAME,
 )
@@ -71,18 +69,6 @@ _SEED_CSV_BOOL_SETTINGS: frozenset[str] = frozenset(
 )
 
 
-def parse_schema_yml(
-    *,
-    contents: str,
-    file_path: Path,
-) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
-    """Parse one schema.yml file into raw model and seed metadata."""
-
-    return parse_loaded_schema_yml(
-        loaded=_load_schema_yaml(contents=contents, file_path=file_path), file_path=file_path
-    )
-
-
 def parse_loaded_schema_yml(
     *, loaded: object, file_path: Path
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
@@ -92,12 +78,6 @@ def parse_loaded_schema_yml(
     return (
         _parse_model_entries(payload=payload, file_path=file_path),
         _parse_seed_entries(payload=payload, file_path=file_path),
-    )
-
-
-def _load_schema_yaml(*, contents: str, file_path: Path) -> object:
-    return load_native_yaml_document(
-        contents=contents, file_path=file_path, kind=NATIVE_SCHEMA_YAML_KIND
     )
 
 

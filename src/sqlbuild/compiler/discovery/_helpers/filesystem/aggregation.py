@@ -29,9 +29,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
-from sqlbuild.compiler.discovery._helpers.native.declarations import (
-    prepare_native_declaration_layout,
-)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
@@ -71,7 +68,6 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.discovery.types import DeclarationFilesReuse
-from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -223,7 +219,6 @@ def _discover_declaration_files(
             project_dir=project_dir
         )
         model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
-        prepare_native_declaration_layout(project_dir=project_dir)
         return DiscoveredDeclarationFiles(
             source_files=source_files,
             model_files=model_files,
@@ -266,10 +261,6 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
 def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
     _ = native_text_runtime()
     project_config, local_config, config_faults = _discover_configs(project_dir=project_dir)
-    prepare_native_declaration_layout(
-        project_dir=project_dir,
-        declaration_kinds=(DeclarationKind.ENUM, DeclarationKind.CONSTANT, DeclarationKind.MACRO),
-    )
     models, model_faults = _discover_models(project_dir=project_dir)
     enums, constants, macros, declaration_faults = _discover_declarations(project_dir=project_dir)
     tests, scenarios, relationship_faults = _discover_relationships(project_dir=project_dir)

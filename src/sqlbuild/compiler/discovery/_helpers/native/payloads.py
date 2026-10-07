@@ -116,16 +116,6 @@ def native_collection[ResultT](
     raise native_failure(payload)
 
 
-def load_native_yaml_document(*, contents: str, file_path: Path, kind: str) -> object:
-    """Load one in-memory YAML document as native discovery loads a `kind` file."""
-
-    payload: tuple[object, ...] = _native.load_yaml_document(str(file_path), contents, kind)
-    error: Exception | None = native_payload_error(payload=payload, file_path=file_path)
-    if error is not None:
-        raise error
-    return payload[2]
-
-
 def materialise_native_files[RecordT](
     *,
     project_dir: Path,

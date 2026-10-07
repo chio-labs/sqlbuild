@@ -57,7 +57,7 @@ def test_given_project_when_running_command_then_discovery_skips_eager_column_lo
             'SELECT o.order_id, o.status FROM __source("typed_orders") AS o\n'
         ),
     )
-    scanned: list[Path] = record_eager_output_column_scans(monkeypatch)
+    scanned: list[dict[str, object]] = record_eager_output_column_scans(monkeypatch)
     _ = capsys.readouterr()
 
     exit_code: int = main(["--project-dir", str(tmp_path), "--no-color", *test_case.command])

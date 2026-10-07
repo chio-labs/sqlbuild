@@ -151,3 +151,16 @@ pub(crate) struct YamlDiscoveryRequest {
     pub(crate) display_prefix: String,
     pub(crate) kind: String,
 }
+
+/// One in-memory SQL model parse request; `file_path` is the path messages name.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct ModelTextRequest {
+    pub(crate) file_path: String,
+    pub(crate) supported_keys: Vec<String>,
+    pub(crate) removed_keys: Vec<String>,
+    pub(crate) extract_implicit_alias_columns: bool,
+    pub(crate) extract_output_column_locations: bool,
+    pub(crate) python_version: (u8, u8),
+    pub(crate) unicode_version: String,
+}

@@ -102,18 +102,6 @@ def parse_native_sql_test_contents(
     )
 
 
-def parse_native_scenario_contents(
-    *, contents: str, file_path: Path, relative_path: Path
-) -> DiscoveredSqlScenarioFile:
-    """Parse in-memory SQL scenario contents, as scenario discovery does."""
-
-    return _scenario_file_from_payload(
-        payload=_native.parse_scenario_contents(_text_request(file_path), contents),
-        file_path=file_path,
-        relative_path=relative_path,
-    )
-
-
 def _text_request(file_path: Path) -> dict[str, object]:
     return {
         "file_path": str(file_path),

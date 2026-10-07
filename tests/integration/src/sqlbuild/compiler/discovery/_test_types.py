@@ -48,26 +48,6 @@ class LargeDocumentOracleTestCase:
 
 
 @dataclass(frozen=True)
-class ModelDiscoveryParityTestCase:
-    """Authored model files discovered by both compiler engines."""
-
-    description: str
-    files: tuple[tuple[str, bytes], ...]
-    directories: tuple[str, ...] = ()
-    expected_identical: bool = True
-
-
-@dataclass(frozen=True)
-class GeneratedModelParityTestCase:
-    """Seeded model files discovered by both compiler engines, one file at a time."""
-
-    description: str
-    seed: int
-    case_count: int
-    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
-
-
-@dataclass(frozen=True)
 class EngineSwitchParityTestCase:
     """A project discovered through `discover_project_inputs` under each engine."""
 
@@ -102,57 +82,12 @@ class SharedSnapshotTestCase:
 
 
 @dataclass(frozen=True)
-class GeneratedLayoutParityTestCase:
-    """Seeded declaration layouts whose native validation and facts must match Python's."""
-
-    description: str
-    seed: int
-    count: int
-    expected_mismatches: tuple[str, ...] = ()
-    expected_minimum_valid: int = 0
-    expected_minimum_invalid: int = 0
-
-
-@dataclass(frozen=True)
-class GeneratedSqlTestParityTestCase:
-    """Seeded SQL test and scenario files discovered by both compiler engines."""
-
-    description: str
-    seed: int
-    case_count: int
-    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
-    expected_minimum_parsed: int = 0
-    expected_minimum_failed: int = 0
-
-
-@dataclass(frozen=True)
-class GeneratedYamlFileParityTestCase:
-    """Seeded source and seed declaration files discovered by both compiler engines."""
-
-    description: str
-    seed: int
-    case_count: int
-    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
-    expected_minimum_parsed: int = 0
-    expected_minimum_failed: int = 0
-
-
-@dataclass(frozen=True)
 class NativeYamlLoadTestCase:
     """Source files whose native load outcomes and loaded values are checked."""
 
     description: str
     files: tuple[tuple[str, bytes], ...]
     expected_native_tags: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class EntryPointParityTestCase:
-    """Authored files read through a bounded discovery entry point by both implementations."""
-
-    description: str
-    files: tuple[tuple[str, bytes], ...]
-    expected_identical: bool = True
 
 
 @dataclass(frozen=True)

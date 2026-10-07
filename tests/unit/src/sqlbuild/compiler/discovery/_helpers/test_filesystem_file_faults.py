@@ -17,11 +17,13 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_event_exporter_declarations,
     discover_materialization_files,
     discover_provider_classes,
-    discover_scenario_files,
-    discover_source_files,
     discover_sql_function_files,
     discover_sql_hook_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
+    discover_native_scenario_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.yaml_files import discover_native_source_files
 from sqlbuild.compiler.discovery.exceptions import (
     EventExporterDiscoveryError,
     ProviderDiscoveryError,
@@ -38,8 +40,8 @@ _FILE_DISCOVERIES: dict[str, Callable[..., tuple[object, ...]]] = {
     "audits": discover_audit_files,
     "constants": discover_constant_files,
     "enums": discover_enum_files,
-    "scenarios": discover_scenario_files,
-    "sources": discover_source_files,
+    "scenarios": discover_native_scenario_files,
+    "sources": discover_native_source_files,
     "sql_functions": discover_sql_function_files,
     "sql_hooks": discover_sql_hook_files,
 }

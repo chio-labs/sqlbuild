@@ -5,9 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_schema_files
-from sqlbuild.compiler.discovery._helpers.native.declarations import (
-    prepare_native_declaration_layout,
-)
 from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
 from sqlbuild.compiler.discovery._helpers.yml.project import load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
@@ -20,7 +17,6 @@ def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProject
 
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     with DirectorySnapshot.scope(project_dir=project_dir):
-        _ = prepare_native_declaration_layout(project_dir=project_dir)
         return DiscoveredProjectInputs(
             project_config=project_config,
             local_config=LocalConfig(),

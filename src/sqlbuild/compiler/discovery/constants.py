@@ -180,13 +180,10 @@ STATEMENT_HEADER_BODY_PATTERN: str = (
     r"|\)(?!\s*;))*+)"
 )
 
-DISCOVERY_SOURCE_FACT_KIND: str = "source"
-DISCOVERY_SQL_TEST_FACT_KIND: str = "sql_test"
 NATIVE_FAILED_TAG: str = "error"
 NATIVE_UNREADABLE_TAG: str = "read"
 NATIVE_UNLISTABLE_TAG: str = "unlistable"
 NATIVE_SOURCE_YAML_KIND: str = "source"
 NATIVE_SCHEMA_YAML_KIND: str = "schema"
 NATIVE_SUPPORTED_PYTHON_VERSIONS: str = "3.12, 3.13 and 3.14"
-NATIVE_LOADED_TAG: str = "ok"
 NATIVE_YAML_BATCH_BYTES: int = 4 * 1024 * 1024

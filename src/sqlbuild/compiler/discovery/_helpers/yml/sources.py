@@ -19,12 +19,10 @@ from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     parse_dlt_sources,
     parse_source_integration_loader,
 )
-from sqlbuild.compiler.discovery._helpers.native.payloads import load_native_yaml_document
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
     reject_unknown_mapping_keys,
 )
 from sqlbuild.compiler.discovery.constants import (
-    NATIVE_SOURCE_YAML_KIND,
     NOT_NULL_AUDIT_NAME,
     SOURCE_AGE_POLICY_CONFIG_KEY,
     SOURCE_LOADER_CONFIG_KEY,
@@ -111,14 +109,6 @@ _FRESHNESS_STRING_TYPE_NAMES: frozenset[str] = frozenset(
 )
 
 
-def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
-    """Parse one sources/*.yml file into raw source declarations."""
-
-    return parse_loaded_sources_yml(
-        loaded=_load_sources_yaml(contents=contents, file_path=file_path), file_path=file_path
-    )
-
-
 def parse_loaded_sources_yml(*, loaded: object, file_path: Path) -> tuple[SourceEntry, ...]:
     """Parse the document one sources/*.yml file loads to into raw source declarations."""
 
@@ -140,12 +130,6 @@ def parse_loaded_sources_yml(*, loaded: object, file_path: Path) -> tuple[Source
         )
     parsed_sources.extend(parse_dlt_sources(payload=payload, file_path=file_path))
     return tuple(parsed_sources)
-
-
-def _load_sources_yaml(*, contents: str, file_path: Path) -> object:
-    return load_native_yaml_document(
-        contents=contents, file_path=file_path, kind=NATIVE_SOURCE_YAML_KIND
-    )
 
 
 def _sources_mapping(*, loaded: object, file_path: Path) -> dict[str, object]:

@@ -1,4 +1,4 @@
-//! Python's `_validate_declaration_groups` and `_declaration_groups`.
+//! Validate scoped `_sqlbuild` declaration groups and list the groups below each owner.
 
 use crate::constants::{
     CANONICAL_AUTHORED_ROOTS, DECLARATION_GROUP_DIRECTORY, GROUPED_NAMED_DECLARATION_DIRECTORIES,
@@ -35,7 +35,7 @@ fn all_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageFailure>
     Ok(groups)
 }
 
-/// Python's `_declaration_groups`: the groups below a concrete owner directory.
+/// The declaration groups below a concrete owner directory.
 pub(crate) fn owned_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageFailure> {
     Ok(all_groups(tree)?
         .into_iter()

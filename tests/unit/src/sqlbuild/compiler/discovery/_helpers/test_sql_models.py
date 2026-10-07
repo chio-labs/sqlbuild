@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from sqlbuild import _native
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_files
+from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
 from sqlbuild.compiler.discovery._helpers.sql import model_files as model_file_helpers
-from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    model_header_column_locations,
-    model_output_column_locations,
-    parse_model_sql,
-)
+from sqlbuild.compiler.discovery._helpers.sql.model_files import model_output_column_locations
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveryFileFault,
@@ -32,16 +26,20 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import (
+    discover_model_files,
+    model_header_column_locations,
+    parse_model_sql,
+)
 
 
 @pytest.mark.parametrize(
     "test_case",
-    [ExpectedCountTestCase(description="unique headers are batched", expected_count=1)],
+    [ExpectedCountTestCase(description="unique headers are parsed", expected_count=2)],
     ids=lambda case: case.description,
 )
-def test_given_unique_model_headers_when_discovering_then_native_tokenization_is_batched(
+def test_given_unique_model_headers_when_discovering_then_header_values_and_locations_are_parsed(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: ExpectedCountTestCase,
 ) -> None:
     models_dir: Path = tmp_path / "models"
@@ -54,30 +52,10 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
     (models_dir / "second.sql").write_text(
         f"MODEL ({second_header});\nSELECT 2 AS total\n", encoding="utf-8"
     )
-    native_calls: list[list[str]] = []
-    native_parse: Callable[
-        [list[str]],
-        list[tuple[dict[str, object] | None, list[tuple[str, int, int]] | None, str | None]],
-    ] = _native.parse_model_headers
-
-    def recording_tokenize(
-        headers: list[str],
-    ) -> list[
-        tuple[
-            dict[str, object] | None,
-            list[tuple[str, int, int]] | None,
-            str | None,
-        ]
-    ]:
-        native_calls.append(headers)
-        return native_parse(headers)
-
-    monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", recording_tokenize)
 
     discovered: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(project_dir=tmp_path)
 
-    assert len(native_calls) == test_case.expected_count
-    assert native_calls == [[first_header, second_header]]
+    assert len(discovered) == test_case.expected_count
     assert [model.header_values for model in discovered] == [
         {"description": "one", "columns": {"café": {"type": "INTEGER"}}},
         {
@@ -148,8 +126,11 @@ def test_given_multiple_invalid_model_headers_when_discovering_then_fault_order_
     (models_dir / "second.sql").write_text("MODEL (schema ${MISSING); SELECT 2", encoding="utf-8")
     faults: list[DiscoveryFileFault] = []
 
-    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
-        project_dir=tmp_path, on_fault=faults.append
+    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
+        project_dir=tmp_path,
+        extract_implicit_alias_columns=True,
+        extract_output_column_locations=True,
+        on_fault=faults.append,
     )
 
     assert discovered == ()
@@ -183,7 +164,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
         encoding="utf-8",
     )
 
-    model_file: DiscoveredSqlModelFile = discover_model_files(
+    model_file: DiscoveredSqlModelFile = discover_native_model_files(
         project_dir=tmp_path,
         extract_implicit_alias_columns=(test_case.expected_extract_implicit_alias_columns),
         extract_output_column_locations=False,

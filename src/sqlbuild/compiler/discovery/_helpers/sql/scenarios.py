@@ -2,52 +2,16 @@
 
 from __future__ import annotations
 
-import re
-from inspect import cleandoc
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
-from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.constants import (
-    SQL_SCENARIO_HEADER_KEYS,
     SQL_SCENARIOS_OWNERSHIP_ROOT,
-    STATEMENT_HEADER_BODY_PATTERN,
 )
 from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 
-_SCENARIO_HEADER_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*SCENARIO\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*(?P<sql>.*)\Z",
-    re.DOTALL,
-)
 _SCENARIO_DESCRIPTION_HEADER_KEY: str = "description"
 _SCENARIO_TAGS_HEADER_KEY: str = "tags"
-
-
-def parse_sql_scenario_file(
-    *, contents: str, file_path: Path, relative_path: Path
-) -> DiscoveredSqlScenarioFile:
-    """Parse one SQL-native scenario file."""
-
-    header_match: re.Match[str] | None = _SCENARIO_HEADER_PATTERN.match(contents)
-    if header_match is None:
-        raise SqlScenarioParseError(
-            f"SQL scenario '{file_path}' must start with a SCENARIO() header as the first "
-            "non-whitespace content"
-        )
-
-    header_values: dict[str, object] = _parse_scenario_header(
-        header=header_match.group("header"),
-        header_line=contents.count("\n", 0, header_match.start("header")) + 1,
-        file_path=file_path,
-    )
-    return build_sql_scenario_file(
-        header_values=header_values,
-        sql_body=cleandoc(header_match.group("sql")),
-        contents=contents,
-        file_path=file_path,
-        relative_path=relative_path,
-    )
 
 
 def build_sql_scenario_file(
@@ -82,23 +46,3 @@ def build_sql_scenario_file(
         name=file_path.stem,
         ownership_root=Path(SQL_SCENARIOS_OWNERSHIP_ROOT),
     )
-
-
-def _parse_scenario_header(*, header: str, header_line: int, file_path: Path) -> dict[str, object]:
-    parsed_header: dict[str, object] = parse_header_values(
-        header=header,
-        file_path=file_path,
-        statement_name="SCENARIO",
-        error_class=SqlScenarioParseError,
-    )
-
-    reject_unsupported_header_keys(
-        header_values=parsed_header,
-        supported_keys=SQL_SCENARIO_HEADER_KEYS,
-        statement="SCENARIO()",
-        header=header,
-        header_line=header_line,
-        file_path=file_path,
-        error_class=SqlScenarioParseError,
-    )
-    return parsed_header

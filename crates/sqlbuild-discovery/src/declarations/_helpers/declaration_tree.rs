@@ -1,4 +1,4 @@
-//! Python's `_scan_declaration_file_facts`: macro, enum and constant files with scope facts.
+//! Scan macro, enum and constant declaration files with their scope facts.
 
 use crate::constants::{
     CANONICAL_AUTHORED_ROOTS, DECLARATION_GROUP_DIRECTORY, GLOBAL_DECLARATION_DIRECTORIES,

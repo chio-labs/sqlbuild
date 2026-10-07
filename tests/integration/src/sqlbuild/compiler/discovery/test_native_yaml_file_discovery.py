@@ -2,25 +2,19 @@
 
 from __future__ import annotations
 
-import random
 from pathlib import Path
 
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
-    GeneratedYamlFileParityTestCase,
     NativeYamlLoadTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    generated_seed_declaration,
-    generated_source_document,
     native_yaml_tags_and_values,
     stage_outcome,
     write_project,
-    yaml_discovery_outcome,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _SOURCES: bytes = (
     b"sources:\n  - name: raw_orders\n    description: Orders feed.\n"
@@ -33,51 +27,6 @@ _SEED: bytes = (
     b"seeds:\n  - name: channels\n    description: Channels.\n"
     b"    columns:\n      - name: id\n        type: INTEGER\n"
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        GeneratedYamlFileParityTestCase(
-            description="seeded source and seed declarations in random YAML styles",
-            seed=81,
-            case_count=800,
-            expected_minimum_parsed=60,
-            expected_minimum_failed=100,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_yaml_files_when_discovering_with_each_engine_then_outcomes_match(
-    test_case: GeneratedYamlFileParityTestCase, tmp_path: Path
-) -> None:
-    rng: random.Random = random.Random(test_case.seed)
-    files: list[tuple[tuple[str, bytes], ...]] = [
-        (
-            ("sources/orders.yml", generated_source_document(rng=rng).encode("utf-8")),
-            ("seeds/channels.yml", generated_seed_declaration(rng=rng).encode("utf-8")),
-            ("seeds/channels.csv", b"id,label\n1,web\n"),
-        )
-        for _ in range(test_case.case_count)
-    ]
-    project_dirs: list[Path] = [tmp_path / f"case_{index}" for index in range(len(files))]
-    for project_dir, project_files in zip(project_dirs, files, strict=True):
-        write_project(project_dir=project_dir, files=project_files)
-    expected: list[object] = [
-        yaml_discovery_outcome(project_dir=project_dir, native=False)
-        for project_dir in project_dirs
-    ]
-
-    actual: list[object] = [
-        yaml_discovery_outcome(project_dir=project_dir, native=True) for project_dir in project_dirs
-    ]
-
-    parsed: int = sum(isinstance(outcome, str) for outcome in expected)
-    assert (
-        mismatches(inputs=list(files), expected=expected, actual=actual),
-        parsed >= test_case.expected_minimum_parsed,
-        len(expected) - parsed >= test_case.expected_minimum_failed,
-    ) == (list(test_case.expected_mismatches), True, True), test_case.description
 
 
 @pytest.mark.parametrize(
