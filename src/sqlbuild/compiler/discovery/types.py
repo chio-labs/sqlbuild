@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from sqlbuild.provider.classes.provider import Provider
 
 type ProjectProvider = Provider
+type NativeLocation = tuple[str, int, int, int, int]
 
 
 class LoaderConnectionMode(StrEnum):

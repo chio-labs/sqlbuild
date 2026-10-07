@@ -14,7 +14,10 @@ use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{
     JsonDialect, JsonInteger, JsonValue, OrjsonOptions, StdlibJsonOptions,
 };
+use sqlbuild_core::text::main::close_matches::close_matches;
 use sqlbuild_core::text::main::decode_python_text::decode_python_text;
+use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
+use sqlbuild_core::text::main::python_alnum_unicode_version::python_alnum_unicode_version;
 use sqlbuild_core::text::models::LineIndex;
 use std::path::Path;
 
@@ -226,7 +229,31 @@ fn _oracle_project_config(project_dir: &str) -> String {
     }))
 }
 
+#[pyfunction]
+fn _oracle_python_alnum(code_points: Vec<u32>) -> (String, Vec<bool>) {
+    (
+        python_alnum_unicode_version().to_owned(),
+        code_points
+            .into_iter()
+            .map(|code_point| char::from_u32(code_point).is_some_and(is_python_alnum))
+            .collect(),
+    )
+}
+
+#[pyfunction]
+fn _oracle_close_matches(
+    word: &str,
+    possibilities: Vec<String>,
+    count: usize,
+    cutoff: f64,
+) -> Vec<String> {
+    let candidates: Vec<&str> = possibilities.iter().map(String::as_str).collect();
+    close_matches(word, &candidates, count, cutoff)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(_oracle_python_alnum, module)?)?;
+    module.add_function(wrap_pyfunction!(_oracle_close_matches, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_json_dumps, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_text_positions, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_yaml_load, module)?)?;

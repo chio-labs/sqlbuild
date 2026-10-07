@@ -34,6 +34,9 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
+from sqlbuild.compiler.discovery._helpers.native.model_files import (
+    discover_native_model_files,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import (
@@ -74,17 +77,24 @@ def build_discovered_project_inputs(
     extract_output_column_locations: bool = True,
     fact_cache: FactCacheStore | None = None,
     declaration_reuse: DeclarationFilesReuse | None = None,
+    native: bool = False,
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
     with OperationLifecycle(
         operation_kind="project", operation_name="discovery_declaration_parse"
     ) as declaration_lifecycle:
-        discover: Callable[[], DiscoveredDeclarationFiles] = partial(
-            _discover_declaration_files,
+        discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]] = partial(
+            _discover_model_files,
             project_dir=project_dir,
             sql_analysis_enabled=sql_analysis_enabled,
             extract_output_column_locations=extract_output_column_locations,
+            native=native,
+        )
+        discover: Callable[[], DiscoveredDeclarationFiles] = partial(
+            _discover_declaration_files,
+            project_dir=project_dir,
+            discover_models=discover_models,
             fact_cache=fact_cache,
         )
         declarations: DiscoveredDeclarationFiles = (
@@ -93,12 +103,7 @@ def build_discovered_project_inputs(
             else declaration_reuse.declaration_files(
                 variant=f"{int(sql_analysis_enabled)}{int(extract_output_column_locations)}",
                 discover=discover,
-                discover_models=partial(
-                    _discover_model_files,
-                    project_dir=project_dir,
-                    sql_analysis_enabled=sql_analysis_enabled,
-                    extract_output_column_locations=extract_output_column_locations,
-                ),
+                discover_models=discover_models,
             )
         )
         declaration_lifecycle.completed(
@@ -207,18 +212,13 @@ def build_discovered_project_inputs(
 def _discover_declaration_files(
     *,
     project_dir: Path,
-    sql_analysis_enabled: bool,
-    extract_output_column_locations: bool,
+    discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
     fact_cache: FactCacheStore | None,
 ) -> DiscoveredDeclarationFiles:
     with DirectorySnapshot.scope(project_dir=project_dir):
         return DiscoveredDeclarationFiles(
             source_files=discover_source_files(project_dir=project_dir, fact_cache=fact_cache),
-            model_files=discover_model_files(
-                project_dir=project_dir,
-                extract_implicit_alias_columns=sql_analysis_enabled,
-                extract_output_column_locations=extract_output_column_locations,
-            ),
+            model_files=discover_models(),
             enum_files=discover_enum_files(project_dir=project_dir),
             constant_files=discover_constant_files(project_dir=project_dir),
             model_schema_files=discover_model_schema_files(project_dir=project_dir),
@@ -236,10 +236,17 @@ def _discover_declaration_files(
 
 
 def _discover_model_files(
-    *, project_dir: Path, sql_analysis_enabled: bool, extract_output_column_locations: bool
+    *,
+    project_dir: Path,
+    sql_analysis_enabled: bool,
+    extract_output_column_locations: bool,
+    native: bool,
 ) -> tuple[DiscoveredSqlModelFile, ...]:
+    discover: Callable[..., tuple[DiscoveredSqlModelFile, ...]] = (
+        discover_native_model_files if native else discover_model_files
+    )
     with DirectorySnapshot.scope(project_dir=project_dir):
-        return discover_model_files(
+        return discover(
             project_dir=project_dir,
             extract_implicit_alias_columns=sql_analysis_enabled,
             extract_output_column_locations=extract_output_column_locations,

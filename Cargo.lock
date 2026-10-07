@@ -661,6 +661,16 @@ name = "sqlbuild-core"
 version = "0.138.0"
 
 [[package]]
+name = "sqlbuild-discovery"
+version = "0.138.0"
+dependencies = [
+ "rayon",
+ "sqlbuild-core",
+ "sqlbuild-sqltext",
+ "tempfile",
+]
+
+[[package]]
 name = "sqlbuild-python"
 version = "0.138.0"
 dependencies = [
@@ -671,6 +681,7 @@ dependencies = [
  "sqlbuild-analysis",
  "sqlbuild-config",
  "sqlbuild-core",
+ "sqlbuild-discovery",
  "sqlbuild-rules",
  "sqlbuild-sqltext",
 ]

@@ -43,3 +43,32 @@ class LargeDocumentOracleTestCase:
     description: str
     document: str
     expected_maximum_seconds: float = 2.0
+
+
+@dataclass(frozen=True)
+class ModelDiscoveryParityTestCase:
+    """Authored model files discovered by both compiler engines."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    directories: tuple[str, ...] = ()
+    expected_identical: bool = True
+
+
+@dataclass(frozen=True)
+class GeneratedModelParityTestCase:
+    """Seeded model files discovered by both compiler engines, one file at a time."""
+
+    description: str
+    seed: int
+    case_count: int
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class EngineSwitchParityTestCase:
+    """A project discovered through `discover_project_inputs` under each engine."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_identical: bool = True

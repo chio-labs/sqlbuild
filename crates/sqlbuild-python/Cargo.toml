@@ -23,6 +23,7 @@ serde_json.workspace = true
 sqlbuild-analysis.workspace = true
 sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
+sqlbuild-discovery.workspace = true
 sqlbuild-rules.workspace = true
 sqlbuild-sqltext.workspace = true
 

@@ -8,13 +8,18 @@ from sqlbuild.compiler.frontier._helpers.stage_capture import write_stage_captur
 from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
 
 
-def compile_frontier[T](*, until: CompilerStage, python_stage: Callable[[], T]) -> T:
+def compile_frontier[T](
+    *,
+    until: CompilerStage,
+    python_stage: Callable[[], T],
+    native_stage: Callable[[], T] | None = None,
+) -> T:
     """Produce the frontier object for `until` on the active engine, capturing it on request."""
 
     result: T = (
         python_stage()
         if active_compiler_engine() is CompilerEngine.PYTHON
-        else native_frontier(until=until, python_stage=python_stage)
+        else native_frontier(until=until, python_stage=python_stage, native_stage=native_stage)
     )
     write_stage_capture(stage=until, value=result)
     return result

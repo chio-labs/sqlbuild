@@ -376,7 +376,7 @@ fn authored_value_to_python(
     }
 }
 
-fn map_to_python(
+pub(crate) fn map_to_python(
     py: Python<'_>,
     values: Vec<(String, sqlbuild_sqltext::compiler::models::AuthoredValue)>,
 ) -> PyResult<Py<PyAny>> {
@@ -594,6 +594,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(render_owned_skill, module)?)?;
     module.add_function(wrap_pyfunction!(skill_freshness, module)?)?;
     crate::bindings::_helpers::oracles::register(module)?;
+    crate::bindings::_helpers::discovery::register(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())

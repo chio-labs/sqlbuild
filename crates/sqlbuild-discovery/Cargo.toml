@@ -1,0 +1,19 @@
+[package]
+name = "sqlbuild-discovery"
+version.workspace = true
+description = "Native project discovery for SQLBuild: the directory walk, file facts and authored file parsing."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rayon.workspace = true
+sqlbuild-core.workspace = true
+sqlbuild-sqltext.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

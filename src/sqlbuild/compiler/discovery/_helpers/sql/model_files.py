@@ -734,6 +734,12 @@ def prepare_matched_model_file_headers(header_matches: list[ModelHeaderMatch | N
     )
 
 
+def project_native_header_values(values: dict[str, object]) -> dict[str, object]:
+    """Project native header parser values, with their marker tuples, to Python header values."""
+
+    return _project_native_header_map(values)
+
+
 def _project_native_header_map(values: dict[str, object]) -> dict[str, object]:
     return {key: _project_native_header_value(value) for key, value in values.items()}
 

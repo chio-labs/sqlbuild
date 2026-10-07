@@ -27,17 +27,14 @@ pub(crate) type HeaderParseResult = (
 
 pub(crate) fn parse_batch(headers: &[String]) -> Result<Vec<HeaderParseResult>, String> {
     let pool = build_tokenizer_pool(headers.len())?;
-    Ok(pool.install(|| {
-        headers
-            .par_iter()
-            .map(
-                |header| match tokenize(header).and_then(HeaderParser::parse) {
-                    Ok((value, offsets)) => (Some(value), Some(offsets), None),
-                    Err(error) => (None, None, Some(error)),
-                },
-            )
-            .collect()
-    }))
+    Ok(pool.install(|| headers.par_iter().map(|header| parse_one(header)).collect()))
+}
+
+pub(crate) fn parse_one(header: &str) -> HeaderParseResult {
+    match tokenize(header).and_then(HeaderParser::parse) {
+        Ok((value, offsets)) => (Some(value), Some(offsets), None),
+        Err(error) => (None, None, Some(error)),
+    }
 }
 
 pub(crate) fn tokenize_one(header: &str) -> Result<Vec<HeaderToken>, String> {
