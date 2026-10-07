@@ -18,6 +18,7 @@ use sqlbuild_core::text::main::close_matches::close_matches;
 use sqlbuild_core::text::main::decode_python_text::decode_python_text;
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::python_alnum_unicode_version::python_alnum_unicode_version;
+use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_core::text::models::LineIndex;
 use std::path::Path;
 
@@ -251,8 +252,14 @@ fn _oracle_close_matches(
     close_matches(word, &candidates, count, cutoff)
 }
 
+#[pyfunction]
+fn _oracle_cleandoc(texts: Vec<String>) -> Vec<String> {
+    texts.iter().map(|text| python_cleandoc(text)).collect()
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_oracle_python_alnum, module)?)?;
+    module.add_function(wrap_pyfunction!(_oracle_cleandoc, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_close_matches, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_json_dumps, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_text_positions, module)?)?;

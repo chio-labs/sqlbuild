@@ -97,6 +97,15 @@ impl From<PositionInput> for validation::PositionInput {
     }
 }
 
+/// The directory listings one Python discovery pass shares across its native calls.
+#[pyclass(module = "sqlbuild._native", frozen)]
+#[derive(Debug)]
+pub(crate) struct NativeProjectTree {
+    pub(crate) inner: sqlbuild_discovery::tree::models::ProjectTree,
+    /// Directories whose listings were already handed to the Python snapshot.
+    pub(crate) exported: Mutex<std::collections::HashSet<String>>,
+}
+
 /// One native model discovery request from the Python discovery facade.
 #[derive(FromPyObject, Debug)]
 #[pyo3(from_item_all)]
@@ -107,4 +116,14 @@ pub(crate) struct ModelDiscoveryRequest {
     pub(crate) removed_keys: Vec<String>,
     pub(crate) extract_implicit_alias_columns: bool,
     pub(crate) extract_output_column_locations: bool,
+}
+
+/// One native SQL test or scenario discovery request from the Python discovery facade.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct SqlTestDiscoveryRequest {
+    pub(crate) project_dir: String,
+    pub(crate) display_prefix: String,
+    pub(crate) test_keys: Vec<String>,
+    pub(crate) scenario_keys: Vec<String>,
 }

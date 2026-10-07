@@ -34,8 +34,19 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
+from sqlbuild.compiler.discovery._helpers.native.declarations import (
+    prepare_native_declaration_layout,
+)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
+    discover_native_scenario_files,
+    discover_native_test_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
+    discover_native_schema_files,
+    discover_native_source_files,
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
@@ -55,6 +66,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredProvider,
     DiscoveredPythonNodeFunctions,
+    DiscoveredSourceFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -96,6 +108,7 @@ def build_discovered_project_inputs(
             project_dir=project_dir,
             discover_models=discover_models,
             fact_cache=fact_cache,
+            native=native,
         )
         declarations: DiscoveredDeclarationFiles = (
             discover()
@@ -214,21 +227,42 @@ def _discover_declaration_files(
     project_dir: Path,
     discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
     fact_cache: FactCacheStore | None,
+    native: bool,
 ) -> DiscoveredDeclarationFiles:
     with DirectorySnapshot.scope(project_dir=project_dir):
+        source_files: tuple[DiscoveredSourceFile, ...] = (
+            discover_native_source_files(project_dir=project_dir, fact_cache=fact_cache)
+            if native
+            else discover_source_files(project_dir=project_dir, fact_cache=fact_cache)
+        )
+        model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
+        if native:
+            prepare_native_declaration_layout(project_dir=project_dir)
         return DiscoveredDeclarationFiles(
-            source_files=discover_source_files(project_dir=project_dir, fact_cache=fact_cache),
-            model_files=discover_models(),
+            source_files=source_files,
+            model_files=model_files,
             enum_files=discover_enum_files(project_dir=project_dir),
             constant_files=discover_constant_files(project_dir=project_dir),
             model_schema_files=discover_model_schema_files(project_dir=project_dir),
             sql_function_files=discover_sql_function_files(project_dir=project_dir),
             sql_hook_files=discover_sql_hook_files(project_dir=project_dir),
             python_function_files=discover_python_function_files(project_dir=project_dir),
-            schema_files=discover_schema_files(project_dir=project_dir),
+            schema_files=(
+                discover_native_schema_files(project_dir=project_dir)
+                if native
+                else discover_schema_files(project_dir=project_dir)
+            ),
             seed_files=discover_seed_files(project_dir=project_dir),
-            test_files=discover_test_files(project_dir=project_dir, fact_cache=fact_cache),
-            scenario_files=discover_scenario_files(project_dir=project_dir),
+            test_files=(
+                discover_native_test_files(project_dir=project_dir, fact_cache=fact_cache)
+                if native
+                else discover_test_files(project_dir=project_dir, fact_cache=fact_cache)
+            ),
+            scenario_files=(
+                discover_native_scenario_files(project_dir=project_dir)
+                if native
+                else discover_scenario_files(project_dir=project_dir)
+            ),
             audit_files=discover_audit_files(project_dir=project_dir),
             macro_files=discover_macro_files(project_dir=project_dir),
             adapter_file=discover_adapter_file(project_dir=project_dir),

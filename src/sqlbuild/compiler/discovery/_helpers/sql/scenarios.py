@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.constants import (
+    SQL_SCENARIO_HEADER_KEYS,
     SQL_SCENARIOS_OWNERSHIP_ROOT,
     STATEMENT_HEADER_BODY_PATTERN,
 )
@@ -21,9 +22,6 @@ _SCENARIO_HEADER_PATTERN: re.Pattern[str] = re.compile(
 )
 _SCENARIO_DESCRIPTION_HEADER_KEY: str = "description"
 _SCENARIO_TAGS_HEADER_KEY: str = "tags"
-_SCENARIO_HEADER_KEYS: frozenset[str] = frozenset(
-    {_SCENARIO_DESCRIPTION_HEADER_KEY, _SCENARIO_TAGS_HEADER_KEY}
-)
 
 
 def parse_sql_scenario_file(
@@ -43,7 +41,33 @@ def parse_sql_scenario_file(
         header_line=contents.count("\n", 0, header_match.start("header")) + 1,
         file_path=file_path,
     )
-    sql_body: str = cleandoc(header_match.group("sql"))
+    return build_sql_scenario_file(
+        header_values=header_values,
+        sql_body=cleandoc(header_match.group("sql")),
+        contents=contents,
+        file_path=file_path,
+        relative_path=relative_path,
+    )
+
+
+def build_sql_scenario_file(
+    *,
+    header_values: dict[str, object],
+    sql_body: str,
+    contents: str,
+    file_path: Path,
+    relative_path: Path,
+) -> DiscoveredSqlScenarioFile:
+    """Validate a header-parsed SCENARIO file with only supported keys and build its record."""
+
+    description_value: object | None = header_values.get(_SCENARIO_DESCRIPTION_HEADER_KEY)
+    if _SCENARIO_DESCRIPTION_HEADER_KEY in header_values and not isinstance(description_value, str):
+        raise SqlScenarioParseError(f"SCENARIO() description in '{file_path}' must be a string")
+    tags_value: object | None = header_values.get(_SCENARIO_TAGS_HEADER_KEY)
+    if _SCENARIO_TAGS_HEADER_KEY in header_values and (
+        not isinstance(tags_value, list) or not all(isinstance(tag, str) for tag in tags_value)
+    ):
+        raise SqlScenarioParseError(f"SCENARIO() tags in '{file_path}' must be a list of strings")
     if not sql_body:
         raise SqlScenarioParseError(
             f"SQL scenario '{file_path}' must define SQL after SCENARIO(...)"
@@ -70,21 +94,11 @@ def _parse_scenario_header(*, header: str, header_line: int, file_path: Path) ->
 
     reject_unsupported_header_keys(
         header_values=parsed_header,
-        supported_keys=_SCENARIO_HEADER_KEYS,
+        supported_keys=SQL_SCENARIO_HEADER_KEYS,
         statement="SCENARIO()",
         header=header,
         header_line=header_line,
         file_path=file_path,
         error_class=SqlScenarioParseError,
     )
-
-    description_value: object | None = parsed_header.get(_SCENARIO_DESCRIPTION_HEADER_KEY)
-    if _SCENARIO_DESCRIPTION_HEADER_KEY in parsed_header and not isinstance(description_value, str):
-        raise SqlScenarioParseError(f"SCENARIO() description in '{file_path}' must be a string")
-    tags_value: object | None = parsed_header.get(_SCENARIO_TAGS_HEADER_KEY)
-    if _SCENARIO_TAGS_HEADER_KEY in parsed_header and (
-        not isinstance(tags_value, list) or not all(isinstance(tag, str) for tag in tags_value)
-    ):
-        raise SqlScenarioParseError(f"SCENARIO() tags in '{file_path}' must be a list of strings")
-
     return parsed_header

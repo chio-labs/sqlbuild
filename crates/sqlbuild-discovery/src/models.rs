@@ -8,6 +8,12 @@ use std::path::PathBuf;
 pub enum FailureKind {
     /// `ModelSqlParseError` (D002).
     ModelSql,
+    /// `DeclarationParseError` (D013).
+    Declaration,
+    /// `SqlTestParseError` (D003).
+    SqlTest,
+    /// `SqlScenarioParseError` (D009).
+    SqlScenario,
 }
 
 impl FailureKind {
@@ -15,6 +21,9 @@ impl FailureKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ModelSql => "model_sql",
+            Self::Declaration => "declaration",
+            Self::SqlTest => "sql_test",
+            Self::SqlScenario => "sql_scenario",
         }
     }
 }

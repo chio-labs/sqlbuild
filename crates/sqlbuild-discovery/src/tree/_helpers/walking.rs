@@ -8,14 +8,6 @@ use std::sync::Arc;
 
 pub(crate) type WalkedDirectory = (String, Arc<Vec<TreeEntry>>);
 
-/// Python's `Path.is_dir()`: follows symbolic links and reports any failure as `false`.
-pub(crate) fn is_dir(tree: &ProjectTree, relative_path: &str) -> bool {
-    match std::fs::metadata(tree.absolute(relative_path)) {
-        Ok(metadata) => metadata.is_dir(),
-        Err(_unreadable) => false,
-    }
-}
-
 /// Every directory below `directory`, with its listing, descending only into real directories.
 pub(crate) fn walk(
     tree: &ProjectTree,
@@ -36,7 +28,10 @@ pub(crate) fn walk(
     Ok(walked)
 }
 
-fn listing(tree: &ProjectTree, directory: &str) -> Result<Arc<Vec<TreeEntry>>, StageDeferral> {
+pub(crate) fn listing(
+    tree: &ProjectTree,
+    directory: &str,
+) -> Result<Arc<Vec<TreeEntry>>, StageDeferral> {
     if let Some(cached) = cached_listing(tree, directory) {
         return Ok(cached);
     }

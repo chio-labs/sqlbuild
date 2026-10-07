@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import cast
 
@@ -25,6 +25,7 @@ _LOCAL_AUDIT_ROLE_DIRECTORY: str = "_audits"
 _SINGULAR_AUDIT_DIRECTORY: str = "singular"
 _LAYOUT_MEMO_KEY: str = "named_declaration_layout"
 _GROUPS_MEMO_KEY: str = "declaration_groups"
+_PATH_SEPARATOR: str = "/"
 _NESTED_ROLE_DIRECTORIES: frozenset[str] = frozenset(
     {DECLARATION_GROUP_DIRECTORY}
     | INHERITED_DECLARATION_DIRECTORIES
@@ -84,6 +85,16 @@ def named_declaration_files(
         file_path: Path
         for file_path in sorted(tree.rglob(root=root.directory, pattern=pattern)):
             yield root, file_path
+
+
+def remember_declaration_groups(*, project_dir: Path, groups: Iterable[tuple[str, str]]) -> None:
+    """Record a named layout another walk of this pass validated, with its declaration groups."""
+
+    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
+    tree.memo[_GROUPS_MEMO_KEY] = tuple(
+        (tuple(root.split(_PATH_SEPARATOR)), project_dir / directory) for root, directory in groups
+    )
+    tree.memo[_LAYOUT_MEMO_KEY] = True
 
 
 def validate_named_declaration_layout(*, project_dir: Path) -> None:

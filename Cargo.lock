@@ -665,6 +665,7 @@ name = "sqlbuild-discovery"
 version = "0.138.0"
 dependencies = [
  "rayon",
+ "sqlbuild-config",
  "sqlbuild-core",
  "sqlbuild-sqltext",
  "tempfile",

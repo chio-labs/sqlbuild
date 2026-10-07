@@ -12,19 +12,52 @@ from collections.abc import Callable
 from contextlib import suppress
 from itertools import compress
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+import pytest
 import yaml
 
 from sqlbuild import _native
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_files
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_constant_files,
+    discover_enum_files,
+    discover_macro_files,
+    discover_model_files,
+    discover_scenario_files,
+    discover_schema_files,
+    discover_source_files,
+    discover_test_files,
+)
+from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
+    named_declaration_roots,
+    remember_declaration_groups,
+)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
+    discover_native_scenario_files,
+    discover_native_test_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
+    discover_native_schema_files,
+    discover_native_source_files,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredMacroFile,
+    DiscoveredSqlModelFile,
+)
+from sqlbuild.compiler.discovery.types import NativeDeclarationFact
+from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.scopes.constants import NAMED_DECLARATION_KINDS
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.integration.src.sqlbuild.compiler.helpers import random_float, random_text
 
@@ -252,7 +285,21 @@ def finished_document(*, rng: random.Random, text: str) -> str:
     return rng.choice(BYTE_ORDER_MARKS) + ending
 
 
+LONG_KEY_CONTEXTS: tuple[str, ...] = (
+    "{key}: 1\n", "{{{key}: 1}}\n", "[{key}: 1]\n", "a:\n  {key} : 1\n", "'{key}': 1\n",
+    "&k {key}: 1\n", "? {key}\n: 1\n", "x: {{{key}: 1, b: 2}}\n",
+)  # fmt: skip
+
+
+def long_key_document(*, rng: random.Random) -> str:
+    """Return a document whose key length straddles the 1024-character simple-key limit."""
+
+    key: str = rng.choice(("a", "0x", "é")) * rng.randint(990, 1040)
+    return rng.choice(LONG_KEY_CONTEXTS).format(key=key)
+
+
 YAML_DOCUMENT_GENERATORS: dict[str, Callable[[random.Random], str]] = {
+    "long keys": lambda rng: long_key_document(rng=rng),
     "scalars": lambda rng: finished_document(rng=rng, text=scalar_document(rng=rng)),
     "anchors": lambda rng: finished_document(rng=rng, text=anchored_document(rng=rng)),
     "dumped": lambda rng: finished_document(rng=rng, text=dumped_document(rng=rng)),
@@ -638,6 +685,241 @@ TAILS: tuple[str, ...] = (
 SEPARATORS: tuple[str, ...] = ("\n", "\r\n", "\r", "\t", " ", "\u3000", "\n\n")
 
 
+TEST_HEADER_ENTRIES: tuple[str, ...] = (
+    'name "keeps_orders"', "mode model", 'name "second"', "name ''", "name 1", "mode query",
+    "mode audit", "mode bogus", "sql_analysis false", "sql_analysis 1", "nme 1",
+    "parameters (status string), cases (placed (status 'placed'))",
+    "parameters (amount (type integer, nullable true)), cases (empty (amount null))",
+    "parameters (amount integer), cases (bad (amount 'x'))", "parameters (amount integer)",
+    "cursor_start '2024-01-01'", "cursor_end 3", "materialized table", "description (",
+    "tags [a, b]", "'unterminated",
+)  # fmt: skip
+SCENARIO_HEADER_ENTRIES: tuple[str, ...] = (
+    'description "Orders world"', "tags [north, south]", "description 1", "tags [1]",
+    "tags north", "name x", "description (", '"unterminated',
+)  # fmt: skip
+STATEMENT_BODIES: tuple[str, ...] = (
+    "SELECT 1", "SELECT 2 AS amount", "\n  SELECT 3\n  FROM orders\n", "", "  ",
+    "\n    SELECT 1\n      FROM t\n", "\tSELECT 1\n\tFROM\tt",
+    "SELECT 'TEST (x);' AS label", "SELECT 1\n   ", "-- only a comment", "SELECT ')' AS c;",
+    "\u3000SELECT 1",
+)  # fmt: skip
+STATEMENT_PREFIXES: tuple[str, ...] = ("",) * 10 + (" \n", "\ufeff", "-- lead\n", "\n\n  ")
+
+
+def generated_statement_text(*, rng: random.Random, keyword: str, entries: tuple[str, ...]) -> str:
+    """Return one statement header with random entries, separators and a body."""
+
+    separator: str = rng.choice(SEPARATORS)
+    chosen: list[str] = rng.choices(
+        (rng.sample(entries, k=rng.choice((0, 1, 1, 1, 2))), rng.sample(entries[:2], k=1)),
+        weights=(3, 2),
+    )[0]
+    header: str = ("," + separator).join(chosen)
+    closing: str = rng.choice((");",) * 8 + (") ;", ")\n;", ")", "));", ");;"))
+    return (
+        f"{rng.choice(('', ' ', '  '))}{keyword}{rng.choice(('', ' '))}({separator}{header}"
+        f"{separator}{closing}{rng.choice(SEPARATORS)}{rng.choice(STATEMENT_BODIES)}"
+    )
+
+
+def generated_test_bytes(*, rng: random.Random) -> bytes:
+    """Return one SQL test file with one to three blocks, joined at or inside lines."""
+
+    blocks: list[str] = [
+        generated_statement_text(rng=rng, keyword="TEST", entries=TEST_HEADER_ENTRIES)
+        for _ in range(rng.choice((1, 1, 1, 1, 2, 3)))
+    ]
+    joined: str = "".join(rng.choice(("\n", "\n\n", " ", "\r\n")) + block for block in blocks)
+    return (rng.choice(STATEMENT_PREFIXES) + joined.lstrip("\n\r ")).encode("utf-8")
+
+
+def generated_scenario_bytes(*, rng: random.Random) -> bytes:
+    """Return one SQL scenario file."""
+
+    text: str = generated_statement_text(
+        rng=rng, keyword="SCENARIO", entries=SCENARIO_HEADER_ENTRIES
+    )
+    return (rng.choice(STATEMENT_PREFIXES) + text).encode("utf-8")
+
+
+def sql_test_discovery_outcome(*, project_dir: Path, native: bool) -> object:
+    """Return the rendered test and scenario files, or the error type, message and help."""
+
+    discover: Callable[[], tuple[object, object]] = {
+        True: lambda: (
+            discover_native_test_files(project_dir=project_dir),
+            discover_native_scenario_files(project_dir=project_dir),
+        ),
+        False: lambda: (
+            discover_test_files(project_dir=project_dir),
+            discover_scenario_files(project_dir=project_dir),
+        ),
+    }[native]
+    capture: FailureCapture = FailureCapture()
+    rendered: list[object] = [None]
+    with DirectorySnapshot.scope(project_dir=project_dir), capture:
+        rendered[0] = render_stage_capture(discover())
+    failure: BaseException | None = capture.failure
+    return {
+        True: rendered[0],
+        False: (type(failure).__name__, str(failure), getattr(failure, "help", None)),
+    }[failure is None]
+
+
+SOURCE_FIELD_CHOICES: dict[str, tuple[object, ...]] = {
+    "description": ("Orders feed.", "", 3, None),
+    "database": ("raw", ""),
+    "schema": ("shop", None),
+    "table": ("orders", 7),
+    "managed": (True, False, "yes"),
+    "write_strategy": ("append", "merge", "table", "bogus"),
+    "unique_key": ("order_id", ["order_id", "line"], [], ""),
+    "cursor_column": ("updated_at",),
+    "load_batch_size": (100, 0, True),
+    "type_enforcement": (True, "no"),
+    "contract": ("enforced", "none", "strict"),
+    "freshness": (
+        {"strategy": "adapter"},
+        {"strategy": "column", "column": "updated_at", "type": "timestamp", "lag_tolerance": "2h"},
+        {"strategy": "sql", "query": "SELECT 1", "type": "timestamp"},
+        {"strategy": "column"},
+    ),
+    "audits": (["not_null"], [{"accepted_values": {"values": [1, 2]}}], "x"),
+    "freshnes": ("1d",),
+}
+COLUMN_FIELD_CHOICES: dict[str, tuple[object, ...]] = {
+    "type": ("INTEGER", "VARCHAR", ""),
+    "nullable": (True, False, "yes", None),
+    "description": ("Order id.", 5),
+    "audits": (["not_null"], ["unique"], []),
+}
+SCALAR_META_TEMPLATES: tuple[str, ...] = (
+    "\n  meta: {{flag: {plain}}}", "\n  meta:\n    seen: {plain}",
+    "\n  meta: &shared{n} {{k: {plain}}}", "\n  description: '{single}'",
+    "\n  <<: {{description: '{single}'}}", "\n  meta: {{k: {plain}, j: [{plain}]}}",
+)  # fmt: skip
+
+
+def _random_fields(
+    *, rng: random.Random, choices: dict[str, tuple[object, ...]]
+) -> dict[str, object]:
+    keys: list[str] = rng.sample(sorted(choices), k=rng.randint(0, 3))
+    return {
+        key: rng.choices(choices[key], weights=(6, *(1,) * (len(choices[key]) - 1)))[0]
+        for key in keys
+    }
+
+
+def _generated_column(*, rng: random.Random, names: tuple[str, ...]) -> dict[str, object]:
+    return {"name": rng.choice(names), **_random_fields(rng=rng, choices=COLUMN_FIELD_CHOICES)}
+
+
+def _generated_entry(
+    *,
+    rng: random.Random,
+    names: tuple[str, ...],
+    column_names: tuple[str, ...],
+    fields: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "name": rng.choice(names),
+        **fields,
+        "columns": [
+            _generated_column(rng=rng, names=column_names) for _ in range(rng.randint(0, 3))
+        ],
+        "meta": {"owner": random_yaml_value(rng=rng, depth=2)},
+    }
+
+
+def generated_source_document(*, rng: random.Random) -> str:
+    """Return a sources file of random entries in a random dump style, with resolver scalars."""
+
+    sources: list[object] = [
+        _generated_entry(
+            rng=rng,
+            names=("orders", "customers", "line_items", ""),
+            column_names=("order_id", "amount", "status"),
+            fields=_random_fields(rng=rng, choices=SOURCE_FIELD_CHOICES),
+        )
+        for _ in range(rng.randint(0, 3))
+    ]
+    flow_style: bool | None = rng.choice((None, False, False, True))
+    dumped: str = yaml.safe_dump(
+        {"sources": sources},
+        default_flow_style=flow_style,
+        default_style=rng.choice((None, None, None, '"', "'")),
+        width=rng.choice((40, 80, 4096)),
+        allow_unicode=rng.random() < 0.5,
+        sort_keys=False,
+    )
+    scalar: str = random_scalar(rng=rng)
+    tail: str = rng.choice(SCALAR_META_TEMPLATES).format(
+        plain=scalar, single=scalar.replace("'", "''"), n=rng.randint(0, 9)
+    )
+    extra: str = rng.choices((f"- name: extra{tail}\n", "other: [\n"), weights=(8, 1))[0]
+    appendable: bool = flow_style is False and bool(sources)
+    return rng.choice(BYTE_ORDER_MARKS) + dumped + {True: extra, False: ""}[appendable]
+
+
+def generated_seed_declaration(*, rng: random.Random) -> str:
+    """Return a seed declaration file of random entries in a random dump style."""
+
+    seeds: list[object] = [
+        _generated_entry(
+            rng=rng,
+            names=("channels", "regions", ""),
+            column_names=("id", "label"),
+            fields={"description": rng.choice(("Order channels.", 1))},
+        )
+        for _ in range(rng.randint(0, 2))
+    ]
+    return yaml.safe_dump(
+        {"seeds": seeds},
+        default_flow_style=rng.choice((None, False, True)),
+        default_style=rng.choice((None, None, '"')),
+        sort_keys=False,
+    )
+
+
+def native_yaml_tags_and_values(
+    *, project_dir: Path, relative_paths: list[str]
+) -> tuple[list[object], bool]:
+    """Return each file's native tag and whether every natively loaded value equals LibYAML's."""
+
+    payloads: list[object] = (
+        _native.load_yaml_files(relative_paths, _native.NativeProjectTree(str(project_dir))) or []
+    )
+    rows: list[tuple[object, ...]] = [cast(tuple[object, ...], payload) for payload in payloads]
+    loaded: list[tuple[object, ...]] = list(compress(rows, [row[0] == "ok" for row in rows]))
+    expected: list[object] = [yaml.load(str(row[1]), Loader=yaml.CSafeLoader) for row in loaded]
+    return [row[0] for row in rows], [row[2] for row in loaded] == expected
+
+
+def yaml_discovery_outcome(*, project_dir: Path, native: bool) -> object:
+    """Return the rendered source and schema files, or the error type, message and help."""
+
+    discover: Callable[[], tuple[object, object]] = {
+        True: lambda: (
+            discover_native_source_files(project_dir=project_dir),
+            discover_native_schema_files(project_dir=project_dir),
+        ),
+        False: lambda: (
+            discover_source_files(project_dir=project_dir),
+            discover_schema_files(project_dir=project_dir),
+        ),
+    }[native]
+    capture: FailureCapture = FailureCapture()
+    rendered: list[object] = [None]
+    with DirectorySnapshot.scope(project_dir=project_dir), capture:
+        rendered[0] = render_stage_capture(discover())
+    failure: BaseException | None = capture.failure
+    return {
+        True: rendered[0],
+        False: (type(failure).__name__, str(failure), getattr(failure, "help", None)),
+    }[failure is None]
+
+
 class FailureCapture:
     """Swallow and keep the discovery failure a block raises."""
 
@@ -704,6 +986,199 @@ def generated_model_bytes(*, rng: random.Random) -> bytes:
         weights=(19, 1),
     )[0]
     return text.encode("utf-8")
+
+
+LAYOUT_ROOTS: tuple[str, ...] = ("models",) * 8 + (
+    "tests/unit", "tests/scenarios", "functions/sql", "sources", "macros", "enums", "constants",
+    "audits", "schemas", "hooks", "_macros", "_sqlbuild", "seeds",
+)  # fmt: skip
+LAYOUT_SEGMENTS: tuple[str, ...] = ("marts", "core") * 6 + (
+    "_sqlbuild", "_sqlbuild", "_sqlbuild", "macros", "enums", "constants", "_macros", "_enums",
+    "_constants", "audits", "_audits", "generic", "singular", "schemas", "_schemas", "hooks",
+    "_hooks", "sql", "python", ".cache",
+)  # fmt: skip
+LAYOUT_TEMPLATES: tuple[str, ...] = (
+    "{root}/{owner}/_sqlbuild/{declaration}", "{root}/{owner}/{local}", "{declaration}",
+    "{declaration}/{owner}", "{root}/{owner}/_sqlbuild/{named}", "{named}", "{root}/{owner}",
+)  # fmt: skip
+LAYOUT_DECLARATIONS: tuple[str, ...] = (
+    "macros", "enums", "constants", "_macros", "_enums", "_constants",
+)  # fmt: skip
+LAYOUT_NAMED_ROLES: tuple[str, ...] = (
+    "audits/generic", "audits/singular", "_audits/generic", "schemas", "_schemas", "hooks/sql",
+    "hooks/python", "_hooks/sql",
+)  # fmt: skip
+LAYOUT_FILE_NAMES: tuple[str, ...] = ("a.py", "b.sql", "c.sql", "__init__.py", "notes.txt", ".keep")
+LAYOUT_CONTENTS: dict[str, str] = {
+    "enums": "ENUM (name e{n}, members [A]);\n",
+    "_enums": "ENUM (name e{n}, members [A]);\n",
+    "constants": "CONSTANT (name c{n}, value 1);\n",
+    "_constants": "CONSTANT (name c{n}, value 1);\n",
+}
+_FACT_KINDS: dict[type[object], str] = {
+    DiscoveredMacroFile: "macro",
+    DiscoveredEnumFile: "enum",
+    DiscoveredConstantFile: "constant",
+}
+
+
+def generated_layout_files(*, rng: random.Random) -> tuple[tuple[str, bytes], ...]:
+    """Return files spread over canonical, global and grouped declaration roots."""
+
+    files: dict[str, bytes] = {}
+    for index in range(rng.randint(1, 6)):
+        directory: str = rng.choices(
+            (
+                rng.choice(LAYOUT_TEMPLATES).format(
+                    root=rng.choice(LAYOUT_ROOTS[:12]),
+                    owner=rng.choice(("marts", "core", "marts/core")),
+                    declaration=rng.choice(LAYOUT_DECLARATIONS),
+                    local=rng.choice(LAYOUT_DECLARATIONS[3:]),
+                    named=rng.choice(LAYOUT_NAMED_ROLES),
+                ),
+                "/".join(
+                    (rng.choice(LAYOUT_ROOTS), *rng.choices(LAYOUT_SEGMENTS, k=rng.randint(0, 3)))
+                ),
+            ),
+            weights=(6, 1),
+        )[0]
+        parts: list[str] = [*directory.split("/"), rng.choice(LAYOUT_FILE_NAMES)]
+        template: str = next(
+            filter(None, (LAYOUT_CONTENTS.get(part) for part in reversed(parts))), ""
+        )
+        files["/".join(parts)] = template.format(n=index).encode("utf-8")
+    return tuple(files.items())
+
+
+def python_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
+    """Return Python's declaration file facts and named roots, `None` where its scan raises."""
+
+    return (
+        _outcome_or_none(lambda: _python_fact_rows(project_dir=project_dir)),
+        _outcome_or_none(lambda: _named_root_rows(project_dir=project_dir, seed=lambda: None)),
+    )
+
+
+def native_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
+    """Return the native facts and the named roots its groups give, `None` where it fails."""
+
+    layout: tuple[list[NativeDeclarationFact] | None, list[tuple[str, str]] | None] | None = (
+        _native.discover_declaration_layout(_native.NativeProjectTree(str(project_dir)))
+    )
+    facts, groups = layout or (None, None)
+    return (
+        _mapped(facts, lambda rows: [_native_fact_row(fact) for fact in rows]),
+        _mapped(
+            groups,
+            lambda rows: _named_root_rows(
+                project_dir=project_dir,
+                seed=lambda: remember_declaration_groups(project_dir=project_dir, groups=rows),
+            ),
+        ),
+    )
+
+
+def _mapped[T](value: T | None, transform: Callable[[T], object]) -> object:
+    return {True: lambda: None, False: lambda: transform(cast(T, value))}[value is None]()
+
+
+def _outcome_or_none(compute: Callable[[], object]) -> object:
+    outcome: list[object] = [None]
+    with suppress(DeclarationParseError):
+        outcome[0] = compute()
+    return outcome[0]
+
+
+def _python_fact_rows(*, project_dir: Path) -> list[tuple[str, ...]]:
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        files: tuple[DiscoveredMacroFile | DiscoveredEnumFile | DiscoveredConstantFile, ...] = (
+            *discover_macro_files(project_dir=project_dir),
+            *discover_enum_files(project_dir=project_dir),
+            *discover_constant_files(project_dir=project_dir),
+        )
+    return sorted(
+        (
+            file.relative_path.as_posix(),
+            _FACT_KINDS[type(file)],
+            file.scope_kind.value,
+            str(file.ownership_root),
+            str(file.owning_path),
+            str(file.declaration_root),
+        )
+        for file in files
+    )
+
+
+def _native_fact_row(fact: NativeDeclarationFact) -> tuple[str, ...]:
+    relative_path, kind, scope_kind, ownership_root, owning_path, declaration_root = fact
+    return (relative_path, kind, scope_kind, ownership_root, str(owning_path), declaration_root)
+
+
+def _named_root_rows(*, project_dir: Path, seed: Callable[[], None]) -> list[tuple[str, ...]]:
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        seed()
+        return [
+            (
+                root.relative_directory.as_posix(),
+                root.kind.value,
+                root.scope_kind.value,
+                str(root.ownership_root),
+                str(root.owning_path),
+            )
+            for root in named_declaration_roots(
+                project_dir=project_dir, kinds=NAMED_DECLARATION_KINDS
+            )
+        ]
+
+
+def stage_outcome(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> object:
+    """Return the rendered discovery stage under `engine` with its failure type and message."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+    capture: FailureCapture = FailureCapture()
+    rendered: list[object] = [None]
+    with capture:
+        rendered[0] = render_stage_capture(discover_project_inputs(project_dir=project_dir))
+    return (rendered[0], type(capture.failure).__name__, str(capture.failure))
+
+
+class RecordingFactCache:
+    """A fact cache that records the fact keys discovery asks for and caches nothing."""
+
+    enabled: bool = True
+
+    def __init__(self) -> None:
+        self.keys: list[tuple[str, ...]] = []
+
+    def key(self, *parts: str) -> str:
+        self.keys.append(parts)
+        return str(len(self.keys))
+
+    def read_many(self, entries: object) -> dict[str, object]:
+        return {}
+
+    def stage(self, *, key: str, slot: str, value: object) -> None:
+        return None
+
+
+def fact_cache_keys(*, project_dir: Path, native: bool) -> list[tuple[str, ...]]:
+    """Return the fact keys source and test discovery request under the chosen path."""
+
+    cache: RecordingFactCache = RecordingFactCache()
+    fact_cache: FactCacheStore = cast(FactCacheStore, cache)
+    discover: Callable[[], object] = {
+        True: lambda: (
+            discover_native_source_files(project_dir=project_dir, fact_cache=fact_cache),
+            discover_native_test_files(project_dir=project_dir, fact_cache=fact_cache),
+        ),
+        False: lambda: (
+            discover_source_files(project_dir=project_dir, fact_cache=fact_cache),
+            discover_test_files(project_dir=project_dir, fact_cache=fact_cache),
+        ),
+    }[native]
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        _ = discover()
+    return cache.keys
 
 
 class CallCounter:

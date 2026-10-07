@@ -8,7 +8,13 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ModelSqlParseError
+from sqlbuild.compiler.discovery.exceptions import (
+    DeclarationParseError,
+    DiscoveryError,
+    ModelSqlParseError,
+    SqlScenarioParseError,
+    SqlTestParseError,
+)
 from sqlbuild.compiler.discovery.types import (
     DirectorySnapshotEntry,
     NativeListing,
@@ -19,7 +25,13 @@ from sqlbuild.spec.contracts.models import SourceLocation
 _DISPLAY_PROBE: str = "_"
 _WINDOWS_OS_NAME: str = "nt"
 _PATH_ENCODING: str = "utf-8"
-_FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {"model_sql": ModelSqlParseError}
+_NATIVE_TREE_MEMO_KEY: str = "native_project_tree"
+_FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {
+    "model_sql": ModelSqlParseError,
+    "declaration": DeclarationParseError,
+    "sql_test": SqlTestParseError,
+    "sql_scenario": SqlScenarioParseError,
+}
 
 
 def native_display_prefix(project_dir: Path) -> str:
@@ -64,9 +76,22 @@ def native_discovery_supported(*, project_dir: Path, display_prefix: str) -> boo
     )
 
 
-def seed_snapshot_listings(*, project_dir: Path, listings: list[NativeListing]) -> None:
+def native_project_tree(project_dir: Path) -> _native.NativeProjectTree:
+    """Return the native listings shared by every native call of this discovery pass."""
+
+    snapshot: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
+    tree: object = snapshot.memo.get(_NATIVE_TREE_MEMO_KEY)
+    if isinstance(tree, _native.NativeProjectTree):
+        return tree
+    created: _native.NativeProjectTree = _native.NativeProjectTree(str(project_dir))
+    snapshot.memo[_NATIVE_TREE_MEMO_KEY] = created
+    return created
+
+
+def seed_snapshot_listings(*, project_dir: Path, tree: _native.NativeProjectTree) -> None:
     """Share the native walk's listings with the pass's Python directory snapshot."""
 
+    listings: list[NativeListing] = tree.listings()
     DirectorySnapshot.current(project_dir=project_dir).seed_listings(
         {project_dir / directory: _snapshot_entries(entries) for directory, entries in listings}
     )
@@ -79,6 +104,12 @@ def _snapshot_entries(
         DirectorySnapshotEntry(name=name, is_dir=is_dir, is_walkable_dir=walkable)
         for name, is_dir, walkable in entries
     )
+
+
+def native_path_text_supported(text: str) -> bool:
+    """Whether a path's text crosses to the native engine unchanged (no surrogate escapes)."""
+
+    return _is_utf8_text(text)
 
 
 def _is_utf8_text(text: str) -> bool:

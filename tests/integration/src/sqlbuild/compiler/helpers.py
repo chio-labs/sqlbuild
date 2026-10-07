@@ -302,6 +302,10 @@ def python_read_text(*, path: Path, data: bytes) -> str:
 
 
 TABLE_PYTHON_VERSION: tuple[int, int] = (3, 12)
+CLEANDOC_FRAGMENTS: tuple[str, ...] = (
+    "", " ", "  ", "\t", " \t", "\u3000", "\x0b", "\x1c", "\xa0", "\r", "\n", "\n", "\n\n",
+    "SELECT 1", "a", "é", "x\ty", "--c",
+)  # fmt: skip
 MUTATION_ALPHABET: str = "abcdefghijklmnopqrstuvwxyz_0é"
 
 
@@ -319,6 +323,12 @@ def _substitute(*, rng: random.Random, word: list[str], position: int) -> None:
 
 
 MUTATIONS: tuple[Callable[..., None], ...] = (_insert, _delete, _substitute)
+
+
+def cleandoc_text(*, rng: random.Random) -> str:
+    """Return a body mixing indentation, tabs, Unicode spaces and blank lines."""
+
+    return "".join(rng.choices(CLEANDOC_FRAGMENTS, k=rng.randint(0, 24)))
 
 
 def mutated_word(*, rng: random.Random, candidates: list[str]) -> str:

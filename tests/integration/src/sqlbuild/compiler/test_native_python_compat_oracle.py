@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import inspect
 import random
 import sys
 import unicodedata
@@ -13,10 +14,12 @@ from sqlbuild import _native
 from sqlbuild.compiler.discovery.constants import SQL_MODEL_HEADER_KEYS
 from tests.integration.src.sqlbuild.compiler._test_types import (
     CharacterClassOracleTestCase,
+    CleandocOracleTestCase,
     CloseMatchesOracleTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import (
     TABLE_PYTHON_VERSION,
+    cleandoc_text,
     mismatches,
     mutated_word,
 )
@@ -84,5 +87,32 @@ def test_given_words_when_finding_close_matches_natively_then_difflib_agrees(
     ]
 
     assert mismatches(inputs=list(words), expected=expected, actual=actual) == list(
+        test_case.expected_mismatches
+    )
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != TABLE_PYTHON_VERSION,
+    reason="native discovery runs only on the CI Python, whose cleandoc the port reproduces",
+)
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CleandocOracleTestCase(
+            description="indented bodies with tabs and blank lines", seed=53, case_count=3000
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_bodies_when_cleaning_natively_then_inspect_cleandoc_agrees(
+    test_case: CleandocOracleTestCase,
+) -> None:
+    rng: random.Random = random.Random(test_case.seed)
+    texts: list[str] = [cleandoc_text(rng=rng) for _ in range(test_case.case_count)]
+
+    expected: list[object] = [inspect.cleandoc(text) for text in texts]
+    actual: list[object] = list(_native._oracle_cleandoc(texts))
+
+    assert mismatches(inputs=list(texts), expected=expected, actual=actual) == list(
         test_case.expected_mismatches
     )

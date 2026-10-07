@@ -48,6 +48,13 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
             expected_maximum_deferred=20,
         ),
         GeneratedDocumentOracleTestCase(
+            description="keys straddling the 1024-character simple-key limit",
+            generator="long keys",
+            seed=44,
+            case_count=600,
+            expected_maximum_deferred=400,
+        ),
+        GeneratedDocumentOracleTestCase(
             description="documents written by PyYAML's safe dumper in random styles",
             generator="dumped",
             seed=43,

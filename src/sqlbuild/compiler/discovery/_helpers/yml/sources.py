@@ -92,7 +92,15 @@ _SOURCE_FRESHNESS_VALUE_KINDS: frozenset[str] = frozenset(
 def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
     """Parse one sources/*.yml file into raw source declarations."""
 
-    payload: dict[str, object] = _load_sources_payload(contents=contents, file_path=file_path)
+    return parse_loaded_sources_yml(
+        loaded=_load_sources_yaml(contents=contents, file_path=file_path), file_path=file_path
+    )
+
+
+def parse_loaded_sources_yml(*, loaded: object, file_path: Path) -> tuple[SourceEntry, ...]:
+    """Parse the document one sources/*.yml file loads to into raw source declarations."""
+
+    payload: dict[str, object] = _sources_mapping(loaded=loaded, file_path=file_path)
     _reject_unknown_source_keys(
         mapping=payload, allowed=_SOURCE_FILE_KEYS, file_path=file_path, label="sources file"
     )
@@ -112,12 +120,16 @@ def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, .
     return tuple(parsed_sources)
 
 
-def _load_sources_payload(*, contents: str, file_path: Path) -> dict[str, object]:
+def _load_sources_yaml(*, contents: str, file_path: Path) -> object:
     try:
         loader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-        payload: object = yaml.load(contents, Loader=loader)
+        return yaml.load(contents, Loader=loader)
     except YAMLError as error:
         raise SourceParseError(f"{file_path} contains invalid YAML: {error}") from error
+
+
+def _sources_mapping(*, loaded: object, file_path: Path) -> dict[str, object]:
+    payload: object = loaded
     if payload is None:
         return {}
     if not isinstance(payload, dict):

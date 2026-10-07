@@ -3,7 +3,7 @@
 use crate::models::StageDeferral;
 use crate::tree::_helpers::listing::join_relative;
 use crate::tree::_helpers::ordering::compare_relative_paths;
-use crate::tree::_helpers::walking::{WalkedDirectory, is_dir, walk};
+use crate::tree::_helpers::walking::{WalkedDirectory, walk};
 use crate::tree::models::{ProjectTree, TreeEntry};
 
 /// Every entry below `root` that `accept` keeps, in Python's sorted path order.
@@ -12,7 +12,7 @@ pub fn rglob(
     root: &str,
     accept: impl Fn(&TreeEntry) -> bool,
 ) -> Result<Vec<String>, StageDeferral> {
-    if !is_dir(tree, root) {
+    if !tree.is_dir(root) {
         return Ok(Vec::new());
     }
     let mut selected: Vec<String> = Vec::new();

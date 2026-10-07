@@ -94,3 +94,58 @@ class SharedSnapshotTestCase:
     created_file: str
     pattern: str
     expected_matches: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GeneratedLayoutParityTestCase:
+    """Seeded declaration layouts whose native validation and facts must match Python's."""
+
+    description: str
+    seed: int
+    count: int
+    expected_mismatches: tuple[str, ...] = ()
+    expected_minimum_valid: int = 0
+    expected_minimum_invalid: int = 0
+
+
+@dataclass(frozen=True)
+class GeneratedSqlTestParityTestCase:
+    """Seeded SQL test and scenario files discovered by both compiler engines."""
+
+    description: str
+    seed: int
+    case_count: int
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+    expected_minimum_parsed: int = 0
+    expected_minimum_failed: int = 0
+
+
+@dataclass(frozen=True)
+class GeneratedYamlFileParityTestCase:
+    """Seeded source and seed declaration files discovered by both compiler engines."""
+
+    description: str
+    seed: int
+    case_count: int
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+    expected_minimum_parsed: int = 0
+    expected_minimum_failed: int = 0
+
+
+@dataclass(frozen=True)
+class NativeYamlLoadTestCase:
+    """Source files whose native load outcome and engine parity are both checked."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_native_tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FactCacheFallbackTestCase:
+    """A runtime under which native source and test discovery must use the fact cache or not."""
+
+    description: str
+    unidata_version: str
+    expected_same_keys_as_python: bool
+    expected_native_keys: int

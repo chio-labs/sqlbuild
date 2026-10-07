@@ -76,19 +76,33 @@ def parse_schema_yml(
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
     """Parse one schema.yml file into raw model and seed metadata."""
 
-    payload: dict[str, object] = _load_schema_payload(contents=contents, file_path=file_path)
+    return parse_loaded_schema_yml(
+        loaded=_load_schema_yaml(contents=contents, file_path=file_path), file_path=file_path
+    )
+
+
+def parse_loaded_schema_yml(
+    *, loaded: object, file_path: Path
+) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
+    """Parse the document one schema.yml file loads to into raw model and seed metadata."""
+
+    payload: dict[str, object] = _schema_mapping(loaded=loaded, file_path=file_path)
     return (
         _parse_model_entries(payload=payload, file_path=file_path),
         _parse_seed_entries(payload=payload, file_path=file_path),
     )
 
 
-def _load_schema_payload(*, contents: str, file_path: Path) -> dict[str, object]:
+def _load_schema_yaml(*, contents: str, file_path: Path) -> object:
     try:
         loader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-        payload: object = yaml.load(contents, Loader=loader)
+        return yaml.load(contents, Loader=loader)
     except YAMLError as error:
         raise SchemaParseError(f"{file_path} contains invalid YAML: {error}") from error
+
+
+def _schema_mapping(*, loaded: object, file_path: Path) -> dict[str, object]:
+    payload: object = loaded
     if payload is None:
         return {}
     if not isinstance(payload, dict):
