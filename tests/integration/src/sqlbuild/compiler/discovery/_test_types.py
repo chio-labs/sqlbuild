@@ -229,3 +229,22 @@ class DeclarationReuseTestCase:
     edited_path: str
     edited_contents: bytes
     expected_reused_session: object = None
+
+
+@dataclass(frozen=True)
+class FailureTextTestCase:
+    """A project whose discovery failure message must keep its authored text unchanged."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_error_type: str
+    expected_message_suffix: str
+
+
+@dataclass(frozen=True)
+class TolerantFailureTextTestCase:
+    """A project whose broken declaration files tolerant discovery faults with authored text."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_fault_keys: tuple[str, ...]

@@ -24,7 +24,6 @@ use sqlbuild_discovery::sql_tests::main::parse_sql_test_text::parse_sql_test_tex
 use sqlbuild_discovery::sql_tests::models::{
     DiscoveredScenarioFile, DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions,
 };
-use sqlbuild_discovery::tree::main::display_text::display_text;
 use sqlbuild_discovery::tree::main::listings::read_listings;
 use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
 use sqlbuild_discovery::yaml_files::main::load_yaml_files::load_yaml_files as load_yaml;
@@ -80,7 +79,7 @@ pub(crate) fn failure_object(py: Python<'_>, failure: DiscoveryFailure) -> PyRes
         vec![
             object(py, "error")?,
             object(py, failure.kind.as_str())?,
-            object(py, display_text(&failure.message))?,
+            object(py, failure.message)?,
             object(py, failure.help)?,
         ],
     )

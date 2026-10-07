@@ -7,7 +7,7 @@ use crate::constants::{
 };
 use crate::declarations::_helpers::declaration_groups::validate_declaration_groups;
 use crate::declarations::_helpers::paths::{directory_facts, name, parent, stem};
-use crate::declarations::_helpers::scan::declaration_failure;
+use crate::declarations::_helpers::scan::{declaration_failure, shown};
 use crate::declarations::errors::ScanError;
 use crate::declarations::models::{DeclarationFileFact, DeclarationKind, ScopeKind};
 use crate::tree::main::directories::directories;
@@ -115,7 +115,8 @@ fn is_kind(kind: Option<DeclarationKind>, directory_name: &str) -> bool {
 
 fn nested_root_failure(directory: &str) -> ScanError {
     declaration_failure(format!(
-        "Declaration root {directory}/ is nested inside another declaration tree"
+        "Declaration root {}/ is nested inside another declaration tree",
+        shown(directory)
     ))
 }
 
