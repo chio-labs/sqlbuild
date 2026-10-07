@@ -15,7 +15,7 @@ from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
 )
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_MAX_FUNCTION_CALL_DEPTH
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role, scan_headers
+from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, restore_interpolation
 from sqlbuild.lint.constants import (
     CARRIAGE_RETURN_LINE_FEED,
@@ -27,13 +27,7 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_FAULT,
 )
 from sqlbuild.lint.exceptions import InterpolationRestorationError, NativeLintError
-from sqlbuild.lint.models import (
-    HeaderSpan,
-    InterpolationSite,
-    LintConfig,
-    LintFileRole,
-    LintViolation,
-)
+from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintConfig, LintViolation
 
 _NATIVE_FORMAT_API_VERSION: int = 1
 _FIXTURE_HEADER_KINDS: frozenset[str] = frozenset({HEADER_KIND_TEST, HEADER_KIND_SCENARIO})
@@ -75,15 +69,13 @@ def format_native_sql_bodies(
     requests_by_key: dict[tuple[str, str, str], dict[str, object]] = {}
     for file_path, contents in sorted(files.items()):
         headers: tuple[HeaderSpan, ...] = scan_headers(contents=contents)
-        role: LintFileRole = lint_file_role(file_path=file_path, project_dir=project_dir)
         body_ranges: tuple[tuple[int, int], ...] = lint_body_ranges(
             contents=contents,
             headers=headers,
             file_path=file_path,
             project_dir=project_dir,
-            role=role,
         )
-        allows_omitted_select: bool = role.in_sql_test_directory or any(
+        allows_omitted_select: bool = any(
             header.kind in _FIXTURE_HEADER_KINDS for header in headers
         )
         prepared_bodies: list[_PreparedBody] = []

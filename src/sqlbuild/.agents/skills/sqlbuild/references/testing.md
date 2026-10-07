@@ -21,10 +21,10 @@
 
 ## Writing a unit test
 
-Files live under `tests/unit/` (any subfolder). A file with one test is just its CTEs; add a
-`TEST (...)` header only to set a name, cursor window, parameters or `sql_analysis false`, and on
-every block of a file with several tests. The older `TEST();` header and trailing `SELECT 1` are
-still accepted but not needed.
+Files live under `tests/unit/` (any subfolder). Every file starts with a `TEST();` header followed
+by CTEs. Header fields are optional; add them to set a name, cursor window, parameters or
+`sql_analysis false`, and give every block of a file with several tests its own `name`. The
+trailing `SELECT 1` is optional.
 A test's name is its `name` or the file stem. Test names are globally unique across tests,
 scenarios, models, sources, seeds, functions and Python nodes, so never name a test file after its
 model (`test_stg_orders.sql`, not `stg_orders.sql`). Run one test with `sqb test <test name>` or
@@ -32,6 +32,8 @@ model (`test_stg_orders.sql`, not `stg_orders.sql`). Run one test with `sqb test
 
 ```sql
 -- tests/unit/test_stg_orders.sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 'completed' AS status,
@@ -67,7 +69,7 @@ shared expected rows can live in one helper that both an `__expected__` CTE and 
 
 Macros work inside tests, so reusable mock generators such as `@mock_orders(count=5)` are normal.
 Tests can also target a macro, UDF or table function directly: defining `__macro_actual__`,
-`__udf_actual__` or `__table_fn_actual__` selects that mode without a `TEST (mode ...)` header; see
+`__udf_actual__` or `__table_fn_actual__` selects that mode without a `mode` header field; see
 [docs/concepts/testing.md](docs/concepts/testing.md) for those modes.
 
 ## Empty-input tests

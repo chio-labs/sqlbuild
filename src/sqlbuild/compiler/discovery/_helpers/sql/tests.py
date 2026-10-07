@@ -53,7 +53,6 @@ _TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*TEST\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*",
     re.DOTALL | re.MULTILINE,
 )
-_TEST_HEADER_START_PATTERN: re.Pattern[str] = re.compile(r"\s*TEST\s*\(")
 _MODE_BY_ACTUAL_CTE_NAME: dict[str, SqlTestMode] = {
     MACRO_ACTUAL_TEST_CTE_NAME: SqlTestMode.MACRO,
     UDF_ACTUAL_TEST_CTE_NAME: SqlTestMode.UDF,
@@ -113,7 +112,10 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
         file_path=file_path, contents=contents
     )
     if not raw_test_blocks:
-        return (_parse_headerless_sql_test_file(file_path=file_path, contents=contents),)
+        raise SqlTestParseError(
+            f"SQL test '{file_path}' must start with a TEST() header as the first "
+            "non-whitespace content"
+        )
 
     discovered_blocks: list[DiscoveredSqlTestBlock] = []
     test_index: int
@@ -210,23 +212,6 @@ def _code_segment_bounds(
     return (start + leading if first is None else first), start + len(stripped) - 1
 
 
-def _parse_headerless_sql_test_file(*, file_path: Path, contents: str) -> DiscoveredSqlTestBlock:
-    if _TEST_HEADER_START_PATTERN.match(contents) is not None:
-        raise SqlTestParseError(
-            f"SQL test '{file_path}' starts with a TEST header that is not a complete "
-            "TEST(...); statement; close the header with `);` or omit it"
-        )
-    sql_body: str = cleandoc(contents)
-    if not sql_body.strip():
-        raise SqlTestParseError(f"SQL test '{file_path}' must define SQL")
-    return DiscoveredSqlTestBlock(
-        test_index=1,
-        header_values={},
-        sql_body=sql_body,
-        mode=_infer_sql_test_mode(sql_body=sql_body, file_path=file_path),
-    )
-
-
 def _infer_sql_test_mode(*, sql_body: str, file_path: Path) -> SqlTestMode:
     """Infer a TEST block's mode from the direct-logic actual CTE it defines, if any."""
 
@@ -258,7 +243,7 @@ def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[tuple[str
     if contents[: matches[0].start()].strip():
         raise SqlTestParseError(
             f"SQL test '{file_path}' must start with a TEST() header as the first "
-            "non-whitespace content; only a file with a single test may omit its header"
+            "non-whitespace content"
         )
 
     raw_blocks: list[tuple[str, int]] = []

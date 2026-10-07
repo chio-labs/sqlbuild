@@ -361,7 +361,7 @@ def expand_file_bodies(
     external_identifiers: tuple[str, ...] = external_identifiers_for_headers(
         contents=contents, headers=headers
     )
-    allows_ceremonial_select: bool = role.in_sql_test_directory or any(
+    allows_ceremonial_select: bool = any(
         header.kind in {HEADER_KIND_TEST, HEADER_KIND_SCENARIO} for header in headers
     )
     allows_empty_fixture_star: bool = allows_ceremonial_select

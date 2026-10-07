@@ -110,6 +110,8 @@ A test first sees declarations available from its own folder tree. It may also u
 macros, enums, and constants available to a model for which it defines expected output.
 
 ```sql
+TEST();
+
 WITH
 __expected__orders AS (
   SELECT

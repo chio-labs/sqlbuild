@@ -226,7 +226,7 @@ class AuthoredSqlParityTestCase:
 
 @dataclass(frozen=True)
 class OptionalTestCeremonyE2ETestCase:
-    """SQL test files written with and without their optional header, mode, and SELECT 1."""
+    """SQL test files written with and without their optional mode and SELECT 1."""
 
     description: str
     test_files: dict[str, str]

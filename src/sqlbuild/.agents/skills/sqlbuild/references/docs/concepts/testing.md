@@ -37,6 +37,8 @@ A test file defines mock inputs and expected outputs using CTEs. SQLBuild substi
 
 ```sql
 -- tests/unit/test_stg_orders.sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT
@@ -81,11 +83,12 @@ that read them. Statically provable collection-versus-scalar type conflicts iden
 column and suggest explicit `CAST`, `ARRAY_CONSTRUCT`, or `PARSE_JSON` expressions. SQLBuild never
 invents missing values.
 
-A test file needs no header and no closing statement: a file that holds one test can be just its
-CTEs. Add a `TEST (...)` header to name the test, set a cursor window, declare parameters, or turn
-off SQL analysis, and on every block of a file that holds several tests. The `TEST();` header and
-the trailing `SELECT 1` that earlier releases required are still accepted, so this file is
-equivalent to the first example:
+Every test file starts with a `TEST()` header. All of its fields are optional: `TEST();` is a
+complete header, and a test without a `name` is named after its file. Add fields to name the test,
+set a cursor window, declare parameters, or turn off SQL analysis.
+
+A test ends after its last CTE. The trailing `SELECT 1` that earlier releases required is still
+accepted but no longer needed, so this file is equivalent to the first example:
 
 ```sql
 TEST();
@@ -140,6 +143,8 @@ expected rows can therefore live in one helper that both an `__expected__` CTE a
 read:
 
 ```sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 3 AS quantity UNION ALL SELECT 2 AS id, 5 AS quantity
@@ -167,6 +172,8 @@ Tests can span multiple models in a single file. Mock your sources, define an ex
 ```sql
 -- Mock two sources, assert on the final mart.
 -- stg_orders and stg_payments resolve automatically from their real SQL.
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
@@ -200,6 +207,8 @@ dependency errors.
 You can mock models directly with `__ref__<name>` and seeds with `__seed__<name>`, not just sources. This skips the model's real SQL (or the seed's real CSV data) and provides controlled data instead:
 
 ```sql
+TEST();
+
 WITH
 __ref__stg_orders AS (
   SELECT
@@ -270,6 +279,8 @@ expressions, with the fixture relation. The mocked function is not deployed as a
 ```sql
 -- models/customer_order_totals.sql reads:
 -- __table_fn("customer_orders")(42)
+TEST();
+
 WITH
 fixture_orders AS (
   SELECT 101 AS order_id, 42 AS customer_id, 2500 AS amount_cents
@@ -295,6 +306,8 @@ compares the real function.
 A single test can assert on multiple models. SQLBuild resolves and compares each one independently:
 
 ```sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
@@ -330,6 +343,8 @@ Only explicit expected CTEs create grants. A matching test filename, `__ref__` m
 Because unit tests are written in SQL, they support macro calls. This lets you write reusable mock generators instead of copy-pasting mock data across test files:
 
 ```sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   @mock_orders()
@@ -361,6 +376,8 @@ with `D013`.
 When a model uses macros that you want to control in tests (e.g. target-specific logic, dynamic SQL generation), you can override their output with `__macro__<name>` CTEs:
 
 ```sql
+TEST();
+
 WITH
 __macro__country_filter AS (
   SELECT 'country_code = ''US'''
@@ -387,6 +404,8 @@ This is useful for:
 Unit tests can include `__assert__<name>` CTEs for property-based checks. An assertion passes if the query returns zero rows - any returned rows are failing examples.
 
 ```sql
+TEST();
+
 WITH
 __ref__stg_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 3 AS quantity,
@@ -454,8 +473,9 @@ project file; see [Rule options](rules/configuration-and-selection.md#rule-optio
 Model tests mock sources and refs and compare model outputs. Three more modes test reusable logic
 directly, without a model chain. SQLBuild infers the mode from the test's CTEs: a test that defines
 `__macro_actual__` is a macro test, `__udf_actual__` a UDF test, `__table_fn_actual__` a table
-function test, and any other test a model test. `TEST (mode ...)` states the mode explicitly; an
-explicit mode that contradicts the CTEs is a compile error.
+function test, and any other test a model test, so the header's `mode` field is optional.
+`TEST (mode ...)` states the mode explicitly; an explicit mode that contradicts the CTEs is a
+compile error.
 
 ### Macro tests
 
@@ -544,11 +564,10 @@ CTE prefixes from other modes are not allowed. For example, `__source__` in a ma
 ## Multiple tests per file
 
 A single test file can contain multiple `TEST()` blocks. A test's name is its `name`, or the file
-stem when `name` or the whole header is omitted. Test names are globally unique: a test cannot share
-a name with another test, a scenario, a model, a source, a seed, a function, or a Python node. Name
-the file or the block after the behavior it checks, such as `orders_status_rules`, rather than after
-the model. The cases of one parameterized test share its name. Every block in a multi-test file needs
-its own `TEST (...)` header with a unique `name`:
+stem when `name` is omitted. Test names are globally unique: a test cannot share a name with another
+test, a scenario, a model, a source, a seed, a function, or a Python node. Name the file or the block
+after the behavior it checks, such as `orders_status_rules`, rather than after the model. The cases
+of one parameterized test share its name. Each block in a file must have its own `name`:
 
 ```sql
 TEST (name "completed_orders_only");
@@ -572,8 +591,7 @@ __expected__stg_orders AS (
 )
 ```
 
-A file with a single test can omit the `name` field, or the whole header. Files with multiple tests
-require a header with a name on every block.
+A file with a single test can omit the `name` field. Files with multiple tests require names on every block.
 
 ## Repeating test logic
 
@@ -669,6 +687,8 @@ capture and replay identity remains explicit.
 When independent status is unnecessary, a normal SQL case table remains concise:
 
 ```sql
+TEST();
+
 WITH cases(case_name, source_status, expected_status) AS (
   VALUES
     ('completed', 'completed', 'completed'),

@@ -1,3 +1,5 @@
+TEST();
+
 WITH
 __ref__stg_orders AS (
   SELECT

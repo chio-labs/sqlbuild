@@ -175,6 +175,8 @@ A test mocks the sources and asserts on the model, resolving every model in betw
 SQL:
 
 ```sql
+TEST();
+
 WITH
 __source__raw__orders AS (
   SELECT

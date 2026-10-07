@@ -49,7 +49,7 @@ class FormatDescriptionResolutionTestCase:
 
 @dataclass(frozen=True)
 class FixtureCeremonyFormatTestCase:
-    """A test or scenario file formatted with or without its optional TEST header and SELECT 1."""
+    """A test or scenario file formatted with or without its optional trailing SELECT 1."""
 
     description: str
     relative_path: str

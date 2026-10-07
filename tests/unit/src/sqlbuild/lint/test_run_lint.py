@@ -345,16 +345,16 @@ def test_given_commented_body_when_formatting_then_comment_is_preserved_in_canon
     "test_case",
     [
         FixtureCeremonyFormatTestCase(
-            description="headerless test without a trailing select stays without one",
+            description="test without a trailing select stays without one",
             relative_path="tests/unit/test_orders.sql",
-            contents=f"{_FIXTURE_CTES}\n",
-            expected_contents=f"{_FORMATTED_FIXTURE_CTES}\n",
+            contents=f"TEST();\n{_FIXTURE_CTES}\n",
+            expected_contents=f"TEST();\n{_FORMATTED_FIXTURE_CTES}\n",
         ),
         FixtureCeremonyFormatTestCase(
             description="semicolon and trailing comment after the last cte are kept",
             relative_path="tests/unit/test_orders.sql",
-            contents=f"{_FIXTURE_CTES}; -- done\n",
-            expected_contents=f"{_FORMATTED_FIXTURE_CTES}; -- done\n",
+            contents=f"TEST();\n{_FIXTURE_CTES}; -- done\n",
+            expected_contents=f"TEST();\n{_FORMATTED_FIXTURE_CTES}; -- done\n",
         ),
         FixtureCeremonyFormatTestCase(
             description="explicit header and trailing select are kept",
