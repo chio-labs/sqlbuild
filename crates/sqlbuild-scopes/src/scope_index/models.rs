@@ -1,5 +1,7 @@
 //! Scope enums, inputs, records and lookup groups exchanged with the Python scope facade.
 
+use std::collections::HashMap;
+
 /// Python's `ResourceKind`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResourceKind {
@@ -385,4 +387,71 @@ pub struct ScopeLookupGroups {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScopeDeferral {
     pub reason: String,
+}
+
+/// Python's `VisibilityReason`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VisibilityReason {
+    Global,
+    InheritedAncestor,
+    LocalOwner,
+    PrivateOwner,
+    ExpectedModel,
+    TestedMacro,
+}
+
+impl VisibilityReason {
+    /// Python's enum value text.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::InheritedAncestor => "inherited_ancestor",
+            Self::LocalOwner => "local_owner",
+            Self::PrivateOwner => "private_owner",
+            Self::ExpectedModel => "expected_model",
+            Self::TestedMacro => "tested_macro",
+        }
+    }
+}
+
+/// Python's `DeclarationVisibilityIndex` without its private owners, which callers resolve.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct VisibilityTable {
+    /// One key per canonical declaration position; equal keys mean equal identities.
+    pub identity_keys: Vec<u32>,
+    pub global: Vec<usize>,
+    pub local: HashMap<String, Vec<usize>>,
+    pub inherited: HashMap<String, Vec<usize>>,
+}
+
+/// One relationship grant: the declaration it opens, why, and the caller's `through` slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GrantEntry {
+    pub identity_key: u32,
+    pub reason: VisibilityReason,
+    pub through: usize,
+}
+
+/// One resource matching the consumer: its private positions, authored path and grants.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsumerResource {
+    pub private: Vec<usize>,
+    pub path: String,
+    pub grants: Vec<GrantEntry>,
+}
+
+/// One visible fact: a declaration position, the reason, and the grant's `through` slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VisibleEntry {
+    pub position: usize,
+    pub reason: VisibilityReason,
+    pub through: Option<usize>,
+}
+
+/// What one matching resource can see, in Python's record order, and what stays inaccessible.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResourceVisibility {
+    pub visible: Vec<VisibleEntry>,
+    pub inaccessible: Vec<usize>,
 }

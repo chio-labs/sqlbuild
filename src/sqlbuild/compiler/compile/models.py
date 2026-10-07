@@ -9,6 +9,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, overload
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
@@ -315,6 +316,9 @@ class DeclarationScopeResolver:
     resource_specific: frozenset[ResourceIdentity] | None = None
     contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext] = field(
         default_factory=dict, compare=False, repr=False
+    )
+    native_contexts: _native.NativeDeclarationContexts | None = field(
+        default=None, compare=False, repr=False
     )
 
     def cache_context(self, *, key: tuple[str, str], context: DeclarationResolutionContext) -> None:

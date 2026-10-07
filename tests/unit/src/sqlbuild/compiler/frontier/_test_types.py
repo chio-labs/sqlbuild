@@ -88,6 +88,15 @@ class UnorderedAttributeTestCase:
 
 
 @dataclass(frozen=True)
+class OmittedFieldTestCase:
+    """Dataclass fields left out of a capture, and the capture that remains."""
+
+    description: str
+    omitted: frozenset[str]
+    expected_capture: object
+
+
+@dataclass(frozen=True)
 class FrontierCaptureTestCase:
     """Frontier stages compiled in order on one engine and the capture files they write."""
 

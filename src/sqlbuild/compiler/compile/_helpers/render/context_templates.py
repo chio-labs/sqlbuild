@@ -8,8 +8,8 @@ from uuid import uuid4
 
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, PRESERVE_TARGET_VALUE
-from sqlbuild.compiler.compile.exceptions import NativeModelConfigMismatchError
 from sqlbuild.compiler.compile.types import CompileContextKey
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ, INVALID_OUTCOME
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
     expand_native_config_templates,
@@ -278,7 +278,7 @@ def expand_config_templates(
         preserve_unknown_context=preserve_unknown_context,
     )
     if outcome == INVALID_OUTCOME:
-        raise NativeModelConfigMismatchError(
+        raise NativeStageMismatchError(
             f"Native model config rejected {context_label} templates that the Python model "
             "config expands; run with SQLBUILD_COMPILER_ENGINE=python"
         )

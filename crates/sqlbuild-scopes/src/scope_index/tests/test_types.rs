@@ -1,3 +1,5 @@
+use crate::scope_index::models::VisibilityReason;
+
 /// `(kind, name, path)` of one resource in walk order.
 pub(super) type ResourceRow = (&'static str, &'static str, &'static str);
 
@@ -82,4 +84,16 @@ pub(super) struct ReprTestCase {
     pub(super) description: &'static str,
     pub(super) value: &'static str,
     pub(super) expected_repr: Option<&'static str>,
+}
+
+/// `(position, reason, through)` of one visible record.
+pub(super) type VisibleRow = (usize, &'static str, Option<usize>);
+
+/// One consumer path, its private positions and `(identity key, reason, through)` grants.
+pub(super) struct ClassifyTestCase {
+    pub(super) description: &'static str,
+    pub(super) path: &'static str,
+    pub(super) private: &'static [usize],
+    pub(super) grants: &'static [(u32, VisibilityReason, usize)],
+    pub(super) expected_classified: Option<(&'static [VisibleRow], &'static [usize])>,
 }

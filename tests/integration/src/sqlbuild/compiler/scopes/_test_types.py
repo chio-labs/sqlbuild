@@ -55,3 +55,16 @@ class ExpectedNameScanTestCase:
     expected_minimum_scanned: int
     expected_minimum_deferred: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class DeclarationContextParityTestCase:
+    """Seeded scoped projects whose consumers resolve declaration contexts under both paths."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_native: int
+    expected_minimum_granted: int
+    expected_minimum_private: int
+    expected_minimum_python_only: int

@@ -14,6 +14,7 @@ from sqlbuild.compiler.frontier.classes.stage_capture_encoder import StageCaptur
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
+    STAGE_CAPTURE_OMITTED_ATTRIBUTES,
     STAGE_CAPTURE_SHARED_NODES_KEY,
     STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
@@ -21,6 +22,7 @@ from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
+    OmittedFieldTestCase,
     SharedCaptureTestCase,
     StageCaptureOrderTestCase,
     StageCaptureTestCase,
@@ -248,6 +250,43 @@ def test_given_declared_memo_attribute_when_rendering_capture_then_only_it_is_so
     )
 
     assert (first == second) is test_case.expected_identical
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OmittedFieldTestCase(
+            description="declared_process_handle_field_is_left_out",
+            omitted=frozenset({"status"}),
+            expected_capture={
+                "__type__": f"{HELPERS_MODULE}:OrderLine",
+                "order_id": 7,
+                "path": {"__path__": "models/a.sql"},
+            },
+        ),
+        OmittedFieldTestCase(
+            description="undeclared_dataclass_keeps_every_field",
+            omitted=frozenset(),
+            expected_capture={
+                "__type__": f"{HELPERS_MODULE}:OrderLine",
+                "order_id": 7,
+                "status": {"__enum__": f"{HELPERS_MODULE}:OrderStatus.PLACED"},
+                "path": {"__path__": "models/a.sql"},
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_declared_omitted_field_when_rendering_dataclass_capture_then_it_is_left_out(
+    test_case: OmittedFieldTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        STAGE_CAPTURE_OMITTED_ATTRIBUTES, f"{HELPERS_MODULE}:OrderLine", test_case.omitted
+    )
+
+    capture: object = json.loads(render_stage_capture(order_line()))
+
+    assert capture == test_case.expected_capture
 
 
 @pytest.mark.parametrize(

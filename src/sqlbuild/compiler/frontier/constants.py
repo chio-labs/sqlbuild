@@ -21,6 +21,7 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.MODEL_CONFIG: NativeStageTier.PREVIEW,
     NativeStage.REFERENCE_EXTRACTION: NativeStageTier.PREVIEW,
     NativeStage.DECLARATION_FILES: NativeStageTier.PREVIEW,
+    NativeStage.MODEL_LOOP: NativeStageTier.PREVIEW,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.PYTHON: frozenset(),
@@ -53,6 +54,7 @@ STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
         {"shared_analyses"}
     ),
     "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs": frozenset({"native_session"}),
+    "sqlbuild.compiler.compile.models:DeclarationScopeResolver": frozenset({"native_contexts"}),
 }
 STAGE_CAPTURE_DECODED_SEQUENCES: frozenset[str] = frozenset(
     {"sqlbuild.compiler.compile.models:CompactLineageFacts"}

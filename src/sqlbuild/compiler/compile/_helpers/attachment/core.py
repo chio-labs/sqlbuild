@@ -80,6 +80,7 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
     expand_declaration_references_result,
+    expand_scanned_declaration_references,
     resolve_declaration_context,
     resolve_enum_contract_columns,
 )
@@ -148,6 +149,10 @@ from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
 )
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
+from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
+    scan_native_declaration_references,
+)
+from sqlbuild.compiler.model_loop.types import NativeDeclarationReference
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -278,6 +283,7 @@ class _ModelInputLoop:
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
     native_header_metadata: dict[Path, NativeHeaderMetadata]
+    native_declaration_references: dict[Path, tuple[NativeDeclarationReference, ...] | None]
 
 
 @dataclass(frozen=True)
@@ -519,6 +525,15 @@ def _build_model_inputs(
         )
     )
     native_model_config: bool = native_stage_enabled(NativeStage.MODEL_CONFIG)
+    prepared_files: tuple[DiscoveredSqlModelFile, ...] = (
+        tuple(
+            model_file
+            for model_file in render_files
+            if prepared_var_substituted_sqls[model_file.file_path] is not None
+        )
+        if native_stage_enabled(NativeStage.MODEL_LOOP)
+        else ()
+    )
     loop: _ModelInputLoop = _ModelInputLoop(
         discovered_inputs=discovered_inputs,
         context=context,
@@ -535,6 +550,18 @@ def _build_model_inputs(
         declaration_cache=_VisibleModelDeclarationCache.build(context),
         native_header_metadata=(
             parse_native_header_metadata(model_files=render_files) if native_model_config else {}
+        ),
+        native_declaration_references=dict(
+            zip(
+                (model_file.file_path for model_file in prepared_files),
+                scan_native_declaration_references(
+                    sqls=tuple(
+                        cast(str, prepared_var_substituted_sqls[model_file.file_path])
+                        for model_file in prepared_files
+                    )
+                ),
+                strict=True,
+            )
         ),
     )
     model_inputs: list[CompileModelInput] = []
@@ -677,13 +704,26 @@ def _build_model_input(
         inaccessible_macros=declarations.inaccessible_macros,
         consumer=model_identity,
     )
-    declaration_expansion: DeclarationExpansionResult = expand_declaration_references_result(
-        sql=var_substituted_sql,
-        file_path=model_file.file_path,
-        declarations=declaration_context,
-        value_renderer=context.value_renderer,
-        collection_rendering=context.collection_rendering,
+    declaration_expansion: DeclarationExpansionResult | None = (
+        expand_scanned_declaration_references(
+            sql=var_substituted_sql,
+            references=loop.native_declaration_references.get(model_file.file_path),
+            file_path=model_file.file_path,
+            declarations=declaration_context,
+            value_renderer=context.value_renderer,
+            collection_rendering=context.collection_rendering,
+        )
+        if prepared_var_substituted_sql is not None
+        else None
     )
+    if declaration_expansion is None:
+        declaration_expansion = expand_declaration_references_result(
+            sql=var_substituted_sql,
+            file_path=model_file.file_path,
+            declarations=declaration_context,
+            value_renderer=context.value_renderer,
+            collection_rendering=context.collection_rendering,
+        )
     declaration_expanded_sql: str = declaration_expansion.sql
     macro_expansion: MacroExpansionResult = expand_sql_macros_result(
         sql=declaration_expanded_sql,

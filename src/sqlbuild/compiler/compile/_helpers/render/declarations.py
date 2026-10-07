@@ -31,7 +31,15 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_loop.constants import ENUM_REFERENCE_KIND_CODE
+from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
+    build_native_declaration_contexts,
+)
+from sqlbuild.compiler.model_loop.types import NativeDeclarationReference
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.scopes.constants import QUALIFIED_IDENTITY_SEPARATOR
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
 from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
@@ -152,9 +160,10 @@ def build_declaration_scope_resolver(
     if loaded_macros is not None:
         for macro in loaded_macros.values():
             declarations[DeclarationIdentity(DeclarationKind.MACRO, macro.name)] = macro
+    scope_lookup: ScopeLookup = build_scope_lookup(index=scope_index) if lookup is None else lookup
     return DeclarationScopeResolver(
         project_dir=discovered_inputs.project_dir,
-        lookup=build_scope_lookup(index=scope_index) if lookup is None else lookup,
+        lookup=scope_lookup,
         projection=DeclarationRuntimeProjection(declarations=MappingProxyType(declarations)),
         resource_specific=frozenset(
             declaration.identity.owner
@@ -162,6 +171,11 @@ def build_declaration_scope_resolver(
             if declaration.scope is ScopeKind.PRIVATE and declaration.identity.owner is not None
         )
         | frozenset(grant.resource for grant in scope_index.grants),
+        native_contexts=(
+            build_native_declaration_contexts(lookup=scope_lookup, declarations=declarations)
+            if native_stage_enabled(NativeStage.MODEL_LOOP)
+            else None
+        ),
     )
 
 
@@ -201,9 +215,43 @@ def resolve_declaration_context(
         )
         if cached_path_context is not None:
             return cached_path_context
-    resolution: DeclarationVisibility = resolve_scope_declaration_visibility(
-        lookup=resolver.lookup, target=resource or target_path
+    native_context: DeclarationResolutionContext | None = (
+        resolver.native_contexts.context(resources, resource or resources[0].identity)
+        if resolver.native_contexts is not None
+        and resources
+        and not _scope_query_parses_identity(resource=resource, target_path=target_path)
+        else None
     )
+    context: DeclarationResolutionContext = (
+        native_context
+        if native_context is not None
+        else _project_declaration_context(
+            resolver=resolver,
+            resolution=resolve_scope_declaration_visibility(
+                lookup=resolver.lookup, target=resource or target_path
+            ),
+            target_path=target_path,
+            resource=resource,
+        )
+    )
+    if cache_key is not None:
+        resolver.cache_context(key=cache_key, context=context)
+    return context
+
+
+def _scope_query_parses_identity(*, resource: ResourceIdentity | None, target_path: Path) -> bool:
+    """Whether the scope query reads the path target as a qualified identity, as Python does."""
+
+    return resource is None and QUALIFIED_IDENTITY_SEPARATOR in str(target_path)
+
+
+def _project_declaration_context(
+    *,
+    resolver: DeclarationScopeResolver,
+    resolution: DeclarationVisibility,
+    target_path: Path,
+    resource: ResourceIdentity | None,
+) -> DeclarationResolutionContext:
     enums: dict[str, EnumDeclaration] = {}
     constants: dict[str, ConstantDeclaration] = {}
     inaccessible_enums: dict[str, DeclarationRecord] = {}
@@ -259,7 +307,7 @@ def resolve_declaration_context(
             constant_visibility[record.identity.name] = records
         elif record.identity.kind is DeclarationKind.MACRO:
             macro_visibility[record.identity.name] = records
-    context: DeclarationResolutionContext = DeclarationResolutionContext(
+    return DeclarationResolutionContext(
         enums=enums,
         constants=constants,
         inaccessible_enums=inaccessible_enums,
@@ -275,9 +323,6 @@ def resolve_declaration_context(
             or (resolution.target.matches[0].identity if resolution.target.matches else None)
         ),
     )
-    if cache_key is not None:
-        resolver.cache_context(key=cache_key, context=context)
-    return context
 
 
 def _declaration_path_visibility(
@@ -615,19 +660,11 @@ def expand_declaration_references_result(
             )
             visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
             member = None
-        if declarations.consumer is not None:
-            for visible in usage_visibility(
-                visibility=visibility,
-                consumer=declarations.consumer,
-            ):
-                usages.append(
-                    UsageRecord(
-                        consumer=declarations.consumer,
-                        declaration=visible.declaration,
-                        through=visible.through,
-                        enum_member=member,
-                    )
-                )
+        usages.extend(
+            declaration_reference_usages(
+                declarations=declarations, visibility=visibility, enum_member=member
+            )
+        )
         rendered_parts.append(replacement)
         spans.append(
             ExpansionSpan(
@@ -644,6 +681,127 @@ def expand_declaration_references_result(
         spans=tuple(spans),
         usages=tuple(dict.fromkeys(usages)),
     )
+
+
+def declaration_reference_usages(
+    *,
+    declarations: DeclarationResolutionContext,
+    visibility: tuple[VisibilityRecord, ...],
+    enum_member: str | None,
+) -> tuple[UsageRecord, ...]:
+    """Usage records one resolved `@enum`/`@const` reference adds for the context's consumer."""
+
+    consumer: ResourceIdentity | DeclarationIdentity | None = declarations.consumer
+    if consumer is None:
+        return ()
+    return tuple(
+        UsageRecord(
+            consumer=consumer,
+            declaration=visible.declaration,
+            through=visible.through,
+            enum_member=enum_member,
+        )
+        for visible in usage_visibility(visibility=visibility, consumer=consumer)
+    )
+
+
+def expand_scanned_declaration_references(  # noqa: PLR0913
+    *,
+    sql: str,
+    references: tuple[NativeDeclarationReference, ...] | None,
+    file_path: Path,
+    declarations: DeclarationResolutionContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+) -> DeclarationExpansionResult | None:
+    """Splice natively scanned references, or return None when Python must expand and report."""
+
+    if references is None:
+        return None
+    if not references:
+        return DeclarationExpansionResult(sql=sql, spans=(), usages=())
+    parts: list[str] = []
+    spans: list[ExpansionSpan] = []
+    usages: list[UsageRecord] = []
+    cursor: int = 0
+    output_length: int = 0
+    for kind, name, member, start, end in references:
+        resolved: tuple[str, tuple[VisibilityRecord, ...]] | None = (
+            _scanned_enum_member_text(declarations=declarations, name=name, member=member)
+            if kind == ENUM_REFERENCE_KIND_CODE
+            else _scanned_constant_text(
+                declarations=declarations,
+                name=name,
+                file_path=file_path,
+                value_renderer=value_renderer,
+                collection_rendering=collection_rendering,
+            )
+        )
+        if resolved is None:
+            return None
+        replacement, visibility = resolved
+        parts.append(sql[cursor:start])
+        output_length += start - cursor
+        usages.extend(
+            declaration_reference_usages(
+                declarations=declarations, visibility=visibility, enum_member=member
+            )
+        )
+        parts.append(replacement)
+        spans.append(
+            ExpansionSpan(
+                source_start=start,
+                source_end=end,
+                output_start=output_length,
+                output_end=output_length + len(replacement),
+            )
+        )
+        output_length += len(replacement)
+        cursor = end
+    parts.append(sql[cursor:])
+    return DeclarationExpansionResult(
+        sql="".join(parts), spans=tuple(spans), usages=tuple(dict.fromkeys(usages))
+    )
+
+
+def _scanned_enum_member_text(
+    *, declarations: DeclarationResolutionContext, name: str, member: str | None
+) -> tuple[str, tuple[VisibilityRecord, ...]] | None:
+    declaration: EnumDeclaration | None = declarations.enums.get(name)
+    if declaration is None:
+        return None
+    matched: EnumMember | None = next(
+        (candidate for candidate in declaration.members if candidate.name == member), None
+    )
+    if matched is None:
+        return None
+    return (
+        render_enum_member_value(value=matched.value),
+        declarations.enum_visibility.get(name, ()),
+    )
+
+
+def _scanned_constant_text(
+    *,
+    declarations: DeclarationResolutionContext,
+    name: str,
+    file_path: Path,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+) -> tuple[str, tuple[VisibilityRecord, ...]] | None:
+    declaration: ConstantDeclaration | None = declarations.constants.get(name)
+    if declaration is None:
+        return None
+    try:
+        rendered: str = render_constant_declaration(
+            declaration=declaration,
+            value_renderer=value_renderer,
+            collection_rendering=collection_rendering,
+            file_path=file_path,
+        )
+    except CompileInputError:
+        return None
+    return rendered, declarations.constant_visibility.get(name, ())
 
 
 def usage_visibility(

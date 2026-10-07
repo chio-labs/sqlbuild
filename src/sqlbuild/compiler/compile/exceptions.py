@@ -29,7 +29,3 @@ class CompactAnalysisInputError(CompileInputError):
 
 class AnalysisCacheEntryError(ValueError):
     """Raised when a persisted model analysis cache entry is invalid."""
-
-
-class NativeModelConfigMismatchError(RuntimeError):
-    """Raised when native model config rejects a value the Python model config accepts."""
