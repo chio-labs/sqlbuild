@@ -291,7 +291,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
       - name: Compare fixtures, examples, generated seeds and the failure corpus
-        run: make compiler-differential COMPILER_DIFFERENTIAL_ARGS=--stage-captures
+        run: >-
+          make compiler-differential
+          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage"
 
   format_performance:
     name: Formatter performance guards
