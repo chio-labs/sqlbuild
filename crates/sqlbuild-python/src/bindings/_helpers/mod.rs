@@ -4,7 +4,7 @@ mod config_values;
 pub(crate) mod conversions;
 mod discovery;
 pub(crate) mod functions;
-mod normalization_results;
 mod oracles;
 pub(crate) mod panics;
 mod positions;
+mod scopes;

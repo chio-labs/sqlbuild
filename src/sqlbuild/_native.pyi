@@ -68,6 +68,65 @@ def discover_declaration_layout(
     ]
     | None
 ): ...
+
+class NativeScopeIndex:
+    def records(
+        self,
+    ) -> tuple[
+        list[str],
+        list[tuple[str, str, str, str | None, str | None]],
+        list[int],
+        list[int],
+        list[tuple[int, int]],
+        list[tuple[str, str, str | None, int | None, int | None, int | None, int | None]],
+        bool,
+    ]: ...
+    def grant(
+        self, facts: list[tuple[str, str, list[str], list[str], list[str]]]
+    ) -> list[tuple[str, str, int, str | int, str]] | None: ...
+    def lookup(
+        self,
+    ) -> (
+        tuple[
+            list[int],
+            list[int],
+            list[int],
+            list[int],
+            tuple[
+                tuple[list[list[int]], bool],
+                tuple[list[list[int]], bool],
+                tuple[list[list[int]], bool],
+                tuple[list[list[int]], bool],
+                tuple[list[list[int]], bool],
+                tuple[list[list[int]], bool],
+            ],
+            tuple[
+                list[int],
+                list[tuple[tuple[str, str], list[int]]],
+                list[tuple[str, list[int]]],
+                list[tuple[str, list[int]]],
+            ],
+        ]
+        | None
+    ): ...
+
+def build_native_scope_index(
+    resources: list[tuple[str, str, str, str]],
+    declarations: list[
+        tuple[
+            str,
+            str,
+            tuple[str, str] | None,
+            str,
+            int,
+            str,
+            str | None,
+            str,
+            str | None,
+            list[tuple[str, str, tuple[str, str] | None]],
+        ]
+    ],
+) -> NativeScopeIndex | None: ...
 def substitute_static_project_vars(
     sqls: list[str], variables: list[tuple[str, str]]
 ) -> list[tuple[int, str | None]]: ...

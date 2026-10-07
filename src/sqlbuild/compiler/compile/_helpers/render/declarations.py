@@ -48,6 +48,7 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ResourceRecord,
     ScopeIndex,
+    ScopeLookup,
     UsageRecord,
     VisibilityRecord,
 )
@@ -115,6 +116,7 @@ def build_declaration_scope_resolver(
     discovered_inputs: DiscoveredProjectInputs,
     scope_index: ScopeIndex,
     loaded_macros: Mapping[str, LoadedMacro] | None = None,
+    lookup: ScopeLookup | None = None,
 ) -> DeclarationScopeResolver:
     """Pair the serializable static index with original process-local declaration values."""
 
@@ -152,7 +154,7 @@ def build_declaration_scope_resolver(
             declarations[DeclarationIdentity(DeclarationKind.MACRO, macro.name)] = macro
     return DeclarationScopeResolver(
         project_dir=discovered_inputs.project_dir,
-        lookup=build_scope_lookup(index=scope_index),
+        lookup=build_scope_lookup(index=scope_index) if lookup is None else lookup,
         projection=DeclarationRuntimeProjection(declarations=MappingProxyType(declarations)),
         resource_specific=frozenset(
             declaration.identity.owner

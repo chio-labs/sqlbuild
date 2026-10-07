@@ -2,6 +2,7 @@
 
 use pyo3::Python;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::prelude::{IntoPyObject, Py, PyAny, PyResult};
 use pyo3::{PyErr, create_exception};
 use sqlbuild_core::constants::PANIC_MESSAGE;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
@@ -37,4 +38,18 @@ impl CompilerDetach for Python<'_> {
     ) -> Result<T, String> {
         self.detach(|| catch_compiler_panic(operation))
     }
+}
+
+/// Return normalized SQL in order, carrying each failure as the exception a single call raises.
+pub(crate) fn normalization_results(
+    py: Python<'_>,
+    results: Vec<Result<String, String>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    results
+        .into_iter()
+        .map(|result| match result {
+            Ok(sql) => Ok(sql.into_pyobject(py)?.into_any().unbind()),
+            Err(error) => Ok(compiler_error(error).into_value(py).into_any()),
+        })
+        .collect()
 }

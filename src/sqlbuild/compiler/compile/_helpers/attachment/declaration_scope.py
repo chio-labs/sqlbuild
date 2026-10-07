@@ -10,6 +10,7 @@ from types import CodeType
 
 from sqlbuild.compiler.compile._helpers.attachment.scope_relationships import (
     build_scope_relationship_grants,
+    extract_scope_relationship_facts,
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_declaration_scope_resolver,
@@ -21,10 +22,14 @@ from sqlbuild.compiler.compile.models import (
     ScopeRelationshipBuild,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
+from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
+from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
-from sqlbuild.compiler.scopes.models import ScopeIndex
+from sqlbuild.compiler.scopes.models import RelationshipFact, ScopeIndex, ScopeLookup
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
@@ -38,6 +43,15 @@ def build_declaration_scope(
 ) -> DeclarationScopeBuild:
     """Build one canonical index and validate it before SQL expansion."""
 
+    if resolve_compiler_engine() is CompilerEngine.NATIVE:
+        native_scope: DeclarationScopeBuild | None = _build_native_declaration_scope(
+            discovered_inputs=discovered_inputs,
+            loaded_macros=loaded_macros,
+            sql_lexical_syntax=sql_lexical_syntax,
+            compile_cache_dir=compile_cache_dir,
+        )
+        if native_scope is not None:
+            return native_scope
     index: ScopeIndex = build_scope_index(
         discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
     )
@@ -76,6 +90,54 @@ def build_declaration_scope(
             discovered_inputs=discovered_inputs,
             scope_index=index,
             loaded_macros=loaded_macros,
+        ),
+    )
+
+
+def _build_native_declaration_scope(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: dict[str, LoadedMacro],
+    sql_lexical_syntax: SqlLexicalSyntax,
+    compile_cache_dir: Path | None,
+) -> DeclarationScopeBuild | None:
+    """Build the scope natively with Python's errors and order, or None for the Python stage."""
+
+    native: NativeScopeIndex | None = open_native_scope_index(
+        discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
+    )
+    if native is None:
+        return None
+    try:
+        validate_scope_index(index=native.index)
+    except ScopeValidationError as error:
+        raise CompileInputError(str(error)) from error
+    if native.has_scoped_relationship_declarations and (
+        discovered_inputs.test_files or discovered_inputs.scenario_files
+    ):
+        facts: tuple[RelationshipFact, ...]
+        fault: str | None
+        facts, fault = extract_scope_relationship_facts(
+            discovered_inputs=discovered_inputs,
+            sql_lexical_syntax=sql_lexical_syntax,
+            compile_cache_dir=compile_cache_dir,
+        )
+        if fault is not None:
+            raise CompileInputError(fault)
+        if not native.grant(facts):
+            return None
+    index: ScopeIndex = native.index_with_relationships()
+    lookup: ScopeLookup | None = native.lookup(index=index)
+    if lookup is None:
+        return None
+    return DeclarationScopeBuild(
+        loaded_macros=loaded_macros,
+        index=index,
+        resolver=build_declaration_scope_resolver(
+            discovered_inputs=discovered_inputs,
+            scope_index=index,
+            loaded_macros=loaded_macros,
+            lookup=lookup,
         ),
     )
 

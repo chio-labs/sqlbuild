@@ -129,6 +129,29 @@ class GrantRecord:
 
 
 @dataclass(frozen=True)
+class NativeDeclarationValues:
+    """The Python-side parts of one declaration record the native scope index does not hold."""
+
+    identity: DeclarationIdentity
+    line: int
+    scope: ScopeKind
+    macro: MacroMetadata | None = None
+    enum: EnumMetadata | None = None
+    constant: ConstantMetadata | None = None
+    dependencies: tuple[DeclarationIdentity, ...] = ()
+
+
+@dataclass(frozen=True)
+class RelationshipFact:
+    """Relationship names one test block or scenario authors, before grants are resolved."""
+
+    resource: ResourceIdentity
+    expected_models: tuple[str, ...] = field(default_factory=tuple)
+    called_macros: tuple[str, ...] = field(default_factory=tuple)
+    tested_macros: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class VisibilityRecord:
     """A resolved positive visibility fact with stable provenance."""
 

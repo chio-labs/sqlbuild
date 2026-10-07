@@ -71,6 +71,9 @@ _ROOTS: dict[ResourceKind, str] = {
     ResourceKind.FUNCTION: "functions/sql",
     ResourceKind.SOURCE: "sources",
 }
+_COLLECTION_KINDS: frozenset[SqlValueKind] = frozenset(
+    {SqlValueKind.LIST, SqlValueKind.SET, SqlValueKind.OBJECT}
+)
 _SEED_ROOT: OwnershipRoot = OwnershipRoot("seeds", OwnershipRootKind.GLOBAL, ResourceKind.SEED)
 _PYTHON_FUNCTION_ROOT: OwnershipRoot = OwnershipRoot(
     "functions/python", OwnershipRootKind.GLOBAL, ResourceKind.FUNCTION
@@ -528,10 +531,7 @@ def _enum_record(
         scope=scope,
         ownership_root=ownership_root,
         owning_path=normalize_path(path=owning_path) if owning_path is not None else None,
-        enum=EnumMetadata(
-            members=tuple(EnumMemberMetadata(item.name) for item in declaration.members),
-            scalar_type=declaration.scalar_type,
-        ),
+        enum=enum_metadata(declaration),
     )
 
 
@@ -544,12 +544,6 @@ def _constant_record(
     path: Path,
     owner: ResourceIdentity | None = None,
 ) -> DeclarationRecord:
-    collection_kinds: frozenset[SqlValueKind] = frozenset(
-        {SqlValueKind.LIST, SqlValueKind.SET, SqlValueKind.OBJECT}
-    )
-    is_collection: bool = declaration.value.kind in collection_kinds
-    payload: object = declaration.value.value
-    item_count: int | None = len(payload) if is_collection and isinstance(payload, tuple) else None
     return DeclarationRecord(
         identity=DeclarationIdentity(DeclarationKind.CONSTANT, declaration.name, owner),
         path=normalize_path(path=path),
@@ -558,13 +552,7 @@ def _constant_record(
         scope=scope,
         ownership_root=ownership_root,
         owning_path=normalize_path(path=owning_path) if owning_path is not None else None,
-        constant=ConstantMetadata(
-            logical_type=declaration.logical_type.display_name,
-            collection_kind=declaration.value.kind.value if is_collection else None,
-            item_count=item_count,
-            nullable=declaration.value.kind is SqlValueKind.NULL,
-            render_as=declaration.render_as.value if declaration.render_as is not None else None,
-        ),
+        constant=constant_metadata(declaration),
     )
 
 
@@ -583,21 +571,15 @@ def _macro_record(
         if discovered is not None and discovered.owning_path is not None
         else None
     )
-    code: object = getattr(loaded.function, "__code__", None)
-    line: int = code.co_firstlineno if isinstance(code, CodeType) else 1
     return DeclarationRecord(
         identity=DeclarationIdentity(DeclarationKind.MACRO, loaded.name),
         path=path,
-        line=line,
+        line=macro_line(loaded),
         column=1,
         scope=scope,
         ownership_root=ownership_root,
         owning_path=owning_path,
-        macro=MacroMetadata(
-            parameters=tuple(inspect.signature(loaded.function).parameters),
-            dependencies=loaded.dependencies,
-            source_digest=hashlib.sha256(loaded.raw_source.encode()).hexdigest(),
-        ),
+        macro=macro_metadata(loaded),
     )
 
 
@@ -734,3 +716,44 @@ def _declaration_key(record: DeclarationRecord) -> tuple[str, str, int, int]:
 
 def _diagnostic_key(item: ScopeDiagnostic) -> tuple[str, int, int, str, str]:
     return (item.path or "", item.line or 0, item.column or 0, item.code.value, item.message)
+
+
+def enum_metadata(declaration: EnumDeclaration) -> EnumMetadata:
+    """Return the member names and scalar type of one enum."""
+
+    return EnumMetadata(
+        members=tuple(EnumMemberMetadata(item.name) for item in declaration.members),
+        scalar_type=declaration.scalar_type,
+    )
+
+
+def constant_metadata(declaration: ConstantDeclaration) -> ConstantMetadata:
+    """Return the logical type and collection shape of one constant."""
+
+    is_collection: bool = declaration.value.kind in _COLLECTION_KINDS
+    payload: object = declaration.value.value
+    item_count: int | None = len(payload) if is_collection and isinstance(payload, tuple) else None
+    return ConstantMetadata(
+        logical_type=declaration.logical_type.display_name,
+        collection_kind=declaration.value.kind.value if is_collection else None,
+        item_count=item_count,
+        nullable=declaration.value.kind is SqlValueKind.NULL,
+        render_as=declaration.render_as.value if declaration.render_as is not None else None,
+    )
+
+
+def macro_metadata(loaded: LoadedMacro) -> MacroMetadata:
+    """Return the parameters, dependencies and source digest of one loaded macro."""
+
+    return MacroMetadata(
+        parameters=tuple(inspect.signature(loaded.function).parameters),
+        dependencies=loaded.dependencies,
+        source_digest=hashlib.sha256(loaded.raw_source.encode()).hexdigest(),
+    )
+
+
+def macro_line(loaded: LoadedMacro) -> int:
+    """Return the first line of a loaded macro's function, or 1 without code."""
+
+    code: object = getattr(loaded.function, "__code__", None)
+    return code.co_firstlineno if isinstance(code, CodeType) else 1

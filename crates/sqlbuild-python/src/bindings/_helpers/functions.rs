@@ -56,10 +56,7 @@ fn normalize_analysis_sqls(
             ),
         )
     });
-    crate::bindings::_helpers::normalization_results::normalization_results(
-        py,
-        results.map_err(value_error)?,
-    )
+    crate::bindings::_helpers::panics::normalization_results(py, results.map_err(value_error)?)
 }
 
 #[pyfunction]
@@ -595,6 +592,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(skill_freshness, module)?)?;
     crate::bindings::_helpers::oracles::register(module)?;
     crate::bindings::_helpers::discovery::register(module)?;
+    crate::bindings::_helpers::scopes::register(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())

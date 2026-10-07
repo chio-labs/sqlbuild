@@ -25,6 +25,7 @@ sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-discovery.workspace = true
 sqlbuild-rules.workspace = true
+sqlbuild-scopes.workspace = true
 sqlbuild-sqltext.workspace = true
 
 [lints]

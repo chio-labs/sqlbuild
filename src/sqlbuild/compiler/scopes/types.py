@@ -6,6 +6,21 @@ from enum import StrEnum
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, object]
+type NativeIdentityRow = tuple[str, str]
+type NativeDeclarationIdentityRow = tuple[str, str, NativeIdentityRow | None]
+type NativeResourceRow = tuple[str, str, str, str]
+type NativeDeclarationRow = tuple[
+    str,
+    str,
+    NativeIdentityRow | None,
+    str,
+    int,
+    str,
+    str | None,
+    str,
+    str | None,
+    list[NativeDeclarationIdentityRow],
+]
 
 
 class ScopeCacheIdentityType(StrEnum):

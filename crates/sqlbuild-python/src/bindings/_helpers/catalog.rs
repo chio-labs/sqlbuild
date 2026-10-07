@@ -1,8 +1,8 @@
 //! Python methods of the compile-owned binding catalog and its compact analysis jobs.
 
 use crate::bindings::_helpers::conversions;
-use crate::bindings::_helpers::normalization_results::normalization_results;
 use crate::bindings::_helpers::panics::compiler_error;
+use crate::bindings::_helpers::panics::normalization_results;
 use crate::bindings::models::{CatalogInput, CompactAnalysisJob, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
 use pyo3::exceptions::PyValueError;
