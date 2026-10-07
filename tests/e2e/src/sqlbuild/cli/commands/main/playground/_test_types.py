@@ -23,3 +23,11 @@ class UnicodeEmptyFixtureTestCase:
     description: str
     status: str
     expected_added_findings: int = 0
+
+
+@dataclass(frozen=True)
+class LegacyCodePageOutputTestCase:
+    description: str
+    code_page: str
+    expected_summary: str
+    expected_json_command: str
