@@ -96,3 +96,15 @@ impl From<PositionInput> for validation::PositionInput {
         }
     }
 }
+
+/// One native model discovery request from the Python discovery facade.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct ModelDiscoveryRequest {
+    pub(crate) project_dir: String,
+    pub(crate) display_prefix: String,
+    pub(crate) supported_keys: Vec<String>,
+    pub(crate) removed_keys: Vec<String>,
+    pub(crate) extract_implicit_alias_columns: bool,
+    pub(crate) extract_output_column_locations: bool,
+}

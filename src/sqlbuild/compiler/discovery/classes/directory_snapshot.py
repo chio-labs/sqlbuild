@@ -56,6 +56,14 @@ class DirectorySnapshot:
             return active
         return DirectorySnapshot(project_dir=project_dir)
 
+    def seed_listings(self, listings: dict[Path, tuple[DirectorySnapshotEntry, ...]]) -> None:
+        """Share listings another walk of this pass read; listings already read are kept."""
+
+        directory: Path
+        entries: tuple[DirectorySnapshotEntry, ...]
+        for directory, entries in listings.items():
+            _ = self._listings.setdefault(directory, entries)
+
     def rglob(self, *, root: Path, pattern: str) -> tuple[Path, ...]:
         """Return the paths ``root.rglob(pattern)`` yields for a single-name pattern, unordered."""
 

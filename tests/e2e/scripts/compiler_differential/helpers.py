@@ -18,8 +18,8 @@ from sqlbuild.compiler.frontier.types import CompilerStage
 _original = frontier.native_frontier
 
 
-def _perturbed(*, until, python_stage):
-    result = _original(until=until, python_stage=python_stage)
+def _perturbed(*, until, **stages):
+    result = _original(until=until, **stages)
     if until is not CompilerStage.COMPILED_PROJECT or not result.models:
         return result
     first = result.models[0]
@@ -42,8 +42,8 @@ from sqlbuild.compiler.frontier.types import CompilerStage
 _original = frontier.native_frontier
 
 
-def _perturbed(*, until, python_stage):
-    result = _original(until=until, python_stage=python_stage)
+def _perturbed(*, until, **stages):
+    result = _original(until=until, **stages)
     if until is not CompilerStage.DISCOVERED_PROJECT_INPUTS or len(result.model_files) < 2:
         return result
     return dataclasses.replace(result, model_files=tuple(reversed(result.model_files)))

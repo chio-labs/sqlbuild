@@ -17,7 +17,14 @@ from typing import Any
 import yaml
 
 from sqlbuild import _native
+from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_files
+from sqlbuild.compiler.discovery._helpers.native.model_files import (
+    discover_native_model_files,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
+from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.integration.src.sqlbuild.compiler.helpers import random_float, random_text
 
@@ -579,3 +586,133 @@ def harmful_mismatches(
     return list(
         compress(zip(inputs, expected, actual, strict=True), map(_is_harmful, expected, actual))
     )[:3]
+
+
+PROJECT_CONFIG: str = 'name = "orders"\nadapter = "duckdb"\n'
+HEADER_ENTRIES: tuple[str, ...] = (
+    "materialized table",
+    "description 'Orders by customer'",
+    "description \"é ☕ 'quoted'\"",
+    "tags [core, finance]",
+    "unique_key [order_id]",
+    'columns (order_id (type INTEGER), "Total" (type DECIMAL(10, 2)))',
+    "columns (\n    customer_id (type BIGINT, audits [not_null]),\n  )",
+    "enums (_status [OPEN, CLOSED])",
+    "enums (status [open])",
+    "constants (_limit_rows 10, _ratio 1.5)",
+    'pre_hooks ["SELECT 1"]',
+    "tagz [a]",
+    "materialised table",
+    "run_despite_unchanged true",
+    "materialized: table",
+    "description 'unterminated",
+    "/* note */ colums (id (type INT))",
+    "-- trailing comment\n  audits [unique]",
+)
+SELECT_ITEMS: tuple[str, ...] = (
+    "order_id",
+    "o.customer_id",
+    "total AS amount",
+    "total as Amount",
+    "total aſ amount",
+    "sum(total) total_sum",
+    "COUNT(*)",
+    '"Quoted Name"',
+    'o."Ünit"',
+    "'a,b' AS text_value",
+    "'it\\'s' AS escaped",
+    "CASE WHEN a THEN 1 END AS flag",
+    "(SELECT 1) sub",
+    "café",
+    "1 AS ünder",
+)
+TAILS: tuple[str, ...] = (
+    "",
+    " FROM orders o",
+    " FROM orders\nUNION ALL\nSELECT 1 FROM b",
+    " FROM orders unıon SELECT 1",
+    " FROM (SELECT 1 FROM x) t",
+    " fRoM orders",
+    "\n-- FROM comment",
+)
+SEPARATORS: tuple[str, ...] = ("\n", "\r\n", "\r", "\t", " ", "\u3000", "\n\n")
+
+
+class FailureCapture:
+    """Swallow and keep the discovery failure a block raises."""
+
+    def __init__(self) -> None:
+        self.failure: BaseException | None = None
+
+    def __enter__(self) -> FailureCapture:
+        return self
+
+    def __exit__(self, error_type: object, error: BaseException | None, traceback: object) -> bool:
+        self.failure = error
+        return isinstance(error, OSError | ValueError)
+
+
+def model_discovery_outcome(*, project_dir: Path, native: bool) -> object:
+    """Return the rendered model files, or the error type, message and help."""
+
+    discover: Callable[..., tuple[DiscoveredSqlModelFile, ...]] = {
+        True: discover_native_model_files,
+        False: discover_model_files,
+    }[native]
+    capture: FailureCapture = FailureCapture()
+    rendered: list[object] = [None]
+    with DirectorySnapshot.scope(project_dir=project_dir), capture:
+        rendered[0] = render_stage_capture(
+            discover(
+                project_dir=project_dir,
+                extract_implicit_alias_columns=True,
+                extract_output_column_locations=True,
+            )
+        )
+    failure: BaseException | None = capture.failure
+    return {
+        True: rendered[0],
+        False: (type(failure).__name__, str(failure), getattr(failure, "help", None)),
+    }[failure is None]
+
+
+def write_project(*, project_dir: Path, files: tuple[tuple[str, bytes], ...]) -> None:
+    """Write a project config and authored files."""
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    _ = (project_dir / "sqlbuild_project.toml").write_text(PROJECT_CONFIG, encoding="utf-8")
+    for relative_path, data in files:
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_bytes(data)
+
+
+def generated_model_bytes(*, rng: random.Random) -> bytes:
+    """Return one model file mixing valid and invalid headers, projections and newlines."""
+
+    separator: str = rng.choice(SEPARATORS)
+    entries: list[str] = rng.sample(HEADER_ENTRIES, k=rng.randint(0, 2))
+    header: str = ("," + separator + "  ").join(entries)
+    items: list[str] = rng.sample(SELECT_ITEMS, k=rng.randint(1, 4))
+    body: str = "SELECT " + ("," + rng.choice(SEPARATORS)).join(items) + rng.choice(TAILS)
+    prefix: str = rng.choice(("",) * 8 + (" \n", "\ufeff", "-- lead\n"))
+    text: str = rng.choices(
+        (
+            f"{prefix}MODEL ({separator}  {header}{separator});{separator}{body}",
+            f"MODEL ({header});",
+        ),
+        weights=(19, 1),
+    )[0]
+    return text.encode("utf-8")
+
+
+class CallCounter:
+    """Count calls and delegate to the wrapped function."""
+
+    def __init__(self, function: Callable[..., object]) -> None:
+        self.function: Callable[..., object] = function
+        self.calls: int = 0
+
+    def __call__(self, *args: object) -> object:
+        self.calls += 1
+        return self.function(*args)

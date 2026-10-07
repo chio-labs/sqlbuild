@@ -299,3 +299,32 @@ def python_read_text(*, path: Path, data: bytes) -> str:
 
     path.write_bytes(data)
     return path.read_text(encoding="utf-8")
+
+
+TABLE_PYTHON_VERSION: tuple[int, int] = (3, 12)
+MUTATION_ALPHABET: str = "abcdefghijklmnopqrstuvwxyz_0é"
+
+
+def _insert(*, rng: random.Random, word: list[str], position: int) -> None:
+    word.insert(position, rng.choice(MUTATION_ALPHABET))
+
+
+def _delete(*, rng: random.Random, word: list[str], position: int) -> None:
+    _ = rng
+    del word[position : position + 1]
+
+
+def _substitute(*, rng: random.Random, word: list[str], position: int) -> None:
+    word[position : position + 1] = [rng.choice(MUTATION_ALPHABET)]
+
+
+MUTATIONS: tuple[Callable[..., None], ...] = (_insert, _delete, _substitute)
+
+
+def mutated_word(*, rng: random.Random, candidates: list[str]) -> str:
+    """Return a candidate with a few random insertions, deletions and substitutions."""
+
+    word: list[str] = list(rng.choice(candidates))
+    for _ in range(rng.randint(0, 4)):
+        rng.choice(MUTATIONS)(rng=rng, word=word, position=rng.randint(0, len(word)))
+    return "".join(word)

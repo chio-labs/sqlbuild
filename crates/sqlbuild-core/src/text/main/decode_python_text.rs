@@ -7,5 +7,8 @@ pub fn decode_python_text(bytes: &[u8]) -> Result<String, TextDecodeError> {
     let text = std::str::from_utf8(bytes).map_err(|error| TextDecodeError {
         valid_up_to: error.valid_up_to(),
     })?;
+    if !bytes.contains(&b'\r') {
+        return Ok(text.to_owned());
+    }
     Ok(text.replace("\r\n", "\n").replace('\r', "\n"))
 }

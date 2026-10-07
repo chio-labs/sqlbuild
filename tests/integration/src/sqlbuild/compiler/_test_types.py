@@ -37,3 +37,25 @@ class OrjsonFloatLayoutTestCase:
     description: str
     value: float
     expected_text: str
+
+
+@dataclass(frozen=True)
+class CloseMatchesOracleTestCase:
+    """Seeded words compared between the native port and `difflib.get_close_matches`."""
+
+    description: str
+    seed: int
+    case_count: int
+    count: int
+    cutoff: float
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class CharacterClassOracleTestCase:
+    """A code point range classified natively and by Python's `str` methods."""
+
+    description: str
+    first: int
+    last: int
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()

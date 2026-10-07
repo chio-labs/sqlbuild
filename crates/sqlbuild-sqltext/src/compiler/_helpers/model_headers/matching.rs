@@ -1,11 +1,20 @@
 //! Exact native equivalent of the possessive Python `MODEL(...)` header regular expression.
 
-/// Code-point offsets of one matched header: header start, header end, and SQL start.
+use sqlbuild_core::text::main::is_python_space::is_python_space;
+
+/// Offsets of one matched header: header start, header end, and SQL start.
 pub(crate) type HeaderMatchOffsets = (usize, usize, usize);
 
 const MODEL_KEYWORD: &[u8] = b"MODEL";
 
 pub(crate) fn match_one(text: &str) -> Option<HeaderMatchOffsets> {
+    match_one_bytes(text).map(|(header_start, header_end, sql_start)| {
+        code_point_offsets(text, header_start, header_end, sql_start)
+    })
+}
+
+/// UTF-8 byte offsets of one matched header: header start, header end, and SQL start.
+pub(crate) fn match_one_bytes(text: &str) -> Option<HeaderMatchOffsets> {
     let bytes = text.as_bytes();
     let mut index = skip_whitespace(text, 0);
     if !bytes[index..].starts_with(MODEL_KEYWORD) {
@@ -25,12 +34,7 @@ pub(crate) fn match_one(text: &str) -> Option<HeaderMatchOffsets> {
         return None;
     }
     let sql_start = skip_whitespace(text, index + 1);
-    Some(code_point_offsets(
-        text,
-        header_start,
-        header_end,
-        sql_start,
-    ))
+    Some((header_start, header_end, sql_start))
 }
 
 /// Consume the possessive header body and return the byte offset where it stops.
@@ -103,30 +107,12 @@ fn escape_end(text: &str, backslash: usize) -> Option<usize> {
 fn skip_whitespace(text: &str, start: usize) -> usize {
     let mut index = start;
     for character in text[start..].chars() {
-        if !is_python_whitespace(character) {
+        if !is_python_space(character) {
             break;
         }
         index += character.len_utf8();
     }
     index
-}
-
-/// Python's `str.isspace()`, which `\s` uses for `str` patterns.
-fn is_python_whitespace(character: char) -> bool {
-    matches!(
-        character,
-        '\t'..='\r'
-            | '\u{1c}'..='\u{20}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
 }
 
 fn code_point_offsets(
