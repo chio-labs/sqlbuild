@@ -195,7 +195,26 @@ def test_given_both_engines_fail_alike_when_outcome_is_unexpected_then_harness_f
                 "Required discovery coverage missing: ",
             ),
             expected_absent=("passed",),
-        )
+        ),
+        CoverageFailureTestCase(
+            description="one_seed_cannot_cover_every_render_kind",
+            extra_arguments=(
+                "--corpus",
+                "seeds",
+                "--seeds",
+                "1",
+                "--stage-captures",
+                "--require-render-coverage",
+            ),
+            expected_exit_code=1,
+            expected_lines=(
+                "OK   seed/0",
+                "Render coverage: ",
+                "Compiler differential FAILED: 0 of 1 projects differ",
+                "Required render coverage missing: ",
+            ),
+            expected_absent=("passed", "Required discovery coverage missing"),
+        ),
     ],
     ids=lambda case: case.description,
 )

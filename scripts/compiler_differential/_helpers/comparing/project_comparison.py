@@ -11,6 +11,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
     diagnostic_codes,
 )
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
+from scripts.compiler_differential._helpers.coverage.render import project_render_kinds
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import ERROR_SEVERITY, WARNING_SEVERITY
 from scripts.compiler_differential.models import (
@@ -50,6 +51,7 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         engine=right_engine,
         options=options,
     )
+    counted: bool = project.seed_coverage and options.stage_captures
     differences: list[Difference] = [
         *_timeout_differences(project=project, runs=(left, right)),
         *_corpus_differences(project=project, run=left),
@@ -61,9 +63,10 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         seconds=time.monotonic() - started,
         discovered_kinds=(
             project_discovery_kinds(captures=left.captures, source_dir=source_dir)
-            if project.discovery_coverage and options.stage_captures
+            if counted
             else frozenset()
         ),
+        rendered_kinds=project_render_kinds(left.captures) if counted else frozenset(),
     )
 
 

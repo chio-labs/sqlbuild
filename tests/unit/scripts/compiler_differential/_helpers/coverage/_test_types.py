@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 
@@ -50,4 +51,23 @@ class EncodedInputsKindsTestCase:
 
     description: str
     inputs: DiscoveredProjectInputs
+    expected_kinds: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RenderCaptureKindsTestCase:
+    """One render capture fragment and the render kinds it must and must not prove."""
+
+    description: str
+    capture: dict[str, object]
+    expected_present: frozenset[str]
+    expected_absent: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RenderEncodedInputsTestCase:
+    """Real compile inputs, encoded by the stage capture, and the render kinds they prove."""
+
+    description: str
+    inputs: CompileProjectInputs
     expected_kinds: frozenset[str]

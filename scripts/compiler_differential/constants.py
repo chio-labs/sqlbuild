@@ -368,3 +368,92 @@ CONFIG_ONLY_KINDS: dict[str, str] = {
         "the config sets [dbt] target_path; the manifest is read after discovery"
     ),
 }
+RENDER_STAGE_CAPTURE_SUFFIX: str = "-compile_project_inputs.json"
+RENDER_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
+    {
+        "project_config",
+        "local_config",
+        "discovered_inputs",
+        "sql_lexical_syntax",
+        "run_id",
+        "effective_target_name",
+        "effective_target",
+        "compile_cache_dir",
+        "effective_connection",
+        "effective_settings",
+        "no_sql_validation",
+        "effective_vars",
+        "macro_context",
+        "diagnostics",
+        "external_sql_reference_resolver",
+        "scope_index",
+        "declaration_scope",
+        "analysis_reuse",
+    }
+)
+RENDER_CALLABLE_CAPTURE_FIELDS: frozenset[str] = CALLABLE_CAPTURE_FIELDS
+TYPED_REFERENCE_ANNOTATION: str = "SqlResourceRef"
+RENDER_HOOK_KEYS: tuple[str, ...] = ("pre_hooks", "post_hooks")
+RENDER_MACRO_SOURCE_READS: dict[str, tuple[str, ...]] = {
+    "macro_reads_vars": ("ctx.vars",),
+    "macro_reads_constants": ("ctx.constants", "ctx.render_constant"),
+    "macro_reads_enums": ("ctx.enums", "ctx.render_enum_member"),
+    "macro_reads_target": ("ctx.target_name", "ctx.adapter_name"),
+    "macro_reads_environment": ("os.environ",),
+}
+RENDER_DETAIL_KINDS: tuple[str, ...] = (
+    "macro_in_model",
+    "macro_in_test",
+    "macro_in_scenario",
+    "macro_in_audit",
+    "macro_in_function",
+    "macro_in_source_expression",
+    "macro_in_hook",
+    "nested_macro_call",
+    "typed_reference_argument",
+    "macro_generated_reference",
+    "cross_file_macro_import",
+    "tested_macro",
+    *RENDER_MACRO_SOURCE_READS,
+    "scope_global_use",
+    "scope_inherited_use",
+    "scope_local_use",
+    "scope_private_use",
+    "enum_member",
+    "scalar_constant",
+    "list_constant",
+    "expected_model_grant",
+    "enum_column_contract",
+    "project_variable",
+    "environment_variable",
+    "runtime_placeholder",
+    "cursor_intrinsic",
+    "source_expression_rendered",
+    "audit_arguments",
+    "python_hook",
+    "named_sql_hook",
+    "inline_sql_hook",
+    "hook_context_variable",
+    "named_hook_arguments",
+    "reference_ref",
+    "reference_source",
+    "reference_seed",
+    "reference_udf",
+    "reference_table_function",
+    "reference_dbt_ref",
+    "model_test",
+    "macro_test",
+    "udf_test",
+    "parameterized_test_case",
+    "singular_audit",
+    "model_audit",
+    "model_column_audit",
+    "source_column_audit",
+    "seed_column_audit",
+    "path_default",
+)
+RENDER_INDIRECT_KINDS: dict[str, str] = {
+    kind: "the used macro's own function source reads it; the capture does not record context reads"
+    for kind in RENDER_MACRO_SOURCE_READS
+}
+RENDER_CONFIG_ONLY_KINDS: dict[str, str] = {}

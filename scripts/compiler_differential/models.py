@@ -34,7 +34,7 @@ class CorpusProject:
     source_dir: Path | None = None
     writer: Callable[[Path], None] | None = None
     project_subdirectory: str | None = None
-    discovery_coverage: bool = False
+    seed_coverage: bool = False
 
 
 @dataclass(frozen=True)
@@ -89,6 +89,7 @@ class ProjectComparison:
     differences: tuple[Difference, ...]
     seconds: float
     discovered_kinds: frozenset[str] = frozenset()
+    rendered_kinds: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,7 @@ class DifferentialOptions:
     python: Path
     engine_environment: dict[str, dict[str, str]]
     require_discovery_coverage: bool = False
+    require_render_coverage: bool = False
 
 
 @dataclass(frozen=True)

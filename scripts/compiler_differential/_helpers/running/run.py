@@ -29,6 +29,7 @@ def differential_options(*, args: argparse.Namespace, work_dir: Path) -> Differe
         python=args.python,
         engine_environment=parse_engine_environment(args.engine_env),
         require_discovery_coverage=args.require_discovery_coverage,
+        require_render_coverage=args.require_render_coverage,
     )
 
 
