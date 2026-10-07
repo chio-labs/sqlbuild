@@ -60,6 +60,18 @@ FROM __ref("stg_orders")
             expected_exit_codes=(1, 1),
             expected_report_text="Unknown qualified identity kind",
         ),
+        NativeModelLoopParityTestCase(
+            description="rejected_reference_call_beside_declaration_references",
+            project_files={
+                **_MARTS_DECLARATIONS,
+                "models/marts/order_flags.sql": _DECLARATION_MODEL.replace(
+                    '__ref("stg_orders")', "__ref('stg_orders')"
+                ),
+            },
+            engines=("python", "native-preview"),
+            expected_exit_codes=(1, 1),
+            expected_report_text="P012",
+        ),
     ],
     ids=lambda case: case.description,
 )
