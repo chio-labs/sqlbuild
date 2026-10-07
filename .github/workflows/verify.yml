@@ -293,7 +293,8 @@ jobs:
       - name: Compare fixtures, examples, generated seeds and the failure corpus
         run: >-
           make compiler-differential
-          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage"
+          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
+          --require-render-coverage"
 
   format_performance:
     name: Formatter performance guards

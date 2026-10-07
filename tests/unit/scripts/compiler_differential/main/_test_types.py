@@ -66,3 +66,12 @@ class RareFeatureSeedTestCase:
     expected_error_code: str
     expected_succeeding_commands: tuple[str, ...]
     other_seeds: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class CoverageFlagUsageTestCase:
+    """A coverage requirement given without what it needs, and the usage error it reports."""
+
+    description: str
+    arguments: tuple[str, ...]
+    expected_message: str

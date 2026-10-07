@@ -10,6 +10,7 @@ from scripts.compiler_differential.classes.discovery_features import (
     DiscoveryFeatureWriter,
     feature_blocks_for_seed,
 )
+from scripts.compiler_differential.classes.render_features import RenderFeatureWriter
 from scripts.compiler_differential.constants import (
     DUCKDB_ADAPTER,
     GENERATOR_CONSTANT_KIND,
@@ -95,7 +96,21 @@ class ProjectBuilder:
             label=self._label,
         )
         extras.write()
-        self._write_config(domains=domains, adapter=extras.adapter, extra_lines=extras.config_lines)
+        rendering: RenderFeatureWriter = RenderFeatureWriter(
+            blocks=blocks,
+            rng=self._random,
+            files=self._files,
+            features=self._features,
+            staging=[model for model in self._models if model.layer == _STAGING],
+            sources=self._sources,
+            label=self._label,
+        )
+        rendering.write()
+        self._write_config(
+            domains=domains,
+            adapter=extras.adapter,
+            extra_lines=[*extras.config_lines, *rendering.config_lines],
+        )
         if invalid_kind is not None:
             self._inject_invalid(kind=invalid_kind)
         return GeneratedProject(

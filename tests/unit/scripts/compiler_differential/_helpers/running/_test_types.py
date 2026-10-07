@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from scripts.compiler_differential.models import ExpectedOutcome, ProjectComparison
@@ -48,6 +49,7 @@ class CoverageReportTestCase:
     """Covered kinds and the coverage report lines the harness must print."""
 
     description: str
+    formatter: Callable[..., str]
     covered: frozenset[str]
     required: tuple[str, ...]
     expected_lines: tuple[str, ...]
@@ -59,6 +61,6 @@ class SummaryTestCase:
 
     description: str
     comparisons: list[ProjectComparison]
-    missing_coverage: tuple[str, ...]
+    missing_coverage: dict[str, tuple[str, ...]]
     expected_lines: tuple[str, ...]
     expected_absent: tuple[str, ...]

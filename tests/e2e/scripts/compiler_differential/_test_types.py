@@ -43,8 +43,11 @@ class FailureCorpusCodesTestCase:
 
     description: str
     expected_first_errors: dict[str, str]
+    expected_first_messages: dict[str, str]
     expected_warnings: dict[str, str]
     expected_discovery_codes: frozenset[str]
+    expected_render_codes: frozenset[str]
+    unreachable_render_codes: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -56,3 +59,14 @@ class CoverageFailureTestCase:
     expected_exit_code: int
     expected_lines: tuple[str, ...]
     expected_absent: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RenderCaptureTestCase:
+    """A generated project with every feature block and the render kinds its capture proves."""
+
+    description: str
+    seed: int
+    blocks: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_kinds: frozenset[str]

@@ -108,7 +108,9 @@ class DiscoveryFeatureWriter:
             "line_endings": self._line_endings,
         }
         for block in self._blocks:
-            writers[block]()
+            writer: Callable[[], None] | None = writers.get(block)
+            if writer is not None:
+                writer()
 
     def _base(self) -> ModelPlan:
         return self._random.choice(self._staging)

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from scripts.compiler_differential.constants import CONFIG_ONLY_KINDS
+from scripts.compiler_differential.constants import (
+    CONFIG_ONLY_KINDS,
+    RENDER_CONFIG_ONLY_KINDS,
+    RENDER_INDIRECT_KINDS,
+)
 from scripts.compiler_differential.models import Difference, ProjectComparison
 
 
@@ -25,13 +29,16 @@ def format_summary(
     comparisons: list[ProjectComparison],
     engines: tuple[str, str],
     seconds: float,
-    missing_coverage: tuple[str, ...] = (),
+    missing_coverage: dict[str, tuple[str, ...]] | None = None,
 ) -> str:
-    """Summarize the run; any difference or required-but-missing coverage reports FAILED."""
+    """Summarize the run; any difference or missing coverage, keyed by stage, reports FAILED."""
 
     differing: list[ProjectComparison] = [item for item in comparisons if item.differences]
+    gaps: dict[str, tuple[str, ...]] = {
+        stage: kinds for stage, kinds in (missing_coverage or {}).items() if kinds
+    }
     left_engine, right_engine = engines
-    if not differing and not missing_coverage:
+    if not differing and not gaps:
         return (
             f"Compiler differential passed: {len(comparisons)} projects identical "
             f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
@@ -43,21 +50,57 @@ def format_summary(
     if differing:
         first: Difference = differing[0].differences[0]
         lines.append(f"First difference: {first.project}: {first.artifact} at {first.location}")
-    if missing_coverage:
-        lines.append(f"Required discovery coverage missing: {', '.join(missing_coverage)}")
+    lines.extend(
+        f"Required {stage} coverage missing: {', '.join(kinds)}" for stage, kinds in gaps.items()
+    )
     return "\n".join(lines)
 
 
 def format_discovery_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:
     """Report how many required discovery input kinds the seed corpus exercised."""
 
+    return _format_coverage(
+        stage="Discovery",
+        covered=covered,
+        required=required,
+        notes=(("config-only kinds", "only proves", CONFIG_ONLY_KINDS),),
+    )
+
+
+def format_render_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:
+    """Report how many required render input kinds the seed corpus exercised."""
+
+    return _format_coverage(
+        stage="Render",
+        covered=covered,
+        required=required,
+        notes=(
+            ("config-only kinds", "only proves", RENDER_CONFIG_ONLY_KINDS),
+            ("indirect kinds", "credited because", RENDER_INDIRECT_KINDS),
+        ),
+    )
+
+
+def _format_coverage(
+    *,
+    stage: str,
+    covered: frozenset[str],
+    required: tuple[str, ...],
+    notes: tuple[tuple[str, str, dict[str, str]], ...],
+) -> str:
     missing: list[str] = [kind for kind in required if kind not in covered]
-    line: str = (
-        f"Discovery coverage: {len(required) - len(missing)} of {len(required)} input kinds "
+    lines: list[str] = [
+        f"{stage} coverage: {len(required) - len(missing)} of {len(required)} input kinds "
         "exercised by the seed corpus"
-    )
-    config_only: str = "; ".join(
-        f"{kind} (only proves {meaning})" for kind, meaning in CONFIG_ONLY_KINDS.items()
-    )
-    line = f"{line}\n  config-only kinds: {config_only}"
-    return line if not missing else f"{line}\n  missing: {', '.join(missing)}"
+    ]
+    for label, verb, kinds in notes:
+        by_meaning: dict[str, list[str]] = {}
+        for kind, meaning in kinds.items():
+            by_meaning.setdefault(meaning, []).append(kind)
+        described: str = "; ".join(
+            f"{', '.join(names)} ({verb} {meaning})" for meaning, names in by_meaning.items()
+        )
+        lines.append(f"  {label}: {described or 'none'}")
+    if missing:
+        lines.append(f"  missing: {', '.join(missing)}")
+    return "\n".join(lines)

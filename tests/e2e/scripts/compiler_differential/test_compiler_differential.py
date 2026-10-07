@@ -16,6 +16,7 @@ from tests.e2e.scripts.compiler_differential._test_types import (
 from tests.e2e.scripts.compiler_differential.helpers import (
     DISCOVERY_PERTURBATION,
     NATIVE_ONLY_STDERR_LINE,
+    RENDER_PERTURBATION,
     harness_arguments,
     perturbation_arguments,
     write_broken_ref_project,
@@ -132,6 +133,42 @@ def test_given_perturbed_native_discovery_when_comparing_then_discovery_capture_
 @pytest.mark.parametrize(
     "test_case",
     [
+        HarnessRunTestCase(
+            description="perturbed_native_compile_inputs",
+            extra_arguments=(),
+            expected_exit_code=1,
+            expected_lines=("DIFF project/waffle_shop",),
+            expected_patterns=(
+                r"- stage capture 0-compile/002-compile_project_inputs\.json at "
+                r"/model_inputs/0/macro_deps/",
+                r"- stage capture 2-plan/002-compile_project_inputs\.json at "
+                r"/model_inputs/0/macro_deps/",
+            ),
+            expected_absent=("001-discovered_project_inputs.json",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_perturbed_native_render_when_comparing_then_compile_inputs_capture_names_the_stage(
+    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code: int = run_compiler_differential(
+        harness_arguments(
+            work_dir=tmp_path / "work",
+            extra=perturbation_arguments(tmp_path / "perturbation", source=RENDER_PERTURBATION),
+        )
+    )
+
+    output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code, output
+    assert all(line in output for line in test_case.expected_lines), output
+    assert all(re.search(pattern, output) for pattern in test_case.expected_patterns), output
+    assert not any(text in output for text in test_case.expected_absent), output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         ProjectExpectationTestCase(
             description="success_expected_by_default",
             extra_arguments=(),
@@ -195,7 +232,26 @@ def test_given_both_engines_fail_alike_when_outcome_is_unexpected_then_harness_f
                 "Required discovery coverage missing: ",
             ),
             expected_absent=("passed",),
-        )
+        ),
+        CoverageFailureTestCase(
+            description="one_seed_cannot_cover_every_render_kind",
+            extra_arguments=(
+                "--corpus",
+                "seeds",
+                "--seeds",
+                "1",
+                "--stage-captures",
+                "--require-render-coverage",
+            ),
+            expected_exit_code=1,
+            expected_lines=(
+                "OK   seed/0",
+                "Render coverage: ",
+                "Compiler differential FAILED: 0 of 1 projects differ",
+                "Required render coverage missing: ",
+            ),
+            expected_absent=("passed", "Required discovery coverage missing"),
+        ),
     ],
     ids=lambda case: case.description,
 )

@@ -143,5 +143,5 @@ def _seed_project(seed: int) -> CorpusProject:
             succeeding_commands=generated.succeeding_commands,
         ),
         writer=generated.write,
-        discovery_coverage=True,
+        seed_coverage=True,
     )

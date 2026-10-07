@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import ast
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.comparing.comparison import diagnostic_codes
+from scripts.compiler_differential._helpers.comparing.comparison import (
+    diagnostic_codes,
+    first_diagnostic_message,
+)
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
     CORPUS_FAILURES,
+    DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
     EXPECT_SUCCESS,
+    RENDER_CODE_SCAN_EXCLUDED,
+    RENDER_RAISED_CODES,
     WARNING_SEVERITY,
 )
 from scripts.compiler_differential.models import (
@@ -20,10 +27,15 @@ from scripts.compiler_differential.models import (
     EmittedCodes,
     EngineRun,
 )
+from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_SHADOW_CODE
+from sqlbuild.compiler.compile import constants as compile_constants
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
+from sqlbuild.compiler.scopes.types import ScopeDiagnosticCode
 
 _SOURCE_DIRECTORY: str = "source"
+_CODE_KEYWORD: str = "code"
 
 
 def emitted_failure_codes(*, options: DifferentialOptions) -> dict[str, EmittedCodes]:
@@ -57,6 +69,66 @@ def discovery_error_codes() -> frozenset[str]:
     return frozenset(codes)
 
 
+def render_error_codes() -> frozenset[str]:
+    """Return every code render, scope, and attachment can report, from compiler constants."""
+
+    compile_codes: set[str] = {
+        value
+        for name, value in vars(compile_constants).items()
+        if name.endswith("_CODE")
+        and isinstance(value, str)
+        and DIAGNOSTIC_CODE_PATTERN.fullmatch(value)
+    }
+    return frozenset(
+        {
+            CompileInputError.code,
+            BUILT_IN_AUDIT_SHADOW_CODE,
+            *compile_codes,
+            *(code.value for code in ScopeDiagnosticCode),
+            *RENDER_RAISED_CODES,
+        }
+    )
+
+
+def inline_compile_codes(compile_root: Path) -> dict[str, tuple[str, ...]]:
+    """Map each `code="X###"` literal in render-stage compile modules to where it is written."""
+
+    found: dict[str, list[str]] = {}
+    for path in sorted(compile_root.rglob("*.py")):
+        relative: str = path.relative_to(compile_root).as_posix()
+        if any(relative.startswith(f"{excluded}/") for excluded in RENDER_CODE_SCAN_EXCLUDED):
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            code: str | None = _code_literal(node)
+            if code is not None:
+                found.setdefault(code, []).append(f"{relative}:{getattr(node, 'lineno', 0)}")
+    return {code: tuple(locations) for code, locations in found.items()}
+
+
+def unaccounted_inline_codes(
+    *, compile_root: Path, accounted: frozenset[str]
+) -> dict[str, tuple[str, ...]]:
+    """Return the inline render-stage codes that are neither required nor documented."""
+
+    return {
+        code: locations
+        for code, locations in inline_compile_codes(compile_root).items()
+        if code not in accounted
+    }
+
+
+def _code_literal(node: ast.AST) -> str | None:
+    if not (
+        isinstance(node, ast.keyword)
+        and node.arg == _CODE_KEYWORD
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+        and DIAGNOSTIC_CODE_PATTERN.fullmatch(node.value.value)
+    ):
+        return None
+    return node.value.value
+
+
 def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> EmittedCodes:
     case_dir: Path = options.work_dir / project.name.replace("/", "__")
     source_dir: Path = case_dir / _SOURCE_DIRECTORY
@@ -72,4 +144,7 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
     return EmittedCodes(
         errors=diagnostic_codes(outcome=run.outcomes[0], severity=ERROR_SEVERITY),
         warnings=diagnostic_codes(outcome=run.outcomes[0], severity=WARNING_SEVERITY),
+        first_error_message=first_diagnostic_message(
+            outcome=run.outcomes[0], severity=ERROR_SEVERITY
+        ),
     )

@@ -10,9 +10,11 @@ import time
 from pathlib import Path
 
 from scripts.compiler_differential._helpers.coverage.discovery import required_discovery_kinds
+from scripts.compiler_differential._helpers.coverage.render import required_render_kinds
 from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
 from scripts.compiler_differential._helpers.running.report import (
     format_discovery_coverage,
+    format_render_coverage,
     format_summary,
 )
 from scripts.compiler_differential._helpers.running.run import (
@@ -44,15 +46,11 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
         comparisons: list[ProjectComparison] = compare_corpus(
             corpus=selected_corpus(args=args, repo_root=repo_root), options=options
         )
-    missing_coverage: tuple[str, ...] = ()
-    if options.stage_captures and CORPUS_SEEDS in args.corpus:
-        covered: frozenset[str] = frozenset().union(
-            *(comparison.discovered_kinds for comparison in comparisons)
-        )
-        required: tuple[str, ...] = required_discovery_kinds()
-        print(format_discovery_coverage(covered=covered, required=required))
-        if options.require_discovery_coverage:
-            missing_coverage = tuple(kind for kind in required if kind not in covered)
+    missing_coverage: dict[str, tuple[str, ...]] = (
+        _seed_coverage(comparisons=comparisons, options=options)
+        if options.stage_captures and CORPUS_SEEDS in args.corpus
+        else {}
+    )
     print(
         format_summary(
             comparisons=comparisons,
@@ -61,7 +59,35 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
             missing_coverage=missing_coverage,
         )
     )
-    return 1 if missing_coverage or any(comparison.differences for comparison in comparisons) else 0
+    return (
+        1
+        if any(missing_coverage.values())
+        or any(comparison.differences for comparison in comparisons)
+        else 0
+    )
+
+
+def _seed_coverage(
+    *, comparisons: list[ProjectComparison], options: DifferentialOptions
+) -> dict[str, tuple[str, ...]]:
+    """Print discovery and render coverage; return the missing kinds each requirement enforces."""
+
+    discovered: frozenset[str] = frozenset().union(
+        *(comparison.discovered_kinds for comparison in comparisons)
+    )
+    rendered: frozenset[str] = frozenset().union(
+        *(comparison.rendered_kinds for comparison in comparisons)
+    )
+    required_discovery: tuple[str, ...] = required_discovery_kinds()
+    required_render: tuple[str, ...] = required_render_kinds()
+    print(format_discovery_coverage(covered=discovered, required=required_discovery))
+    print(format_render_coverage(covered=rendered, required=required_render))
+    missing: dict[str, tuple[str, ...]] = {}
+    if options.require_discovery_coverage:
+        missing["discovery"] = tuple(kind for kind in required_discovery if kind not in discovered)
+    if options.require_render_coverage:
+        missing["render"] = tuple(kind for kind in required_render if kind not in rendered)
+    return missing
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -100,6 +126,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="fail unless the seed corpus exercises every discovery input kind (needs captures)",
     )
     parser.add_argument(
+        "--require-render-coverage",
+        action="store_true",
+        help="fail unless the seed corpus exercises every render input kind (needs captures)",
+    )
+    parser.add_argument(
         "--engine-env",
         action="append",
         default=[],
@@ -109,8 +140,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, default=None, help="keep run directories here")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     args: argparse.Namespace = parser.parse_args(argv)
-    if args.require_discovery_coverage and not (
-        args.stage_captures and CORPUS_SEEDS in args.corpus
+    for flag, required in (
+        ("--require-discovery-coverage", args.require_discovery_coverage),
+        ("--require-render-coverage", args.require_render_coverage),
     ):
-        parser.error("--require-discovery-coverage needs --stage-captures and the seeds corpus")
+        if required and not (args.stage_captures and CORPUS_SEEDS in args.corpus):
+            parser.error(f"{flag} needs --stage-captures and the seeds corpus")
     return args

@@ -15,6 +15,7 @@ from scripts.compiler_differential.constants import (
     ENGINE_ENV_VAR,
     EXCLUDED_ENVIRONMENT_KEYS,
     EXCLUDED_ENVIRONMENT_PREFIX,
+    GENERATOR_ENVIRONMENT,
     MANIFEST_FILE,
     PROJECT_DIRECTORY,
     SQB_ENTRY,
@@ -88,12 +89,16 @@ def run_engine(
 
 
 def harness_environment() -> dict[str, str]:
-    """Return this process's environment without engine, capture, and dbt settings."""
+    """Return this environment without engine, capture or dbt settings, plus generator vars."""
 
     return {
-        key: value
-        for key, value in os.environ.items()
-        if key not in EXCLUDED_ENVIRONMENT_KEYS and not key.startswith(EXCLUDED_ENVIRONMENT_PREFIX)
+        **{
+            key: value
+            for key, value in os.environ.items()
+            if key not in EXCLUDED_ENVIRONMENT_KEYS
+            and not key.startswith(EXCLUDED_ENVIRONMENT_PREFIX)
+        },
+        **GENERATOR_ENVIRONMENT,
     }
 
 
