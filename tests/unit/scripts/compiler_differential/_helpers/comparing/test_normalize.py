@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.compiler_differential._helpers.normalize import (
+from scripts.compiler_differential._helpers.comparing.normalize import (
     normalize_artifact_text,
     normalize_stderr,
     strip_manifest_metadata,
     strip_report_fields,
 )
-from tests.unit.scripts.compiler_differential._helpers._test_types import (
+from tests.unit.scripts.compiler_differential._helpers.comparing._test_types import (
     NormalizationTestCase,
     PayloadStripTestCase,
 )

@@ -9,9 +9,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.options import parse_expected_outcome
-from scripts.compiler_differential._helpers.report import format_summary
-from scripts.compiler_differential._helpers.run import (
+from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
+from scripts.compiler_differential._helpers.running.report import format_summary
+from scripts.compiler_differential._helpers.running.run import (
     compare_corpus,
     differential_options,
     selected_corpus,

@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from scripts.compiler_differential._helpers.compare import (
+from scripts.compiler_differential._helpers.comparing.compare import (
     as_json_object,
     first_document_difference,
     first_json_difference,
     first_text_difference,
 )
-from scripts.compiler_differential._helpers.normalize import (
+from scripts.compiler_differential._helpers.comparing.normalize import (
     normalize_artifact_text,
     normalize_stderr,
     strip_manifest_metadata,

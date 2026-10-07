@@ -6,8 +6,11 @@ import shutil
 import time
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.comparison import compare_engine_runs, diagnostic_codes
-from scripts.compiler_differential._helpers.execution import run_engine
+from scripts.compiler_differential._helpers.comparing.comparison import (
+    compare_engine_runs,
+    diagnostic_codes,
+)
+from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.models import (
     CommandOutcome,
     CorpusProject,

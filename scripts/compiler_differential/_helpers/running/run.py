@@ -7,10 +7,10 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.corpus import build_corpus
-from scripts.compiler_differential._helpers.options import parse_engine_environment
-from scripts.compiler_differential._helpers.project_comparison import compare_project
-from scripts.compiler_differential._helpers.report import format_comparison
+from scripts.compiler_differential._helpers.comparing.project_comparison import compare_project
+from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
+from scripts.compiler_differential._helpers.running.options import parse_engine_environment
+from scripts.compiler_differential._helpers.running.report import format_comparison
 from scripts.compiler_differential.models import (
     CorpusProject,
     DifferentialOptions,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.failure_cases import all_failure_cases
+from scripts.compiler_differential._helpers.corpus.failure_cases import all_failure_cases
 from scripts.compiler_differential.classes.dense_project import DenseProject
 from scripts.compiler_differential.classes.project_builder import ProjectBuilder
 from scripts.compiler_differential.constants import (

@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.compiler_differential._helpers.corpus import build_corpus
+from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
 from scripts.compiler_differential.models import CorpusProject, ExpectedOutcome
-from tests.unit.scripts.compiler_differential._helpers._test_types import (
+from tests.unit.scripts.compiler_differential._helpers.corpus._test_types import (
     CorpusExpectationTestCase,
 )
 
-_REPO_ROOT: Path = Path(__file__).resolve().parents[5]
+_REPO_ROOT: Path = Path(__file__).resolve().parents[6]
 
 
 @pytest.mark.parametrize(
