@@ -23,6 +23,9 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Project Configuration](concepts/project-configuration.md) (`concepts/project-configuration`) - Configure your SQLBuild project with sqlbuild_project.toml and sqlbuild_local.toml.
 - [Resource Identities](concepts/resource-identities.md) (`concepts/resource-identities`) - Canonical names for SQLBuild resources, selectors, state, and integrations.
 - [Semantic Compilation](concepts/semantic-compilation.md) (`concepts/semantic-compilation`) - Offline reference, semantic and type checks that sqb compile runs before any warehouse work.
+- [Refactoring](concepts/refactoring.md) (`concepts/refactoring`) - Rename and move models and columns, keep their warehouse history, and keep old names working.
+- [Model migrations](concepts/models/migrations.md) (`concepts/models/migrations`) - Keep a renamed model's history, and keep its old name working for a while.
+- [Column migrations](concepts/models/column-migrations.md) (`concepts/models/column-migrations`) - Keep a column's history when you rename it in an incremental or snapshot model.
 - [Overview](concepts/adapters.md) (`concepts/adapters`) - Supported database engines and their connection configuration.
 - [Snowflake](concepts/adapters/snowflake.md) (`concepts/adapters/snowflake`) - Snowflake adapter configuration for SQLBuild.
 - [DuckDB](concepts/adapters/duckdb.md) (`concepts/adapters/duckdb`) - DuckDB adapter configuration for SQLBuild.
@@ -38,8 +41,6 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Schemas](concepts/models/schemas.md) (`concepts/models/schemas`) - Declare model columns inline or reuse canonical inherited schemas.
 - [Type Enforcement](concepts/models/type-enforcement.md) (`concepts/models/type-enforcement`) - Understand declared model types, static checks, and runtime casting.
 - [Contracts](concepts/models/contracts.md) (`concepts/models/contracts`) - Validate required or exact model output schemas.
-- [Model migrations](concepts/models/migrations.md) (`concepts/models/migrations`) - Keep a renamed model's history, and keep its old name working for a while.
-- [Column migrations](concepts/models/column-migrations.md) (`concepts/models/column-migrations`) - Keep a column's history when you rename it in an incremental or snapshot model.
 - [Hooks](concepts/models/hooks.md) (`concepts/models/hooks`) - Run SQL or Python lifecycle hooks around model materialization.
 - [SQL Hooks](concepts/models/hooks/sql.md) (`concepts/models/hooks/sql`) - Define, parameterize, compile, and invoke reusable or inline SQL lifecycle hooks.
 - [Python Hooks](concepts/models/hooks/python.md) (`concepts/models/hooks/python`) - Define Python lifecycle hooks with runtime context, providers, SQL access, and skips.

@@ -24,6 +24,18 @@
 			"docs/concepts/resource-identities",
 			"docs/concepts/semantic-compilation",
 			{
+				"label": "Refactoring",
+				"collapsed": false,
+				"items": [
+					{
+						"label": "Overview",
+						"slug": "docs/concepts/refactoring"
+					},
+					"docs/concepts/models/migrations",
+					"docs/concepts/models/column-migrations"
+				]
+			},
+			{
 				"label": "Adapters",
 				"collapsed": true,
 				"items": [
@@ -48,8 +60,6 @@
 					"docs/concepts/models/schemas",
 					"docs/concepts/models/type-enforcement",
 					"docs/concepts/models/contracts",
-					"docs/concepts/models/migrations",
-					"docs/concepts/models/column-migrations",
 					{
 						"label": "Hooks",
 						"collapsed": true,
