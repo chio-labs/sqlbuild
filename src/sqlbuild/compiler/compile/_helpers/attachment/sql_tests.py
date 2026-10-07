@@ -29,6 +29,7 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
 )
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    complete_omitted_ceremonial_select,
     extract_assertion_target_model_names,
     extract_sql_test_ctes,
 )
@@ -260,7 +261,10 @@ def build_test_inputs(
                     value_renderer=scoped_declarations.value_renderer,
                     collection_rendering=scoped_declarations.collection_rendering,
                 )
-                expanded_sql_body: str = expansion.sql
+                expanded_sql_body: str = complete_omitted_ceremonial_select(
+                    sql=expansion.sql,
+                    syntax=sql_lexical_syntax,
+                )
                 reject_cursor_intrinsics(
                     sql=expanded_sql_body,
                     context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
@@ -611,7 +615,10 @@ def build_scenario_inputs(
             value_renderer=scoped_declarations.value_renderer,
             collection_rendering=scoped_declarations.collection_rendering,
         )
-        expanded_sql_body: str = expansion.sql
+        expanded_sql_body: str = complete_omitted_ceremonial_select(
+            sql=expansion.sql,
+            syntax=sql_lexical_syntax,
+        )
         reject_cursor_intrinsics(
             sql=expanded_sql_body,
             context=f"SQL scenario '{scenario_file.file_path.stem}'",

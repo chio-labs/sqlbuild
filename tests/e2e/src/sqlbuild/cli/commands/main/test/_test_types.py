@@ -225,6 +225,16 @@ class AuthoredSqlParityTestCase:
 
 
 @dataclass(frozen=True)
+class OptionalTestCeremonyE2ETestCase:
+    """SQL test files written with and without their optional header, mode, and SELECT 1."""
+
+    description: str
+    test_files: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CommentedFixtureE2ETestCase:
     """SQL tests whose fixture CTEs carry comments around set-operation branches."""
 

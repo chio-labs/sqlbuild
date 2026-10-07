@@ -125,10 +125,11 @@ do not hand-write that filter. Unlisted inputs are read in full. Use `__cursor_s
 window into batches, each with its own audits. Always `sqb plan` an incremental change before building. Read
 [references/incremental-models.md](references/incremental-models.md).
 
-**Tests.** SQL unit tests live under `tests/unit/`. A `TEST();` file mocks inputs with
+**Tests.** SQL unit tests live under `tests/unit/`. A test file mocks inputs with
 `__source__<name>`, `__ref__<name>`, `__seed__<name>` CTEs, states expected output with
 `__expected__<model>` (only the listed columns are compared, matched by name; unlisted columns are
-ignored), adds zero-row checks with `__assert__<name>`, and ends with `SELECT 1`.
+ignored), and adds zero-row checks with `__assert__<name>`. A single-test file needs no `TEST();`
+header and no closing `SELECT 1`.
 One test can span many models: mock the sources, assert on the final model, and every intermediate
 model runs from its real SQL. Never write a test that only proves empty inputs produce no rows; it
 cannot fail, Rules reject it, and it does not count toward `min_tests_per_model`. Mock real rows

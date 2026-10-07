@@ -177,8 +177,6 @@ def mock_orders(count: int = 1) -> str:
 ```
 
 ```sql
-TEST();
-
 WITH
 __source__raw__orders AS (
   @mock_orders(3)
@@ -190,7 +188,6 @@ __expected__stg_orders AS (
   UNION ALL
   SELECT 3 AS order_id, 300 AS customer_id, 'completed' AS status
 )
-SELECT 1
 ```
 
 ## Use macros in hooks

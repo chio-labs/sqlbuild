@@ -1,5 +1,3 @@
-TEST();
-
 WITH
 __ref__stg_orders AS (
   SELECT
@@ -47,4 +45,3 @@ __assert__line_totals_are_non_negative AS (
   FROM __ref("fact_orders")
   WHERE line_total_cents < 0
 )
-SELECT 1

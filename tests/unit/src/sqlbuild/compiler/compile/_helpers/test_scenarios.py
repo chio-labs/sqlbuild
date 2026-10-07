@@ -63,6 +63,20 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
             expected_assertion_names=(),
         ),
         ExtractSqlScenarioCtesTestCase(
+            description="extracts fixtures when the trailing select is omitted",
+            sql="""
+        WITH
+        __ref__stg_orders AS (SELECT 1 AS order_id),
+        __expected__daily_revenue AS (SELECT 1 AS order_id)
+        """.strip(),
+            expected_authored_cte_names=("__ref__stg_orders",),
+            expected_source_fixture_names=(),
+            expected_ref_fixture_names=("stg_orders",),
+            expected_dbt_ref_fixture_names=(),
+            expected_expected_model_names=("daily_revenue",),
+            expected_assertion_names=(),
+        ),
+        ExtractSqlScenarioCtesTestCase(
             description="extracts source ref seed fixtures expectations and assertions",
             sql="""
         WITH
@@ -184,7 +198,7 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
         scenario_result AS (SELECT 1)
         SELECT * FROM scenario_result
         """.strip(),
-            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+            expected_error_fragment="must end after its CTEs",
         ),
         ExtractSqlScenarioCtesErrorTestCase(
             description="raises when assertion depends directly on expected result",
@@ -468,7 +482,7 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
             sql="SELECT * FROM orders",
             expected_message=(
                 "SQL scenario 'tests/scenarios/orders.sql' must declare fixture CTEs and at least "
-                "one __expected__<model> or __assert__<assertion> CTE before `SELECT 1`"
+                "one __expected__<model> or __assert__<assertion> CTE in a top-level WITH clause"
             ),
         ),
         CteScannerMessageTestCase(
@@ -494,8 +508,8 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
                 "result AS (SELECT 1) SELECT * FROM result"
             ),
             expected_message=(
-                "SQL scenario 'tests/scenarios/orders.sql' must end with a ceremonial top-level "
-                "`SELECT 1` after its CTEs"
+                "SQL scenario 'tests/scenarios/orders.sql' must end after its CTEs; only an optional "
+                "ceremonial top-level `SELECT 1` may follow them"
             ),
         ),
         CteScannerMessageTestCase(

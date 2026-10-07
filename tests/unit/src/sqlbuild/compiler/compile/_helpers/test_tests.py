@@ -4,6 +4,7 @@ import pytest
 
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     CompileSqlTestCtes,
+    complete_omitted_ceremonial_select,
     extract_sql_test_ctes,
     extract_sql_test_expected_model_names,
 )
@@ -15,6 +16,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    CompleteCeremonialSelectTestCase,
     CteScannerMessageTestCase,
     ExtractSqlTestCtesErrorTestCase,
     ExtractSqlTestCtesTestCase,
@@ -40,6 +42,31 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
             expected_mock_source_names=(),
             expected_expected_model_names=("fact_orders",),
             expected_mock_dbt_ref_names=("orders", "stripe__payments"),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts model ctes when the trailing select is omitted",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        """.strip(),
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts model ctes ending with a semicolon and comment",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id);
+        -- end of test
+        """.strip(),
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
         ),
         ExtractSqlTestCtesTestCase(
             description="extracts table function fixtures from model tests",
@@ -419,6 +446,20 @@ def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expec
             expected_macro_actual_cte_name="__table_fn_actual__",
             expected_macro_expected_cte_name="__table_fn_expected__",
         ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts macro ctes when the trailing select is omitted",
+            sql="""
+        WITH __macro_actual__ AS (SELECT @double(2) AS value),
+        __macro_expected__ AS (SELECT 4 AS value)
+        """.strip(),
+            mode=SqlTestMode.MACRO,
+            expected_authored_cte_names=(),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=(),
+            expected_macro_actual_cte_name="__macro_actual__",
+            expected_macro_expected_cte_name="__macro_expected__",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -453,7 +494,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         test_result AS (SELECT 1)
         SELECT * FROM test_result
         """.strip(),
-            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+            expected_error_fragment="must end after its CTEs",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when assertion depends directly on expected result",
@@ -614,7 +655,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         WITH __source__raw_orders AS (SELECT 1), __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1 FROM __expected__orders
         """.strip(),
-            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+            expected_error_fragment="must end after its CTEs",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when final result cte is not ceremonial select one",
@@ -625,7 +666,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         test_result AS (SELECT 2)
         SELECT * FROM test_result
         """.strip(),
-            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+            expected_error_fragment="must end after its CTEs",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when fallback terminal read follows a set operation",
@@ -852,7 +893,7 @@ def test_given_invalid_sql_test_cte_variants_when_extracting_then_it_raises_clea
             sql="SELECT * FROM orders",
             expected_message=(
                 "SQL test 'tests/unit/orders.sql' must declare mock CTEs and one "
-                "__expected__<model> CTE before `SELECT 1`"
+                "__expected__<model> CTE in a top-level WITH clause"
             ),
         ),
         CteScannerMessageTestCase(
@@ -868,8 +909,8 @@ def test_given_invalid_sql_test_cte_variants_when_extracting_then_it_raises_clea
                 "result AS (SELECT 1) SELECT * FROM result"
             ),
             expected_message=(
-                "SQL test 'tests/unit/orders.sql' must end with a ceremonial top-level "
-                "`SELECT 1` after its CTEs"
+                "SQL test 'tests/unit/orders.sql' must end after its CTEs; only an optional "
+                "ceremonial top-level `SELECT 1` may follow them"
             ),
         ),
     ),
@@ -916,3 +957,57 @@ def test_given_malformed_sql_test_ctes_when_scanning_expected_models_then_names_
         )
 
     assert str(error_info.value) == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CompleteCeremonialSelectTestCase(
+            description="adds the select after the last cte",
+            sql="WITH __source__orders AS (SELECT 1 AS id),\n__expected__orders AS (SELECT 1 AS id)",
+            expected_sql=(
+                "WITH __source__orders AS (SELECT 1 AS id),\n"
+                "__expected__orders AS (SELECT 1 AS id)\nSELECT 1"
+            ),
+        ),
+        CompleteCeremonialSelectTestCase(
+            description="adds the select before a trailing semicolon and comment",
+            sql="WITH __source__orders AS (SELECT 1 AS id);\n-- done",
+            expected_sql="WITH __source__orders AS (SELECT 1 AS id)\nSELECT 1;\n-- done",
+        ),
+        CompleteCeremonialSelectTestCase(
+            description="ignores parentheses in a trailing comment and string",
+            sql="WITH __source__orders AS (SELECT ')' AS id) -- closes (\n",
+            expected_sql="WITH __source__orders AS (SELECT ')' AS id)\nSELECT 1 -- closes (\n",
+        ),
+        CompleteCeremonialSelectTestCase(
+            description="keeps an authored ceremonial select unchanged",
+            sql="WITH __source__orders AS (SELECT 1 AS id)\nSELECT 1",
+            expected_sql="WITH __source__orders AS (SELECT 1 AS id)\nSELECT 1",
+        ),
+        CompleteCeremonialSelectTestCase(
+            description="keeps another final statement for the scanner to reject",
+            sql="WITH __source__orders AS (SELECT 1 AS id)\nSELECT * FROM __source__orders",
+            expected_sql="WITH __source__orders AS (SELECT 1 AS id)\nSELECT * FROM __source__orders",
+        ),
+        CompleteCeremonialSelectTestCase(
+            description="keeps sql without a with clause unchanged",
+            sql="SELECT 1",
+            expected_sql="SELECT 1",
+        ),
+        CompleteCeremonialSelectTestCase(
+            description="keeps an unclosed cte unchanged",
+            sql="WITH __source__orders AS (SELECT 1 AS id",
+            expected_sql="WITH __source__orders AS (SELECT 1 AS id",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_test_sql_when_completing_ceremonial_select_then_only_omitted_select_is_added(
+    test_case: CompleteCeremonialSelectTestCase,
+) -> None:
+    completed: str = complete_omitted_ceremonial_select(
+        sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX
+    )
+
+    assert completed == test_case.expected_sql

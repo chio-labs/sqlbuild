@@ -587,6 +587,23 @@ class ParseSqlTestFileErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSqlTestModeTestCase:
+    description: str
+    contents: str
+    expected_modes: tuple[str, ...]
+    expected_header_values: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class OmittedSelectPerformanceTestCase:
+    description: str
+    trailing_sql: str
+    fixture_rows: int
+    expected_offset_found: bool
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
 class ParseSqlTestCursorWindowTestCase:
     description: str
     contents: str

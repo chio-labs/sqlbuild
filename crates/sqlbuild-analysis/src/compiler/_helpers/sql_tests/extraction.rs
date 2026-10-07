@@ -107,7 +107,7 @@ pub(crate) fn extract_batch_json(request_json: &str) -> Result<String, String> {
 fn extract_ctes(sql: &str, file: &str) -> Result<Vec<Cte>, String> {
     let mut index = skip_ignorable(sql, 0)?;
     index = consume_keyword(sql, index, "WITH").ok_or_else(|| {
-        format!("SQL test '{file}' must declare mock CTEs and one __expected__<model> CTE before `SELECT 1`")
+        format!("SQL test '{file}' must declare mock CTEs and one __expected__<model> CTE in a top-level WITH clause")
     })?;
     index = skip_ignorable(sql, index)?;
     if let Some(end) = consume_keyword(sql, index, "RECURSIVE") {
@@ -140,9 +140,9 @@ fn extract_ctes(sql: &str, file: &str) -> Result<Vec<Cte>, String> {
             break;
         }
     }
-    if !ceremonial_select_matches(sql, index)? {
+    if !statement_ends(sql, index)? && !ceremonial_select_matches(sql, index)? {
         return Err(format!(
-            "SQL test '{file}' must end with a ceremonial top-level `SELECT 1` after its CTEs"
+            "SQL test '{file}' must end after its CTEs; only an optional ceremonial top-level `SELECT 1` may follow them"
         ));
     }
     Ok(ctes)
@@ -1045,7 +1045,11 @@ fn ceremonial_select_matches(sql: &str, start: usize) -> Result<bool, String> {
     if byte_at(sql, index) != Some(b'1') {
         return Ok(false);
     }
-    index = skip_ignorable(sql, index + 1)?;
+    statement_ends(sql, index + 1)
+}
+
+fn statement_ends(sql: &str, start: usize) -> Result<bool, String> {
+    let mut index = skip_ignorable(sql, start)?;
     if byte_at(sql, index) == Some(b';') {
         index = skip_ignorable(sql, index + 1)?;
     }

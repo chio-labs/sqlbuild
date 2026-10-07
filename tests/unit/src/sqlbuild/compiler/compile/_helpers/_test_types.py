@@ -896,6 +896,13 @@ class CteScannerMessageTestCase:
 
 
 @dataclass(frozen=True)
+class CompleteCeremonialSelectTestCase:
+    description: str
+    sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class ExpectedProjectionScanTestCase:
     description: str
     sql: str

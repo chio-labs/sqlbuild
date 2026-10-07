@@ -1,5 +1,3 @@
-TEST();
-
 WITH
 __source__raw__orders AS (
   SELECT
@@ -24,4 +22,3 @@ __assert__order_ids_are_not_null AS (
   FROM __ref("stg_orders")
   WHERE order_id IS NULL
 )
-SELECT 1

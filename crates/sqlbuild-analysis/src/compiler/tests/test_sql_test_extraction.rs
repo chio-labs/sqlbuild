@@ -7,7 +7,7 @@ use crate::compiler::tests::helpers::{
     expected_projection_errors_name_the_expected_cte,
     mixed_expanded_tests_preserve_order_and_payloads,
     quoted_ctes_and_implicit_alias_preserve_payload,
-    set_operation_expected_ctes_validate_every_branch,
+    set_operation_expected_ctes_validate_every_branch, trailing_ceremonial_select_is_optional,
 };
 use crate::compiler::tests::test_types::{SqlTestExtractionTestCase, TopLevelScanTestCase};
 
@@ -37,6 +37,11 @@ fn given_sql_test_cases_when_extracting_native_payloads_then_expected_behavior_h
         SqlTestExtractionTestCase {
             description: "expected projection errors name the expected CTE",
             run: expected_projection_errors_name_the_expected_cte,
+            expected_success: true,
+        },
+        SqlTestExtractionTestCase {
+            description: "trailing ceremonial SELECT 1 is optional",
+            run: trailing_ceremonial_select_is_optional,
             expected_success: true,
         },
         SqlTestExtractionTestCase {

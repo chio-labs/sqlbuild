@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock
@@ -14,6 +15,9 @@ from sqlbuild.compiler.discovery._helpers.sql.tests import (
     prepare_sql_test_file_headers,
 )
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
+from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
+    omitted_ceremonial_select_offset,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,
@@ -21,17 +25,66 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     SqlTestParameterDeclaration,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ExpectedCountTestCase,
+    OmittedSelectPerformanceTestCase,
     ParseSqlTestCursorWindowTestCase,
     ParseSqlTestFileErrorTestCase,
     ParseSqlTestFileTestCase,
+    ParseSqlTestModeTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     discovered_test_case_values,
     discovered_test_cases,
     discovered_test_parameters,
 )
+
+_FIXTURE_ROW: str = (
+    "  SELECT 1 AS order_id, 'it''s (open)' AS note, \"Qty\" AS qty -- row (comment)\n  UNION ALL\n"
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OmittedSelectPerformanceTestCase(
+            description="authored select one takes the constant-time path",
+            trailing_sql="SELECT 1\n",
+            fixture_rows=12_000,
+            expected_offset_found=False,
+            expected_max_seconds=0.05,
+        ),
+        OmittedSelectPerformanceTestCase(
+            description="omitted select one scans a megabyte body within budget",
+            trailing_sql="",
+            fixture_rows=12_000,
+            expected_offset_found=True,
+            expected_max_seconds=1.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_large_fixture_body_when_locating_omitted_select_then_completes_within_budget(
+    test_case: OmittedSelectPerformanceTestCase,
+) -> None:
+    sql: str = (
+        "WITH __source__orders AS (\n"
+        + _FIXTURE_ROW * test_case.fixture_rows
+        + "  SELECT 2 AS order_id, 'x' AS note, 3 AS qty\n),\n"
+        + "__expected__orders AS (SELECT 1 AS order_id)\n"
+        + test_case.trailing_sql
+    )
+    timings: list[float] = []
+    offset: int | None = None
+
+    for _ in range(3):
+        started: float = time.perf_counter()
+        offset = omitted_ceremonial_select_offset(sql=sql, syntax=SqlLexicalSyntax())
+        timings.append(time.perf_counter() - started)
+
+    assert (offset is not None) == test_case.expected_offset_found
+    assert min(timings) < test_case.expected_max_seconds
 
 
 @pytest.mark.parametrize(
@@ -69,7 +122,9 @@ def test_given_batch_preparation_failure_when_discovering_tolerantly_then_report
 ) -> None:
     tests_dir: Path = tmp_path / "tests" / "unit"
     tests_dir.mkdir(parents=True)
-    (tests_dir / "a_invalid.sql").write_text("SELECT 1", encoding="utf-8")
+    (tests_dir / "a_invalid.sql").write_text(
+        'TEST (name "unterminated")\nSELECT 1', encoding="utf-8"
+    )
     (tests_dir / "b_valid.sql").write_text('TEST (name "valid_order");\nSELECT 1', encoding="utf-8")
     preparation: Mock = Mock(side_effect=ValueError("invalid batch projection"))
     monkeypatch.setattr(test_file_discovery, "prepare_sql_test_file_headers", preparation)
@@ -106,6 +161,23 @@ def test_given_batch_preparation_failure_when_discovering_tolerantly_then_report
             expected_names=(None,),
             expected_sql_bodies=(
                 "WITH\n__source__orders AS (\n  SELECT 1 AS order_id\n)\nSELECT 1",
+            ),
+            expected_test_indexes=(1,),
+            expected_header_values=({},),
+        ),
+        ParseSqlTestFileTestCase(
+            description="treats a headerless file as one unnamed test block",
+            contents="""
+        -- Orders keep their identifiers.
+        WITH
+        __source__orders AS (
+          SELECT 1 AS order_id
+        )
+        """,
+            expected_names=(None,),
+            expected_sql_bodies=(
+                "-- Orders keep their identifiers.\nWITH\n__source__orders AS (\n"
+                "  SELECT 1 AS order_id\n)",
             ),
             expected_test_indexes=(1,),
             expected_header_values=({},),
@@ -268,9 +340,26 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
     "test_case",
     [
         ParseSqlTestFileErrorTestCase(
-            description="raises when the file does not start with a test header",
-            contents="SELECT 1\n",
-            expected_error_fragment="must start with a TEST",
+            description="raises when a headerless body precedes another test block",
+            contents='SELECT 1;\n\nTEST (name "second");\n\nSELECT 1\n',
+            expected_error_fragment="only a file with a single test may omit its header",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="raises when a test header is not terminated",
+            contents='TEST (name "orders")\n\nWITH __source__orders AS (SELECT 1 AS id)\n',
+            expected_error_fragment=r"not a complete TEST\(\.\.\.\); statement",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="raises when a headerless file is empty",
+            contents="\n  \n",
+            expected_error_fragment="must define SQL",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="raises when one block defines actual CTEs for several modes",
+            contents=(
+                "WITH __macro_actual__ AS (SELECT 1 AS a),\n__udf_actual__ AS (SELECT 1 AS a)\n"
+            ),
+            expected_error_fragment=r"actual CTEs for several test modes \(macro, udf\)",
         ),
         ParseSqlTestFileErrorTestCase(
             description="raises when leading comments appear before the first test header",
@@ -440,6 +529,93 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
 ) -> None:
     with pytest.raises(SqlTestParseError, match=test_case.expected_error_fragment):
         parse_sql_test_file(contents=test_case.contents, file_path=Path("tests/unit/orders.sql"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSqlTestModeTestCase(
+            description="defaults to model mode without direct-logic actual CTEs",
+            contents="WITH __source__orders AS (SELECT 1 AS id),\n__expected__orders AS (SELECT 1 AS id)",
+            expected_modes=("model",),
+            expected_header_values=({},),
+        ),
+        ParseSqlTestModeTestCase(
+            description="infers macro mode in a headerless file",
+            contents=(
+                "WITH __macro_actual__ AS (SELECT @double(1) AS value),\n"
+                "__macro_expected__ AS (SELECT 2 AS value)"
+            ),
+            expected_modes=("macro",),
+            expected_header_values=({},),
+        ),
+        ParseSqlTestModeTestCase(
+            description="infers udf mode under a header without a mode",
+            contents=(
+                'TEST (name "detects_completed_orders");\n'
+                "WITH __udf_actual__ AS (SELECT 1 AS value),\n"
+                "__udf_expected__ AS (SELECT 1 AS value)\n"
+                "SELECT 1"
+            ),
+            expected_modes=("udf",),
+            expected_header_values=({"name": "detects_completed_orders"},),
+        ),
+        ParseSqlTestModeTestCase(
+            description="infers table function mode from a lower-case as keyword",
+            contents=(
+                "WITH __table_fn_actual__ as (SELECT 1 AS value),\n"
+                "__table_fn_expected__ as (SELECT 1 AS value)"
+            ),
+            expected_modes=("table_fn",),
+            expected_header_values=({},),
+        ),
+        ParseSqlTestModeTestCase(
+            description="infers each named block independently",
+            contents=(
+                'TEST (name "macro_case");\n'
+                "WITH __macro_actual__ AS (SELECT 1 AS value),\n"
+                "__macro_expected__ AS (SELECT 1 AS value);\n\n"
+                'TEST (name "model_case");\n'
+                "WITH __source__orders AS (SELECT 1 AS id),\n"
+                "__expected__orders AS (SELECT 1 AS id)"
+            ),
+            expected_modes=("macro", "model"),
+            expected_header_values=({"name": "macro_case"}, {"name": "model_case"}),
+        ),
+        ParseSqlTestModeTestCase(
+            description="ignores actual CTE names in comments, strings and nested queries",
+            contents=(
+                "-- __macro_actual__ AS (\n"
+                "WITH __source__orders AS (\n"
+                "  WITH __udf_actual__ AS (SELECT 1 AS id) SELECT id FROM __udf_actual__\n"
+                "),\n"
+                "__expected__orders AS (SELECT '__table_fn_actual__ AS (' AS id)"
+            ),
+            expected_modes=("model",),
+            expected_header_values=({},),
+        ),
+        ParseSqlTestModeTestCase(
+            description="keeps an explicit mode even when it contradicts the CTEs",
+            contents=(
+                "TEST (mode model);\n"
+                "WITH __macro_actual__ AS (SELECT 1 AS value),\n"
+                "__macro_expected__ AS (SELECT 1 AS value)"
+            ),
+            expected_modes=("model",),
+            expected_header_values=({"mode": "model"},),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_test_block_ctes_when_parsing_then_mode_is_explicit_or_inferred(
+    test_case: ParseSqlTestModeTestCase,
+) -> None:
+    blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
+        contents=test_case.contents, file_path=Path("tests/unit/orders.sql")
+    )
+
+    assert tuple(block.mode.value for block in blocks) == test_case.expected_modes
+    assert tuple(block.header_values for block in blocks) == test_case.expected_header_values
 
 
 @pytest.mark.parametrize(

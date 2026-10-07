@@ -3700,7 +3700,7 @@ SELECT order_id FROM __expected__orders
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+            expected_error_fragment="must end after its CTEs",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when a compiled test body references an unknown source mock",
