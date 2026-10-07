@@ -1,0 +1,11 @@
+[package]
+name = "sqlbuild-scopes"
+version.workspace = true
+description = "Native declaration scopes for SQLBuild: the scope index, visibility and relationship grants."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

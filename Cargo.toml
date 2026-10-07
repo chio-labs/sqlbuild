@@ -4,6 +4,7 @@ members = [
     "crates/sqlbuild-sqltext",
     "crates/sqlbuild-config",
     "crates/sqlbuild-discovery",
+    "crates/sqlbuild-scopes",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
     "crates/sqlbuild-python",
@@ -19,6 +20,7 @@ order = [
     "sqlbuild-sqltext",
     "sqlbuild-config",
     "sqlbuild-discovery",
+    "sqlbuild-scopes",
     "sqlbuild-analysis",
     "sqlbuild-rules",
     "sqlbuild-python",
@@ -68,6 +70,7 @@ sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
+sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }
 sqlbuild-sqltext = { path = "crates/sqlbuild-sqltext" }
 stacker = "0.1"
 sqlparser = { version = "0.58", features = ["visitor"] }
