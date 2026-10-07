@@ -1274,6 +1274,7 @@ def _compact_projected_analysis_result(
                 string_pool=string_pool,
                 rows=cached_facts.lineage_rows,
                 resource_name_indexes=request.resource_name_indexes,
+                resource_names=request.resource_names,
             ),
             has_star=bool(request.analysis and request.analysis.get("hasStar")),
             star_resolved=bool(request.analysis and request.analysis.get("starResolved")),

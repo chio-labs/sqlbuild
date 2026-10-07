@@ -41,6 +41,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
+from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -306,6 +308,22 @@ def timed_compile_outcome(
     ), timings
 
 
+def compiled_project_capture(
+    *,
+    project_dir: Path,
+    capture_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Cold-compile once with stage captures; return the compiled-project capture file."""
+
+    with monkeypatch.context() as capture_patch:
+        capture_patch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(capture_dir))
+        _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+    _ = capsys.readouterr()
+    return next(capture_dir.glob(f"*-{CompilerStage.COMPILED_PROJECT.value}.json"))
+
+
 def reshape_models(*, project_dir: Path, names: tuple[str, ...], indexes: tuple[int, ...]) -> None:
     """Reshape the models at `indexes` of the generated topological name order."""
 
@@ -317,6 +335,14 @@ def use_wave_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
     """Analyze one topological level at a time, the reference schedule."""
 
     monkeypatch.setattr(project_assembly, "analyze_binding_dataflow", analyze_binding_waves)
+
+
+def analyze_single_model_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Analyze every model in its own native batch on one worker."""
+
+    monkeypatch.setattr(binding_waves, "_DATAFLOW_WORKERS", 1)
+    monkeypatch.setattr(binding_waves, "_DATAFLOW_BATCH_MIN", 1)
+    monkeypatch.setattr(binding_waves, "_DATAFLOW_BATCH_LIMIT", 1)
 
 
 def perturb_dataflow_schedule(

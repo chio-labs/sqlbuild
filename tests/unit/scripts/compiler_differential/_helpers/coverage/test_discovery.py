@@ -236,14 +236,19 @@ def test_given_authored_bytes_when_classifying_then_crlf_counts_only_for_discove
         path: Path = tmp_path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_bytes(contents)
-    capture: str = json.dumps(
-        empty_inputs_capture(
-            model_files=[{"relative_path": {"__path__": path}} for path in test_case.read_paths]
-        )
+    capture: Path = tmp_path / "captures" / "001-discovered_project_inputs.json"
+    capture.parent.mkdir()
+    _ = capture.write_text(
+        json.dumps(
+            empty_inputs_capture(
+                model_files=[{"relative_path": {"__path__": path}} for path in test_case.read_paths]
+            )
+        ),
+        encoding="utf-8",
     )
 
     kinds: frozenset[str] = project_discovery_kinds(
-        captures={"0-compile": {"001-discovered_project_inputs.json": capture}}, source_dir=tmp_path
+        captures={"0-compile": {capture.name: capture}}, source_dir=tmp_path
     )
 
     assert ("crlf" in kinds) is test_case.expected_crlf

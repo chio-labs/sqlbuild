@@ -6,18 +6,16 @@ from scripts.compiler_differential._helpers.comparing.compare import as_json_obj
 from scripts.compiler_differential.constants import (
     ELAPSED_TIME_MASK,
     ELAPSED_TIME_PATTERN,
-    ENGINE_NAMESPACE_PATTERN,
-    INVOCATION_ID_MASK,
-    INVOCATION_ID_PATTERN,
     MANIFEST_VOLATILE_METADATA,
     STRIPPED_REPORT_FIELDS,
 )
+from sqlbuild.compiler.frontier.classes.stage_capture_encoder import mask_capture_noise
 
 
 def normalize_artifact_text(text: str) -> str:
     """Mask invocation ids and engine store suffixes, which differ by design."""
 
-    return ENGINE_NAMESPACE_PATTERN.sub("", INVOCATION_ID_PATTERN.sub(INVOCATION_ID_MASK, text))
+    return mask_capture_noise(text)
 
 
 def normalize_stderr(text: str) -> str:

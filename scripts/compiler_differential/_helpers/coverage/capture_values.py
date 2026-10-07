@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Iterator
 
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object
+from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
     CALLABLE_MARKER,
     COLLECTION_CAPTURE_MARKERS,
@@ -87,7 +87,7 @@ def capture_problems(
 ) -> tuple[str, ...]:
     """Return why a capture is incomplete or not canonical; empty when it is sound."""
 
-    capture: dict[str, object] = as_json_object(json.loads(capture_text)) or {}
+    capture: dict[str, object] = as_json_object(expand_capture_text(capture_text)) or {}
     problems: list[str] = []
     captured: tuple[str, ...] = tuple(key for key in capture if key != TYPE_MARKER)
     if captured != fields:

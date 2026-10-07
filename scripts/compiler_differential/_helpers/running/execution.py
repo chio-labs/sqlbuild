@@ -45,9 +45,10 @@ def run_engine(
     source_dir: Path,
     case_dir: Path,
     engine: str,
+    side: str,
     options: DifferentialOptions,
 ) -> EngineRun:
-    """Run the project's commands under one engine in a fresh copy at a fixed path."""
+    """Run the project's commands under one engine in a fresh copy, keeping captures on disk."""
 
     workspace: Path = case_dir / PROJECT_DIRECTORY
     shutil.rmtree(workspace, ignore_errors=True)
@@ -57,7 +58,7 @@ def run_engine(
         if project.project_subdirectory is None
         else workspace / project.project_subdirectory
     )
-    capture_root: Path = case_dir / f"{engine}-{CAPTURES_DIRECTORY}"
+    capture_root: Path = case_dir / f"{side}-{engine}-{CAPTURES_DIRECTORY}"
     shutil.rmtree(capture_root, ignore_errors=True)
     outcomes: list[CommandOutcome] = []
     for index, command in enumerate(project.commands):
@@ -166,16 +167,10 @@ def _optional_text(path: Path) -> str | None:
     return path.read_text(encoding="utf-8", errors="surrogateescape") if path.is_file() else None
 
 
-def _captures(root: Path) -> dict[str, dict[str, str]]:
-    captures: dict[str, dict[str, str]] = {}
+def _captures(root: Path) -> dict[str, dict[str, Path]]:
+    captures: dict[str, dict[str, Path]] = {}
     for command_dir in sorted(root.iterdir()) if root.is_dir() else ():
-        captures[command_dir.name] = _capture_files(command_dir)
+        captures[command_dir.name] = {
+            capture.name: capture for capture in sorted(command_dir.iterdir()) if capture.is_file()
+        }
     return captures
-
-
-def _capture_files(command_dir: Path) -> dict[str, str]:
-    return {
-        capture.name: capture.read_text(encoding="utf-8")
-        for capture in sorted(command_dir.iterdir())
-        if capture.is_file()
-    }

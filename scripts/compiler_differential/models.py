@@ -57,7 +57,7 @@ class EngineRun:
     compiled: dict[str, bytes]
     manifest: str | None
     dag: str | None
-    captures: dict[str, dict[str, str]] = field(default_factory=dict)
+    captures: dict[str, dict[str, Path]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

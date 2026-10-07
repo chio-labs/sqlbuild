@@ -17,6 +17,7 @@ from scripts.compiler_differential.constants import (
     DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
     EXPECT_SUCCESS,
+    LEFT_SIDE,
     RENDER_CODE_SCAN_EXCLUDED,
     RENDER_RAISED_CODES,
     WARNING_SEVERITY,
@@ -139,6 +140,7 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
         source_dir=source_dir,
         case_dir=case_dir,
         engine=options.engines[0],
+        side=LEFT_SIDE,
         options=options,
     )
     return EmittedCodes(

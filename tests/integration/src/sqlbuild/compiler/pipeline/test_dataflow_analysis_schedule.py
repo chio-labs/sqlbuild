@@ -9,9 +9,13 @@ from _pytest.capture import CaptureResult
 
 from scripts.cold_compile_performance._helpers.random_dag_project import write_random_dag_project
 from scripts.cold_compile_performance.models import RandomDagProject
+from scripts.compiler_differential._helpers.comparing.capture import first_capture_difference
+from scripts.compiler_differential.main.generate_project import generate_project
+from scripts.compiler_differential.models import Divergence
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     CompileOutcome,
+    DataflowCaptureCase,
     DataflowFailureCase,
     DataflowInterruptAfterFaultCase,
     DataflowInterruptCase,
@@ -22,17 +26,25 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     analysis_pool_thread_ids,
     compile_outcome,
+    compiled_project_capture,
     fail_model_analysis,
     fail_worker_start,
     interrupt_after_analysis_fault,
     interrupt_reacquiring_analysis,
     live_model_analysis_threads,
     perturb_dataflow_schedule,
+    random_dag_writer,
     reshape_models,
     use_wave_analysis,
 )
 
 _PROJECT: RandomDagProject = RandomDagProject(seed=97, model_count=40, errors=True)
+_SHARED_ANALYSIS_SEED: int = 29
+_CAPTURE_SCHEDULES: tuple[DataflowScheduleCase, ...] = (
+    DataflowScheduleCase("one worker with single models", 1, 1, 0.0),
+    DataflowScheduleCase("four workers with small batches", 4, 2, 0.004),
+    DataflowScheduleCase("four workers with wide batches", 4, 64, 0.002),
+)
 _EDITED: tuple[int, ...] = (10, 25)
 _REPEATS: tuple[int, ...] = (0, 1)
 _SETTLE_SECONDS: float = 0.3
@@ -79,6 +91,52 @@ def test_given_perturbed_schedule_when_compiling_repeatedly_then_output_is_ident
         assert actual_edit == edit, f"edited compile differs in repeat {repeat}"
         assert actual_cold[0] == test_case.expected_cold_exit_code
         assert actual_edit[0] == test_case.expected_edit_exit_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DataflowCaptureCase(
+            "random dag",
+            random_dag_writer(_PROJECT),
+            _CAPTURE_SCHEDULES,
+        ),
+        DataflowCaptureCase(
+            "differential seed with shared analyses",
+            generate_project(seed=_SHARED_ANALYSIS_SEED).write,
+            _CAPTURE_SCHEDULES,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_perturbed_schedule_when_capturing_compiled_project_then_capture_is_identical(
+    test_case: DataflowCaptureCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    _ = test_case.write_project(project_dir)
+    with monkeypatch.context() as waves_patch:
+        use_wave_analysis(waves_patch)
+        reference: Path = compiled_project_capture(
+            project_dir=project_dir,
+            capture_dir=tmp_path / "reference",
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+        )
+    for index, schedule in enumerate(test_case.schedules):
+        with monkeypatch.context() as schedule_patch:
+            perturb_dataflow_schedule(monkeypatch=schedule_patch, case=schedule, seed=index)
+            actual: Path = compiled_project_capture(
+                project_dir=project_dir,
+                capture_dir=tmp_path / f"schedule-{index}",
+                capsys=capsys,
+                monkeypatch=monkeypatch,
+            )
+
+        difference: Divergence | None = first_capture_difference(left=reference, right=actual)
+        assert getattr(difference, "location", None) == test_case.expected_difference, schedule
 
 
 @pytest.mark.parametrize(

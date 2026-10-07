@@ -46,7 +46,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import BINDING_SEVERITIES, TYPE_CHECKED_DIALECTS
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
-_ANALYSIS_CACHE_VERSION: int = 12
+_ANALYSIS_CACHE_VERSION: int = 13
 _ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v21-completed-star-shapes"
 _LINEAGE_COLUMN_VALUE_COUNT: int = 4
 _LINEAGE_SOURCE_VALUE_COUNT: int = 3

@@ -441,6 +441,14 @@ class DataflowScheduleCase:
 
 
 @dataclass(frozen=True)
+class DataflowCaptureCase:
+    description: str
+    write_project: Callable[[Path], object]
+    schedules: tuple[DataflowScheduleCase, ...]
+    expected_difference: str | None = None
+
+
+@dataclass(frozen=True)
 class DataflowFailureCase:
     description: str
     failing_models: tuple[str, ...]

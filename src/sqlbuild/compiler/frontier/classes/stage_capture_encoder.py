@@ -12,12 +12,20 @@ import json
 import math
 import re
 import types
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from pathlib import PurePath
 from typing import Any
 
 from sqlbuild.compiler.frontier.constants import (
+    STAGE_CAPTURE_DECODED_SEQUENCES,
+    STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN,
+    STAGE_CAPTURE_INVOCATION_ID_MASK,
+    STAGE_CAPTURE_INVOCATION_ID_PATTERN,
+    STAGE_CAPTURE_OMITTED_ATTRIBUTES,
+    STAGE_CAPTURE_RESERVED_KEYS,
+    STAGE_CAPTURE_SHARED_MARKER,
+    STAGE_CAPTURE_SHARED_MIN_BYTES,
     STAGE_CAPTURE_SKIPPED_SLOTS,
     STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
@@ -32,17 +40,29 @@ _CALLABLE_TYPES: tuple[type, ...] = (
 
 
 class StageCaptureEncoder:
-    """Encode one object graph deterministically, replacing callables with qualified names."""
+    """Encode an object graph deterministically, sharing large subtrees by content digest."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        on_shared: Callable[..., None] | None = None,
+        share_min_bytes: int = STAGE_CAPTURE_SHARED_MIN_BYTES,
+    ) -> None:
         self._active: set[int] = set()
+        self._cycles: int = 0
+        self._encoded: dict[int, tuple[object, object]] = {}
+        self._on_shared: Callable[..., None] | None = on_shared
+        self._share_min_bytes: int = share_min_bytes
+        self._digests: set[str] = set()
 
     def encode(self, value: object) -> object:
         """Return a JSON-compatible value that keeps insertion order and sorts only sets."""
 
         if isinstance(value, enum.Enum):
             return {"__enum__": f"{qualified_name(type(value))}.{value.name}"}
-        if value is None or isinstance(value, (bool, int, str)):
+        if isinstance(value, str):
+            return value if len(value) < self._share_min_bytes else self._share(value)
+        if value is None or isinstance(value, (bool, int)):
             return value
         if isinstance(value, float):
             return value if math.isfinite(value) else {"__float__": repr(value)}
@@ -51,14 +71,37 @@ class StageCaptureEncoder:
             return scalar
         identity: int = id(value)
         if identity in self._active:
+            self._cycles += 1
             return {"__cycle__": qualified_name(type(value))}
+        known: tuple[object, object] | None = self._encoded.get(identity)
+        if known is not None:
+            return known[1]
+        cycles: int = self._cycles
         self._active.add(identity)
         try:
-            return self._encode_container(value)
+            encoded: object = self._share(self._encode_container(value))
         finally:
             self._active.discard(identity)
+        if self._cycles == cycles:
+            self._encoded[identity] = (value, encoded)
+        return encoded
+
+    def _share(self, encoded: object) -> object:
+        if self._on_shared is None or not isinstance(encoded, (dict, list, str)):
+            return encoded
+        text: str = json.dumps(encoded, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        if len(text) < self._share_min_bytes:
+            return encoded
+        digest: str = hashlib.sha256(mask_capture_noise(text).encode("utf-8")).hexdigest()
+        if digest not in self._digests:
+            self._digests.add(digest)
+            self._on_shared(digest=digest, text=text)
+        return {STAGE_CAPTURE_SHARED_MARKER: digest}
 
     def _encode_container(self, value: object) -> object:
+        type_name: str = qualified_name(type(value))
+        if type_name in STAGE_CAPTURE_DECODED_SEQUENCES and isinstance(value, Sequence):
+            return [self.encode(item) for item in value]
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
             return {
                 "__type__": qualified_name(type(value)),
@@ -80,15 +123,16 @@ class StageCaptureEncoder:
                 "keywords": self.encode(value.keywords),
             }
         attributes: dict[str, object] | None = _instance_attributes(value)
-        type_name: str = qualified_name(type(value))
         if attributes is None:
             return {"__opaque__": type_name}
         unordered: frozenset[str] = STAGE_CAPTURE_UNORDERED_ATTRIBUTES.get(type_name, frozenset())
+        omitted: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(type_name, frozenset())
         return {
             "__type__": type_name,
             **{
                 name: self._encode_attribute(value=item, unordered=name in unordered)
                 for name, item in attributes.items()
+                if name not in omitted
             },
         }
 
@@ -98,7 +142,9 @@ class StageCaptureEncoder:
         return {"__unordered_mapping__": sorted(self._mapping_pairs(value), key=_sort_key)}
 
     def _encode_mapping(self, value: Mapping[Any, object]) -> object:
-        if all(isinstance(key, str) for key in value):
+        if all(isinstance(key, str) for key in value) and STAGE_CAPTURE_RESERVED_KEYS.isdisjoint(
+            value
+        ):
             return {str(key): self.encode(item) for key, item in value.items()}
         return {"__mapping__": self._mapping_pairs(value)}
 
@@ -135,8 +181,17 @@ def _encode_scalar(value: object) -> object | None:
     return None
 
 
+def mask_capture_noise(text: str) -> str:
+    """Mask invocation ids and native store suffixes, which differ between identical compiles."""
+
+    return STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN.sub(
+        "",
+        STAGE_CAPTURE_INVOCATION_ID_PATTERN.sub(STAGE_CAPTURE_INVOCATION_ID_MASK, text),
+    )
+
+
 def _sort_key(item: object) -> str:
-    return json.dumps(item, sort_keys=True, ensure_ascii=False)
+    return mask_capture_noise(json.dumps(item, sort_keys=True, ensure_ascii=False))
 
 
 def _instance_attributes(value: object) -> dict[str, object] | None:

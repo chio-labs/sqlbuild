@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 
+from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild.compiler.frontier.classes.stage_capture_encoder import StageCaptureEncoder
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
+    STAGE_CAPTURE_SHARED_NODES_KEY,
     STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
+    SharedCaptureTestCase,
     StageCaptureOrderTestCase,
     StageCaptureTestCase,
     UnorderedAttributeTestCase,
@@ -27,7 +32,14 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
     memo_catalog,
     order_line,
     order_total,
+    orders_binding_catalog,
+    orders_lineage,
+    repeated_orders,
 )
+
+_COMPILE_MODELS: str = "sqlbuild.compiler.compile.models"
+_COMPILE_TYPES: str = "sqlbuild.compiler.compile.types"
+_LINEAGE_TYPES: str = "sqlbuild.compiler.lineage.types"
 
 
 @pytest.mark.parametrize(
@@ -66,6 +78,35 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
                 "name": "customer",
                 "peer": {"__cycle__": f"{HELPERS_MODULE}:LinkedCustomer"},
             },
+        ),
+        StageCaptureTestCase(
+            description="compact_lineage_is_captured_as_decoded_facts",
+            value=lambda: orders_lineage(
+                string_pool=("customers", "order_id", "source", "orders"), source_index=3
+            ),
+            expected_capture=[
+                {
+                    "__type__": f"{_COMPILE_MODELS}:CompiledLineageColumnFact",
+                    "output_column": "order_id",
+                    "upstream_columns": [
+                        {
+                            "__type__": f"{_COMPILE_MODELS}:CompiledLineageSourceFact",
+                            "resource_type": {
+                                "__enum__": f"{_COMPILE_TYPES}:CompiledResourceType.SOURCE"
+                            },
+                            "resource_name": "orders",
+                            "column_name": "order_id",
+                        }
+                    ],
+                    "transform_kind": {"__enum__": f"{_LINEAGE_TYPES}:ColumnTransformKind.DIRECT"},
+                    "confidence": {"__enum__": f"{_LINEAGE_TYPES}:ColumnLineageConfidence.HIGH"},
+                }
+            ],
+        ),
+        StageCaptureTestCase(
+            description="mapping_with_a_reserved_key_is_encoded_as_pairs",
+            value=lambda: {"__shared__": "orders", "status": "placed"},
+            expected_capture={"__mapping__": [["__shared__", "orders"], ["status", "placed"]]},
         ),
         StageCaptureTestCase(
             description="non_finite_float_and_bytes",
@@ -113,6 +154,50 @@ def test_given_frontier_value_when_rendering_capture_then_json_is_canonical(
             first=lambda: frozenset(("orders", "customers", "products")),
             second=lambda: frozenset(("products", "customers", "orders")),
             expected_identical=True,
+        ),
+        StageCaptureOrderTestCase(
+            description="batch_string_pool_layout_is_not_visible",
+            first=lambda: orders_lineage(
+                string_pool=("order_id", "source", "orders"), source_index=2
+            ),
+            second=lambda: orders_lineage(
+                string_pool=("customers", "source", "orders", "amount", "order_id"),
+                source_index=2,
+            ),
+            expected_identical=True,
+        ),
+        StageCaptureOrderTestCase(
+            description="decoded_lineage_source_is_visible",
+            first=lambda: orders_lineage(
+                string_pool=("order_id", "source", "orders", "customers"), source_index=2
+            ),
+            second=lambda: orders_lineage(
+                string_pool=("order_id", "source", "orders", "customers"), source_index=3
+            ),
+            expected_identical=False,
+        ),
+        StageCaptureOrderTestCase(
+            description="shared_analysis_memo_fill_is_not_visible",
+            first=lambda: orders_binding_catalog(
+                shared_analyses=(("orders_key", "orders"), ("customers_key", "customers")),
+                relations=("orders", "customers"),
+            ),
+            second=lambda: orders_binding_catalog(
+                shared_analyses=(
+                    ("customers_key", "customers_copy"),
+                    ("orders_key", "orders_copy"),
+                ),
+                relations=("customers", "orders"),
+            ),
+            expected_identical=True,
+        ),
+        StageCaptureOrderTestCase(
+            description="binding_catalog_relations_stay_visible",
+            first=lambda: orders_binding_catalog(
+                shared_analyses=(), relations=("orders", "customers")
+            ),
+            second=lambda: orders_binding_catalog(shared_analyses=(), relations=("orders",)),
+            expected_identical=False,
         ),
     ],
     ids=lambda case: case.description,
@@ -163,6 +248,34 @@ def test_given_declared_memo_attribute_when_rendering_capture_then_only_it_is_so
     )
 
     assert (first == second) is test_case.expected_identical
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedCaptureTestCase(
+            description="repeated_lines_and_sql_are_stored_once",
+            value=repeated_orders,
+            expected_shared_nodes=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_repeated_large_subtrees_when_rendering_capture_then_each_is_stored_once(
+    test_case: SharedCaptureTestCase,
+) -> None:
+    text: str = render_stage_capture(test_case.value())
+
+    shared: dict[str, object] = json.loads(text)[STAGE_CAPTURE_SHARED_NODES_KEY]
+    assert len(shared) == test_case.expected_shared_nodes
+    assert expand_capture_text(text) == StageCaptureEncoder().encode(test_case.value())
+    assert {
+        hashlib.sha256(
+            json.dumps(node, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+        for node in shared.values()
+    } == set(shared)
+    assert len(text.splitlines()) == test_case.expected_shared_nodes + 4
 
 
 @pytest.mark.parametrize(
