@@ -43,15 +43,17 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     prepare_matched_model_file_headers,
 )
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
+from sqlbuild.compiler.discovery._helpers.yml.file_paths import (
+    schema_file_paths,
+    source_file_paths,
+)
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     CANONICAL_AUTHORED_ROOTS,
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
-    SCHEMA_FILE_NAME,
     SEED_FILE_SUFFIX,
-    YAML_FILE_SUFFIXES,
 )
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
@@ -59,7 +61,6 @@ from sqlbuild.compiler.discovery.exceptions import (
     ModelSqlParseError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
-    SchemaParseError,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
@@ -683,27 +684,7 @@ def discover_python_function_files(
 def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]:
     """Discover model schema.yml files and seed declaration .yml files."""
 
-    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
-    schema_paths: list[Path] = []
-    models_root: Path = project_dir / "models"
-    seeds_root: Path = project_dir / "seeds"
-
-    if models_root.is_dir():
-        schema_paths.extend(
-            path
-            for path in sorted(tree.rglob(root=models_root, pattern=SCHEMA_FILE_NAME))
-            if not is_in_scoped_declaration_tree(file_path=path, project_dir=project_dir)
-        )
-    if seeds_root.is_dir():
-        yaml_path: Path
-        for yaml_path in sorted(tree.rglob(root=seeds_root, pattern="*.yaml")):
-            raise SchemaParseError(
-                f"Seed declaration file {yaml_path.relative_to(project_dir)} must use .yml; "
-                ".yaml is not supported"
-            )
-        schema_paths.extend(sorted(tree.rglob(root=seeds_root, pattern="*.yml")))
-
-    deduped_paths: tuple[Path, ...] = tuple(dict.fromkeys(schema_paths))
+    deduped_paths: tuple[Path, ...] = schema_file_paths(project_dir=project_dir)
     discovered_schema_files: list[DiscoveredSchemaFile] = []
     file_path: Path
     for file_path in deduped_paths:
@@ -731,13 +712,7 @@ def discover_source_files(
 ) -> tuple[DiscoveredSourceFile, ...]:
     """Discover source declaration YAML files under sources/."""
 
-    sources_root: Path = project_dir / "sources"
-    if not sources_root.is_dir():
-        return ()
-
-    yaml_paths: tuple[Path, ...] = tuple(
-        sorted(path for path in sources_root.iterdir() if path.suffix in YAML_FILE_SUFFIXES)
-    )
+    yaml_paths: tuple[Path, ...] = source_file_paths(project_dir=project_dir)
 
     def parse(file_path: Path) -> DiscoveredSourceFile:
         return parse_source_file_with_cache(

@@ -1,5 +1,6 @@
 mod allocator;
 mod catalog;
+mod config_values;
 pub(crate) mod conversions;
 mod discovery;
 pub(crate) mod functions;

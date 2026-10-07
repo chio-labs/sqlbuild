@@ -59,6 +59,7 @@ def discover_sql_test_files(
 def discover_scenario_files(
     request: dict[str, object], tree: NativeProjectTree
 ) -> list[tuple[str, tuple[object, ...]]] | None: ...
+def load_yaml_files(relative_paths: list[str], tree: NativeProjectTree) -> list[object] | None: ...
 def discover_declaration_layout(
     tree: NativeProjectTree,
 ) -> (

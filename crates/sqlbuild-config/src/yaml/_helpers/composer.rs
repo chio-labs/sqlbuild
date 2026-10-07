@@ -7,8 +7,8 @@ use crate::yaml::_helpers::anchors::{
 use crate::yaml::_helpers::block_scalars::{column_of, scan_block_scalar};
 use crate::yaml::_helpers::resolver::resolve_scalar;
 use crate::yaml::constants::{
-    FLOW_KEY_INDICATOR, MAP_TAG, MAX_NESTING_DEPTH, NON_SPECIFIC_TAG,
-    PLAIN_FORBIDDEN_FIRST_CHARACTERS, SEQ_TAG, SEQUENCE_ENTRY_TOKEN,
+    FLOW_KEY_INDICATOR, MAP_TAG, MAX_NATIVE_IMPLICIT_KEY_CHARACTERS, MAX_NESTING_DEPTH,
+    NON_SPECIFIC_TAG, PLAIN_FORBIDDEN_FIRST_CHARACTERS, SEQ_TAG, SEQUENCE_ENTRY_TOKEN,
 };
 use crate::yaml::models::{ComposedDocument, Node, NodeContent};
 use saphyr_parser::{Event, Parser, ScalarStyle, ScanError, Span, StrInput, Tag};
@@ -142,8 +142,8 @@ impl<'input> Composer<'input> {
         self.chars.get(index).copied()
     }
 
-    /// Whether an implicit key, from its first property to its `:` indicator, covers a line break.
-    fn spans_lines(&self, span: Span) -> bool {
+    /// An implicit key's extent from its first property to its `:` indicator; `None` if explicit.
+    fn implicit_key_extent(&self, span: Span) -> Option<(usize, usize)> {
         let key_end = span.end.index().min(self.chars.len());
         let indicator = (key_end..self.chars.len())
             .find(|index| !matches!(self.chars[*index], ' ' | '\t' | '\n' | '\r'))
@@ -166,10 +166,22 @@ impl<'input> Composer<'input> {
                 self.char_at(start + 1),
                 None | Some(' ' | '\t' | '\n' | '\r')
             );
-        !explicit
-            && self.chars[start.min(end)..end]
+        (!explicit).then_some((start.min(end), end))
+    }
+
+    /// Whether an implicit key, from its first property to its `:` indicator, covers a line break.
+    fn spans_lines(&self, span: Span) -> bool {
+        self.implicit_key_extent(span).is_some_and(|(start, end)| {
+            self.chars[start..end]
                 .iter()
                 .any(|character| matches!(character, '\n' | '\r'))
+        })
+    }
+
+    /// Whether an implicit key nears PyYAML's 1024-character simple-key limit.
+    fn is_long_implicit_key(&self, span: Span) -> bool {
+        self.implicit_key_extent(span)
+            .is_some_and(|(start, end)| end - start > MAX_NATIVE_IMPLICIT_KEY_CHARACTERS)
     }
 
     /// Whether the collection starting at `span` is written in flow style.
@@ -325,6 +337,11 @@ impl<'input> Composer<'input> {
                     return Err(ConfigError::new(
                         ConfigErrorKind::Syntax,
                         "a plain scalar in a flow collection cannot start with ':'",
+                    ));
+                }
+                if placement.key && self.is_long_implicit_key(span) {
+                    return Err(unsupported(
+                        "implicit keys near PyYAML's 1024-character limit are left to Python",
                     ));
                 }
                 if placement.key && placement.flow && self.spans_lines(span) {

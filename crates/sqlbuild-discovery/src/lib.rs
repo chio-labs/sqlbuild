@@ -9,3 +9,4 @@ pub mod model_files;
 pub mod models;
 pub mod sql_tests;
 pub mod tree;
+pub mod yaml_files;

@@ -106,6 +106,12 @@ def _snapshot_entries(
     )
 
 
+def native_path_text_supported(text: str) -> bool:
+    """Whether a path's text crosses to the native engine unchanged (no surrogate escapes)."""
+
+    return _is_utf8_text(text)
+
+
 def _is_utf8_text(text: str) -> bool:
     try:
         _ = text.encode(_PATH_ENCODING)

@@ -44,6 +44,10 @@ from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     discover_native_scenario_files,
     discover_native_test_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
+    discover_native_schema_files,
+    discover_native_source_files,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import (
@@ -226,8 +230,10 @@ def _discover_declaration_files(
     native: bool,
 ) -> DiscoveredDeclarationFiles:
     with DirectorySnapshot.scope(project_dir=project_dir):
-        source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(
-            project_dir=project_dir, fact_cache=fact_cache
+        source_files: tuple[DiscoveredSourceFile, ...] = (
+            discover_native_source_files(project_dir=project_dir, fact_cache=fact_cache)
+            if native
+            else discover_source_files(project_dir=project_dir, fact_cache=fact_cache)
         )
         model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
         if native:
@@ -241,7 +247,11 @@ def _discover_declaration_files(
             sql_function_files=discover_sql_function_files(project_dir=project_dir),
             sql_hook_files=discover_sql_hook_files(project_dir=project_dir),
             python_function_files=discover_python_function_files(project_dir=project_dir),
-            schema_files=discover_schema_files(project_dir=project_dir),
+            schema_files=(
+                discover_native_schema_files(project_dir=project_dir)
+                if native
+                else discover_schema_files(project_dir=project_dir)
+            ),
             seed_files=discover_seed_files(project_dir=project_dir),
             test_files=(
                 discover_native_test_files(project_dir=project_dir, fact_cache=fact_cache)

@@ -20,10 +20,13 @@ use sqlbuild_discovery::sql_tests::models::{
 };
 use sqlbuild_discovery::tree::main::listings::read_listings;
 use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
+use sqlbuild_discovery::yaml_files::main::load_yaml_files::load_yaml_files as load_yaml;
+use sqlbuild_discovery::yaml_files::models::YamlFileOutcome;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::bindings::_helpers::config_values::config_value_to_python;
 use crate::bindings::_helpers::functions::map_to_python;
 use crate::bindings::models::{ModelDiscoveryRequest, NativeProjectTree, SqlTestDiscoveryRequest};
 use crate::bindings::types::CompilerDetach;
@@ -297,7 +300,45 @@ fn discover_scenario_files(
     }
 }
 
+/// One file's payload; a value Python cannot hold natively makes Python load that file.
+fn yaml_file_object(py: Python<'_>, outcome: YamlFileOutcome) -> PyResult<PyObject> {
+    match outcome {
+        YamlFileOutcome::Loaded { contents, value } => match config_value_to_python(py, value) {
+            Ok(loaded) => tuple_object(py, vec![object(py, "ok")?, object(py, contents)?, loaded]),
+            Err(_unconvertible) => {
+                tuple_object(py, vec![object(py, "load")?, object(py, contents)?])
+            }
+        },
+        YamlFileOutcome::LoadInPython { contents } => {
+            tuple_object(py, vec![object(py, "load")?, object(py, contents)?])
+        }
+        YamlFileOutcome::Unreadable => tuple_object(py, vec![object(py, "read")?]),
+    }
+}
+
+/// Read and load YAML files natively, one payload per path, or `None` when Python must run.
+#[pyfunction]
+fn load_yaml_files(
+    py: Python<'_>,
+    relative_paths: Vec<String>,
+    tree: &NativeProjectTree,
+) -> PyResult<Option<Vec<PyObject>>> {
+    let loaded: Result<Vec<YamlFileOutcome>, StageDeferral> = py
+        .compiler_detach(|| Ok(load_yaml(&tree.inner, &relative_paths)))
+        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+    match loaded {
+        Ok(outcomes) => Ok(Some(
+            outcomes
+                .into_iter()
+                .map(|outcome| yaml_file_object(py, outcome))
+                .collect::<PyResult<_>>()?,
+        )),
+        Err(_deferral) => Ok(None),
+    }
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(load_yaml_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_sql_test_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_scenario_files, module)?)?;
     module.add_class::<NativeProjectTree>()?;

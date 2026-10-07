@@ -60,3 +60,5 @@ pub(crate) const STRIP_INDICATOR: char = '-';
 pub(crate) const SEQUENCE_ENTRY_TOKEN: &str = "-";
 pub(crate) const DIRECTIVE_INDICATOR: char = '%';
 pub(crate) const PLAIN_FORBIDDEN_FIRST_CHARACTERS: [char; 5] = ['|', '>', '%', '@', '`'];
+/// Longer implicit keys are left to Python, which rejects simple keys beyond 1024 characters.
+pub(crate) const MAX_NATIVE_IMPLICIT_KEY_CHARACTERS: usize = 1000;

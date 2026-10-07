@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 rayon.workspace = true
+sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-sqltext.workspace = true
 
