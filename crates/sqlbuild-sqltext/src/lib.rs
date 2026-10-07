@@ -4,4 +4,5 @@
 
 pub mod compiler;
 mod constants;
+pub mod sql_references;
 pub mod sql_scan;
