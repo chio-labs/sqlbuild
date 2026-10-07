@@ -85,6 +85,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             stage=NativeStage.DECLARATION_FILES,
             expected_enabled=True,
         ),
+        NativeStageTierTestCase(
+            description="python_model_loop",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.MODEL_LOOP,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_model_loop",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.MODEL_LOOP,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_model_loop",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.MODEL_LOOP,
+            expected_enabled=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

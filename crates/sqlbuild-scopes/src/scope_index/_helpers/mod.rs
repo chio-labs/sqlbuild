@@ -1,3 +1,4 @@
+pub(crate) mod consumer_positions;
 pub(crate) mod diagnostics;
 pub(crate) mod grants;
 pub(crate) mod identities;

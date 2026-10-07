@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import random
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from itertools import compress
+from dataclasses import dataclass, fields, replace
+from itertools import chain, compress
 from pathlib import Path
 
 import pytest
@@ -13,10 +13,16 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_expected_model_names
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
+from sqlbuild.compiler.compile.models import (
+    DeclarationResolutionContext,
+    DeclarationScopeBuild,
+    DeclarationScopeResolver,
+    LoadedMacro,
+)
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -29,7 +35,13 @@ from sqlbuild.compiler.scopes.main._native_expected_model_names import (
 )
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
-from sqlbuild.compiler.scopes.models import ScopeIndex, ScopeLookup
+from sqlbuild.compiler.scopes.models import (
+    ResourceIdentity,
+    ScopeIndex,
+    ScopeLookup,
+    VisibilityRecord,
+)
+from sqlbuild.compiler.scopes.types import VisibilityReason
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -483,3 +495,121 @@ def _python_expected_names(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[str, 
         )
     except CompileInputError as error:
         return str(error)
+
+
+@dataclass(frozen=True)
+class ContextParity:
+    """Native and Python declaration contexts for every consumer of some projects."""
+
+    targets: tuple[str, ...] = ()
+    native: tuple[object, ...] = ()
+    python: tuple[object, ...] = ()
+    native_contexts: int = 0
+    granted_contexts: int = 0
+    private_contexts: int = 0
+    python_only_paths: int = 0
+
+
+_CONTEXT_DICT_FIELDS: tuple[str, ...] = tuple(
+    item.name for item in fields(DeclarationResolutionContext) if item.name != "consumer"
+)
+
+
+def declaration_context_parity(
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> ContextParity:
+    """Resolve every resource, resource path and declaration file natively and in Python."""
+
+    try:
+        discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+        macros: dict[str, LoadedMacro] = load_project_macros(discovered.macro_files)
+        monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
+        scope: DeclarationScopeBuild = build_declaration_scope(
+            discovered_inputs=discovered,
+            loaded_macros=macros,
+            sql_lexical_syntax=DuckDbAdapter().sql_lexical_syntax,
+        )
+    except (DiscoveryError, CompileInputError):
+        return ContextParity()
+    resolver: DeclarationScopeResolver = scope.resolver
+    targets: list[tuple[Path, ResourceIdentity | None]] = [
+        *(
+            (Path(records[0].path), identity)
+            for identity, records in resolver.lookup.resources.items()
+        ),
+        *((Path(path), None) for path in resolver.lookup.resources_by_path),
+        *((Path(record.path), None) for record in scope.index.declarations),
+    ]
+    native: list[DeclarationResolutionContext] = [
+        resolve_declaration_context(
+            resolver=replace(resolver, contexts_by_directory={}),
+            file_path=file_path,
+            resource=resource,
+        )
+        for file_path, resource in targets
+    ]
+    python: list[DeclarationResolutionContext] = [
+        resolve_declaration_context(
+            resolver=replace(resolver, contexts_by_directory={}, native_contexts=None),
+            file_path=file_path,
+            resource=resource,
+        )
+        for file_path, resource in targets
+    ]
+    indexed: list[bool] = [
+        bool(resource) or file_path.as_posix() in resolver.lookup.resources_by_path
+        for file_path, resource in targets
+    ]
+    records: list[list[VisibilityRecord]] = list(map(_visibility_records, native))
+    return ContextParity(
+        targets=tuple(
+            f"{project_dir.name}:{file_path}:{resource}" for file_path, resource in targets
+        ),
+        native=tuple(map(_context_shape, native)),
+        python=tuple(map(_context_shape, python)),
+        native_contexts=sum(indexed),
+        granted_contexts=sum(map(_has_grant, records)),
+        private_contexts=sum(map(_has_private_value, records)),
+        python_only_paths=len(indexed) - sum(indexed),
+    )
+
+
+def combined_context_parity(parities: list[ContextParity]) -> ContextParity:
+    """Concatenate the compared contexts and add up the coverage counts of several projects."""
+
+    return ContextParity(
+        targets=tuple(chain.from_iterable(parity.targets for parity in parities)),
+        native=tuple(chain.from_iterable(parity.native for parity in parities)),
+        python=tuple(chain.from_iterable(parity.python for parity in parities)),
+        native_contexts=sum(parity.native_contexts for parity in parities),
+        granted_contexts=sum(parity.granted_contexts for parity in parities),
+        private_contexts=sum(parity.private_contexts for parity in parities),
+        python_only_paths=sum(parity.python_only_paths for parity in parities),
+    )
+
+
+def _has_grant(records: list[VisibilityRecord]) -> bool:
+    return any(record.through is not None for record in records)
+
+
+def _has_private_value(records: list[VisibilityRecord]) -> bool:
+    return any(record.reason is VisibilityReason.PRIVATE_OWNER for record in records)
+
+
+def _visibility_records(context: DeclarationResolutionContext) -> list[VisibilityRecord]:
+    return list(
+        chain.from_iterable(
+            chain(
+                context.enum_visibility.values(),
+                context.constant_visibility.values(),
+                context.macro_visibility.values(),
+            )
+        )
+    )
+
+
+def _context_shape(context: DeclarationResolutionContext) -> tuple[object, ...]:
+    return (
+        *(tuple(getattr(context, name).items()) for name in _CONTEXT_DICT_FIELDS),
+        context.consumer,
+    )

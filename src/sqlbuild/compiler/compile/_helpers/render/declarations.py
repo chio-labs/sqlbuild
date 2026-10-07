@@ -31,7 +31,13 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
+    build_native_declaration_contexts,
+)
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.scopes.constants import QUALIFIED_IDENTITY_SEPARATOR
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
 from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
@@ -152,9 +158,10 @@ def build_declaration_scope_resolver(
     if loaded_macros is not None:
         for macro in loaded_macros.values():
             declarations[DeclarationIdentity(DeclarationKind.MACRO, macro.name)] = macro
+    scope_lookup: ScopeLookup = build_scope_lookup(index=scope_index) if lookup is None else lookup
     return DeclarationScopeResolver(
         project_dir=discovered_inputs.project_dir,
-        lookup=build_scope_lookup(index=scope_index) if lookup is None else lookup,
+        lookup=scope_lookup,
         projection=DeclarationRuntimeProjection(declarations=MappingProxyType(declarations)),
         resource_specific=frozenset(
             declaration.identity.owner
@@ -162,6 +169,11 @@ def build_declaration_scope_resolver(
             if declaration.scope is ScopeKind.PRIVATE and declaration.identity.owner is not None
         )
         | frozenset(grant.resource for grant in scope_index.grants),
+        native_contexts=(
+            build_native_declaration_contexts(lookup=scope_lookup, declarations=declarations)
+            if native_stage_enabled(NativeStage.MODEL_LOOP)
+            else None
+        ),
     )
 
 
@@ -201,9 +213,43 @@ def resolve_declaration_context(
         )
         if cached_path_context is not None:
             return cached_path_context
-    resolution: DeclarationVisibility = resolve_scope_declaration_visibility(
-        lookup=resolver.lookup, target=resource or target_path
+    native_context: DeclarationResolutionContext | None = (
+        resolver.native_contexts.context(resources, resource or resources[0].identity)
+        if resolver.native_contexts is not None
+        and resources
+        and not _scope_query_parses_identity(resource=resource, target_path=target_path)
+        else None
     )
+    context: DeclarationResolutionContext = (
+        native_context
+        if native_context is not None
+        else _project_declaration_context(
+            resolver=resolver,
+            resolution=resolve_scope_declaration_visibility(
+                lookup=resolver.lookup, target=resource or target_path
+            ),
+            target_path=target_path,
+            resource=resource,
+        )
+    )
+    if cache_key is not None:
+        resolver.cache_context(key=cache_key, context=context)
+    return context
+
+
+def _scope_query_parses_identity(*, resource: ResourceIdentity | None, target_path: Path) -> bool:
+    """Whether the scope query reads the path target as a qualified identity, as Python does."""
+
+    return resource is None and QUALIFIED_IDENTITY_SEPARATOR in str(target_path)
+
+
+def _project_declaration_context(
+    *,
+    resolver: DeclarationScopeResolver,
+    resolution: DeclarationVisibility,
+    target_path: Path,
+    resource: ResourceIdentity | None,
+) -> DeclarationResolutionContext:
     enums: dict[str, EnumDeclaration] = {}
     constants: dict[str, ConstantDeclaration] = {}
     inaccessible_enums: dict[str, DeclarationRecord] = {}
@@ -259,7 +305,7 @@ def resolve_declaration_context(
             constant_visibility[record.identity.name] = records
         elif record.identity.kind is DeclarationKind.MACRO:
             macro_visibility[record.identity.name] = records
-    context: DeclarationResolutionContext = DeclarationResolutionContext(
+    return DeclarationResolutionContext(
         enums=enums,
         constants=constants,
         inaccessible_enums=inaccessible_enums,
@@ -275,9 +321,6 @@ def resolve_declaration_context(
             or (resolution.target.matches[0].identity if resolution.target.matches else None)
         ),
     )
-    if cache_key is not None:
-        resolver.cache_context(key=cache_key, context=context)
-    return context
 
 
 def _declaration_path_visibility(

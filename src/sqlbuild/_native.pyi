@@ -1,5 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
+from collections.abc import Sequence
 from typing import Any, TypedDict
 
 BUILD_IDENTITY: str
@@ -85,6 +86,16 @@ def discover_declaration_layout(
 def parse_model_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
 def parse_sql_test_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
 def parse_scenario_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
+
+class NativeDeclarationContexts:
+    def __init__(
+        self,
+        positions: list[tuple[object, ...]],
+        table: tuple[list[int], dict[str, list[int]], dict[str, list[int]]],
+        classes: dict[str, object],
+        lookup: dict[str, object],
+    ) -> None: ...
+    def context(self, matches: Sequence[Any], consumer: object) -> Any: ...
 
 class NativeScopeIndex:
     def records(

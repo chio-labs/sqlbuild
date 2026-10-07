@@ -1,16 +1,21 @@
 use crate::scope_index::_helpers::identities::{
     declaration_text, grant_through_text, resource_text,
 };
+use std::collections::HashMap;
+
 use crate::scope_index::main::build_scope_index::build_scope_index;
+use crate::scope_index::main::classify_resource::classify_resource;
 use crate::scope_index::main::relationship_grants::relationship_grants;
 use crate::scope_index::main::scope_lookup::scope_lookup_groups;
 use crate::scope_index::models::{
-    DeclarationIdentity, DeclarationInput, DeclarationKind, RelationshipFact, ResourceIdentity,
-    ResourceInput, ResourceKind, ResourceRoot, ScopeDeferral, ScopeIndex, ScopeInputs, ScopeKind,
-    ScopeLookupGroups,
+    ConsumerResource, DeclarationIdentity, DeclarationInput, DeclarationKind, GrantEntry,
+    RelationshipFact, ResourceIdentity, ResourceInput, ResourceKind, ResourceRoot,
+    ResourceVisibility, ScopeDeferral, ScopeIndex, ScopeInputs, ScopeKind, ScopeLookupGroups,
+    VisibilityTable,
 };
 use crate::scope_index::tests::test_types::{
-    DeclarationRow, FactRow, GrantTestCase, IndexFactsTestCase, LookupTestCase, ResourceRow,
+    ClassifyTestCase, DeclarationRow, FactRow, GrantTestCase, IndexFactsTestCase, LookupTestCase,
+    ResourceRow, VisibleRow,
 };
 
 const GLOBAL_ROOT_FALLBACKS: [(DeclarationKind, &str); 3] = [
@@ -225,4 +230,45 @@ fn resource(kind: &str, name: &str) -> ResourceIdentity {
 
 fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
+}
+
+/// Six positions: global 0 and 4, local 2 under `models/marts`, inherited 3 and 5.
+fn consumer_table() -> VisibilityTable {
+    VisibilityTable {
+        identity_keys: vec![0, 1, 2, 3, 4, 5],
+        global: vec![0, 4],
+        local: HashMap::from([("models/marts".to_owned(), vec![2])]),
+        inherited: HashMap::from([
+            ("models".to_owned(), vec![3]),
+            ("models/staging".to_owned(), vec![5]),
+        ]),
+    }
+}
+
+/// Classify one case's consumer against the shared table, or None when it defers.
+pub(super) fn classified_rows(
+    test_case: &ClassifyTestCase,
+) -> Option<(Vec<VisibleRow>, Vec<usize>)> {
+    let resource: ConsumerResource = ConsumerResource {
+        private: test_case.private.to_vec(),
+        path: test_case.path.to_owned(),
+        grants: test_case
+            .grants
+            .iter()
+            .map(|(identity_key, reason, through)| GrantEntry {
+                identity_key: *identity_key,
+                reason: *reason,
+                through: *through,
+            })
+            .collect(),
+    };
+    let classified: ResourceVisibility = classify_resource(&consumer_table(), &resource).ok()?;
+    Some((
+        classified
+            .visible
+            .iter()
+            .map(|entry| (entry.position, entry.reason.as_str(), entry.through))
+            .collect(),
+        classified.inaccessible,
+    ))
 }

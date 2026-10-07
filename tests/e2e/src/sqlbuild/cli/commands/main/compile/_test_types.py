@@ -873,3 +873,14 @@ class RejectedReferenceCallTestCase:
     staging_from: str
     mart_from: str
     expected_diagnostics: tuple[tuple[str, str, str, int, int, str], ...]
+
+
+@dataclass(frozen=True)
+class NativeModelLoopParityTestCase:
+    """Models whose declarations two engines must resolve, report and write the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    engines: tuple[str, str]
+    expected_exit_codes: tuple[int, int]
+    expected_report_text: str
