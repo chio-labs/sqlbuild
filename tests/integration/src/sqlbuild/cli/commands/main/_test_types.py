@@ -1050,3 +1050,13 @@ class InferredFreshnessCliTestCase:
     description: str
     sources_yaml: str
     expected_sources: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class FixSessionTestCase:
+    """A Rule fix under an engine whose discovery retains a native session."""
+
+    description: str
+    engine: str
+    expected_original_sessions: tuple[bool, ...]
+    expected_fix_pass_sessions: frozenset[bool]

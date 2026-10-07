@@ -639,6 +639,11 @@ class DiscoveredDeclarationFiles:
     macro_files: tuple[DiscoveredMacroFile, ...]
     adapter_file: DiscoveredAdapterFile | None
     native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
+    """The native session that read these declaration files, for later native stages.
+
+    `None` means no session: readers must use the Python objects. Any copy that changes a
+    discovered collection must set it to `None` so it never describes other files.
+    """
 
 
 @dataclass(frozen=True)
@@ -674,7 +679,11 @@ class DiscoveredProjectInputs:
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
     native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
-    """The native discovery session that read the declaration files, for later native stages."""
+    """The native session that read these declaration files, for later native stages.
+
+    `None` means no session: readers must use the Python objects. Any copy that changes a
+    discovered collection must set it to `None` so it never describes other files.
+    """
 
 
 @dataclass(frozen=True)

@@ -439,4 +439,5 @@ def _updated_inputs(
             else model
             for model in inputs.model_files
         ),
+        native_session=None,
     )
