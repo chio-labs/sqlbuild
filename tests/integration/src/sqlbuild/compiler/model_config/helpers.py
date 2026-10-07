@@ -21,13 +21,14 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_template_data,
 )
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, MACRO_CALL_PATTERN
-from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeModelConfigMismatchError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.model_config.constants import INVALID_OUTCOME, UNSUPPORTED_OUTCOME
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
@@ -227,7 +228,7 @@ def native_rejection_error(
         _ = model_config_engine_outcome(
             project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
         )
-    except NativeModelConfigMismatchError as error:
+    except NativeStageMismatchError as error:
         return str(error)
     return "no error"
 
@@ -332,7 +333,7 @@ def _native_expansion(value: object, flags: TemplateFlags) -> object:
             )
         except CompileInputError:
             return _RAISES
-        except NativeModelConfigMismatchError as error:
+        except NativeStageMismatchError as error:
             return str(error)
     return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
 

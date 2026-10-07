@@ -26,7 +26,7 @@ from sqlbuild.compiler.compile.constants import (
     MODEL_AUDIT_OVERRIDE_KEYS,
     MODEL_HEADER_METADATA_KEYS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeModelConfigMismatchError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CachedModelHeaderColumns,
     CompileModelConfig,
@@ -42,6 +42,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
 )
@@ -359,7 +360,7 @@ def build_model_header_schema_entry(
         )
     )
     if native is not None and native.invalid:
-        raise NativeModelConfigMismatchError(
+        raise NativeStageMismatchError(
             f"{file_path}: native model config rejected MODEL columns or audits that the Python "
             "model config accepts; run with SQLBUILD_COMPILER_ENGINE=python"
         )
