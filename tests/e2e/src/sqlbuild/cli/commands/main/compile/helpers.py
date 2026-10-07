@@ -4274,6 +4274,96 @@ def prepare_reference_call_project(*, tmp_path: Path, staging_from: str, mart_fr
     return project_dir
 
 
+_MACRO_REFERENCE_CALL_MODELS: tuple[str, ...] = ("customer_orders", "customer_returns")
+_DIAGNOSTIC_FIELDS: tuple[str, ...] = (
+    "code",
+    "message",
+    "resource_name",
+    "path",
+    "line",
+    "column",
+    "help",
+)
+
+
+class MacroReferenceCallRuns(NamedTuple):
+    """Repeated compiles: exit codes, macro executions, and the diagnostics of each run."""
+
+    returncodes: tuple[int, ...]
+    logged_calls: tuple[int, ...]
+    diagnostics: tuple[tuple[tuple[object, ...], ...], ...]
+
+
+def prepare_macro_reference_call_project(*, tmp_path: Path) -> Path:
+    """Write a project whose models share a macro returning a reference call compile rejects."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="orders",
+        repo_files={
+            "sqlbuild_project.toml": _REFERENCE_CALL_PROJECT_TOML,
+            "sources/raw.yml": _REFERENCE_CALL_SOURCES_YML,
+            "models/staging/customers.sql": (
+                'MODEL (description "Customers.", materialized view);\n\n'
+                'SELECT order_id AS customer_id FROM __source("raw_orders")\n'
+            ),
+            "models/marts/_sqlbuild/_macros/customer_relation.py": (
+                '"""A macro that returns an unquoted reference call."""\n\n'
+                "import os\n\n\n"
+                "def customer_relation() -> str:\n"
+                '    """Return the customers relation, logging each execution."""\n'
+                f'    path = os.environ.get("{MACRO_CALL_LOG_ENV_VAR}")\n'
+                "    if path:\n"
+                '        with open(path, "a", encoding="utf-8") as log:\n'
+                '            log.write("customer_relation\\n")\n'
+                '    return "__ref(customers)"\n'
+            ),
+            **{
+                f"models/marts/{name}.sql": (
+                    f'MODEL (description "{name}.", materialized view);\n\n'
+                    "SELECT customer_id FROM @customer_relation()\n"
+                )
+                for name in _MACRO_REFERENCE_CALL_MODELS
+            },
+        },
+    )
+
+
+def _diagnostic_fields(item: dict[str, object]) -> tuple[object, ...]:
+    return tuple(item.get(field) for field in _DIAGNOSTIC_FIELDS)
+
+
+def macro_reference_call_runs(
+    *, project_dir: Path, log_path: Path, engine: str, runs: int
+) -> MacroReferenceCallRuns:
+    """Compile `runs` times in fresh processes, keeping the macro call store between runs."""
+
+    env: dict[str, str] = {
+        COMPILER_ENGINE_ENV_VAR: engine,
+        REUSE_DISABLE_ENV_VAR: "1",
+        MACRO_CALL_LOG_ENV_VAR: str(log_path),
+    }
+    returncodes: list[int] = []
+    logged_calls: list[int] = []
+    diagnostics: list[tuple[tuple[object, ...], ...]] = []
+    for _ in range(runs):
+        _ = log_path.write_text("", encoding="utf-8")
+        compiled: subprocess.CompletedProcess[str] = run_installed_sqb(
+            project_dir=project_dir, args=("compile", "--json"), env=env
+        )
+        returncodes.append(compiled.returncode)
+        logged_calls.append(len(log_path.read_text(encoding="utf-8").splitlines()))
+        items: list[dict[str, object]] = cast(
+            list[dict[str, object]], json.loads(compiled.stdout)["diagnostics"]
+        )
+        diagnostics.append(tuple(_diagnostic_fields(item) for item in items))
+    return MacroReferenceCallRuns(
+        returncodes=tuple(returncodes),
+        logged_calls=tuple(logged_calls),
+        diagnostics=tuple(diagnostics),
+    )
+
+
 MACRO_CALL_STORE_ENGINE: str = "native-preview"
 STORE_ENVIRONMENT_REGION_VAR: str = "SQB_STORE_TEST_REGION"
 STORE_ARGUMENT_ENV_VAR: str = "STORE_TEST_ARGUMENT"

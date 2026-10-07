@@ -901,6 +901,15 @@ class NativeModelLoopParityTestCase:
 
 
 @dataclass(frozen=True)
+class MacroReferenceCallStoreTestCase:
+    """Repeated compiles of models sharing a macro that returns a rejected reference call."""
+
+    description: str
+    engine: str
+    expected_logged_calls: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class MacroCallStoreEditStep:
     """One edit compiled with the macro call store, and the executions it expects."""
 

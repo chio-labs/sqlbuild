@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     EngineMacroCallGateTestCase,
     MacroCallStoreEditSequenceTestCase,
     MacroCallStoreEditStep,
+    MacroReferenceCallStoreTestCase,
     SecondCompileStoreTestCase,
     StaleMacroModuleStoreTestCase,
     StaleStoreArrangement,
@@ -23,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     EngineMacroCallRuns,
     MacroCallStoreRun,
+    MacroReferenceCallRuns,
     backdate_flavor_between_processes,
     block_proc_reads,
     compile_as_new_process_here,
@@ -36,8 +38,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     in_process_reuse_run,
     logged_in_process_compile,
     macro_call_store_compile,
+    macro_reference_call_runs,
     move_flavor_while_saving,
     prepare_macro_call_store_project,
+    prepare_macro_reference_call_project,
     pretend_fresh_process,
     recompile_in_process_after_edit,
     replace_project_text,
@@ -50,6 +54,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 )
 from tests.integration.src.sqlbuild.compiler.compile.helpers import MACRO_CALL_LOG_ENV_VAR
 
+_MACRO_REFERENCE_CALL_RUNS: int = 2
+_MACRO_REFERENCE_CALL_MESSAGE: str = (
+    "__ref(customers) is not a valid __ref() call, returned by macro customer_relation()"
+)
+_MACRO_REFERENCE_CALL_PATH: str = "models/marts/_sqlbuild/_macros/customer_relation.py"
 _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
     MacroCallStoreEditStep(
         description="no_change",
@@ -303,6 +312,48 @@ def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_st
     assert runs.returncodes == (0, 0)
     assert runs.logged_calls == test_case.expected_logged_calls
     assert runs.store_files == test_case.expected_store_files
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroReferenceCallStoreTestCase(
+            description="python",
+            engine="python",
+            expected_logged_calls=(2, 2),
+        ),
+        MacroReferenceCallStoreTestCase(
+            description="native_preview_memo_then_store",
+            engine="native-preview",
+            expected_logged_calls=(1, 0),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_returning_rejected_reference_call_when_replaying_then_reports_match_python(
+    tmp_path: Path, test_case: MacroReferenceCallStoreTestCase
+) -> None:
+    oracle: MacroReferenceCallRuns = macro_reference_call_runs(
+        project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "python"),
+        log_path=tmp_path / "python.log",
+        engine="python",
+        runs=1,
+    )
+
+    runs: MacroReferenceCallRuns = macro_reference_call_runs(
+        project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "engine"),
+        log_path=tmp_path / "engine.log",
+        engine=test_case.engine,
+        runs=_MACRO_REFERENCE_CALL_RUNS,
+    )
+
+    assert [diagnostic[:4] for diagnostic in oracle.diagnostics[0]] == [
+        ("P012", _MACRO_REFERENCE_CALL_MESSAGE, name, _MACRO_REFERENCE_CALL_PATH)
+        for name in ("customer_orders", "customer_returns")
+    ]
+    assert runs.returncodes == (1,) * _MACRO_REFERENCE_CALL_RUNS
+    assert runs.logged_calls == test_case.expected_logged_calls
+    assert runs.diagnostics == oracle.diagnostics * _MACRO_REFERENCE_CALL_RUNS
 
 
 @pytest.mark.parametrize(
