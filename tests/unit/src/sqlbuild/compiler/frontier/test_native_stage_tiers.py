@@ -139,6 +139,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             stage=NativeStage.MACRO_CALL_STORE,
             expected_enabled=True,
         ),
+        NativeStageTierTestCase(
+            description="python_attachments",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.ATTACHMENTS,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_attachments",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.ATTACHMENTS,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_attachments",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.ATTACHMENTS,
+            expected_enabled=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

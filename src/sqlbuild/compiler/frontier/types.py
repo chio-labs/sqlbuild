@@ -22,6 +22,7 @@ class NativeStage(StrEnum):
     MODEL_LOOP = "model_loop"
     MACRO_CALLS = "macro_calls"
     MACRO_CALL_STORE = "macro_call_store"
+    ATTACHMENTS = "attachments"
 
 
 class NativeStageTier(StrEnum):
