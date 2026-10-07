@@ -6,8 +6,9 @@ that can be tested and benchmarked with `cargo test` alone.
 
 | Crate | Responsibility |
 |---|---|
-| `sqlbuild-core` | Constants shared by several crates and the panic boundary that turns an unwinding native failure into a named compiler error. |
+| `sqlbuild-core` | Constants shared by several crates, the panic boundary that turns an unwinding native failure into a named compiler error, passive identity, diagnostic and SQL value types, text positions, and a JSON emitter whose output matches Python's `json.dumps` and `orjson` byte for byte. |
 | `sqlbuild-sqltext` | Lexical SQL text without polyglot: comment, quote and parenthesis scanning, the rules quote policy, model header tokenization and matching, static variable substitution and static reference extraction. |
+| `sqlbuild-config` | Configuration file reading without Python: `tomllib`-compatible TOML, PyYAML `safe_load`-compatible YAML 1.1, and typed project and local config readers for the fields discovery needs. Any error means "defer to Python", which re-parses for exact messages. |
 | `sqlbuild-analysis` | SQL analysis over polyglot: SQL tokens, query analysis, the binding catalog, semantic validation and usage, column references, and SQL-test extraction, planning and rendering. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
@@ -18,8 +19,12 @@ Dependencies point one way, from the top of this graph to the bottom:
 
 ```text
 sqlbuild-python
-  -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-sqltext -> sqlbuild-core
+  -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-config -> sqlbuild-sqltext -> sqlbuild-core
 ```
+
+`sqlbuild-config` does not depend on the crates below it today; its place in the order only
+fixes which crates may use it. The JSON emitter lives in `sqlbuild-core` so that any layer can
+produce text that must equal Python's `json.dumps` output.
 
 Each crate may depend only on crates below it, and may also skip layers. The order is declared
 in `[workspace.metadata.native-layers]` in the workspace `Cargo.toml`, and

@@ -1,0 +1,19 @@
+[package]
+name = "sqlbuild-config"
+version.workspace = true
+description = "Project configuration reading for SQLBuild: TOML and PyYAML-compatible YAML."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+saphyr-parser.workspace = true
+toml_edit.workspace = true
+toml_parser.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
