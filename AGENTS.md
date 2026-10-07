@@ -79,6 +79,8 @@
 - Keep real-system validation evidence in its approved private tracking location. Do not paste that
   evidence into source, tests, documentation, generated skills, benchmarks, commit metadata, pull
   requests, or CI output.
+- Never put private issue-tracker identifiers (for example `ABC-123`) in commits, branch names, pull
+  request titles or bodies, code, comments, tests, or documentation. Describe the change instead.
 - Load and follow the `public-repository-hygiene` skill before editing or publishing this repository.
   Run its private scanner over the working tree and introduced history before every push, and
   rescan after generation, formatting, rebasing, or merging.
