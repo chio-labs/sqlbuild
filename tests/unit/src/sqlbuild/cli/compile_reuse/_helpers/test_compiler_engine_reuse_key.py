@@ -31,15 +31,15 @@ from tests.unit.src.sqlbuild.cli.compile_reuse._helpers.helpers import (
             expected_same_digest=False,
         ),
         EngineReuseDigestTestCase(
-            description="unset_then_native",
+            description="unset_then_python",
             first_environment={},
-            second_environment={COMPILER_ENGINE_ENV_VAR: "native"},
+            second_environment={COMPILER_ENGINE_ENV_VAR: "python"},
             expected_same_digest=False,
         ),
         EngineReuseDigestTestCase(
-            description="unset_then_explicit_python",
+            description="unset_then_explicit_native",
             first_environment={},
-            second_environment={COMPILER_ENGINE_ENV_VAR: "python"},
+            second_environment={COMPILER_ENGINE_ENV_VAR: "native"},
             expected_same_digest=True,
         ),
         EngineReuseDigestTestCase(

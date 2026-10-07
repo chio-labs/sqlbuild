@@ -54,6 +54,8 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_RENDER_STATE_SUFFIX,
 )
 from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     IncrementalEditStep,
@@ -617,7 +619,7 @@ def run_fresh_process_compile_cache_benchmark(
             compile_args=(),
         )
     )
-    cache_dir: Path = target_dir / "cache" / "compiler"
+    cache_dir: Path = compiler_cache_directory(project_dir)
     cache_bytes: int = sum(path.stat().st_size for path in cache_dir.rglob("*.json")) + sum(
         path.stat().st_size for path in cache_dir.rglob("*.sqlite3")
     )
@@ -3133,7 +3135,7 @@ def compile_reuse_entry_paths(*, project_dir: Path) -> tuple[Path, ...]:
     """Return every stored compile reuse entry of a project."""
 
     return tuple(
-        sorted((project_dir / "target" / "cache" / "compiler" / "project-reuse-v1").glob("*.entry"))
+        sorted((compiler_cache_directory(project_dir) / "project-reuse-v1").glob("*.entry"))
     )
 
 
@@ -4161,6 +4163,12 @@ def engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
     """Compile with reuse enabled under one engine selected by the hidden flag."""
 
     return run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
+
+
+def environment_engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
+    """Compile with reuse enabled under the engine the environment selects; empty means default."""
+
+    return run_reuse_compile(project_dir=project_dir, env={COMPILER_ENGINE_ENV_VAR: engine})
 
 
 def engine_compile_and_rules(*, project_dir: Path, engine: str, rules_selector: str) -> int:

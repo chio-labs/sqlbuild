@@ -23,6 +23,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredPr
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.models import LintRunResult
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostSplitIntegrationTestCase,
     DynamicPivotRulesIntegrationTestCase,
@@ -747,7 +748,7 @@ def test_given_cached_sql_test_rules_when_test_or_macro_changes_then_findings_ar
     assert plain_finding not in after_test_edit
     assert macro_finding in after_test_edit
     assert macro_finding not in after_macro_edit
-    assert (tmp_path / "target" / "rules-cache" / "bulk" / "sql.json").is_file()
+    assert rules_bulk_cache_path(project_dir=tmp_path, file_name="sql.json").is_file()
 
 
 @pytest.mark.parametrize(
@@ -1104,7 +1105,9 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     monkeypatch.setattr(native_module, "run_custom_host_json", recording_host)
     single: dict[str, Any] = compile_payload(hosts=1)
     single_runs: int = len(host_runs)
-    (tmp_path / "target" / "rules-cache").rename(tmp_path / "single-rules-cache")
+    rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json").parent.parent.rename(
+        tmp_path / "single-rules-cache"
+    )
     split: dict[str, Any] = compile_payload(hosts=test_case.hosts)
     split_runs: int = len(host_runs) - single_runs
     warm: dict[str, Any] = compile_payload(hosts=test_case.hosts)
@@ -1115,8 +1118,8 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     assert warm["diagnostics"] == single["diagnostics"]
     assert warm["compile_timings"]["rule_cache_hits"] >= test_case.model_count
     assert (tmp_path / "single-rules-cache" / "bulk" / "custom-rules.json").read_bytes() == (
-        tmp_path / "target" / "rules-cache" / "bulk" / "custom-rules.json"
-    ).read_bytes()
+        rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json").read_bytes()
+    )
 
 
 @pytest.mark.parametrize(

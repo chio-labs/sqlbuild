@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 SCOPE_METADATA_SCHEMA_VERSION: int = 3
 SCOPE_CACHE_SCHEMA_VERSION: int = 3
 SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 2
 SCOPE_CACHE_DIRECTORY_NAME: str = "declaration-scopes-v2"
-SCOPE_CACHE_DIRECTORY: Path = Path("target/cache/compiler") / SCOPE_CACHE_DIRECTORY_NAME
 SCOPE_CACHE_FILENAME: str = "scope-index.json"
 SCOPE_CACHE_MAX_BYTES: int = 16 * 1024 * 1024
 SCOPE_SOURCE_SUFFIXES: frozenset[str] = frozenset({".sql", ".yml", ".yaml", ".py"})

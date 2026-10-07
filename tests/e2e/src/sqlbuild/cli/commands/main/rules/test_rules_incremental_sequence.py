@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
     BUILT_IN_RULES_PROJECT,
     rule_cache_counts,
     rules_compile_outcome,
+    write_bulk_rules_cache,
     write_project_files,
 )
 
@@ -144,14 +145,14 @@ def test_given_warm_rules_cache_when_applying_edit_chain_then_every_compile_equa
     (
         RulesCacheEditCase(
             "corrupt_model_findings_cache",
-            lambda root: (root / "target/rules-cache/bulk/native.json").write_text(
-                '{"fingerprint": "trunc', encoding="utf-8"
+            lambda root: write_bulk_rules_cache(
+                root=root, file_name="native.json", text='{"fingerprint": "trunc'
             ),
         ),
         RulesCacheEditCase(
             "corrupt_response_memo",
-            lambda root: (root / "target/rules-cache/bulk/native-response.json").write_text(
-                '{"identity": ', encoding="utf-8"
+            lambda root: write_bulk_rules_cache(
+                root=root, file_name="native-response.json", text='{"identity": '
             ),
         ),
     ),

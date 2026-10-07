@@ -22,7 +22,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     "test_case",
     [
         EngineResolutionTestCase(
-            description="empty", raw_value="", expected_engine=CompilerEngine.PYTHON
+            description="empty", raw_value="", expected_engine=CompilerEngine.NATIVE
         ),
         EngineResolutionTestCase(
             description="python", raw_value="python", expected_engine=CompilerEngine.PYTHON
@@ -45,12 +45,12 @@ def test_given_engine_variable_when_resolving_then_returns_selected_engine(
     "test_case",
     [
         EngineResolutionTestCase(
-            description="unset", raw_value="", expected_engine=CompilerEngine.PYTHON
+            description="unset", raw_value="", expected_engine=CompilerEngine.NATIVE
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_no_engine_variable_when_resolving_then_python_is_the_default(
+def test_given_no_engine_variable_when_resolving_then_native_is_the_default(
     test_case: EngineResolutionTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(COMPILER_ENGINE_ENV_VAR, raising=False)

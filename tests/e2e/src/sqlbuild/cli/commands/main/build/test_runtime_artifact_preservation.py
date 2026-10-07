@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     RuntimeArtifactPreservationBuildE2ETestCase,
 )
@@ -73,7 +74,7 @@ def test_given_full_build_when_running_selected_rerun_then_existing_runtime_arti
         path = project_dir / relative_path
         assert path.exists(), f"expected compiled artifact to exist: {path}"
     compiler_caches: tuple[Path, ...] = tuple(
-        (project_dir / "target" / "cache" / "compiler").rglob("*.sqlite3")
+        compiler_cache_directory(project_dir).rglob("*.sqlite3")
     )
     assert len(compiler_caches) == test_case.expected_compiler_cache_count
     assert (project_dir / ".sqlbuild").exists() is test_case.expected_local_history

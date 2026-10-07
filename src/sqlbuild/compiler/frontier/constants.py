@@ -4,7 +4,7 @@ from sqlbuild.compiler.frontier.types import CompilerEngine
 
 COMPILER_ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 COMPILER_ENGINE_OPTION: str = "--compiler-engine"
-DEFAULT_COMPILER_ENGINE: CompilerEngine = CompilerEngine.PYTHON
+DEFAULT_COMPILER_ENGINE: CompilerEngine = CompilerEngine.NATIVE
 COMPILER_ENGINE_VALUES: tuple[str, ...] = tuple(engine.value for engine in CompilerEngine)
 NATIVE_CACHE_NAMESPACE_SUFFIX: str = "-native-v1"
 TARGET_DIRECTORY_NAME: str = "target"

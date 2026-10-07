@@ -31,6 +31,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     PolyglotAnalysisResult,
 )
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -145,7 +146,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     analyzer.assert_not_called()
     signature_builder.assert_not_called()
     reference_scanner.assert_not_called()
-    assert len(tuple((tmp_path / "target" / "cache" / "compiler").rglob("*.sqlite3"))) == (
+    assert len(tuple((compiler_cache_directory(tmp_path)).rglob("*.sqlite3"))) == (
         test_case.expected_count + 1
     )
 
@@ -193,7 +194,7 @@ def test_given_exact_compact_batch_when_entry_rows_are_absent_then_warm_compile_
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v12" / "model-analysis.sqlite3"
+    cache_path: Path = compiler_cache_directory(tmp_path) / "v12" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         batch_count: int = connection.execute(
             "SELECT COUNT(*) FROM model_analysis_compact_batch"
@@ -226,7 +227,7 @@ def test_given_one_changed_model_when_entry_rows_are_absent_then_compact_batch_r
     write_repo_files(tmp_path, _SELECTION_REPO_FILES)
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v12" / "model-analysis.sqlite3"
+    cache_path: Path = compiler_cache_directory(tmp_path) / "v12" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute("DELETE FROM model_analysis")
     (tmp_path / "models" / "unrelated.sql").write_text(
@@ -264,7 +265,7 @@ def test_given_corrupt_compact_batch_when_entry_rows_are_valid_then_warm_compile
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v12" / "model-analysis.sqlite3"
+    cache_path: Path = compiler_cache_directory(tmp_path) / "v12" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis_compact_batch SET payload = ?",
@@ -315,7 +316,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v12" / "model-analysis.sqlite3"
+    cache_path: Path = compiler_cache_directory(tmp_path) / "v12" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
             "SELECT payload FROM model_analysis"
@@ -356,7 +357,7 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v12" / "model-analysis.sqlite3"
+    cache_path: Path = compiler_cache_directory(tmp_path) / "v12" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis SET payload = ?",
@@ -384,7 +385,7 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
-        (tmp_path / "target" / "cache" / "compiler" / "references-v2").glob("*.sqlite3")
+        (compiler_cache_directory(tmp_path) / "references-v2").glob("*.sqlite3")
     )
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
@@ -424,7 +425,7 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
-        (tmp_path / "target" / "cache" / "compiler" / "references-v2").glob("*.sqlite3")
+        (compiler_cache_directory(tmp_path) / "references-v2").glob("*.sqlite3")
     )
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
