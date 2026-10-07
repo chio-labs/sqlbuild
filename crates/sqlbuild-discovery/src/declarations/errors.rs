@@ -1,14 +1,14 @@
-//! Why a declaration scan stopped: an authored layout failure or a whole-stage deferral.
+//! Why a declaration scan stopped: an authored layout failure or a whole-stage failure.
 
-use crate::models::{DiscoveryFailure, StageDeferral};
+use crate::models::{DiscoveryFailure, StageFailure};
 
 pub(crate) enum ScanError {
     Failure(DiscoveryFailure),
-    Deferral(StageDeferral),
+    Stage(StageFailure),
 }
 
-impl From<StageDeferral> for ScanError {
-    fn from(deferral: StageDeferral) -> Self {
-        Self::Deferral(deferral)
+impl From<StageFailure> for ScanError {
+    fn from(failure: StageFailure) -> Self {
+        Self::Stage(failure)
     }
 }

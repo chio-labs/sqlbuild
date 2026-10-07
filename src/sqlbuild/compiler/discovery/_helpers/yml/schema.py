@@ -5,9 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-import yaml
-from yaml import YAMLError
-
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_bool import optional_bool
 from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
@@ -21,7 +18,10 @@ from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
     reject_unknown_mapping_keys,
 )
-from sqlbuild.compiler.discovery.constants import NOT_NULL_AUDIT_NAME, SEEDS_DIRECTORY_NAME
+from sqlbuild.compiler.discovery.constants import (
+    NOT_NULL_AUDIT_NAME,
+    SEEDS_DIRECTORY_NAME,
+)
 from sqlbuild.compiler.discovery.exceptions import SchemaParseError
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
@@ -69,18 +69,6 @@ _SEED_CSV_BOOL_SETTINGS: frozenset[str] = frozenset(
 )
 
 
-def parse_schema_yml(
-    *,
-    contents: str,
-    file_path: Path,
-) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
-    """Parse one schema.yml file into raw model and seed metadata."""
-
-    return parse_loaded_schema_yml(
-        loaded=_load_schema_yaml(contents=contents, file_path=file_path), file_path=file_path
-    )
-
-
 def parse_loaded_schema_yml(
     *, loaded: object, file_path: Path
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
@@ -91,14 +79,6 @@ def parse_loaded_schema_yml(
         _parse_model_entries(payload=payload, file_path=file_path),
         _parse_seed_entries(payload=payload, file_path=file_path),
     )
-
-
-def _load_schema_yaml(*, contents: str, file_path: Path) -> object:
-    try:
-        loader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-        return yaml.load(contents, Loader=loader)
-    except YAMLError as error:
-        raise SchemaParseError(f"{file_path} contains invalid YAML: {error}") from error
 
 
 def _schema_mapping(*, loaded: object, file_path: Path) -> dict[str, object]:

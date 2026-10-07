@@ -13,6 +13,7 @@ from typing import Any, cast
 import duckdb
 import pytest
 
+from sqlbuild._native import NativeProjectTree
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
@@ -28,12 +29,11 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
 from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
-from sqlbuild.compiler.discovery._helpers.filesystem import (
-    model_files as discovery_model_files_module,
+from sqlbuild.compiler.discovery._helpers.native import (
+    model_files as native_model_files_module,
 )
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
-from sqlbuild.spec.contracts.models import SourceLocation
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
@@ -651,22 +651,18 @@ def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[st
     return analysed
 
 
-def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
-    """Record every model file whose output columns discovery locates eagerly."""
+def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    """Record every native model discovery request that locates output columns eagerly."""
 
-    scanned: list[Path] = []
-    original: Callable[..., dict[str, SourceLocation]] = (
-        discovery_model_files_module.matched_model_output_column_locations
-    )
+    eager: list[dict[str, object]] = []
+    original: Callable[..., object] = native_model_files_module._native.discover_model_files
 
-    def recording(**kwargs: Any) -> dict[str, SourceLocation]:
-        scanned.append(cast(Path, kwargs["relative_path"]))
-        return original(**kwargs)
+    def recording(request: dict[str, object], tree: NativeProjectTree) -> object:
+        eager.extend(filter(lambda item: item["extract_output_column_locations"], (request,)))
+        return original(request, tree)
 
-    monkeypatch.setattr(
-        discovery_model_files_module, "matched_model_output_column_locations", recording
-    )
-    return scanned
+    monkeypatch.setattr(native_model_files_module._native, "discover_model_files", recording)
+    return eager
 
 
 def write_repeated_json_parse_project(

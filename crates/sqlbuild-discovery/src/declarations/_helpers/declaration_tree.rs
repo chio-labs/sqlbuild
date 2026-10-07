@@ -1,4 +1,4 @@
-//! Python's `_scan_declaration_file_facts`: macro, enum and constant files with scope facts.
+//! Scan macro, enum and constant declaration files with their scope facts.
 
 use crate::constants::{
     CANONICAL_AUTHORED_ROOTS, DECLARATION_GROUP_DIRECTORY, GLOBAL_DECLARATION_DIRECTORIES,
@@ -11,6 +11,7 @@ use crate::declarations::_helpers::scan::declaration_failure;
 use crate::declarations::errors::ScanError;
 use crate::declarations::models::{DeclarationFileFact, DeclarationKind, ScopeKind};
 use crate::tree::main::directories::directories;
+use crate::tree::main::path_order::compare_posix_text;
 use crate::tree::main::rglob::rglob;
 use crate::tree::models::ProjectTree;
 
@@ -25,11 +26,15 @@ struct DeclarationRoot<'a> {
 /// Every declaration file below every macro, enum and constant root, by relative path.
 pub(crate) fn declaration_file_facts(
     tree: &ProjectTree,
+    kind: Option<DeclarationKind>,
 ) -> Result<Vec<DeclarationFileFact>, ScanError> {
     validate_declaration_groups(tree)?;
     let mut local: Vec<&str> = LOCAL_DECLARATION_DIRECTORIES.to_vec();
     local.sort_unstable();
-    if let Some(directory) = local.into_iter().find(|directory| tree.is_dir(directory)) {
+    if let Some(directory) = local
+        .into_iter()
+        .find(|directory| is_kind(kind, directory) && tree.is_dir(directory))
+    {
         return Err(declaration_failure(format!(
             "Scoped declaration root {directory}/ must be below a canonical authored root"
         )));
@@ -38,7 +43,7 @@ pub(crate) fn declaration_file_facts(
     let mut global: Vec<&str> = GLOBAL_DECLARATION_DIRECTORIES.to_vec();
     global.sort_unstable();
     for directory in global {
-        if tree.is_dir(directory) {
+        if is_kind(kind, directory) && tree.is_dir(directory) {
             facts.extend(files_under_root(
                 tree,
                 &DeclarationRoot {
@@ -53,10 +58,10 @@ pub(crate) fn declaration_file_facts(
     for root_parts in CANONICAL_AUTHORED_ROOTS {
         let root: String = root_parts.join("/");
         if tree.is_dir(&root) {
-            facts.extend(scoped_root_files(tree, &root, root_parts.len())?);
+            facts.extend(scoped_root_files(tree, &root, root_parts.len(), kind)?);
         }
     }
-    facts.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    facts.sort_by(|left, right| compare_posix_text(&left.relative_path, &right.relative_path));
     Ok(facts)
 }
 
@@ -64,12 +69,16 @@ fn scoped_root_files(
     tree: &ProjectTree,
     root: &str,
     root_length: usize,
+    kind: Option<DeclarationKind>,
 ) -> Result<Vec<DeclarationFileFact>, ScanError> {
     let mut facts: Vec<DeclarationFileFact> = Vec::new();
     for directory in directories(tree, root)? {
         let Some((_, scope_kind)) = directory_facts(name(&directory)) else {
             continue;
         };
+        if !is_kind(kind, name(&directory)) {
+            continue;
+        }
         let parts: Vec<&str> = directory.split('/').collect();
         let between: &[&str] = &parts[root_length..parts.len() - 1];
         if between
@@ -93,6 +102,15 @@ fn scoped_root_files(
         )?);
     }
     Ok(facts)
+}
+
+/// Whether a declaration directory holds `kind`, or every kind when none is requested.
+fn is_kind(kind: Option<DeclarationKind>, directory_name: &str) -> bool {
+    match (kind, directory_facts(directory_name)) {
+        (None, _) => true,
+        (Some(kind), Some((directory_kind, _))) => directory_kind == kind,
+        (Some(_), None) => false,
+    }
 }
 
 fn nested_root_failure(directory: &str) -> ScanError {

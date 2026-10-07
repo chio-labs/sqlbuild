@@ -1,4 +1,4 @@
-//! Python's `validate_named_declaration_layout`.
+//! Validate where named declaration roots may appear in the project layout.
 
 use crate::constants::{
     AUDIT_ROLE_DIRECTORY, DECLARATION_GROUP_DIRECTORY, GLOBAL_DECLARATION_DIRECTORIES,

@@ -1,4 +1,4 @@
-//! The header half of Python's `parse_sql_scenario_file`.
+//! Parse a scenario file header; Python builds the scenario from the parsed values.
 
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::models::{DiscoveryFailure, FailureKind};

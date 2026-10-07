@@ -4,7 +4,7 @@ Thanks for helping improve SQLBuild. Keep changes focused, tested, and easy to r
 
 ## Setup
 
-SQLBuild requires Python 3.12 or newer.
+SQLBuild supports Python 3.12, 3.13 and 3.14.
 
 Install dependencies with:
 

@@ -39,8 +39,6 @@ pub const GROUPED_NAMED_DECLARATION_DIRECTORIES: [&str; 6] = [
 ];
 /// Project-wide named declaration roles.
 pub const GLOBAL_NAMED_DECLARATION_DIRECTORIES: [&str; 3] = ["audits", "schemas", "hooks"];
-/// Root of seed files, walked so the Python snapshot shares its listings.
-pub const SEEDS_DIRECTORY: &str = "seeds";
 /// Suffix of macro files.
 pub const PYTHON_FILE_SUFFIX: &str = ".py";
 /// The stem of package initialisers, which are not macro files.

@@ -10,10 +10,7 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery.constants import (
-    REMOVED_SQL_MODEL_HEADER_KEYS,
-    SQL_MODEL_HEADER_KEYS,
     STATEMENT_HEADER_BODY_PATTERN,
 )
 from sqlbuild.compiler.discovery.exceptions import (
@@ -127,90 +124,6 @@ def match_model_header(contents: str) -> ModelHeaderMatch | None:
         header_start=header_match.start("header"),
         header_end=header_match.end("header"),
         sql_start=header_match.start("sql"),
-    )
-
-
-def match_model_headers(contents: list[str]) -> list[ModelHeaderMatch | None]:
-    """Match many MODEL(...) headers natively with the same semantics as ``match_model_header``."""
-
-    return [
-        None
-        if offsets is None
-        else ModelHeaderMatch(
-            contents=value,
-            header_start=offsets[0],
-            header_end=offsets[1],
-            sql_start=offsets[2],
-        )
-        for value, offsets in zip(contents, _native.match_model_headers(contents), strict=True)
-    ]
-
-
-def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
-    """Parse a raw SQL model file into header values and SQL body."""
-
-    return parse_matched_model_sql(header_match=match_model_header(contents), file_path=file_path)
-
-
-def parse_matched_model_sql(
-    *, header_match: ModelHeaderMatch | None, file_path: Path
-) -> tuple[dict[str, object], str]:
-    """Parse header values and SQL body from one precomputed MODEL header match."""
-
-    if header_match is None:
-        raise ModelSqlParseError(
-            f"SQL model '{file_path}' must start with a MODEL(...) header as the first "
-            "non-whitespace content"
-        )
-
-    header_values: dict[str, object] = parse_header_values(
-        header=header_match.header,
-        file_path=file_path,
-        statement_name="MODEL",
-    )
-    removed: list[str] = sorted(REMOVED_SQL_MODEL_HEADER_KEYS.intersection(header_values))
-    if removed:
-        raise ModelSqlParseError(
-            f"MODEL() option(s) {', '.join(removed)} in '{file_path}' were removed with virtual "
-            "environments; projects run in direct mode"
-        )
-    reject_unsupported_header_keys(
-        header_values=header_values,
-        supported_keys=SQL_MODEL_HEADER_KEYS,
-        statement="MODEL()",
-        header=header_match.header,
-        header_line=header_match.contents.count("\n", 0, header_match.header_start) + 1,
-        file_path=file_path,
-        error_class=ModelSqlParseError,
-    )
-    query: str = header_match.sql.strip()
-    if not query:
-        raise ModelSqlParseError(f"SQL model '{file_path}' must contain SQL after MODEL(...)")
-    return header_values, query
-
-
-def model_header_column_locations(
-    *, contents: str, relative_path: Path
-) -> dict[str, SourceLocation]:
-    """Return authored locations for MODEL(columns) declarations."""
-
-    return matched_model_header_column_locations(
-        contents=contents, header_match=match_model_header(contents), relative_path=relative_path
-    )
-
-
-def matched_model_header_column_locations(
-    *, contents: str, header_match: ModelHeaderMatch | None, relative_path: Path
-) -> dict[str, SourceLocation]:
-    """Return authored MODEL(columns) locations from one precomputed header match."""
-
-    if header_match is None:
-        return {}
-    return header_column_locations(
-        contents=contents,
-        header=header_match.header,
-        header_start=header_match.header_start,
-        relative_path=relative_path,
     )
 
 
@@ -718,20 +631,6 @@ def _header_column_relative_locations(
                 cursor = newline + 1
         locations.append((name, line, column, length))
     return tuple(locations)
-
-
-def prepare_model_file_headers(contents: list[str]) -> None:
-    """Batch tokenization for syntactically recognizable MODEL file headers."""
-
-    prepare_matched_model_file_headers([match_model_header(value) for value in contents])
-
-
-def prepare_matched_model_file_headers(header_matches: list[ModelHeaderMatch | None]) -> None:
-    """Batch tokenization for precomputed MODEL header matches."""
-
-    prepare_model_header_tokens(
-        [header_match.header for header_match in header_matches if header_match is not None]
-    )
 
 
 def project_native_header_values(values: dict[str, object]) -> dict[str, object]:

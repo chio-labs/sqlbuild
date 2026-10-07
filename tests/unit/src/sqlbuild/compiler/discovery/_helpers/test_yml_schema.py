@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SchemaModelEntry,
@@ -18,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSeedCsvSettingsYamlTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import expected_or_actual
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import parse_schema_yml
 
 
 @pytest.mark.parametrize(

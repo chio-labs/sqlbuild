@@ -13,6 +13,8 @@ pub(crate) enum NodeContent {
 pub(crate) struct Node {
     pub(crate) tag: String,
     pub(crate) content: NodeContent,
+    /// The one-based line and column where the node starts.
+    pub(crate) position: (usize, usize),
 }
 
 /// A composed document; `root` is `None` for an empty stream.

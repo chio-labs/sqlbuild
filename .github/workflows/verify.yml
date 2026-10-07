@@ -335,13 +335,60 @@ jobs:
           uv run --no-sync pytest
           tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
           -n auto --dist loadfile
-      - name: Compare python with the shipped native default on fixtures, examples, the failure corpus and a few seeds
+      - name: Compare python with native-preview on fixtures, examples, the failure corpus and a few seeds
         env:
           PYTHONUNBUFFERED: "1"
         run: >-
           uv run --no-sync python -m scripts.run_compiler_differential
-          --engines python native
+          --engines python native-preview
           --corpus fixtures examples failures seeds --seeds 4 --jobs 4
+
+  native_discovery_windows:
+    name: Native discovery on Windows
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.compiler_differential == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Test the native discovery crate (walk, junctions, ordering, read errors)
+        run: cargo test --locked -p sqlbuild-discovery
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install SQLBuild and pytest
+        run: |
+          uv sync --locked --no-dev --python 3.12
+          uv pip install "pytest>=8.4.2" "pytest-xdist>=3.8.0"
+      - name: Compare native text, YAML and TOML readers with this Python
+        run: >-
+          uv run --no-sync pytest
+          tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
+          tests/integration/src/sqlbuild/compiler/discovery/test_native_yaml_oracle.py
+          tests/integration/src/sqlbuild/compiler/discovery/test_native_toml_oracle.py
+          -n auto --dist loadfile
+      - name: Compile and build playground projects
+        run: |
+          project="${RUNNER_TEMP}/waffle-shop"
+          uv run --no-sync sqb playground "${project}"
+          uv run --no-sync sqb --project-dir "${project}" --no-color compile
+          SQLBUILD_COMPILER_ENGINE=python uv run --no-sync sqb --project-dir "${project}" --no-color compile
+          uv run --no-sync sqb --project-dir "${project}" --no-color build
+          nodes="${RUNNER_TEMP}/python-nodes"
+          uv run --no-sync sqb playground --template python_nodes "${nodes}"
+          uv run --no-sync sqb --project-dir "${nodes}" --no-color compile
 
   format_performance:
     name: Formatter performance guards
@@ -762,6 +809,7 @@ jobs:
         e2e_shards,
         compiler_differential,
         compiler_differential_python_versions,
+        native_discovery_windows,
         format_performance,
         performance,
         cold_compile_performance,
@@ -783,6 +831,7 @@ jobs:
           E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
           COMPILER_DIFFERENTIAL_RESULT: ${{ needs.compiler_differential.result }}
           COMPILER_DIFFERENTIAL_PYTHON_VERSIONS_RESULT: ${{ needs.compiler_differential_python_versions.result }}
+          NATIVE_DISCOVERY_WINDOWS_RESULT: ${{ needs.native_discovery_windows.result }}
           FORMAT_PERFORMANCE_RESULT: ${{ needs.format_performance.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           COLD_COMPILE_PERFORMANCE_RESULT: ${{ needs.cold_compile_performance.result }}
@@ -806,6 +855,7 @@ jobs:
             "${E2E_SHARDS_RESULT}" \
             "${COMPILER_DIFFERENTIAL_RESULT}" \
             "${COMPILER_DIFFERENTIAL_PYTHON_VERSIONS_RESULT}" \
+            "${NATIVE_DISCOVERY_WINDOWS_RESULT}" \
             "${FORMAT_PERFORMANCE_RESULT}" \
             "${PERFORMANCE_RESULT}" \
             "${COLD_COMPILE_PERFORMANCE_RESULT}" \

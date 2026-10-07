@@ -284,3 +284,25 @@ Use [`sqb freshness`](/docs/cli/freshness) to observe source freshness on demand
 A sources file contains only `sources` and `dlt_sources`. Unknown keys in a sources file, a source,
 a source column, `freshness`, `freshness.age_policy`, or `ingestr` fail discovery with `D006`,
 naming the key and suggesting the nearest supported key.
+
+## YAML that SQLBuild reads
+
+Sources files, seed declarations and `schema.yml` files use plain YAML 1.1: block and flow mappings
+and sequences, plain and quoted scalars, literal (`|`) and folded (`>`) block scalars, comments,
+anchors, aliases and merge keys (`<<`). Files must be UTF-8.
+
+Invalid YAML fails discovery with `D006` (sources) or `D005` (seed declarations and `schema.yml`),
+naming the file, line and column. The following YAML features also fail with the same codes and a
+hint to rewrite the value in plain YAML:
+
+- tab characters anywhere in the file, and byte order marks after its start
+- `%YAML` and `%TAG` directives
+- the `!!binary`, `!!set`, `!!omap` and `!!pairs` tags, and an empty scalar tagged `!`
+- recursive aliases, and aliases that expand beyond SQLBuild's size limit
+- nesting deeper than 256 levels, integers longer than 4300 digits, and implicit keys longer than
+  1000 characters
+- NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR line breaks
+- `?` inside a plain scalar in a flow collection, and `:` directly before `,`, `]` or `}` in a
+  flow collection
+- a block scalar used as a key, inside a flow collection, or with indentation SQLBuild cannot read
+  unambiguously

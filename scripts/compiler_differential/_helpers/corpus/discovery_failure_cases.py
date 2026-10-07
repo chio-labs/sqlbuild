@@ -1,5 +1,7 @@
 """Minimal projects that fail inside project discovery, one per diagnostic family."""
 
+import os
+
 from scripts.compiler_differential._helpers.corpus.case_builder import (
     config_files,
     failure_case,
@@ -100,6 +102,12 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                     '"Staged orders",', '"Staged orders",\n  materialised table,'
                 )
             },
+        ),
+        failure_case(
+            name="model-path-not-utf8",
+            expected_code="D016",
+            files={os.fsdecode(b"models/staging/caf\xe9.sql"): FAILURE_BASE_STAGING},
+            expected_message="is not valid UTF-8; rename it so SQLBuild can read it",
         ),
         failure_case(
             name="model-reserved-name",
@@ -215,6 +223,21 @@ def _yaml_file_cases() -> tuple[FailureCase, ...]:
                 "seeds/order_channels.yaml": _SEED_DECLARATION,
                 "seeds/order_channels.csv": "id,label\n1,web\n",
             },
+        ),
+        failure_case(
+            name="schema-yml-invalid-yaml",
+            expected_code="D005",
+            files={"models/marts/schema.yml": "models: [\n"},
+            expected_message="contains invalid YAML at line 2, column 1",
+        ),
+        failure_case(
+            name="source-unsupported-yaml",
+            expected_code="D006",
+            files={
+                FAILURE_SOURCES_PATH: FAILURE_BASE_FILES[FAILURE_SOURCES_PATH]
+                + "    meta:\n      blob: !!binary aGk=\n"
+            },
+            expected_message="uses YAML that SQLBuild does not support at line",
         ),
         failure_case(
             name="source-unknown-key",

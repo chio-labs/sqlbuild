@@ -5,9 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-import yaml
-from yaml import YAMLError
-
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_bool import optional_bool
 from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
@@ -112,14 +109,6 @@ _FRESHNESS_STRING_TYPE_NAMES: frozenset[str] = frozenset(
 )
 
 
-def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
-    """Parse one sources/*.yml file into raw source declarations."""
-
-    return parse_loaded_sources_yml(
-        loaded=_load_sources_yaml(contents=contents, file_path=file_path), file_path=file_path
-    )
-
-
 def parse_loaded_sources_yml(*, loaded: object, file_path: Path) -> tuple[SourceEntry, ...]:
     """Parse the document one sources/*.yml file loads to into raw source declarations."""
 
@@ -141,14 +130,6 @@ def parse_loaded_sources_yml(*, loaded: object, file_path: Path) -> tuple[Source
         )
     parsed_sources.extend(parse_dlt_sources(payload=payload, file_path=file_path))
     return tuple(parsed_sources)
-
-
-def _load_sources_yaml(*, contents: str, file_path: Path) -> object:
-    try:
-        loader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-        return yaml.load(contents, Loader=loader)
-    except YAMLError as error:
-        raise SourceParseError(f"{file_path} contains invalid YAML: {error}") from error
 
 
 def _sources_mapping(*, loaded: object, file_path: Path) -> dict[str, object]:

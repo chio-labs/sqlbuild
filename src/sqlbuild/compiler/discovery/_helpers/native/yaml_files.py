@@ -1,129 +1,108 @@
-"""Source and schema YAML files loaded by the native engine, with per-file Python loading."""
+"""Source and schema YAML files read and loaded by the native engine."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.filesystem.cached_files import (
-    parse_source_file_with_cache,
-)
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_source_files
 from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import project_relative_path
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
-    native_discovery_supported,
+    materialise_native_files,
+    native_collection,
     native_display_prefix,
-    native_path_text_supported,
+    native_payload_error,
     native_project_tree,
+    native_unreadable_path_payload,
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.yml.file_paths import (
     schema_file_paths,
     source_file_paths,
 )
-from sqlbuild.compiler.discovery._helpers.yml.schema import (
-    parse_loaded_schema_yml,
-    parse_schema_yml,
-)
+from sqlbuild.compiler.discovery._helpers.yml.schema import parse_loaded_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_loaded_sources_yml
+from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
-    NATIVE_LOADED_TAG,
-    NATIVE_UNREADABLE_TAG,
+    NATIVE_SCHEMA_YAML_KIND,
+    NATIVE_SOURCE_YAML_KIND,
     NATIVE_YAML_BATCH_BYTES,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSourceFile
-from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
-from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSchemaFile,
+    DiscoveredSourceFile,
+    DiscoveryFileFault,
+)
 
 type _Payload = tuple[object, ...]
 
 
 def discover_native_source_files(
-    *, project_dir: Path, fact_cache: FactCacheStore | None = None
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
 ) -> tuple[DiscoveredSourceFile, ...]:
-    """Discover source YAML files natively; Python, with its fact cache, loads the rest."""
+    """Discover source YAML files natively, reporting failing files to `on_fault`."""
 
-    file_paths: tuple[Path, ...] = source_file_paths(project_dir=project_dir)
-    if not _native_supported(project_dir=project_dir, file_paths=file_paths):
-        return discover_source_files(project_dir=project_dir, fact_cache=fact_cache)
-    discovered: list[DiscoveredSourceFile] = []
-    for file_path, payload in _native_payloads(project_dir=project_dir, file_paths=file_paths):
-        relative_path: Path = project_relative_path(path=file_path, project_dir=project_dir)
-        if payload[0] == NATIVE_LOADED_TAG:
-            _tag, contents, loaded = payload
-            discovered.append(
-                DiscoveredSourceFile(
-                    file_path=file_path,
-                    relative_path=relative_path,
-                    contents=str(contents),
-                    source_entries=parse_loaded_sources_yml(loaded=loaded, file_path=file_path),
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        file_paths: tuple[Path, ...] = source_file_paths(project_dir=project_dir)
+        return materialise_native_files(
+            project_dir=project_dir,
+            files=(
+                (project_relative_path(path=file_path, project_dir=project_dir), payload)
+                for file_path, payload in _native_payloads(
+                    project_dir=project_dir, file_paths=file_paths, kind=NATIVE_SOURCE_YAML_KIND
                 )
-            )
-        else:
-            discovered.append(
-                parse_source_file_with_cache(
-                    project_dir=project_dir,
-                    file_path=file_path,
-                    relative_path=relative_path,
-                    fact_cache=fact_cache,
-                )
-            )
-    return tuple(discovered)
+            ),
+            build=lambda relative_path, payload: _source_file(
+                project_dir=project_dir, relative_path=relative_path, payload=payload
+            ),
+            on_fault=on_fault,
+        )
 
 
 def discover_native_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]:
-    """Discover schema YAML files natively; Python loads any file native cannot reproduce."""
+    """Discover model schema.yml and seed declaration files natively."""
 
-    file_paths: tuple[Path, ...] = schema_file_paths(project_dir=project_dir)
-    payloads: Iterator[tuple[Path, _Payload]] = (
-        _native_payloads(project_dir=project_dir, file_paths=file_paths)
-        if _native_supported(project_dir=project_dir, file_paths=file_paths)
-        else ((file_path, (NATIVE_UNREADABLE_TAG,)) for file_path in file_paths)
-    )
-    discovered: list[DiscoveredSchemaFile] = []
-    for file_path, payload in payloads:
-        contents: str
-        entries: tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]
-        if payload[0] == NATIVE_LOADED_TAG:
-            _tag, native_contents, loaded = payload
-            contents = str(native_contents)
-            entries = parse_loaded_schema_yml(loaded=loaded, file_path=file_path)
-        else:
-            contents = _python_contents(file_path=file_path, payload=payload)
-            entries = parse_schema_yml(contents=contents, file_path=file_path)
-        discovered.append(
-            DiscoveredSchemaFile(
-                file_path=file_path,
-                relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-                contents=contents,
-                model_entries=entries[0],
-                seed_entries=entries[1],
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        file_paths: tuple[Path, ...] = schema_file_paths(project_dir=project_dir)
+        return tuple(
+            _schema_file(project_dir=project_dir, file_path=file_path, payload=payload)
+            for file_path, payload in _native_payloads(
+                project_dir=project_dir, file_paths=file_paths, kind=NATIVE_SCHEMA_YAML_KIND
             )
         )
-    return tuple(discovered)
 
 
-def _python_contents(*, file_path: Path, payload: _Payload) -> str:
-    read: Callable[[], str] = {
-        True: lambda: file_path.read_text(encoding="utf-8"),
-        False: lambda: str(payload[1]),
-    }[payload[0] == NATIVE_UNREADABLE_TAG]
-    return read()
-
-
-def _native_supported(*, project_dir: Path, file_paths: tuple[Path, ...]) -> bool:
-    return (
-        bool(file_paths)
-        and native_discovery_supported(
-            project_dir=project_dir, display_prefix=native_display_prefix(project_dir)
-        )
-        and all(
-            native_path_text_supported(_relative_text(project_dir=project_dir, file_path=file_path))
-            for file_path in file_paths
-        )
+def _source_file(
+    *, project_dir: Path, relative_path: Path, payload: _Payload
+) -> DiscoveredSourceFile:
+    file_path: Path = project_dir / relative_path
+    contents, loaded = _loaded(payload=payload, file_path=file_path)
+    return DiscoveredSourceFile(
+        file_path=file_path,
+        relative_path=relative_path,
+        contents=contents,
+        source_entries=parse_loaded_sources_yml(loaded=loaded, file_path=file_path),
     )
+
+
+def _schema_file(*, project_dir: Path, file_path: Path, payload: _Payload) -> DiscoveredSchemaFile:
+    contents, loaded = _loaded(payload=payload, file_path=file_path)
+    model_entries, seed_entries = parse_loaded_schema_yml(loaded=loaded, file_path=file_path)
+    return DiscoveredSchemaFile(
+        file_path=file_path,
+        relative_path=project_relative_path(path=file_path, project_dir=project_dir),
+        contents=contents,
+        model_entries=model_entries,
+        seed_entries=seed_entries,
+    )
+
+
+def _loaded(*, payload: _Payload, file_path: Path) -> tuple[str, object]:
+    error: Exception | None = native_payload_error(payload=payload, file_path=file_path)
+    if error is not None:
+        raise error
+    _tag, contents, loaded = payload
+    return str(contents), loaded
 
 
 def _relative_text(*, project_dir: Path, file_path: Path) -> str:
@@ -131,24 +110,42 @@ def _relative_text(*, project_dir: Path, file_path: Path) -> str:
 
 
 def _native_payloads(
-    *, project_dir: Path, file_paths: tuple[Path, ...]
+    *, project_dir: Path, file_paths: tuple[Path, ...], kind: str
 ) -> Iterator[tuple[Path, _Payload]]:
     """Load the files natively in batches bounded by size, releasing each file once used."""
 
+    if not file_paths:
+        return
     tree: _native.NativeProjectTree = native_project_tree(project_dir)
+    request: dict[str, object] = {
+        "project_dir": str(project_dir),
+        "display_prefix": native_display_prefix(project_dir),
+        "kind": kind,
+    }
     for batch in _batches(file_paths=file_paths):
-        payloads: list[object] | None = _native.load_yaml_files(
-            [_relative_text(project_dir=project_dir, file_path=path) for path in batch], tree
+        relative_texts: list[str] = [
+            _relative_text(project_dir=project_dir, file_path=path) for path in batch
+        ]
+        unnamed: list[_Payload] = [
+            native_unreadable_path_payload(project_dir=project_dir, relative_text=text)
+            for text in relative_texts
+        ]
+        payloads: list[_Payload] = native_collection(
+            result=_native.load_yaml_files(
+                request,
+                [
+                    text
+                    for text, failure in zip(relative_texts, unnamed, strict=True)
+                    if not failure
+                ],
+                tree,
+            ),
+            project_dir=project_dir,
         )
         seed_snapshot_listings(project_dir=project_dir, tree=tree)
-        pending: list[_Payload] = (
-            [(NATIVE_UNREADABLE_TAG,)] * len(batch)
-            if payloads is None
-            else [cast(_Payload, payload) for payload in reversed(payloads)]
-        )
-        del payloads
-        for file_path in batch:
-            yield file_path, pending.pop()
+        payloads.reverse()
+        for file_path, failure in zip(batch, unnamed, strict=True):
+            yield file_path, failure or payloads.pop()
 
 
 def _batches(*, file_paths: tuple[Path, ...]) -> Iterator[tuple[Path, ...]]:

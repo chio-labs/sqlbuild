@@ -1,4 +1,4 @@
-//! Python's `_split_sql_test_blocks` and the header half of `_parse_single_sql_test_block`.
+//! Split a SQL test file into `TEST` blocks and parse each block header.
 
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::models::{DiscoveryFailure, FailureKind};

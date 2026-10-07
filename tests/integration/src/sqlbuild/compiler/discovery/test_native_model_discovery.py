@@ -3,129 +3,34 @@
 from __future__ import annotations
 
 import os
-import random
 import sys
 import unicodedata
 from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as _native
+from sqlbuild import _native
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
-    GeneratedModelParityTestCase,
-    ModelDiscoveryParityTestCase,
-    NativeDeferralTestCase,
+    NativeRuntimeTestCase,
     SharedSnapshotTestCase,
+    UnsupportedPythonCommandTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    CallCounter,
-    generated_model_bytes,
-    model_discovery_outcome,
+    FailureCapture,
     write_project,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _VALID_MODEL: bytes = b"MODEL (materialized table);\nSELECT order_id, total AS amount FROM orders"
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ModelDiscoveryParityTestCase(
-            description="sorted part by part, scoped declaration trees skipped",
-            files=(
-                ("models/a-c.sql", _VALID_MODEL),
-                ("models/a/b.sql", _VALID_MODEL),
-                ("models/.hidden.sql", _VALID_MODEL),
-                ("models/core/_sqlbuild/schemas/x.sql", b"not a model"),
-                ("models/core/macros/helpers.sql", b"not a model"),
-                ("models/notes.txt", b"ignored"),
-            ),
-        ),
-        ModelDiscoveryParityTestCase(
-            description="CRLF, CR and non-ASCII locations",
-            files=(
-                (
-                    "models/orders.sql",
-                    "MODEL (\r\n  description 'é',\r  columns (id (type INT)),\r\n);\r\n"
-                    'SELECT id, "Ünit" AS ünit FROM t'.encode(),
-                ),
-            ),
-        ),
-        ModelDiscoveryParityTestCase(
-            description="byte order mark before the header",
-            files=(("models/orders.sql", b"\xef\xbb\xbf" + _VALID_MODEL),),
-        ),
-        ModelDiscoveryParityTestCase(
-            description="invalid UTF-8 raises Python's decoding error",
-            files=(("models/a.sql", _VALID_MODEL), ("models/b.sql", b"MODEL ();\nSELECT '\xff'")),
-        ),
-        ModelDiscoveryParityTestCase(
-            description="a directory named like a model is read and fails",
-            files=(("models/a.sql", _VALID_MODEL),),
-            directories=("models/b.sql",),
-        ),
-        ModelDiscoveryParityTestCase(
-            description="the first failing file in order wins",
-            files=(
-                ("models/a.sql", _VALID_MODEL),
-                ("models/b.sql", b"MODEL (tagz [x]);\nSELECT 1"),
-                ("models/c.sql", b"SELECT 1"),
-            ),
-        ),
-        ModelDiscoveryParityTestCase(
-            description="model-local enum declarations fail after the header checks",
-            files=(("models/a.sql", b"MODEL (enums [a]);\nSELECT 1"),),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_model_files_when_discovering_with_each_engine_then_outcomes_match(
-    test_case: ModelDiscoveryParityTestCase, tmp_path: Path
-) -> None:
-    write_project(project_dir=tmp_path, files=test_case.files)
-    for directory in test_case.directories:
-        (tmp_path / directory).mkdir(parents=True)
-
-    python: object = model_discovery_outcome(project_dir=tmp_path, native=False)
-    native: object = model_discovery_outcome(project_dir=tmp_path, native=True)
-
-    assert (native == python) is test_case.expected_identical
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        GeneratedModelParityTestCase(
-            description="mixed headers and projections", seed=61, case_count=400
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_model_files_when_discovering_with_each_engine_then_outcomes_match(
-    test_case: GeneratedModelParityTestCase, tmp_path: Path
-) -> None:
-    rng: random.Random = random.Random(test_case.seed)
-    contents: list[bytes] = [generated_model_bytes(rng=rng) for _ in range(test_case.case_count)]
-    expected: list[object] = []
-    actual: list[object] = []
-    for index, data in enumerate(contents):
-        project_dir: Path = tmp_path / f"case_{index}"
-        write_project(project_dir=project_dir, files=(("models/orders.sql", data),))
-        expected.append(model_discovery_outcome(project_dir=project_dir, native=False))
-        actual.append(model_discovery_outcome(project_dir=project_dir, native=True))
-
-    assert mismatches(inputs=list(contents), expected=expected, actual=actual) == list(
-        test_case.expected_mismatches
-    )
 
 
 @pytest.mark.parametrize(
@@ -160,53 +65,69 @@ def test_given_project_when_discovering_through_the_engine_switch_then_inputs_ma
 @pytest.mark.parametrize(
     "test_case",
     [
-        NativeDeferralTestCase(
-            description="matching Unicode data and a UTF-8 root run natively",
+        NativeRuntimeTestCase(
+            description="the running Python and a UTF-8 root run natively",
             project_name="orders",
-            expected_native_calls=1,
+            expected_models=1,
         ),
-        NativeDeferralTestCase(
-            description="different Unicode data defers to Python",
-            project_name="orders",
-            unidata_version="0.0.0",
-            expected_native_calls=0,
-        ),
-        NativeDeferralTestCase(
+        NativeRuntimeTestCase(
             description="another supported Python and its Unicode data run natively",
             project_name="orders",
             unidata_version="16.0.0",
             python_version=(3, 14),
-            expected_native_calls=1,
+            expected_models=1,
         ),
-        NativeDeferralTestCase(
-            description="an unreleased Python defers to Python",
+        NativeRuntimeTestCase(
+            description="unknown Unicode data fails naming the supported versions",
+            project_name="orders",
+            unidata_version="0.0.0",
+            expected_models=0,
+            expected_error="UnsupportedPythonError",
+            expected_message="This SQLBuild release supports Python 3.12, 3.13 and 3.14, not Python",
+        ),
+        NativeRuntimeTestCase(
+            description="an unreleased Python fails naming its version",
             project_name="orders",
             unidata_version="16.0.0",
             python_version=(3, 15),
-            expected_native_calls=0,
+            expected_models=0,
+            expected_error="UnsupportedPythonError",
+            expected_message="not Python 3.15 (Unicode 16.0.0); run sqb with a supported Python",
         ),
-        NativeDeferralTestCase(
-            description="a non-UTF-8 project root defers to Python",
+        NativeRuntimeTestCase(
+            description="a non-UTF-8 project root fails showing the path lossily",
             project_name=os.fsdecode(b"orders\xff"),
-            expected_native_calls=0,
+            expected_models=0,
+            expected_error="ProjectPathError",
+            expected_message="orders\\xff is not valid UTF-8; move the project to a directory",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_runtime_and_root_when_discovering_natively_then_python_runs_where_native_cannot_match(
-    test_case: NativeDeferralTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_given_runtime_and_root_when_discovering_natively_then_supported_runs_and_others_fail(
+    test_case: NativeRuntimeTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_dir: Path = tmp_path / test_case.project_name
     write_project(project_dir=project_dir, files=(("models/orders.sql", _VALID_MODEL),))
-    python: object = model_discovery_outcome(project_dir=project_dir, native=False)
-    counter: CallCounter = CallCounter(_native.discover_model_files)
-    monkeypatch.setattr(_native, "discover_model_files", counter)
     monkeypatch.setattr(unicodedata, "unidata_version", test_case.unidata_version)
     monkeypatch.setattr(sys, "version_info", (*test_case.python_version, 0, "final", 0))
+    capture: FailureCapture = FailureCapture()
+    models: list[DiscoveredSqlModelFile] = []
 
-    native: object = model_discovery_outcome(project_dir=project_dir, native=True)
+    with capture:
+        models.extend(
+            discover_native_model_files(
+                project_dir=project_dir,
+                extract_implicit_alias_columns=True,
+                extract_output_column_locations=True,
+            )
+        )
 
-    assert (native, counter.calls) == (python, test_case.expected_native_calls)
+    assert (
+        len(models),
+        type(capture.failure).__name__,
+        test_case.expected_message in str(capture.failure),
+    ) == (test_case.expected_models, test_case.expected_error, True), test_case.description
 
 
 @pytest.mark.parametrize(
@@ -238,3 +159,41 @@ def test_given_native_model_walk_when_globbing_models_later_in_the_pass_then_the
     assert tuple(path.relative_to(tmp_path).as_posix() for path in matches) == (
         test_case.expected_matches
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnsupportedPythonCommandTestCase(
+            description="compile reports the coded error without a traceback",
+            command=("compile",),
+            expected_exit_code=1,
+            expected_error="error[D017]: This SQLBuild release supports Python 3.12, 3.13 and 3.14",
+        ),
+        UnsupportedPythonCommandTestCase(
+            description="tolerant scope discovery still refuses the Python",
+            command=("scope", "models/orders.sql"),
+            expected_exit_code=1,
+            expected_error="error[D017]: This SQLBuild release supports Python 3.12, 3.13 and 3.14",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unsupported_python_when_running_command_then_coded_error_is_printed(
+    test_case: UnsupportedPythonCommandTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_project(project_dir=tmp_path, files=(("models/orders.sql", _VALID_MODEL),))
+    monkeypatch.setattr(_native, "native_text_supported", lambda *_arguments: False)
+    _ = capsys.readouterr()
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "--no-color", *test_case.command])
+
+    error: str = capsys.readouterr().err
+    assert (exit_code, test_case.expected_error in error, "Traceback" in error) == (
+        test_case.expected_exit_code,
+        True,
+        False,
+    ), error

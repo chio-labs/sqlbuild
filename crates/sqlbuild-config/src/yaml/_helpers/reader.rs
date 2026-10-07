@@ -33,40 +33,88 @@ pub(crate) fn without_byte_order_mark(text: &str) -> &str {
     text.strip_prefix(BYTE_ORDER_MARK).unwrap_or(text)
 }
 
-/// Reject what PyYAML's reader rejects, and defer characters PyYAML and LibYAML read differently.
+/// The one-based line and column of the character at byte `index`.
+fn position_of(text: &str, index: usize) -> (usize, usize) {
+    let before = &text[..index];
+    let line_start = before.rfind('\n').map_or(0, |newline| newline + 1);
+    (
+        before.matches('\n').count() + 1,
+        before[line_start..].chars().count() + 1,
+    )
+}
+
+fn error_at(text: &str, index: usize, kind: ConfigErrorKind, message: String) -> ConfigError {
+    let (line, column) = position_of(text, index);
+    ConfigError::new(kind, message).at(line, column)
+}
+
+/// The byte index where the first line of `text` that `matches` starts.
+fn line_index(text: &str, matches: impl Fn(&str) -> bool) -> Option<usize> {
+    let mut index = 0;
+    for line in text.split('\n') {
+        if matches(line) {
+            return Some(index);
+        }
+        index += line.len() + 1;
+    }
+    None
+}
+
+/// Reject what PyYAML's reader rejects, and the characters PyYAML and LibYAML read differently.
 pub(crate) fn check_characters(text: &str) -> Result<(), ConfigError> {
-    if let Some(character) = text.chars().find(|character| !is_printable(*character)) {
-        return Err(ConfigError::new(
+    if let Some((index, character)) = text
+        .char_indices()
+        .find(|(_, character)| !is_printable(*character))
+    {
+        return Err(error_at(
+            text,
+            index,
             ConfigErrorKind::Syntax,
             format!("unacceptable character {:#x}", u32::from(character)),
         ));
     }
-    if text.contains(PYTHON_ONLY_LINE_BREAKS) {
-        return Err(ConfigError::new(
+    if let Some(index) = text.find(PYTHON_ONLY_LINE_BREAKS) {
+        return Err(error_at(
+            text,
+            index,
             ConfigErrorKind::Unsupported,
-            "NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR are YAML 1.1 line breaks",
+            "NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR line breaks".to_owned(),
         ));
     }
-    if text.contains(LOADER_DEPENDENT_CHARACTERS) {
-        return Err(ConfigError::new(
+    if let Some(index) = text.find(LOADER_DEPENDENT_CHARACTERS) {
+        let construct: &str = if text[index..].starts_with('\t') {
+            "tab characters"
+        } else {
+            "byte order marks after the start of the document"
+        };
+        return Err(error_at(
+            text,
+            index,
             ConfigErrorKind::Unsupported,
-            "tabs and inner byte order marks are read differently by PyYAML and LibYAML",
+            construct.to_owned(),
         ));
     }
-    let directive = text.starts_with(DIRECTIVE_INDICATOR)
-        || text
-            .split(['\n', '\r'])
-            .any(|line| line.starts_with(DIRECTIVE_INDICATOR));
-    if directive {
-        return Err(ConfigError::new(
+    if let Some(index) = line_index(text, |line| {
+        line.starts_with(DIRECTIVE_INDICATOR)
+            || line
+                .split('\r')
+                .skip(1)
+                .any(|part| part.starts_with(DIRECTIVE_INDICATOR))
+    }) {
+        return Err(error_at(
+            text,
+            index,
             ConfigErrorKind::Unsupported,
-            "directives are left to Python",
+            "%YAML and %TAG directives".to_owned(),
         ));
     }
     if starts_with_document_end(text) {
-        return Err(ConfigError::new(
+        let index = line_index(text, |line| !is_blank_or_comment(line)).unwrap_or(0);
+        return Err(error_at(
+            text,
+            index,
             ConfigErrorKind::Syntax,
-            "expected the node content, but found a document end marker",
+            "expected the node content, but found a document end marker".to_owned(),
         ));
     }
     Ok(())

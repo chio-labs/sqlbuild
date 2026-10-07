@@ -15,7 +15,7 @@ pub enum ConfigErrorKind {
     InvalidField,
 }
 
-/// A configuration failure; the Python reader re-parses the file to report its exact message.
+/// A configuration failure, at its one-based line and column where known.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfigError {
     pub kind: ConfigErrorKind,
@@ -32,6 +32,18 @@ impl ConfigError {
             message: message.into(),
             line: None,
             column: None,
+        }
+    }
+
+    /// This error at a one-based line and column, unless it already has a position.
+    pub fn at(self, line: usize, column: usize) -> Self {
+        if self.line.is_some() {
+            return self;
+        }
+        Self {
+            line: Some(line),
+            column: Some(column),
+            ..self
         }
     }
 }

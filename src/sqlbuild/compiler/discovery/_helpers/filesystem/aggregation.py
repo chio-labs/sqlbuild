@@ -18,28 +18,21 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_hook_functions,
     discover_macro_files,
     discover_materialization_files,
-    discover_model_files,
     discover_model_schema_files,
     discover_provider_classes,
     discover_python_function_files,
     discover_python_node_functions,
-    discover_scenario_files,
-    discover_schema_files,
     discover_seed_files,
-    discover_source_files,
     discover_sql_function_files,
     discover_sql_hook_files,
-    discover_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
-from sqlbuild.compiler.discovery._helpers.native.declarations import (
-    prepare_native_declaration_layout,
-)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.payloads import native_text_runtime
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     discover_native_scenario_files,
     discover_native_test_files,
@@ -75,7 +68,6 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.discovery.types import DeclarationFilesReuse
-from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -87,9 +79,7 @@ def build_discovered_project_inputs(
     local_config: LocalConfig,
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool = True,
-    fact_cache: FactCacheStore | None = None,
     declaration_reuse: DeclarationFilesReuse | None = None,
-    native: bool = False,
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
@@ -101,14 +91,11 @@ def build_discovered_project_inputs(
             project_dir=project_dir,
             sql_analysis_enabled=sql_analysis_enabled,
             extract_output_column_locations=extract_output_column_locations,
-            native=native,
         )
         discover: Callable[[], DiscoveredDeclarationFiles] = partial(
             _discover_declaration_files,
             project_dir=project_dir,
             discover_models=discover_models,
-            fact_cache=fact_cache,
-            native=native,
         )
         declarations: DiscoveredDeclarationFiles = (
             discover()
@@ -226,18 +213,12 @@ def _discover_declaration_files(
     *,
     project_dir: Path,
     discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
-    fact_cache: FactCacheStore | None,
-    native: bool,
 ) -> DiscoveredDeclarationFiles:
     with DirectorySnapshot.scope(project_dir=project_dir):
-        source_files: tuple[DiscoveredSourceFile, ...] = (
-            discover_native_source_files(project_dir=project_dir, fact_cache=fact_cache)
-            if native
-            else discover_source_files(project_dir=project_dir, fact_cache=fact_cache)
+        source_files: tuple[DiscoveredSourceFile, ...] = discover_native_source_files(
+            project_dir=project_dir
         )
         model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
-        if native:
-            prepare_native_declaration_layout(project_dir=project_dir)
         return DiscoveredDeclarationFiles(
             source_files=source_files,
             model_files=model_files,
@@ -247,22 +228,10 @@ def _discover_declaration_files(
             sql_function_files=discover_sql_function_files(project_dir=project_dir),
             sql_hook_files=discover_sql_hook_files(project_dir=project_dir),
             python_function_files=discover_python_function_files(project_dir=project_dir),
-            schema_files=(
-                discover_native_schema_files(project_dir=project_dir)
-                if native
-                else discover_schema_files(project_dir=project_dir)
-            ),
+            schema_files=discover_native_schema_files(project_dir=project_dir),
             seed_files=discover_seed_files(project_dir=project_dir),
-            test_files=(
-                discover_native_test_files(project_dir=project_dir, fact_cache=fact_cache)
-                if native
-                else discover_test_files(project_dir=project_dir, fact_cache=fact_cache)
-            ),
-            scenario_files=(
-                discover_native_scenario_files(project_dir=project_dir)
-                if native
-                else discover_scenario_files(project_dir=project_dir)
-            ),
+            test_files=discover_native_test_files(project_dir=project_dir),
+            scenario_files=discover_native_scenario_files(project_dir=project_dir),
             audit_files=discover_audit_files(project_dir=project_dir),
             macro_files=discover_macro_files(project_dir=project_dir),
             adapter_file=discover_adapter_file(project_dir=project_dir),
@@ -274,17 +243,12 @@ def _discover_model_files(
     project_dir: Path,
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool,
-    native: bool,
 ) -> tuple[DiscoveredSqlModelFile, ...]:
-    discover: Callable[..., tuple[DiscoveredSqlModelFile, ...]] = (
-        discover_native_model_files if native else discover_model_files
+    return discover_native_model_files(
+        project_dir=project_dir,
+        extract_implicit_alias_columns=sql_analysis_enabled,
+        extract_output_column_locations=extract_output_column_locations,
     )
-    with DirectorySnapshot.scope(project_dir=project_dir):
-        return discover(
-            project_dir=project_dir,
-            extract_implicit_alias_columns=sql_analysis_enabled,
-            extract_output_column_locations=extract_output_column_locations,
-        )
 
 
 def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
@@ -295,6 +259,7 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
 
 
 def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
+    _ = native_text_runtime()
     project_config, local_config, config_faults = _discover_configs(project_dir=project_dir)
     models, model_faults = _discover_models(project_dir=project_dir)
     enums, constants, macros, declaration_faults = _discover_declarations(project_dir=project_dir)
@@ -306,7 +271,7 @@ def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscov
         function=discover_sql_hook_files, project_dir=project_dir
     )
     sources, source_faults = _discover_category(
-        function=discover_source_files, project_dir=project_dir
+        function=discover_native_source_files, project_dir=project_dir
     )
     audits, audit_faults = _discover_category(
         function=discover_audit_files, project_dir=project_dir
@@ -376,7 +341,7 @@ def _discover_models(
     *, project_dir: Path
 ) -> tuple[tuple[DiscoveredSqlModelFile, ...], tuple[DiscoveryFileFault, ...]]:
     faults: list[DiscoveryFileFault] = []
-    models: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
+    models: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
         project_dir=project_dir,
         extract_implicit_alias_columns=False,
         extract_output_column_locations=False,
@@ -438,10 +403,10 @@ def _discover_relationships(
     tuple[DiscoveryFileFault, ...],
 ]:
     faults: list[DiscoveryFileFault] = []
-    tests: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(
+    tests: tuple[DiscoveredSqlTestFile, ...] = discover_native_test_files(
         project_dir=project_dir, on_fault=faults.append
     )
-    scenarios: tuple[DiscoveredSqlScenarioFile, ...] = discover_scenario_files(
+    scenarios: tuple[DiscoveredSqlScenarioFile, ...] = discover_native_scenario_files(
         project_dir=project_dir, on_fault=faults.append
     )
     return tests, scenarios, tuple(faults)

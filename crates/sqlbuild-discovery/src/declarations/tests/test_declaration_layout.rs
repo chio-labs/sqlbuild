@@ -1,3 +1,4 @@
+use crate::declarations::models::DeclarationKind;
 use crate::declarations::tests::helpers::{layout_rows, owned_facts, owned_groups};
 use crate::declarations::tests::test_types::LayoutTestCase;
 
@@ -5,6 +6,7 @@ use crate::declarations::tests::test_types::LayoutTestCase;
 fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python() {
     let test_cases = [
         LayoutTestCase {
+            kind: None,
             description: "global, inherited, grouped and local roots sort by relative path",
             files: &[
                 "macros/text.py",
@@ -45,6 +47,7 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             expected_groups: Ok(&[("models", "models/marts/_sqlbuild")]),
         },
         LayoutTestCase {
+            kind: None,
             description: "a declaration group directly below a canonical root fails",
             files: &["models/_sqlbuild/macros/text.py"],
             directories: &[],
@@ -56,6 +59,7 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             expected_groups: Ok(&[]),
         },
         LayoutTestCase {
+            kind: None,
             description: "a nested declaration root fails in both scans",
             files: &["models/a/_enums/macros/x.py"],
             directories: &["schemas/enums"],
@@ -70,6 +74,7 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             ),
         },
         LayoutTestCase {
+            kind: None,
             description: "unsupported group and role entries list every entry",
             files: &[
                 "models/a/_sqlbuild/notes.txt",
@@ -87,6 +92,7 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             ),
         },
         LayoutTestCase {
+            kind: None,
             description: "local singular audits and unknown hook roles fail the named layout",
             files: &[],
             directories: &[
@@ -101,11 +107,35 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             ),
         },
         LayoutTestCase {
+            kind: None,
             description: "a scoped root at the project root fails",
             files: &["_macros/text.py"],
             directories: &[],
             expected_facts: Err(
                 "Scoped declaration root _macros/ must be below a canonical authored root",
+            ),
+            expected_groups: Ok(&[]),
+        },
+        LayoutTestCase {
+            kind: Some(DeclarationKind::Enum),
+            description: "an isolated kind skips the misplaced roots of other kinds",
+            files: &[
+                "_macros/text.py",
+                "enums/status.sql",
+                "models/a/macros/x.py",
+            ],
+            directories: &[],
+            expected_facts: Ok(&[("enums/status.sql", "enum", "global", "enums", None, "enums")]),
+            expected_groups: Ok(&[]),
+        },
+        LayoutTestCase {
+            kind: Some(DeclarationKind::Constant),
+            description: "an isolated kind still rejects a root nested in its own tree",
+            files: &["models/a/constants/_enums/x.sql"],
+            directories: &[],
+            expected_facts: Err(
+                "Declaration root models/a/constants/_enums/ is nested inside another \
+                 declaration tree",
             ),
             expected_groups: Ok(&[]),
         },

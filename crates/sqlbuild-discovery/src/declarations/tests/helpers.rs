@@ -21,7 +21,8 @@ pub(super) fn layout_rows(
         fs::create_dir_all(project.path().join(relative_path)).expect("directory");
     }
     let layout: DeclarationLayout =
-        declaration_layout(&ProjectTree::new(project.path())).expect("no deferral");
+        declaration_layout(&ProjectTree::new(project.path()), test_case.kind)
+            .expect("no stage failure");
     (
         rows(layout.file_facts, fact_row),
         rows(layout.named_groups, group_pair),

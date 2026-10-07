@@ -478,6 +478,9 @@ _FOLDED_INTO_P001: str = (
     "compile raises the strict scope index error, which reports it inside a P001 "
     "'Invalid declaration scope index' message"
 )
+DISCOVERY_UNREACHABLE_CODES: dict[str, str] = {
+    "D017": ("the corpus runs a supported Python; an integration test forces an unsupported one"),
+}
 RENDER_UNREACHABLE_CODES: dict[str, str] = {
     "S001": _SCOPE_QUERY_ONLY,
     "S002": _SCOPE_QUERY_ONLY,

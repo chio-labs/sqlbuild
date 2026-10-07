@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from functools import lru_cache
-from inspect import cleandoc
 from pathlib import Path
 from typing import cast
 
@@ -18,15 +17,8 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
-from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    parse_header_values,
-    prepare_model_header_tokens,
-)
 from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_CONFIG_KEY,
-    SQL_TEST_HEADER_KEYS,
-    STATEMENT_HEADER_BODY_PATTERN,
 )
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import (
@@ -45,14 +37,6 @@ from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
-_TEST_HEADER_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*TEST\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*(?P<sql>.*)\Z",
-    re.DOTALL,
-)
-_TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*TEST\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*",
-    re.DOTALL | re.MULTILINE,
-)
 _MODE_BY_ACTUAL_CTE_NAME: dict[str, SqlTestMode] = {
     MACRO_ACTUAL_TEST_CTE_NAME: SqlTestMode.MACRO,
     UDF_ACTUAL_TEST_CTE_NAME: SqlTestMode.UDF,
@@ -92,47 +76,6 @@ _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
     SqlValueKind.DECIMAL,
 )
 _IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def prepare_sql_test_file_headers(contents_batch: list[str]) -> None:
-    """Batch cache TEST header parsing before projecting individual files."""
-
-    headers: list[str] = []
-    for contents in contents_batch:
-        headers.extend(
-            match.group("header") for match in _TEST_HEADER_ONLY_PATTERN.finditer(contents)
-        )
-    prepare_model_header_tokens(headers)
-
-
-def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
-    """Parse one SQL-native test file into one or more raw TEST(...) blocks."""
-
-    raw_test_blocks: tuple[tuple[str, int], ...] = _split_sql_test_blocks(
-        file_path=file_path, contents=contents
-    )
-    if not raw_test_blocks:
-        raise SqlTestParseError(
-            f"SQL test '{file_path}' must start with a TEST() header as the first "
-            "non-whitespace content"
-        )
-
-    discovered_blocks: list[DiscoveredSqlTestBlock] = []
-    test_index: int
-    raw_test_block: str
-    block_line: int
-    for test_index, (raw_test_block, block_line) in enumerate(raw_test_blocks, start=1):
-        discovered_blocks.append(
-            _parse_single_sql_test_block(
-                file_path=file_path,
-                raw_test_block=raw_test_block,
-                block_line=block_line,
-                test_index=test_index,
-            )
-        )
-
-    validate_sql_test_names(file_path=file_path, blocks=tuple(discovered_blocks))
-    return tuple(discovered_blocks)
 
 
 def omitted_ceremonial_select_offset_impl(*, sql: str, syntax: SqlLexicalSyntax) -> int | None:
@@ -236,56 +179,6 @@ def _infer_sql_test_mode(*, sql_body: str, file_path: Path) -> SqlTestMode:
     return next(iter(inferred_modes), DEFAULT_SQL_TEST_MODE)
 
 
-def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[tuple[str, int], ...]:
-    matches: tuple[re.Match[str], ...] = tuple(_TEST_HEADER_ONLY_PATTERN.finditer(contents))
-    if not matches:
-        return ()
-    if contents[: matches[0].start()].strip():
-        raise SqlTestParseError(
-            f"SQL test '{file_path}' must start with a TEST() header as the first "
-            "non-whitespace content"
-        )
-
-    raw_blocks: list[tuple[str, int]] = []
-    match_index: int
-    match: re.Match[str]
-    for match_index, match in enumerate(matches):
-        next_start: int = (
-            matches[match_index + 1].start() if match_index + 1 < len(matches) else len(contents)
-        )
-        raw_block: str = contents[match.start() : next_start]
-        block_start: int = match.start() + len(raw_block) - len(raw_block.lstrip())
-        raw_blocks.append((raw_block.strip(), contents.count("\n", 0, block_start) + 1))
-    return tuple(raw_blocks)
-
-
-def _parse_single_sql_test_block(
-    *,
-    file_path: Path,
-    raw_test_block: str,
-    block_line: int,
-    test_index: int,
-) -> DiscoveredSqlTestBlock:
-    header_match: re.Match[str] | None = _TEST_HEADER_PATTERN.match(raw_test_block)
-    if header_match is None:
-        raise SqlTestParseError(
-            f"SQL test '{file_path}' must start with a TEST() header as the first "
-            "non-whitespace content"
-        )
-
-    header_values: dict[str, object] = _parse_test_header(
-        header=header_match.group("header"),
-        header_line=block_line + raw_test_block.count("\n", 0, header_match.start("header")),
-        file_path=file_path,
-    )
-    return build_sql_test_block(
-        header_values=header_values,
-        sql_body=cleandoc(header_match.group("sql")),
-        file_path=file_path,
-        test_index=test_index,
-    )
-
-
 def build_sql_test_block(
     *, header_values: dict[str, object], sql_body: str, file_path: Path, test_index: int
 ) -> DiscoveredSqlTestBlock:
@@ -353,26 +246,6 @@ def _parse_test_cursor_bound(
     raise SqlTestParseError(
         f"TEST() {key} in '{file_path}' must be a non-empty string or an integer"
     )
-
-
-def _parse_test_header(*, header: str, header_line: int, file_path: Path) -> dict[str, object]:
-    parsed_header: dict[str, object] = parse_header_values(
-        header=header,
-        file_path=file_path,
-        statement_name="TEST",
-        error_class=SqlTestParseError,
-    )
-
-    reject_unsupported_header_keys(
-        header_values=parsed_header,
-        supported_keys=SQL_TEST_HEADER_KEYS,
-        statement="TEST()",
-        header=header,
-        header_line=header_line,
-        file_path=file_path,
-        error_class=SqlTestParseError,
-    )
-    return parsed_header
 
 
 def _parse_test_parameters_and_cases(

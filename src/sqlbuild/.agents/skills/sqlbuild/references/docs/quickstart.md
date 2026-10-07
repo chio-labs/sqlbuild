@@ -21,7 +21,7 @@ This guide walks you through creating and running a complete transformation proj
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.12–3.14 (other versions stop with `D017` naming the supported versions)
 - SQLBuild installed: `uv pip install sqlbuild` or `pip install sqlbuild`
 
 Confirm the installed release with `sqb --version`.

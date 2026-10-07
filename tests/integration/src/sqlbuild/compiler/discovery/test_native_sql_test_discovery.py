@@ -2,71 +2,20 @@
 
 from __future__ import annotations
 
-import random
 from pathlib import Path
 
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
-    GeneratedSqlTestParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    generated_scenario_bytes,
-    generated_test_bytes,
-    sql_test_discovery_outcome,
     stage_outcome,
     write_project,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _TEST: bytes = b'TEST (name "keeps_orders");\n\nSELECT 1\n'
 _SCENARIO: bytes = b'SCENARIO (description "Orders world");\n\nSELECT 1\n'
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        GeneratedSqlTestParityTestCase(
-            description="seeded test blocks and scenario headers",
-            seed=71,
-            case_count=1000,
-            expected_minimum_parsed=80,
-            expected_minimum_failed=150,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_test_files_when_discovering_with_each_engine_then_outcomes_match(
-    test_case: GeneratedSqlTestParityTestCase, tmp_path: Path
-) -> None:
-    rng: random.Random = random.Random(test_case.seed)
-    files: list[tuple[tuple[str, bytes], ...]] = [
-        (
-            ("tests/unit/orders.sql", generated_test_bytes(rng=rng)),
-            ("tests/scenarios/orders.sql", generated_scenario_bytes(rng=rng)),
-        )
-        for _ in range(test_case.case_count)
-    ]
-    project_dirs: list[Path] = [tmp_path / f"case_{index}" for index in range(len(files))]
-    for project_dir, project_files in zip(project_dirs, files, strict=True):
-        write_project(project_dir=project_dir, files=project_files)
-    expected: list[object] = [
-        sql_test_discovery_outcome(project_dir=project_dir, native=False)
-        for project_dir in project_dirs
-    ]
-
-    actual: list[object] = [
-        sql_test_discovery_outcome(project_dir=project_dir, native=True)
-        for project_dir in project_dirs
-    ]
-
-    parsed: int = sum(isinstance(outcome, str) for outcome in expected)
-    assert (
-        mismatches(inputs=list(files), expected=expected, actual=actual),
-        parsed >= test_case.expected_minimum_parsed,
-        len(expected) - parsed >= test_case.expected_minimum_failed,
-    ) == (list(test_case.expected_mismatches), True, True), test_case.description
 
 
 @pytest.mark.parametrize(

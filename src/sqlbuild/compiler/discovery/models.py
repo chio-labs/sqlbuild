@@ -619,14 +619,6 @@ class DiscoveredPythonNodeFunctions:
 
 
 @dataclass(frozen=True)
-class DiscoveryCacheRequest:
-    """Compile-cache controls that let discovery reuse exact per-file parse facts."""
-
-    selected_target: str | None = None
-    no_cache: bool = False
-
-
-@dataclass(frozen=True)
 class DiscoveredDeclarationFiles:
     """Project files discovery parses without importing any project Python."""
 

@@ -1,16 +1,17 @@
 //! Native outcomes of reading and loading authored YAML files.
 
+use crate::models::{DiscoveryFailure, ReadFailure};
 use sqlbuild_config::models::ConfigValue;
 
-/// One YAML file read and loaded as PyYAML `safe_load` would, or what Python must redo.
+/// One YAML file read and loaded as YAML 1.1 `safe_load`, or why it could not be.
 #[derive(Clone, Debug, PartialEq)]
 pub enum YamlFileOutcome {
     Loaded {
         contents: String,
         value: ConfigValue,
     },
-    /// Read, but the native loader cannot reproduce PyYAML here; Python loads the contents.
-    LoadInPython { contents: String },
-    /// The bytes could not be read or decoded; Python re-reads the file to raise its error.
-    Unreadable,
+    /// Invalid YAML, or YAML outside the forms SQLBuild reads.
+    Failed(DiscoveryFailure),
+    /// The file could not be read or decoded as Python's `read_text` would.
+    Unreadable(ReadFailure),
 }

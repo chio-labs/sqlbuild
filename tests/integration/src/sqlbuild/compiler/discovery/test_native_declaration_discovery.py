@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-import random
 from pathlib import Path
 
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
-    GeneratedLayoutParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    generated_layout_files,
-    native_layout_outcome,
-    python_layout_outcome,
     stage_outcome,
     write_project,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _AUDIT: bytes = b'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE NOT (@expression)\n'
 _SCHEMA: bytes = (
@@ -76,42 +70,3 @@ def test_given_declaration_layout_when_discovering_through_the_engine_switch_the
     native: object = stage_outcome(project_dir=tmp_path, engine="native", monkeypatch=monkeypatch)
 
     assert (native == python) is test_case.expected_identical, test_case.description
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        GeneratedLayoutParityTestCase(
-            description="seeded layouts over every declaration role",
-            seed=20261007,
-            count=400,
-            expected_minimum_valid=60,
-            expected_minimum_invalid=60,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_layouts_when_validating_natively_then_facts_and_failures_match_python(
-    test_case: GeneratedLayoutParityTestCase, tmp_path: Path
-) -> None:
-    rng: random.Random = random.Random(test_case.seed)
-    project_dirs: list[Path] = [tmp_path / f"project_{index}" for index in range(test_case.count)]
-    for project_dir in project_dirs:
-        write_project(project_dir=project_dir, files=generated_layout_files(rng=rng))
-    expected: list[tuple[object, object]] = [
-        python_layout_outcome(project_dir=path) for path in project_dirs
-    ]
-
-    actual: list[tuple[object, object]] = [
-        native_layout_outcome(project_dir=path) for path in project_dirs
-    ]
-
-    valid: int = sum(None not in outcome for outcome in expected)
-    inputs: list[object] = [path.name for path in project_dirs]
-    expected_outcomes: list[object] = [*expected]
-    actual_outcomes: list[object] = [*actual]
-    assert (
-        mismatches(inputs=inputs, expected=expected_outcomes, actual=actual_outcomes),
-        valid >= test_case.expected_minimum_valid,
-        test_case.count - valid >= test_case.expected_minimum_invalid,
-    ) == (list(test_case.expected_mismatches), True, True), test_case.description

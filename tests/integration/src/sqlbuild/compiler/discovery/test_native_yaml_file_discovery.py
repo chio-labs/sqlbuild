@@ -2,28 +2,19 @@
 
 from __future__ import annotations
 
-import random
-import unicodedata
 from pathlib import Path
 
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
-    FactCacheFallbackTestCase,
-    GeneratedYamlFileParityTestCase,
     NativeYamlLoadTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    fact_cache_keys,
-    generated_seed_declaration,
-    generated_source_document,
     native_yaml_tags_and_values,
     stage_outcome,
     write_project,
-    yaml_discovery_outcome,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _SOURCES: bytes = (
     b"sources:\n  - name: raw_orders\n    description: Orders feed.\n"
@@ -36,51 +27,6 @@ _SEED: bytes = (
     b"seeds:\n  - name: channels\n    description: Channels.\n"
     b"    columns:\n      - name: id\n        type: INTEGER\n"
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        GeneratedYamlFileParityTestCase(
-            description="seeded source and seed declarations in random YAML styles",
-            seed=81,
-            case_count=800,
-            expected_minimum_parsed=60,
-            expected_minimum_failed=100,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_yaml_files_when_discovering_with_each_engine_then_outcomes_match(
-    test_case: GeneratedYamlFileParityTestCase, tmp_path: Path
-) -> None:
-    rng: random.Random = random.Random(test_case.seed)
-    files: list[tuple[tuple[str, bytes], ...]] = [
-        (
-            ("sources/orders.yml", generated_source_document(rng=rng).encode("utf-8")),
-            ("seeds/channels.yml", generated_seed_declaration(rng=rng).encode("utf-8")),
-            ("seeds/channels.csv", b"id,label\n1,web\n"),
-        )
-        for _ in range(test_case.case_count)
-    ]
-    project_dirs: list[Path] = [tmp_path / f"case_{index}" for index in range(len(files))]
-    for project_dir, project_files in zip(project_dirs, files, strict=True):
-        write_project(project_dir=project_dir, files=project_files)
-    expected: list[object] = [
-        yaml_discovery_outcome(project_dir=project_dir, native=False)
-        for project_dir in project_dirs
-    ]
-
-    actual: list[object] = [
-        yaml_discovery_outcome(project_dir=project_dir, native=True) for project_dir in project_dirs
-    ]
-
-    parsed: int = sum(isinstance(outcome, str) for outcome in expected)
-    assert (
-        mismatches(inputs=list(files), expected=expected, actual=actual),
-        parsed >= test_case.expected_minimum_parsed,
-        len(expected) - parsed >= test_case.expected_minimum_failed,
-    ) == (list(test_case.expected_mismatches), True, True), test_case.description
 
 
 @pytest.mark.parametrize(
@@ -146,73 +92,31 @@ def test_given_yaml_files_when_discovering_through_the_engine_switch_then_inputs
             expected_native_tags=("ok",),
         ),
         NativeYamlLoadTestCase(
-            description="an implicit key beyond PyYAML's simple-key limit is left to Python",
+            description="an implicit key beyond the simple-key limit is unsupported",
             files=(("sources/a.yml", f"sources: []\nmeta: {{{_BIG_HEX}: key}}\n".encode()),),
-            expected_native_tags=("load",),
+            expected_native_tags=("error",),
         ),
         NativeYamlLoadTestCase(
-            description="an earlier invalid file still fails before a later big integer",
+            description="an invalid file fails on its own and a later big integer still loads",
             files=(
                 ("sources/a.yml", b"sources: [\n"),
                 ("sources/b.yml", f"sources: []\nmeta: {{v: {_BIG_HEX}}}\n".encode()),
             ),
-            expected_native_tags=("load", "ok"),
+            expected_native_tags=("error", "ok"),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_big_integers_when_loading_natively_then_values_and_error_order_match_python(
+def test_given_big_integers_when_loading_natively_then_values_match_libyaml(
     test_case: NativeYamlLoadTestCase, tmp_path: Path
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    python: object = yaml_discovery_outcome(project_dir=tmp_path, native=False)
 
-    native: object = yaml_discovery_outcome(project_dir=tmp_path, native=True)
     tags, values_match = native_yaml_tags_and_values(
         project_dir=tmp_path, relative_paths=[path for path, _contents in test_case.files]
     )
 
-    assert (native, tags, values_match) == (
-        python,
+    assert (tags, values_match) == (
         list(test_case.expected_native_tags),
         True,
-    ), test_case.description
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        FactCacheFallbackTestCase(
-            description="when native defers, Python discovery uses the fact cache as usual",
-            unidata_version="0.0.0",
-            expected_same_keys_as_python=True,
-            expected_native_keys=2,
-        ),
-        FactCacheFallbackTestCase(
-            description="native discovery itself reads no cached facts",
-            unidata_version=unicodedata.unidata_version,
-            expected_same_keys_as_python=False,
-            expected_native_keys=0,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_native_deferral_when_discovering_sources_and_tests_then_fact_cache_is_used(
-    test_case: FactCacheFallbackTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_project(
-        project_dir=tmp_path,
-        files=(
-            ("sources/orders.yml", _SOURCES),
-            ("tests/unit/orders.sql", b'TEST (name "keeps_orders");\nSELECT 1\n'),
-        ),
-    )
-    python: list[tuple[str, ...]] = fact_cache_keys(project_dir=tmp_path, native=False)
-    monkeypatch.setattr(unicodedata, "unidata_version", test_case.unidata_version)
-
-    native: list[tuple[str, ...]] = fact_cache_keys(project_dir=tmp_path, native=True)
-
-    assert ((native == python), len(native)) == (
-        test_case.expected_same_keys_as_python,
-        test_case.expected_native_keys,
     ), test_case.description

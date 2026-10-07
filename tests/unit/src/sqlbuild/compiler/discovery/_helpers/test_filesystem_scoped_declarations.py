@@ -12,14 +12,15 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_audit_files,
     discover_hook_functions,
     discover_macro_files,
-    discover_model_files,
     discover_python_function_files,
-    discover_scenario_files,
-    discover_source_files,
     discover_sql_function_files,
     discover_sql_hook_files,
-    discover_test_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
+    discover_native_scenario_files,
+    discover_native_test_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.yaml_files import discover_native_source_files
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
@@ -42,6 +43,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     declaration_contents,
     discover_declarations,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers import discover_model_files
 
 
 class _DiscoveredFile(Protocol):
@@ -384,12 +386,12 @@ def test_given_file_in_declaration_role_when_discovering_resources_then_returns_
     file_path.write_text(test_case.contents, encoding="utf-8")
     discoverers: dict[str, Callable[..., tuple[_DiscoveredFile, ...]]] = {
         "model": discover_model_files,
-        "test": discover_test_files,
-        "scenario": discover_scenario_files,
+        "test": discover_native_test_files,
+        "scenario": discover_native_scenario_files,
         "hook": discover_sql_hook_files,
         "function": discover_sql_function_files,
         "audit": discover_audit_files,
-        "source": discover_source_files,
+        "source": discover_native_source_files,
         "python_function": discover_python_function_files,
         "python_hook": discover_hook_functions,
     }

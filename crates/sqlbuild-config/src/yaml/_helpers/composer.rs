@@ -64,8 +64,13 @@ fn syntax_error(error: &ScanError) -> ConfigError {
         kind: ConfigErrorKind::Syntax,
         message: error.info().to_owned(),
         line: Some(error.marker().line()),
-        column: Some(error.marker().col()),
+        column: Some(error.marker().col() + 1),
     }
+}
+
+/// The one-based line and column where `span` starts.
+fn start_position(span: Span) -> (usize, usize) {
+    (span.start.line(), span.start.col() + 1)
 }
 
 fn full_tag(tag: Option<&Cow<'_, Tag>>) -> Option<String> {
@@ -92,8 +97,12 @@ impl<'input> Composer<'input> {
         }
     }
 
-    fn push(&mut self, tag: String, content: NodeContent) -> usize {
-        self.document.nodes.push(Node { tag, content });
+    fn push(&mut self, tag: String, content: NodeContent, span: Span) -> usize {
+        self.document.nodes.push(Node {
+            tag,
+            content,
+            position: start_position(span),
+        });
         self.document.nodes.len() - 1
     }
 
@@ -103,7 +112,7 @@ impl<'input> Composer<'input> {
             return Ok(());
         }
         let name = anchor_name(&self.chars, &self.code_ends, span.start.index())
-            .ok_or_else(|| unsupported("anchor name could not be recovered"))?;
+            .ok_or_else(|| unsupported("this anchor"))?;
         if !is_python_anchor_name(&name) {
             return Err(ConfigError::new(
                 ConfigErrorKind::Syntax,
@@ -130,7 +139,7 @@ impl<'input> Composer<'input> {
 
     fn alias(&self, anchor_id: usize) -> Result<usize, ConfigError> {
         if self.open_anchors.contains(&anchor_id) {
-            return Err(unsupported("recursive aliases are left to Python"));
+            return Err(unsupported("recursive aliases"));
         }
         self.anchors
             .get(&anchor_id)
@@ -212,7 +221,7 @@ impl<'input> Composer<'input> {
             && matches!(self.char_at(colon + 1), Some(',' | ']' | '}'));
         if placement.flow && adjacent_value {
             return Err(unsupported(
-                "LibYAML rejects ':' directly before a flow indicator",
+                "':' directly before ',', ']' or '}' in a flow collection",
             ));
         }
         let explicit_key = explicit_key_before(&self.chars, &self.code_ends, start);
@@ -281,7 +290,7 @@ impl<'input> Composer<'input> {
         span: Span,
         placement: Placement,
     ) -> Result<String, ConfigError> {
-        let deferred = || unsupported("this block scalar is left to Python");
+        let deferred = || unsupported("this literal or folded block scalar layout");
         if placement.flow || placement.key {
             return Err(deferred());
         }
@@ -304,14 +313,26 @@ impl<'input> Composer<'input> {
             .ok_or_else(deferred)
     }
 
+    /// Compose one node; an error without a position is placed at the node's start.
     fn compose_node(
         &mut self,
         event: Event<'input>,
         span: Span,
         placement: Placement,
     ) -> Result<usize, ConfigError> {
+        let (line, column) = start_position(span);
+        self.compose_node_at(event, span, placement)
+            .map_err(|error| error.at(line, column))
+    }
+
+    fn compose_node_at(
+        &mut self,
+        event: Event<'input>,
+        span: Span,
+        placement: Placement,
+    ) -> Result<usize, ConfigError> {
         if placement.depth > MAX_NESTING_DEPTH {
-            return Err(unsupported("nesting is deeper than the native limit"));
+            return Err(unsupported("nesting deeper than 256 levels"));
         }
         match event {
             Event::Alias(anchor_id) => self.alias(anchor_id),
@@ -321,7 +342,7 @@ impl<'input> Composer<'input> {
                     && value.contains(FLOW_KEY_INDICATOR)
                 {
                     return Err(unsupported(
-                        "PyYAML ends a flow scalar at '?' and LibYAML does not",
+                        "'?' inside a plain scalar in a flow collection",
                     ));
                 }
                 if style == ScalarStyle::Plain
@@ -340,9 +361,7 @@ impl<'input> Composer<'input> {
                     ));
                 }
                 if placement.key && self.is_long_implicit_key(span) {
-                    return Err(unsupported(
-                        "implicit keys near PyYAML's 1024-character limit are left to Python",
-                    ));
+                    return Err(unsupported("implicit keys longer than 1000 characters"));
                 }
                 if placement.key && placement.flow && self.spans_lines(span) {
                     return Err(ConfigError::new(
@@ -361,13 +380,11 @@ impl<'input> Composer<'input> {
                 };
                 let non_specific = full_tag(tag.as_ref()).as_deref() == Some(NON_SPECIFIC_TAG);
                 if non_specific && value.is_empty() && style == ScalarStyle::Plain {
-                    return Err(unsupported(
-                        "LibYAML and PyYAML differ on an empty '!' scalar",
-                    ));
+                    return Err(unsupported("an empty scalar tagged '!'"));
                 }
                 self.open_anchor(anchor_id, span)?;
                 let tag = scalar_tag(&value, style, full_tag(tag.as_ref()));
-                let node = self.push(tag, NodeContent::Scalar(value.into_owned()));
+                let node = self.push(tag, NodeContent::Scalar(value.into_owned()), span);
                 Ok(self.close_anchor(anchor_id, node))
             }
             Event::SequenceStart(anchor_id, tag) => {
@@ -398,7 +415,7 @@ impl<'input> Composer<'input> {
             items.push(self.compose_node(event, item_span, item_placement)?);
         }
         let tag = collection_tag(full_tag(tag.as_ref()), SEQ_TAG);
-        let node = self.push(tag, NodeContent::Sequence(items));
+        let node = self.push(tag, NodeContent::Sequence(items), span);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -426,7 +443,7 @@ impl<'input> Composer<'input> {
             entries.push((key, value));
         }
         let tag = collection_tag(full_tag(tag.as_ref()), MAP_TAG);
-        let node = self.push(tag, NodeContent::Mapping(entries));
+        let node = self.push(tag, NodeContent::Mapping(entries), span);
         Ok(self.close_anchor(anchor_id, node))
     }
 

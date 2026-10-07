@@ -1,4 +1,4 @@
-//! Parse one model file with the checks and messages of Python's `parse_matched_model_sql`.
+//! Parse one model file: header checks, model-local declaration checks and their messages.
 
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
 use crate::model_files::_helpers::locations::header_column_locations;

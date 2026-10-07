@@ -1,4 +1,4 @@
-//! Python's `_validate_declaration_groups` and `_declaration_groups`.
+//! Validate scoped `_sqlbuild` declaration groups and list the groups below each owner.
 
 use crate::constants::{
     CANONICAL_AUTHORED_ROOTS, DECLARATION_GROUP_DIRECTORY, GROUPED_NAMED_DECLARATION_DIRECTORIES,
@@ -8,13 +8,13 @@ use crate::declarations::_helpers::paths::parent;
 use crate::declarations::_helpers::scan::declaration_failure;
 use crate::declarations::errors::ScanError;
 use crate::declarations::models::DeclarationGroup;
-use crate::models::StageDeferral;
+use crate::models::StageFailure;
 use crate::tree::main::children::children;
 use crate::tree::main::rglob::rglob;
 use crate::tree::models::{ProjectTree, TreeEntry};
 
 /// Every `_sqlbuild/` directory below a canonical root, root by root, in path order.
-fn all_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageDeferral> {
+fn all_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageFailure> {
     let mut groups: Vec<DeclarationGroup> = Vec::new();
     for root_parts in CANONICAL_AUTHORED_ROOTS {
         let root: String = root_parts.join("/");
@@ -35,8 +35,8 @@ fn all_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageDeferral
     Ok(groups)
 }
 
-/// Python's `_declaration_groups`: the groups below a concrete owner directory.
-pub(crate) fn owned_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageDeferral> {
+/// The declaration groups below a concrete owner directory.
+pub(crate) fn owned_groups(tree: &ProjectTree) -> Result<Vec<DeclarationGroup>, StageFailure> {
     Ok(all_groups(tree)?
         .into_iter()
         .filter(|group| parent(&group.directory) != group.root)

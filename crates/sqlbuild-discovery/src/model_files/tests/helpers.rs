@@ -1,4 +1,4 @@
-use crate::model_files::_helpers::parsing::parse_model_file;
+use crate::model_files::main::parse_model_text::parse_model_text;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use crate::model_files::tests::test_types::{Located, ModelSummary, Span};
 use crate::models::LineColumnSpan;
@@ -50,7 +50,7 @@ fn summary(model: &DiscoveredModelFile) -> (String, Vec<Located>, Vec<Located>) 
 
 /// Parse one model file as `/project/models/orders.sql` and summarise the outcome.
 pub(super) fn parsed_summary(contents: &str) -> ModelSummary {
-    parse_model_file(FILE_PATH, contents.to_owned(), &options())
+    parse_model_text(FILE_PATH, contents.to_owned(), &options())
         .map(|model| summary(&model))
         .map_err(|failure| (failure.message, failure.help))
 }

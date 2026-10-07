@@ -1,6 +1,6 @@
 //! Results native discovery hands to the Python facade.
 
-use sqlbuild_core::text::errors::TextDecodeError;
+use crate::tree::main::display_text::display_text;
 use std::path::PathBuf;
 
 /// The Python `DiscoveryError` subclass a native failure is raised as.
@@ -14,6 +14,12 @@ pub enum FailureKind {
     SqlTest,
     /// `SqlScenarioParseError` (D009).
     SqlScenario,
+    /// `SchemaParseError` (D005).
+    Schema,
+    /// `SourceParseError` (D006).
+    Source,
+    /// `ProjectPathError` (D016).
+    ProjectPath,
 }
 
 impl FailureKind {
@@ -24,6 +30,9 @@ impl FailureKind {
             Self::Declaration => "declaration",
             Self::SqlTest => "sql_test",
             Self::SqlScenario => "sql_scenario",
+            Self::Schema => "schema",
+            Self::Source => "source",
+            Self::ProjectPath => "project_path",
         }
     }
 }
@@ -47,10 +56,16 @@ impl DiscoveryFailure {
     }
 }
 
-/// Native discovery cannot reproduce Python for this project; the Python stage runs instead.
+/// Why a whole discovery collection cannot be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StageDeferral {
-    pub reason: String,
+pub enum StageFailure {
+    /// A directory Python lists with `iterdir()` could not be listed: Python's `OSError`.
+    Unlistable {
+        relative_path: String,
+        error: ReadFailure,
+    },
+    /// The discovery worker pool could not start.
+    Internal(String),
 }
 
 /// The outcome of reading and parsing one authored file.
@@ -58,8 +73,8 @@ pub struct StageDeferral {
 pub enum FileOutcome<T> {
     Parsed(T),
     Failed(DiscoveryFailure),
-    /// The bytes could not be read or decoded; Python re-reads the file to raise its error.
-    Unreadable,
+    /// The file could not be read or decoded as Python's `read_text` would.
+    Unreadable(ReadFailure),
 }
 
 /// One discovered file, by `/`-separated path relative to the project directory.
@@ -88,13 +103,28 @@ pub struct ProjectRoot {
 impl ProjectRoot {
     /// Python's `str(project_dir / relative_path)` for a `/`-separated relative path.
     pub fn display_path(&self, relative_path: &str) -> String {
-        format!("{}{relative_path}", self.display_prefix)
+        format!(
+            "{}{}",
+            self.display_prefix,
+            display_text(relative_path).replace('/', std::path::MAIN_SEPARATOR_STR)
+        )
     }
 }
 
 /// Why an authored file could not be read the way Python's `read_text` reads it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReadFailure {
-    Io(std::io::ErrorKind),
-    Decode(TextDecodeError),
+    /// A refused read: `OSError(errno, strerror, path)`, or `winerror` for a Windows listing.
+    Io {
+        errno: Option<i32>,
+        winerror: Option<i32>,
+        message: String,
+    },
+    /// Python's `UnicodeDecodeError("utf-8", bytes, start, end, reason)`.
+    Decode {
+        bytes: Vec<u8>,
+        start: usize,
+        end: usize,
+        reason: &'static str,
+    },
 }
