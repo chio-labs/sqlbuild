@@ -103,11 +103,15 @@ class StageCaptureEncoder:
         if type_name in STAGE_CAPTURE_DECODED_SEQUENCES and isinstance(value, Sequence):
             return [self.encode(item) for item in value]
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            omitted_fields: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(
+                type_name, frozenset()
+            )
             return {
-                "__type__": qualified_name(type(value)),
+                "__type__": type_name,
                 **{
                     field.name: self.encode(getattr(value, field.name, None))
                     for field in dataclasses.fields(value)
+                    if field.name not in omitted_fields
                 },
             }
         if isinstance(value, Mapping):

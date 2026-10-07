@@ -20,6 +20,12 @@ pub enum FailureKind {
     Source,
     /// `ProjectPathError` (D016).
     ProjectPath,
+    /// `SqlHookParseError` (D014).
+    SqlHook,
+    /// `SqlAuditParseError` (D004).
+    SqlAudit,
+    /// `ResourceIdentityError` (D016).
+    ResourceIdentity,
 }
 
 impl FailureKind {
@@ -33,6 +39,9 @@ impl FailureKind {
             Self::Schema => "schema",
             Self::Source => "source",
             Self::ProjectPath => "project_path",
+            Self::SqlHook => "sql_hook",
+            Self::SqlAudit => "sql_audit",
+            Self::ResourceIdentity => "resource_identity",
         }
     }
 }
@@ -75,6 +84,8 @@ pub enum FileOutcome<T> {
     Failed(DiscoveryFailure),
     /// The file could not be read or decoded as Python's `read_text` would.
     Unreadable(ReadFailure),
+    /// Native parsing cannot reproduce Python for this file; the Python parser reads it.
+    Deferred,
 }
 
 /// One discovered file, by `/`-separated path relative to the project directory.

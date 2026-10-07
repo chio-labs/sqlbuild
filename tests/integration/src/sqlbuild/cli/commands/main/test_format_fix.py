@@ -10,13 +10,16 @@ import duckdb
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    FixSessionTestCase,
     FormatCompileIntegrationTestCase,
     SemanticFixTestCase,
     UnusedOutputDifferentialCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     built_model_rows,
+    record_fix_sessions,
     rule_fix_statuses,
 )
 
@@ -29,6 +32,41 @@ _DIFFERENTIAL_RAW_SQL: str = (
     " (3, 8, 'done', 3, [4, 5, 6]), (4, 9, 'done', 2, [7])) AS v"
     " (order_id, customer_id, status, amount, tags)\n"
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FixSessionTestCase(
+            description="preview fix passes drop the session of the unfixed files",
+            engine="native-preview",
+            expected_original_sessions=(True,),
+            expected_fix_pass_sessions=frozenset({False}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_retained_native_session_when_fixing_then_fix_passes_never_reuse_it(
+    test_case: FixSessionTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id UNION SELECT 2 AS order_id\n'
+    )
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine)
+    original, passes = record_fix_sessions(monkeypatch)
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "format", "--fix", "--json"])
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert tuple(original) == test_case.expected_original_sessions
+    assert frozenset(passes) == test_case.expected_fix_pass_sessions
 
 
 @pytest.mark.parametrize(

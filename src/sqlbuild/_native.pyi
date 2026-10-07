@@ -62,6 +62,23 @@ def load_yaml_files(
     request: dict[str, object], relative_paths: list[str], tree: NativeProjectTree
 ) -> list[tuple[object, ...]] | tuple[object, ...]: ...
 def load_yaml_document(file_path: str, text: str, kind: str) -> tuple[object, ...]: ...
+
+class NativeDiscoverySession:
+    def __init__(self, request: dict[str, object]) -> None: ...
+    def collection(
+        self, kind: str, tree: NativeProjectTree, isolate_kind: bool = False
+    ) -> (
+        list[
+            tuple[
+                str, tuple[str, str, str | None, str | None, str | None] | None, tuple[object, ...]
+            ]
+        ]
+        | tuple[object, ...]
+    ): ...
+
+def parse_declaration_contents(
+    request: dict[str, object], names: tuple[str, str], contents: str
+) -> tuple[object, ...]: ...
 def discover_declaration_layout(
     tree: NativeProjectTree, kind: str | None = None
 ) -> tuple[tuple[object, ...], tuple[object, ...]] | tuple[object, ...]: ...

@@ -37,6 +37,11 @@ from scripts.compiler_differential.constants import (
 )
 from sqlbuild.adapter.discovery.constants import BUILTIN_ADAPTER_IMPORTS
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_OMITTED_ATTRIBUTES
+
+_OMITTED_DISCOVERY_FIELDS: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(
+    f"{DiscoveredProjectInputs.__module__}:{DiscoveredProjectInputs.__qualname__}", frozenset()
+)
 
 _CROSS_FILE_MACRO_IMPORT: re.Pattern[str] = re.compile(r"^(?:from|import) macros\.", re.MULTILINE)
 _NON_ASCII_COMMENT: re.Pattern[str] = re.compile(r"--[^\n]*[^\x00-\x7f]")
@@ -123,7 +128,11 @@ def discovery_capture_problems(capture_text: str) -> tuple[str, ...]:
 
     return capture_problems(
         capture_text=capture_text,
-        fields=tuple(field.name for field in dataclasses.fields(DiscoveredProjectInputs)),
+        fields=tuple(
+            field.name
+            for field in dataclasses.fields(DiscoveredProjectInputs)
+            if field.name not in _OMITTED_DISCOVERY_FIELDS
+        ),
         callable_fields=CALLABLE_CAPTURE_FIELDS,
     )
 

@@ -1,6 +1,6 @@
 //! Python's lexical scan of the top-level SELECT list for authored output column locations.
 
-use crate::model_files::_helpers::locations::{absolute_span, line_starts};
+use crate::_helpers::locations::{absolute_span, line_starts};
 use crate::models::LineColumnSpan;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::is_python_word::is_python_word;

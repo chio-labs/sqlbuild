@@ -132,7 +132,9 @@ class CompileRenderReuseSession:
         ):
             declarations: DiscoveredDeclarationFiles = discover()
         recorded: StoredRender | None = _stored_render(
-            reads=reads, value=replace(declarations, model_files=()), reported=reported
+            reads=reads,
+            value=replace(declarations, model_files=(), native_session=None),
+            reported=reported,
         )
         if recorded is not None:
             self._pending_groups.append((name, recorded))

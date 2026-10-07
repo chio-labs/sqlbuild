@@ -53,6 +53,7 @@ DESCRIPTION_EXEMPT_INPUTS: dict[str, str] = {
     "materialization_files": "materialization strategies, not graph resources",
     "event_exporters": "runtime event outputs, not graph resources",
     "command_output_sinks": "runtime command outputs, not graph resources",
+    "native_session": "native parse state kept for later stages, not a project input",
 }
 SQL_ANALYSIS_OPT_OUT_ENTRY: str = "sql_analysis false"
 HOOK_DIRECTORY_NAME: str = "hooks"

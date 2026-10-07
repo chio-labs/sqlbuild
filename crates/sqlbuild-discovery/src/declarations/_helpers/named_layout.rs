@@ -7,7 +7,7 @@ use crate::constants::{
 };
 use crate::declarations::_helpers::declaration_groups::owned_groups;
 use crate::declarations::_helpers::paths::{join, name};
-use crate::declarations::_helpers::scan::declaration_failure;
+use crate::declarations::_helpers::scan::{declaration_failure, shown, shown_list};
 use crate::declarations::errors::ScanError;
 use crate::declarations::models::DeclarationGroup;
 use crate::tree::main::children::children;
@@ -50,9 +50,10 @@ pub(crate) fn named_declaration_groups(
             .find(|directory| is_nested_role_directory(name(directory)))
         {
             return Err(declaration_failure(format!(
-                "Declaration directory {nested}/ is not allowed inside the project-wide \
+                "Declaration directory {}/ is not allowed inside the project-wide \
                  {top_level}/ role; scoped declarations belong under \
-                 <folder>/{DECLARATION_GROUP_DIRECTORY}/ below a resource tree"
+                 <folder>/{DECLARATION_GROUP_DIRECTORY}/ below a resource tree",
+                shown(&nested)
             )));
         }
     }
@@ -78,8 +79,9 @@ fn validate_group_roles(tree: &ProjectTree, group: &str) -> Result<(), ScanError
         let singular: String = join(&directory, SINGULAR_AUDIT_DIRECTORY);
         if role == LOCAL_AUDIT_ROLE_DIRECTORY && tree.exists(&singular) {
             return Err(declaration_failure(format!(
-                "{singular}/ is invalid: singular audits are never used by name, so folder-only \
-                 visibility has no meaning; use {DECLARATION_GROUP_DIRECTORY}/audits/singular/"
+                "{}/ is invalid: singular audits are never used by name, so folder-only \
+                 visibility has no meaning; use {DECLARATION_GROUP_DIRECTORY}/audits/singular/",
+                shown(&singular)
             )));
         }
         let help_text: String = format!(
@@ -116,8 +118,8 @@ fn require_role_children(tree: &ProjectTree, role: &RoleChildren<'_>) -> Result<
     }
     Err(declaration_failure(format!(
         "Unsupported entries in {}/: {}; {}",
-        role.directory,
-        unsupported.join(", "),
+        shown(role.directory),
+        shown_list(&unsupported),
         role.help_text
     )))
 }

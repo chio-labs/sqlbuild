@@ -20,6 +20,22 @@ PYTHON_UDF_DECORATOR_NAME: str = "udf"
 SQL_FUNCTION_HEADER_KEYS: frozenset[str] = frozenset(
     {"arguments", "returns", "database", "schema", "tags", "description"}
 )
+SQL_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
+    {
+        "name",
+        "severity",
+        "run_scope",
+        "always_run",
+        "evaluation",
+        "value",
+        "sample_count",
+        "sample_unit",
+        "thresholds",
+        "minimum_samples",
+        "sql_analysis",
+    }
+)
+SQL_HOOK_HEADER_KEYS: frozenset[str] = frozenset({"description"})
 SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
     {
         "alias",
@@ -183,6 +199,8 @@ STATEMENT_HEADER_BODY_PATTERN: str = (
 NATIVE_FAILED_TAG: str = "error"
 NATIVE_UNREADABLE_TAG: str = "read"
 NATIVE_UNLISTABLE_TAG: str = "unlistable"
+NATIVE_DEFERRED_TAG: str = "defer"
+NATIVE_PARSED_TAG: str = "ok"
 NATIVE_SOURCE_YAML_KIND: str = "source"
 NATIVE_SCHEMA_YAML_KIND: str = "schema"
 NATIVE_SUPPORTED_PYTHON_VERSIONS: str = "3.12, 3.13 and 3.14"

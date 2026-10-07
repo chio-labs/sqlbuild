@@ -34,6 +34,8 @@ from sqlbuild.compiler.discovery._helpers.native import (
 )
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
+from sqlbuild.lint._helpers import fixes as lint_fixes
+from sqlbuild.lint.main import run_format as run_format_module
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
@@ -187,6 +189,27 @@ def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     monkeypatch.setattr(prepared_compile_artifacts, "plan_static_sql_tests", recorded_plan)
     return threads
+
+
+def record_fix_sessions(monkeypatch: pytest.MonkeyPatch) -> tuple[list[bool], list[bool]]:
+    """Record whether the inputs a Rule fix starts from, and each fix pass lints, hold a session."""
+
+    original: list[bool] = []
+    passes: list[bool] = []
+    plan: Callable[..., Any] = run_format_module.plan_rule_fixes
+    lint: Callable[..., Any] = lint_fixes.run_lint
+
+    def recorded_plan(**kwargs: Any) -> Any:
+        original.append(getattr(kwargs["discovered_inputs"], "native_session", None) is not None)
+        return plan(**kwargs)
+
+    def recorded_lint(**kwargs: Any) -> Any:
+        passes.append(kwargs["discovered_inputs"].native_session is not None)
+        return lint(**kwargs)
+
+    monkeypatch.setattr(run_format_module, "plan_rule_fixes", recorded_plan)
+    monkeypatch.setattr(lint_fixes, "run_lint", recorded_lint)
+    return original, passes
 
 
 def skip_artifact_preparation(self: PreparedCompileArtifacts, **kwargs: object) -> None:

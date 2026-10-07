@@ -24,6 +24,8 @@ from sqlbuild.compiler.discovery.exceptions import (
     ProjectPathError,
     SchemaParseError,
     SourceParseError,
+    SqlAuditParseError,
+    SqlHookParseError,
     SqlScenarioParseError,
     SqlTestParseError,
     UnsupportedPythonError,
@@ -34,6 +36,7 @@ from sqlbuild.compiler.discovery.types import (
     NativeListing,
     NativeLocation,
 )
+from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from sqlbuild.spec.contracts.models import SourceLocation
 
 _DISPLAY_PROBE: str = "_"
@@ -56,6 +59,9 @@ _FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {
     "schema": SchemaParseError,
     "source": SourceParseError,
     _PROJECT_PATH_KIND: ProjectPathError,
+    "sql_hook": SqlHookParseError,
+    "sql_audit": SqlAuditParseError,
+    "resource_identity": ResourceIdentityError,
 }
 
 

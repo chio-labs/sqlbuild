@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from sqlbuild._native import NativeDiscoverySession
 from sqlbuild.compiler.auditing.models import MeasurementContract
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
@@ -637,6 +638,12 @@ class DiscoveredDeclarationFiles:
     audit_files: tuple[DiscoveredAuditFile, ...]
     macro_files: tuple[DiscoveredMacroFile, ...]
     adapter_file: DiscoveredAdapterFile | None
+    native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
+    """The native session that read these declaration files, for later native stages.
+
+    `None` means no session: readers must use the Python objects. Any copy that changes a
+    discovered collection must set it to `None` so it never describes other files.
+    """
 
 
 @dataclass(frozen=True)
@@ -671,6 +678,12 @@ class DiscoveredProjectInputs:
     command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
+    native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
+    """The native session that read these declaration files, for later native stages.
+
+    `None` means no session: readers must use the Python objects. Any copy that changes a
+    discovered collection must set it to `None` so it never describes other files.
+    """
 
 
 @dataclass(frozen=True)

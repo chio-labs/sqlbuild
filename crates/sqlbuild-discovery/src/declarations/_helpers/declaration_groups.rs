@@ -5,7 +5,7 @@ use crate::constants::{
     SCOPED_DECLARATION_DIRECTORIES,
 };
 use crate::declarations::_helpers::paths::parent;
-use crate::declarations::_helpers::scan::declaration_failure;
+use crate::declarations::_helpers::scan::{declaration_failure, shown, shown_list};
 use crate::declarations::errors::ScanError;
 use crate::declarations::models::DeclarationGroup;
 use crate::models::StageFailure;
@@ -56,7 +56,7 @@ pub(crate) fn validate_declaration_groups(tree: &ProjectTree) -> Result<(), Scan
                 "Grouped declaration root {}/ must be below a concrete owner directory; use the \
                  project-wide macros/, enums/, constants/, audits/, schemas/, or hooks/ root \
                  instead",
-                group.directory
+                shown(&group.directory)
             )));
         }
         let unsupported: Vec<String> = children(tree, &group.directory)?
@@ -67,8 +67,8 @@ pub(crate) fn validate_declaration_groups(tree: &ProjectTree) -> Result<(), Scan
         if !unsupported.is_empty() {
             return Err(declaration_failure(format!(
                 "Declaration group {}/ contains unsupported entries: {}",
-                group.directory,
-                unsupported.join(", ")
+                shown(&group.directory),
+                shown_list(&unsupported)
             )));
         }
     }

@@ -4,6 +4,7 @@
 
 pub(crate) mod _helpers;
 pub mod constants;
+pub mod declaration_files;
 pub mod declarations;
 pub mod model_files;
 pub mod models;

@@ -1,7 +1,7 @@
 //! Parse one model file: header checks, model-local declaration checks and their messages.
 
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
-use crate::model_files::_helpers::locations::header_column_locations;
+use crate::_helpers::locations::header_column_locations;
 use crate::model_files::_helpers::output_columns::output_column_locations;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use crate::models::{DiscoveryFailure, FailureKind};

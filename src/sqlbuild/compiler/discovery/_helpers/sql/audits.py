@@ -11,7 +11,7 @@ from sqlbuild.compiler.auditing.models import MeasurementContract
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
-from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_CONFIG_KEY
+from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_CONFIG_KEY, SQL_AUDIT_HEADER_KEYS
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
 
@@ -31,21 +31,6 @@ _STATEMENT_DELIMITER: str = ";"
 _IDENTIFIER_SEPARATOR: str = "_"
 _ESCAPE_CHARACTER: str = "\\"
 _SQL_QUOTES: frozenset[str] = frozenset({"'", '"', "`"})
-_SUPPORTED_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
-    {
-        _AUDIT_NAME_HEADER_KEY,
-        _AUDIT_SEVERITY_HEADER_KEY,
-        _AUDIT_RUN_SCOPE_HEADER_KEY,
-        _AUDIT_ALWAYS_RUN_HEADER_KEY,
-        _AUDIT_EVALUATION_HEADER_KEY,
-        _AUDIT_VALUE_HEADER_KEY,
-        _AUDIT_SAMPLE_COUNT_HEADER_KEY,
-        _AUDIT_SAMPLE_UNIT_HEADER_KEY,
-        _AUDIT_THRESHOLDS_HEADER_KEY,
-        _AUDIT_MINIMUM_SAMPLES_HEADER_KEY,
-        SQL_ANALYSIS_CONFIG_KEY,
-    }
-)
 
 
 def parse_sql_audit_file(*, contents: str, file_path: Path) -> tuple[DiscoveredAuditBlock, ...]:
@@ -145,7 +130,7 @@ def _parse_audit_header(*, header: str, header_line: int, file_path: Path) -> di
     )
     reject_unsupported_header_keys(
         header_values=parsed_header,
-        supported_keys=_SUPPORTED_AUDIT_HEADER_KEYS,
+        supported_keys=SQL_AUDIT_HEADER_KEYS,
         statement="AUDIT()",
         header=header,
         header_line=header_line,
