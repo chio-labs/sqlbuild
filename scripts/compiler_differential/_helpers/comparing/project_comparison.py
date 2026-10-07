@@ -12,6 +12,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
 )
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.running.execution import run_engine
+from scripts.compiler_differential.constants import ERROR_SEVERITY, WARNING_SEVERITY
 from scripts.compiler_differential.models import (
     CommandOutcome,
     CorpusProject,
@@ -77,32 +78,20 @@ def _materialized_source(*, project: CorpusProject, case_dir: Path) -> Path:
 
 def _corpus_differences(*, project: CorpusProject, run: EngineRun) -> list[Difference]:
     first: CommandOutcome = run.outcomes[0]
-    errors: tuple[str, ...] = diagnostic_codes(outcome=first, errors_only=True)
-    expected_code: str | None = project.expected.error_code
-    if expected_code is not None:
-        codes: tuple[str, ...] = diagnostic_codes(outcome=first, errors_only=False)
-        met: bool = first.exit_code != 0 and bool(errors) and expected_code in codes
-        failed: list[Difference] = (
-            []
-            if met
-            else [
+    errors: tuple[str, ...] = diagnostic_codes(outcome=first, severity=ERROR_SEVERITY)
+    if project.expected.error_code is not None:
+        return [
+            *_failure_differences(project=project, outcome=first, errors=errors),
+            *(
                 _expectation_difference(
                     project=project,
-                    location="expected failure",
-                    expected=f"non-zero exit reporting {expected_code}",
-                    actual=f"exit {first.exit_code}: {', '.join(codes) or '<no codes>'}",
+                    location=f"`{outcome.label}` expected success",
+                    expected="exit 0",
+                    actual=f"exit {outcome.exit_code}",
                 )
-            ]
-        )
-        return failed + [
-            _expectation_difference(
-                project=project,
-                location=f"`{outcome.label}` expected success",
-                expected="exit 0",
-                actual=f"exit {outcome.exit_code}",
-            )
-            for outcome in run.outcomes
-            if outcome.label in project.expected.succeeding_commands and outcome.exit_code != 0
+                for outcome in run.outcomes
+                if outcome.label in project.expected.succeeding_commands and outcome.exit_code != 0
+            ),
         ]
     problems: list[str] = [
         f"`{outcome.label}` exit {outcome.exit_code}"
@@ -121,6 +110,34 @@ def _corpus_differences(*, project: CorpusProject, run: EngineRun) -> list[Diffe
             actual="; ".join(problems),
         )
     ]
+
+
+def _failure_differences(
+    *, project: CorpusProject, outcome: CommandOutcome, errors: tuple[str, ...]
+) -> list[Difference]:
+    expected_code: str | None = project.expected.error_code
+    differences: list[Difference] = []
+    if outcome.exit_code == 0 or not errors or errors[0] != expected_code:
+        differences.append(
+            _expectation_difference(
+                project=project,
+                location="expected failure",
+                expected=f"non-zero exit whose first error is {expected_code}",
+                actual=f"exit {outcome.exit_code}: errors {', '.join(errors) or '<none>'}",
+            )
+        )
+    warning_code: str | None = project.expected.warning_code
+    warnings: tuple[str, ...] = diagnostic_codes(outcome=outcome, severity=WARNING_SEVERITY)
+    if warning_code is not None and warning_code not in warnings:
+        differences.append(
+            _expectation_difference(
+                project=project,
+                location="expected warning",
+                expected=f"warning {warning_code}",
+                actual=f"warnings {', '.join(warnings) or '<none>'}",
+            )
+        )
+    return differences
 
 
 def _timeout_differences(

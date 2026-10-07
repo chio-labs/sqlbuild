@@ -1,5 +1,8 @@
 """Minimal failing projects, each derived from the shared base project."""
 
+from scripts.compiler_differential._helpers.corpus.discovery_failure_cases import (
+    discovery_failure_cases,
+)
 from scripts.compiler_differential.constants import (
     FAILURE_BASE_CONFIG,
     FAILURE_BASE_FILES,
@@ -15,9 +18,18 @@ from scripts.compiler_differential.models import FailureCase
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'
 
 
-def _case(*, name: str, expected_code: str, files: dict[str, str]) -> FailureCase:
+def _case(
+    *,
+    name: str,
+    expected_code: str,
+    files: dict[str, str],
+    expected_warning_code: str | None = None,
+) -> FailureCase:
     return FailureCase(
-        files={**FAILURE_BASE_FILES, **files}, name=name, expected_code=expected_code
+        files={**FAILURE_BASE_FILES, **files},
+        name=name,
+        expected_code=expected_code,
+        expected_warning_code=expected_warning_code,
     )
 
 
@@ -38,6 +50,10 @@ def _rules(*codes: str) -> dict[str, str]:
 def all_failure_cases() -> tuple[FailureCase, ...]:
     """Return every failure case in a stable order."""
 
+    return (*_compile_failure_cases(), *discovery_failure_cases())
+
+
+def _compile_failure_cases() -> tuple[FailureCase, ...]:
     return (
         _case(
             name="config-toml-syntax",
@@ -136,7 +152,8 @@ def all_failure_cases() -> tuple[FailureCase, ...]:
         ),
         _case(
             name="built-in-audit-shadow",
-            expected_code="P003",
+            expected_code="S010",
+            expected_warning_code="P003",
             files={
                 "models/staging/_sqlbuild/_audits/generic/not_null.sql": (
                     'AUDIT (name "not_null");\n\nSELECT 1 WHERE FALSE\n'

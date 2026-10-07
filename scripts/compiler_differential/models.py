@@ -17,10 +17,11 @@ class DifferentialCommand:
 
 @dataclass(frozen=True)
 class ExpectedOutcome:
-    """Success, or failure with one code; `succeeding_commands` must still exit 0."""
+    """Success, or failure whose first error is `error_code`, plus an optional expected warning."""
 
     error_code: str | None = None
     succeeding_commands: tuple[str, ...] = ()
+    warning_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,7 @@ class FailureCase(WritableProject):
 
     name: str
     expected_code: str
+    expected_warning_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -162,3 +164,17 @@ class DeclarationPlan:
     consumers: tuple[ModelPlan, ...]
     body: str = ""
     private: bool = False
+
+
+@dataclass(frozen=True)
+class EmittedCodes:
+    """The error and warning codes one compile reported, in report order."""
+
+    errors: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+    @property
+    def first_error(self) -> str | None:
+        """Return the first reported error code, if any."""
+
+        return self.errors[0] if self.errors else None

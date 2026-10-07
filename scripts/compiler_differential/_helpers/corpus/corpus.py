@@ -80,7 +80,9 @@ def build_corpus(
             CorpusProject(
                 name=f"failure/{case.name}",
                 commands=(COLD_COMPILE,),
-                expected=ExpectedOutcome(error_code=case.expected_code),
+                expected=ExpectedOutcome(
+                    error_code=case.expected_code, warning_code=case.expected_warning_code
+                ),
                 writer=case.write,
             )
             for case in all_failure_cases()

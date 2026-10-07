@@ -18,7 +18,6 @@ from scripts.compiler_differential._helpers.comparing.normalize import (
     strip_report_fields,
 )
 from scripts.compiler_differential.constants import (
-    ERROR_SEVERITY,
     MISSING_VALUE,
     MODEL_RESOURCE_TYPE,
     PLAN_LABEL,
@@ -70,17 +69,15 @@ def compare_engine_runs(*, project: str, left: EngineRun, right: EngineRun) -> l
     ]
 
 
-def diagnostic_codes(*, outcome: CommandOutcome, errors_only: bool) -> tuple[str, ...]:
-    """Return the diagnostic codes of a JSON compile report, in report order."""
+def diagnostic_codes(*, outcome: CommandOutcome, severity: str | None) -> tuple[str, ...]:
+    """Return a JSON compile report's diagnostic codes in order, optionally of one severity."""
 
     payload: dict[str, object] = as_json_object(_loads(outcome.stdout)) or {}
     diagnostics: object = payload.get("diagnostics")
     found: list[str] = []
     for raw_diagnostic in diagnostics if isinstance(diagnostics, list) else ():
         diagnostic: dict[str, object] | None = as_json_object(raw_diagnostic)
-        if diagnostic is not None and (
-            not errors_only or diagnostic.get("severity") == ERROR_SEVERITY
-        ):
+        if diagnostic is not None and (severity is None or diagnostic.get("severity") == severity):
             found.append(str(diagnostic.get("code")))
     return tuple(found)
 
