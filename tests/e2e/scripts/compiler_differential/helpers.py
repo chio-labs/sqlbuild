@@ -135,5 +135,5 @@ def perturbation_arguments(directory: Path, *, source: str = _SITECUSTOMIZE) -> 
     return (
         "--stage-captures",
         "--engine-env",
-        f"native:PYTHONPATH={write_native_perturbation(directory, source=source)}",
+        f"native-preview:PYTHONPATH={write_native_perturbation(directory, source=source)}",
     )

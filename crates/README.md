@@ -10,6 +10,7 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-sqltext` | Lexical SQL text without polyglot: comment, quote and parenthesis scanning, the rules quote policy, model header tokenization and matching, static variable substitution and static reference extraction. |
 | `sqlbuild-config` | Configuration file reading without Python: `tomllib`-compatible TOML, PyYAML `safe_load`-compatible YAML 1.1, and typed project and local config readers for the fields discovery needs. Any error means "defer to Python", which re-parses for exact messages. |
 | `sqlbuild-discovery` | Native project discovery: the shared directory walk with Python's glob and sort semantics, file reading with Python's newline handling, and parsing of authored files with Python's exact discovery messages. Results are plain data the Python discovery facade materialises; anything it cannot reproduce exactly defers to Python. |
+| `sqlbuild-scopes` | Declaration scopes: the scope index with Python's record orders and diagnostics, declaration visibility, relationship grants, the scope lookup groups, and the dialect-aware scan of SQL tests and scenarios for their expected models. Anything it cannot reproduce exactly defers to Python. |
 | `sqlbuild-analysis` | SQL analysis over polyglot: SQL tokens, query analysis, the binding catalog, semantic validation and usage, column references, and SQL-test extraction, planning and rendering. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
@@ -20,13 +21,14 @@ Dependencies point one way, from the top of this graph to the bottom:
 
 ```text
 sqlbuild-python
-  -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-discovery -> sqlbuild-config
+  -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-scopes -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-core
 ```
 
-`sqlbuild-config` does not depend on the crates below it today; its place in the order only
-fixes which crates may use it. The JSON emitter lives in `sqlbuild-core` so that any layer can
-produce text that must equal Python's `json.dumps` output.
+`sqlbuild-config` does not depend on the crates below it today, and `sqlbuild-scopes` uses only
+`sqlbuild-sqltext`; their place in the order fixes which crates may use them. The JSON emitter
+lives in `sqlbuild-core` so that any layer can produce text that must equal Python's
+`json.dumps` output.
 
 Each crate may depend only on crates below it, and may also skip layers. The order is declared
 in `[workspace.metadata.native-layers]` in the workspace `Cargo.toml`, and
@@ -42,6 +44,28 @@ The same check fails when the workspace version, the `pyproject.toml` version an
 
 `fensu check` applies the Rust structure rules inside each crate: other crates use items through
 `main/` entry points, `models.rs`, `types.rs` and `constants.rs`, not through `_helpers/`.
+
+## Compiler engines
+
+`SQLBUILD_COMPILER_ENGINE` (or the hidden `--compiler-engine` flag) selects which compiler
+stages run natively:
+
+| Engine | Runs |
+|---|---|
+| `python` | The Python compiler only. It is the oracle every native stage must match byte for byte. |
+| `native` | The default: native stages that passed their flip gate (`shipped` tier). |
+| `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
+
+Each native stage declares its tier once, in `NATIVE_STAGE_TIERS` in
+`src/sqlbuild/compiler/frontier/constants.py`. A stage moves from `preview` to `shipped` by
+changing that line, after its flip gate passes: a byte-identical real project, a green
+differential, and no measured slowdown on cold, edit and no-change compiles. Every engine keeps
+its own compiler, Rules and compile-reuse stores, so preview output is never reused by `native`.
+
+`make compiler-differential` compares `python` with `native-preview` on the full per-PR corpus.
+`make compiler-differential-shipped` compares `python` with `native` on the generated seeds and
+the failure corpus, so the shipped default stays covered on its own. CI runs both, and compares
+`python` with `native` on Python 3.13 and 3.14 as well.
 
 ## Working on the crates
 

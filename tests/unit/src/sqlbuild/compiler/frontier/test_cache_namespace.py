@@ -37,10 +37,16 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import store_paths
             base="rules-cache",
             expected_name="rules-cache-native-v1",
         ),
+        EngineCacheNameTestCase(
+            description="native_preview_gets_its_own_suffix",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            base="compiler",
+            expected_name="compiler-native-preview-v1",
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_naming_store_then_only_native_is_suffixed(
+def test_given_engine_when_naming_store_then_only_native_engines_are_suffixed(
     test_case: EngineCacheNameTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)
@@ -69,6 +75,16 @@ def test_given_engine_when_naming_store_then_only_native_is_suffixed(
                 "target/cache/compiler-native-v1",
                 "target/cache/compiler-native-v1/declaration-scopes-v2",
                 "target/rules-cache-native-v1/bulk/sql.json",
+            ),
+        ),
+        EngineStorePathsTestCase(
+            description="native_preview_paths_separate",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            expected_paths=(
+                "target/cache/compiler-native-preview-v1",
+                "target/cache/compiler-native-preview-v1",
+                "target/cache/compiler-native-preview-v1/declaration-scopes-v2",
+                "target/rules-cache-native-preview-v1/bulk/sql.json",
             ),
         ),
     ],

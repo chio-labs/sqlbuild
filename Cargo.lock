@@ -684,6 +684,7 @@ dependencies = [
  "sqlbuild-core",
  "sqlbuild-discovery",
  "sqlbuild-rules",
+ "sqlbuild-scopes",
  "sqlbuild-sqltext",
 ]
 
@@ -706,6 +707,13 @@ dependencies = [
  "stacker",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "sqlbuild-scopes"
+version = "0.139.0"
+dependencies = [
+ "sqlbuild-sqltext",
 ]
 
 [[package]]

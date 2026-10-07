@@ -31,7 +31,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, Discover
 from sqlbuild.compiler.discovery.types import DeclarationFilesReuse
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
-from sqlbuild.compiler.frontier.types import CompilerStage
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import CompilerStage, NativeStage
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -58,14 +59,18 @@ def discover_project_inputs(
                 declaration_reuse=declaration_reuse,
                 native=False,
             ),
-            native_stage=partial(
-                _discover_project_inputs,
-                project_dir=project_dir,
-                sql_analysis_enabled_override=sql_analysis_enabled_override,
-                extract_output_column_locations=extract_output_column_locations,
-                cache_request=cache_request,
-                declaration_reuse=declaration_reuse,
-                native=True,
+            native_stage=(
+                partial(
+                    _discover_project_inputs,
+                    project_dir=project_dir,
+                    sql_analysis_enabled_override=sql_analysis_enabled_override,
+                    extract_output_column_locations=extract_output_column_locations,
+                    cache_request=cache_request,
+                    declaration_reuse=declaration_reuse,
+                    native=True,
+                )
+                if native_stage_enabled(NativeStage.DISCOVERY)
+                else None
             ),
         )
 

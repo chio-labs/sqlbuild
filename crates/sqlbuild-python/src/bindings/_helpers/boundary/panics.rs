@@ -21,6 +21,10 @@ pub(crate) fn compiler_error(error: impl std::fmt::Display) -> PyErr {
     }
 }
 
+pub(crate) fn value_error(error: impl std::fmt::Display) -> PyErr {
+    compiler_error(error)
+}
+
 pub(crate) fn compiler_guard<T>(
     operation: impl FnOnce() -> pyo3::PyResult<T>,
 ) -> pyo3::PyResult<T> {

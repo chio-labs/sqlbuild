@@ -33,7 +33,7 @@ from tests.e2e.scripts.compiler_differential.helpers import (
             expected_exit_code=0,
             expected_lines=(
                 "OK   project/waffle_shop",
-                "Compiler differential passed: 1 projects identical (python vs native)",
+                "Compiler differential passed: 1 projects identical (python vs native-preview)",
             ),
             expected_patterns=(),
             expected_absent=("DIFF",),
@@ -64,9 +64,9 @@ def test_given_identical_engines_when_comparing_fixture_then_harness_passes(
             expected_lines=(
                 "DIFF project/waffle_shop",
                 "- `compile` stdout at /resources/models/0/query_sql",
-                'native: "SELECT * FROM (',
+                'native-preview: "SELECT * FROM (',
                 "- `compile` stderr at line 1",
-                f'native: "{NATIVE_ONLY_STDERR_LINE}"',
+                f'native-preview: "{NATIVE_ONLY_STDERR_LINE}"',
                 "- stage capture 0-compile/003-compiled_project.json at /models/0/query_sql",
                 "First difference: project/waffle_shop: `compile` stdout at",
             ),

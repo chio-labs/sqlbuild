@@ -290,11 +290,13 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
-      - name: Compare fixtures, examples, generated seeds and the failure corpus
+      - name: Compare fixtures, examples, generated seeds and the failure corpus (python vs native-preview)
         run: >-
           make compiler-differential
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
           --require-render-coverage"
+      - name: Compare generated seeds and the failure corpus (python vs shipped native)
+        run: make compiler-differential-shipped
 
   compiler_differential_python_versions:
     name: Native discovery on Python ${{ matrix.python }}
@@ -333,11 +335,12 @@ jobs:
           uv run --no-sync pytest
           tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
           -n auto --dist loadfile
-      - name: Compare engines on fixtures, examples, the failure corpus and a few seeds
+      - name: Compare python with the shipped native default on fixtures, examples, the failure corpus and a few seeds
         env:
           PYTHONUNBUFFERED: "1"
         run: >-
           uv run --no-sync python -m scripts.run_compiler_differential
+          --engines python native
           --corpus fixtures examples failures seeds --seeds 4 --jobs 4
 
   format_performance:
@@ -758,6 +761,7 @@ jobs:
         checks,
         e2e_shards,
         compiler_differential,
+        compiler_differential_python_versions,
         format_performance,
         performance,
         cold_compile_performance,
@@ -778,6 +782,7 @@ jobs:
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
           COMPILER_DIFFERENTIAL_RESULT: ${{ needs.compiler_differential.result }}
+          COMPILER_DIFFERENTIAL_PYTHON_VERSIONS_RESULT: ${{ needs.compiler_differential_python_versions.result }}
           FORMAT_PERFORMANCE_RESULT: ${{ needs.format_performance.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           COLD_COMPILE_PERFORMANCE_RESULT: ${{ needs.cold_compile_performance.result }}
@@ -800,6 +805,7 @@ jobs:
           for result in \
             "${E2E_SHARDS_RESULT}" \
             "${COMPILER_DIFFERENTIAL_RESULT}" \
+            "${COMPILER_DIFFERENTIAL_PYTHON_VERSIONS_RESULT}" \
             "${FORMAT_PERFORMANCE_RESULT}" \
             "${PERFORMANCE_RESULT}" \
             "${COLD_COMPILE_PERFORMANCE_RESULT}" \

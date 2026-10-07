@@ -9,9 +9,11 @@ pub(crate) fn normalization_results(
         .into_iter()
         .map(|result| match result {
             Ok(sql) => Ok(sql.into_pyobject(py)?.into_any().unbind()),
-            Err(error) => Ok(crate::bindings::_helpers::panics::compiler_error(error)
-                .into_value(py)
-                .into_any()),
+            Err(error) => Ok(
+                crate::bindings::_helpers::boundary::panics::compiler_error(error)
+                    .into_value(py)
+                    .into_any(),
+            ),
         })
         .collect()
 }

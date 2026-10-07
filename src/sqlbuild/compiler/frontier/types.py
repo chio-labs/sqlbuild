@@ -8,6 +8,21 @@ class CompilerEngine(StrEnum):
 
     PYTHON = "python"
     NATIVE = "native"
+    NATIVE_PREVIEW = "native-preview"
+
+
+class NativeStage(StrEnum):
+    """A native implementation that replaces one Python compiler stage when its tier is active."""
+
+    DISCOVERY = "discovery"
+    DECLARATION_SCOPES = "declaration_scopes"
+
+
+class NativeStageTier(StrEnum):
+    """Which engines run a native stage: shipped stages passed their flip gate."""
+
+    SHIPPED = "shipped"
+    PREVIEW = "preview"
 
 
 class CompilerStage(StrEnum):
