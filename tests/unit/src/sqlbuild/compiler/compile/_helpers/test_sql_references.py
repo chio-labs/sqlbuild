@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -29,8 +31,8 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
         SqlReferenceExtractionTestCase(
             description="simple references preserve authored order",
             sql=(
-                "SELECT * FROM __source('orders') "
-                'UNION ALL SELECT * FROM __dbt_ref("shop", "customers")'
+                'SELECT * FROM __source("orders") '
+                'UNION ALL SELECT * FROM __dbt_ref("shop" , "customers")'
             ),
             expected_references=(
                 (SqlReferenceKind.SOURCE, "orders", None),
@@ -82,11 +84,6 @@ def test_given_simple_references_when_extracting_then_returns_authored_order(
             expected_error="unclosed parenthesis",
         ),
         SqlReferenceExtractionErrorTestCase(
-            description="expression reference name preserves diagnostic",
-            sql="SELECT * FROM __ref(concat('ord', 'ers'))",
-            expected_error="name argument must be a quoted string or identifier",
-        ),
-        SqlReferenceExtractionErrorTestCase(
             description="unclosed block comment preserves diagnostic",
             sql='SELECT * FROM __ref("orders") /* unterminated',
             expected_error="unclosed block comment",
@@ -109,6 +106,101 @@ def test_given_unsupported_reference_sql_when_extracting_then_preserves_python_d
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error):
         extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlReferenceExtractionErrorTestCase(
+            description="unquoted ref name",
+            sql="SELECT * FROM __ref(stg_orders)",
+            expected_error=re.escape("__ref(stg_orders) is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("stg_orders")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="comment inside ref call",
+            sql="SELECT * FROM __ref( /* upstream */ 'stg_orders')",
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("stg_orders")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="single quoted source name",
+            sql="SELECT * FROM __source('raw_orders')",
+            expected_error=re.escape("__source('raw_orders') is not a valid __source() call"),
+            expected_code="P012",
+            expected_help='__source("raw_orders")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="whitespace inside seed call",
+            sql='SELECT * FROM __seed( "country_codes" )',
+            expected_error=re.escape("is not a valid __seed() call"),
+            expected_code="P012",
+            expected_help='__seed("country_codes")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="unquoted udf name",
+            sql="SELECT __udf(is_completed)(status) FROM orders",
+            expected_error=re.escape("__udf(is_completed) is not a valid __udf() call"),
+            expected_code="P012",
+            expected_help='__udf("is_completed")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="single quoted table function name",
+            sql="SELECT * FROM __table_fn('customer_orders')(1)",
+            expected_error=re.escape("is not a valid __table_fn() call"),
+            expected_code="P012",
+            expected_help='__table_fn("customer_orders")(...)',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="unquoted dbt ref package and name",
+            sql="SELECT * FROM __dbt_ref(shop, customers)",
+            expected_error=re.escape("is not a valid __dbt_ref() call"),
+            expected_code="P012",
+            expected_help='__dbt_ref("shop", "customers")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="expression name falls back to a placeholder call",
+            sql="SELECT * FROM __ref(concat('ord', 'ers'))",
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("model_name")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="second ref name argument",
+            sql='SELECT * FROM __ref("orders", "customers")',
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("model_name")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="empty quoted name",
+            sql='SELECT * FROM __ref("")',
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("model_name")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="table function without argument list",
+            sql='SELECT * FROM __table_fn("customer_orders")',
+            expected_error="must be followed by an argument list",
+            expected_code="P012",
+            expected_help='__table_fn("customer_orders")()',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reference_call_compile_cannot_replace_when_extracting_then_raises_syntax_error(
+    test_case: SqlReferenceExtractionErrorTestCase,
+) -> None:
+    with pytest.raises(CompileInputError, match=test_case.expected_error) as raised:
+        extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+
+    assert raised.value.code == test_case.expected_code
+    assert raised.value.help is not None
+    assert test_case.expected_help is not None
+    assert raised.value.help.endswith(test_case.expected_help)
 
 
 @pytest.mark.parametrize(

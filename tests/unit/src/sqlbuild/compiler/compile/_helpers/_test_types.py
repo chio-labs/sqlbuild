@@ -59,6 +59,8 @@ class SqlReferenceExtractionErrorTestCase:
     description: str
     sql: str
     expected_error: str
+    expected_code: str = "P001"
+    expected_help: str | None = None
 
 
 @dataclass(frozen=True)

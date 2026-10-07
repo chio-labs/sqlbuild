@@ -42,7 +42,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _PARTIAL_FIXTURE_ALIAS: str = "__sqlbuild_partial_fixture"
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)",\s*"([^"]+)"\)')
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\s*,\s*"([^"]+)"\)')
 
 
 def build_relation_fixture_completion(

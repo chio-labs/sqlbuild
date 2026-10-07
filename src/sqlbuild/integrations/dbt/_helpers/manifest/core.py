@@ -160,7 +160,7 @@ def resolve_dbt_manifest_model(
             f"dbt model '{name}' is ambiguous across packages: {packages}",
             code="C213",
             help=(
-                f"Use {SqlReferenceKind.DBT_REF.example_call('package_name', name)} to "
+                f"Use {SqlReferenceKind.DBT_REF.example_call('package_name', name, quote='"')} to "
                 "choose one dbt model."
             ),
         )

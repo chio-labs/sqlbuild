@@ -385,7 +385,7 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
-        (compiler_cache_directory(tmp_path) / "references-v2").glob("*.sqlite3")
+        (compiler_cache_directory(tmp_path) / "references-v3").glob("*.sqlite3")
     )
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
@@ -425,7 +425,7 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
-        (compiler_cache_directory(tmp_path) / "references-v2").glob("*.sqlite3")
+        (compiler_cache_directory(tmp_path) / "references-v3").glob("*.sqlite3")
     )
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(

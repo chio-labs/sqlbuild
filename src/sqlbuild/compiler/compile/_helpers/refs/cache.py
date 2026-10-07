@@ -18,7 +18,7 @@ from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
-_REFERENCE_CACHE_VERSION: int = 2
+_REFERENCE_CACHE_VERSION: int = 3
 _CACHE_DATABASE_NAME: str = "sql-references.sqlite3"
 _CACHE_ENTRY_SEPARATOR: str = "\n"
 _MAX_CACHE_ENTRY_BYTES: int = 1_000_000

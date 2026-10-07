@@ -41,7 +41,7 @@ def validate_model_references(
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} references seed '{reference.ref_name}' "
                     f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
+                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} for seed "
                     f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
             raise CompileInputError(
@@ -57,7 +57,7 @@ def validate_model_references(
                     f"Model file {model_file.relative_path} references model "
                     f"'{reference.ref_name}' "
                     f"with {SqlReferenceKind.SEED.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.REF.example_call(reference.ref_name)} for model "
+                    f"{SqlReferenceKind.REF.example_call(reference.ref_name, quote='"')} for model "
                     "references."
                 )
             raise CompileInputError(
@@ -198,7 +198,7 @@ def validate_function_references(
                 raise CompileInputError(
                     f"SQL function file {function_file.relative_path} references seed "
                     f"'{reference.ref_name}' with {SqlReferenceKind.REF.placeholder_call('...')}. "
-                    f"Use {SqlReferenceKind.SEED.example_call(reference.ref_name)} "
+                    f"Use {SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} "
                     f"for seed references; {SqlReferenceKind.REF.function_name} only "
                     "resolves models."
                 )
@@ -284,7 +284,7 @@ def validate_audit_references(
                 raise CompileInputError(
                     f"Audit file {audit_file.relative_path} references seed '{reference.ref_name}' "
                     f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
+                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} for seed "
                     f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
             raise CompileInputError(

@@ -7,6 +7,7 @@ import re
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile.constants import (
+    REFERENCE_CALL_SYNTAX_CODE,
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CLOSE_PAREN_TOKEN,
     SQL_OPEN_PAREN_TOKEN,
@@ -25,8 +26,21 @@ from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_n
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL reference"
-_DOUBLE_QUOTE_TOKEN: str = '"'
 _PAIRED_QUOTE_CHARACTER_COUNT: int = 2
+_DBT_REF_PACKAGE_ARGUMENT_COUNT: int = 2
+_MAX_DISPLAYED_CALL_LENGTH: int = 80
+_ELLIPSIS: str = "..."
+_NAME_ARGUMENT_PATTERN: re.Pattern[str] = re.compile(r'"([^"]+)"')
+_DBT_REF_ARGUMENTS_PATTERN: re.Pattern[str] = re.compile(r'"([^"]+)"(?:\s*,\s*"([^"]+)")?')
+_AUTHORED_NAME_PATTERN: re.Pattern[str] = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
+_PLACEHOLDER_NAMES: dict[SqlReferenceKind, tuple[str, ...]] = {
+    SqlReferenceKind.REF: ("model_name",),
+    SqlReferenceKind.SOURCE: ("source_name",),
+    SqlReferenceKind.SEED: ("seed_name",),
+    SqlReferenceKind.UDF: ("function_name",),
+    SqlReferenceKind.TABLE_FUNCTION: ("function_name",),
+    SqlReferenceKind.DBT_REF: ("package_name", "model_name"),
+}
 _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
     ("__dbt_ref(", SqlReferenceKind.DBT_REF),
     ("__table_fn(", SqlReferenceKind.TABLE_FUNCTION),
@@ -156,33 +170,40 @@ def _parse_reference_at(
         sql=sql, open_paren_index=open_paren_index, context=_CONTEXT, syntax=syntax
     )
     raw_arguments: str = sql[open_paren_index + 1 : closing_paren_index]
-    argument_values: tuple[str, ...] = _split_top_level_arguments(
-        raw_arguments=raw_arguments, syntax=syntax
-    )
-    two_argument_count: int = 2
-    if ref_kind == SqlReferenceKind.DBT_REF:
-        if len(argument_values) not in {1, two_argument_count}:
-            raise CompileInputError(
-                f"{ref_prefix(ref_kind)} must contain one name argument or package/name arguments"
-            )
-        if len(argument_values) == two_argument_count:
-            return (
-                CompileSqlReference(
-                    ref_kind=ref_kind,
-                    ref_package=_parse_reference_name(
-                        raw_value=argument_values[0], ref_kind=ref_kind
-                    ),
-                    ref_name=_parse_reference_name(raw_value=argument_values[1], ref_kind=ref_kind),
-                ),
-                closing_paren_index + 1,
-            )
-    elif len(argument_values) != 1:
-        raise CompileInputError(f"{ref_prefix(ref_kind)} must contain exactly one name argument")
+    argument_match: re.Match[str] | None = (
+        _DBT_REF_ARGUMENTS_PATTERN
+        if ref_kind == SqlReferenceKind.DBT_REF
+        else _NAME_ARGUMENT_PATTERN
+    ).fullmatch(raw_arguments)
+    if argument_match is None:
+        raise _reference_call_syntax_error(
+            ref_kind=ref_kind,
+            call=sql[start : closing_paren_index + 1],
+            raw_arguments=raw_arguments,
+            syntax=syntax,
+        )
+    if ref_kind == SqlReferenceKind.DBT_REF and argument_match.group(2) is not None:
+        return (
+            CompileSqlReference(
+                ref_kind=ref_kind,
+                ref_package=argument_match.group(1),
+                ref_name=argument_match.group(2),
+            ),
+            closing_paren_index + 1,
+        )
     call_argument_count: int | None = None
     if ref_kind == SqlReferenceKind.TABLE_FUNCTION:
         call_suffix_start: int = _skip_whitespace(sql=sql, start=closing_paren_index + 1)
         if call_suffix_start >= len(sql) or sql[call_suffix_start] != SQL_OPEN_PAREN_TOKEN:
-            raise CompileInputError(f"{ref_prefix(ref_kind)} must be followed by an argument list")
+            corrected_call: str = ref_kind.example_call(argument_match.group(1), quote='"')
+            raise CompileInputError(
+                f"{ref_prefix(ref_kind)} must be followed by an argument list",
+                code=REFERENCE_CALL_SYNTAX_CODE,
+                help=(
+                    "pass the function arguments in a second set of parentheses, using () for "
+                    f"no arguments: {corrected_call}()"
+                ),
+            )
         call_suffix_end: int = find_matching_paren(
             sql=sql,
             open_paren_index=call_suffix_start,
@@ -197,11 +218,78 @@ def _parse_reference_at(
     return (
         CompileSqlReference(
             ref_kind=ref_kind,
-            ref_name=_parse_reference_name(raw_value=argument_values[0], ref_kind=ref_kind),
+            ref_name=argument_match.group(1),
             call_argument_count=call_argument_count,
         ),
         closing_paren_index + 1,
     )
+
+
+def _reference_call_syntax_error(
+    *, ref_kind: SqlReferenceKind, call: str, raw_arguments: str, syntax: SqlLexicalSyntax
+) -> CompileInputError:
+    """Reject a reference call that later compile stages could not replace."""
+
+    names: tuple[str, ...] | None = _authored_reference_names(
+        raw_arguments=raw_arguments, syntax=syntax
+    )
+    allowed_counts: frozenset[int] = (
+        frozenset({1, _DBT_REF_PACKAGE_ARGUMENT_COUNT})
+        if ref_kind == SqlReferenceKind.DBT_REF
+        else frozenset({1})
+    )
+    if names is None or len(names) not in allowed_counts:
+        names = _PLACEHOLDER_NAMES[ref_kind]
+    corrected_call: str = ref_kind.example_call(*names, quote='"')
+    if ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        corrected_call += "(...)"
+    accepted: str = (
+        "one double-quoted model name, or a double-quoted package name and model name "
+        "separated by a comma"
+        if ref_kind == SqlReferenceKind.DBT_REF
+        else "exactly one double-quoted name"
+    )
+    return CompileInputError(
+        f"{_display_call(call)} is not a valid {ref_prefix(ref_kind)}() call",
+        code=REFERENCE_CALL_SYNTAX_CODE,
+        help=(
+            f"{ref_prefix(ref_kind)}() takes {accepted}, with no comments or extra spaces "
+            f"inside the parentheses: {corrected_call}"
+        ),
+    )
+
+
+def _authored_reference_names(
+    *, raw_arguments: str, syntax: SqlLexicalSyntax
+) -> tuple[str, ...] | None:
+    """Return the names the author meant, when each argument is a plain name or string."""
+
+    try:
+        arguments: tuple[str, ...] = _split_top_level_arguments(
+            raw_arguments=raw_arguments, syntax=syntax
+        )
+    except CompileInputError:
+        return None
+    names: list[str] = []
+    for argument in arguments:
+        name: str = argument
+        if (
+            len(argument) >= _PAIRED_QUOTE_CHARACTER_COUNT
+            and argument[0] == argument[-1]
+            and argument[0] in SQL_REFERENCE_NAME_QUOTE_TOKENS
+        ):
+            name = argument[1:-1]
+        if _AUTHORED_NAME_PATTERN.fullmatch(name) is None:
+            return None
+        names.append(name)
+    return tuple(names)
+
+
+def _display_call(call: str) -> str:
+    collapsed: str = " ".join(call.split())
+    if len(collapsed) <= _MAX_DISPLAYED_CALL_LENGTH:
+        return collapsed
+    return f"{collapsed[: _MAX_DISPLAYED_CALL_LENGTH - len(_ELLIPSIS)]}{_ELLIPSIS}"
 
 
 def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
@@ -257,27 +345,3 @@ def _split_top_level_arguments(*, raw_arguments: str, syntax: SqlLexicalSyntax) 
     elif saw_separator:
         raise CompileInputError(f"{_CONTEXT} contains an empty argument")
     return tuple(arguments)
-
-
-def _parse_reference_name(*, raw_value: str, ref_kind: SqlReferenceKind) -> str:
-    stripped_value: str = raw_value.strip()
-    if ref_kind == SqlReferenceKind.TABLE_FUNCTION and not (
-        len(stripped_value) >= _PAIRED_QUOTE_CHARACTER_COUNT
-        and stripped_value[0] == stripped_value[-1] == _DOUBLE_QUOTE_TOKEN
-    ):
-        raise CompileInputError(f"{ref_prefix(ref_kind)} name argument must be double quoted")
-    if (
-        len(stripped_value) >= _PAIRED_QUOTE_CHARACTER_COUNT
-        and stripped_value[0] == stripped_value[-1]
-        and stripped_value[0] in SQL_REFERENCE_NAME_QUOTE_TOKENS
-    ):
-        return stripped_value[1:-1]
-    if (
-        stripped_value
-        and stripped_value.replace("_", "a").isalnum()
-        and stripped_value[0].isalpha()
-    ):
-        return stripped_value
-    raise CompileInputError(
-        f"{ref_prefix(ref_kind)} name argument must be a quoted string or identifier"
-    )

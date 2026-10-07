@@ -475,6 +475,34 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="unquoted-ref-name",
+            expected_code="P012",
+            expected_message="__ref(stg_orders) is not a valid __ref() call",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    '__ref("stg_orders")', "__ref(stg_orders)"
+                )
+            },
+        ),
+        failure_case(
+            name="commented-ref-argument",
+            expected_code="P012",
+            expected_message="is not a valid __ref() call",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    '__ref("stg_orders")', "__ref( /* upstream */ 'stg_orders')"
+                )
+            },
+        ),
+        failure_case(
+            name="single-quoted-source-name",
+            expected_code="P012",
+            expected_message="__source('raw_orders') is not a valid __source() call",
+            files=staging_files(
+                FAILURE_BASE_STAGING.replace('__source("raw_orders")', "__source('raw_orders')")
+            ),
+        ),
+        failure_case(
             name="invalid-declaration-name",
             expected_code="D016",
             files={

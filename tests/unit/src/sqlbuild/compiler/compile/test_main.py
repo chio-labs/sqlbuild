@@ -3347,7 +3347,7 @@ SELECT customer_id AS order_id
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment="name argument must be double quoted",
+            expected_error_fragment=r"is not a valid __table_fn\(\) call",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when table function argument count does not match",

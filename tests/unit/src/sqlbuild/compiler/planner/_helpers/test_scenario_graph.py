@@ -53,7 +53,7 @@ SCENARIO_KEY: CompiledObjectKey = CompiledObjectKey(
             model_deps={"daily_revenue": ("raw__orders",)},
             source_names=("raw__orders",),
             seed_names=(),
-            assertion_sql_bodies=("SELECT * FROM __ref(daily_revenue) WHERE revenue < 0",),
+            assertion_sql_bodies=('SELECT * FROM __ref("daily_revenue") WHERE revenue < 0',),
             source_fixture_names=("raw__orders",),
             expected_plan=ScenarioGraphPlan(
                 key=SCENARIO_KEY,
@@ -71,7 +71,7 @@ SCENARIO_KEY: CompiledObjectKey = CompiledObjectKey(
             seed_names=(),
             assertion_sql_bodies=(
                 "SELECT '__ref(not_a_model)' AS marker_text "
-                "FROM __ref(daily_revenue) -- __ref(commented_model)",
+                'FROM __ref("daily_revenue") -- __ref(commented_model)',
             ),
             source_fixture_names=("raw__orders",),
             expected_plan=ScenarioGraphPlan(
@@ -92,7 +92,7 @@ SCENARIO_KEY: CompiledObjectKey = CompiledObjectKey(
             source_names=("raw__orders",),
             seed_names=(),
             expected_model_names=("daily_revenue",),
-            assertion_sql_bodies=("SELECT * FROM __ref(customer_revenue)",),
+            assertion_sql_bodies=('SELECT * FROM __ref("customer_revenue")',),
             source_fixture_names=("raw__orders",),
             expected_plan=ScenarioGraphPlan(
                 key=SCENARIO_KEY,
@@ -212,7 +212,7 @@ def test_given_scenario_when_planning_graph_then_infers_expected_slice(
             model_deps={},
             source_names=(),
             seed_names=(),
-            assertion_sql_bodies=("SELECT * FROM __ref(daily_revenue)",),
+            assertion_sql_bodies=('SELECT * FROM __ref("daily_revenue")',),
             expected_error_fragment="assertion references unknown model 'daily_revenue'",
         ),
         PlanScenarioGraphErrorTestCase(
