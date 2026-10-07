@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     copy_compile_project,
     engine_compile_and_rules,
     engine_reuse_compile,
+    environment_engine_reuse_compile,
     prepare_compile_reuse_project,
     report_engine,
     report_without_engine,
@@ -55,6 +56,40 @@ def test_given_same_project_when_compiling_with_each_engine_then_outputs_are_ide
     assert report_without_engine(right) == report_without_engine(left)
     assert right.compiled == left.compiled
     assert left.compiled
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompilerEngineParityTestCase(
+            description="python_oracle_and_unset_default",
+            left_engine="python",
+            right_engine="",
+            expected_engines=("python", "native"),
+            expected_exit_codes=(0, 0),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_engine_selection_when_compiling_then_native_runs_and_matches_python(
+    test_case: CompilerEngineParityTestCase, tmp_path: Path
+) -> None:
+    prepared_project: Path = tmp_path / "orders"
+    prepare_compile_reuse_project(project_dir=prepared_project)
+    oracle: CompileReuseRun = environment_engine_reuse_compile(
+        project_dir=copy_compile_project(source=prepared_project, destination=tmp_path / "oracle"),
+        engine=test_case.left_engine,
+    )
+    default: CompileReuseRun = environment_engine_reuse_compile(
+        project_dir=copy_compile_project(source=prepared_project, destination=tmp_path / "default"),
+        engine=test_case.right_engine,
+    )
+
+    assert (oracle.returncode, default.returncode) == test_case.expected_exit_codes
+    assert (report_engine(oracle), report_engine(default)) == test_case.expected_engines
+    assert report_without_engine(default) == report_without_engine(oracle)
+    assert default.compiled == oracle.compiled
+    assert oracle.compiled
 
 
 @pytest.mark.parametrize(

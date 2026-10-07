@@ -3,7 +3,8 @@
 use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 use pyo3::{IntoPyObjectExt, pyfunction, pymethods, wrap_pyfunction};
-use sqlbuild_core::text::main::python_alnum_unicode_version::python_alnum_unicode_version;
+use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_discovery::declarations::main::declaration_layout::declaration_layout;
 use sqlbuild_discovery::declarations::models::{
     DeclarationFileFact, DeclarationGroup, DeclarationLayout,
@@ -161,6 +162,9 @@ fn discover_model_files(
     request: ModelDiscoveryRequest,
     tree: &NativeProjectTree,
 ) -> PyResult<Option<Vec<(String, PyObject)>>> {
+    let Some(python) = python_text(request.python_version, &request.unicode_version) else {
+        return Ok(None);
+    };
     let root = ProjectRoot {
         directory: PathBuf::from(request.project_dir),
         display_prefix: request.display_prefix,
@@ -170,6 +174,7 @@ fn discover_model_files(
         removed_keys: request.removed_keys,
         extract_implicit_alias_columns: request.extract_implicit_alias_columns,
         extract_output_column_locations: request.extract_output_column_locations,
+        python,
     };
     let discovered: Result<Vec<DiscoveredFile<DiscoveredModelFile>>, StageDeferral> = py
         .compiler_detach(|| Ok(discover_models(&root, &tree.inner, &options)))
@@ -253,8 +258,10 @@ fn scenario_object(py: Python<'_>, file: DiscoveredScenarioFile) -> PyResult<PyO
     )
 }
 
-fn sql_test_inputs(request: SqlTestDiscoveryRequest) -> (ProjectRoot, SqlTestFileOptions) {
-    (
+/// The root and options of one request, or `None` when native cannot reproduce this Python.
+fn sql_test_inputs(request: SqlTestDiscoveryRequest) -> Option<(ProjectRoot, SqlTestFileOptions)> {
+    let python: PythonText = python_text(request.python_version, &request.unicode_version)?;
+    Some((
         ProjectRoot {
             directory: PathBuf::from(request.project_dir),
             display_prefix: request.display_prefix,
@@ -262,8 +269,9 @@ fn sql_test_inputs(request: SqlTestDiscoveryRequest) -> (ProjectRoot, SqlTestFil
         SqlTestFileOptions {
             test_keys: request.test_keys,
             scenario_keys: request.scenario_keys,
+            python,
         },
-    )
+    ))
 }
 
 /// Discover and split the SQL test files natively, or return `None` when Python must run.
@@ -273,7 +281,9 @@ fn discover_sql_test_files(
     request: SqlTestDiscoveryRequest,
     tree: &NativeProjectTree,
 ) -> PyResult<Option<Vec<(String, PyObject)>>> {
-    let (root, options) = sql_test_inputs(request);
+    let Some((root, options)) = sql_test_inputs(request) else {
+        return Ok(None);
+    };
     let discovered: Result<Vec<DiscoveredFile<DiscoveredSqlTestFile>>, StageDeferral> = py
         .compiler_detach(|| Ok(discover_tests(&root, &tree.inner, &options)))
         .map_err(crate::bindings::_helpers::panics::compiler_error)?;
@@ -290,7 +300,9 @@ fn discover_scenario_files(
     request: SqlTestDiscoveryRequest,
     tree: &NativeProjectTree,
 ) -> PyResult<Option<Vec<(String, PyObject)>>> {
-    let (root, options) = sql_test_inputs(request);
+    let Some((root, options)) = sql_test_inputs(request) else {
+        return Ok(None);
+    };
     let discovered: Result<Vec<DiscoveredFile<DiscoveredScenarioFile>>, StageDeferral> = py
         .compiler_detach(|| Ok(discover_scenarios(&root, &tree.inner, &options)))
         .map_err(crate::bindings::_helpers::panics::compiler_error)?;
@@ -337,16 +349,19 @@ fn load_yaml_files(
     }
 }
 
+/// Whether native discovery reproduces the string semantics of this Python and Unicode version.
+#[pyfunction]
+fn native_text_supported(python_version: (u8, u8), unicode_version: &str) -> bool {
+    python_text(python_version, unicode_version).is_some()
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(native_text_supported, module)?)?;
     module.add_function(wrap_pyfunction!(load_yaml_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_sql_test_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_scenario_files, module)?)?;
     module.add_class::<NativeProjectTree>()?;
     module.add_function(wrap_pyfunction!(discover_model_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_declaration_layout, module)?)?;
-    module.add(
-        "PYTHON_ALNUM_UNICODE_VERSION",
-        python_alnum_unicode_version(),
-    )?;
     Ok(())
 }

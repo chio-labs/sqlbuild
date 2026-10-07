@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -171,6 +172,20 @@ def test_given_project_when_discovering_through_the_engine_switch_then_inputs_ma
             expected_native_calls=0,
         ),
         NativeDeferralTestCase(
+            description="another supported Python and its Unicode data run natively",
+            project_name="orders",
+            unidata_version="16.0.0",
+            python_version=(3, 14),
+            expected_native_calls=1,
+        ),
+        NativeDeferralTestCase(
+            description="an unreleased Python defers to Python",
+            project_name="orders",
+            unidata_version="16.0.0",
+            python_version=(3, 15),
+            expected_native_calls=0,
+        ),
+        NativeDeferralTestCase(
             description="a non-UTF-8 project root defers to Python",
             project_name=os.fsdecode(b"orders\xff"),
             expected_native_calls=0,
@@ -187,6 +202,7 @@ def test_given_runtime_and_root_when_discovering_natively_then_python_runs_where
     counter: CallCounter = CallCounter(_native.discover_model_files)
     monkeypatch.setattr(_native, "discover_model_files", counter)
     monkeypatch.setattr(unicodedata, "unidata_version", test_case.unidata_version)
+    monkeypatch.setattr(sys, "version_info", (*test_case.python_version, 0, "final", 0))
 
     native: object = model_discovery_outcome(project_dir=project_dir, native=True)
 

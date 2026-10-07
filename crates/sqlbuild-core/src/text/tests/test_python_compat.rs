@@ -2,7 +2,12 @@ use crate::text::main::close_matches::close_matches;
 use crate::text::main::is_python_alnum::is_python_alnum;
 use crate::text::main::is_python_space::is_python_space;
 use crate::text::main::is_python_word::is_python_word;
-use crate::text::tests::test_types::{CharacterClassTestCase, CloseMatchesTestCase};
+use crate::text::main::python_cleandoc::python_cleandoc;
+use crate::text::main::python_text::python_text;
+use crate::text::models::PythonText;
+use crate::text::tests::test_types::{
+    CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase, PythonTextTestCase,
+};
 
 const KEYS: &[&str] = &[
     "audits",
@@ -142,11 +147,12 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
             expected_space: true,
         },
     ];
+    let python: PythonText = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
     for test_case in test_cases {
         assert_eq!(
             (
-                is_python_alnum(test_case.character),
-                is_python_word(test_case.character),
+                is_python_alnum(python, test_case.character),
+                is_python_word(python, test_case.character),
                 is_python_space(test_case.character)
             ),
             (
@@ -154,6 +160,95 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
                 test_case.expected_word,
                 test_case.expected_space
             ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_python_runtimes_when_selecting_text_semantics_then_tables_follow_unicode_version() {
+    let test_cases = [
+        PythonTextTestCase {
+            description: "Python 3.12 with Unicode 15.0 predates CJK extension I",
+            python_version: (3, 12),
+            unicode_version: "15.0.0",
+            expected_alnum: Some([false, false]),
+        },
+        PythonTextTestCase {
+            description: "Python 3.13 with Unicode 15.1 adds CJK extension I",
+            python_version: (3, 13),
+            unicode_version: "15.1.0",
+            expected_alnum: Some([true, false]),
+        },
+        PythonTextTestCase {
+            description: "Python 3.14 with Unicode 16.0 adds the Garay script",
+            python_version: (3, 14),
+            unicode_version: "16.0.0",
+            expected_alnum: Some([true, true]),
+        },
+        PythonTextTestCase {
+            description: "an unknown Unicode version defers",
+            python_version: (3, 14),
+            unicode_version: "17.0.0",
+            expected_alnum: None,
+        },
+        PythonTextTestCase {
+            description: "an unknown Python version defers",
+            python_version: (3, 15),
+            unicode_version: "16.0.0",
+            expected_alnum: None,
+        },
+        PythonTextTestCase {
+            description: "an older Python defers",
+            python_version: (3, 11),
+            unicode_version: "15.0.0",
+            expected_alnum: None,
+        },
+    ];
+    for test_case in test_cases {
+        let alnum: Option<[bool; 2]> =
+            python_text(test_case.python_version, test_case.unicode_version).map(|python| {
+                [
+                    is_python_alnum(python, '\u{2ebf0}'),
+                    is_python_alnum(python, '\u{10d40}'),
+                ]
+            });
+        assert_eq!(alnum, test_case.expected_alnum, "{}", test_case.description);
+    }
+}
+
+#[test]
+fn given_python_versions_when_cleaning_bodies_then_cleandoc_matches_that_version() {
+    let test_cases = [
+        CleandocTestCase {
+            description: "3.12 strips any leading whitespace",
+            python_version: (3, 12),
+            unicode_version: "15.0.0",
+            text: "\u{c}first\n\u{3000}  second\n\u{3000} third",
+            expected_text: "first\n second\nthird",
+        },
+        CleandocTestCase {
+            description: "3.13 strips leading spaces only",
+            python_version: (3, 13),
+            unicode_version: "15.1.0",
+            text: "\u{c}first\n\u{3000}  second\n  third",
+            expected_text: "\u{c}first\n\u{3000}  second\n  third",
+        },
+        CleandocTestCase {
+            description: "3.14 dedents by the common run of spaces",
+            python_version: (3, 14),
+            unicode_version: "16.0.0",
+            text: "  first\n    second\n\t third\n",
+            expected_text: "first\nsecond\n     third",
+        },
+    ];
+    for test_case in test_cases {
+        let python: PythonText = python_text(test_case.python_version, test_case.unicode_version)
+            .expect("supported runtime");
+        assert_eq!(
+            python_cleandoc(python, test_case.text),
+            test_case.expected_text,
             "{}",
             test_case.description
         );

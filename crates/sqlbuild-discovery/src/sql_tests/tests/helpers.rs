@@ -1,14 +1,23 @@
 use crate::models::DiscoveryFailure;
 use crate::sql_tests::_helpers::scenario_parsing::parse_scenario_file;
 use crate::sql_tests::_helpers::test_blocks::parse_sql_test_file;
-use crate::sql_tests::models::SqlTestBlock;
+use crate::sql_tests::models::{SqlTestBlock, SqlTestFileOptions};
 use crate::sql_tests::tests::test_types::StatementFileTestCase;
+use sqlbuild_core::text::main::python_text::python_text;
 
 pub(super) type BlockRow = (Vec<String>, String);
 pub(super) const FILE_PATH: &str = "project/tests/unit/orders.sql";
 
 fn keys(test_keys: &[&str]) -> Vec<String> {
     test_keys.iter().map(|key| (*key).to_owned()).collect()
+}
+
+fn options() -> SqlTestFileOptions {
+    SqlTestFileOptions {
+        test_keys: keys(&["name", "mode", "parameters", "cases"]),
+        scenario_keys: keys(&["description", "tags"]),
+        python: python_text((3, 12), "15.0.0").expect("Python 3.12 is supported"),
+    }
 }
 
 fn block_row(block: &SqlTestBlock) -> BlockRow {
@@ -32,35 +41,31 @@ fn failed_rows(failure: DiscoveryFailure) -> (Vec<BlockRow>, Option<String>) {
 
 /// The test file's parsed block rows and its failure message.
 pub(super) fn test_file_rows(test_case: &StatementFileTestCase) -> (Vec<BlockRow>, Option<String>) {
-    parse_sql_test_file(
-        FILE_PATH,
-        test_case.contents.to_owned(),
-        &keys(&["name", "mode", "parameters", "cases"]),
+    parse_sql_test_file(FILE_PATH, test_case.contents.to_owned(), &options()).map_or_else(
+        failed_rows,
+        |file| {
+            (
+                file.blocks.iter().map(block_row).collect(),
+                file.failure.map(message),
+            )
+        },
     )
-    .map_or_else(failed_rows, |file| {
-        (
-            file.blocks.iter().map(block_row).collect(),
-            file.failure.map(message),
-        )
-    })
 }
 
 /// The scenario file's block row and its failure message.
 pub(super) fn scenario_rows(test_case: &StatementFileTestCase) -> (Vec<BlockRow>, Option<String>) {
-    parse_scenario_file(
-        FILE_PATH,
-        test_case.contents.to_owned(),
-        &keys(&["description", "tags"]),
+    parse_scenario_file(FILE_PATH, test_case.contents.to_owned(), &options()).map_or_else(
+        failed_rows,
+        |file| {
+            (
+                vec![block_row(&SqlTestBlock {
+                    header_values: file.header_values,
+                    sql_body: file.sql_body,
+                })],
+                None,
+            )
+        },
     )
-    .map_or_else(failed_rows, |file| {
-        (
-            vec![block_row(&SqlTestBlock {
-                header_values: file.header_values,
-                sql_body: file.sql_body,
-            })],
-            None,
-        )
-    })
 }
 
 /// The expected rows in the shape the parsers' rows take.

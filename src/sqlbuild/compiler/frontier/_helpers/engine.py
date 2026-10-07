@@ -12,7 +12,7 @@ from sqlbuild.compiler.frontier.types import CompilerEngine
 
 
 def active_compiler_engine() -> CompilerEngine:
-    """Return the engine selected by SQLBUILD_COMPILER_ENGINE, defaulting to Python."""
+    """Return the engine selected by SQLBUILD_COMPILER_ENGINE, defaulting to native."""
 
     raw_value: str | None = os.environ.get(COMPILER_ENGINE_ENV_VAR)
     if not raw_value:

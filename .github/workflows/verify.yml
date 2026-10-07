@@ -296,6 +296,50 @@ jobs:
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
           --require-render-coverage"
 
+  compiler_differential_python_versions:
+    name: Native discovery on Python ${{ matrix.python }}
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.compiler_differential == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.13", "3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install ${{ matrix.python }}
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras --python ${{ matrix.python }}
+      - name: Require native discovery to support this Python
+        run: >-
+          uv run --no-sync python -c "import sys, unicodedata, sqlbuild._native as n;
+          assert n.native_text_supported(sys.version_info[:2], unicodedata.unidata_version)"
+      - name: Compare native text helpers with this Python
+        run: >-
+          uv run --no-sync pytest
+          tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
+          -n auto --dist loadfile
+      - name: Compare engines on fixtures, examples, the failure corpus and a few seeds
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: >-
+          uv run --no-sync python -m scripts.run_compiler_differential
+          --corpus fixtures examples failures seeds --seeds 4 --jobs 4
+
   format_performance:
     name: Formatter performance guards
     needs: [changes, lockfile]
@@ -488,7 +532,7 @@ jobs:
         run: uv sync --locked --all-groups --all-extras
       - name: Install base dependencies
         working-directory: base
-        run: uv sync --locked --all-extras
+        run: uv sync --locked --all-groups --all-extras
       - name: Compare base and head cold, warm and one-model edit compiles
         env:
           KIND: ${{ matrix.kind }}

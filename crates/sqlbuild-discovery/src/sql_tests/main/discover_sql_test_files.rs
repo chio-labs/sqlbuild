@@ -17,6 +17,6 @@ pub fn discover_sql_test_files(
         root,
         tree,
         &SQL_TESTS_ROOT.join("/"),
-        |file_path, contents| parse_sql_test_file(file_path, contents, &options.test_keys),
+        |file_path, contents| parse_sql_test_file(file_path, contents, options),
     )
 }

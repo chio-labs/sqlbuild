@@ -34,3 +34,19 @@ pub(super) struct CharacterClassTestCase {
     pub(super) expected_word: bool,
     pub(super) expected_space: bool,
 }
+
+pub(super) struct PythonTextTestCase {
+    pub(super) description: &'static str,
+    pub(super) python_version: (u8, u8),
+    pub(super) unicode_version: &'static str,
+    /// `str.isalnum()` of U+2EBF0 and U+10D40, or `None` when the runtime is unsupported.
+    pub(super) expected_alnum: Option<[bool; 2]>,
+}
+
+pub(super) struct CleandocTestCase {
+    pub(super) description: &'static str,
+    pub(super) python_version: (u8, u8),
+    pub(super) unicode_version: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_text: &'static str,
+}

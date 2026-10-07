@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_display_prefix,
     native_failure,
     native_project_tree,
+    native_text_runtime,
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
@@ -89,6 +90,7 @@ def _native_files(*, project_dir: Path, discover: _NativeDiscovery) -> _NativeFi
             "display_prefix": display_prefix,
             "test_keys": sorted(SQL_TEST_HEADER_KEYS),
             "scenario_keys": sorted(SQL_SCENARIO_HEADER_KEYS),
+            **native_text_runtime(),
         },
         tree,
     )

@@ -116,6 +116,8 @@ pub(crate) struct ModelDiscoveryRequest {
     pub(crate) removed_keys: Vec<String>,
     pub(crate) extract_implicit_alias_columns: bool,
     pub(crate) extract_output_column_locations: bool,
+    pub(crate) python_version: (u8, u8),
+    pub(crate) unicode_version: String,
 }
 
 /// One native SQL test or scenario discovery request from the Python discovery facade.
@@ -126,4 +128,6 @@ pub(crate) struct SqlTestDiscoveryRequest {
     pub(crate) display_prefix: String,
     pub(crate) test_keys: Vec<String>,
     pub(crate) scenario_keys: Vec<String>,
+    pub(crate) python_version: (u8, u8),
+    pub(crate) unicode_version: String,
 }

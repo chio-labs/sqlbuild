@@ -99,3 +99,20 @@ impl<'text> LineIndex<'text> {
         })
     }
 }
+
+/// The Python string semantics native text helpers reproduce for one CPython release.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PythonText {
+    /// Inclusive code point ranges where `str.isalnum()` is true, in order.
+    pub(crate) alnum_ranges: &'static [(u32, u32)],
+    pub(crate) cleandoc_margin: CleandocMargin,
+}
+
+/// The characters `inspect.cleandoc` strips from line starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CleandocMargin {
+    /// Python 3.12: `str.lstrip()`, any Python whitespace.
+    Whitespace,
+    /// Python 3.13 and later: `str.lstrip(' ')`, spaces only.
+    Spaces,
+}

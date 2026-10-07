@@ -8,7 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
-from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACHE_FILENAME
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME, SCOPE_CACHE_FILENAME
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import REPO_ROOT
 
 
@@ -150,4 +151,4 @@ def median_seconds(values: tuple[float, ...]) -> float:
 def scope_cache_path(*, project_dir: Path) -> Path:
     """Return the persistent Scope Explorer cache path."""
 
-    return project_dir / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME
+    return compiler_cache_directory(project_dir) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME

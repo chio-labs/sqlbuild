@@ -4,6 +4,7 @@ use crate::model_files::_helpers::locations::{absolute_span, line_starts};
 use crate::models::LineColumnSpan;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::models::PythonText;
 
 const SELECT_KEYWORD: &str = "SELECT";
 const UNION_KEYWORD: &str = "UNION";
@@ -12,6 +13,7 @@ const ESCAPE: char = '\\';
 
 /// Python's `matched_model_output_column_locations` from the SQL start (a byte offset).
 pub(crate) fn output_column_locations(
+    python: PythonText,
     contents: &str,
     sql_start: usize,
     extract_implicit_alias_columns: bool,
@@ -19,7 +21,7 @@ pub(crate) fn output_column_locations(
     let characters: Vec<char> = contents.chars().collect();
     let sql_offset = contents[..sql_start].chars().count();
     let sql = &characters[sql_offset..];
-    let Some((list_start, list_end)) = top_level_select_list_bounds(sql) else {
+    let Some((list_start, list_end)) = top_level_select_list_bounds(python, sql) else {
         return Vec::new();
     };
     let starts = line_starts(&characters);
@@ -56,7 +58,7 @@ fn is_scan_special(character: char) -> bool {
     )
 }
 
-fn top_level_select_list_bounds(sql: &[char]) -> Option<(usize, usize)> {
+fn top_level_select_list_bounds(python: PythonText, sql: &[char]) -> Option<(usize, usize)> {
     let length = sql.len();
     let has_union_candidate = contains_lowercase_union(sql);
     let (mut depth, mut index) = (0_usize, 0_usize);
@@ -106,17 +108,20 @@ fn top_level_select_list_bounds(sql: &[char]) -> Option<(usize, usize)> {
         let upper = character.to_ascii_uppercase();
         match list_start {
             None => {
-                if upper == 'S' && keyword_at(sql, SELECT_KEYWORD, index) {
+                if upper == 'S' && keyword_at(python, sql, SELECT_KEYWORD, index) {
                     index += SELECT_KEYWORD.len();
                     list_start = Some(index);
                     continue;
                 }
             }
             Some(start) => {
-                if upper == 'U' && keyword_at(sql, UNION_KEYWORD, index) {
+                if upper == 'U' && keyword_at(python, sql, UNION_KEYWORD, index) {
                     return None;
                 }
-                if list_end.is_none() && upper == 'F' && keyword_at(sql, FROM_KEYWORD, index) {
+                if list_end.is_none()
+                    && upper == 'F'
+                    && keyword_at(python, sql, FROM_KEYWORD, index)
+                {
                     list_end = Some(index);
                     if !has_union_candidate {
                         return Some((start, index));
@@ -155,7 +160,7 @@ fn ascii_upper(character: char) -> Option<char> {
     }
 }
 
-fn keyword_at(sql: &[char], keyword: &str, index: usize) -> bool {
+fn keyword_at(python: PythonText, sql: &[char], keyword: &str, index: usize) -> bool {
     let end = index + keyword.len();
     let slice = &sql[index..end.min(sql.len())];
     if slice.len() != keyword.len()
@@ -168,7 +173,7 @@ fn keyword_at(sql: &[char], keyword: &str, index: usize) -> bool {
     }
     let before = index.checked_sub(1).map_or(' ', |previous| sql[previous]);
     let after = sql.get(end).copied().unwrap_or(' ');
-    !is_python_word(before) && !is_python_word(after)
+    !is_python_word(python, before) && !is_python_word(python, after)
 }
 
 fn split_top_level_items(sql: &[char], start: usize, end: usize) -> Vec<(usize, usize)> {

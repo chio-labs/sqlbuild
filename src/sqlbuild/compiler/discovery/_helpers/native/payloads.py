@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -65,12 +66,18 @@ def native_locations(
     }
 
 
+def native_text_runtime() -> dict[str, object]:
+    """Return the request fields naming the Python whose string semantics native reproduces."""
+
+    return {"python_version": _python_version(), "unicode_version": unicodedata.unidata_version}
+
+
 def native_discovery_supported(*, project_dir: Path, display_prefix: str) -> bool:
-    """Whether native discovery reproduces Python here: same Unicode data, UTF-8 paths, POSIX."""
+    """Whether native discovery reproduces Python here: known Python, UTF-8 paths, POSIX."""
 
     return (
         os.name != _WINDOWS_OS_NAME
-        and unicodedata.unidata_version == _native.PYTHON_ALNUM_UNICODE_VERSION
+        and _native.native_text_supported(_python_version(), unicodedata.unidata_version)
         and _is_utf8_text(str(project_dir))
         and _is_utf8_text(display_prefix)
     )
@@ -118,3 +125,7 @@ def _is_utf8_text(text: str) -> bool:
     except UnicodeEncodeError:
         return False
     return True
+
+
+def _python_version() -> tuple[int, int]:
+    return (sys.version_info[0], sys.version_info[1])

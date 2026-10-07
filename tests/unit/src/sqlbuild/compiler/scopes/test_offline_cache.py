@@ -9,8 +9,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.scopes._helpers.cache import scope_index_fingerprint
-from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACHE_FILENAME
+from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME, SCOPE_CACHE_FILENAME
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ScopeIndex
 from sqlbuild.compiler.scopes.types import (
@@ -56,7 +57,9 @@ def test_given_valid_project_when_loading_twice_then_warm_cache_reconstructs_exa
     write_scope_cache_project(root=tmp_path, write_repo_files=write_repo_files)
 
     cold: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
-    cache_path: Path = tmp_path / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME
+    cache_path: Path = (
+        compiler_cache_directory(tmp_path) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME
+    )
     first_bytes: bytes = cache_path.read_bytes()
     warm: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
 
@@ -150,9 +153,10 @@ def test_given_no_cache_when_loading_twice_then_cache_is_bypassed(
     first: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path, no_cache=True)
     second: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path, no_cache=True)
 
-    assert (first == second and not (tmp_path / SCOPE_CACHE_DIRECTORY).exists()) is (
-        test_case.expected_result
-    )
+    assert (
+        first == second
+        and not (compiler_cache_directory(tmp_path) / SCOPE_CACHE_DIRECTORY_NAME).exists()
+    ) is (test_case.expected_result)
 
 
 @pytest.mark.parametrize(
@@ -296,7 +300,9 @@ def test_given_authored_values_and_secrets_when_caching_then_payload_is_value_fr
     )
 
     load_or_build_scope_index(project_dir=tmp_path)
-    raw: str = (tmp_path / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME).read_text(encoding="ascii")
+    raw: str = (
+        compiler_cache_directory(tmp_path) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME
+    ).read_text(encoding="ascii")
 
     assert (secret not in raw and str(tmp_path) not in raw) is test_case.expected_result
 
@@ -482,7 +488,9 @@ def test_given_corrupt_cache_when_loading_then_it_is_a_miss_and_is_atomically_re
 ) -> None:
     write_scope_cache_project(root=tmp_path, write_repo_files=write_repo_files)
     expected: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
-    cache_path: Path = tmp_path / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME
+    cache_path: Path = (
+        compiler_cache_directory(tmp_path) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME
+    )
     cache_path.write_bytes(b"\xffnot-json")
 
     actual: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
@@ -512,7 +520,9 @@ def test_given_invalid_cache_envelope_when_loading_then_fault_is_a_repairable_mi
 ) -> None:
     write_scope_cache_project(root=tmp_path, write_repo_files=write_repo_files)
     expected: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
-    cache_path: Path = tmp_path / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME
+    cache_path: Path = (
+        compiler_cache_directory(tmp_path) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME
+    )
     test_case.mutate(path=cache_path)
 
     actual: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
@@ -710,7 +720,9 @@ def test_given_partial_project_when_loading_then_incomplete_index_is_not_cached(
     )
 
     index: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
-    cache_path: Path = tmp_path / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME
+    cache_path: Path = (
+        compiler_cache_directory(tmp_path) / SCOPE_CACHE_DIRECTORY_NAME / SCOPE_CACHE_FILENAME
+    )
 
     assert (not index.completeness.complete and not cache_path.exists()) is (
         test_case.expected_result

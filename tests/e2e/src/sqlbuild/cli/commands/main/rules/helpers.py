@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.rules_benchmark._helpers.custom_rules import write_custom_rules
+from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import replace_project_text
 
 __all__ = ("write_custom_rules",)
@@ -591,4 +592,12 @@ def move_order_totals_description_to_path_defaults(root: Path) -> None:
         config.read_text(encoding="utf-8")
         + '\n[path_defaults.marts]\ndescription = "Order totals per order"\n',
         encoding="utf-8",
+    )
+
+
+def write_bulk_rules_cache(*, root: Path, file_name: str, text: str) -> None:
+    """Overwrite one bulk Rules cache file of the active compiler engine."""
+
+    _ = rules_bulk_cache_path(project_dir=root, file_name=file_name).write_text(
+        text, encoding="utf-8"
     )

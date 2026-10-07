@@ -17,8 +17,8 @@ use sqlbuild_core::json::models::{
 use sqlbuild_core::text::main::close_matches::close_matches;
 use sqlbuild_core::text::main::decode_python_text::decode_python_text;
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::python_alnum_unicode_version::python_alnum_unicode_version;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
+use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_core::text::models::LineIndex;
 use std::path::Path;
 
@@ -231,12 +231,19 @@ fn _oracle_project_config(project_dir: &str) -> String {
 }
 
 #[pyfunction]
-fn _oracle_python_alnum(code_points: Vec<u32>) -> (String, Vec<bool>) {
-    (
-        python_alnum_unicode_version().to_owned(),
+fn _oracle_python_alnum(
+    python_version: (u8, u8),
+    unicode_version: &str,
+    code_points: Vec<u32>,
+) -> Option<Vec<bool>> {
+    let python = python_text(python_version, unicode_version)?;
+    Some(
         code_points
             .into_iter()
-            .map(|code_point| char::from_u32(code_point).is_some_and(is_python_alnum))
+            .map(|code_point| {
+                char::from_u32(code_point)
+                    .is_some_and(|character| is_python_alnum(python, character))
+            })
             .collect(),
     )
 }
@@ -253,8 +260,18 @@ fn _oracle_close_matches(
 }
 
 #[pyfunction]
-fn _oracle_cleandoc(texts: Vec<String>) -> Vec<String> {
-    texts.iter().map(|text| python_cleandoc(text)).collect()
+fn _oracle_cleandoc(
+    python_version: (u8, u8),
+    unicode_version: &str,
+    texts: Vec<String>,
+) -> Option<Vec<String>> {
+    let python = python_text(python_version, unicode_version)?;
+    Some(
+        texts
+            .iter()
+            .map(|text| python_cleandoc(python, text))
+            .collect(),
+    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
