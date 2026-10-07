@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import unicodedata
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import sqlbuild._native as _native
@@ -16,6 +17,7 @@ from sqlbuild.compiler.discovery.exceptions import (
     SqlScenarioParseError,
     SqlTestParseError,
 )
+from sqlbuild.compiler.discovery.models import DiscoveryFileFault
 from sqlbuild.compiler.discovery.types import (
     DirectorySnapshotEntry,
     NativeListing,
@@ -49,6 +51,30 @@ def native_failure(payload: tuple[object, ...]) -> DiscoveryError:
     return error_class(str(message), help=None if help_text is None else str(help_text))
 
 
+def materialise_native_files[RecordT](
+    *,
+    project_dir: Path,
+    files: Iterable[tuple[Path, tuple[object, ...]]],
+    build: Callable[[Path, tuple[object, ...]], RecordT],
+    on_fault: Callable[[DiscoveryFileFault], None] | None,
+) -> tuple[RecordT, ...]:
+    """Build each native file payload, reporting and skipping a failing file when asked."""
+
+    records: list[RecordT] = []
+    for relative_path, payload in files:
+        try:
+            records.append(build(relative_path, payload))
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(
+                DiscoveryFileFault(
+                    path=relative_path, message=str(error).replace(str(project_dir), ".")
+                )
+            )
+    return tuple(records)
+
+
 def native_locations(
     *, locations: list[NativeLocation], relative_path: Path
 ) -> dict[str, SourceLocation]:
@@ -77,10 +103,16 @@ def native_discovery_supported(*, project_dir: Path, display_prefix: str) -> boo
 
     return (
         os.name != _WINDOWS_OS_NAME
-        and _native.native_text_supported(_python_version(), unicodedata.unidata_version)
+        and native_text_supported()
         and _is_utf8_text(str(project_dir))
         and _is_utf8_text(display_prefix)
     )
+
+
+def native_text_supported() -> bool:
+    """Whether native parsing reproduces the string semantics of the running Python."""
+
+    return _native.native_text_supported(_python_version(), unicodedata.unidata_version)
 
 
 def native_project_tree(project_dir: Path) -> _native.NativeProjectTree:

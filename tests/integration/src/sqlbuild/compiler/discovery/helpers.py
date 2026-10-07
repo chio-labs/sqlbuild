@@ -18,6 +18,9 @@ import pytest
 import yaml
 
 from sqlbuild import _native
+from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
+    build_tolerant_scope_discovery,
+)
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_constant_files,
     discover_enum_files,
@@ -38,13 +41,16 @@ from sqlbuild.compiler.discovery._helpers.native.model_files import (
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     discover_native_scenario_files,
     discover_native_test_files,
+    parse_native_sql_test_contents,
 )
 from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
     discover_native_schema_files,
     discover_native_source_files,
 )
+from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
+from sqlbuild.compiler.discovery.constants import NATIVE_LOADED_TAG
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
@@ -52,6 +58,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredEnumFile,
     DiscoveredMacroFile,
     DiscoveredSqlModelFile,
+    DiscoveryFileFault,
 )
 from sqlbuild.compiler.discovery.types import NativeDeclarationFact
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
@@ -1062,10 +1069,16 @@ def python_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
 def native_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
     """Return the native facts and the named roots its groups give, `None` where it fails."""
 
-    layout: tuple[list[NativeDeclarationFact] | None, list[tuple[str, str]] | None] | None = (
-        _native.discover_declaration_layout(_native.NativeProjectTree(str(project_dir)))
+    layout: tuple[tuple[object, ...], tuple[object, ...]] = cast(
+        tuple[tuple[object, ...], tuple[object, ...]],
+        _native.discover_declaration_layout(_native.NativeProjectTree(str(project_dir))),
     )
-    facts, groups = layout or (None, None)
+    facts: list[NativeDeclarationFact] | None = cast(
+        list[NativeDeclarationFact] | None, _valid_rows(layout[0])
+    )
+    groups: list[tuple[str, str]] | None = cast(
+        list[tuple[str, str]] | None, _valid_rows(layout[1])
+    )
     return (
         _mapped(facts, lambda rows: [_native_fact_row(fact) for fact in rows]),
         _mapped(
@@ -1076,6 +1089,10 @@ def native_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
             ),
         ),
     )
+
+
+def _valid_rows(payload: tuple[object, ...]) -> object:
+    return {NATIVE_LOADED_TAG: payload[1]}.get(str(payload[0]))
 
 
 def _mapped[T](value: T | None, transform: Callable[[T], object]) -> object:
@@ -1191,3 +1208,61 @@ class CallCounter:
     def __call__(self, *args: object) -> object:
         self.calls += 1
         return self.function(*args)
+
+
+def selected_entry_point_outcome(*, project_dir: Path, native: bool) -> object:
+    """Return selected models and tests read with faults kept, by the chosen implementation."""
+
+    selected_models: frozenset[str] = frozenset({"orders", "b"})
+    selected_tests: frozenset[Path] = frozenset({(project_dir / "tests/unit/a.sql").resolve()})
+    discover_models: Callable[..., object] = {
+        True: discover_native_model_files,
+        False: discover_model_files,
+    }[native]
+    discover_tests: Callable[..., object] = {
+        True: discover_native_test_files,
+        False: discover_test_files,
+    }[native]
+    faults: list[DiscoveryFileFault] = []
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        return render_stage_capture(
+            (
+                discover_models(
+                    project_dir=project_dir,
+                    extract_implicit_alias_columns=False,
+                    extract_output_column_locations=False,
+                    selected_model_names=selected_models,
+                    on_fault=faults.append,
+                ),
+                discover_tests(
+                    project_dir=project_dir, selected_paths=selected_tests, on_fault=faults.append
+                ),
+                tuple(faults),
+            )
+        )
+
+
+def contents_parse_outcome(*, project_dir: Path, native: bool) -> object:
+    """Return every unit-test file parsed from its contents, with each failure."""
+
+    parse: Callable[..., object] = {
+        True: parse_native_sql_test_contents,
+        False: parse_sql_test_file,
+    }[native]
+    outcomes: list[object] = []
+    for path in sorted((project_dir / "tests" / "unit").glob("*.sql")):
+        capture: FailureCapture = FailureCapture()
+        with capture:
+            outcomes.append(
+                render_stage_capture(
+                    parse(contents=path.read_text(encoding="utf-8"), file_path=path)
+                )
+            )
+        outcomes.append((type(capture.failure).__name__, str(capture.failure)))
+    return outcomes
+
+
+def tolerant_scope_outcome(*, project_dir: Path) -> object:
+    """Return the rendered tolerant scope discovery."""
+
+    return render_stage_capture(build_tolerant_scope_discovery(project_dir=project_dir))

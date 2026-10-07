@@ -12,11 +12,14 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
+    materialise_native_files,
     native_discovery_supported,
     native_display_prefix,
     native_failure,
+    native_path_text_supported,
     native_project_tree,
     native_text_runtime,
+    native_text_supported,
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
@@ -40,6 +43,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
+    DiscoveryFileFault,
 )
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 
@@ -50,33 +54,117 @@ type _NativeDiscovery = Callable[
 
 
 def discover_native_test_files(
-    *, project_dir: Path, fact_cache: FactCacheStore | None = None
+    *,
+    project_dir: Path,
+    fact_cache: FactCacheStore | None = None,
+    selected_paths: frozenset[Path] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
 ) -> tuple[DiscoveredSqlTestFile, ...]:
-    """Discover SQL test files natively; Python, with its fact cache, runs where native cannot."""
+    """Discover the (selected) SQL test files natively, reporting failing files to `on_fault`."""
 
     files: _NativeFiles | None = _native_files(
         project_dir=project_dir, discover=_native.discover_sql_test_files
     )
     if files is None:
-        return discover_test_files(project_dir=project_dir, fact_cache=fact_cache)
-    return tuple(
-        _test_file(project_dir=project_dir, relative_path=Path(relative_path), payload=payload)
-        for relative_path, payload in files
+        return discover_test_files(
+            project_dir=project_dir,
+            selected_paths=selected_paths,
+            on_fault=on_fault,
+            fact_cache=fact_cache,
+        )
+    return materialise_native_files(
+        project_dir=project_dir,
+        files=(
+            (Path(relative_path), payload)
+            for relative_path, payload in files
+            if selected_paths is None or (project_dir / relative_path).resolve() in selected_paths
+        ),
+        build=lambda relative_path, payload: _test_file(
+            project_dir=project_dir, relative_path=relative_path, payload=payload
+        ),
+        on_fault=on_fault,
     )
 
 
-def discover_native_scenario_files(*, project_dir: Path) -> tuple[DiscoveredSqlScenarioFile, ...]:
+def discover_native_scenario_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlScenarioFile, ...]:
     """Discover scenario files natively; Python runs when native discovery cannot match it."""
 
     files: _NativeFiles | None = _native_files(
         project_dir=project_dir, discover=_native.discover_scenario_files
     )
     if files is None:
-        return discover_scenario_files(project_dir=project_dir)
-    return tuple(
-        _scenario_file(project_dir=project_dir, relative_path=Path(relative_path), payload=payload)
-        for relative_path, payload in files
+        return discover_scenario_files(project_dir=project_dir, on_fault=on_fault)
+    return materialise_native_files(
+        project_dir=project_dir,
+        files=((Path(relative_path), payload) for relative_path, payload in files),
+        build=lambda relative_path, payload: _scenario_file(
+            project_dir=project_dir, relative_path=relative_path, payload=payload
+        ),
+        on_fault=on_fault,
     )
+
+
+def parse_native_sql_test_contents(
+    *, contents: str, file_path: Path
+) -> tuple[DiscoveredSqlTestBlock, ...]:
+    """Parse in-memory SQL test contents into ordered blocks, as test discovery does."""
+
+    payload: tuple[object, ...] | None = (
+        _native.parse_sql_test_contents(_text_request(file_path), contents)
+        if _text_supported(file_path)
+        else None
+    )
+    if payload is None:
+        return parse_sql_test_file(contents=contents, file_path=file_path)
+    if payload[0] == NATIVE_FAILED_TAG:
+        raise native_failure(payload)
+    _tag, _contents, native_blocks, block_failure = payload
+    return _test_blocks(
+        file_path=file_path,
+        native_blocks=cast(list[tuple[dict[str, object], str]], native_blocks),
+        block_failure=cast(tuple[object, ...] | None, block_failure),
+    )
+
+
+def parse_native_scenario_contents(
+    *, contents: str, file_path: Path, relative_path: Path
+) -> DiscoveredSqlScenarioFile:
+    """Parse in-memory SQL scenario contents, as scenario discovery does."""
+
+    payload: tuple[object, ...] | None = (
+        _native.parse_scenario_contents(_text_request(file_path), contents)
+        if _text_supported(file_path)
+        else None
+    )
+    if payload is None:
+        return parse_sql_scenario_file(
+            contents=contents, file_path=file_path, relative_path=relative_path
+        )
+    if payload[0] == NATIVE_FAILED_TAG:
+        raise native_failure(payload)
+    _tag, native_contents, values, sql_body = payload
+    return build_sql_scenario_file(
+        header_values=project_native_header_values(cast(dict[str, object], values)),
+        sql_body=str(sql_body),
+        contents=str(native_contents),
+        file_path=file_path,
+        relative_path=relative_path,
+    )
+
+
+def _text_supported(file_path: Path) -> bool:
+    return native_text_supported() and native_path_text_supported(str(file_path))
+
+
+def _text_request(file_path: Path) -> dict[str, object]:
+    return {
+        "file_path": str(file_path),
+        "test_keys": sorted(SQL_TEST_HEADER_KEYS),
+        "scenario_keys": sorted(SQL_SCENARIO_HEADER_KEYS),
+        **native_text_runtime(),
+    }
 
 
 def _native_files(*, project_dir: Path, discover: _NativeDiscovery) -> _NativeFiles | None:

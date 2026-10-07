@@ -131,3 +131,14 @@ pub(crate) struct SqlTestDiscoveryRequest {
     pub(crate) python_version: (u8, u8),
     pub(crate) unicode_version: String,
 }
+
+/// One in-memory SQL test or scenario parse request; `file_path` is the path messages name.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct SqlTestTextRequest {
+    pub(crate) file_path: String,
+    pub(crate) test_keys: Vec<String>,
+    pub(crate) scenario_keys: Vec<String>,
+    pub(crate) python_version: (u8, u8),
+    pub(crate) unicode_version: String,
+}

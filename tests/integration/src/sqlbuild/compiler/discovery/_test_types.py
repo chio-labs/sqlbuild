@@ -152,3 +152,12 @@ class FactCacheFallbackTestCase:
     unidata_version: str
     expected_same_keys_as_python: bool
     expected_native_keys: int
+
+
+@dataclass(frozen=True)
+class EntryPointParityTestCase:
+    """Authored files read through a bounded discovery entry point by both implementations."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_identical: bool = True

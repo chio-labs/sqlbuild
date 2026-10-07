@@ -7,7 +7,7 @@ use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_core::text::models::PythonText;
 use sqlbuild_discovery::declarations::main::declaration_layout::declaration_layout;
 use sqlbuild_discovery::declarations::models::{
-    DeclarationFileFact, DeclarationGroup, DeclarationLayout,
+    DeclarationFileFact, DeclarationGroup, DeclarationKind, DeclarationLayout,
 };
 use sqlbuild_discovery::model_files::main::discover_model_files::discover_model_files as discover_models;
 use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOptions};
@@ -16,6 +16,8 @@ use sqlbuild_discovery::models::{
 };
 use sqlbuild_discovery::sql_tests::main::discover_scenario_files::discover_scenario_files as discover_scenarios;
 use sqlbuild_discovery::sql_tests::main::discover_sql_test_files::discover_sql_test_files as discover_tests;
+use sqlbuild_discovery::sql_tests::main::parse_scenario_text::parse_scenario_text;
+use sqlbuild_discovery::sql_tests::main::parse_sql_test_text::parse_sql_test_text;
 use sqlbuild_discovery::sql_tests::models::{
     DiscoveredScenarioFile, DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions,
 };
@@ -29,7 +31,9 @@ use std::sync::Mutex;
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
-use crate::bindings::models::{ModelDiscoveryRequest, NativeProjectTree, SqlTestDiscoveryRequest};
+use crate::bindings::models::{
+    ModelDiscoveryRequest, NativeProjectTree, SqlTestDiscoveryRequest, SqlTestTextRequest,
+};
 use crate::bindings::types::CompilerDetach;
 
 type PyObject = Py<PyAny>;
@@ -101,7 +105,7 @@ type FactRow = (
     Option<String>,
     String,
 );
-type DeclarationLayoutRows = (Option<Vec<FactRow>>, Option<Vec<(String, String)>>);
+type DeclarationLayoutRows = (PyObject, PyObject);
 
 fn entry_rows(entries: &[TreeEntry]) -> Vec<(String, bool, bool)> {
     entries
@@ -125,10 +129,33 @@ fn group_row(group: DeclarationGroup) -> (String, String) {
     (group.root, group.directory)
 }
 
-fn valid_rows<T, R>(outcome: Result<Vec<T>, DiscoveryFailure>, row: fn(T) -> R) -> Option<Vec<R>> {
+/// `("ok", rows)` for a valid layout, or the failure Python raises for it.
+fn layout_rows<'py, T, R: IntoPyObject<'py>>(
+    py: Python<'py>,
+    outcome: Result<Vec<T>, DiscoveryFailure>,
+    row: fn(T) -> R,
+) -> PyResult<PyObject> {
     match outcome {
-        Ok(items) => Some(items.into_iter().map(row).collect()),
-        Err(_failure) => None,
+        Ok(items) => tuple_object(
+            py,
+            vec![
+                object(py, "ok")?,
+                object(py, items.into_iter().map(row).collect::<Vec<R>>())?,
+            ],
+        ),
+        Err(failure) => failure_object(py, failure),
+    }
+}
+
+fn declaration_kind(kind: Option<&str>) -> PyResult<Option<DeclarationKind>> {
+    match kind {
+        None => Ok(None),
+        Some("macro") => Ok(Some(DeclarationKind::Macro)),
+        Some("enum") => Ok(Some(DeclarationKind::Enum)),
+        Some("constant") => Ok(Some(DeclarationKind::Constant)),
+        Some(other) => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown declaration kind {other:?}"
+        ))),
     }
 }
 
@@ -185,19 +212,22 @@ fn discover_model_files(
     }
 }
 
-/// The valid declaration file facts and named declaration groups; `None` where Python must scan.
+/// The declaration layout payloads, each valid or failing; `None` where Python must scan.
 #[pyfunction]
+#[pyo3(signature = (tree, kind=None))]
 fn discover_declaration_layout(
     py: Python<'_>,
     tree: &NativeProjectTree,
+    kind: Option<&str>,
 ) -> PyResult<Option<DeclarationLayoutRows>> {
+    let kind: Option<DeclarationKind> = declaration_kind(kind)?;
     let layout: Result<DeclarationLayout, StageDeferral> = py
-        .compiler_detach(|| Ok(declaration_layout(&tree.inner)))
+        .compiler_detach(|| Ok(declaration_layout(&tree.inner, kind)))
         .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
     match layout {
         Ok(layout) => Ok(Some((
-            valid_rows(layout.file_facts, fact_row),
-            valid_rows(layout.named_groups, group_row),
+            layout_rows(py, layout.file_facts, fact_row)?,
+            layout_rows(py, layout.named_groups, group_row)?,
         ))),
         Err(_deferral) => Ok(None),
     }
@@ -312,6 +342,53 @@ fn discover_scenario_files(
     }
 }
 
+/// The options of one in-memory request, or `None` when native cannot reproduce this Python.
+fn text_options(request: &SqlTestTextRequest) -> Option<SqlTestFileOptions> {
+    Some(SqlTestFileOptions {
+        test_keys: request.test_keys.clone(),
+        scenario_keys: request.scenario_keys.clone(),
+        python: python_text(request.python_version, &request.unicode_version)?,
+    })
+}
+
+/// Split in-memory SQL test contents natively, or return `None` when Python must parse them.
+#[pyfunction]
+fn parse_sql_test_contents(
+    py: Python<'_>,
+    request: SqlTestTextRequest,
+    contents: String,
+) -> PyResult<Option<PyObject>> {
+    let Some(options) = text_options(&request) else {
+        return Ok(None);
+    };
+    let parsed = py
+        .compiler_detach(|| Ok(parse_sql_test_text(&request.file_path, contents, &options)))
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
+    Ok(Some(match parsed {
+        Ok(file) => test_file_object(py, file)?,
+        Err(failure) => failure_object(py, failure)?,
+    }))
+}
+
+/// Header-parse in-memory SQL scenario contents natively, or `None` when Python must parse them.
+#[pyfunction]
+fn parse_scenario_contents(
+    py: Python<'_>,
+    request: SqlTestTextRequest,
+    contents: String,
+) -> PyResult<Option<PyObject>> {
+    let Some(options) = text_options(&request) else {
+        return Ok(None);
+    };
+    let parsed = py
+        .compiler_detach(|| Ok(parse_scenario_text(&request.file_path, contents, &options)))
+        .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
+    Ok(Some(match parsed {
+        Ok(file) => scenario_object(py, file)?,
+        Err(failure) => failure_object(py, failure)?,
+    }))
+}
+
 /// One file's payload; a value Python cannot hold natively makes Python load that file.
 fn yaml_file_object(py: Python<'_>, outcome: YamlFileOutcome) -> PyResult<PyObject> {
     match outcome {
@@ -360,6 +437,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(load_yaml_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_sql_test_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_scenario_files, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_sql_test_contents, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_scenario_contents, module)?)?;
     module.add_class::<NativeProjectTree>()?;
     module.add_function(wrap_pyfunction!(discover_model_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_declaration_layout, module)?)?;

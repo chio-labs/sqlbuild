@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery._helpers.filesystem.cached_files import (
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_source_files
 from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import project_relative_path
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
+    materialise_native_files,
     native_discovery_supported,
     native_display_prefix,
     native_path_text_supported,
@@ -33,7 +34,11 @@ from sqlbuild.compiler.discovery.constants import (
     NATIVE_UNREADABLE_TAG,
     NATIVE_YAML_BATCH_BYTES,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSourceFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSchemaFile,
+    DiscoveredSourceFile,
+    DiscoveryFileFault,
+)
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry
 
@@ -41,36 +46,58 @@ type _Payload = tuple[object, ...]
 
 
 def discover_native_source_files(
-    *, project_dir: Path, fact_cache: FactCacheStore | None = None
+    *,
+    project_dir: Path,
+    fact_cache: FactCacheStore | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
 ) -> tuple[DiscoveredSourceFile, ...]:
-    """Discover source YAML files natively; Python, with its fact cache, loads the rest."""
+    """Discover source YAML files natively, reporting failing files to `on_fault`."""
 
     file_paths: tuple[Path, ...] = source_file_paths(project_dir=project_dir)
     if not _native_supported(project_dir=project_dir, file_paths=file_paths):
-        return discover_source_files(project_dir=project_dir, fact_cache=fact_cache)
-    discovered: list[DiscoveredSourceFile] = []
-    for file_path, payload in _native_payloads(project_dir=project_dir, file_paths=file_paths):
-        relative_path: Path = project_relative_path(path=file_path, project_dir=project_dir)
-        if payload[0] == NATIVE_LOADED_TAG:
-            _tag, contents, loaded = payload
-            discovered.append(
-                DiscoveredSourceFile(
-                    file_path=file_path,
-                    relative_path=relative_path,
-                    contents=str(contents),
-                    source_entries=parse_loaded_sources_yml(loaded=loaded, file_path=file_path),
-                )
+        return discover_source_files(
+            project_dir=project_dir, on_fault=on_fault, fact_cache=fact_cache
+        )
+    return materialise_native_files(
+        project_dir=project_dir,
+        files=(
+            (project_relative_path(path=file_path, project_dir=project_dir), payload)
+            for file_path, payload in _native_payloads(
+                project_dir=project_dir, file_paths=file_paths
             )
-        else:
-            discovered.append(
-                parse_source_file_with_cache(
-                    project_dir=project_dir,
-                    file_path=file_path,
-                    relative_path=relative_path,
-                    fact_cache=fact_cache,
-                )
-            )
-    return tuple(discovered)
+        ),
+        build=lambda relative_path, payload: _source_file(
+            project_dir=project_dir,
+            relative_path=relative_path,
+            payload=payload,
+            fact_cache=fact_cache,
+        ),
+        on_fault=on_fault,
+    )
+
+
+def _source_file(
+    *,
+    project_dir: Path,
+    relative_path: Path,
+    payload: _Payload,
+    fact_cache: FactCacheStore | None,
+) -> DiscoveredSourceFile:
+    file_path: Path = project_dir / relative_path
+    if payload[0] == NATIVE_LOADED_TAG:
+        _tag, contents, loaded = payload
+        return DiscoveredSourceFile(
+            file_path=file_path,
+            relative_path=relative_path,
+            contents=str(contents),
+            source_entries=parse_loaded_sources_yml(loaded=loaded, file_path=file_path),
+        )
+    return parse_source_file_with_cache(
+        project_dir=project_dir,
+        file_path=file_path,
+        relative_path=relative_path,
+        fact_cache=fact_cache,
+    )
 
 
 def discover_native_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]:

@@ -1,6 +1,6 @@
 use crate::models::DiscoveryFailure;
-use crate::sql_tests::_helpers::scenario_parsing::parse_scenario_file;
-use crate::sql_tests::_helpers::test_blocks::parse_sql_test_file;
+use crate::sql_tests::main::parse_scenario_text::parse_scenario_text;
+use crate::sql_tests::main::parse_sql_test_text::parse_sql_test_text;
 use crate::sql_tests::models::{SqlTestBlock, SqlTestFileOptions};
 use crate::sql_tests::tests::test_types::StatementFileTestCase;
 use sqlbuild_core::text::main::python_text::python_text;
@@ -41,7 +41,7 @@ fn failed_rows(failure: DiscoveryFailure) -> (Vec<BlockRow>, Option<String>) {
 
 /// The test file's parsed block rows and its failure message.
 pub(super) fn test_file_rows(test_case: &StatementFileTestCase) -> (Vec<BlockRow>, Option<String>) {
-    parse_sql_test_file(FILE_PATH, test_case.contents.to_owned(), &options()).map_or_else(
+    parse_sql_test_text(FILE_PATH, test_case.contents.to_owned(), &options()).map_or_else(
         failed_rows,
         |file| {
             (
@@ -54,7 +54,7 @@ pub(super) fn test_file_rows(test_case: &StatementFileTestCase) -> (Vec<BlockRow
 
 /// The scenario file's block row and its failure message.
 pub(super) fn scenario_rows(test_case: &StatementFileTestCase) -> (Vec<BlockRow>, Option<String>) {
-    parse_scenario_file(FILE_PATH, test_case.contents.to_owned(), &options()).map_or_else(
+    parse_scenario_text(FILE_PATH, test_case.contents.to_owned(), &options()).map_or_else(
         failed_rows,
         |file| {
             (

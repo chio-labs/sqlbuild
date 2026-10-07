@@ -76,6 +76,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.discovery.types import DeclarationFilesReuse
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -296,6 +297,10 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
 
 def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
     project_config, local_config, config_faults = _discover_configs(project_dir=project_dir)
+    prepare_native_declaration_layout(
+        project_dir=project_dir,
+        declaration_kinds=(DeclarationKind.ENUM, DeclarationKind.CONSTANT, DeclarationKind.MACRO),
+    )
     models, model_faults = _discover_models(project_dir=project_dir)
     enums, constants, macros, declaration_faults = _discover_declarations(project_dir=project_dir)
     tests, scenarios, relationship_faults = _discover_relationships(project_dir=project_dir)
@@ -306,7 +311,7 @@ def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscov
         function=discover_sql_hook_files, project_dir=project_dir
     )
     sources, source_faults = _discover_category(
-        function=discover_source_files, project_dir=project_dir
+        function=discover_native_source_files, project_dir=project_dir
     )
     audits, audit_faults = _discover_category(
         function=discover_audit_files, project_dir=project_dir
@@ -376,7 +381,7 @@ def _discover_models(
     *, project_dir: Path
 ) -> tuple[tuple[DiscoveredSqlModelFile, ...], tuple[DiscoveryFileFault, ...]]:
     faults: list[DiscoveryFileFault] = []
-    models: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
+    models: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
         project_dir=project_dir,
         extract_implicit_alias_columns=False,
         extract_output_column_locations=False,
@@ -438,10 +443,10 @@ def _discover_relationships(
     tuple[DiscoveryFileFault, ...],
 ]:
     faults: list[DiscoveryFileFault] = []
-    tests: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(
+    tests: tuple[DiscoveredSqlTestFile, ...] = discover_native_test_files(
         project_dir=project_dir, on_fault=faults.append
     )
-    scenarios: tuple[DiscoveredSqlScenarioFile, ...] = discover_scenario_files(
+    scenarios: tuple[DiscoveredSqlScenarioFile, ...] = discover_native_scenario_files(
         project_dir=project_dir, on_fault=faults.append
     )
     return tests, scenarios, tuple(faults)

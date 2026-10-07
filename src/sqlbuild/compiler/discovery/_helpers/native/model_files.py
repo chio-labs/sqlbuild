@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -11,6 +12,7 @@ from sqlbuild.compiler.discovery._helpers.filesystem.model_files import (
     discover_matched_model_file,
 )
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
+    materialise_native_files,
     native_discovery_supported,
     native_display_prefix,
     native_failure,
@@ -33,7 +35,7 @@ from sqlbuild.compiler.discovery.constants import (
     REMOVED_SQL_MODEL_HEADER_KEYS,
     SQL_MODEL_HEADER_KEYS,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveryFileFault
 from sqlbuild.compiler.discovery.types import NativeLocation
 
 
@@ -42,8 +44,10 @@ def discover_native_model_files(
     project_dir: Path,
     extract_implicit_alias_columns: bool,
     extract_output_column_locations: bool,
+    selected_model_names: frozenset[str] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
 ) -> tuple[DiscoveredSqlModelFile, ...]:
-    """Discover model files natively; Python runs when native discovery cannot match it."""
+    """Discover the (selected) model files natively, reporting failing files to `on_fault`."""
 
     display_prefix: str = native_display_prefix(project_dir)
     files: list[tuple[str, tuple[object, ...]]] | None = (
@@ -61,16 +65,24 @@ def discover_native_model_files(
             project_dir=project_dir,
             extract_implicit_alias_columns=extract_implicit_alias_columns,
             extract_output_column_locations=extract_output_column_locations,
+            selected_model_names=selected_model_names,
+            on_fault=on_fault,
         )
-    return tuple(
-        _model_file(
+    return materialise_native_files(
+        project_dir=project_dir,
+        files=(
+            (Path(relative_path), payload)
+            for relative_path, payload in files
+            if selected_model_names is None or Path(relative_path).stem in selected_model_names
+        ),
+        build=lambda relative_path, payload: _model_file(
             project_dir=project_dir,
-            relative_path=Path(relative_path),
+            relative_path=relative_path,
             payload=payload,
             extract_implicit_alias_columns=extract_implicit_alias_columns,
             extract_output_column_locations=extract_output_column_locations,
-        )
-        for relative_path, payload in files
+        ),
+        on_fault=on_fault,
     )
 
 

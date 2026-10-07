@@ -60,14 +60,14 @@ def discover_scenario_files(
 ) -> list[tuple[str, tuple[object, ...]]] | None: ...
 def load_yaml_files(relative_paths: list[str], tree: NativeProjectTree) -> list[object] | None: ...
 def discover_declaration_layout(
-    tree: NativeProjectTree,
-) -> (
-    tuple[
-        list[tuple[str, str, str, str, str | None, str]] | None,
-        list[tuple[str, str]] | None,
-    ]
-    | None
-): ...
+    tree: NativeProjectTree, kind: str | None = None
+) -> tuple[tuple[object, ...], tuple[object, ...]] | None: ...
+def parse_sql_test_contents(
+    request: dict[str, object], contents: str
+) -> tuple[object, ...] | None: ...
+def parse_scenario_contents(
+    request: dict[str, object], contents: str
+) -> tuple[object, ...] | None: ...
 
 class NativeScopeIndex:
     def records(

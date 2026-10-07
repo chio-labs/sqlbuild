@@ -57,6 +57,7 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
+    DiscoveryError,
     EventExporterDiscoveryError,
     ModelSqlParseError,
     ProviderDiscoveryError,
@@ -187,6 +188,8 @@ def _discover_declaration_file_facts(
     tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
     memo_key: tuple[str, DeclarationKind | None] = (_FACTS_MEMO_KEY, declaration_kind)
     cached: object = tree.memo.get(memo_key)
+    if isinstance(cached, DiscoveryError):
+        raise cached
     if cached is not None:
         return cast(tuple[_DeclarationFileFacts, ...], cached)
     facts: tuple[_DeclarationFileFacts, ...] = _scan_declaration_file_facts(
@@ -197,21 +200,30 @@ def _discover_declaration_file_facts(
 
 
 def remember_declaration_file_facts(
-    *, project_dir: Path, facts: Iterable[NativeDeclarationFact]
+    *,
+    project_dir: Path,
+    declaration_kind: DeclarationKind | None,
+    facts: Iterable[NativeDeclarationFact] | DiscoveryError,
 ) -> None:
-    """Record a scan of every declaration kind another walk of this pass already validated."""
+    """Record a declaration scan another walk of this pass made, or the error it raises."""
 
-    DirectorySnapshot.current(project_dir=project_dir).memo[(_FACTS_MEMO_KEY, None)] = tuple(
-        _DeclarationFileFacts(
-            file_path=project_dir / relative_path,
-            relative_path=Path(relative_path),
-            declaration_kind=DeclarationKind(kind),
-            scope_kind=ScopeKind(scope_kind),
-            ownership_root=Path(ownership_root),
-            owning_path=None if owning_path is None else Path(owning_path),
-            declaration_root=Path(declaration_root),
+    DirectorySnapshot.current(project_dir=project_dir).memo[(_FACTS_MEMO_KEY, declaration_kind)] = (
+        facts
+        if isinstance(facts, DiscoveryError)
+        else tuple(
+            _DeclarationFileFacts(
+                file_path=project_dir / relative_path,
+                relative_path=Path(relative_path),
+                declaration_kind=DeclarationKind(kind),
+                scope_kind=ScopeKind(scope_kind),
+                ownership_root=Path(ownership_root),
+                owning_path=None if owning_path is None else Path(owning_path),
+                declaration_root=Path(declaration_root),
+            )
+            for relative_path, kind, scope_kind, ownership_root, owning_path, declaration_root in (
+                facts
+            )
         )
-        for relative_path, kind, scope_kind, ownership_root, owning_path, declaration_root in facts
     )
 
 
