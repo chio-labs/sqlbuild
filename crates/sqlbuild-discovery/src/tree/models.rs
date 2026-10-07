@@ -37,4 +37,20 @@ impl ProjectTree {
             .filter(|part| !part.is_empty())
             .fold(self.directory.clone(), |path, part| path.join(part))
     }
+
+    /// Python's `Path.is_dir()`: follows symbolic links and reports any failure as `false`.
+    pub fn is_dir(&self, relative_path: &str) -> bool {
+        match std::fs::metadata(self.absolute(relative_path)) {
+            Ok(metadata) => metadata.is_dir(),
+            Err(_unreadable) => false,
+        }
+    }
+
+    /// Python's `Path.exists()`: follows symbolic links and reports any failure as `false`.
+    pub fn exists(&self, relative_path: &str) -> bool {
+        match std::fs::metadata(self.absolute(relative_path)) {
+            Ok(_metadata) => true,
+            Err(_missing) => false,
+        }
+    }
 }

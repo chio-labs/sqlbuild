@@ -94,7 +94,7 @@ from sqlbuild.compiler.discovery.models import (
     ModelHeaderMatch,
     NamedDeclarationRoot,
 )
-from sqlbuild.compiler.discovery.types import ScopedDeclarationFile
+from sqlbuild.compiler.discovery.types import NativeDeclarationFact, ScopedDeclarationFile
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
@@ -193,6 +193,25 @@ def _discover_declaration_file_facts(
     )
     tree.memo[memo_key] = facts
     return facts
+
+
+def remember_declaration_file_facts(
+    *, project_dir: Path, facts: Iterable[NativeDeclarationFact]
+) -> None:
+    """Record a scan of every declaration kind another walk of this pass already validated."""
+
+    DirectorySnapshot.current(project_dir=project_dir).memo[(_FACTS_MEMO_KEY, None)] = tuple(
+        _DeclarationFileFacts(
+            file_path=project_dir / relative_path,
+            relative_path=Path(relative_path),
+            declaration_kind=DeclarationKind(kind),
+            scope_kind=ScopeKind(scope_kind),
+            ownership_root=Path(ownership_root),
+            owning_path=None if owning_path is None else Path(owning_path),
+            declaration_root=Path(declaration_root),
+        )
+        for relative_path, kind, scope_kind, ownership_root, owning_path, declaration_root in facts
+    )
 
 
 def _scan_declaration_file_facts(

@@ -19,6 +19,7 @@ from sqlbuild.spec.contracts.models import SourceLocation
 _DISPLAY_PROBE: str = "_"
 _WINDOWS_OS_NAME: str = "nt"
 _PATH_ENCODING: str = "utf-8"
+_NATIVE_TREE_MEMO_KEY: str = "native_project_tree"
 _FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {"model_sql": ModelSqlParseError}
 
 
@@ -64,9 +65,22 @@ def native_discovery_supported(*, project_dir: Path, display_prefix: str) -> boo
     )
 
 
-def seed_snapshot_listings(*, project_dir: Path, listings: list[NativeListing]) -> None:
+def native_project_tree(project_dir: Path) -> _native.NativeProjectTree:
+    """Return the native listings shared by every native call of this discovery pass."""
+
+    snapshot: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
+    tree: object = snapshot.memo.get(_NATIVE_TREE_MEMO_KEY)
+    if isinstance(tree, _native.NativeProjectTree):
+        return tree
+    created: _native.NativeProjectTree = _native.NativeProjectTree(str(project_dir))
+    snapshot.memo[_NATIVE_TREE_MEMO_KEY] = created
+    return created
+
+
+def seed_snapshot_listings(*, project_dir: Path, tree: _native.NativeProjectTree) -> None:
     """Share the native walk's listings with the pass's Python directory snapshot."""
 
+    listings: list[NativeListing] = tree.listings()
     DirectorySnapshot.current(project_dir=project_dir).seed_listings(
         {project_dir / directory: _snapshot_entries(entries) for directory, entries in listings}
     )

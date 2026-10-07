@@ -27,3 +27,25 @@ pub const CANONICAL_AUTHORED_ROOTS: [&[&str]; 5] = [
 pub const SQL_TESTS_ROOT: &[&str] = &["tests", "unit"];
 /// The directory of macro tests below the SQL test root.
 pub const MACRO_TESTS_DIRECTORY: &str = "macros";
+/// Inherited declaration directories, which may also be project-wide global roots.
+pub const GLOBAL_DECLARATION_DIRECTORIES: [&str; 3] = ["macros", "enums", "constants"];
+/// Folder-local declaration directories.
+pub const LOCAL_DECLARATION_DIRECTORIES: [&str; 3] = ["_macros", "_enums", "_constants"];
+/// Directories a declaration group may hold for named declarations.
+pub const GROUPED_NAMED_DECLARATION_DIRECTORIES: [&str; 6] = [
+    "audits", "_audits", "schemas", "_schemas", "hooks", "_hooks",
+];
+/// Project-wide named declaration roles.
+pub const GLOBAL_NAMED_DECLARATION_DIRECTORIES: [&str; 3] = ["audits", "schemas", "hooks"];
+/// Root of seed files, walked so the Python snapshot shares its listings.
+pub const SEEDS_DIRECTORY: &str = "seeds";
+/// Suffix of macro files.
+pub const PYTHON_FILE_SUFFIX: &str = ".py";
+/// The stem of package initialisers, which are not macro files.
+pub const PYTHON_INIT_MODULE_STEM: &str = "__init__";
+/// The project-wide audit role directory.
+pub const AUDIT_ROLE_DIRECTORY: &str = "audits";
+/// The folder-local audit role directory inside a declaration group.
+pub const LOCAL_AUDIT_ROLE_DIRECTORY: &str = "_audits";
+/// The singular audit directory below an audit role.
+pub const SINGULAR_AUDIT_DIRECTORY: &str = "singular";

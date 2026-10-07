@@ -15,6 +15,7 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_display_prefix,
     native_failure,
     native_locations,
+    native_project_tree,
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
@@ -32,7 +33,7 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_MODEL_HEADER_KEYS,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.discovery.types import NativeLocation, NativeModelDiscovery
+from sqlbuild.compiler.discovery.types import NativeLocation
 
 
 def discover_native_model_files(
@@ -44,28 +45,22 @@ def discover_native_model_files(
     """Discover model files natively; Python runs when native discovery cannot match it."""
 
     display_prefix: str = native_display_prefix(project_dir)
-    discovered: NativeModelDiscovery | None = (
-        _native.discover_model_files(
-            {
-                "project_dir": str(project_dir),
-                "display_prefix": display_prefix,
-                "supported_keys": sorted(SQL_MODEL_HEADER_KEYS),
-                "removed_keys": sorted(REMOVED_SQL_MODEL_HEADER_KEYS),
-                "extract_implicit_alias_columns": extract_implicit_alias_columns,
-                "extract_output_column_locations": extract_output_column_locations,
-            }
+    files: list[tuple[str, tuple[object, ...]]] | None = (
+        _discover_native_files(
+            project_dir=project_dir,
+            display_prefix=display_prefix,
+            extract_implicit_alias_columns=extract_implicit_alias_columns,
+            extract_output_column_locations=extract_output_column_locations,
         )
         if native_discovery_supported(project_dir=project_dir, display_prefix=display_prefix)
         else None
     )
-    if discovered is None:
+    if files is None:
         return discover_model_files(
             project_dir=project_dir,
             extract_implicit_alias_columns=extract_implicit_alias_columns,
             extract_output_column_locations=extract_output_column_locations,
         )
-    files, listings = discovered
-    seed_snapshot_listings(project_dir=project_dir, listings=listings)
     return tuple(
         _model_file(
             project_dir=project_dir,
@@ -76,6 +71,29 @@ def discover_native_model_files(
         )
         for relative_path, payload in files
     )
+
+
+def _discover_native_files(
+    *,
+    project_dir: Path,
+    display_prefix: str,
+    extract_implicit_alias_columns: bool,
+    extract_output_column_locations: bool,
+) -> list[tuple[str, tuple[object, ...]]] | None:
+    tree: _native.NativeProjectTree = native_project_tree(project_dir)
+    files: list[tuple[str, tuple[object, ...]]] | None = _native.discover_model_files(
+        {
+            "project_dir": str(project_dir),
+            "display_prefix": display_prefix,
+            "supported_keys": sorted(SQL_MODEL_HEADER_KEYS),
+            "removed_keys": sorted(REMOVED_SQL_MODEL_HEADER_KEYS),
+            "extract_implicit_alias_columns": extract_implicit_alias_columns,
+            "extract_output_column_locations": extract_output_column_locations,
+        },
+        tree,
+    )
+    seed_snapshot_listings(project_dir=project_dir, tree=tree)
+    return files
 
 
 def _model_file(

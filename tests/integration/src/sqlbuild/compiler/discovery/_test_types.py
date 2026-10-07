@@ -94,3 +94,15 @@ class SharedSnapshotTestCase:
     created_file: str
     pattern: str
     expected_matches: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GeneratedLayoutParityTestCase:
+    """Seeded declaration layouts whose native validation and facts must match Python's."""
+
+    description: str
+    seed: int
+    count: int
+    expected_mismatches: tuple[str, ...] = ()
+    expected_minimum_valid: int = 0
+    expected_minimum_invalid: int = 0

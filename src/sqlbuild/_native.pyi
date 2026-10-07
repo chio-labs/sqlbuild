@@ -46,10 +46,20 @@ def tokenize_model_header(header: str) -> list[tuple[int, str, int]]: ...
 
 PYTHON_ALNUM_UNICODE_VERSION: str
 
+class NativeProjectTree:
+    def __init__(self, project_dir: str) -> None: ...
+    def listings(self) -> list[tuple[str, list[tuple[str, bool, bool]]]]: ...
+
 def discover_model_files(
-    request: dict[str, object],
+    request: dict[str, object], tree: NativeProjectTree
+) -> list[tuple[str, tuple[object, ...]]] | None: ...
+def discover_declaration_layout(
+    tree: NativeProjectTree,
 ) -> (
-    tuple[list[tuple[str, tuple[object, ...]]], list[tuple[str, list[tuple[str, bool, bool]]]]]
+    tuple[
+        list[tuple[str, str, str, str, str | None, str]] | None,
+        list[tuple[str, str]] | None,
+    ]
     | None
 ): ...
 def substitute_static_project_vars(

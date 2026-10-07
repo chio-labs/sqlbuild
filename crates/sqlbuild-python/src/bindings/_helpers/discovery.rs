@@ -2,19 +2,25 @@
 
 use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyTuple;
-use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObjectExt, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::text::main::python_alnum_unicode_version::python_alnum_unicode_version;
+use sqlbuild_discovery::declarations::main::declaration_layout::declaration_layout;
+use sqlbuild_discovery::declarations::models::{
+    DeclarationFileFact, DeclarationGroup, DeclarationLayout,
+};
 use sqlbuild_discovery::model_files::main::discover_model_files::discover_model_files as discover_models;
 use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use sqlbuild_discovery::models::{
-    DiscoveredFile, FileOutcome, LineColumnSpan, ProjectRoot, StageDeferral,
+    DiscoveredFile, DiscoveryFailure, FileOutcome, LineColumnSpan, ProjectRoot, StageDeferral,
 };
 use sqlbuild_discovery::tree::main::listings::read_listings;
 use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::bindings::_helpers::functions::map_to_python;
-use crate::bindings::models::ModelDiscoveryRequest;
+use crate::bindings::models::{ModelDiscoveryRequest, NativeProjectTree};
 use crate::bindings::types::CompilerDetach;
 
 type PyObject = Py<PyAny>;
@@ -86,7 +92,15 @@ fn files_object<T>(
 }
 
 type Listing = (String, Vec<(String, bool, bool)>);
-type ModelDiscovery = (Vec<(String, PyObject)>, Vec<Listing>);
+type FactRow = (
+    String,
+    &'static str,
+    &'static str,
+    String,
+    Option<String>,
+    String,
+);
+type DeclarationLayoutRows = (Option<Vec<FactRow>>, Option<Vec<(String, String)>>);
 
 fn entry_rows(entries: &[TreeEntry]) -> Vec<(String, bool, bool)> {
     entries
@@ -95,19 +109,58 @@ fn entry_rows(entries: &[TreeEntry]) -> Vec<(String, bool, bool)> {
         .collect()
 }
 
-fn listing_rows(tree: &ProjectTree) -> Vec<Listing> {
-    read_listings(tree)
-        .into_iter()
-        .map(|(directory, entries)| (directory, entry_rows(&entries)))
-        .collect()
+fn fact_row(fact: DeclarationFileFact) -> FactRow {
+    (
+        fact.relative_path,
+        fact.kind.as_str(),
+        fact.scope_kind.as_str(),
+        fact.ownership_root,
+        fact.owning_path,
+        fact.declaration_root,
+    )
 }
 
-/// Discover the model files natively with the listings the walk read, or `None` to defer.
+fn group_row(group: DeclarationGroup) -> (String, String) {
+    (group.root, group.directory)
+}
+
+fn valid_rows<T, R>(outcome: Result<Vec<T>, DiscoveryFailure>, row: fn(T) -> R) -> Option<Vec<R>> {
+    match outcome {
+        Ok(items) => Some(items.into_iter().map(row).collect()),
+        Err(_failure) => None,
+    }
+}
+
+#[pymethods]
+impl NativeProjectTree {
+    #[new]
+    fn new(project_dir: &str) -> Self {
+        Self {
+            inner: ProjectTree::new(Path::new(project_dir)),
+            exported: Mutex::new(HashSet::new()),
+        }
+    }
+
+    /// The listings read since the last call, for the pass's Python directory snapshot.
+    fn listings(&self) -> Vec<Listing> {
+        let Ok(mut exported) = self.exported.lock() else {
+            return Vec::new();
+        };
+        read_listings(&self.inner)
+            .into_iter()
+            .filter(|(directory, _)| exported.insert(directory.clone()))
+            .map(|(directory, entries)| (directory, entry_rows(&entries)))
+            .collect()
+    }
+}
+
+/// Discover the model files natively, or return `None` when Python must run the stage.
 #[pyfunction]
 fn discover_model_files(
     py: Python<'_>,
     request: ModelDiscoveryRequest,
-) -> PyResult<Option<ModelDiscovery>> {
+    tree: &NativeProjectTree,
+) -> PyResult<Option<Vec<(String, PyObject)>>> {
     let root = ProjectRoot {
         directory: PathBuf::from(request.project_dir),
         display_prefix: request.display_prefix,
@@ -118,24 +171,37 @@ fn discover_model_files(
         extract_implicit_alias_columns: request.extract_implicit_alias_columns,
         extract_output_column_locations: request.extract_output_column_locations,
     };
-    let (discovered, listings): (
-        Result<Vec<DiscoveredFile<DiscoveredModelFile>>, StageDeferral>,
-        Vec<Listing>,
-    ) = py
-        .compiler_detach(|| {
-            let tree = ProjectTree::new(&root.directory);
-            let discovered = discover_models(&root, &tree, &options);
-            Ok((discovered, listing_rows(&tree)))
-        })
+    let discovered: Result<Vec<DiscoveredFile<DiscoveredModelFile>>, StageDeferral> = py
+        .compiler_detach(|| Ok(discover_models(&root, &tree.inner, &options)))
         .map_err(crate::bindings::_helpers::panics::compiler_error)?;
     match discovered {
-        Ok(files) => Ok(Some((files_object(py, files, model_object)?, listings))),
+        Ok(files) => Ok(Some(files_object(py, files, model_object)?)),
+        Err(_deferral) => Ok(None),
+    }
+}
+
+/// The valid declaration file facts and named declaration groups; `None` where Python must scan.
+#[pyfunction]
+fn discover_declaration_layout(
+    py: Python<'_>,
+    tree: &NativeProjectTree,
+) -> PyResult<Option<DeclarationLayoutRows>> {
+    let layout: Result<DeclarationLayout, StageDeferral> = py
+        .compiler_detach(|| Ok(declaration_layout(&tree.inner)))
+        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+    match layout {
+        Ok(layout) => Ok(Some((
+            valid_rows(layout.file_facts, fact_row),
+            valid_rows(layout.named_groups, group_row),
+        ))),
         Err(_deferral) => Ok(None),
     }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<NativeProjectTree>()?;
     module.add_function(wrap_pyfunction!(discover_model_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_declaration_layout, module)?)?;
     module.add(
         "PYTHON_ALNUM_UNICODE_VERSION",
         python_alnum_unicode_version(),

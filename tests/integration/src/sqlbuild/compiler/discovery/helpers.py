@@ -12,19 +12,39 @@ from collections.abc import Callable
 from contextlib import suppress
 from itertools import compress
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+import pytest
 import yaml
 
 from sqlbuild import _native
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_files
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_constant_files,
+    discover_enum_files,
+    discover_macro_files,
+    discover_model_files,
+)
+from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
+    named_declaration_roots,
+    remember_declaration_groups,
+)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredMacroFile,
+    DiscoveredSqlModelFile,
+)
+from sqlbuild.compiler.discovery.types import NativeDeclarationFact
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.scopes.constants import NAMED_DECLARATION_KINDS
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.integration.src.sqlbuild.compiler.helpers import random_float, random_text
 
@@ -704,6 +724,160 @@ def generated_model_bytes(*, rng: random.Random) -> bytes:
         weights=(19, 1),
     )[0]
     return text.encode("utf-8")
+
+
+LAYOUT_ROOTS: tuple[str, ...] = ("models",) * 8 + (
+    "tests/unit", "tests/scenarios", "functions/sql", "sources", "macros", "enums", "constants",
+    "audits", "schemas", "hooks", "_macros", "_sqlbuild", "seeds",
+)  # fmt: skip
+LAYOUT_SEGMENTS: tuple[str, ...] = ("marts", "core") * 6 + (
+    "_sqlbuild", "_sqlbuild", "_sqlbuild", "macros", "enums", "constants", "_macros", "_enums",
+    "_constants", "audits", "_audits", "generic", "singular", "schemas", "_schemas", "hooks",
+    "_hooks", "sql", "python", ".cache",
+)  # fmt: skip
+LAYOUT_TEMPLATES: tuple[str, ...] = (
+    "{root}/{owner}/_sqlbuild/{declaration}", "{root}/{owner}/{local}", "{declaration}",
+    "{declaration}/{owner}", "{root}/{owner}/_sqlbuild/{named}", "{named}", "{root}/{owner}",
+)  # fmt: skip
+LAYOUT_DECLARATIONS: tuple[str, ...] = (
+    "macros", "enums", "constants", "_macros", "_enums", "_constants",
+)  # fmt: skip
+LAYOUT_NAMED_ROLES: tuple[str, ...] = (
+    "audits/generic", "audits/singular", "_audits/generic", "schemas", "_schemas", "hooks/sql",
+    "hooks/python", "_hooks/sql",
+)  # fmt: skip
+LAYOUT_FILE_NAMES: tuple[str, ...] = ("a.py", "b.sql", "c.sql", "__init__.py", "notes.txt", ".keep")
+LAYOUT_CONTENTS: dict[str, str] = {
+    "enums": "ENUM (name e{n}, members [A]);\n",
+    "_enums": "ENUM (name e{n}, members [A]);\n",
+    "constants": "CONSTANT (name c{n}, value 1);\n",
+    "_constants": "CONSTANT (name c{n}, value 1);\n",
+}
+_FACT_KINDS: dict[type[object], str] = {
+    DiscoveredMacroFile: "macro",
+    DiscoveredEnumFile: "enum",
+    DiscoveredConstantFile: "constant",
+}
+
+
+def generated_layout_files(*, rng: random.Random) -> tuple[tuple[str, bytes], ...]:
+    """Return files spread over canonical, global and grouped declaration roots."""
+
+    files: dict[str, bytes] = {}
+    for index in range(rng.randint(1, 6)):
+        directory: str = rng.choices(
+            (
+                rng.choice(LAYOUT_TEMPLATES).format(
+                    root=rng.choice(LAYOUT_ROOTS[:12]),
+                    owner=rng.choice(("marts", "core", "marts/core")),
+                    declaration=rng.choice(LAYOUT_DECLARATIONS),
+                    local=rng.choice(LAYOUT_DECLARATIONS[3:]),
+                    named=rng.choice(LAYOUT_NAMED_ROLES),
+                ),
+                "/".join(
+                    (rng.choice(LAYOUT_ROOTS), *rng.choices(LAYOUT_SEGMENTS, k=rng.randint(0, 3)))
+                ),
+            ),
+            weights=(6, 1),
+        )[0]
+        parts: list[str] = [*directory.split("/"), rng.choice(LAYOUT_FILE_NAMES)]
+        template: str = next(
+            filter(None, (LAYOUT_CONTENTS.get(part) for part in reversed(parts))), ""
+        )
+        files["/".join(parts)] = template.format(n=index).encode("utf-8")
+    return tuple(files.items())
+
+
+def python_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
+    """Return Python's declaration file facts and named roots, `None` where its scan raises."""
+
+    return (
+        _outcome_or_none(lambda: _python_fact_rows(project_dir=project_dir)),
+        _outcome_or_none(lambda: _named_root_rows(project_dir=project_dir, seed=lambda: None)),
+    )
+
+
+def native_layout_outcome(*, project_dir: Path) -> tuple[object, object]:
+    """Return the native facts and the named roots its groups give, `None` where it fails."""
+
+    layout: tuple[list[NativeDeclarationFact] | None, list[tuple[str, str]] | None] | None = (
+        _native.discover_declaration_layout(_native.NativeProjectTree(str(project_dir)))
+    )
+    facts, groups = layout or (None, None)
+    return (
+        _mapped(facts, lambda rows: [_native_fact_row(fact) for fact in rows]),
+        _mapped(
+            groups,
+            lambda rows: _named_root_rows(
+                project_dir=project_dir,
+                seed=lambda: remember_declaration_groups(project_dir=project_dir, groups=rows),
+            ),
+        ),
+    )
+
+
+def _mapped[T](value: T | None, transform: Callable[[T], object]) -> object:
+    return {True: lambda: None, False: lambda: transform(cast(T, value))}[value is None]()
+
+
+def _outcome_or_none(compute: Callable[[], object]) -> object:
+    outcome: list[object] = [None]
+    with suppress(DeclarationParseError):
+        outcome[0] = compute()
+    return outcome[0]
+
+
+def _python_fact_rows(*, project_dir: Path) -> list[tuple[str, ...]]:
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        files: tuple[DiscoveredMacroFile | DiscoveredEnumFile | DiscoveredConstantFile, ...] = (
+            *discover_macro_files(project_dir=project_dir),
+            *discover_enum_files(project_dir=project_dir),
+            *discover_constant_files(project_dir=project_dir),
+        )
+    return sorted(
+        (
+            file.relative_path.as_posix(),
+            _FACT_KINDS[type(file)],
+            file.scope_kind.value,
+            str(file.ownership_root),
+            str(file.owning_path),
+            str(file.declaration_root),
+        )
+        for file in files
+    )
+
+
+def _native_fact_row(fact: NativeDeclarationFact) -> tuple[str, ...]:
+    relative_path, kind, scope_kind, ownership_root, owning_path, declaration_root = fact
+    return (relative_path, kind, scope_kind, ownership_root, str(owning_path), declaration_root)
+
+
+def _named_root_rows(*, project_dir: Path, seed: Callable[[], None]) -> list[tuple[str, ...]]:
+    with DirectorySnapshot.scope(project_dir=project_dir):
+        seed()
+        return [
+            (
+                root.relative_directory.as_posix(),
+                root.kind.value,
+                root.scope_kind.value,
+                str(root.ownership_root),
+                str(root.owning_path),
+            )
+            for root in named_declaration_roots(
+                project_dir=project_dir, kinds=NAMED_DECLARATION_KINDS
+            )
+        ]
+
+
+def stage_outcome(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> object:
+    """Return the rendered discovery stage under `engine` with its failure type and message."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+    capture: FailureCapture = FailureCapture()
+    rendered: list[object] = [None]
+    with capture:
+        rendered[0] = render_stage_capture(discover_project_inputs(project_dir=project_dir))
+    return (rendered[0], type(capture.failure).__name__, str(capture.failure))
 
 
 class CallCounter:

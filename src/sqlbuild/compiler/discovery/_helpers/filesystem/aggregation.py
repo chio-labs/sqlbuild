@@ -34,6 +34,9 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
+from sqlbuild.compiler.discovery._helpers.native.declarations import (
+    prepare_native_declaration_layout,
+)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
@@ -55,6 +58,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredProvider,
     DiscoveredPythonNodeFunctions,
+    DiscoveredSourceFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -96,6 +100,7 @@ def build_discovered_project_inputs(
             project_dir=project_dir,
             discover_models=discover_models,
             fact_cache=fact_cache,
+            native=native,
         )
         declarations: DiscoveredDeclarationFiles = (
             discover()
@@ -214,11 +219,18 @@ def _discover_declaration_files(
     project_dir: Path,
     discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
     fact_cache: FactCacheStore | None,
+    native: bool,
 ) -> DiscoveredDeclarationFiles:
     with DirectorySnapshot.scope(project_dir=project_dir):
+        source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(
+            project_dir=project_dir, fact_cache=fact_cache
+        )
+        model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
+        if native:
+            prepare_native_declaration_layout(project_dir=project_dir)
         return DiscoveredDeclarationFiles(
-            source_files=discover_source_files(project_dir=project_dir, fact_cache=fact_cache),
-            model_files=discover_models(),
+            source_files=source_files,
+            model_files=model_files,
             enum_files=discover_enum_files(project_dir=project_dir),
             constant_files=discover_constant_files(project_dir=project_dir),
             model_schema_files=discover_model_schema_files(project_dir=project_dir),

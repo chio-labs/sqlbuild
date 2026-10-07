@@ -25,6 +25,7 @@ _HOOK_MODULE: str = (
     '    """Log one refresh."""\n'
     "    return None\n"
 )
+_MACRO_MODULE: str = "def cents(value):\n    return f'{value} * 100'\n"
 _SEED_DECLARATION: str = (
     "seeds:\n  - name: order_channels\n    description: Order channels.\n"
     "    columns:\n      - name: id\n        type: INTEGER\n"
@@ -48,6 +49,7 @@ def discovery_failure_cases() -> tuple[FailureCase, ...]:
     return (
         *_config_cases(),
         *_sql_file_cases(),
+        *_layout_cases(),
         *_yaml_file_cases(),
         *_conflict_cases(),
         *_python_cases(),
@@ -182,6 +184,22 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                 )
             },
         ),
+    )
+
+
+def _layout_cases() -> tuple[FailureCase, ...]:
+    return tuple(
+        _case(name=name, expected_code="D013", files={path: contents})
+        for name, path, contents in (
+            ("scoped-root-at-project-root", "_enums/order_status.sql", ""),
+            ("declaration-group-below-root", "models/_sqlbuild/macros/money.py", _MACRO_MODULE),
+            ("declaration-root-nested", "models/marts/_enums/_constants/limits.sql", ""),
+            ("declaration-group-unsupported-entry", "models/marts/_sqlbuild/notes.txt", ""),
+            ("named-role-nested-declaration", "schemas/enums/order_status.sql", ""),
+            ("audit-role-unsupported-entry", "audits/at_least.sql", ""),
+            ("local-singular-audit", "models/marts/_sqlbuild/_audits/singular/at_least.sql", ""),
+            ("hook-role-unsupported-entry", "models/marts/_sqlbuild/hooks/notes.sql", ""),
+        )
     )
 
 
