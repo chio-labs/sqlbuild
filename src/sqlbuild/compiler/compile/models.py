@@ -12,6 +12,7 @@ from typing import Any, overload
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
@@ -386,6 +387,19 @@ class MacroContext:
         )
 
         return render_enum_member_value(value=value)
+
+
+@dataclass(frozen=True)
+class MacroExpansionState:
+    """Inputs and recorded facts of one authored string's macro expansion."""
+
+    loaded_macros: dict[str, LoadedMacro]
+    macro_overrides: dict[str, str]
+    macro_context: MacroContext
+    declaration_resolver: DeclarationScopeResolver | None
+    declarations: DeclarationResolutionContext | None
+    facts: MacroExpansionFacts
+    consumer: ResourceIdentity | DeclarationIdentity | None = None
 
 
 @dataclass(frozen=True)

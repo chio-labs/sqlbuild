@@ -19,6 +19,10 @@ class MacroDeclarationLookupError(CompileInputError, KeyError):
     """Retain authored diagnostics while honoring the Mapping lookup contract."""
 
 
+class NativeRenderMismatchError(RuntimeError):
+    """Raised when native rendering disagrees with Python, so the Python stage must re-run."""
+
+
 class NativeSqlTestResponseError(CompileInputError):
     """Raised when native SQL-test extraction returns malformed data."""
 

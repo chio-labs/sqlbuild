@@ -809,6 +809,16 @@ class CompilerEngineParityTestCase:
 
 
 @dataclass(frozen=True)
+class CompilerEngineMacroParityTestCase:
+    """Two engines compiling separate copies of one macro-heavy project."""
+
+    description: str
+    files: dict[str, str]
+    expected_exit_codes: tuple[int, int]
+    expected_compiled_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompilerEngineStoreTestCase:
     """A sequence of engine compiles in one project and which of them reuse a stored compile."""
 

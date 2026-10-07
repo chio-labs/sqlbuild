@@ -11,7 +11,7 @@ import sys
 import threading
 from collections.abc import Callable, Iterator, Mapping
 from contextvars import Token
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
@@ -19,12 +19,10 @@ from typing import cast
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     call_site_sql_references,
     evaluate_typed_reference,
-    reference_call_text,
     reject_macro_generated_references,
-    relation_placeholder_text,
-    render_relation_placeholders,
     report_macro_reference_call_syntax,
 )
+from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
@@ -41,6 +39,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
+    MacroExpansionState,
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
@@ -50,6 +49,14 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
+from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
+from sqlbuild.compiler.macro_bridge.constants import (
+    DECLARATION_READ_EVENT,
+    GENERATED_REFERENCE_MARKERS,
+    GENERATED_SQL_EVENT,
+    MACRO_USE_EVENT,
+)
+from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -104,83 +111,6 @@ class _MacroAnalysisInputs:
     package_names: frozenset[str]
 
 
-@dataclass
-class _ExpansionFacts:
-    dependencies: list[DeclarationIdentity] = field(default_factory=list)
-    usages: list[UsageRecord] = field(default_factory=list)
-    relations: dict[SqlResourceRef, int] = field(default_factory=dict)
-    argument_references: dict[SqlResourceRef, None] = field(default_factory=dict)
-    call_site_refs: list[set[SqlResourceRef]] = field(default_factory=list)
-    rendering_approved: list[frozenset[SqlResourceRef]] = field(default_factory=list)
-
-    def add_dependency(self, identity: DeclarationIdentity) -> _ExpansionFacts:
-        """Record a resolved dependency in encounter order."""
-
-        self.dependencies.append(identity)
-        return self
-
-    def add_usage(self, usage: UsageRecord) -> _ExpansionFacts:
-        """Record a resolved macro-to-macro edge in encounter order."""
-
-        self.usages.append(usage)
-        return self
-
-    def record_call_site_refs(self, refs: tuple[SqlResourceRef, ...]) -> None:
-        """Record references written as arguments of every macro call being expanded."""
-
-        self.argument_references.update(dict.fromkeys(refs))
-        for approved in self.call_site_refs:
-            approved.update(refs)
-
-    def open_call_site(self) -> _ExpansionFacts:
-        """Start collecting the references written as one macro call's arguments."""
-
-        self.call_site_refs.append(set())
-        return self
-
-    def close_call_site(self) -> frozenset[SqlResourceRef]:
-        """Stop collecting for the innermost macro call and return its argument references."""
-
-        return frozenset(self.call_site_refs.pop())
-
-    def begin_rendering(self, approved: frozenset[SqlResourceRef]) -> _ExpansionFacts:
-        """Approve the call-site argument references of the macro about to run."""
-
-        self.rendering_approved.append(approved)
-        return self
-
-    def end_rendering(self) -> _ExpansionFacts:
-        """Restore the approvals of the enclosing macro after one macro returns."""
-
-        self.rendering_approved.pop()
-        return self
-
-    def render_relation(self, ref: object) -> str:
-        """Render a reference a macro formats; only call-site arguments become placeholders."""
-
-        if not isinstance(ref, SqlResourceRef):
-            raise CompileInputError("Only typed resource references render as relations")
-        if not self.rendering_approved or ref not in self.rendering_approved[-1]:
-            return reference_call_text(ref)
-        return relation_placeholder_text(self.relations.setdefault(ref, len(self.relations)))
-
-    def render_relation_placeholders(self, sql: str) -> str:
-        """Replace typed reference placeholders with the reference call written at the call site."""
-
-        return render_relation_placeholders(sql=sql, relations=self.relations)
-
-
-@dataclass(frozen=True)
-class _ExpansionState:
-    loaded_macros: dict[str, LoadedMacro]
-    macro_overrides: dict[str, str]
-    macro_context: MacroContext
-    declaration_resolver: DeclarationScopeResolver | None
-    declarations: DeclarationResolutionContext | None
-    facts: _ExpansionFacts
-    consumer: ResourceIdentity | DeclarationIdentity | None = None
-
-
 class _MacroDeclarationValues(Mapping[str, object]):
     def __init__(
         self,
@@ -190,17 +120,20 @@ class _MacroDeclarationValues(Mapping[str, object]):
         declaration_kind: str,
         file_path: Path,
         on_access: Callable[[str], None],
+        on_miss: Callable[[], None],
     ) -> None:
         self._values: Mapping[str, object] = values
         self._inaccessible: Mapping[str, DeclarationRecord] = inaccessible
         self._declaration_kind: str = declaration_kind
         self._file_path: Path = file_path
         self._on_access: Callable[[str], None] = on_access
+        self._on_miss: Callable[[], None] = on_miss
 
     def __getitem__(self, name: str) -> object:
         if name in self._values:
             self._on_access(name)
             return self._values[name]
+        self._on_miss()
         inaccessible: DeclarationRecord | None = self._inaccessible.get(name)
         if inaccessible is not None:
             owner: str = inaccessible.owning_path or "global"
@@ -227,14 +160,23 @@ class _MacroDeclarationValues(Mapping[str, object]):
 
 
 class _MacroEnumMembers(Mapping[str, str | int]):
-    def __init__(self, *, enum_name: str, values: Mapping[str, str | int], file_path: Path) -> None:
+    def __init__(
+        self,
+        *,
+        enum_name: str,
+        values: Mapping[str, str | int],
+        file_path: Path,
+        on_miss: Callable[[], None],
+    ) -> None:
         self._enum_name: str = enum_name
         self._values: Mapping[str, str | int] = values
         self._file_path: Path = file_path
+        self._on_miss: Callable[[], None] = on_miss
 
     def __getitem__(self, name: str) -> str | int:
         if name in self._values:
             return self._values[name]
+        self._on_miss()
         available: str = ", ".join(sorted(self._values)) or "none"
         raise MacroDeclarationLookupError(
             f"Unknown member '{name}' for enum '{self._enum_name}' in '{self._file_path}'. "
@@ -1256,8 +1198,8 @@ def expand_sql_macros_result(
 ) -> MacroExpansionResult:
     """Expand macros and retain deterministic resolved dependency facts."""
 
-    facts: _ExpansionFacts = _ExpansionFacts()
-    state: _ExpansionState = _ExpansionState(
+    facts: MacroExpansionFacts = MacroExpansionFacts()
+    state: MacroExpansionState = MacroExpansionState(
         loaded_macros=loaded_macros,
         macro_overrides={} if macro_overrides is None else macro_overrides,
         macro_context=macro_context,
@@ -1266,11 +1208,21 @@ def expand_sql_macros_result(
         facts=facts,
         consumer=consumer,
     )
-    expanded_sql, spans = _expand_sql_macros(
-        sql=sql,
-        consumer_path=file_path,
-        state=state,
-        stack=(),
+    bridge: MacroBridge | None = active_macro_bridge() if not state.macro_overrides else None
+    expanded_sql, spans = (
+        _expand_sql_macros(
+            sql=sql,
+            consumer_path=file_path,
+            state=state,
+            stack=(),
+        )
+        if bridge is None
+        else _bridged_sql_macros(
+            sql=sql,
+            consumer_path=file_path,
+            state=state,
+            bridge=bridge,
+        )
     )
     return MacroExpansionResult(
         sql=expanded_sql,
@@ -1281,16 +1233,39 @@ def expand_sql_macros_result(
     )
 
 
+def _bridged_sql_macros(
+    *, sql: str, consumer_path: Path, state: MacroExpansionState, bridge: MacroBridge
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
+    from sqlbuild.compiler.compile._helpers.macro_bridge.expansion import (
+        expand_bridged_sql_macros,
+    )
+
+    return expand_bridged_sql_macros(
+        sql=sql, consumer_path=consumer_path, state=state, bridge=bridge
+    )
+
+
 def _expand_sql_macros(
     *,
     sql: str,
     consumer_path: Path,
-    state: _ExpansionState,
+    state: MacroExpansionState,
     stack: tuple[DeclarationIdentity, ...],
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     if MACRO_TOKEN not in sql:
         return sql, ()
+    return _expand_resolved_sql_macros(
+        sql=sql,
+        consumer_path=consumer_path,
+        state=state,
+        declarations=_expansion_declarations(state=state, consumer_path=consumer_path),
+        stack=stack,
+    )
 
+
+def _expansion_declarations(
+    *, state: MacroExpansionState, consumer_path: Path
+) -> DeclarationResolutionContext | None:
     declarations: DeclarationResolutionContext | None = state.declarations
     if declarations is None and state.declaration_resolver is not None:
         from sqlbuild.compiler.compile._helpers.render.declarations import (
@@ -1300,7 +1275,17 @@ def _expand_sql_macros(
         declarations = resolve_declaration_context(
             resolver=state.declaration_resolver, file_path=consumer_path
         )
+    return declarations
 
+
+def _expand_resolved_sql_macros(
+    *,
+    sql: str,
+    consumer_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
     rendered_sql_parts: list[str] = []
     spans: list[ExpansionSpan] = []
     output_length: int = 0
@@ -1399,7 +1384,7 @@ def _evaluate_macro_call(
     sql: str,
     call_start_index: int,
     file_path: Path,
-    state: _ExpansionState,
+    state: MacroExpansionState,
     declarations: DeclarationResolutionContext | None,
     stack: tuple[DeclarationIdentity, ...],
     top_level: bool,
@@ -1452,29 +1437,13 @@ def _evaluate_macro_call(
         raise CompileInputError(
             f"Macro expansion cycle detected: {chain}. Definition paths: {paths}"
         )
-    _ = state.facts.add_dependency(identity)
-    if stack:
-        _ = state.facts.add_usage(
-            UsageRecord(stack[-1], identity, UsageKind.DECLARATION_DEPENDENCY),
-        )
-    elif state.consumer is not None:
-        visibility: tuple[VisibilityRecord, ...] = (
-            declarations.macro_visibility.get(macro_name, ()) if declarations is not None else ()
-        )
-        if visibility:
-            from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
-
-            for visible in usage_visibility(visibility=visibility, consumer=state.consumer):
-                _ = state.facts.add_usage(
-                    UsageRecord(
-                        state.consumer,
-                        identity,
-                        UsageKind.RUNTIME,
-                        through=visible.through,
-                    )
-                )
-        else:
-            _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
+    _record_macro_use(
+        macro_name=macro_name,
+        identity=identity,
+        state=state,
+        declarations=declarations,
+        stack=stack,
+    )
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]
@@ -1528,20 +1497,74 @@ def _evaluate_macro_call(
         _validate_final_macro_sql(
             macro_name=macro_name, file_path=file_path, macro_result=macro_result
         )
-        report_macro_reference_call_syntax(
+        _report_generated_references(
+            macro_name=macro_name,
+            loaded_macro=loaded_macro,
+            macro_result=macro_result,
+            file_path=file_path,
+            state=state,
+        )
+    return macro_result, closing_paren_index + 1
+
+
+def _record_macro_use(
+    *,
+    macro_name: str,
+    identity: DeclarationIdentity,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
+) -> None:
+    state.facts.note_event((MACRO_USE_EVENT, macro_name, ""))
+    _ = state.facts.add_dependency(identity)
+    if stack:
+        state.facts.block_memo()
+        _ = state.facts.add_usage(
+            UsageRecord(stack[-1], identity, UsageKind.DECLARATION_DEPENDENCY),
+        )
+    elif state.consumer is not None:
+        visibility: tuple[VisibilityRecord, ...] = (
+            declarations.macro_visibility.get(macro_name, ()) if declarations is not None else ()
+        )
+        if visibility:
+            from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
+
+            for visible in usage_visibility(visibility=visibility, consumer=state.consumer):
+                _ = state.facts.add_usage(
+                    UsageRecord(
+                        state.consumer,
+                        identity,
+                        UsageKind.RUNTIME,
+                        through=visible.through,
+                    )
+                )
+        else:
+            _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
+
+
+def _report_generated_references(
+    *,
+    macro_name: str,
+    loaded_macro: LoadedMacro,
+    macro_result: str,
+    file_path: Path,
+    state: MacroExpansionState,
+) -> None:
+    if any(marker in macro_result for marker in GENERATED_REFERENCE_MARKERS):
+        state.facts.note_event((GENERATED_SQL_EVENT, macro_name, macro_result))
+    report_macro_reference_call_syntax(
+        loaded_macro=loaded_macro,
+        macro_result=macro_result,
+        file_path=file_path,
+        consumer=state.consumer,
+    )
+    if state.macro_context._enforce_explicit_references:
+        reject_macro_generated_references(
             loaded_macro=loaded_macro,
             macro_result=macro_result,
             file_path=file_path,
             consumer=state.consumer,
         )
-        if state.macro_context._enforce_explicit_references:
-            reject_macro_generated_references(
-                loaded_macro=loaded_macro,
-                macro_result=macro_result,
-                file_path=file_path,
-                consumer=state.consumer,
-            )
-    return macro_result, closing_paren_index + 1
 
 
 def _build_macro_invocation_context(
@@ -1549,13 +1572,13 @@ def _build_macro_invocation_context(
     macro_context: MacroContext,
     declarations: DeclarationResolutionContext | None,
     file_path: Path,
-    state: _ExpansionState,
+    state: MacroExpansionState,
 ) -> MacroContext:
     if declarations is None:
         return macro_context
     constant_values: Mapping[str, object] = _build_constant_context_values(declarations.constants)
     enum_values: Mapping[str, object] = _build_enum_context_values(
-        declarations=declarations.enums, file_path=file_path
+        declarations=declarations.enums, file_path=file_path, on_miss=state.facts.block_memo
     )
     constants: Mapping[str, object] = _MacroDeclarationValues(
         values=constant_values,
@@ -1568,6 +1591,7 @@ def _build_macro_invocation_context(
             declarations=declarations,
             state=state,
         ),
+        on_miss=state.facts.block_memo,
     )
     enum_mapping: Mapping[str, object] = _MacroDeclarationValues(
         values=enum_values,
@@ -1580,6 +1604,7 @@ def _build_macro_invocation_context(
             declarations=declarations,
             state=state,
         ),
+        on_miss=state.facts.block_memo,
     )
     return replace(
         macro_context,
@@ -1602,6 +1627,7 @@ def _build_enum_context_values(
     *,
     declarations: Mapping[str, EnumDeclaration],
     file_path: Path,
+    on_miss: Callable[[], None],
 ) -> Mapping[str, object]:
     values: dict[str, object] = {}
     for name, declaration in declarations.items():
@@ -1612,6 +1638,7 @@ def _build_enum_context_values(
             enum_name=name,
             values=MappingProxyType(members),
             file_path=file_path,
+            on_miss=on_miss,
         )
     return MappingProxyType(values)
 
@@ -1660,10 +1687,11 @@ def _record_macro_declaration_usage(
     name: str,
     kind: DeclarationKind,
     declarations: DeclarationResolutionContext,
-    state: _ExpansionState,
+    state: MacroExpansionState,
 ) -> None:
     from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
 
+    state.facts.note_event((DECLARATION_READ_EVENT, kind.value, name))
     consumer: ResourceIdentity | DeclarationIdentity | None = (
         state.consumer or declarations.consumer
     )
@@ -1738,7 +1766,7 @@ def _parse_macro_arguments(
     *,
     args_source: str,
     file_path: Path,
-    state: _ExpansionState,
+    state: MacroExpansionState,
     declarations: DeclarationResolutionContext | None,
     stack: tuple[DeclarationIdentity, ...],
 ) -> tuple[tuple[object, ...], dict[str, object]]:
@@ -1796,7 +1824,7 @@ def _rewrite_nested_macro_calls(
     *,
     args_source: str,
     file_path: Path,
-    state: _ExpansionState,
+    state: MacroExpansionState,
     declarations: DeclarationResolutionContext | None,
     stack: tuple[DeclarationIdentity, ...],
 ) -> tuple[str, dict[str, object]]:
