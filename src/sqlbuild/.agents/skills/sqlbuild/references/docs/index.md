@@ -33,9 +33,10 @@ real model graph against test data, then replay it locally on DuckDB in CI.
 
 [`sqb plan`](concepts/planning.md) shows why each model will run and how much it will rebuild.
 [`sqb diff`](concepts/diff.md) compares real data between targets before a change ships. When you
-rename a model, a [migration](concepts/models/migrations.md) moves its table instead of rebuilding
-its history, and the [janitor](cli/janitor.md) archives tables the project no longer builds before
-it deletes them.
+rename or move a model with [`sqb rename` and `sqb mv`](concepts/refactoring.md), every reference is
+updated, a [migration](concepts/models/migrations.md) moves its table instead of rebuilding its
+history, and the old name keeps working as a view. Columns can be renamed the same way. The
+[janitor](cli/janitor.md) archives tables the project no longer builds before it deletes them.
 
 ## How it fits together
 

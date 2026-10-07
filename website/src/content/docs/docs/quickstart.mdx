@@ -201,6 +201,10 @@ sqb audit
 # Inspect lineage
 sqb lineage fact_orders --direction both
 
+# Rename a model or a column, updating every reference (see Refactoring)
+sqb rename fact_orders order_facts
+sqb rename stg_customers.email email_address
+
 # Compile and check contracts
 sqb compile
 ```
