@@ -705,9 +705,17 @@ dependencies = [
  "sqlbuild-core",
  "sqlbuild-discovery",
  "sqlbuild-model-config",
+ "sqlbuild-render",
  "sqlbuild-rules",
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
+]
+
+[[package]]
+name = "sqlbuild-render"
+version = "0.139.0"
+dependencies = [
+ "sqlbuild-core",
 ]
 
 [[package]]
