@@ -49,6 +49,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             stage=NativeStage.DECLARATION_SCOPES,
             expected_enabled=True,
         ),
+        NativeStageTierTestCase(
+            description="python_reference_extraction",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.REFERENCE_EXTRACTION,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_reference_extraction",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.REFERENCE_EXTRACTION,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_reference_extraction",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.REFERENCE_EXTRACTION,
+            expected_enabled=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

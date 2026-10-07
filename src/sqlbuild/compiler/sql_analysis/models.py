@@ -74,6 +74,19 @@ class SqlLexicalSyntax:
             )
         )
 
+    @property
+    def native_mapping(self) -> dict[str, object]:
+        """Return these lexical rules as the mapping native scanners read."""
+
+        return {
+            "backslash_escape_quotes": sorted(self.backslash_escape_quotes),
+            "escape_string_prefix": self.escape_string_prefix,
+            "raw_string_prefix": self.raw_string_prefix,
+            "triple_quoted_strings": self.triple_quoted_strings,
+            "nested_block_comments": self.nested_block_comments,
+            "line_comment_prefixes": sorted(self.line_comment_prefixes),
+        }
+
     def reads_differently_from_generic(self, sql: str) -> bool:
         """Return whether these rules can read the SQL differently from generic SQL."""
 

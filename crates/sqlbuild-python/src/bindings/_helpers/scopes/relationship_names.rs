@@ -1,38 +1,14 @@
 //! Expected-model relationship names of SQL tests and scenarios, scanned natively.
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
+use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::relationship_names::main::expected_model_names::expected_model_names;
 use sqlbuild_scopes::relationship_names::models::ExpectedNames;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
-
-/// One adapter's `SqlLexicalSyntax`, read from a Python mapping.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-struct LexicalSyntaxInput {
-    backslash_escape_quotes: Vec<String>,
-    escape_string_prefix: bool,
-    raw_string_prefix: bool,
-    triple_quoted_strings: bool,
-    nested_block_comments: bool,
-    line_comment_prefixes: Vec<String>,
-}
-
-impl From<LexicalSyntaxInput> for LexicalSyntax {
-    fn from(input: LexicalSyntaxInput) -> Self {
-        Self {
-            backslash_escape_quotes: input.backslash_escape_quotes,
-            escape_string_prefix: input.escape_string_prefix,
-            raw_string_prefix: input.raw_string_prefix,
-            triple_quoted_strings: input.triple_quoted_strings,
-            nested_block_comments: input.nested_block_comments,
-            line_comment_prefixes: input.line_comment_prefixes,
-        }
-    }
-}
 
 /// Return each body's expected-model names, or `None` where Python must extract them.
 #[pyfunction]
