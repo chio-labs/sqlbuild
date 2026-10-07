@@ -181,6 +181,17 @@ GENERATOR_ROLES: dict[str, str] = {
     GENERATOR_MACRO_KIND: "macros",
     GENERATOR_HOOK_KIND: "hooks",
 }
+GENERATOR_RENDER_BLOCKS: tuple[str, ...] = (
+    "macro_context_reads",
+    "typed_reference_macro",
+    "macro_generated_reference",
+    "table_function",
+    "interpolation",
+    "cursor_bounds",
+    "macros_across_resources",
+    "enum_column_contract",
+    "resource_audits",
+)
 GENERATOR_FEATURE_BLOCKS: tuple[str, ...] = (
     "incremental_append",
     "incremental_delete_insert",
@@ -209,6 +220,7 @@ GENERATOR_FEATURE_BLOCKS: tuple[str, ...] = (
     "target_override",
     "dbt_ref",
     "line_endings",
+    *GENERATOR_RENDER_BLOCKS,
 )
 GENERATOR_FEATURE_STRIDE: int = 4
 GENERATOR_OPTIONAL_FEATURE_SHARE: float = 0.2
@@ -216,6 +228,10 @@ GENERATOR_RARE_FEATURE_PERIOD: int = 12
 GENERATOR_RARE_FEATURE_BLOCKS: dict[str, int] = {"dbt_ref": 1}
 GENERATOR_DBT_REF_ERROR_CODE: str = "C214"
 GENERATOR_FEATURE_FOLDER: str = "models/features"
+GENERATOR_RENDER_FOLDER: str = "models/rendering"
+GENERATOR_RENDER_TEST_FOLDER: str = "tests/unit/rendering"
+GENERATOR_CHANNEL_ENV_VAR: str = "SQB_DIFFERENTIAL_CHANNEL"
+GENERATOR_ENVIRONMENT: dict[str, str] = {GENERATOR_CHANNEL_ENV_VAR: "web-orders"}
 GENERATOR_PROJECT_ADAPTER: str = "generated_duckdb"
 GENERATOR_CRLF: str = "\r\n"
 GENERATOR_BOM: str = "\ufeff"
