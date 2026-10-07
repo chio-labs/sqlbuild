@@ -59,3 +59,14 @@ class CoverageFailureTestCase:
     expected_exit_code: int
     expected_lines: tuple[str, ...]
     expected_absent: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RenderCaptureTestCase:
+    """A generated project with every feature block and the render kinds its capture proves."""
+
+    description: str
+    seed: int
+    blocks: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_kinds: frozenset[str]

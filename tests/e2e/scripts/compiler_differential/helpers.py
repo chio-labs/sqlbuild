@@ -52,6 +52,27 @@ def _perturbed(*, until, **stages):
 frontier.native_frontier = _perturbed
 """
 
+RENDER_PERTURBATION: str = """
+import dataclasses
+
+import sqlbuild.compiler.frontier.main._compile_frontier as frontier
+from sqlbuild.compiler.frontier.types import CompilerStage
+
+_original = frontier.native_frontier
+
+
+def _perturbed(*, until, **stages):
+    result = _original(until=until, **stages)
+    if until is not CompilerStage.COMPILE_PROJECT_INPUTS or not result.model_inputs:
+        return result
+    first = result.model_inputs[0]
+    changed = dataclasses.replace(first, macro_deps=(*first.macro_deps, "perturbed_by_test"))
+    return dataclasses.replace(result, model_inputs=(changed, *result.model_inputs[1:]))
+
+
+frontier.native_frontier = _perturbed
+"""
+
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "broken_orders"\nadapter = "duckdb"\n\n'
