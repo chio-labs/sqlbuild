@@ -30,6 +30,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     scopes::registration::register(module)?;
     model_config::registration::register(module)?;
     crate::macro_bridge::main::register::register(module)?;
+    crate::native_store::main::register::register(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())

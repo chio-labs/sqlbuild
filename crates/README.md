@@ -7,12 +7,13 @@ that can be tested and benchmarked with `cargo test` alone.
 | Crate | Responsibility |
 |---|---|
 | `sqlbuild-core` | Constants shared by several crates, the panic boundary that turns an unwinding native failure into a named compiler error, passive identity, diagnostic and SQL value types, text positions, and a JSON emitter whose output matches Python's `json.dumps` and `orjson` byte for byte. |
+| `sqlbuild-cache` | The shared native store every native cache uses (one atomically replaced, checksummed file per cache kind, keyed by content digests) and the one fingerprinting scheme for cache keys: the content digest and the project file fingerprint. |
 | `sqlbuild-sqltext` | Lexical SQL text without polyglot: comment, quote and parenthesis scanning, the rules quote policy, model header tokenization and matching, static variable substitution, static reference extraction, and the general reference scan with table-function call arguments under each adapter's lexical rules. |
 | `sqlbuild-config` | Configuration file reading without Python: `tomllib`-compatible TOML, PyYAML `safe_load`-compatible YAML 1.1, and typed project and local config readers for the fields discovery needs. Errors carry their kind and position; YAML outside the supported subset is an `Unsupported` error. |
 | `sqlbuild-discovery` | Native project discovery and the only implementation of the model, SQL test, scenario, source and schema file collections and the declaration layout: the shared directory walk with Python's glob and sort semantics, file reading with Python's newline handling and read errors, and parsing of authored files with Python's exact discovery messages. Results are plain data the Python discovery facade materialises. |
 | `sqlbuild-scopes` | Declaration scopes: the scope index with Python's record orders and diagnostics, declaration visibility, relationship grants, the scope lookup groups, and the dialect-aware scan of SQL tests and scenarios for their expected models. Anything it cannot reproduce exactly defers to Python. |
 | `sqlbuild-model-config` | Model configuration: MODEL header columns and audits, `${...}` template expansion with its environment and context reads, and the template and macro presence scans over authored config values, all read through a trait over the caller's values. Anything it cannot reproduce exactly defers to Python, which also raises every model config error. |
-| `sqlbuild-render` | Native rendering: the macro call scanner (a byte-for-byte port of Python's), splicing of rendered calls with code-point spans, and the in-compile memo of recorded macro calls and their replayable events. Anything it cannot reproduce exactly defers to Python. |
+| `sqlbuild-render` | Native rendering: the macro call scanner (a byte-for-byte port of Python's), splicing of rendered calls with code-point spans, and the in-compile memo of recorded macro calls and their replayable events, which can carry results across compiles through the shared native store. Anything it cannot reproduce exactly defers to Python. |
 | `sqlbuild-analysis` | SQL analysis over polyglot: SQL tokens, query analysis, the binding catalog, semantic validation and usage, column references, and SQL-test extraction, planning and rendering. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
@@ -24,7 +25,8 @@ Dependencies point one way, from the top of this graph to the bottom:
 ```text
 sqlbuild-python
   -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-model-config -> sqlbuild-render
-  -> sqlbuild-scopes -> sqlbuild-discovery -> sqlbuild-config -> sqlbuild-sqltext -> sqlbuild-core
+  -> sqlbuild-scopes -> sqlbuild-discovery -> sqlbuild-config -> sqlbuild-sqltext -> sqlbuild-cache
+  -> sqlbuild-core
 ```
 
 `sqlbuild-config` and `sqlbuild-model-config` do not depend on the crates below them today, and

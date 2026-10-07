@@ -24,3 +24,11 @@ pub(crate) struct MacroCallMemoTestCase {
     pub(crate) call_text: &'static str,
     pub(crate) expected_hit: bool,
 }
+
+pub(crate) struct MacroCallStoreTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) recorded_class_texts: &'static [&'static str],
+    pub(crate) looked_up_class_texts: &'static [&'static str],
+    pub(crate) call_text: &'static str,
+    pub(crate) expected_store_hit: bool,
+}
