@@ -13,6 +13,9 @@ sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-sqltext.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+junction.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 

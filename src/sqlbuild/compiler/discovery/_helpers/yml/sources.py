@@ -5,9 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-import yaml
-from yaml import YAMLError
-
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_bool import optional_bool
 from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
@@ -22,10 +19,12 @@ from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     parse_dlt_sources,
     parse_source_integration_loader,
 )
+from sqlbuild.compiler.discovery._helpers.native.payloads import load_native_yaml_document
 from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
     reject_unknown_mapping_keys,
 )
 from sqlbuild.compiler.discovery.constants import (
+    NATIVE_SOURCE_YAML_KIND,
     NOT_NULL_AUDIT_NAME,
     SOURCE_AGE_POLICY_CONFIG_KEY,
     SOURCE_LOADER_CONFIG_KEY,
@@ -144,11 +143,9 @@ def parse_loaded_sources_yml(*, loaded: object, file_path: Path) -> tuple[Source
 
 
 def _load_sources_yaml(*, contents: str, file_path: Path) -> object:
-    try:
-        loader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-        return yaml.load(contents, Loader=loader)
-    except YAMLError as error:
-        raise SourceParseError(f"{file_path} contains invalid YAML: {error}") from error
+    return load_native_yaml_document(
+        contents=contents, file_path=file_path, kind=NATIVE_SOURCE_YAML_KIND
+    )
 
 
 def _sources_mapping(*, loaded: object, file_path: Path) -> dict[str, object]:

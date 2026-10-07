@@ -57,7 +57,6 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
-    DiscoveryError,
     EventExporterDiscoveryError,
     ModelSqlParseError,
     ProviderDiscoveryError,
@@ -188,7 +187,7 @@ def _discover_declaration_file_facts(
     tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
     memo_key: tuple[str, DeclarationKind | None] = (_FACTS_MEMO_KEY, declaration_kind)
     cached: object = tree.memo.get(memo_key)
-    if isinstance(cached, DiscoveryError):
+    if isinstance(cached, Exception):
         raise cached
     if cached is not None:
         return cast(tuple[_DeclarationFileFacts, ...], cached)
@@ -203,13 +202,13 @@ def remember_declaration_file_facts(
     *,
     project_dir: Path,
     declaration_kind: DeclarationKind | None,
-    facts: Iterable[NativeDeclarationFact] | DiscoveryError,
+    facts: Iterable[NativeDeclarationFact] | Exception,
 ) -> None:
     """Record a declaration scan another walk of this pass made, or the error it raises."""
 
     DirectorySnapshot.current(project_dir=project_dir).memo[(_FACTS_MEMO_KEY, declaration_kind)] = (
         facts
-        if isinstance(facts, DiscoveryError)
+        if isinstance(facts, Exception)
         else tuple(
             _DeclarationFileFacts(
                 file_path=project_dir / relative_path,

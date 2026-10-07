@@ -40,6 +40,13 @@ error[D016]: Invalid model identity 'DailyOrders' in models/DailyOrders.sql;
 use snake_case 'daily_orders'
 ```
 
+Discovery also fails with `D016` when the project directory, or a model, unit test, scenario, source
+or schema YAML file it reads, has a path that is not valid UTF-8, including a directory above the
+file. The error shows each invalid byte as a `\xNN` escape; rename the path to valid UTF-8. Other
+files with such names, such as notes or data files, and directories that hold none of those files
+are ignored. Commands that tolerate unreadable files, such as `sqb scope`, report the file and
+continue.
+
 SQLBuild suggests a corrected spelling but never silently normalizes an identity. Silent
 normalization would make selectors, manifests, persisted execution state, and integration keys
 disagree about which resource ran.

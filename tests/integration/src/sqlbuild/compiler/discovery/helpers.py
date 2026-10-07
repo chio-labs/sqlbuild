@@ -38,6 +38,7 @@ from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.payloads import native_payload_error
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     discover_native_scenario_files,
     discover_native_test_files,
@@ -50,18 +51,25 @@ from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
 from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
+from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
+    SelectedContractInputDiscoverer,
+)
 from sqlbuild.compiler.discovery.constants import NATIVE_LOADED_TAG
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
+from sqlbuild.compiler.discovery.main._model_description_inputs import (
+    discover_model_description_inputs,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredMacroFile,
+    DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     DiscoveryFileFault,
+    TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.discovery.types import NativeDeclarationFact
-from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.scopes.constants import NAMED_DECLARATION_KINDS
@@ -74,6 +82,9 @@ PYTHON_ERROR: dict[str, str] = {"error": "rejected"}
 DEFERRED: dict[str, str] = {"error": "deferred to Python"}
 LOADERS_DISAGREE: dict[str, str] = {"error": "PyYAML and LibYAML disagree"}
 UNCHECKED_PYTHON_OUTCOMES: tuple[dict[str, str], ...] = (PYTHON_ERROR, LOADERS_DISAGREE)
+UNDECODABLE_BYTES: tuple[int, ...] = (
+    0x80, 0x9F, 0xA0, 0xBF, 0xC0, 0xC1, 0xC2, 0xE0, 0xE2, 0xED, 0xF0, 0xF4, 0xF5, 0xFF,
+)  # fmt: skip
 YAML_LINE_BREAKS: dict[int, None] = {0x85: None, 0x2028: None, 0x2029: None}
 SCALAR_FRAGMENTS: tuple[str, ...] = (
     "0", "1", "7", "8", "9", "00", "12", "59", "60", "_", ".", ":", "e", "E", "e+", "E-",
@@ -894,10 +905,15 @@ def native_yaml_tags_and_values(
 ) -> tuple[list[object], bool]:
     """Return each file's native tag and whether every natively loaded value equals LibYAML's."""
 
-    payloads: list[object] = (
-        _native.load_yaml_files(relative_paths, _native.NativeProjectTree(str(project_dir))) or []
+    payloads: list[tuple[object, ...]] = cast(
+        list[tuple[object, ...]],
+        _native.load_yaml_files(
+            {"project_dir": str(project_dir), "display_prefix": "", "kind": "source"},
+            relative_paths,
+            _native.NativeProjectTree(str(project_dir)),
+        ),
     )
-    rows: list[tuple[object, ...]] = [cast(tuple[object, ...], payload) for payload in payloads]
+    rows: list[tuple[object, ...]] = list(payloads)
     loaded: list[tuple[object, ...]] = list(compress(rows, [row[0] == "ok" for row in rows]))
     expected: list[object] = [yaml.load(str(row[1]), Loader=yaml.CSafeLoader) for row in loaded]
     return [row[0] for row in rows], [row[2] for row in loaded] == expected
@@ -938,7 +954,7 @@ class FailureCapture:
 
     def __exit__(self, error_type: object, error: BaseException | None, traceback: object) -> bool:
         self.failure = error
-        return isinstance(error, OSError | ValueError)
+        return isinstance(error, OSError | ValueError | RuntimeError)
 
 
 def model_discovery_outcome(*, project_dir: Path, native: bool) -> object:
@@ -1159,45 +1175,6 @@ def stage_outcome(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyP
     return (rendered[0], type(capture.failure).__name__, str(capture.failure))
 
 
-class RecordingFactCache:
-    """A fact cache that records the fact keys discovery asks for and caches nothing."""
-
-    enabled: bool = True
-
-    def __init__(self) -> None:
-        self.keys: list[tuple[str, ...]] = []
-
-    def key(self, *parts: str) -> str:
-        self.keys.append(parts)
-        return str(len(self.keys))
-
-    def read_many(self, entries: object) -> dict[str, object]:
-        return {}
-
-    def stage(self, *, key: str, slot: str, value: object) -> None:
-        return None
-
-
-def fact_cache_keys(*, project_dir: Path, native: bool) -> list[tuple[str, ...]]:
-    """Return the fact keys source and test discovery request under the chosen path."""
-
-    cache: RecordingFactCache = RecordingFactCache()
-    fact_cache: FactCacheStore = cast(FactCacheStore, cache)
-    discover: Callable[[], object] = {
-        True: lambda: (
-            discover_native_source_files(project_dir=project_dir, fact_cache=fact_cache),
-            discover_native_test_files(project_dir=project_dir, fact_cache=fact_cache),
-        ),
-        False: lambda: (
-            discover_source_files(project_dir=project_dir, fact_cache=fact_cache),
-            discover_test_files(project_dir=project_dir, fact_cache=fact_cache),
-        ),
-    }[native]
-    with DirectorySnapshot.scope(project_dir=project_dir):
-        _ = discover()
-    return cache.keys
-
-
 class CallCounter:
     """Count calls and delegate to the wrapped function."""
 
@@ -1266,3 +1243,123 @@ def tolerant_scope_outcome(*, project_dir: Path) -> object:
     """Return the rendered tolerant scope discovery."""
 
     return render_stage_capture(build_tolerant_scope_discovery(project_dir=project_dir))
+
+
+def random_undecodable_bytes(*, rng: random.Random) -> bytes:
+    """Return text bytes with UTF-8 sequences cut, corrupted or replaced by invalid bytes."""
+
+    text: bytes = random_text(rng=rng, max_length=12).encode("utf-8")
+    cut: int = rng.randint(0, len(text))
+    noise: bytes = bytes(rng.choice(UNDECODABLE_BYTES) for _ in range(rng.randint(0, 3)))
+    return rng.choice((text[:cut] + noise + text[cut:], text[:cut], noise + text))
+
+
+def native_read_outcomes(*, project_dir: Path, relative_paths: list[str]) -> list[object]:
+    """Return the type and text of the read error native reading reports for each file, if any."""
+
+    payloads: list[tuple[object, ...]] = cast(
+        list[tuple[object, ...]],
+        _native.load_yaml_files(
+            {"project_dir": str(project_dir), "display_prefix": "", "kind": "source"},
+            relative_paths,
+            _native.NativeProjectTree(str(project_dir)),
+        ),
+    )
+    errors: list[Exception | None] = [
+        native_payload_error(payload=payload, file_path=project_dir / path)
+        for payload, path in zip(payloads, relative_paths, strict=True)
+    ]
+    return [
+        {True: (type(error).__name__, str(error)), False: ("NoneType", "None")}[
+            isinstance(error, UnicodeError | OSError)
+        ]
+        for error in errors
+    ]
+
+
+def python_read_outcomes(*, project_dir: Path, relative_paths: list[str]) -> list[object]:
+    """Return the type and text of the error `Path.read_text` raises for each file, if any."""
+
+    outcomes: list[object] = []
+    for relative_path in relative_paths:
+        capture: FailureCapture = FailureCapture()
+        with capture:
+            _ = (project_dir / relative_path).read_text(encoding="utf-8")
+        outcomes.append((type(capture.failure).__name__, str(capture.failure)))
+    return outcomes
+
+
+def compile_failure(*, project_dir: Path) -> tuple[str, str]:
+    """Return the type and text of the error project discovery raises."""
+
+    capture: FailureCapture = FailureCapture()
+    with capture:
+        _ = discover_project_inputs(project_dir=project_dir)
+    return type(capture.failure).__name__, str(capture.failure)
+
+
+def discovery_failure_with_help(*, project_dir: Path) -> tuple[str, str, bool]:
+    """Return the type and text of the error project discovery raises, and whether it has help."""
+
+    capture: FailureCapture = FailureCapture()
+    with capture:
+        _ = discover_project_inputs(project_dir=project_dir)
+    return (
+        type(capture.failure).__name__,
+        str(capture.failure),
+        getattr(capture.failure, "help", None) is not None,
+    )
+
+
+def tolerant_scope_fault_outcome(*, project_dir: Path) -> tuple[object, ...]:
+    """Return tolerant scope discovery's model and source paths and its per-file faults."""
+
+    discovery: TolerantScopeDiscovery = build_tolerant_scope_discovery(project_dir=project_dir)
+    return (
+        *_inputs_paths(discovery.discovered_inputs),
+        tuple(
+            (str(fault.path), fault.message)
+            for fault in (*discovery.resource_faults, *discovery.relationship_faults)
+        ),
+    )
+
+
+def description_inputs_outcome(*, project_dir: Path) -> tuple[object, ...]:
+    """Return the model and source paths model description resolution reads, without faults."""
+
+    return (*_inputs_paths(discover_model_description_inputs(project_dir=project_dir)), ())
+
+
+def selected_contract_outcome(*, project_dir: Path) -> tuple[object, ...]:
+    """Return the model and source paths selected-contract discovery reads for `orders`."""
+
+    inputs: DiscoveredProjectInputs = SelectedContractInputDiscoverer.discover(
+        project_dir=project_dir,
+        selected_test_paths=frozenset(),
+        referenced_model_names=frozenset({"orders"}),
+    )
+    return (*_inputs_paths(inputs), ())
+
+
+def _inputs_paths(inputs: DiscoveredProjectInputs) -> tuple[object, ...]:
+    return (
+        tuple(model.relative_path.as_posix() for model in inputs.model_files),
+        tuple(source.relative_path.as_posix() for source in inputs.source_files),
+    )
+
+
+def declared_enums_outcome(*, project_dir: Path) -> tuple[object, ...]:
+    """Return each discovered enum file with the enum names it declares, and the model paths."""
+
+    inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    return (
+        tuple(_declared_enum_names(enum_file) for enum_file in inputs.enum_files),
+        tuple(model.relative_path.as_posix() for model in inputs.model_files),
+    )
+
+
+def _declared_enum_names(enum_file: DiscoveredEnumFile) -> tuple[str, tuple[str, ...]]:
+    return (
+        enum_file.relative_path.as_posix(),
+        tuple(declaration.name for declaration in enum_file.declarations),
+    )

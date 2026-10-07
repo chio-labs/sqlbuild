@@ -8,7 +8,7 @@ from typing import cast
 
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import CANONICAL_AUTHORED_ROOTS
-from sqlbuild.compiler.discovery.exceptions import DeclarationParseError, DiscoveryError
+from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import NamedDeclarationRoot
 from sqlbuild.compiler.scopes.constants import (
     DECLARATION_GROUP_DIRECTORY,
@@ -40,7 +40,7 @@ def named_declaration_roots(
 
     tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
     layout: object = tree.memo.get(_LAYOUT_MEMO_KEY)
-    if isinstance(layout, DiscoveryError):
+    if isinstance(layout, Exception):
         raise layout
     if layout is None:
         validate_named_declaration_layout(project_dir=project_dir)
@@ -91,12 +91,12 @@ def named_declaration_files(
 
 
 def remember_declaration_groups(
-    *, project_dir: Path, groups: Iterable[tuple[str, str]] | DiscoveryError
+    *, project_dir: Path, groups: Iterable[tuple[str, str]] | Exception
 ) -> None:
     """Record a named layout another walk of this pass validated, or the error it raises."""
 
     tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
-    if isinstance(groups, DiscoveryError):
+    if isinstance(groups, Exception):
         tree.memo[_LAYOUT_MEMO_KEY] = groups
         return
     tree.memo[_GROUPS_MEMO_KEY] = tuple(

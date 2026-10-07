@@ -1,5 +1,6 @@
 //! YAML tags SafeLoader resolves and constructs.
 
+pub(crate) const STANDARD_TAG_PREFIX: &str = "tag:yaml.org,2002:";
 pub(crate) const NULL_TAG: &str = "tag:yaml.org,2002:null";
 pub(crate) const BOOL_TAG: &str = "tag:yaml.org,2002:bool";
 pub(crate) const INT_TAG: &str = "tag:yaml.org,2002:int";

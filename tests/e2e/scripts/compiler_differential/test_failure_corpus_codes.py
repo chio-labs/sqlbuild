@@ -13,7 +13,10 @@ from scripts.compiler_differential._helpers.corpus.emitted_codes import (
     emitted_failure_codes,
     render_error_codes,
 )
-from scripts.compiler_differential.constants import RENDER_UNREACHABLE_CODES
+from scripts.compiler_differential.constants import (
+    DISCOVERY_UNREACHABLE_CODES,
+    RENDER_UNREACHABLE_CODES,
+)
 from scripts.compiler_differential.main.failure_cases import failure_cases
 from scripts.compiler_differential.models import DifferentialOptions, EmittedCodes
 from tests.e2e.scripts.compiler_differential._test_types import FailureCorpusCodesTestCase
@@ -37,7 +40,8 @@ from tests.e2e.scripts.compiler_differential._test_types import FailureCorpusCod
                 for case in failure_cases()
                 if case.expected_warning_code is not None
             },
-            expected_discovery_codes=discovery_error_codes(),
+            expected_discovery_codes=discovery_error_codes()
+            - frozenset(DISCOVERY_UNREACHABLE_CODES),
             expected_render_codes=render_error_codes() - frozenset(RENDER_UNREACHABLE_CODES),
             unreachable_render_codes=frozenset(RENDER_UNREACHABLE_CODES),
         )

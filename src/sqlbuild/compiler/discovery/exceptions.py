@@ -109,3 +109,15 @@ class ProjectPythonPathError(DiscoveryError):
     """Raised when project-owned Python lives outside a supported extension root."""
 
     code: str = "D016"
+
+
+class ProjectPathError(DiscoveryError):
+    """Raised when an authored project path cannot be read as valid UTF-8."""
+
+    code: str = "D016"
+
+
+class UnsupportedPythonError(DiscoveryError):
+    """Raised when discovery runs on a Python whose text semantics this release does not know."""
+
+    code: str = "D017"

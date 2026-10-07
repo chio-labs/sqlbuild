@@ -130,7 +130,7 @@ pub(crate) fn construct_int(text: &str) -> Result<ConfigValue, ConfigError> {
     if value.len() > PYTHON_INT_MAX_STR_DIGITS {
         return Err(ConfigError::new(
             ConfigErrorKind::Unsupported,
-            "integers longer than Python's string conversion limit are left to Python",
+            "integers longer than 4300 digits",
         ));
     }
     let (inner_negative, magnitude) = if value == ZERO_TEXT {

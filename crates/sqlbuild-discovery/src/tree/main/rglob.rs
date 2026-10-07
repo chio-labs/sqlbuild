@@ -1,6 +1,6 @@
 //! `sorted(root.rglob(pattern))` over the shared snapshot.
 
-use crate::models::StageDeferral;
+use crate::models::StageFailure;
 use crate::tree::_helpers::listing::join_relative;
 use crate::tree::_helpers::ordering::compare_relative_paths;
 use crate::tree::_helpers::walking::{WalkedDirectory, walk};
@@ -11,7 +11,7 @@ pub fn rglob(
     tree: &ProjectTree,
     root: &str,
     accept: impl Fn(&TreeEntry) -> bool,
-) -> Result<Vec<String>, StageDeferral> {
+) -> Result<Vec<String>, StageFailure> {
     if !tree.is_dir(root) {
         return Ok(Vec::new());
     }
@@ -28,6 +28,6 @@ fn accepted_paths(walked: &WalkedDirectory, accept: &impl Fn(&TreeEntry) -> bool
     listing
         .iter()
         .filter(|entry| accept(entry))
-        .map(|entry| join_relative(directory, &entry.name))
+        .map(|entry| join_relative(directory, &entry.segment))
         .collect()
 }

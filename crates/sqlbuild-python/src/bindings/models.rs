@@ -142,3 +142,12 @@ pub(crate) struct SqlTestTextRequest {
     pub(crate) python_version: (u8, u8),
     pub(crate) unicode_version: String,
 }
+
+/// One native YAML file discovery request; `kind` is `source` or `schema`.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct YamlDiscoveryRequest {
+    pub(crate) project_dir: String,
+    pub(crate) display_prefix: String,
+    pub(crate) kind: String,
+}

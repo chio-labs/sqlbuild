@@ -8,7 +8,7 @@ use crate::yaml::_helpers::timestamps::construct_timestamp;
 use crate::yaml::constants::{
     BASE_EXPANSION_BUDGET, BOOL_TAG, BOOL_WORDS, EXPANSION_BUDGET_PER_CHARACTER, FLOAT_TAG,
     INT_TAG, MAP_TAG, MAX_CONSTRUCTION_DEPTH, MERGE_TAG, NULL_TAG, PYTHON_ONLY_TAGS, SEQ_TAG,
-    STR_TAG, TIMESTAMP_TAG, VALUE_TAG,
+    STANDARD_TAG_PREFIX, STR_TAG, TIMESTAMP_TAG, VALUE_TAG,
 };
 use crate::yaml::models::{ComposedDocument, Node, NodeContent};
 use std::collections::HashMap;
@@ -16,6 +16,12 @@ use std::collections::hash_map::Entry;
 
 /// One mapping entry after merge keys are flattened; `string_key` marks a `=` key read as text.
 type FlatEntry = (usize, usize, bool);
+
+/// A standard tag in its `!!name` shorthand.
+fn short_tag(tag: &str) -> String {
+    tag.strip_prefix(STANDARD_TAG_PREFIX)
+        .map_or_else(|| tag.to_owned(), |name| format!("!!{name}"))
+}
 
 fn construct_error(message: String) -> ConfigError {
     ConfigError::new(ConfigErrorKind::Construct, message)
@@ -41,7 +47,7 @@ fn construct_scalar(tag: &str, text: &str) -> Result<ConfigValue, ConfigError> {
         TIMESTAMP_TAG => construct_timestamp(text.strip_suffix('\n').unwrap_or(text)),
         _ if PYTHON_ONLY_TAGS.contains(&tag) => Err(ConfigError::new(
             ConfigErrorKind::Unsupported,
-            format!("values tagged {tag} are left to Python"),
+            format!("values tagged {}", short_tag(tag)),
         )),
         SEQ_TAG | MAP_TAG => Err(construct_error(format!(
             "expected a collection node for {tag}"
@@ -114,24 +120,27 @@ impl Constructor<'_> {
         self.budget = self
             .budget
             .checked_sub(amount)
-            .ok_or_else(|| deferred("aliases expand beyond the native size budget"))?;
+            .ok_or_else(|| deferred("aliases that expand beyond the size limit"))?;
         Ok(())
     }
 
     fn construct(&mut self, id: usize, depth: usize) -> Result<Sized, ConfigError> {
+        let (line, column) = self.node(id).position;
         if depth > MAX_CONSTRUCTION_DEPTH {
-            return Err(deferred("values nest deeper than the native limit"));
+            return Err(deferred("values nested deeper than 256 levels").at(line, column));
         }
         if let Some((value, size, height)) = self.built.get(&id) {
             if depth + height > MAX_CONSTRUCTION_DEPTH {
-                return Err(deferred("aliased values nest deeper than the native limit"));
+                return Err(deferred("values nested deeper than 256 levels").at(line, column));
             }
             let (value, size) = (value.clone(), *size);
-            self.spend(size)?;
+            self.spend(size).map_err(|error| error.at(line, column))?;
             return Ok((value, size));
         }
-        self.spend(1)?;
-        let built = self.construct_new(id, depth)?;
+        self.spend(1).map_err(|error| error.at(line, column))?;
+        let built = self
+            .construct_new(id, depth)
+            .map_err(|error| error.at(line, column))?;
         if self.shared[id] {
             let (value, size) = &built;
             self.built.insert(id, (value.clone(), *size, height(value)));
@@ -157,7 +166,7 @@ impl Constructor<'_> {
             (NodeContent::Mapping(_), MAP_TAG) => self.construct_mapping(id, depth),
             (_, tag) if PYTHON_ONLY_TAGS.contains(&tag) => Err(ConfigError::new(
                 ConfigErrorKind::Unsupported,
-                format!("values tagged {tag} are left to Python"),
+                format!("values tagged {}", short_tag(tag)),
             )),
             (_, tag) => Err(construct_error(format!(
                 "could not construct a collection tagged {tag:?}"
@@ -200,7 +209,7 @@ impl Constructor<'_> {
     /// PyYAML's `flatten_mapping`: merged entries first, then the mapping's own entries.
     fn flatten(&mut self, id: usize, depth: usize) -> Result<Vec<FlatEntry>, ConfigError> {
         if depth > MAX_CONSTRUCTION_DEPTH {
-            return Err(deferred("merge keys nest deeper than the native limit"));
+            return Err(deferred("merge keys nested deeper than 256 levels"));
         }
         let mut merged: Vec<FlatEntry> = Vec::new();
         let mut own: Vec<FlatEntry> = Vec::new();

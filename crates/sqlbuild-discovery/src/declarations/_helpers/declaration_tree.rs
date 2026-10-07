@@ -11,6 +11,7 @@ use crate::declarations::_helpers::scan::declaration_failure;
 use crate::declarations::errors::ScanError;
 use crate::declarations::models::{DeclarationFileFact, DeclarationKind, ScopeKind};
 use crate::tree::main::directories::directories;
+use crate::tree::main::path_order::compare_posix_text;
 use crate::tree::main::rglob::rglob;
 use crate::tree::models::ProjectTree;
 
@@ -60,7 +61,7 @@ pub(crate) fn declaration_file_facts(
             facts.extend(scoped_root_files(tree, &root, root_parts.len(), kind)?);
         }
     }
-    facts.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    facts.sort_by(|left, right| compare_posix_text(&left.relative_path, &right.relative_path));
     Ok(facts)
 }
 

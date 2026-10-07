@@ -4,4 +4,6 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextDecodeError {
     pub valid_up_to: usize,
+    /// The length of the invalid sequence, or `None` when the bytes end mid-sequence.
+    pub error_len: Option<usize>,
 }
