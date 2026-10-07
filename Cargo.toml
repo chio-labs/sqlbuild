@@ -6,6 +6,7 @@ members = [
     "crates/sqlbuild-discovery",
     "crates/sqlbuild-scopes",
     "crates/sqlbuild-model-config",
+    "crates/sqlbuild-render",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
     "crates/sqlbuild-python",
@@ -23,6 +24,7 @@ order = [
     "sqlbuild-discovery",
     "sqlbuild-scopes",
     "sqlbuild-model-config",
+    "sqlbuild-render",
     "sqlbuild-analysis",
     "sqlbuild-rules",
     "sqlbuild-python",
@@ -73,6 +75,7 @@ sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
 sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
+sqlbuild-render = { path = "crates/sqlbuild-render" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
 sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }
