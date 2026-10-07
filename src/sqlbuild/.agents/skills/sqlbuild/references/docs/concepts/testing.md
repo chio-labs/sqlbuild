@@ -97,6 +97,7 @@ The trailing `SELECT 1` is required as a ceremonial closing statement.
 | `__expected__<name>` | Define expected output for a model. SQLBuild resolves the model's real SQL and compares both ways on the listed columns. |
 | `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
 | `__macro__<name>` | Mock a macro. Replaces every `@<name>(...)` call with the mock value. |
+| any other name | Helper CTE, shared by the test's mocks, helpers, `__expected__` and `__assert__` CTEs. Models never see it, so it can share a name with a model's CTE or a table. It is emitted as `__helper__<name>`, so `__helper__` names are reserved. |
 
 Any CTE without one of these prefixes is treated as a helper CTE, available to mock, helper,
 `__expected__`, and `__assert__` SQL in the test. Models never see helpers: a model's own CTEs and
