@@ -254,6 +254,14 @@ def _declaration_kinds(
 
 def _interpolation_kinds(capture: dict[str, object]) -> set[str]:
     kinds: set[str] = set()
+    for source in records(capture.get("source_inputs")):
+        source_file: dict[str, object] = as_json_object(source.get("source_file")) or {}
+        if _TEMPLATE_OPEN in json.dumps(source_file.get("source_entries")):
+            kinds.add("source_template")
+    for function in records(capture.get("sql_function_inputs")):
+        function_file: dict[str, object] = as_json_object(function.get("function_file")) or {}
+        if _TEMPLATE_OPEN in json.dumps(function_file.get("header_values")):
+            kinds.add("function_header_template")
     for model in records(capture.get("model_inputs")):
         model_file: dict[str, object] = as_json_object(model.get("model_file")) or {}
         authored: str = str(model_file.get("query_sql", ""))
@@ -429,6 +437,14 @@ def _model_config_kinds(capture: dict[str, object]) -> set[str]:
     target: dict[str, object] = as_json_object(capture.get("effective_target")) or {}
     if any(_TEMPLATE_OPEN in str(target.get(key)) for key in _TARGET_NAMESPACE_KEYS):
         kinds.add("target_namespace_template")
+    for source in records(capture.get("source_inputs")):
+        source_file: dict[str, object] = as_json_object(source.get("source_file")) or {}
+        if _TEMPLATE_OPEN in json.dumps(source_file.get("source_entries")):
+            kinds.add("source_template")
+    for function in records(capture.get("sql_function_inputs")):
+        function_file: dict[str, object] = as_json_object(function.get("function_file")) or {}
+        if _TEMPLATE_OPEN in json.dumps(function_file.get("header_values")):
+            kinds.add("function_header_template")
     for model in records(capture.get("model_inputs")):
         model_file: dict[str, object] = as_json_object(model.get("model_file")) or {}
         header: dict[str, object] = as_json_object(model_file.get("header_values")) or {}

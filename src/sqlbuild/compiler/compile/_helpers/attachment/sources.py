@@ -9,12 +9,10 @@ from typing import cast
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_source_expression_syntax,
 )
+from sqlbuild.compiler.compile._helpers.render.context_templates import expand_config_templates
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
-from sqlbuild.compiler.compile._helpers.render.templating import (
-    expand_template_data,
-)
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileSourceInput,
@@ -28,6 +26,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord, VisibilityRecord
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind
 from sqlbuild.spec.contracts.models import (
@@ -320,7 +320,7 @@ def _expand_source_template_value(
 def _expand_source_template_object(
     *, value: object, effective_vars: dict[str, object], context_label: str
 ) -> object:
-    return expand_template_data(
+    return expand_config_templates(
         value=value,
         variables=effective_vars,
         context_values={},
@@ -328,4 +328,5 @@ def _expand_source_template_object(
         allow_context=False,
         preserve_context_tokens=False,
         preserve_unknown_context=False,
+        native=native_stage_enabled(NativeStage.ATTACHMENTS),
     )

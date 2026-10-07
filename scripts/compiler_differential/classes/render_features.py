@@ -449,3 +449,29 @@ class RenderFeatureWriter:
             ),
             body=f'SELECT id, amount, status\nFROM __ref("{base.name}")\n',
         )
+        self._files["sources/configured.yml"] = (
+            "sources:\n"
+            "  - name: configured_events\n"
+            f'    description: "Configured feed ${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, '
+            "'events')}\"\n"
+            '    expression: "(SELECT 1 AS id, CAST(2.5 AS DOUBLE) AS amount)"\n'
+            "    meta:\n"
+            f"      owner: \"${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, 'orders team')}}\"\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: INTEGER\n"
+            f"        description: \"Key ${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, 'id')}}\"\n"
+            "        audits:\n"
+            "          - accepted_values:\n"
+            f"              values: [\"${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, '1')}}\"]\n"
+            "      - name: amount\n"
+            "        type: DOUBLE\n"
+        )
+        self._files["functions/sql/configured_label.sql"] = (
+            "FUNCTION (\n"
+            '  description "Label a configured status.",\n'
+            f"  schema \"${{coalesce(ENV:{GENERATOR_MISSING_ENV_VAR}, 'udfs')}}\",\n"
+            "  arguments (raw_status STRING),\n"
+            "  returns STRING,\n);\n\n"
+            "UPPER(raw_status)\n"
+        )

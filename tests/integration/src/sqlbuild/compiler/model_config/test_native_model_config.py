@@ -177,7 +177,7 @@ def test_given_generated_templates_when_expanding_then_native_matches_python_or_
             engine="native-preview",
             expected_native_calls={
                 "parse_model_header_metadata": 1,
-                "expand_config_templates": 6,
+                "expand_config_templates": 7,
                 "config_contains_template": 2,
                 "config_contains_macro_call": 2,
             },
@@ -212,7 +212,7 @@ def test_given_engine_tier_when_building_model_inputs_then_native_config_runs_on
         NativeRejectionTestCase(
             description="templates",
             native_entry="expand_config_templates",
-            expected_message="templates that the Python model config expands",
+            expected_message="templates that Python expands",
         ),
     ],
     ids=lambda case: case.description,
