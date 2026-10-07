@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments impo
     reject_macro_generated_references,
     relation_placeholder_text,
     render_relation_placeholders,
+    report_macro_reference_call_syntax,
 )
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
@@ -1526,6 +1527,12 @@ def _evaluate_macro_call(
     if isinstance(macro_result, str):
         _validate_final_macro_sql(
             macro_name=macro_name, file_path=file_path, macro_result=macro_result
+        )
+        report_macro_reference_call_syntax(
+            loaded_macro=loaded_macro,
+            macro_result=macro_result,
+            file_path=file_path,
+            consumer=state.consumer,
         )
         if state.macro_context._enforce_explicit_references:
             reject_macro_generated_references(

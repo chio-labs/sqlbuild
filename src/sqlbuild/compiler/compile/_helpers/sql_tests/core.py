@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile._helpers.analysis.ctes import (
@@ -51,6 +52,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlTestCte,
     CompileSqlTestCtes,
+    SqlReferenceOrigin,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
@@ -209,7 +211,10 @@ def extract_sql_test_expected_model_names(
 
 
 def extract_assertion_target_model_names(
-    *, assertion_sql: tuple[str, ...], syntax: SqlLexicalSyntax
+    *,
+    assertion_sql: tuple[str, ...],
+    syntax: SqlLexicalSyntax,
+    origin: SqlReferenceOrigin | None = None,
 ) -> tuple[str, ...]:
     """Extract assertion model targets in authored order using canonical references."""
 
@@ -217,7 +222,7 @@ def extract_assertion_target_model_names(
     for sql in assertion_sql:
         targets.extend(
             reference.ref_name
-            for reference in extract_sql_references(sql=sql, syntax=syntax)
+            for reference in extract_sql_references(sql=sql, syntax=syntax, origin=origin)
             if reference.ref_kind == SqlReferenceKind.REF
         )
     return tuple(dict.fromkeys(targets))
@@ -700,7 +705,13 @@ def _validate_no_direct_logic_calls(
         raise CompileInputError(
             f"SQL test '{file_label}' mode '{mode.value}' {cte_label} must not call macros"
         )
-    references: tuple[CompileSqlReference, ...] = extract_sql_references(sql=sql, syntax=syntax)
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(
+        sql=sql,
+        syntax=syntax,
+        origin=SqlReferenceOrigin(
+            file_path=Path(file_label), relative_path=Path(file_label), contents=""
+        ),
+    )
     reference: CompileSqlReference | None = next(
         (
             item

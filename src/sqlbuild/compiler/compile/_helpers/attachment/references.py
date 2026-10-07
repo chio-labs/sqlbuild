@@ -76,7 +76,7 @@ def validate_model_references(
             if external_sql_reference_resolver is None:
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} uses "
-                    f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} "
+                    f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
                     "but no dbt manifest was found",
                     code="C214",
                     help=(
@@ -225,8 +225,8 @@ def validate_function_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} uses "
-                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} but dbt refs "
-                "are not supported yet; "
+                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
+                "but dbt refs are not supported yet; "
                 "support may be added in a future release"
             )
         if (
@@ -273,8 +273,8 @@ def validate_audit_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} may not use "
-                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)}; audit dbt "
-                "model checks belong in dbt"
+                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')}; "
+                "audit dbt model checks belong in dbt"
             )
         if (
             reference.ref_kind == SqlReferenceKind.REF

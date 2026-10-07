@@ -114,6 +114,13 @@ class BuildCompileInputsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class BuildCompileInputsDiagnosticTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_diagnostics: tuple[tuple[str, str, int | None, int | None], ...]
+
+
+@dataclass(frozen=True)
 class BuildCompileInputsPythonHookValidationTestCase:
     description: str
     repo_files: dict[str, str]

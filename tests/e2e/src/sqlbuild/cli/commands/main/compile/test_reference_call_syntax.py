@@ -67,54 +67,144 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
             engine="python",
             staging_from=_CANONICAL_SOURCE,
             mart_from="__ref(stg_orders)",
-            expected_code="P012",
-            expected_message="__ref(stg_orders) is not a valid __ref() call",
-            expected_corrected_call='__ref("stg_orders")',
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref(stg_orders) is not a valid __ref() call",
+                    "models/marts/order_totals.sql",
+                    4,
+                    6,
+                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
+                ),
+            ),
         ),
         RejectedReferenceCallTestCase(
             description="python engine rejects comment inside ref call",
             engine="python",
             staging_from=_CANONICAL_SOURCE,
             mart_from="__ref( /* upstream */ 'stg_orders')",
-            expected_code="P012",
-            expected_message="__ref( /* upstream */ 'stg_orders') is not a valid __ref() call",
-            expected_corrected_call='__ref("stg_orders")',
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref( /* upstream */ 'stg_orders') is not a valid __ref() call",
+                    "models/marts/order_totals.sql",
+                    4,
+                    6,
+                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
+                ),
+            ),
         ),
         RejectedReferenceCallTestCase(
             description="python engine rejects single quoted source name",
             engine="python",
             staging_from="__source('raw_orders')",
             mart_from=_CANONICAL_REF,
-            expected_code="P012",
-            expected_message="__source('raw_orders') is not a valid __source() call",
-            expected_corrected_call='__source("raw_orders")',
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__source('raw_orders') is not a valid __source() call",
+                    "models/staging/stg_orders.sql",
+                    3,
+                    36,
+                    '__source() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __source("raw_orders")',
+                ),
+            ),
+        ),
+        RejectedReferenceCallTestCase(
+            description="python engine rejects invalid calls in two files",
+            engine="python",
+            staging_from="__source('raw_orders')",
+            mart_from="__ref(stg_orders)",
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref(stg_orders) is not a valid __ref() call",
+                    "models/marts/order_totals.sql",
+                    4,
+                    6,
+                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
+                ),
+                (
+                    "P012",
+                    "__source('raw_orders') is not a valid __source() call",
+                    "models/staging/stg_orders.sql",
+                    3,
+                    36,
+                    '__source() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __source("raw_orders")',
+                ),
+            ),
         ),
         RejectedReferenceCallTestCase(
             description="native engine rejects unquoted ref name",
             engine="native",
             staging_from=_CANONICAL_SOURCE,
             mart_from="__ref(stg_orders)",
-            expected_code="P012",
-            expected_message="__ref(stg_orders) is not a valid __ref() call",
-            expected_corrected_call='__ref("stg_orders")',
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref(stg_orders) is not a valid __ref() call",
+                    "models/marts/order_totals.sql",
+                    4,
+                    6,
+                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
+                ),
+            ),
         ),
         RejectedReferenceCallTestCase(
             description="native engine rejects comment inside ref call",
             engine="native",
             staging_from=_CANONICAL_SOURCE,
             mart_from="__ref( /* upstream */ 'stg_orders')",
-            expected_code="P012",
-            expected_message="__ref( /* upstream */ 'stg_orders') is not a valid __ref() call",
-            expected_corrected_call='__ref("stg_orders")',
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref( /* upstream */ 'stg_orders') is not a valid __ref() call",
+                    "models/marts/order_totals.sql",
+                    4,
+                    6,
+                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
+                ),
+            ),
         ),
         RejectedReferenceCallTestCase(
             description="native engine rejects single quoted source name",
             engine="native",
             staging_from="__source('raw_orders')",
             mart_from=_CANONICAL_REF,
-            expected_code="P012",
-            expected_message="__source('raw_orders') is not a valid __source() call",
-            expected_corrected_call='__source("raw_orders")',
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__source('raw_orders') is not a valid __source() call",
+                    "models/staging/stg_orders.sql",
+                    3,
+                    36,
+                    '__source() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __source("raw_orders")',
+                ),
+            ),
+        ),
+        RejectedReferenceCallTestCase(
+            description="native engine rejects invalid calls in two files",
+            engine="native",
+            staging_from="__source('raw_orders')",
+            mart_from="__ref(stg_orders)",
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref(stg_orders) is not a valid __ref() call",
+                    "models/marts/order_totals.sql",
+                    4,
+                    6,
+                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
+                ),
+                (
+                    "P012",
+                    "__source('raw_orders') is not a valid __source() call",
+                    "models/staging/stg_orders.sql",
+                    3,
+                    36,
+                    '__source() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __source("raw_orders")',
+                ),
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -140,7 +230,18 @@ def test_given_reference_call_compile_cannot_replace_when_building_then_fails_wi
     )
     assert compiled.returncode == 1, compiled.stdout + compiled.stderr
     assert built.returncode == 1, built.stdout + built.stderr
-    assert {item["code"] for item in diagnostics} == {test_case.expected_code}
-    assert diagnostics[0]["message"] == test_case.expected_message
-    assert str(diagnostics[0]["help"]).endswith(test_case.expected_corrected_call)
-    assert f"error[{test_case.expected_code}]" in built.stdout + built.stderr
+    assert (
+        tuple(
+            (
+                item["code"],
+                item["message"],
+                item["path"],
+                item["line"],
+                item["column"],
+                item["help"],
+            )
+            for item in diagnostics
+        )
+        == test_case.expected_diagnostics
+    )
+    assert "error[P012]" in built.stdout + built.stderr

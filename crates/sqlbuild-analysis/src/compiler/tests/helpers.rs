@@ -337,7 +337,7 @@ pub(crate) fn unresolved_reference_fast_rejection_preserves_warning() -> bool {
         json!([{
             "modelName": "orders",
             "severity": "error",
-            "message": "test 'orders_case': model 'orders' references __source('missing_orders') which has no mock"
+            "message": "test 'orders_case': model 'orders' references __source(\"missing_orders\") which has no mock"
         }])
     );
     true
@@ -519,7 +519,7 @@ pub(crate) fn deep_shared_graph_reports_missing_mock_once() -> bool {
             json!([{
                 "modelName": "orders_00",
                 "severity": "error",
-                "message": "test 'orders_totals': model 'orders_00' references __source('raw_orders') which has no mock"
+                "message": "test 'orders_totals': model 'orders_00' references __source(\"raw_orders\") which has no mock"
             }]),
             "sql_analysis_enabled={sql_analysis_enabled}"
         );

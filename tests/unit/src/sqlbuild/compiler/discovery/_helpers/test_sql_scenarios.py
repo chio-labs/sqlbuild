@@ -53,7 +53,7 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers import parse_sql_scenari
 
         WITH
         __assert__daily_revenue_has_rows AS (
-          SELECT * FROM __ref(daily_revenue) WHERE order_id IS NULL
+          SELECT * FROM __ref("daily_revenue") WHERE order_id IS NULL
         )
         SELECT 1
         """,
@@ -62,7 +62,7 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers import parse_sql_scenari
             expected_sql_body=(
                 "WITH\n"
                 "__assert__daily_revenue_has_rows AS (\n"
-                "  SELECT * FROM __ref(daily_revenue) WHERE order_id IS NULL\n"
+                '  SELECT * FROM __ref("daily_revenue") WHERE order_id IS NULL\n'
                 ")\n"
                 "SELECT 1"
             ),

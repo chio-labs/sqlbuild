@@ -1055,7 +1055,7 @@ def test_given_shared_upstream_graph_when_running_test_then_outcomes_and_sql_mat
             layers=12,
             expected_error=(
                 "test 'deep_orders_missing_mock': model 'orders_00_left' references "
-                "__source('raw_orders') which has no mock"
+                '__source("raw_orders") which has no mock'
             ),
             expected_stdout_fragments=(),
         ),
@@ -1165,10 +1165,10 @@ def test_given_expected_cte_column_subset_when_testing_then_only_listed_columns_
         MissingMockCliE2ETestCase(
             description="missing source mock fails test and compile until mocked",
             expected_error=(
-                "test 'test_chain': model 'stg_orders' references __source('raw') which has no mock"
+                "test 'test_chain': model 'stg_orders' references __source(\"raw\") which has no mock"
             ),
             compile_error_line=(
-                "error[S000]: test 'test_chain': model 'stg_orders' references __source('raw') "
+                "error[S000]: test 'test_chain': model 'stg_orders' references __source(\"raw\") "
                 "which has no mock"
             ),
             compile_summary_fragment="1 error, 0 warnings",

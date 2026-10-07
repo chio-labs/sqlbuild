@@ -1664,7 +1664,7 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
     let mut protected = ProtectedRanges::new(&patterns.lexical, sql);
     for name in marker_names_in(&patterns.reference, &mut protected) {
         let message = format!(
-            "test '{test_name}': model '{model_name}' references __ref('{name}') which has no mock and is not in the expected chain"
+            "test '{test_name}': model '{model_name}' references __ref(\"{name}\") which has no mock and is not in the expected chain"
         );
         warn(REF_FUNCTION, name, message);
     }
@@ -1674,7 +1674,7 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
     ] {
         for name in marker_names_in(pattern, &mut protected) {
             let message = format!(
-                "test '{test_name}': model '{model_name}' references {function_name}('{name}') which has no mock"
+                "test '{test_name}': model '{model_name}' references {function_name}(\"{name}\") which has no mock"
             );
             warn(function_name, name, message);
         }

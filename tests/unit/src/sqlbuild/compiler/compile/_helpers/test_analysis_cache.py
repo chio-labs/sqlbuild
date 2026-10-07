@@ -137,7 +137,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     reference_scanner: Mock = Mock(
         side_effect=AssertionError("SQL references must not be scanned on a cache hit")
     )
-    monkeypatch.setattr(reference_cache, "extract_sql_references", reference_scanner)
+    monkeypatch.setattr(reference_cache, "scan_sql_reference_calls", reference_scanner)
 
     warm_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
 
@@ -397,8 +397,8 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
             "UPDATE sql_reference SET payload = ?",
             (corrupt_contents,),
         )
-    scanner: Mock = Mock(wraps=reference_cache.extract_sql_references)
-    monkeypatch.setattr(reference_cache, "extract_sql_references", scanner)
+    scanner: Mock = Mock(wraps=reference_cache.scan_sql_reference_calls)
+    monkeypatch.setattr(reference_cache, "scan_sql_reference_calls", scanner)
 
     repaired_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
 
@@ -432,8 +432,8 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
             "UPDATE sql_reference SET payload = ?",
             (sqlite3.Binary(b"broken"),),
         )
-    scanner: Mock = Mock(wraps=reference_cache.extract_sql_references)
-    monkeypatch.setattr(reference_cache, "extract_sql_references", scanner)
+    scanner: Mock = Mock(wraps=reference_cache.scan_sql_reference_calls)
+    monkeypatch.setattr(reference_cache, "scan_sql_reference_calls", scanner)
 
     _ = compile_project_with_cache(project_dir=tmp_path)
 

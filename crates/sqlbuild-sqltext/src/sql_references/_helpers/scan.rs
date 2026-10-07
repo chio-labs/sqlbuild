@@ -1,9 +1,9 @@
 //! The general reference scan of Python `extract_sql_references`, reproduced exactly.
 
 use crate::sql_references::constants::{
-    DBT_REFERENCE_KIND, NAME_QUOTE_BYTES, NON_CODE_START_BYTES, PAIRED_QUOTE_LENGTH,
-    PYTHON_ASCII_WHITESPACE, QUOTE_BYTES, REFERENCE_CONTEXT, REFERENCE_PREFIXES,
-    TABLE_FUNCTION_CALL_CONTEXT, TABLE_FUNCTION_REFERENCE_KIND,
+    DBT_REFERENCE_KIND, NON_CODE_START_BYTES, PYTHON_ASCII_WHITESPACE, QUOTE_BYTES,
+    REFERENCE_CONTEXT, REFERENCE_PREFIXES, TABLE_FUNCTION_CALL_CONTEXT,
+    TABLE_FUNCTION_REFERENCE_KIND,
 };
 use crate::sql_references::models::SqlReference;
 use crate::sql_references::types::ReferencePrefix;
@@ -54,7 +54,7 @@ pub(crate) fn scan_references(sql: &[u8], syntax: &LexicalSyntax) -> Scan<Vec<Sq
         }
         let Some(call) = REFERENCE_PREFIXES
             .iter()
-            .find(|(prefix, _, _)| sql[index..].starts_with(prefix))
+            .find(|(prefix, _)| sql[index..].starts_with(prefix))
         else {
             index += 1;
             continue;
@@ -66,48 +66,27 @@ pub(crate) fn scan_references(sql: &[u8], syntax: &LexicalSyntax) -> Scan<Vec<Sq
     Ok(references)
 }
 
-/// Parse the reference call starting at `start`, returning it and the offset after its name list.
+/// Parse a bare double-quoted reference call at `start`; other forms defer so Python reports P012.
 fn parse_reference(
     sql: &[u8],
     start: usize,
     call: &ReferencePrefix,
     syntax: &LexicalSyntax,
 ) -> Scan<(SqlReference, usize)> {
-    let (prefix, kind, call_name) = *call;
+    let (prefix, kind) = *call;
     let open = start + prefix.len() - 1;
     let close = matching_paren(sql, open, syntax, REFERENCE_CONTEXT)?;
-    let arguments = split_arguments(sql, open + 1, close, syntax)?;
-    if kind == DBT_REFERENCE_KIND {
-        if !matches!(arguments.len(), 1 | 2) {
-            return Err(failed(format!(
-                "{call_name} must contain one name argument or package/name arguments"
-            )));
-        }
-        if let [package, name] = arguments.as_slice() {
-            let package = reference_name(package, kind, call_name)?;
-            let name = reference_name(name, kind, call_name)?;
-            return Ok((
-                SqlReference {
-                    kind,
-                    name,
-                    package: Some(package),
-                    call_argument_count: None,
-                },
-                close + 1,
-            ));
-        }
-    } else if arguments.len() != 1 {
-        return Err(failed(format!(
-            "{call_name} must contain exactly one name argument"
-        )));
-    }
+    let arguments = &sql[open + 1..close];
+    let (name, package) = if kind == DBT_REFERENCE_KIND {
+        dbt_reference_names(arguments)?
+    } else {
+        (bare_name(arguments)?, None)
+    };
     let mut call_argument_count = None;
     if kind == TABLE_FUNCTION_REFERENCE_KIND {
         let suffix = python_whitespace_end(sql, close + 1)?;
         if sql.get(suffix) != Some(&b'(') {
-            return Err(failed(format!(
-                "{call_name} must be followed by an argument list"
-            )));
+            return Err(Stop::Deferred);
         }
         let suffix_close = matching_paren(sql, suffix, syntax, TABLE_FUNCTION_CALL_CONTEXT)?;
         call_argument_count = Some(split_arguments(sql, suffix + 1, suffix_close, syntax)?.len());
@@ -115,12 +94,55 @@ fn parse_reference(
     Ok((
         SqlReference {
             kind,
-            name: reference_name(&arguments[0], kind, call_name)?,
-            package: None,
+            name,
+            package,
             call_argument_count,
         },
         close + 1,
     ))
+}
+
+/// Python `"([^"]+)"` matched against the whole argument text.
+fn bare_name(arguments: &[u8]) -> Scan<String> {
+    match quoted_name_end(arguments, 0) {
+        Some(end) if end == arguments.len() => utf8(&arguments[1..end - 1]),
+        _ => Err(Stop::Deferred),
+    }
+}
+
+/// Python `"([^"]+)"(?:\s*,\s*"([^"]+)")?` matched against the whole argument text.
+fn dbt_reference_names(arguments: &[u8]) -> Scan<(String, Option<String>)> {
+    let Some(first_end) = quoted_name_end(arguments, 0) else {
+        return Err(Stop::Deferred);
+    };
+    if first_end == arguments.len() {
+        return Ok((utf8(&arguments[1..first_end - 1])?, None));
+    }
+    let separator = python_whitespace_end(arguments, first_end)?;
+    if arguments.get(separator) != Some(&b',') {
+        return Err(Stop::Deferred);
+    }
+    let second_start = python_whitespace_end(arguments, separator + 1)?;
+    match quoted_name_end(arguments, second_start) {
+        Some(end) if end == arguments.len() => Ok((
+            utf8(&arguments[second_start + 1..end - 1])?,
+            Some(utf8(&arguments[1..first_end - 1])?),
+        )),
+        _ => Err(Stop::Deferred),
+    }
+}
+
+/// The offset after a `"name"` with at least one character starting at `start`.
+fn quoted_name_end(arguments: &[u8], start: usize) -> Option<usize> {
+    if arguments.get(start) != Some(&b'"') {
+        return None;
+    }
+    let close = start
+        + 1
+        + arguments[start + 1..]
+            .iter()
+            .position(|byte| *byte == b'"')?;
+    (close > start + 1).then_some(close + 1)
 }
 
 /// Python `_split_top_level_arguments` over `sql[start..end]`: comments read as one space.
@@ -178,47 +200,6 @@ fn split_arguments(
         )));
     }
     Ok(arguments)
-}
-
-/// Python `_parse_reference_name` for one stripped argument.
-fn reference_name(argument: &[u8], kind: &str, call_name: &str) -> Scan<String> {
-    let paired_quote = |quotes: &[u8]| {
-        argument.len() >= PAIRED_QUOTE_LENGTH
-            && argument[0] == argument[argument.len() - 1]
-            && quotes.contains(&argument[0])
-    };
-    if kind == TABLE_FUNCTION_REFERENCE_KIND && !paired_quote(b"\"") {
-        return Err(failed(format!(
-            "{call_name} name argument must be double quoted"
-        )));
-    }
-    if paired_quote(NAME_QUOTE_BYTES) {
-        return utf8(&argument[1..argument.len() - 1]);
-    }
-    if identifier_validity(argument)? {
-        return utf8(argument);
-    }
-    Err(failed(format!(
-        "{call_name} name argument must be a quoted string or identifier"
-    )))
-}
-
-/// Python `value.replace("_", "a").isalnum() and value[0].isalpha()` for a non-empty value.
-fn identifier_validity(value: &[u8]) -> Scan<bool> {
-    if value
-        .iter()
-        .any(|byte| byte.is_ascii() && !(byte.is_ascii_alphanumeric() || *byte == b'_'))
-    {
-        return Ok(false);
-    }
-    if value[0].is_ascii() && !value[0].is_ascii_alphabetic() {
-        return Ok(false);
-    }
-    if value.is_ascii() {
-        Ok(true)
-    } else {
-        Err(Stop::Deferred)
-    }
 }
 
 /// Python `str.strip()`; a non-ASCII character at either edge may be Unicode whitespace.

@@ -6,15 +6,23 @@ import hashlib
 import hmac
 import json
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
 
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.refs.references import (
+    report_invalid_reference_calls,
+    scan_sql_reference_calls,
+)
 from sqlbuild.compiler.compile.exceptions import AnalysisCacheEntryError
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models import (
+    CompileSqlReference,
+    SqlReferenceOrigin,
+    SqlReferenceScan,
+)
+from sqlbuild.compiler.compile.types import SqlReferenceExtractor
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
@@ -83,8 +91,8 @@ class _SqlReferenceCache:
                 except sqlite3.DatabaseError:
                     pass
 
-    def references(self, sql: str) -> tuple[CompileSqlReference, ...]:
-        """Return cached references or scan and record this exact expanded SQL."""
+    def references(self, *, sql: str, origin: SqlReferenceOrigin | None) -> SqlReferenceScan:
+        """Return cached references, or scan, report rejected calls, and cache clean SQL."""
 
         cache_key: str = _reference_cache_key(sql=sql, syntax_key=self._syntax_key)
         pending_contents: str | None = self._pending_contents_by_key.get(cache_key)
@@ -94,7 +102,7 @@ class _SqlReferenceCache:
                 expected_cache_key=cache_key,
             )
             if pending_references is not None:
-                return pending_references
+                return SqlReferenceScan(references=pending_references)
         connection: sqlite3.Connection | None = self._connection
         if connection is not None:
             try:
@@ -107,25 +115,26 @@ class _SqlReferenceCache:
                         _references_from_contents(contents=row[0], expected_cache_key=cache_key)
                     )
                     if cached_references is not None:
-                        return cached_references
+                        return SqlReferenceScan(references=cached_references)
             except sqlite3.DatabaseError:
                 self._disable()
                 connection = None
 
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(
-            sql=sql, syntax=self._syntax
+        scan: SqlReferenceScan = scan_sql_reference_calls(sql=sql, syntax=self._syntax)
+        report_invalid_reference_calls(
+            invalid_calls=scan.invalid_calls, origin=origin, syntax=self._syntax
         )
-        if self._database_path is not None:
+        if self._database_path is not None and not scan.invalid_calls:
             try:
                 contents: str = _reference_contents(
                     cache_key=cache_key,
-                    references=references,
+                    references=scan.references,
                 )
                 if len(contents.encode()) <= _MAX_CACHE_ENTRY_BYTES:
                     self._pending_contents_by_key[cache_key] = contents
             except (TypeError, ValueError):
                 pass
-        return references
+        return scan
 
     def _write_pending(self, *, connection: sqlite3.Connection | None) -> sqlite3.Connection | None:
         if not self._pending_contents_by_key or self._database_path is None:
@@ -256,7 +265,7 @@ def _cache_entry_digest(*, cache_key: str, serialized_payload: str) -> str:
 @contextmanager
 def cached_sql_reference_extractor(
     *, root: Path | None, syntax: SqlLexicalSyntax
-) -> Iterator[Callable[[str], tuple[CompileSqlReference, ...]]]:
+) -> Iterator[SqlReferenceExtractor]:
     """Yield an exact cached reference extractor for one compile invocation and dialect."""
 
     with _SqlReferenceCache(root=root, syntax=syntax) as cache:

@@ -546,8 +546,8 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
         ScenarioCheckSqlResolutionTestCase(
             description="resolves assertion refs to scenario model and ref fixture relations",
             sql=(
-                "SELECT * FROM __ref(daily_revenue) dr "
-                "JOIN __ref(stg_customers) sc ON dr.customer_id = sc.customer_id"
+                'SELECT * FROM __ref("daily_revenue") dr '
+                'JOIN __ref("stg_customers") sc ON dr.customer_id = sc.customer_id'
             ),
             expected_sql=(
                 "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue dr "
@@ -558,8 +558,8 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
         ScenarioCheckSqlResolutionTestCase(
             description="resolves seed and source markers to scenario fixture relations",
             sql=(
-                "SELECT * FROM __seed(country_codes) c "
-                "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
+                'SELECT * FROM __seed("country_codes") c '
+                'JOIN __source("raw__orders") o ON c.country_code = o.country_code'
             ),
             expected_sql=(
                 "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
@@ -577,20 +577,20 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
         ScenarioCheckSqlResolutionTestCase(
             description="check sql resolution keeps strings and comments as authored",
             sql=(
-                "SELECT '__ref(daily_revenue)' AS marker_text "
-                "FROM __ref(daily_revenue) dr -- __source(raw__orders)"
+                "SELECT '__ref(\"daily_revenue\")' AS marker_text "
+                'FROM __ref("daily_revenue") dr -- __source("raw__orders")'
             ),
             expected_sql=(
-                "SELECT '__ref(daily_revenue)' AS marker_text "
+                "SELECT '__ref(\"daily_revenue\")' AS marker_text "
                 "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue dr "
-                "-- __source(raw__orders)"
+                '-- __source("raw__orders")'
             ),
         ),
         ScenarioCheckSqlResolutionTestCase(
             description="authored function spellings and keyword case are not regenerated",
             sql=(
                 "select STARTSWITH(name, 'a') as flagged, IFNULL(total, 0) as total "
-                "from __ref(daily_revenue) where total != 0"
+                'from __ref("daily_revenue") where total != 0'
             ),
             expected_sql=(
                 "select STARTSWITH(name, 'a') as flagged, IFNULL(total, 0) as total "
@@ -670,8 +670,8 @@ CHECK_SQL_GRAPH_PLAN: ScenarioGraphPlan = ScenarioGraphPlan(
             description="even backslash-escaped quotes around a marker",
             lexical_syntaxes=BACKSLASH_LEXICAL_SYNTAXES,
             sql=(
-                "select * from __ref(daily_revenue) where note = 'O\\'Brien' "
-                "union all select * from __ref(stg_customers) where note = 'D\\'Arcy'"
+                "select * from __ref(\"daily_revenue\") where note = 'O\\'Brien' "
+                "union all select * from __ref(\"stg_customers\") where note = 'D\\'Arcy'"
             ),
             expected_sql=(
                 f"select * from {DAILY_REVENUE_TARGET} where note = 'O\\'Brien' "
@@ -682,8 +682,8 @@ CHECK_SQL_GRAPH_PLAN: ScenarioGraphPlan = ScenarioGraphPlan(
             description="escape strings around a marker",
             lexical_syntaxes=ESCAPE_LEXICAL_SYNTAXES,
             sql=(
-                "select * from __ref(daily_revenue) where note = E'O\\'Brien' "
-                "union all select * from __ref(stg_customers) where note = e'D\\'Arcy'"
+                "select * from __ref(\"daily_revenue\") where note = E'O\\'Brien' "
+                "union all select * from __ref(\"stg_customers\") where note = e'D\\'Arcy'"
             ),
             expected_sql=(
                 f"select * from {DAILY_REVENUE_TARGET} where note = E'O\\'Brien' "
@@ -693,27 +693,27 @@ CHECK_SQL_GRAPH_PLAN: ScenarioGraphPlan = ScenarioGraphPlan(
         ScenarioDialectCheckSqlResolutionTestCase(
             description="dollar-quoted text hides quotes and markers",
             lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax, *ESCAPE_LEXICAL_SYNTAXES),
-            sql="select $$O'Brien __ref(stg_customers)$$ as note from __ref(daily_revenue)",
+            sql='select $$O\'Brien __ref("stg_customers")$$ as note from __ref("daily_revenue")',
             expected_sql=(
-                f"select $$O'Brien __ref(stg_customers)$$ as note from {DAILY_REVENUE_TARGET}"
+                f'select $$O\'Brien __ref("stg_customers")$$ as note from {DAILY_REVENUE_TARGET}'
             ),
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
             description="snowflake quoted identifier ending in a backslash",
             lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax,),
-            sql='select "note\\", "it""s" from __ref(daily_revenue)',
+            sql='select "note\\", "it""s" from __ref("daily_revenue")',
             expected_sql=f'select "note\\", "it""s" from {DAILY_REVENUE_TARGET}',
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
             description="bigquery backtick identifier with an escaped backtick",
             lexical_syntaxes=(BigQueryAdapter.sql_lexical_syntax,),
-            sql="select `note\\`s` from __ref(daily_revenue)",
+            sql='select `note\\`s` from __ref("daily_revenue")',
             expected_sql=f"select `note\\`s` from {DAILY_REVENUE_TARGET}",
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
             description="bigquery triple-quoted string with an apostrophe",
             lexical_syntaxes=(BigQueryAdapter.sql_lexical_syntax,),
-            sql="select '''it's''' as note from __ref(daily_revenue)",
+            sql="select '''it's''' as note from __ref(\"daily_revenue\")",
             expected_sql=f"select '''it's''' as note from {DAILY_REVENUE_TARGET}",
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
@@ -724,27 +724,27 @@ CHECK_SQL_GRAPH_PLAN: ScenarioGraphPlan = ScenarioGraphPlan(
                 DatabricksAdapter.sql_lexical_syntax,
                 SqlServerAdapter.sql_lexical_syntax,
             ),
-            sql="select * /* a /* b */ it's __ref(stg_customers) */ from __ref(daily_revenue)",
+            sql='select * /* a /* b */ it\'s __ref("stg_customers") */ from __ref("daily_revenue")',
             expected_sql=(
-                f"select * /* a /* b */ it's __ref(stg_customers) */ from {DAILY_REVENUE_TARGET}"
+                f'select * /* a /* b */ it\'s __ref("stg_customers") */ from {DAILY_REVENUE_TARGET}'
             ),
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
             description="bigquery hash line comment with an apostrophe",
             lexical_syntaxes=(BigQueryAdapter.sql_lexical_syntax,),
-            sql="select * # it's __ref(stg_customers)\nfrom __ref(daily_revenue)",
-            expected_sql=f"select * # it's __ref(stg_customers)\nfrom {DAILY_REVENUE_TARGET}",
+            sql='select * # it\'s __ref("stg_customers")\nfrom __ref("daily_revenue")',
+            expected_sql=f'select * # it\'s __ref("stg_customers")\nfrom {DAILY_REVENUE_TARGET}',
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
             description="snowflake double slash line comment with an apostrophe",
             lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax,),
-            sql="select * // it's __ref(stg_customers)\nfrom __ref(daily_revenue)",
-            expected_sql=f"select * // it's __ref(stg_customers)\nfrom {DAILY_REVENUE_TARGET}",
+            sql='select * // it\'s __ref("stg_customers")\nfrom __ref("daily_revenue")',
+            expected_sql=f'select * // it\'s __ref("stg_customers")\nfrom {DAILY_REVENUE_TARGET}',
         ),
         ScenarioDialectCheckSqlResolutionTestCase(
             description="databricks raw string ending in a backslash",
             lexical_syntaxes=(DatabricksAdapter.sql_lexical_syntax,),
-            sql="select r'C:\\' as path from __ref(daily_revenue)",
+            sql="select r'C:\\' as path from __ref(\"daily_revenue\")",
             expected_sql=f"select r'C:\\' as path from {DAILY_REVENUE_TARGET}",
         ),
     ],
@@ -782,8 +782,8 @@ def test_given_dialect_lexical_syntax_when_resolving_check_sql_then_replaces_eve
             description="backslash before a quote is not an escape outside escape strings",
             lexical_syntaxes=ESCAPE_LEXICAL_SYNTAXES,
             sql=(
-                "select * from __ref(daily_revenue) where note = 'O\\'Brien' "
-                "union all select * from __ref(stg_customers)"
+                "select * from __ref(\"daily_revenue\") where note = 'O\\'Brien' "
+                'union all select * from __ref("stg_customers")'
             ),
             expected_error_code="S511",
             expected_error_fragment="unclosed quoted string",
@@ -791,7 +791,7 @@ def test_given_dialect_lexical_syntax_when_resolving_check_sql_then_replaces_eve
         ScenarioCheckSqlResolutionErrorTestCase(
             description="escaped closing quote leaves the string unclosed",
             lexical_syntaxes=BACKSLASH_LEXICAL_SYNTAXES,
-            sql="select * from __ref(daily_revenue) where note = 'O\\'",
+            sql="select * from __ref(\"daily_revenue\") where note = 'O\\'",
             expected_error_code="S511",
             expected_error_fragment="unclosed quoted string",
         ),
@@ -801,16 +801,16 @@ def test_given_dialect_lexical_syntax_when_resolving_check_sql_then_replaces_eve
                 SnowflakeAdapter.sql_lexical_syntax,
                 BigQueryAdapter.sql_lexical_syntax,
             ),
-            sql="select * /* a /* b */ it's */ from __ref(daily_revenue)",
+            sql='select * /* a /* b */ it\'s */ from __ref("daily_revenue")',
             expected_error_code="S511",
             expected_error_fragment="unclosed quoted string",
         ),
         ScenarioCheckSqlResolutionErrorTestCase(
             description="marker naming a relation outside the scenario",
             lexical_syntaxes=(SnowflakeAdapter.sql_lexical_syntax,),
-            sql="select * from __ref(daily_revenue) join __ref(unknown_orders) using (id)",
+            sql='select * from __ref("daily_revenue") join __ref("unknown_orders") using (id)',
             expected_error_code="S511",
-            expected_error_fragment="references '__ref(unknown_orders)'",
+            expected_error_fragment="references '__ref(\"unknown_orders\")'",
         ),
     ],
     ids=lambda case: case.description,
@@ -847,16 +847,16 @@ def test_given_unresolvable_check_sql_when_resolving_then_raises_scenario_error(
         ScenarioFixtureSqlResolutionErrorTestCase(
             description="unclosed string in duckdb fixture sql",
             lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
-            fixture_sql="SELECT 'O\\'Brien' AS note FROM __source(raw__orders)",
+            fixture_sql="SELECT 'O\\'Brien' AS note FROM __source(\"raw__orders\")",
             expected_error_code="S511",
             expected_error_fragment="unclosed quoted string",
         ),
         ScenarioFixtureSqlResolutionErrorTestCase(
             description="fixture sql naming an unknown project source",
             lexical_syntax=SnowflakeAdapter.sql_lexical_syntax,
-            fixture_sql="SELECT * FROM __source(raw__returns)",
+            fixture_sql='SELECT * FROM __source("raw__returns")',
             expected_error_code="S511",
-            expected_error_fragment="references '__source(raw__returns)'",
+            expected_error_fragment="references '__source(\"raw__returns\")'",
         ),
     ],
     ids=lambda case: case.description,

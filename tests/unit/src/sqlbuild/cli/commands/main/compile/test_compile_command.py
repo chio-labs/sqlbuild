@@ -553,7 +553,7 @@ def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyze
             min_prepared_models=128,
             test_header='name "orders_case"',
             expected_codes=("SQBRMODEL102", "S000"),
-            expected_message_fragment="references __source('raw_refunds') which has no mock",
+            expected_message_fragment='references __source("raw_refunds") which has no mock',
             expected_inline_planning_calls=0,
         ),
         RuleGatedTestPlanningTestCase(
@@ -561,7 +561,7 @@ def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyze
             min_prepared_models=1,
             test_header='name "orders_case"',
             expected_codes=("SQBRMODEL102", "S000"),
-            expected_message_fragment="references __source('raw_refunds') which has no mock",
+            expected_message_fragment='references __source("raw_refunds") which has no mock',
             expected_inline_planning_calls=0,
         ),
         RuleGatedTestPlanningTestCase(

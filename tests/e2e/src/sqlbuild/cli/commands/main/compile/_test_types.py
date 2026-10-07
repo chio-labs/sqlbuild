@@ -872,6 +872,4 @@ class RejectedReferenceCallTestCase:
     engine: str
     staging_from: str
     mart_from: str
-    expected_code: str
-    expected_message: str
-    expected_corrected_call: str
+    expected_diagnostics: tuple[tuple[str, str, str, int, int, str], ...]

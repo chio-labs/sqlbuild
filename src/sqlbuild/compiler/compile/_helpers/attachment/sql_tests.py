@@ -55,6 +55,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationScopeResolver,
     LoadedMacro,
     MacroContext,
+    SqlReferenceOrigin,
 )
 from sqlbuild.compiler.compile.types import (
     SqlTestMode,
@@ -301,6 +302,7 @@ def build_test_inputs(
             extract_assertion_target_model_names(
                 assertion_sql=tuple(cte.sql_body for cte in test_ctes.payload.assertion_ctes),
                 syntax=sql_lexical_syntax,
+                origin=_sql_file_reference_origin(test.test_file),
             )
             if isinstance(test_ctes.payload, CompileModelSqlTestCtes)
             else ()
@@ -494,7 +496,9 @@ def _infer_tested_udf_names(
             "__udf_actual__ CTE and exactly one __udf_expected__ CTE"
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
-        sql=raw_test_ctes.payload.actual_cte.sql_body, syntax=syntax
+        sql=raw_test_ctes.payload.actual_cte.sql_body,
+        syntax=syntax,
+        origin=_sql_file_reference_origin(test_file),
     )
     tested_udf_names: tuple[str, ...] = tuple(
         dict.fromkeys(
@@ -539,7 +543,9 @@ def _infer_tested_table_function_names(
             "__table_fn_actual__ CTE and exactly one __table_fn_expected__ CTE"
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
-        sql=raw_test_ctes.payload.actual_cte.sql_body, syntax=syntax
+        sql=raw_test_ctes.payload.actual_cte.sql_body,
+        syntax=syntax,
+        origin=_sql_file_reference_origin(test_file),
     )
     validate_table_function_reference_arities(
         references=references,
@@ -637,6 +643,7 @@ def build_scenario_inputs(
         assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
             assertion_sql=tuple(cte.sql_body for cte in scenario_ctes.assertion_ctes),
             syntax=sql_lexical_syntax,
+            origin=_sql_file_reference_origin(scenario_file),
         )
         scenario_inputs.append(
             CompileSqlScenarioInput(
@@ -663,6 +670,16 @@ def build_scenario_inputs(
     return tuple(scenario_inputs)
 
 
+def _sql_file_reference_origin(
+    sql_file: DiscoveredSqlTestFile | DiscoveredSqlScenarioFile,
+) -> SqlReferenceOrigin:
+    return SqlReferenceOrigin(
+        file_path=sql_file.file_path,
+        relative_path=sql_file.relative_path,
+        contents=sql_file.contents,
+    )
+
+
 def _validate_scenario_source_references(
     *,
     scenario_ctes: CompileSqlScenarioCtes,
@@ -673,7 +690,7 @@ def _validate_scenario_source_references(
     cte: CompileSqlScenarioCte
     for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
         references: tuple[CompileSqlReference, ...] = extract_sql_references(
-            sql=cte.sql_body, syntax=syntax
+            sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
         )
         reference: CompileSqlReference
         for reference in references:
@@ -687,7 +704,9 @@ def _validate_scenario_source_references(
             )
 
     for cte in scenario_ctes.authored_ctes:
-        references = extract_sql_references(sql=cte.sql_body, syntax=syntax)
+        references = extract_sql_references(
+            sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
+        )
         for reference in references:
             if reference.ref_kind != SqlReferenceKind.SOURCE:
                 continue
