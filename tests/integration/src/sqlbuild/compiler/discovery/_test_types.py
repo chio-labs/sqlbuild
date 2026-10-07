@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import sys
+import unicodedata
 from dataclasses import dataclass, field
-
-import sqlbuild._native as _native
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,10 @@ class NativeDeferralTestCase:
     description: str
     project_name: str
     expected_native_calls: int
-    unidata_version: str = field(default_factory=lambda: _native.PYTHON_ALNUM_UNICODE_VERSION)
+    unidata_version: str = field(default_factory=lambda: unicodedata.unidata_version)
+    python_version: tuple[int, int] = field(
+        default_factory=lambda: (sys.version_info[0], sys.version_info[1])
+    )
 
 
 @dataclass(frozen=True)

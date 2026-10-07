@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as _native
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
     FactCacheFallbackTestCase,
@@ -191,7 +190,7 @@ def test_given_big_integers_when_loading_natively_then_values_and_error_order_ma
         ),
         FactCacheFallbackTestCase(
             description="native discovery itself reads no cached facts",
-            unidata_version=_native.PYTHON_ALNUM_UNICODE_VERSION,
+            unidata_version=unicodedata.unidata_version,
             expected_same_keys_as_python=False,
             expected_native_keys=0,
         ),

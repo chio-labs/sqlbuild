@@ -2,7 +2,7 @@
 
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::models::{DiscoveryFailure, FailureKind};
-use crate::sql_tests::models::{DiscoveredSqlTestFile, SqlTestBlock};
+use crate::sql_tests::models::{DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions};
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_core::text::main::python_strip::python_strip;
@@ -22,7 +22,7 @@ struct BlockMatch {
 pub(crate) fn parse_sql_test_file(
     file_path: &str,
     contents: String,
-    supported_keys: &[String],
+    options: &SqlTestFileOptions,
 ) -> Result<DiscoveredSqlTestFile, DiscoveryFailure> {
     let matches: Vec<BlockMatch> = block_matches(&contents);
     let Some(first) = matches.first() else {
@@ -36,7 +36,8 @@ pub(crate) fn parse_sql_test_file(
         statement_name: TEST_KEYWORD,
         statement: TEST_STATEMENT,
         file_path,
-        supported_keys,
+        supported_keys: &options.test_keys,
+        python: options.python,
     };
     let mut blocks: Vec<SqlTestBlock> = Vec::with_capacity(matches.len());
     let mut failure: Option<DiscoveryFailure> = None;
@@ -50,6 +51,7 @@ pub(crate) fn parse_sql_test_file(
             Ok(header_values) => blocks.push(SqlTestBlock {
                 header_values,
                 sql_body: python_cleandoc(
+                    options.python,
                     contents[block.end.min(next_start)..next_start]
                         .trim_end_matches(is_python_space),
                 ),

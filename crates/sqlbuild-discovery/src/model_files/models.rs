@@ -1,6 +1,7 @@
 //! Native results for SQL model files.
 
 use crate::models::LineColumnSpan;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 /// What the Python facade asked for, with the header key sets Python owns during dual running.
@@ -10,6 +11,8 @@ pub struct ModelFileOptions {
     pub removed_keys: Vec<String>,
     pub extract_implicit_alias_columns: bool,
     pub extract_output_column_locations: bool,
+    /// The string semantics of the Python whose discovery output native must reproduce.
+    pub python: PythonText,
 }
 
 /// One parsed model file; values mirror the fields of Python's `DiscoveredSqlModelFile`.

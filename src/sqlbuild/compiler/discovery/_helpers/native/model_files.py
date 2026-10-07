@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_failure,
     native_locations,
     native_project_tree,
+    native_text_runtime,
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
@@ -89,6 +90,7 @@ def _discover_native_files(
             "removed_keys": sorted(REMOVED_SQL_MODEL_HEADER_KEYS),
             "extract_implicit_alias_columns": extract_implicit_alias_columns,
             "extract_output_column_locations": extract_output_column_locations,
+            **native_text_runtime(),
         },
         tree,
     )

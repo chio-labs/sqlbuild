@@ -1,4 +1,4 @@
-"""Direct wrapper for regenerating the native `str.isalnum()` table; run it with the CI Python."""
+"""Direct wrapper for generating the native `str.isalnum()` table of the running Python."""
 
 from __future__ import annotations
 

@@ -14,6 +14,6 @@ pub fn discover_scenario_files(
     options: &SqlTestFileOptions,
 ) -> Result<Vec<DiscoveredFile<DiscoveredScenarioFile>>, StageDeferral> {
     discover_sql_files(root, tree, SQL_SCENARIOS_ROOT, |file_path, contents| {
-        parse_scenario_file(file_path, contents, &options.scenario_keys)
+        parse_scenario_file(file_path, contents, options)
     })
 }
