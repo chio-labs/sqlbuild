@@ -11,6 +11,9 @@ from scripts.compiler_differential._helpers.corpus.discovery_failure_cases impor
 from scripts.compiler_differential._helpers.corpus.render_failure_cases import (
     render_failure_cases,
 )
+from scripts.compiler_differential._helpers.corpus.scope_failure_cases import (
+    scope_failure_cases,
+)
 from scripts.compiler_differential.constants import (
     FAILURE_BASE_CONFIG,
     FAILURE_BASE_MART,
@@ -33,7 +36,12 @@ def _rules(*codes: str) -> dict[str, str]:
 def all_failure_cases() -> tuple[FailureCase, ...]:
     """Return every failure case in a stable order."""
 
-    return (*_compile_failure_cases(), *discovery_failure_cases(), *render_failure_cases())
+    return (
+        *_compile_failure_cases(),
+        *discovery_failure_cases(),
+        *render_failure_cases(),
+        *scope_failure_cases(),
+    )
 
 
 def _compile_failure_cases() -> tuple[FailureCase, ...]:
