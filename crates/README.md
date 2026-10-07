@@ -10,7 +10,7 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-sqltext` | Lexical SQL text without polyglot: comment, quote and parenthesis scanning, the rules quote policy, model header tokenization and matching, static variable substitution and static reference extraction. |
 | `sqlbuild-config` | Configuration file reading without Python: `tomllib`-compatible TOML, PyYAML `safe_load`-compatible YAML 1.1, and typed project and local config readers for the fields discovery needs. Any error means "defer to Python", which re-parses for exact messages. |
 | `sqlbuild-discovery` | Native project discovery: the shared directory walk with Python's glob and sort semantics, file reading with Python's newline handling, and parsing of authored files with Python's exact discovery messages. Results are plain data the Python discovery facade materialises; anything it cannot reproduce exactly defers to Python. |
-| `sqlbuild-scopes` | Declaration scopes: the scope index with Python's record orders and diagnostics, declaration visibility, relationship grants and the scope lookup groups. Anything it cannot reproduce exactly defers to Python. |
+| `sqlbuild-scopes` | Declaration scopes: the scope index with Python's record orders and diagnostics, declaration visibility, relationship grants, the scope lookup groups, and the dialect-aware scan of SQL tests and scenarios for their expected models. Anything it cannot reproduce exactly defers to Python. |
 | `sqlbuild-analysis` | SQL analysis over polyglot: SQL tokens, query analysis, the binding catalog, semantic validation and usage, column references, and SQL-test extraction, planning and rendering. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
@@ -25,9 +25,10 @@ sqlbuild-python
   -> sqlbuild-sqltext -> sqlbuild-core
 ```
 
-`sqlbuild-config` and `sqlbuild-scopes` do not depend on the crates below them today; their
-place in the order only fixes which crates may use them. The JSON emitter lives in
-`sqlbuild-core` so that any layer can produce text that must equal Python's `json.dumps` output.
+`sqlbuild-config` does not depend on the crates below it today, and `sqlbuild-scopes` uses only
+`sqlbuild-sqltext`; their place in the order fixes which crates may use them. The JSON emitter
+lives in `sqlbuild-core` so that any layer can produce text that must equal Python's
+`json.dumps` output.
 
 Each crate may depend only on crates below it, and may also skip layers. The order is declared
 in `[workspace.metadata.native-layers]` in the workspace `Cargo.toml`, and

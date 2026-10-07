@@ -127,6 +127,9 @@ def build_native_scope_index(
         ]
     ],
 ) -> NativeScopeIndex | None: ...
+def scope_expected_model_names(
+    sqls: list[str], syntax: dict[str, object]
+) -> list[list[str] | None]: ...
 def substitute_static_project_vars(
     sqls: list[str], variables: list[tuple[str, str]]
 ) -> list[tuple[int, str | None]]: ...

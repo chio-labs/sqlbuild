@@ -712,6 +712,9 @@ dependencies = [
 [[package]]
 name = "sqlbuild-scopes"
 version = "0.139.0"
+dependencies = [
+ "sqlbuild-sqltext",
+]
 
 [[package]]
 name = "sqlbuild-sqltext"

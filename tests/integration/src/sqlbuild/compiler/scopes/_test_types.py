@@ -42,3 +42,16 @@ class ScopeEngineTierTestCase:
     description: str
     engine: str
     expected_native_attempts: int
+
+
+@dataclass(frozen=True)
+class ExpectedNameScanTestCase:
+    """Seeded SQL test bodies scanned for expected models natively and in Python."""
+
+    description: str
+    syntax: str
+    seed: int
+    count: int
+    expected_minimum_scanned: int
+    expected_minimum_deferred: int
+    expected_minimum_python_errors: int

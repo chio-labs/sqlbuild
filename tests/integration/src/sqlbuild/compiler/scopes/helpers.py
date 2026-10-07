@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from itertools import compress
 from pathlib import Path
 
 import pytest
@@ -13,18 +14,24 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_expected_model_names
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
+from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
+from sqlbuild.compiler.scopes.main._native_expected_model_names import (
+    native_expected_model_names,
+)
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex, ScopeLookup
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 PROJECT_CONFIG: str = (
     'name = "scope_parity"\nadapter = "duckdb"\n\n[connection]\ndatabase = "scope.duckdb"\n'
@@ -347,3 +354,132 @@ def _lookup_shape(lookup: ScopeLookup) -> tuple[object, ...]:
         tuple(lookup.visibility_index.local_positions.items()),
         tuple(lookup.visibility_index.inherited_positions.items()),
     )
+
+
+_LEADING: tuple[str, ...] = (
+    "",
+    "-- header\n",
+    "/* note ) */ ",
+    "# hash comment\n",
+    "// slash comment\n",
+    "/* outer /* inner */ ) */ ",
+    "\n\t ",
+    "\x1c",
+    "\u00a0",
+    "'quoted' ",
+)
+_WITH: tuple[str, ...] = (
+    "WITH ",
+    "with\n",
+    "WITH RECURSIVE ",
+    "With/*c*/",
+    "w\u0131th ",
+    "WITHIN ",
+)
+_CTE_NAMES: tuple[str, ...] = (
+    "__expected__orders",
+    "__expected__customers",
+    "__source__raw_orders",
+    "__ref__stg_orders",
+    "__assert__totals",
+    "__expected__",
+    "__expected__caf\u00e9",
+    '"__expected__quoted"',
+    "helper",
+)
+_COLUMN_LISTS: tuple[str, ...] = ("", " (order_id, amount)", "(x)")
+_AS: tuple[str, ...] = (" AS ", " as\n", "AS", " ")
+_BODIES: tuple[str, ...] = (
+    "(SELECT 1 AS order_id)",
+    "(SELECT ')' AS x, '(' AS y)",
+    "(SELECT 'it\\')' AS x)",
+    "(SELECT $$ ) $$ AS x)",
+    "(SELECT $tag$ ( $tag$ AS x)",
+    "(SELECT '''a ) b''' AS x)",
+    "(SELECT r'\\' AS x) ",
+    "(SELECT E'\\')' AS x)",
+    "(SELECT 1 -- )\n)",
+    "(SELECT 1 # )\n)",
+    '(SELECT "caf\u00e9" FROM t)',
+    "(SELECT (1)",
+)
+_TRAILING: tuple[str, ...] = (
+    "",
+    "\nSELECT 1\n",
+    " select 1 ;",
+    " SELECT 1; -- done\n",
+    " SELECT 2",
+    " SELECT 1 /* open",
+    "\u00a0SELECT 1",
+    " $x",
+    " ; ",
+)
+LEXICAL_SYNTAXES: dict[str, SqlLexicalSyntax] = {
+    "generic": SqlLexicalSyntax(),
+    "backslash_triple_raw": SqlLexicalSyntax(
+        backslash_escape_quotes=frozenset({"'", '"'}),
+        raw_string_prefix=True,
+        triple_quoted_strings=True,
+        line_comment_prefixes=frozenset({"--", "#"}),
+    ),
+    "escape_prefix": SqlLexicalSyntax(escape_string_prefix=True),
+    "nested_comments": SqlLexicalSyntax(nested_block_comments=True),
+    "slash_comments": SqlLexicalSyntax(line_comment_prefixes=frozenset({"--", "//"})),
+}
+
+
+@dataclass(frozen=True)
+class ExpectedNameScanParity:
+    """How the native expected-model scan compared with Python over one corpus."""
+
+    mismatches: list[tuple[object, object, object]]
+    scanned: int
+    deferred: int
+    python_errors: int
+
+
+def generated_expected_model_sqls(*, rng: random.Random, count: int) -> list[str]:
+    """Return seeded SQL test bodies mixing valid, dialect-sensitive and invalid CTE layouts."""
+
+    return [_generated_expected_model_sql(rng=rng) for _ in range(count)]
+
+
+def _generated_expected_model_sql(*, rng: random.Random) -> str:
+    ctes: list[str] = [
+        f"{rng.choice(_CTE_NAMES)}{rng.choice(_COLUMN_LISTS)}{rng.choice(_AS)}{rng.choice(_BODIES)}"
+        for _ in range(rng.randint(1, 4))
+    ]
+    return f"{rng.choice(_LEADING)}{rng.choice(_WITH)}{','.join(ctes)}{rng.choice(_TRAILING)}"
+
+
+def expected_name_scan_parity(
+    *, sqls: list[str], syntax: SqlLexicalSyntax
+) -> ExpectedNameScanParity:
+    """Compare the native scan with Python wherever the native scan does not defer."""
+
+    native: list[tuple[str, ...] | None] = native_expected_model_names(sqls=sqls, syntax=syntax)
+    python: list[tuple[str, ...] | str] = [
+        _python_expected_names(sql=sql, syntax=syntax) for sql in sqls
+    ]
+    scanned: list[tuple[str, tuple[str, ...] | str, tuple[str, ...] | None]] = list(
+        compress(zip(sqls, python, native, strict=True), [names is not None for names in native])
+    )
+    return ExpectedNameScanParity(
+        mismatches=mismatches(
+            inputs=[sql for sql, _, _ in scanned],
+            expected=[expected for _, expected, _ in scanned],
+            actual=[names for _, _, names in scanned],
+        ),
+        scanned=sum(names is not None for names in native),
+        deferred=sum(names is None for names in native),
+        python_errors=sum(isinstance(expected, str) for expected in python),
+    )
+
+
+def _python_expected_names(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[str, ...] | str:
+    try:
+        return extract_sql_test_expected_model_names(
+            sql=sql, file_label="tests/unit/test.sql", syntax=syntax, mode=SqlTestMode.MODEL
+        )
+    except CompileInputError as error:
+        return str(error)

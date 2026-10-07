@@ -2,4 +2,5 @@
 
 #![forbid(unsafe_code)]
 
+pub mod relationship_names;
 pub mod scope_index;
