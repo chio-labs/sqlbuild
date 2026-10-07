@@ -24,8 +24,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     analysis::normalization::register(module)?;
     analysis::queries::register(module)?;
     analysis::sql_tests::register(module)?;
-    sqltext::model_headers::register(module)?;
-    sqltext::static_sql::register(module)?;
+    sqltext::registration::register(module)?;
     boundary::oracles::register(module)?;
     discovery::project_files::register(module)?;
     scopes::scope_index::register(module)?;

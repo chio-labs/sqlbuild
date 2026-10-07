@@ -137,6 +137,13 @@ def expand_config_templates(
     sources: tuple[dict[str, object], object, dict[str, str | None]],
     flags: tuple[bool, bool, bool],
 ) -> tuple[object, list[tuple[str, str]]] | str: ...
+
+class SqlReferenceScanner:
+    def __init__(self, syntax: dict[str, object]) -> None: ...
+    def extract(
+        self, sql: str
+    ) -> tuple[list[tuple[str, str, str | None, int | None]], None] | tuple[None, str] | None: ...
+
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...

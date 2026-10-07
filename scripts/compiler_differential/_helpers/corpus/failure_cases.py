@@ -8,6 +8,9 @@ from scripts.compiler_differential._helpers.corpus.case_builder import (
 from scripts.compiler_differential._helpers.corpus.discovery_failure_cases import (
     discovery_failure_cases,
 )
+from scripts.compiler_differential._helpers.corpus.reference_failure_cases import (
+    reference_failure_cases,
+)
 from scripts.compiler_differential._helpers.corpus.render_failure_cases import (
     render_failure_cases,
 )
@@ -41,6 +44,7 @@ def all_failure_cases() -> tuple[FailureCase, ...]:
         *discovery_failure_cases(),
         *render_failure_cases(),
         *scope_failure_cases(),
+        *reference_failure_cases(),
     )
 
 

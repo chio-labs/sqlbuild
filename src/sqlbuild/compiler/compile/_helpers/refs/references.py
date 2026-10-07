@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile.constants import (
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CLOSE_PAREN_TOKEN,
@@ -14,6 +15,10 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import CompilerEngine, NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
@@ -41,6 +46,8 @@ def extract_sql_references(
 ) -> tuple[CompileSqlReference, ...]:
     """Return logical SQL refs found outside comments and quoted text under the dialect's rules."""
 
+    if native_stage_enabled(NativeStage.REFERENCE_EXTRACTION):
+        return _extract_sql_references_natively(sql=sql, syntax=syntax)
     if syntax.reads_differently_from_generic(sql):
         return _extract_sql_references_with_python(sql=sql, syntax=syntax)
     native_references: list[tuple[str, str, str | None, int | None]] | None = (
@@ -57,6 +64,42 @@ def extract_sql_references(
             for kind, name, package, call_argument_count in native_references
         )
     return _extract_sql_references_with_python(sql=sql, syntax=syntax)
+
+
+def _extract_sql_references_natively(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, ...]:
+    """Return the native refs; a native error stands only when Python raises the same error."""
+
+    native_references: tuple[CompileSqlReference, ...] | str | None = extract_native_sql_references(
+        sql=sql, syntax=syntax
+    )
+    if native_references is None:
+        return _extract_sql_references_with_python(sql=sql, syntax=syntax)
+    if not isinstance(native_references, str):
+        return native_references
+    try:
+        python_references: tuple[CompileSqlReference, ...] = _extract_sql_references_with_python(
+            sql=sql, syntax=syntax
+        )
+    except CompileInputError as error:
+        if str(error) == native_references:
+            raise
+        raise _reference_mismatch(
+            native_message=native_references, python_outcome=f"raised {str(error)!r}"
+        ) from error
+    raise _reference_mismatch(
+        native_message=native_references,
+        python_outcome=f"found {len(python_references)} reference(s)",
+    )
+
+
+def _reference_mismatch(*, native_message: str, python_outcome: str) -> NativeStageMismatchError:
+    return NativeStageMismatchError(
+        f"native {NativeStage.REFERENCE_EXTRACTION} raised {native_message!r} but the Python "
+        f"compiler {python_outcome}; rerun with {COMPILER_ENGINE_ENV_VAR}="
+        f"{CompilerEngine.PYTHON} and report this mismatch"
+    )
 
 
 def _extract_sql_references_with_python(

@@ -17,15 +17,7 @@ def native_expected_model_names(
         return []
     try:
         names: list[list[str] | None] = _native.scope_expected_model_names(
-            list(sqls),
-            {
-                "backslash_escape_quotes": sorted(syntax.backslash_escape_quotes),
-                "escape_string_prefix": syntax.escape_string_prefix,
-                "raw_string_prefix": syntax.raw_string_prefix,
-                "triple_quoted_strings": syntax.triple_quoted_strings,
-                "nested_block_comments": syntax.nested_block_comments,
-                "line_comment_prefixes": sorted(syntax.line_comment_prefixes),
-            },
+            list(sqls), syntax.native_mapping
         )
     except (TypeError, UnicodeError):
         return [None] * len(sqls)
