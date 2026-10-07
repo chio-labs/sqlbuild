@@ -29,6 +29,9 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
+from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
+    retained_discovery_session,
+)
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
@@ -206,6 +209,7 @@ def build_discovered_project_inputs(
         command_output_sinks=command_output_sinks,
         providers=providers,
         adapter_file=declarations.adapter_file,
+        native_session=declarations.native_session,
     )
 
 
@@ -235,6 +239,7 @@ def _discover_declaration_files(
             audit_files=discover_audit_files(project_dir=project_dir),
             macro_files=discover_macro_files(project_dir=project_dir),
             adapter_file=discover_adapter_file(project_dir=project_dir),
+            native_session=retained_discovery_session(project_dir=project_dir),
         )
 
 

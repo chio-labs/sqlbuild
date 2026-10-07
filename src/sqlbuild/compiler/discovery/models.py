@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from sqlbuild._native import NativeDiscoverySession
 from sqlbuild.compiler.auditing.models import MeasurementContract
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
@@ -637,6 +638,7 @@ class DiscoveredDeclarationFiles:
     audit_files: tuple[DiscoveredAuditFile, ...]
     macro_files: tuple[DiscoveredMacroFile, ...]
     adapter_file: DiscoveredAdapterFile | None
+    native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -671,6 +673,8 @@ class DiscoveredProjectInputs:
     command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
+    native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
+    """The native discovery session that read the declaration files, for later native stages."""
 
 
 @dataclass(frozen=True)

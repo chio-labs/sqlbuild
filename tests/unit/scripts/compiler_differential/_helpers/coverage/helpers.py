@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
+from itertools import filterfalse
 from typing import cast
 
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_OMITTED_ATTRIBUTES
 
 _VALUE_KIND: str = "sqlbuild.sql_values.types:SqlValueKind"
 
@@ -20,11 +22,15 @@ def constant_declaration(*, kind: str, value: object) -> dict[str, object]:
 
 
 def empty_inputs_capture(**overrides: object) -> dict[str, object]:
-    """Return a capture with every `DiscoveredProjectInputs` field, in order, then overrides."""
+    """Return a capture with every captured `DiscoveredProjectInputs` field, then overrides."""
 
+    type_name: str = "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs"
+    names: list[str] = [field.name for field in dataclasses.fields(DiscoveredProjectInputs)]
     return {
-        "__type__": "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs",
-        **{field.name: [] for field in dataclasses.fields(DiscoveredProjectInputs)},
+        "__type__": type_name,
+        **dict.fromkeys(
+            filterfalse(STAGE_CAPTURE_OMITTED_ATTRIBUTES[type_name].__contains__, names), []
+        ),
         **overrides,
     }
 

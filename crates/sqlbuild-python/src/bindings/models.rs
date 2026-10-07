@@ -164,3 +164,35 @@ pub(crate) struct ModelTextRequest {
     pub(crate) python_version: (u8, u8),
     pub(crate) unicode_version: String,
 }
+
+/// The declaration collections one Python discovery pass read natively, kept for later stages.
+#[pyclass(module = "sqlbuild._native", frozen)]
+#[derive(Debug)]
+pub(crate) struct NativeDiscoverySession {
+    pub(crate) inner: sqlbuild_discovery::declaration_files::models::DiscoverySession,
+}
+
+/// One native declaration discovery session request from the Python discovery facade.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct DeclarationDiscoveryRequest {
+    pub(crate) project_dir: String,
+    pub(crate) display_prefix: String,
+    pub(crate) function_keys: Vec<String>,
+    pub(crate) audit_keys: Vec<String>,
+    pub(crate) hook_keys: Vec<String>,
+    pub(crate) python_version: (u8, u8),
+    pub(crate) unicode_version: String,
+}
+
+/// One in-memory declaration file parse request; `kind` names the collection it belongs to.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct DeclarationTextRequest {
+    pub(crate) kind: String,
+    pub(crate) function_keys: Vec<String>,
+    pub(crate) audit_keys: Vec<String>,
+    pub(crate) hook_keys: Vec<String>,
+    pub(crate) python_version: (u8, u8),
+    pub(crate) unicode_version: String,
+}

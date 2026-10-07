@@ -27,6 +27,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     sqltext::registration::register(module)?;
     boundary::oracles::register(module)?;
     discovery::project_files::register(module)?;
+    discovery::declaration_files::register(module)?;
     scopes::scope_index::register(module)?;
     scopes::relationship_names::register(module)?;
     model_config::header_metadata::register(module)?;

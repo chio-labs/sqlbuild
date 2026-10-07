@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
@@ -162,3 +163,69 @@ class CollidingNamesTestCase:
     files: tuple[tuple[str, bytes], ...]
     expected_enums: tuple[tuple[str, tuple[str, ...]], ...]
     expected_models: tuple[str, ...] = ("models/orders.sql",)
+
+
+@dataclass(frozen=True)
+class GeneratedDeclarationFileTestCase:
+    """Seeded declaration files of one kind discovered by the Python and native-preview engines."""
+
+    description: str
+    kind: str
+    relative_path: str
+    case_count: int
+    expected_minimum_parsed: int
+    expected_minimum_failed: int
+    expected_maximum_deferred: int
+    expected_mismatches: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class DeclarationFilesParityTestCase:
+    """A project whose declaration files discovery reads under the Python and preview engines."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_failure_type: str = "NoneType"
+    expected_message_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class DeclarationMismatchTestCase:
+    """A declaration file the Python parser is patched to accept, which native discovery rejects."""
+
+    description: str
+    relative_path: str
+    contents: bytes
+    patched_parser: str
+    patched: Callable[..., object]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class NativeSessionTestCase:
+    """Whether a discovery pass under one engine keeps its native declaration session."""
+
+    description: str
+    engine: str
+    expected_session: bool
+
+
+@dataclass(frozen=True)
+class TolerantDeclarationFilesTestCase:
+    """A project whose broken declaration files tolerant scope discovery reports as faults."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_resource_faults: int
+    expected_declaration_faults: int
+
+
+@dataclass(frozen=True)
+class DeclarationReuseTestCase:
+    """A preview compile followed by an edit that only touches one model file."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    edited_path: str
+    edited_contents: bytes
+    expected_reused_session: object = None

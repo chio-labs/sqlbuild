@@ -423,6 +423,30 @@ def _parse_constant_declaration(
         file_path=file_path,
         label=f"constant '{parsed_name}' render_as",
     )
+    return typed_constant_declaration(
+        name=parsed_name,
+        value=value,
+        explicit_type=parsed_explicit_type,
+        render_as_text=render_as_text,
+        file_path=file_path,
+        relative_path=relative_path,
+        model_name=model_name,
+    )
+
+
+def typed_constant_declaration(
+    *,
+    name: str,
+    value: object,
+    explicit_type: str | None,
+    render_as_text: str | None,
+    file_path: Path,
+    relative_path: Path,
+    model_name: str | None,
+) -> ConstantDeclaration:
+    """Normalize a constant whose name and options are valid into its typed declaration."""
+
+    parsed_name: str = name
     try:
         render_as: CollectionRendering | None = (
             CollectionRendering(render_as_text) if render_as_text is not None else None
@@ -434,7 +458,7 @@ def _parse_constant_declaration(
     try:
         typed_value: SqlValue = normalize_sql_value(
             raw_value=value,
-            explicit_type=parsed_explicit_type,
+            explicit_type=explicit_type,
             context=f"{file_path} constant '{parsed_name}'",
         )
     except SqlValueValidationError as error:

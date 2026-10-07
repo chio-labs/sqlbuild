@@ -22,6 +22,16 @@ from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
     is_in_scoped_declaration_tree,
     project_relative_path,
 )
+from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
+    native_audit_files,
+    native_constant_files,
+    native_enum_files,
+    native_macro_files,
+    native_model_schema_files,
+    native_seed_files,
+    native_sql_function_files,
+    native_sql_hook_files,
+)
 from sqlbuild.compiler.discovery._helpers.native.declarations import native_declaration_file_facts
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
@@ -70,7 +80,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     NamedDeclarationRoot,
 )
-from sqlbuild.compiler.discovery.types import ScopedDeclarationFile
+from sqlbuild.compiler.discovery.types import NativeFileScope, ScopedDeclarationFile
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -189,6 +201,7 @@ def discover_enum_files(
         parse_declarations=parse_enum_declaration_file,
         discovered_file_type=DiscoveredEnumFile,
         on_fault=on_fault,
+        native_files=native_enum_files,
     )
 
 
@@ -207,6 +220,7 @@ def discover_constant_files(
         parse_declarations=parse_constant_declaration_file,
         discovered_file_type=DiscoveredConstantFile,
         on_fault=on_fault,
+        native_files=native_constant_files,
     )
 
 
@@ -218,6 +232,7 @@ def _discover_declaration_kind_files[DeclarationT, DiscoveredT](
     parse_declarations: Callable[..., tuple[DeclarationT, ...]],
     discovered_file_type: Callable[..., DiscoveredT],
     on_fault: Callable[[DiscoveryFileFault], None] | None,
+    native_files: Callable[..., tuple[DiscoveredT, ...]],
 ) -> tuple[DiscoveredT, ...]:
     def parse(facts: _DeclarationFileFacts) -> DiscoveredT:
         contents: str = facts.file_path.read_text(encoding="utf-8")
@@ -237,6 +252,13 @@ def _discover_declaration_kind_files[DeclarationT, DiscoveredT](
             declaration_root=facts.declaration_root,
         )
 
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_files(
+            project_dir=project_dir,
+            isolate_declaration_kind=isolate_declaration_kind,
+            on_fault=on_fault,
+            parse_with_python=_scoped_parser(project_dir=project_dir, parse=parse),
+        )
     return _parse_discovered_files(
         project_dir=project_dir,
         items=(
@@ -251,6 +273,53 @@ def _discover_declaration_kind_files[DeclarationT, DiscoveredT](
         parse=parse,
         on_fault=on_fault,
     )
+
+
+def _scoped_parser[DiscoveredT](
+    *, project_dir: Path, parse: Callable[[_DeclarationFileFacts], DiscoveredT]
+) -> Callable[..., DiscoveredT]:
+    """Parse a macro, enum or constant file native discovery listed as the Python path does."""
+
+    def parse_listed(*, relative_path: Path, scope: NativeFileScope | None) -> DiscoveredT:
+        kind, scope_kind, ownership_root, owning_path, declaration_root = cast(
+            NativeFileScope, scope
+        )
+        return parse(
+            _DeclarationFileFacts(
+                file_path=project_dir / relative_path,
+                relative_path=relative_path,
+                declaration_kind=DeclarationKind(kind),
+                scope_kind=ScopeKind(scope_kind),
+                ownership_root=Path(cast(str, ownership_root)),
+                owning_path=None if owning_path is None else Path(owning_path),
+                declaration_root=Path(cast(str, declaration_root)),
+            )
+        )
+
+    return parse_listed
+
+
+def _named_parser[DiscoveredT: ScopedDeclarationFile](
+    *, project_dir: Path, parse: Callable[[tuple[NamedDeclarationRoot, Path]], DiscoveredT]
+) -> Callable[..., DiscoveredT]:
+    """Parse a named declaration file native discovery listed as its Python role places it."""
+
+    def parse_listed(*, relative_path: Path, scope: NativeFileScope | None) -> DiscoveredT:
+        kind, scope_kind, ownership_root, owning_path, declaration_root = cast(
+            NativeFileScope, scope
+        )
+        relative_directory: Path = Path(cast(str, declaration_root))
+        root: NamedDeclarationRoot = NamedDeclarationRoot(
+            directory=project_dir / relative_directory,
+            relative_directory=relative_directory,
+            kind=DeclarationKind(kind),
+            scope_kind=ScopeKind(scope_kind),
+            ownership_root=None if ownership_root is None else Path(ownership_root),
+            owning_path=None if owning_path is None else Path(owning_path),
+        )
+        return root.place(parse((root, project_dir / relative_path)))
+
+    return parse_listed
 
 
 def _parse_discovered_files[ItemT, DiscoveredT](
@@ -316,6 +385,12 @@ def discover_model_schema_files(
             ),
         )
 
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_model_schema_files(
+            project_dir=project_dir,
+            on_fault=on_fault,
+            parse_with_python=_named_parser(project_dir=project_dir, parse=parse),
+        )
     return _parse_named_declaration_files(
         project_dir=project_dir,
         kinds=frozenset({DeclarationKind.SCHEMA}),
@@ -356,10 +431,6 @@ def discover_sql_function_files(
 ) -> tuple[DiscoveredSqlFunctionFile, ...]:
     """Discover SQL function files under functions/sql/."""
 
-    function_root: Path = project_dir / "functions" / "sql"
-    if not function_root.is_dir():
-        return ()
-
     def parse(file_path: Path) -> DiscoveredSqlFunctionFile:
         contents: str = file_path.read_text(encoding="utf-8")
         header_values: dict[str, object]
@@ -373,6 +444,19 @@ def discover_sql_function_files(
             body_sql=body_sql,
         )
 
+    def parse_listed(
+        *, relative_path: Path, scope: NativeFileScope | None
+    ) -> DiscoveredSqlFunctionFile:
+        _ = scope
+        return parse(project_dir / relative_path)
+
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_sql_function_files(
+            project_dir=project_dir, on_fault=on_fault, parse_with_python=parse_listed
+        )
+    function_root: Path = project_dir / "functions" / "sql"
+    if not function_root.is_dir():
+        return ()
     return _parse_discovered_paths(
         project_dir=project_dir,
         file_paths=_unscoped_files(root=function_root, pattern="*.sql", project_dir=project_dir),
@@ -416,6 +500,8 @@ def discover_python_function_files(
 def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
     """Discover seed CSV files under seeds/."""
 
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_seed_files(project_dir=project_dir)
     seeds_root: Path = project_dir / "seeds"
     if not seeds_root.is_dir():
         return ()
@@ -446,6 +532,12 @@ def discover_audit_files(
             declaration_kind=root.kind,
         )
 
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_audit_files(
+            project_dir=project_dir,
+            on_fault=on_fault,
+            parse_with_python=_named_parser(project_dir=project_dir, parse=parse),
+        )
     return _parse_named_declaration_files(
         project_dir=project_dir,
         kinds=frozenset({DeclarationKind.AUDIT, DeclarationKind.SINGULAR_AUDIT}),
@@ -459,8 +551,8 @@ def discover_macro_files(
 ) -> tuple[DiscoveredMacroFile, ...]:
     """Discover global and scoped project macro Python files."""
 
-    return tuple(
-        DiscoveredMacroFile(
+    def read(facts: _DeclarationFileFacts) -> DiscoveredMacroFile:
+        return DiscoveredMacroFile(
             file_path=facts.file_path,
             relative_path=facts.relative_path,
             contents=facts.file_path.read_text(encoding="utf-8"),
@@ -469,6 +561,15 @@ def discover_macro_files(
             owning_path=facts.owning_path,
             declaration_root=facts.declaration_root,
         )
+
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_macro_files(
+            project_dir=project_dir,
+            isolate_declaration_kind=isolate_declaration_kind,
+            read_with_python=_scoped_parser(project_dir=project_dir, parse=read),
+        )
+    return tuple(
+        read(facts)
         for facts in _discover_declaration_file_facts(
             project_dir=project_dir,
             declaration_kind=DeclarationKind.MACRO if isolate_declaration_kind else None,
@@ -609,6 +710,12 @@ def discover_sql_hook_files(
             relative_path=project_relative_path(path=file_path, project_dir=project_dir),
         )
 
+    if native_stage_enabled(NativeStage.DECLARATION_FILES):
+        return native_sql_hook_files(
+            project_dir=project_dir,
+            on_fault=on_fault,
+            parse_with_python=_named_parser(project_dir=project_dir, parse=parse),
+        )
     return _parse_named_declaration_files(
         project_dir=project_dir,
         kinds=frozenset({DeclarationKind.SQL_HOOK}),

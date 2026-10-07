@@ -274,7 +274,7 @@ GENERATOR_SUFFIXES: dict[str, str] = {
 }
 DISCOVERY_STAGE_CAPTURE_SUFFIX: str = "-discovered_project_inputs.json"
 DISCOVERY_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
-    {"project_config", "local_config", "project_dir"}
+    {"project_config", "local_config", "project_dir", "native_session"}
 )
 DISCOVERY_DECLARATION_FILE_COLLECTIONS: tuple[str, ...] = (
     "enum_files",

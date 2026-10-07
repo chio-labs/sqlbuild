@@ -8,11 +8,11 @@ from typing import cast
 
 from sqlbuild.compiler.discovery._helpers.sql.header_keys import reject_unsupported_header_keys
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery.constants import SQL_HOOK_HEADER_KEYS
 from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile
 
 _HOOK_DESCRIPTION_HEADER_KEY: str = "description"
-_SUPPORTED_HOOK_HEADER_KEYS: frozenset[str] = frozenset({_HOOK_DESCRIPTION_HEADER_KEY})
 _SQL_ESCAPE_CHARACTER: str = "\\"
 _SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"', "`"})
 _SQL_STATEMENT_TERMINATOR: str = ";"
@@ -111,7 +111,7 @@ def _parse_hook_header(*, header: str, header_line: int, file_path: Path) -> dic
     )
     reject_unsupported_header_keys(
         header_values=parsed_header,
-        supported_keys=_SUPPORTED_HOOK_HEADER_KEYS,
+        supported_keys=SQL_HOOK_HEADER_KEYS,
         statement="HOOK()",
         header=header,
         header_line=header_line,

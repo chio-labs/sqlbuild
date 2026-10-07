@@ -18,6 +18,7 @@ class NativeStage(StrEnum):
     DECLARATION_SCOPES = "declaration_scopes"
     MODEL_CONFIG = "model_config"
     REFERENCE_EXTRACTION = "reference_extraction"
+    DECLARATION_FILES = "declaration_files"
 
 
 class NativeStageTier(StrEnum):

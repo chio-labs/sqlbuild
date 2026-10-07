@@ -5,12 +5,15 @@ from __future__ import annotations
 import datetime
 import json
 import math
+import os
 import random
 import struct
 import tomllib
+from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
 from itertools import compress
+from operator import not_
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,10 +24,26 @@ from sqlbuild import _native
 from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
     build_tolerant_scope_discovery,
 )
-from sqlbuild.compiler.discovery._helpers.native.payloads import native_payload_error
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_audit_files,
+    discover_constant_files,
+    discover_enum_files,
+    discover_model_schema_files,
+    discover_sql_function_files,
+    discover_sql_hook_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.payloads import (
+    native_payload_error,
+    native_text_runtime,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
     SelectedContractInputDiscoverer,
+)
+from sqlbuild.compiler.discovery.constants import (
+    SQL_AUDIT_HEADER_KEYS,
+    SQL_FUNCTION_HEADER_KEYS,
+    SQL_HOOK_HEADER_KEYS,
 )
 from sqlbuild.compiler.discovery.main._model_description_inputs import (
     discover_model_description_inputs,
@@ -33,11 +52,15 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredEnumFile,
     DiscoveredProjectInputs,
+    DiscoveryFileFault,
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
+    GeneratedDeclarationFileTestCase,
+)
 from tests.integration.src.sqlbuild.compiler.helpers import random_float, random_text
 
 REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
@@ -664,7 +687,9 @@ def write_project(*, project_dir: Path, files: tuple[tuple[str, bytes], ...]) ->
         _ = path.write_bytes(data)
 
 
-def stage_outcome(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> object:
+def stage_outcome(
+    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+) -> tuple[object, ...]:
     """Return the rendered discovery stage under `engine` with its failure type and message."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
@@ -793,3 +818,469 @@ def _declared_enum_names(enum_file: DiscoveredEnumFile) -> tuple[str, tuple[str,
         enum_file.relative_path.as_posix(),
         tuple(declaration.name for declaration in enum_file.declarations),
     )
+
+
+DECLARATION_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
+    "enum": discover_enum_files,
+    "constant": discover_constant_files,
+    "model_schema": discover_model_schema_files,
+    "audit": discover_audit_files,
+    "sql_hook": discover_sql_hook_files,
+    "sql_function": discover_sql_function_files,
+}
+
+
+def declaration_files_outcome(
+    *, project_dir: Path, kind: str, engine: str, monkeypatch: pytest.MonkeyPatch
+) -> tuple[object, ...]:
+    """Return the rendered `kind` collection under `engine`, or its failure type, text and help."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+    capture: FailureCapture = FailureCapture()
+    with capture:
+        return (
+            "parsed",
+            render_stage_capture(DECLARATION_DISCOVERERS[kind](project_dir=project_dir)),
+        )
+    failure: BaseException | None = capture.failure
+    return (type(failure).__name__, str(failure), getattr(failure, "help", None))
+
+
+def native_declaration_tag(*, file_path: Path, kind: str) -> str:
+    """Return whether native parsing parses, fails or defers one file's contents."""
+
+    payload: tuple[object, ...] = _native.parse_declaration_contents(
+        {
+            "kind": kind,
+            "function_keys": sorted(SQL_FUNCTION_HEADER_KEYS),
+            "audit_keys": sorted(SQL_AUDIT_HEADER_KEYS),
+            "hook_keys": sorted(SQL_HOOK_HEADER_KEYS),
+            **native_text_runtime(),
+        },
+        (str(file_path), file_path.stem),
+        file_path.read_text(encoding="utf-8"),
+    )
+    return str(payload[0])
+
+
+def tolerant_declaration_outcome(
+    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+) -> tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]]:
+    """Return tolerant scope discovery's declaration collections and faults under `engine`."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+    discovery: TolerantScopeDiscovery = build_tolerant_scope_discovery(project_dir=project_dir)
+    return (
+        render_stage_capture(discovery.discovered_inputs),
+        discovery.resource_faults,
+        discovery.declaration_faults,
+    )
+
+
+# Seeded generators of declaration file contents: each builds a valid file, then often applies one
+# authored mistake or awkward form, so the corpus covers every failure path and its position.
+VALID_IDENTIFIERS: tuple[str, ...] = ("order_status", "orders", "cap", "a", "a1", "tier_2")
+ODD_IDENTIFIERS: tuple[str, ...] = (
+    "OrderStatus", "HTTPCode", "x2Y", "__dunder", "_private", "order_", "9lives", "order-status",
+    "caf\u00e9", "PLACED", "_", "order__status", "'quoted_name'", "1", "true", "null", "1.5",
+)  # fmt: skip
+ENUM_MEMBERS: tuple[str, ...] = ("PLACED", "SHIPPED", "RETURNED", "A", "B_2")
+ODD_ENUM_MEMBERS: tuple[str, ...] = ("placed", "Placed", "1", "'quoted'", "true", "x\u00e9", "_")
+HEADER_SCALARS: tuple[str, ...] = (
+    "1", "-2", "+3", "0", "007", "1.5", ".5", "5.", "true", "false", "null", "'text'",
+    '"quoted"', "''", "' '", "word", "PLACED", "\u0661\u0662", "x\u00e9", "1e5", "'it''s'",
+    "'a\\'b'", "99999999999999999999999",
+)  # fmt: skip
+HEADER_VALUES: tuple[str, ...] = (
+    "1", "'text'", "[1, 2]", "{'a', 'b'}", "1.5", "true", "'2024-01-01'", "[]", "{}", "null",
+    "['a', 'b']", "(x 1)", "[1, 'a']", "[[1], [2]]", "-7",
+)  # fmt: skip
+DECLARATION_SPACES: tuple[str, ...] = (
+    " ",
+    "",
+    "  ",
+    "\n",
+    "\n  ",
+    " ",
+    "\n",
+    "\t",
+    "\u00a0",
+    "\r\n",
+) * 6 + (" -- note\n", " /* c */ ", "\u2028", "\x1c", "\u3000")
+SQL_BODIES: tuple[str, ...] = (
+    "SELECT 1",
+    '\n  SELECT *\n  FROM __ref("@model")\n  WHERE NOT (@expression)\n',
+    "SELECT ';' AS x",
+    "WITH t AS (SELECT 1) SELECT * FROM t",
+    "SELECT 'it''s' AS x, \"q\" FROM `t`",
+    "\tSELECT\n\t\t1\n",
+    "seLECT 1 -- trailing\n",
+    "SELECT 1 /* ( */",
+)
+ODD_SQL_BODIES: tuple[str, ...] = (
+    "", "   ", "-- only a comment", "SELECT 1; SELECT 2", "SELECT (1", "MEASURE (SELECT 1);",
+    "\u017felect 1", "EVIDENCE (SELECT 1);", "SELECT 1;", "SELECT ')' AS x",
+)  # fmt: skip
+AUDIT_OPTIONAL_KEYS: tuple[str, ...] = (
+    "severity", "run_scope", "always_run", "sample_count", "sample_unit", "thresholds",
+    "minimum_samples", "sql_analysis", "unknown_key", "nme",
+)  # fmt: skip
+FUNCTION_HEADER_KEYS: tuple[str, ...] = (
+    "arguments", "returns", "database", "schema", "tags", "description", "argumnts", "body",
+)  # fmt: skip
+VALID_FUNCTION_HEADER: str = 'arguments (amount DECIMAL), returns DECIMAL, description "Doubles"'
+ODD_WEIGHTS: tuple[int, int] = (85, 15)
+
+
+def _space(rng: random.Random) -> str:
+    return rng.choice(DECLARATION_SPACES)
+
+
+def _pick(rng: random.Random, valid: tuple[str, ...], odd: tuple[str, ...]) -> str:
+    """Mostly a valid form, sometimes an odd one."""
+
+    return rng.choice(rng.choices((valid, odd), weights=ODD_WEIGHTS)[0])
+
+
+def _maybe(rng: random.Random, chance: float, entry: str) -> list[str]:
+    """`[entry]` with probability `chance`, else no entry."""
+
+    return [entry] * (rng.random() < chance)
+
+
+def _scalar_value(rng: random.Random, depth: int) -> str:
+    _ = depth
+    return rng.choice((*HEADER_VALUES, *HEADER_SCALARS))
+
+
+def _list_value(rng: random.Random, depth: int) -> str:
+    return "[" + ", ".join(_value(rng, depth + 1) for _ in range(rng.randint(0, 3))) + "]"
+
+
+def _set_value(rng: random.Random, depth: int) -> str:
+    return "{" + ", ".join(_value(rng, depth + 1) for _ in range(rng.randint(0, 3))) + "}"
+
+
+def _map_value(rng: random.Random, depth: int) -> str:
+    entries: str = ", ".join(
+        f"key_{index} {_value(rng, depth + 1)}" for index in range(rng.randint(0, 3))
+    )
+    return f"({entries})"
+
+
+def _wrapped_value(rng: random.Random, depth: int) -> str:
+    keys: list[str] = rng.sample(("value", "type", "render_as", "extra"), k=rng.randint(0, 3))
+    return "constant(" + ", ".join(f"{key} {_value(rng, depth + 1)}" for key in keys) + ")"
+
+
+VALUE_FORMS: tuple[Callable[[random.Random, int], str], ...] = (
+    _scalar_value, _list_value, _set_value, _map_value, _wrapped_value,
+)  # fmt: skip
+VALUE_FORM_WEIGHTS: dict[int, tuple[int, ...]] = {
+    0: (50, 15, 10, 10, 15),
+    1: (50, 15, 10, 10, 15),
+    2: (100, 0, 0, 0, 0),
+}
+
+
+def _value(rng: random.Random, depth: int = 0) -> str:
+    form: Callable[[random.Random, int], str] = rng.choices(
+        VALUE_FORMS, weights=VALUE_FORM_WEIGHTS[min(depth, 2)]
+    )[0]
+    return form(rng, depth)
+
+
+def _shuffled(rng: random.Random, entries: list[str]) -> str:
+    """Entries in authored order, or shuffled: the parsers must not depend on key order."""
+
+    return ", ".join(rng.choice((entries, rng.sample(entries, k=len(entries)))))
+
+
+def _declaration_count(rng: random.Random) -> int:
+    return rng.choice((1, 1, 1, 1, 2, 2, 3))
+
+
+def _statement(rng: random.Random, keyword: str, header: str) -> list[str]:
+    return [_space(rng), keyword, _space(rng), f"({header})", _space(rng), ";"]
+
+
+STATEMENT_MISTAKES: tuple[Callable[[list[str]], None], ...] = (
+    lambda statement: statement.__setitem__(5, ""),
+    lambda statement: statement.__setitem__(5, ";;"),
+    lambda statement: statement.__setitem__(5, ","),
+    lambda statement: statement.__setitem__(1, statement[1].lower()),
+    lambda statement: statement.__setitem__(1, "SCHEMA"),
+    lambda statement: statement.__setitem__(3, statement[3][:-1]),
+    lambda statement: None,
+)
+FILE_MISTAKES: tuple[Callable[[str], str], ...] = (
+    lambda text: "-- header\n" + text,
+    lambda text: text + "SELECT 1",
+    lambda text: text[:0] + "\n",
+    lambda text: text,
+)
+
+
+def _statements(rng: random.Random, keyword: str, headers: list[str]) -> str:
+    """Join `KEYWORD (header);` statements with at most one statement and one file mistake."""
+
+    statements: list[list[str]] = [_statement(rng, keyword, header) for header in headers]
+    rng.choices(STATEMENT_MISTAKES, weights=(4, 3, 3, 3, 3, 3, 81))[0](rng.choice(statements))
+    text: str = "".join("".join(statement) for statement in statements) + _space(rng)
+    return rng.choices(FILE_MISTAKES, weights=(4, 4, 4, 88))[0](text)
+
+
+def _identity(rng: random.Random, index: int) -> str:
+    return _pick(rng, (f"{rng.choice(VALID_IDENTIFIERS)}_{index}",), ODD_IDENTIFIERS)
+
+
+def _shorthand_members(rng: random.Random, names: list[str]) -> str:
+    return "[" + ", ".join(_pick(rng, (name,), ODD_ENUM_MEMBERS) for name in names) + "]"
+
+
+def _explicit_members(rng: random.Random, names: list[str]) -> str:
+    values: tuple[str, ...] = rng.choice((("'x'", "'y'", "'z'"), ("1", "2", "-3")))
+    entries: str = ", ".join(
+        f"{_pick(rng, (name,), ODD_ENUM_MEMBERS)} {_pick(rng, values, HEADER_SCALARS)}"
+        for name in names
+    )
+    return f"({entries})"
+
+
+def _odd_members(rng: random.Random, names: list[str]) -> str:
+    _ = names
+    return rng.choice(("[]", "()", "1", "'x'", "{A, B}", "null", _value(rng)))
+
+
+ENUM_MEMBER_FORMS: tuple[Callable[[random.Random, list[str]], str], ...] = (
+    _shorthand_members, _explicit_members, _odd_members,
+)  # fmt: skip
+
+
+def _enum_header(rng: random.Random, index: int) -> str:
+    names: list[str] = rng.sample(ENUM_MEMBERS, k=rng.randint(1, 3))
+    names.extend(names[:1] * (rng.random() < 0.1))
+    members: str = rng.choices(ENUM_MEMBER_FORMS, weights=(50, 42, 8))[0](rng, names)
+    entries: list[str] = [
+        *_maybe(rng, 0.97, f"name {_identity(rng, index)}"),
+        *_maybe(rng, 0.97, f"members {members}"),
+        *_maybe(rng, 0.05, "extra 1"),
+    ]
+    return _shuffled(rng, entries)
+
+
+def enum_file(*, rng: random.Random) -> str:
+    """Return enum file contents, mostly valid, some with one authored mistake."""
+
+    headers: list[str] = [_enum_header(rng, index) for index in range(_declaration_count(rng))]
+    return _statements(rng, "ENUM", headers)
+
+
+def _constant_header(rng: random.Random, index: int) -> str:
+    value: str = rng.choice((rng.choice(HEADER_VALUES), _value(rng)))
+    types: tuple[str, ...] = ("INTEGER", "VARCHAR", "BOOLEAN", "decimal", "1", "true", "''")
+    renderings: tuple[str, ...] = ("value_list", "array", "list", "1", "''")
+    entries: list[str] = [
+        f"name {_identity(rng, index)}",
+        *_maybe(rng, 0.95, f"value {value}"),
+        *_maybe(rng, 0.25, f"type {rng.choice(types)}"),
+        *_maybe(rng, 0.2, f"render_as {rng.choice(renderings)}"),
+        *_maybe(rng, 0.05, "unknown 1"),
+    ]
+    return _shuffled(rng, entries)
+
+
+def constant_file(*, rng: random.Random) -> str:
+    """Return constant file contents with wrapped, typed and malformed constants."""
+
+    headers: list[str] = [_constant_header(rng, index) for index in range(_declaration_count(rng))]
+    return _statements(rng, "CONSTANT", headers)
+
+
+def _column(rng: random.Random, index: int) -> str:
+    audits: str = _pick(rng, ("not_null", "unique", "accepted_values(values [1])"), ("1",))
+    metadata: list[str] = [
+        *_maybe(rng, 0.8, f"type {_pick(rng, ('INTEGER', 'VARCHAR', 'DECIMAL(10, 2)'), ('1',))}"),
+        *_maybe(rng, 0.3, f"nullable {_pick(rng, ('true', 'false'), ('1', 'maybe'))}"),
+        *_maybe(rng, 0.3, f"description {_pick(rng, ('"Order id"',), ('""', '1'))}"),
+        *_maybe(rng, 0.3, f"audits [{audits}]"),
+        *_maybe(rng, 0.03, "migrate_from old"),
+    ]
+    name: str = _pick(rng, (f"column_{index}",), ("ORDER_ID", '"spaced name"', "column_0"))
+    return f"{name} ({', '.join(metadata)})"
+
+
+def _schema_header(rng: random.Random, index: int) -> str:
+    columns: str = ", ".join(_column(rng, column) for column in range(rng.randint(0, 3)))
+    description: str = _pick(rng, ('"Orders"', "word"), ('""', '" "', "1", "null"))
+    extends: str = _pick(rng, ("base_shape", '"base"'), ('"not ident"', "1", "null"))
+    entries: list[str] = [
+        f"name {_identity(rng, index)}",
+        *_maybe(rng, 0.5, f"description {description}"),
+        *_maybe(rng, 0.3, f"extends {extends}"),
+        *_maybe(
+            rng, 0.95, rng.choices((f"columns ({columns})", f"columns {_value(rng)}"), (95, 5))[0]
+        ),
+        *_maybe(rng, 0.05, "extra 1"),
+    ]
+    return _shuffled(rng, entries)
+
+
+def schema_file(*, rng: random.Random) -> str:
+    """Return reusable model schema file contents."""
+
+    headers: list[str] = [_schema_header(rng, index) for index in range(_declaration_count(rng))]
+    return _statements(rng, "SCHEMA", headers)
+
+
+def _violation_audit(rng: random.Random, index: int, named: bool) -> tuple[str, str]:
+    entries: list[str] = [
+        *_maybe(rng, named, f"name {_pick(rng, (f'check_{index}',), ('check_0', '""', '1'))}"),
+        *_maybe(rng, 0.05, f"evaluation {rng.choice(('violations', 'count', '1'))}"),
+        *(f"{key} {rng.choice(('x', 'true', '1', '""'))}" for key in _optional_keys(rng)),
+    ]
+    return _shuffled(rng, entries), _pick(rng, SQL_BODIES, ODD_SQL_BODIES)
+
+
+def _measurement_audit(rng: random.Random, index: int, named: bool) -> tuple[str, str]:
+    entries: list[str] = [
+        *_maybe(rng, named, f"name {_pick(rng, (f'check_{index}',), ('check_0', '""', '1'))}"),
+        "evaluation measurement",
+        *_maybe(rng, 0.95, f"value {_pick(rng, ('total', '"amount"'), ('1', '""'))}"),
+        *(f"{key} {rng.choice(('x', 'true', '1', '""'))}" for key in _optional_keys(rng)),
+    ]
+    measure: str = f"MEASURE{_space(rng)}({_pick(rng, SQL_BODIES, ODD_SQL_BODIES)})"
+    evidence: str = (
+        f"{_pick(rng, ('EVIDENCE',), ('evidence', 'MEASURE', 'EVIDENCES'))} "
+        f"({_pick(rng, SQL_BODIES, ODD_SQL_BODIES)});"
+    )
+    parts: list[str] = [
+        *_maybe(rng, 0.95, measure + rng.choices((";", ""), weights=(95, 5))[0]),
+        *_maybe(rng, 0.4, evidence),
+        *_maybe(rng, 0.05, "SELECT 1"),
+    ]
+    return _shuffled(rng, entries), "\n".join(parts)
+
+
+def _optional_keys(rng: random.Random) -> list[str]:
+    return rng.sample(AUDIT_OPTIONAL_KEYS, k=rng.choices((0, 1, 2), weights=(70, 20, 10))[0])
+
+
+AUDIT_FORMS: tuple[Callable[[random.Random, int, bool], tuple[str, str]], ...] = (
+    _violation_audit, _measurement_audit,
+)  # fmt: skip
+
+
+def audit_file(*, rng: random.Random) -> str:
+    """Return SQL audit file contents with violation and measurement blocks."""
+
+    count: int = _declaration_count(rng)
+    named: bool = count > 1 or rng.random() < 0.5
+    blocks: list[str] = []
+    for index in range(count):
+        header, body = rng.choices(AUDIT_FORMS, weights=(65, 35))[0](rng, index, named)
+        keyword: str = _pick(rng, ("AUDIT", "audit", "Audit"), ("AUD\u0131T", "AUDITS"))
+        close: str = _pick(rng, (");", ") ;", ");\n"), (")", "); -- c"))
+        blocks.append(f"{keyword}{_space(rng)}({header}{close}\n{body}\n")
+    leading: str = _pick(rng, ("", "\n\n", "  "), ("-- lead\n", "SELECT 1;\n"))
+    return leading + "".join(blocks)
+
+
+def hook_file(*, rng: random.Random) -> str:
+    """Return SQL hook file contents."""
+
+    header: str = _pick(
+        rng,
+        ("", 'description "Refresh"', "description 'it''s (fine)'", "description `q`"),
+        (
+            'description ""',
+            "description 1",
+            'descripton "typo"',
+            'description "a (b" , other 1',
+            "description 'unterminated",
+            "description 'a\\'b'",
+        ),
+    )
+    keyword: str = _pick(rng, ("HOOK",), ("hook", "HOOKS", "-- c\nHOOK"))
+    close: str = _pick(rng, (");", ") ;", ");\n"), (")", "));"))
+    body: str = _pick(rng, SQL_BODIES, ODD_SQL_BODIES)
+    return f"{_space(rng)}{keyword}{_space(rng)}({header}{close}{body}"
+
+
+def function_file(*, rng: random.Random) -> str:
+    """Return SQL function file contents."""
+
+    keys: list[str] = rng.sample(FUNCTION_HEADER_KEYS, k=rng.randint(0, 3))
+    generated: str = ", ".join(f"{key} {_value(rng)}" for key in keys)
+    entries: str = rng.choices((VALID_FUNCTION_HEADER, generated), weights=(70, 30))[0]
+    keyword: str = _pick(rng, ("FUNCTION",), ("function", "FUNC"))
+    close: str = _pick(rng, (");", ") ;", ");\n"), (")",))
+    body: str = _pick(rng, SQL_BODIES, ODD_SQL_BODIES)
+    return f"{_space(rng)}{keyword}{_space(rng)}({entries}{close}{body}"
+
+
+DECLARATION_GENERATORS: dict[str, Callable[..., str]] = {
+    "enum": enum_file,
+    "constant": constant_file,
+    "model_schema": schema_file,
+    "audit": audit_file,
+    "sql_hook": hook_file,
+    "sql_function": function_file,
+}
+
+
+def generated_declaration_outcomes(
+    *,
+    project_root: Path,
+    test_case: GeneratedDeclarationFileTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[tuple[int, ...], Counter[str]]:
+    """Discover each generated file under both engines: the mismatching seeds and native tags."""
+
+    agreements: list[bool] = []
+    tags: Counter[str] = Counter()
+    for seed in range(test_case.case_count):
+        project_dir: Path = project_root / str(seed)
+        contents: str = DECLARATION_GENERATORS[test_case.kind](
+            rng=random.Random(f"{test_case.kind}-{seed}")
+        )
+        write_project(
+            project_dir=project_dir, files=((test_case.relative_path, contents.encode("utf-8")),)
+        )
+        python: tuple[object, ...] = declaration_files_outcome(
+            project_dir=project_dir, kind=test_case.kind, engine="python", monkeypatch=monkeypatch
+        )
+        native: tuple[object, ...] = declaration_files_outcome(
+            project_dir=project_dir,
+            kind=test_case.kind,
+            engine="native-preview",
+            monkeypatch=monkeypatch,
+        )
+        tags[
+            native_declaration_tag(
+                file_path=project_dir / test_case.relative_path, kind=test_case.kind
+            )
+        ] += 1
+        agreements.append(native == python)
+    return tuple(compress(range(test_case.case_count), map(not_, agreements))), tags
+
+
+def accept_any_declarations(**_: object) -> tuple[object, ...]:
+    """A patched Python parser that accepts every file."""
+
+    return ()
+
+
+def reject_any_contents(**_: object) -> tuple[object, ...]:
+    """A patched Python parser that rejects every file with an unrelated error."""
+
+    raise ValueError("different")
+
+
+def write_undecodable_hook(*, project_dir: Path, contents: bytes) -> None:
+    """Write a project whose only SQL hook has a file name that is not valid UTF-8."""
+
+    write_project(project_dir=project_dir, files=())
+    hooks: Path = project_dir / "hooks" / "sql"
+    hooks.mkdir(parents=True)
+    _ = Path(os.fsdecode(bytes(hooks) + b"/refresh_\xff.sql")).write_bytes(contents)
