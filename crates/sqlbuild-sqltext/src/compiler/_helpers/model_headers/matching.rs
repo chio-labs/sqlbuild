@@ -15,12 +15,21 @@ pub(crate) fn match_one(text: &str) -> Option<HeaderMatchOffsets> {
 
 /// UTF-8 byte offsets of one matched header: header start, header end, and SQL start.
 pub(crate) fn match_one_bytes(text: &str) -> Option<HeaderMatchOffsets> {
+    match_statement_bytes(text, 0, MODEL_KEYWORD)
+}
+
+/// `\s*KEYWORD\s*\((?P<header>...)\)\s*;\s*` matched at byte `start`, as UTF-8 byte offsets.
+pub(crate) fn match_statement_bytes(
+    text: &str,
+    start: usize,
+    keyword: &[u8],
+) -> Option<HeaderMatchOffsets> {
     let bytes = text.as_bytes();
-    let mut index = skip_whitespace(text, 0);
-    if !bytes[index..].starts_with(MODEL_KEYWORD) {
+    let mut index = skip_whitespace(text, start);
+    if !bytes[index..].starts_with(keyword) {
         return None;
     }
-    index = skip_whitespace(text, index + MODEL_KEYWORD.len());
+    index = skip_whitespace(text, index + keyword.len());
     if bytes.get(index) != Some(&b'(') {
         return None;
     }

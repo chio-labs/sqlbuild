@@ -8,7 +8,13 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ModelSqlParseError
+from sqlbuild.compiler.discovery.exceptions import (
+    DeclarationParseError,
+    DiscoveryError,
+    ModelSqlParseError,
+    SqlScenarioParseError,
+    SqlTestParseError,
+)
 from sqlbuild.compiler.discovery.types import (
     DirectorySnapshotEntry,
     NativeListing,
@@ -20,7 +26,12 @@ _DISPLAY_PROBE: str = "_"
 _WINDOWS_OS_NAME: str = "nt"
 _PATH_ENCODING: str = "utf-8"
 _NATIVE_TREE_MEMO_KEY: str = "native_project_tree"
-_FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {"model_sql": ModelSqlParseError}
+_FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {
+    "model_sql": ModelSqlParseError,
+    "declaration": DeclarationParseError,
+    "sql_test": SqlTestParseError,
+    "sql_scenario": SqlScenarioParseError,
+}
 
 
 def native_display_prefix(project_dir: Path) -> str:

@@ -121,6 +121,10 @@ DLT_WRITE_DISPOSITION_MERGE: str = "merge"
 CONFIG_CONCURRENCY_KEY: str = "concurrency"
 LEGACY_CONFIG_CONCURRENCY_KEY: str = "max_concurrency"
 SQL_ANALYSIS_CONFIG_KEY: str = "sql_analysis"
+SQL_TEST_HEADER_KEYS: frozenset[str] = frozenset(
+    {"name", "mode", "parameters", "cases", "cursor_start", "cursor_end", SQL_ANALYSIS_CONFIG_KEY}
+)
+SQL_SCENARIO_HEADER_KEYS: frozenset[str] = frozenset({"description", "tags"})
 LEGACY_SQL_VALIDATION_CONFIG_KEY: str = "sql_validation"
 SQL_ANALYSIS_SETTING_KEY: str = "sql_analysis"
 REQUIRE_SQL_ANALYSIS_SETTING_KEY: str = "require_sql_analysis"

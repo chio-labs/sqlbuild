@@ -106,3 +106,15 @@ class GeneratedLayoutParityTestCase:
     expected_mismatches: tuple[str, ...] = ()
     expected_minimum_valid: int = 0
     expected_minimum_invalid: int = 0
+
+
+@dataclass(frozen=True)
+class GeneratedSqlTestParityTestCase:
+    """Seeded SQL test and scenario files discovered by both compiler engines."""
+
+    description: str
+    seed: int
+    case_count: int
+    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
+    expected_minimum_parsed: int = 0
+    expected_minimum_failed: int = 0

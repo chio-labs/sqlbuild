@@ -25,6 +25,8 @@ pub const CANONICAL_AUTHORED_ROOTS: [&[&str]; 5] = [
 ];
 /// The SQL test root, whose `macros/` SQL files are tests rather than declarations.
 pub const SQL_TESTS_ROOT: &[&str] = &["tests", "unit"];
+/// The SQL scenario root.
+pub const SQL_SCENARIOS_ROOT: &str = "tests/scenarios";
 /// The directory of macro tests below the SQL test root.
 pub const MACRO_TESTS_DIRECTORY: &str = "macros";
 /// Inherited declaration directories, which may also be project-wide global roots.

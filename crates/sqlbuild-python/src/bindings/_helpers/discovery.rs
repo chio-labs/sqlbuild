@@ -13,6 +13,11 @@ use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOpti
 use sqlbuild_discovery::models::{
     DiscoveredFile, DiscoveryFailure, FileOutcome, LineColumnSpan, ProjectRoot, StageDeferral,
 };
+use sqlbuild_discovery::sql_tests::main::discover_scenario_files::discover_scenario_files as discover_scenarios;
+use sqlbuild_discovery::sql_tests::main::discover_sql_test_files::discover_sql_test_files as discover_tests;
+use sqlbuild_discovery::sql_tests::models::{
+    DiscoveredScenarioFile, DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions,
+};
 use sqlbuild_discovery::tree::main::listings::read_listings;
 use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
 use std::collections::HashSet;
@@ -20,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::bindings::_helpers::functions::map_to_python;
-use crate::bindings::models::{ModelDiscoveryRequest, NativeProjectTree};
+use crate::bindings::models::{ModelDiscoveryRequest, NativeProjectTree, SqlTestDiscoveryRequest};
 use crate::bindings::types::CompilerDetach;
 
 type PyObject = Py<PyAny>;
@@ -49,15 +54,7 @@ fn outcome_object<T>(
     match outcome {
         FileOutcome::Parsed(value) => parsed(py, value),
         FileOutcome::Unreadable => tuple_object(py, vec![object(py, "read")?]),
-        FileOutcome::Failed(failure) => tuple_object(
-            py,
-            vec![
-                object(py, "error")?,
-                object(py, failure.kind.as_str())?,
-                object(py, failure.message)?,
-                object(py, failure.help)?,
-            ],
-        ),
+        FileOutcome::Failed(failure) => failure_object(py, failure),
     }
 }
 
@@ -198,7 +195,111 @@ fn discover_declaration_layout(
     }
 }
 
+fn failure_object(py: Python<'_>, failure: DiscoveryFailure) -> PyResult<PyObject> {
+    tuple_object(
+        py,
+        vec![
+            object(py, "error")?,
+            object(py, failure.kind.as_str())?,
+            object(py, failure.message)?,
+            object(py, failure.help)?,
+        ],
+    )
+}
+
+fn test_block_object(py: Python<'_>, block: SqlTestBlock) -> PyResult<PyObject> {
+    tuple_object(
+        py,
+        vec![
+            map_to_python(py, block.header_values)?,
+            object(py, block.sql_body)?,
+        ],
+    )
+}
+
+fn test_file_object(py: Python<'_>, file: DiscoveredSqlTestFile) -> PyResult<PyObject> {
+    let blocks: Vec<PyObject> = file
+        .blocks
+        .into_iter()
+        .map(|block| test_block_object(py, block))
+        .collect::<PyResult<_>>()?;
+    let failure: Option<PyObject> = file
+        .failure
+        .map(|failure| failure_object(py, failure))
+        .transpose()?;
+    tuple_object(
+        py,
+        vec![
+            object(py, "ok")?,
+            object(py, file.contents)?,
+            object(py, blocks)?,
+            object(py, failure)?,
+        ],
+    )
+}
+
+fn scenario_object(py: Python<'_>, file: DiscoveredScenarioFile) -> PyResult<PyObject> {
+    tuple_object(
+        py,
+        vec![
+            object(py, "ok")?,
+            object(py, file.contents)?,
+            map_to_python(py, file.header_values)?,
+            object(py, file.sql_body)?,
+        ],
+    )
+}
+
+fn sql_test_inputs(request: SqlTestDiscoveryRequest) -> (ProjectRoot, SqlTestFileOptions) {
+    (
+        ProjectRoot {
+            directory: PathBuf::from(request.project_dir),
+            display_prefix: request.display_prefix,
+        },
+        SqlTestFileOptions {
+            test_keys: request.test_keys,
+            scenario_keys: request.scenario_keys,
+        },
+    )
+}
+
+/// Discover and split the SQL test files natively, or return `None` when Python must run.
+#[pyfunction]
+fn discover_sql_test_files(
+    py: Python<'_>,
+    request: SqlTestDiscoveryRequest,
+    tree: &NativeProjectTree,
+) -> PyResult<Option<Vec<(String, PyObject)>>> {
+    let (root, options) = sql_test_inputs(request);
+    let discovered: Result<Vec<DiscoveredFile<DiscoveredSqlTestFile>>, StageDeferral> = py
+        .compiler_detach(|| Ok(discover_tests(&root, &tree.inner, &options)))
+        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+    match discovered {
+        Ok(files) => Ok(Some(files_object(py, files, test_file_object)?)),
+        Err(_deferral) => Ok(None),
+    }
+}
+
+/// Discover and header-parse the scenario files natively, or return `None` when Python must run.
+#[pyfunction]
+fn discover_scenario_files(
+    py: Python<'_>,
+    request: SqlTestDiscoveryRequest,
+    tree: &NativeProjectTree,
+) -> PyResult<Option<Vec<(String, PyObject)>>> {
+    let (root, options) = sql_test_inputs(request);
+    let discovered: Result<Vec<DiscoveredFile<DiscoveredScenarioFile>>, StageDeferral> = py
+        .compiler_detach(|| Ok(discover_scenarios(&root, &tree.inner, &options)))
+        .map_err(crate::bindings::_helpers::panics::compiler_error)?;
+    match discovered {
+        Ok(files) => Ok(Some(files_object(py, files, scenario_object)?)),
+        Err(_deferral) => Ok(None),
+    }
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(discover_sql_test_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_scenario_files, module)?)?;
     module.add_class::<NativeProjectTree>()?;
     module.add_function(wrap_pyfunction!(discover_model_files, module)?)?;
     module.add_function(wrap_pyfunction!(discover_declaration_layout, module)?)?;

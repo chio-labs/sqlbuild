@@ -40,6 +40,10 @@ from sqlbuild.compiler.discovery._helpers.native.declarations import (
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
+    discover_native_scenario_files,
+    discover_native_test_files,
+)
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import (
@@ -239,8 +243,16 @@ def _discover_declaration_files(
             python_function_files=discover_python_function_files(project_dir=project_dir),
             schema_files=discover_schema_files(project_dir=project_dir),
             seed_files=discover_seed_files(project_dir=project_dir),
-            test_files=discover_test_files(project_dir=project_dir, fact_cache=fact_cache),
-            scenario_files=discover_scenario_files(project_dir=project_dir),
+            test_files=(
+                discover_native_test_files(project_dir=project_dir, fact_cache=fact_cache)
+                if native
+                else discover_test_files(project_dir=project_dir, fact_cache=fact_cache)
+            ),
+            scenario_files=(
+                discover_native_scenario_files(project_dir=project_dir)
+                if native
+                else discover_scenario_files(project_dir=project_dir)
+            ),
             audit_files=discover_audit_files(project_dir=project_dir),
             macro_files=discover_macro_files(project_dir=project_dir),
             adapter_file=discover_adapter_file(project_dir=project_dir),

@@ -114,36 +114,26 @@ def _assemble_discovered_project_inputs(
             else project_config.settings.sql_analysis
         )
     )
-    if native:
+    with FactCacheStore(
+        root=discovery_cache_root(
+            project_dir=project_dir,
+            project_config=project_config,
+            local_config=local_config,
+            cache_request=cache_request,
+        ),
+        namespace=DISCOVERY_FACT_CACHE_NAMESPACE,
+        algorithm=DISCOVERY_FACT_CACHE_ALGORITHM,
+    ) as fact_cache:
         discovered_inputs: DiscoveredProjectInputs = build_discovered_project_inputs(
             project_dir=project_dir,
             project_config=project_config,
             local_config=local_config,
             sql_analysis_enabled=sql_analysis_enabled,
             extract_output_column_locations=extract_output_column_locations,
+            fact_cache=fact_cache,
             declaration_reuse=declaration_reuse,
-            native=True,
+            native=native,
         )
-    else:
-        with FactCacheStore(
-            root=discovery_cache_root(
-                project_dir=project_dir,
-                project_config=project_config,
-                local_config=local_config,
-                cache_request=cache_request,
-            ),
-            namespace=DISCOVERY_FACT_CACHE_NAMESPACE,
-            algorithm=DISCOVERY_FACT_CACHE_ALGORITHM,
-        ) as fact_cache:
-            discovered_inputs = build_discovered_project_inputs(
-                project_dir=project_dir,
-                project_config=project_config,
-                local_config=local_config,
-                sql_analysis_enabled=sql_analysis_enabled,
-                extract_output_column_locations=extract_output_column_locations,
-                fact_cache=fact_cache,
-                declaration_reuse=declaration_reuse,
-            )
     validate_discovered_inputs(discovered_inputs)
     from sqlbuild.runtime.event_exporting.main.configure_discovered_event_exporters import (
         configure_discovered_event_exporters,

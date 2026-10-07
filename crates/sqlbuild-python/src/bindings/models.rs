@@ -117,3 +117,13 @@ pub(crate) struct ModelDiscoveryRequest {
     pub(crate) extract_implicit_alias_columns: bool,
     pub(crate) extract_output_column_locations: bool,
 }
+
+/// One native SQL test or scenario discovery request from the Python discovery facade.
+#[derive(FromPyObject, Debug)]
+#[pyo3(from_item_all)]
+pub(crate) struct SqlTestDiscoveryRequest {
+    pub(crate) project_dir: String,
+    pub(crate) display_prefix: String,
+    pub(crate) test_keys: Vec<String>,
+    pub(crate) scenario_keys: Vec<String>,
+}

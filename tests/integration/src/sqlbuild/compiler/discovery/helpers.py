@@ -23,6 +23,8 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_enum_files,
     discover_macro_files,
     discover_model_files,
+    discover_scenario_files,
+    discover_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
     named_declaration_roots,
@@ -30,6 +32,10 @@ from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
 )
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
+)
+from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
+    discover_native_scenario_files,
+    discover_native_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
@@ -656,6 +662,88 @@ TAILS: tuple[str, ...] = (
     "\n-- FROM comment",
 )
 SEPARATORS: tuple[str, ...] = ("\n", "\r\n", "\r", "\t", " ", "\u3000", "\n\n")
+
+
+TEST_HEADER_ENTRIES: tuple[str, ...] = (
+    'name "keeps_orders"', "mode model", 'name "second"', "name ''", "name 1", "mode query",
+    "mode audit", "mode bogus", "sql_analysis false", "sql_analysis 1", "nme 1",
+    "parameters (status string), cases (placed (status 'placed'))",
+    "parameters (amount (type integer, nullable true)), cases (empty (amount null))",
+    "parameters (amount integer), cases (bad (amount 'x'))", "parameters (amount integer)",
+    "cursor_start '2024-01-01'", "cursor_end 3", "materialized table", "description (",
+    "tags [a, b]", "'unterminated",
+)  # fmt: skip
+SCENARIO_HEADER_ENTRIES: tuple[str, ...] = (
+    'description "Orders world"', "tags [north, south]", "description 1", "tags [1]",
+    "tags north", "name x", "description (", '"unterminated',
+)  # fmt: skip
+STATEMENT_BODIES: tuple[str, ...] = (
+    "SELECT 1", "SELECT 2 AS amount", "\n  SELECT 3\n  FROM orders\n", "", "  ",
+    "\n    SELECT 1\n      FROM t\n", "\tSELECT 1\n\tFROM\tt",
+    "SELECT 'TEST (x);' AS label", "SELECT 1\n   ", "-- only a comment", "SELECT ')' AS c;",
+    "\u3000SELECT 1",
+)  # fmt: skip
+STATEMENT_PREFIXES: tuple[str, ...] = ("",) * 10 + (" \n", "\ufeff", "-- lead\n", "\n\n  ")
+
+
+def generated_statement_text(*, rng: random.Random, keyword: str, entries: tuple[str, ...]) -> str:
+    """Return one statement header with random entries, separators and a body."""
+
+    separator: str = rng.choice(SEPARATORS)
+    chosen: list[str] = rng.choices(
+        (rng.sample(entries, k=rng.choice((0, 1, 1, 1, 2))), rng.sample(entries[:2], k=1)),
+        weights=(3, 2),
+    )[0]
+    header: str = ("," + separator).join(chosen)
+    closing: str = rng.choice((");",) * 8 + (") ;", ")\n;", ")", "));", ");;"))
+    return (
+        f"{rng.choice(('', ' ', '  '))}{keyword}{rng.choice(('', ' '))}({separator}{header}"
+        f"{separator}{closing}{rng.choice(SEPARATORS)}{rng.choice(STATEMENT_BODIES)}"
+    )
+
+
+def generated_test_bytes(*, rng: random.Random) -> bytes:
+    """Return one SQL test file with one to three blocks, joined at or inside lines."""
+
+    blocks: list[str] = [
+        generated_statement_text(rng=rng, keyword="TEST", entries=TEST_HEADER_ENTRIES)
+        for _ in range(rng.choice((1, 1, 1, 1, 2, 3)))
+    ]
+    joined: str = "".join(rng.choice(("\n", "\n\n", " ", "\r\n")) + block for block in blocks)
+    return (rng.choice(STATEMENT_PREFIXES) + joined.lstrip("\n\r ")).encode("utf-8")
+
+
+def generated_scenario_bytes(*, rng: random.Random) -> bytes:
+    """Return one SQL scenario file."""
+
+    text: str = generated_statement_text(
+        rng=rng, keyword="SCENARIO", entries=SCENARIO_HEADER_ENTRIES
+    )
+    return (rng.choice(STATEMENT_PREFIXES) + text).encode("utf-8")
+
+
+def sql_test_discovery_outcome(*, project_dir: Path, native: bool) -> object:
+    """Return the rendered test and scenario files, or the error type, message and help."""
+
+    discover: Callable[[], tuple[object, object]] = {
+        True: lambda: (
+            discover_native_test_files(project_dir=project_dir),
+            discover_native_scenario_files(project_dir=project_dir),
+        ),
+        False: lambda: (
+            discover_test_files(project_dir=project_dir),
+            discover_scenario_files(project_dir=project_dir),
+        ),
+    }[native]
+    capture: FailureCapture = FailureCapture()
+    rendered: list[object] = [None]
+    with DirectorySnapshot.scope(project_dir=project_dir), capture:
+        rendered[0] = render_stage_capture(discover())
+    failure: BaseException | None = capture.failure
+    return {
+        True: rendered[0],
+        False: (type(failure).__name__, str(failure), getattr(failure, "help", None)),
+    }[failure is None]
 
 
 class FailureCapture:

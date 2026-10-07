@@ -7,6 +7,7 @@ use sqlbuild_core::text::main::is_python_word::is_python_word;
 
 /// The facts of one header that declares keys outside its supported set.
 pub(crate) struct UnsupportedKeys<'a> {
+    pub(crate) kind: FailureKind,
     pub(crate) statement: &'a str,
     pub(crate) file_path: &'a str,
     pub(crate) header: &'a str,
@@ -18,6 +19,7 @@ pub(crate) struct UnsupportedKeys<'a> {
 
 pub(crate) fn unsupported_keys_failure(facts: &UnsupportedKeys<'_>) -> DiscoveryFailure {
     let UnsupportedKeys {
+        kind,
         statement,
         file_path,
         header,
@@ -33,7 +35,7 @@ pub(crate) fn unsupported_keys_failure(facts: &UnsupportedKeys<'_>) -> Discovery
             .filter(|character| **character == '\n')
             .count();
     DiscoveryFailure {
-        kind: FailureKind::ModelSql,
+        kind: *kind,
         message: format!(
             "{statement} in '{file_path}:{line}' has unsupported keys: {}",
             keys.join(", ")

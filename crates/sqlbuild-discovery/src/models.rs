@@ -10,6 +10,10 @@ pub enum FailureKind {
     ModelSql,
     /// `DeclarationParseError` (D013).
     Declaration,
+    /// `SqlTestParseError` (D003).
+    SqlTest,
+    /// `SqlScenarioParseError` (D009).
+    SqlScenario,
 }
 
 impl FailureKind {
@@ -18,6 +22,8 @@ impl FailureKind {
         match self {
             Self::ModelSql => "model_sql",
             Self::Declaration => "declaration",
+            Self::SqlTest => "sql_test",
+            Self::SqlScenario => "sql_scenario",
         }
     }
 }

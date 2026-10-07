@@ -17,6 +17,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
 )
 from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_CONFIG_KEY,
+    SQL_TEST_HEADER_KEYS,
     STATEMENT_HEADER_BODY_PATTERN,
 )
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
@@ -44,17 +45,6 @@ _TEST_PARAMETERS_HEADER_KEY: str = "parameters"
 _TEST_CASES_HEADER_KEY: str = "cases"
 _TEST_CURSOR_START_HEADER_KEY: str = "cursor_start"
 _TEST_CURSOR_END_HEADER_KEY: str = "cursor_end"
-_TEST_HEADER_KEYS: frozenset[str] = frozenset(
-    {
-        _TEST_NAME_HEADER_KEY,
-        _TEST_MODE_HEADER_KEY,
-        _TEST_PARAMETERS_HEADER_KEY,
-        _TEST_CASES_HEADER_KEY,
-        _TEST_CURSOR_START_HEADER_KEY,
-        _TEST_CURSOR_END_HEADER_KEY,
-        SQL_ANALYSIS_CONFIG_KEY,
-    }
-)
 _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
     SqlValueKind.STRING,
     SqlValueKind.INTEGER,
@@ -102,7 +92,7 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
             )
         )
 
-    _validate_test_names(file_path=file_path, blocks=tuple(discovered_blocks))
+    validate_sql_test_names(file_path=file_path, blocks=tuple(discovered_blocks))
     return tuple(discovered_blocks)
 
 
@@ -148,7 +138,27 @@ def _parse_single_sql_test_block(
         header_line=block_line + raw_test_block.count("\n", 0, header_match.start("header")),
         file_path=file_path,
     )
-    sql_body: str = cleandoc(header_match.group("sql"))
+    return build_sql_test_block(
+        header_values=header_values,
+        sql_body=cleandoc(header_match.group("sql")),
+        file_path=file_path,
+        test_index=test_index,
+    )
+
+
+def build_sql_test_block(
+    *, header_values: dict[str, object], sql_body: str, file_path: Path, test_index: int
+) -> DiscoveredSqlTestBlock:
+    """Validate a header-parsed TEST block with only supported keys and build its record."""
+
+    if _TEST_NAME_HEADER_KEY in header_values:
+        _validate_test_name(name_value=header_values[_TEST_NAME_HEADER_KEY], file_path=file_path)
+    if _TEST_MODE_HEADER_KEY in header_values:
+        _validate_test_mode(mode_value=header_values[_TEST_MODE_HEADER_KEY], file_path=file_path)
+    if SQL_ANALYSIS_CONFIG_KEY in header_values and not isinstance(
+        header_values[SQL_ANALYSIS_CONFIG_KEY], bool
+    ):
+        raise SqlTestParseError(f"TEST() sql_analysis in '{file_path}' must be a boolean")
     if not sql_body:
         raise SqlTestParseError(f"SQL test '{file_path}' must define SQL after TEST(...)")
 
@@ -211,23 +221,13 @@ def _parse_test_header(*, header: str, header_line: int, file_path: Path) -> dic
 
     reject_unsupported_header_keys(
         header_values=parsed_header,
-        supported_keys=_TEST_HEADER_KEYS,
+        supported_keys=SQL_TEST_HEADER_KEYS,
         statement="TEST()",
         header=header,
         header_line=header_line,
         file_path=file_path,
         error_class=SqlTestParseError,
     )
-
-    if _TEST_NAME_HEADER_KEY in parsed_header:
-        _validate_test_name(name_value=parsed_header[_TEST_NAME_HEADER_KEY], file_path=file_path)
-    if _TEST_MODE_HEADER_KEY in parsed_header:
-        _validate_test_mode(mode_value=parsed_header[_TEST_MODE_HEADER_KEY], file_path=file_path)
-    if SQL_ANALYSIS_CONFIG_KEY in parsed_header and not isinstance(
-        parsed_header[SQL_ANALYSIS_CONFIG_KEY], bool
-    ):
-        raise SqlTestParseError(f"TEST() sql_analysis in '{file_path}' must be a boolean")
-
     return parsed_header
 
 
@@ -391,7 +391,9 @@ def _validate_test_mode(*, mode_value: object, file_path: Path) -> None:
         raise SqlTestParseError(f"TEST() mode in '{file_path}' must be one of: {allowed_modes}")
 
 
-def _validate_test_names(*, file_path: Path, blocks: tuple[DiscoveredSqlTestBlock, ...]) -> None:
+def validate_sql_test_names(*, file_path: Path, blocks: tuple[DiscoveredSqlTestBlock, ...]) -> None:
+    """Reject multi-block files whose blocks lack unique names."""
+
     if len(blocks) <= 1:
         return
 

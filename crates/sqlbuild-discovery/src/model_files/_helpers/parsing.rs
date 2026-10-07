@@ -1,6 +1,6 @@
 //! Parse one model file with the checks and messages of Python's `parse_matched_model_sql`.
 
-use crate::model_files::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
+use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
 use crate::model_files::_helpers::locations::header_column_locations;
 use crate::model_files::_helpers::output_columns::output_column_locations;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
@@ -54,6 +54,7 @@ pub(crate) fn parse_model_file(
         .collect();
     if !unsupported.is_empty() {
         return Err(unsupported_keys_failure(&UnsupportedKeys {
+            kind: FailureKind::ModelSql,
             statement: MODEL_STATEMENT,
             file_path,
             header,

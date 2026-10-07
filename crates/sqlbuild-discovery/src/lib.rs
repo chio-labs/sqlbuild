@@ -7,4 +7,5 @@ pub mod constants;
 pub mod declarations;
 pub mod model_files;
 pub mod models;
+pub mod sql_tests;
 pub mod tree;
