@@ -9,6 +9,7 @@ use sqlbuild_config::models::{ConfigDate, ConfigTime, ConfigValue};
 use sqlbuild_config::project::main::read_local_config::read_local_config;
 use sqlbuild_config::project::main::read_project_config::read_project_config;
 use sqlbuild_config::toml::main::load_toml::load_toml;
+use sqlbuild_config::yaml::main::safe_load::safe_load;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{
     JsonDialect, JsonInteger, JsonValue, OrjsonOptions, StdlibJsonOptions,
@@ -187,6 +188,12 @@ fn outcome(result: Result<Value, ConfigError>) -> String {
         .to_string()
 }
 
+/// Load YAML natively and return its canonical form, or `{"error": kind}`.
+#[pyfunction]
+fn _oracle_yaml_load(text: &str) -> String {
+    outcome(safe_load(text).map(|value| canonical(&value)))
+}
+
 /// Load TOML natively and return its canonical form, or `{"error": kind}`.
 #[pyfunction]
 fn _oracle_toml_load(text: &str) -> String {
@@ -222,6 +229,7 @@ fn _oracle_project_config(project_dir: &str) -> String {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_oracle_json_dumps, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_text_positions, module)?)?;
+    module.add_function(wrap_pyfunction!(_oracle_yaml_load, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_toml_load, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_project_config, module)?)?;
     Ok(())

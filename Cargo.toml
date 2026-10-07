@@ -55,6 +55,7 @@ polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.
 ] }
 quote = "1"
 rayon = "1"
+saphyr-parser = "0.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 # Every crate relies on insertion-ordered JSON objects, which the extension has always built with.

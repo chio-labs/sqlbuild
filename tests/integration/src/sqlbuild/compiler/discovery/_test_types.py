@@ -34,3 +34,12 @@ class HostileDocumentOracleTestCase:
     document: str
     expected_deferred: bool = True
     expected_maximum_seconds: float = 1.0
+
+
+@dataclass(frozen=True)
+class LargeDocumentOracleTestCase:
+    """A large single-line document that must load in linear time with PyYAML's value."""
+
+    description: str
+    document: str
+    expected_maximum_seconds: float = 2.0

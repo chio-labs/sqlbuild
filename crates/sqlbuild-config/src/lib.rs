@@ -1,4 +1,4 @@
-//! Project configuration reading: `tomllib`-compatible TOML.
+//! Project configuration reading: `tomllib`-compatible TOML and PyYAML-compatible YAML.
 
 #![forbid(unsafe_code)]
 
@@ -7,3 +7,4 @@ pub mod errors;
 pub mod models;
 pub mod project;
 pub mod toml;
+pub mod yaml;
