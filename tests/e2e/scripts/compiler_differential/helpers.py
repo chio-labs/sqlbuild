@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.compiler_differential.main.failure_cases import failure_cases
+
 NATIVE_ONLY_STDERR_LINE: str = "native engine perturbation active"
 WAFFLE_SHOP_FIXTURE: Path = Path(__file__).resolve().parents[2] / "fixtures" / "waffle_shop"
 _SITECUSTOMIZE: str = f'''
@@ -31,6 +33,25 @@ frontier.native_frontier = _perturbed
 print("{NATIVE_ONLY_STDERR_LINE}", file=sys.stderr)
 '''
 
+DISCOVERY_PERTURBATION: str = """
+import dataclasses
+
+import sqlbuild.compiler.frontier.main._compile_frontier as frontier
+from sqlbuild.compiler.frontier.types import CompilerStage
+
+_original = frontier.native_frontier
+
+
+def _perturbed(*, until, python_stage):
+    result = _original(until=until, python_stage=python_stage)
+    if until is not CompilerStage.DISCOVERED_PROJECT_INPUTS or len(result.model_files) < 2:
+        return result
+    return dataclasses.replace(result, model_files=tuple(reversed(result.model_files)))
+
+
+frontier.native_frontier = _perturbed
+"""
+
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "broken_orders"\nadapter = "duckdb"\n\n'
@@ -52,11 +73,21 @@ def write_broken_ref_project(directory: Path) -> Path:
     return directory
 
 
-def write_native_perturbation(directory: Path) -> Path:
-    """Write a sitecustomize module that changes the first compiled model on the native path."""
+def write_failure_case_project(directory: Path, *, name: str) -> Path:
+    """Write one named failure-corpus project below a directory."""
+
+    {case.name: case for case in failure_cases()}[name].write(directory)
+    return directory
+
+
+def write_native_perturbation(directory: Path, *, source: str = _SITECUSTOMIZE) -> Path:
+    """Write a sitecustomize module that perturbs one frontier object on the native path.
+
+    By default it changes the first compiled model.
+    """
 
     directory.mkdir(parents=True, exist_ok=True)
-    _ = (directory / "sitecustomize.py").write_text(_SITECUSTOMIZE, encoding="utf-8")
+    _ = (directory / "sitecustomize.py").write_text(source, encoding="utf-8")
     return directory
 
 
@@ -77,11 +108,11 @@ def harness_arguments(
     ]
 
 
-def perturbation_arguments(directory: Path) -> tuple[str, ...]:
+def perturbation_arguments(directory: Path, *, source: str = _SITECUSTOMIZE) -> tuple[str, ...]:
     """Return the options that load the perturbation into native-engine processes only."""
 
     return (
         "--stage-captures",
         "--engine-env",
-        f"native:PYTHONPATH={write_native_perturbation(directory)}",
+        f"native:PYTHONPATH={write_native_perturbation(directory, source=source)}",
     )
