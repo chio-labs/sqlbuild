@@ -41,7 +41,7 @@ def validate_model_references(
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} references seed '{reference.ref_name}' "
                     f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
+                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} for seed "
                     f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
             raise CompileInputError(
@@ -57,7 +57,7 @@ def validate_model_references(
                     f"Model file {model_file.relative_path} references model "
                     f"'{reference.ref_name}' "
                     f"with {SqlReferenceKind.SEED.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.REF.example_call(reference.ref_name)} for model "
+                    f"{SqlReferenceKind.REF.example_call(reference.ref_name, quote='"')} for model "
                     "references."
                 )
             raise CompileInputError(
@@ -76,7 +76,7 @@ def validate_model_references(
             if external_sql_reference_resolver is None:
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} uses "
-                    f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} "
+                    f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
                     "but no dbt manifest was found",
                     code="C214",
                     help=(
@@ -198,7 +198,7 @@ def validate_function_references(
                 raise CompileInputError(
                     f"SQL function file {function_file.relative_path} references seed "
                     f"'{reference.ref_name}' with {SqlReferenceKind.REF.placeholder_call('...')}. "
-                    f"Use {SqlReferenceKind.SEED.example_call(reference.ref_name)} "
+                    f"Use {SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} "
                     f"for seed references; {SqlReferenceKind.REF.function_name} only "
                     "resolves models."
                 )
@@ -225,8 +225,8 @@ def validate_function_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} uses "
-                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} but dbt refs "
-                "are not supported yet; "
+                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
+                "but dbt refs are not supported yet; "
                 "support may be added in a future release"
             )
         if (
@@ -273,8 +273,8 @@ def validate_audit_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} may not use "
-                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)}; audit dbt "
-                "model checks belong in dbt"
+                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')}; "
+                "audit dbt model checks belong in dbt"
             )
         if (
             reference.ref_kind == SqlReferenceKind.REF
@@ -284,7 +284,7 @@ def validate_audit_references(
                 raise CompileInputError(
                     f"Audit file {audit_file.relative_path} references seed '{reference.ref_name}' "
                     f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
+                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} for seed "
                     f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
             raise CompileInputError(

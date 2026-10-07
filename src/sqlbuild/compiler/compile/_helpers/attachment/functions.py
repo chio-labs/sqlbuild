@@ -46,6 +46,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    SqlReferenceOrigin,
 )
 from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
@@ -228,7 +229,15 @@ def build_sql_function_inputs(
                     function_file=function_file,
                 )
         references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-            references=extract_sql_references(sql=expanded_body_sql, syntax=sql_lexical_syntax),
+            references=extract_sql_references(
+                sql=expanded_body_sql,
+                syntax=sql_lexical_syntax,
+                origin=SqlReferenceOrigin(
+                    file_path=function_file.file_path,
+                    relative_path=function_file.relative_path,
+                    contents=function_file.contents,
+                ),
+            ),
             argument_references=expansion.argument_references,
         )
         validate_function_references(

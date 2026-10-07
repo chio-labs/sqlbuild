@@ -86,7 +86,7 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
         __seed__waffle_types AS (SELECT 1 AS waffle_type_id),
         __expected__daily_revenue AS (SELECT 1 AS order_id),
         __assert__no_negative_revenue AS (
-          SELECT * FROM __ref(daily_revenue) WHERE revenue < 0
+          SELECT * FROM __ref("daily_revenue") WHERE revenue < 0
         )
         SELECT 1
         """.strip(),
@@ -108,7 +108,7 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
         WITH
         __source__raw__orders AS (SELECT 1 AS order_id),
         __assert__has_no_null_orders AS (
-          SELECT * FROM __ref(fact_orders) WHERE order_id IS NULL
+          SELECT * FROM __ref("fact_orders") WHERE order_id IS NULL
         )
         SELECT 1
         """.strip(),
@@ -265,7 +265,7 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
             sql="""
         WITH
         __source__raw__orders AS (SELECT 1 AS order_id),
-        __assert__ AS (SELECT * FROM __ref(fact_orders))
+        __assert__ AS (SELECT * FROM __ref("fact_orders"))
         SELECT 1
         """.strip(),
             expected_error_fragment="__assert__<assertion>",

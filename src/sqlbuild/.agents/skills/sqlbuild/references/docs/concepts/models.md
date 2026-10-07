@@ -41,6 +41,20 @@ The header controls how SQLBuild builds, validates, and documents the model. The
 | Source | `__source("name")` | An external source |
 | Scalar UDF | `__udf("name")` | A user-defined function |
 
+Write the name as exactly one double-quoted string, with no spaces or comments inside the parentheses. `__dbt_ref("package", "name")` is the only call that takes two names. Compile rejects any other form, such as `__ref(stg_orders)`, `__ref('stg_orders')` or `__ref( /* upstream */ "stg_orders")`, with a `P012` error at the call that shows the corrected call:
+
+```text
+error[P012]: __ref(stg_orders) is not a valid __ref() call
+  model: fact_orders
+  --> models/marts/fact_orders.sql:24:6
+     |
+  24 | FROM __ref(stg_orders) o
+     |      ^^^^^^^^^^^^^^^^^
+  = help: __ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")
+```
+
+One compile reports every rejected call. When a macro returns the rejected call, the error points at the macro and shows how to pass the reference in instead, for example `@staged_orders(__ref("stg_orders"))`. The same rule applies inside test and scenario files, including `__assert__` CTEs.
+
 SQLBuild discovers the dependency graph from these calls and orders selected work topologically. Among selected models, upstream models run before downstream dependents. An unselected upstream is read from its existing warehouse relation; use an upstream-expanding selector such as `+fact_orders` when it should also be built. Seeds use `__seed()`, not `__ref()`.
 
 See [Functions](functions.md) for scalar UDF and table-function references.

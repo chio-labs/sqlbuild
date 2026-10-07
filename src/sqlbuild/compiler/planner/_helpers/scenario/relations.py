@@ -81,22 +81,19 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceEntry
 
+_NAME_ARGUMENT_PATTERN_TEXT: str = r'"(?P<name>[^"]+)"\)'
 _REF_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"
-    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    reference_call_prefix_pattern_text(SqlReferenceKind.REF) + _NAME_ARGUMENT_PATTERN_TEXT
 )
 _SEED_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.SEED)}\s*"
-    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    reference_call_prefix_pattern_text(SqlReferenceKind.SEED) + _NAME_ARGUMENT_PATTERN_TEXT
 )
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.SOURCE)}\s*"
-    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    reference_call_prefix_pattern_text(SqlReferenceKind.SOURCE) + _NAME_ARGUMENT_PATTERN_TEXT
 )
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
-    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*["\']'
-    r'(?P<first>[A-Za-z_][A-Za-z0-9_]*)["\']\s*'
-    r'(?:,\s*["\'](?P<second>[A-Za-z_][A-Za-z0-9_]*)["\']\s*)?\)'
+    reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)
+    + r'"(?P<first>[^"]+)"(?:\s*,\s*"(?P<second>[^"]+)")?\)'
 )
 
 

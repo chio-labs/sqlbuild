@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
@@ -19,7 +20,7 @@ from sqlbuild.compiler.lineage.types import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
+from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention, SourceLocation
 from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import RequiredDescriptionInputs
 
@@ -59,6 +60,8 @@ class SqlReferenceExtractionErrorTestCase:
     description: str
     sql: str
     expected_error: str
+    expected_code: str = "P001"
+    expected_help: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1155,3 +1158,11 @@ class CursorModelWithoutInputsCase:
     reference_kinds: tuple[str, ...]
     expected_codes: tuple[str, ...]
     expected_locations: tuple[tuple[str, int, int, int], ...] = ()
+
+
+@dataclass(frozen=True)
+class CollectedReferenceCallSyntaxTestCase:
+    description: str
+    contents: str
+    sql: str
+    expected_diagnostics: tuple[tuple[str, str, Path, SourceLocation | None], ...]

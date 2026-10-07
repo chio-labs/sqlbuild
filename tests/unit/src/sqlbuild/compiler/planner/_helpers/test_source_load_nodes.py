@@ -176,7 +176,7 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
         deps=(upstream_key,),
         name="fact_orders",
         relative_path=Path("models/fact_orders.sql"),
-        query_sql="SELECT * FROM __ref('stg_orders')",
+        query_sql='SELECT * FROM __ref("stg_orders")',
         config=CompileModelConfig(),
         destination=CompiledRelationLocation(
             database="ANALYTICS_DB",

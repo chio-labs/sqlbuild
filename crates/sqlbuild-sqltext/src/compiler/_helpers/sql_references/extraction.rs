@@ -3,7 +3,6 @@
 use crate::compiler::types::StaticReference;
 use crate::constants::{DBT_REFERENCE_KIND, TABLE_FUNCTION_REFERENCE_KIND};
 use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::main::quote_end::quote_end;
 use crate::sql_scan::models::QuotePolicy;
 
 const PREFIXES: [(&str, &str); 6] = [
@@ -39,13 +38,14 @@ pub(crate) fn extract(sql: &str) -> Option<Vec<StaticReference>> {
             return None;
         }
         let (first_name, first_end) = reference_name(sql, index + prefix.len())?;
-        let mut cursor = ascii_whitespace_end(bytes, first_end);
+        let mut cursor = first_end;
         let mut package = None;
         let name;
-        if *kind == DBT_REFERENCE_KIND && bytes.get(cursor).copied() == Some(b',') {
-            cursor = ascii_whitespace_end(bytes, cursor + 1);
-            let (second_name, second_end) = reference_name(sql, cursor)?;
-            cursor = ascii_whitespace_end(bytes, second_end);
+        let separator = ascii_whitespace_end(bytes, cursor);
+        if *kind == DBT_REFERENCE_KIND && bytes.get(separator).copied() == Some(b',') {
+            let second_start = ascii_whitespace_end(bytes, separator + 1);
+            let (second_name, second_end) = reference_name(sql, second_start)?;
+            cursor = second_end;
             package = Some(first_name);
             name = second_name;
         } else {
@@ -60,27 +60,17 @@ pub(crate) fn extract(sql: &str) -> Option<Vec<StaticReference>> {
     Some(references)
 }
 
+/// Read one bare `"name"` argument, the only form compile replacement accepts.
 fn reference_name(sql: &str, start: usize) -> Option<(String, usize)> {
     let bytes = sql.as_bytes();
-    let start = ascii_whitespace_end(bytes, start);
-    let first = bytes.get(start).copied()?;
-    if matches!(first, b'\'' | b'"') {
-        let Ok(end) = quote_end(bytes, start, QuotePolicy::COMPILER) else {
-            return None;
-        };
-        return Some((sql[start + 1..end - 1].to_owned(), end));
-    }
-    if !is_identifier_start(first) {
+    if bytes.get(start).copied() != Some(b'"') {
         return None;
     }
-    let mut end = start + 1;
-    while bytes.get(end).copied().is_some_and(is_identifier_continue) {
-        end += 1;
-    }
-    if bytes.get(end).is_some_and(|value| !value.is_ascii()) {
+    let close = start + 1 + bytes[start + 1..].iter().position(|value| *value == b'"')?;
+    if close == start + 1 {
         return None;
     }
-    Some((sql[start..end].to_owned(), end))
+    Some((sql[start + 1..close].to_owned(), close + 1))
 }
 
 fn ascii_whitespace_end(bytes: &[u8], start: usize) -> usize {
@@ -92,12 +82,4 @@ fn ascii_whitespace_end(bytes: &[u8], start: usize) -> usize {
         end += 1;
     }
     end
-}
-
-fn is_identifier_start(value: u8) -> bool {
-    value.is_ascii_alphabetic()
-}
-
-fn is_identifier_continue(value: u8) -> bool {
-    value.is_ascii_alphanumeric() || value == b'_'
 }

@@ -43,7 +43,7 @@ pub(crate) fn dynamic_or_malformed_sql_requests_fallback() -> bool {
 
 pub(crate) fn simple_references_preserve_authored_order() -> bool {
     extract(
-        "SELECT * FROM __source('orders') UNION ALL SELECT * FROM __dbt_ref(\"shop\", \"customers\")",
+        "SELECT * FROM __source(\"orders\") UNION ALL SELECT * FROM __dbt_ref(\"shop\" , \"customers\")",
     ) == Some(vec![
         ("source".to_owned(), "orders".to_owned(), None, None),
         (
@@ -56,7 +56,7 @@ pub(crate) fn simple_references_preserve_authored_order() -> bool {
 }
 
 pub(crate) fn comments_and_quoted_text_hide_references() -> bool {
-    extract("-- __ref(\"ignored\")\nSELECT '__seed(\"also_ignored\")' FROM __ref(orders)")
+    extract("-- __ref(\"ignored\")\nSELECT '__seed(\"also_ignored\")' FROM __ref(\"orders\")")
         == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
 }
 
@@ -64,7 +64,7 @@ pub(crate) fn dollar_quoted_text_hides_references() -> bool {
     extract(concat!(
         "SELECT $$Customer's order -- __ref(\"ignored\") $5$$ AS label, ",
         "$tag$ $$ __seed(\"also_ignored\") $tag$ AS note, price$1$ ",
-        "FROM __ref(orders)"
+        "FROM __ref(\"orders\")"
     )) == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
 }
 
@@ -77,6 +77,13 @@ pub(crate) fn complex_or_malformed_sql_requests_fallback() -> bool {
         "SELECT * FROM __ref(\"orders\") WHERE note = 'unterminated",
         "SELECT * FROM __ref(\"orders\") WHERE note = $$unterminated",
         "SELECT * FROM __ref(örders)",
+        "SELECT * FROM __ref(orders)",
+        "SELECT * FROM __ref('orders')",
+        "SELECT * FROM __ref( \"orders\" )",
+        "SELECT * FROM __ref(/* upstream */ \"orders\")",
+        "SELECT * FROM __ref(\"\")",
+        "SELECT * FROM __ref(\"ord\"\"ers\")",
+        "SELECT * FROM __dbt_ref(\"shop\", \"customers\" )",
     ]
     .into_iter()
     .all(|sql| extract(sql).is_none())

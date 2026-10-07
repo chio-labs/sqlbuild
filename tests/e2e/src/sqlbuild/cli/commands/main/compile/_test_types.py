@@ -853,3 +853,23 @@ class NativeModelConfigParityTestCase:
     engines: tuple[str, str]
     expected_exit_codes: tuple[int, int]
     expected_report_text: str
+
+
+@dataclass(frozen=True)
+class ReplaceableReferenceCallTestCase:
+    """A compiler engine that must build double-quoted reference calls end to end."""
+
+    description: str
+    engine: str
+    expected_total_cents: str
+
+
+@dataclass(frozen=True)
+class RejectedReferenceCallTestCase:
+    """A reference call form compile cannot replace and the error it must report first."""
+
+    description: str
+    engine: str
+    staging_from: str
+    mart_from: str
+    expected_diagnostics: tuple[tuple[str, str, str, int, int, str], ...]

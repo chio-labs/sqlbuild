@@ -299,7 +299,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             test_case.description
         );
         assert_eq!(
-            extract(&format!("SELECT {fragment} __ref('b')")).is_some(),
+            extract(&format!("SELECT {fragment} __ref(\"b\")")).is_some(),
             test_case.expected_reference_fast_path,
             "SQL reference fast path: {}",
             test_case.description

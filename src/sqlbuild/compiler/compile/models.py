@@ -517,6 +517,37 @@ class CompileSqlReference:
 
 
 @dataclass(frozen=True)
+class InvalidSqlReferenceCall:
+    """One reference call whose arguments compile could not replace with a relation."""
+
+    ref_kind: SqlReferenceKind
+    call: str
+    start: int
+    message: str
+    help: str
+    corrected_call: str
+
+
+@dataclass(frozen=True)
+class SqlReferenceScan:
+    """Valid references and rejected reference calls found in one SQL text."""
+
+    references: tuple[CompileSqlReference, ...]
+    invalid_calls: tuple[InvalidSqlReferenceCall, ...] = ()
+
+
+@dataclass(frozen=True)
+class SqlReferenceOrigin:
+    """The authored file that SQL handed to reference extraction came from."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    resource_type: CompiledResourceType | None = None
+    resource_name: str | None = None
+
+
+@dataclass(frozen=True)
 class CompiledLineageSourceFact:
     """Compact upstream column fact extracted during SQL analysis."""
 

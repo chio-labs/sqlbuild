@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -9,18 +12,23 @@ from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAd
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import collect_compile_diagnostics
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference, SqlReferenceOrigin
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.spec.contracts.models import SourceLocation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    CollectedReferenceCallSyntaxTestCase,
     DialectSqlScanTestCase,
     SqlReferenceExtractionErrorTestCase,
     SqlReferenceExtractionTestCase,
 )
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
+_ORIGIN_PATH: Path = Path("models/marts/order_totals.sql")
 
 
 @pytest.mark.parametrize(
@@ -29,8 +37,8 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
         SqlReferenceExtractionTestCase(
             description="simple references preserve authored order",
             sql=(
-                "SELECT * FROM __source('orders') "
-                'UNION ALL SELECT * FROM __dbt_ref("shop", "customers")'
+                'SELECT * FROM __source("orders") '
+                'UNION ALL SELECT * FROM __dbt_ref("shop" , "customers")'
             ),
             expected_references=(
                 (SqlReferenceKind.SOURCE, "orders", None),
@@ -82,11 +90,6 @@ def test_given_simple_references_when_extracting_then_returns_authored_order(
             expected_error="unclosed parenthesis",
         ),
         SqlReferenceExtractionErrorTestCase(
-            description="expression reference name preserves diagnostic",
-            sql="SELECT * FROM __ref(concat('ord', 'ers'))",
-            expected_error="name argument must be a quoted string or identifier",
-        ),
-        SqlReferenceExtractionErrorTestCase(
             description="unclosed block comment preserves diagnostic",
             sql='SELECT * FROM __ref("orders") /* unterminated',
             expected_error="unclosed block comment",
@@ -109,6 +112,181 @@ def test_given_unsupported_reference_sql_when_extracting_then_preserves_python_d
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error):
         extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlReferenceExtractionErrorTestCase(
+            description="unquoted ref name",
+            sql="SELECT * FROM __ref(stg_orders)",
+            expected_error=re.escape("__ref(stg_orders) is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("stg_orders")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="comment inside ref call",
+            sql="SELECT * FROM __ref( /* upstream */ 'stg_orders')",
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("stg_orders")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="single quoted source name",
+            sql="SELECT * FROM __source('raw_orders')",
+            expected_error=re.escape("__source('raw_orders') is not a valid __source() call"),
+            expected_code="P012",
+            expected_help='__source("raw_orders")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="whitespace inside seed call",
+            sql='SELECT * FROM __seed( "country_codes" )',
+            expected_error=re.escape("is not a valid __seed() call"),
+            expected_code="P012",
+            expected_help='__seed("country_codes")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="unquoted udf name",
+            sql="SELECT __udf(is_completed)(status) FROM orders",
+            expected_error=re.escape("__udf(is_completed) is not a valid __udf() call"),
+            expected_code="P012",
+            expected_help='__udf("is_completed")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="single quoted table function name",
+            sql="SELECT * FROM __table_fn('customer_orders')(1)",
+            expected_error=re.escape("is not a valid __table_fn() call"),
+            expected_code="P012",
+            expected_help='__table_fn("customer_orders")(...)',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="unquoted dbt ref package and name",
+            sql="SELECT * FROM __dbt_ref(shop, customers)",
+            expected_error=re.escape("is not a valid __dbt_ref() call"),
+            expected_code="P012",
+            expected_help='__dbt_ref("shop", "customers")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="expression name falls back to a placeholder call",
+            sql="SELECT * FROM __ref(concat('ord', 'ers'))",
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("model_name")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="second ref name argument",
+            sql='SELECT * FROM __ref("orders", "customers")',
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("model_name")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="empty quoted name",
+            sql='SELECT * FROM __ref("")',
+            expected_error=re.escape("is not a valid __ref() call"),
+            expected_code="P012",
+            expected_help='__ref("model_name")',
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="table function without argument list",
+            sql='SELECT * FROM __table_fn("customer_orders")',
+            expected_error="must be followed by an argument list",
+            expected_code="P012",
+            expected_help='__table_fn("customer_orders")()',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reference_call_compile_cannot_replace_when_extracting_then_raises_syntax_error(
+    test_case: SqlReferenceExtractionErrorTestCase,
+) -> None:
+    with pytest.raises(CompileInputError, match=test_case.expected_error) as raised:
+        extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX)
+
+    assert raised.value.code == test_case.expected_code
+    assert raised.value.help is not None
+    assert test_case.expected_help is not None
+    assert raised.value.help.endswith(test_case.expected_help)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CollectedReferenceCallSyntaxTestCase(
+            description="every rejected call is reported at its authored location",
+            contents=(
+                'MODEL (description "Order totals.");\n\n'
+                "SELECT * FROM __ref(stg_orders) o\n"
+                "JOIN __source('raw_payments') p USING (order_id)\n"
+            ),
+            sql=(
+                "SELECT * FROM __ref(stg_orders) o\n"
+                "JOIN __source('raw_payments') p USING (order_id)\n"
+            ),
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref(stg_orders) is not a valid __ref() call",
+                    _ORIGIN_PATH,
+                    SourceLocation(path=_ORIGIN_PATH, line=3, column=15, end_line=3, end_column=32),
+                ),
+                (
+                    "P012",
+                    "__source('raw_payments') is not a valid __source() call",
+                    _ORIGIN_PATH,
+                    SourceLocation(path=_ORIGIN_PATH, line=4, column=6, end_line=4, end_column=30),
+                ),
+            ),
+        ),
+        CollectedReferenceCallSyntaxTestCase(
+            description="a commented-out rejected call does not take the authored location",
+            contents=("-- was __ref(stg_orders)\nSELECT * FROM __ref(stg_orders)\n"),
+            sql="SELECT * FROM __ref(stg_orders)\n",
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__ref(stg_orders) is not a valid __ref() call",
+                    _ORIGIN_PATH,
+                    SourceLocation(path=_ORIGIN_PATH, line=2, column=15, end_line=2, end_column=32),
+                ),
+            ),
+        ),
+        CollectedReferenceCallSyntaxTestCase(
+            description="a call missing from the authored text keeps the file path",
+            contents="SELECT * FROM @staged_orders()\n",
+            sql="SELECT * FROM __ref(stg_orders)\n",
+            expected_diagnostics=(
+                ("P012", "__ref(stg_orders) is not a valid __ref() call", _ORIGIN_PATH, None),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rejected_calls_when_collecting_diagnostics_then_reports_each_with_location(
+    test_case: CollectedReferenceCallSyntaxTestCase,
+) -> None:
+    origin: SqlReferenceOrigin = SqlReferenceOrigin(
+        file_path=Path("/project/models/marts/order_totals.sql"),
+        relative_path=_ORIGIN_PATH,
+        contents=test_case.contents,
+        resource_type=CompiledResourceType.MODEL,
+        resource_name="order_totals",
+    )
+
+    with collect_compile_diagnostics() as collected:
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(
+            sql=test_case.sql, syntax=_GENERIC_SQL_SYNTAX, origin=origin
+        )
+
+    assert references == ()
+    assert (
+        tuple(
+            (diagnostic.code, diagnostic.message, diagnostic.path, diagnostic.location)
+            for diagnostic in collected.diagnostics
+        )
+        == test_case.expected_diagnostics
+    )
+    assert {diagnostic.resource_name for diagnostic in collected.diagnostics} == {"order_totals"}
 
 
 @pytest.mark.parametrize(

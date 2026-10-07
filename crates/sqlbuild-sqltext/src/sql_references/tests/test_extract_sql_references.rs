@@ -11,8 +11,9 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
     let test_cases = [
         ExtractSqlReferencesTestCase {
             description: "every kind in authored order",
-            sql: "SELECT * FROM __ref(orders) JOIN __source('raw_orders') JOIN __seed(\"regions\") \
-                  JOIN __dbt_ref('shop', customers) WHERE __udf(clean)(x) > 0",
+            sql: "SELECT * FROM __ref(\"orders\") JOIN __source(\"raw_orders\") \
+                  JOIN __seed(\"regions\") JOIN __dbt_ref(\"shop\" ,\x1c\"customers\") \
+                  WHERE __udf(\"clean\")(x) > 0 OR __dbt_ref(\"orders\") IS NULL",
             syntax: generic(),
             expected_extraction: extracted(vec![
                 reference("ref", "orders"),
@@ -20,6 +21,7 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
                 reference("seed", "regions"),
                 dbt_reference("shop", "customers"),
                 reference("udf", "clean"),
+                reference("dbt_ref", "orders"),
             ]),
         },
         ExtractSqlReferencesTestCase {
@@ -44,26 +46,26 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
             ]),
         },
         ExtractSqlReferencesTestCase {
-            description: "comments become spaces inside quoted names",
+            description: "comment inside a reference call defers to python",
             sql: "SELECT * FROM __ref(\"a\" /* note */ \"b\")",
             syntax: generic(),
-            expected_extraction: extracted(vec![reference("ref", "a\"   \"b")]),
+            expected_extraction: ReferenceExtraction::Deferred,
         },
         ExtractSqlReferencesTestCase {
             description: "comments, strings and dollar quotes hide references",
-            sql: "-- __ref(a)\nSELECT '__ref(b)', $$__ref(c)$$, /* __ref(d) */ 1 FROM __ref(e)",
+            sql: "-- __ref(a)\nSELECT '__ref(b)', $$__ref(c)$$, /* __ref(d) */ 1 FROM __ref(\"e\")",
             syntax: generic(),
             expected_extraction: extracted(vec![reference("ref", "e")]),
         },
         ExtractSqlReferencesTestCase {
             description: "dialect hash comments hide references",
-            sql: "SELECT 1 # __ref(a)\nFROM __ref(b)",
+            sql: "SELECT 1 # __ref(a)\nFROM __ref(\"b\")",
             syntax: backslash_hash_comments(),
             expected_extraction: extracted(vec![reference("ref", "b")]),
         },
         ExtractSqlReferencesTestCase {
             description: "dialect backslash escapes keep strings open",
-            sql: "SELECT 'it\\'s __ref(a)' FROM __ref(b)",
+            sql: "SELECT 'it\\'s __ref(a)' FROM __ref(\"b\")",
             syntax: backslash_hash_comments(),
             expected_extraction: extracted(vec![reference("ref", "b")]),
         },
@@ -74,48 +76,10 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
             expected_extraction: extracted(vec![reference("ref", "commandes_é")]),
         },
         ExtractSqlReferencesTestCase {
-            description: "wrong reference argument count",
-            sql: "SELECT * FROM __ref(a, b)",
-            syntax: generic(),
-            expected_extraction: failed("__ref must contain exactly one name argument"),
-        },
-        ExtractSqlReferencesTestCase {
-            description: "wrong dbt reference argument count",
-            sql: "SELECT * FROM __dbt_ref(a, b, c)",
-            syntax: generic(),
-            expected_extraction: failed(
-                "__dbt_ref must contain one name argument or package/name arguments",
-            ),
-        },
-        ExtractSqlReferencesTestCase {
-            description: "empty reference argument",
-            sql: "SELECT * FROM __source(a, )",
-            syntax: generic(),
-            expected_extraction: failed("SQL reference contains an empty argument"),
-        },
-        ExtractSqlReferencesTestCase {
             description: "empty table function call argument",
             sql: "SELECT * FROM __table_fn(\"f\")(1,,2)",
             syntax: generic(),
             expected_extraction: failed("SQL reference contains an empty argument"),
-        },
-        ExtractSqlReferencesTestCase {
-            description: "table function without call suffix",
-            sql: "SELECT * FROM __table_fn(\"f\") /* x */ (1)",
-            syntax: generic(),
-            expected_extraction: failed("__table_fn must be followed by an argument list"),
-        },
-        ExtractSqlReferencesTestCase {
-            description: "table function call suffix checked before the name",
-            sql: "SELECT * FROM __table_fn(f)",
-            syntax: generic(),
-            expected_extraction: failed("__table_fn must be followed by an argument list"),
-        },
-        ExtractSqlReferencesTestCase {
-            description: "single quoted table function name",
-            sql: "SELECT * FROM __table_fn('f')(1)",
-            syntax: generic(),
-            expected_extraction: failed("__table_fn name argument must be double quoted"),
         },
         ExtractSqlReferencesTestCase {
             description: "unclosed table function call",
@@ -136,24 +100,86 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
             expected_extraction: failed("SQL reference contains an unclosed quoted string"),
         },
         ExtractSqlReferencesTestCase {
-            description: "invalid identifier name",
-            sql: "SELECT * FROM __ref(1orders)",
+            description: "unquoted name defers to python",
+            sql: "SELECT * FROM __ref(orders)",
             syntax: generic(),
-            expected_extraction: failed(
-                "__ref name argument must be a quoted string or identifier",
-            ),
+            expected_extraction: ReferenceExtraction::Deferred,
         },
         ExtractSqlReferencesTestCase {
-            description: "nested reference is not a name",
-            sql: "SELECT * FROM __ref(__ref(a))",
+            description: "single quoted name defers to python",
+            sql: "SELECT * FROM __source('raw_orders')",
             syntax: generic(),
-            expected_extraction: failed(
-                "__ref name argument must be a quoted string or identifier",
-            ),
+            expected_extraction: ReferenceExtraction::Deferred,
         },
         ExtractSqlReferencesTestCase {
-            description: "non-ascii identifier defers",
+            description: "spaces inside the call defer to python",
+            sql: "SELECT * FROM __seed( \"regions\" )",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "empty quoted name defers to python",
+            sql: "SELECT * FROM __ref(\"\")",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "doubled quote inside a name defers to python",
+            sql: "SELECT * FROM __ref(\"ord\"\"ers\")",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "second name argument defers to python",
+            sql: "SELECT * FROM __ref(\"a\", \"b\")",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "dbt reference trailing space defers to python",
+            sql: "SELECT * FROM __dbt_ref(\"shop\", \"customers\" )",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "dbt reference third name defers to python",
+            sql: "SELECT * FROM __dbt_ref(\"a\", \"b\", \"c\")",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "non-ascii space around a dbt comma defers to python",
+            sql: "SELECT * FROM __dbt_ref(\"shop\"\u{a0}, \"customers\")",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "table function without call suffix defers to python",
+            sql: "SELECT * FROM __table_fn(\"f\") /* x */ (1)",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "single quoted table function name defers to python",
+            sql: "SELECT * FROM __table_fn('f')(1)",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "nested reference name defers to python",
+            sql: "SELECT * FROM __ref(__ref(\"a\"))",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "non-ascii identifier defers to python",
             sql: "SELECT * FROM __ref(commandés)",
+            syntax: generic(),
+            expected_extraction: ReferenceExtraction::Deferred,
+        },
+        ExtractSqlReferencesTestCase {
+            description: "an earlier valid reference does not stop a later deferral",
+            sql: "SELECT * FROM __ref(\"a\") JOIN __ref(b)",
             syntax: generic(),
             expected_extraction: ReferenceExtraction::Deferred,
         },
@@ -171,7 +197,7 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
         },
         ExtractSqlReferencesTestCase {
             description: "unsupported line comment prefix defers",
-            sql: "SELECT * FROM __ref(a)",
+            sql: "SELECT * FROM __ref(\"a\")",
             syntax: unsupported_comments(),
             expected_extraction: ReferenceExtraction::Deferred,
         },

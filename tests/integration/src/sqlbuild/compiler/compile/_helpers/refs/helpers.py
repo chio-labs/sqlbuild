@@ -15,10 +15,10 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.refs.references import (
-    _extract_sql_references_with_python,
+    _scan_sql_references_with_python,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference, SqlReferenceScan
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
@@ -33,6 +33,12 @@ LEXICAL_SYNTAXES: dict[str, SqlLexicalSyntax] = {
     "sqlserver": SqlServerAdapter.sql_lexical_syntax,
 }
 _NAMES: tuple[str, ...] = (
+    '"orders"',
+    '"customers"',
+    '"order items"',
+    '"größe"',
+)
+_REJECTED_NAMES: tuple[str, ...] = (
     "'customers'",
     "products",
     "  inventory\t",
@@ -40,13 +46,10 @@ _NAMES: tuple[str, ...] = (
     "orders\x1c",
     "orders /* note */",
     "-- note\norders",
-)
-_QUOTED_NAMES: tuple[str, ...] = (
-    '"orders"',
+    ' "orders" ',
     ' "order""s" ',
     '"a" "b"',
     '""',
-    '"größe"',
     '/* note */ "orders"',
 )
 _MALFORMED_NAMES: tuple[str, ...] = (
@@ -65,7 +68,7 @@ _MALFORMED_NAMES: tuple[str, ...] = (
     "orders",
 )
 _NO_SECOND_ARGUMENT: tuple[str, ...] = ("",)
-_DBT_SECOND_ARGUMENTS: tuple[str, ...] = ("", ", products", ' , "orders"')
+_DBT_SECOND_ARGUMENTS: tuple[str, ...] = ("", ', "products"', ' ,\x1c"orders"', ", products")
 _MALFORMED_SECOND_ARGUMENTS: tuple[str, ...] = (",", ", ", ",, products", ", products", ' ,"a"')
 _NO_CALL_SUFFIX: tuple[str, ...] = ("",)
 _CALL_SUFFIXES: tuple[str, ...] = (
@@ -101,6 +104,8 @@ _FILLERS: tuple[str, ...] = (
     "'it''s'",
     "a$$b",
     "é",
+    "/* unclosed",
+    "'unclosed",
 )
 _RISKY_FILLERS: tuple[str, ...] = (
     "# __ref(hidden)\n",
@@ -127,15 +132,15 @@ class _CallShape:
     call_suffixes: tuple[str, ...]
 
 
-_ANY_NAMES: tuple[str, ...] = (*_NAMES, *_QUOTED_NAMES)
+_ANY_NAMES: tuple[str, ...] = (*(_NAMES * 9), *_REJECTED_NAMES)
 _CALL_SHAPES: tuple[_CallShape, ...] = (
     _CallShape("__ref(", _ANY_NAMES, _NO_SECOND_ARGUMENT, _NO_CALL_SUFFIX),
     _CallShape("__source(", _ANY_NAMES, _NO_SECOND_ARGUMENT, _NO_CALL_SUFFIX),
     _CallShape("__seed(", _ANY_NAMES, _NO_SECOND_ARGUMENT, _NO_CALL_SUFFIX),
     _CallShape("__udf(", _ANY_NAMES, _NO_SECOND_ARGUMENT, ("(x)",)),
     _CallShape("__dbt_ref(", _ANY_NAMES, _DBT_SECOND_ARGUMENTS, _NO_CALL_SUFFIX),
-    _CallShape("__table_fn(", _QUOTED_NAMES, _NO_SECOND_ARGUMENT, _CALL_SUFFIXES),
-    _CallShape("__table_fn(", _QUOTED_NAMES, _NO_SECOND_ARGUMENT, _CALL_SUFFIXES),
+    _CallShape("__table_fn(", _ANY_NAMES, _NO_SECOND_ARGUMENT, _CALL_SUFFIXES),
+    _CallShape("__table_fn(", _NAMES, _NO_SECOND_ARGUMENT, _CALL_SUFFIXES),
     _CallShape("___ref(", _ANY_NAMES, _NO_SECOND_ARGUMENT, _NO_CALL_SUFFIX),
     _CallShape("x__ref(", _ANY_NAMES, _NO_SECOND_ARGUMENT, _NO_CALL_SUFFIX),
 )
@@ -153,6 +158,7 @@ class ReferenceParity:
     extracted: int
     failed: int
     deferred: int
+    rejected: int
     table_functions: int
 
 
@@ -180,25 +186,31 @@ def _generated_reference_call(*, rng: random.Random) -> str:
     )
 
 
-def python_outcome(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[CompileSqlReference, ...] | str:
-    """Return the oracle scanner's references or the message of the error it raises."""
+def python_outcome(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, ...] | str | None:
+    """Return the oracle's references, its error message, or None when it rejects a call."""
 
     try:
-        return _extract_sql_references_with_python(sql=sql, syntax=syntax)
+        scan: SqlReferenceScan = _scan_sql_references_with_python(sql=sql, syntax=syntax)
     except CompileInputError as error:
         return str(error)
+    return (scan.references, None)[bool(scan.invalid_calls)]
 
 
 def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceParity:
-    """Compare native extraction with Python wherever the native scan does not defer."""
+    """Compare native extraction with Python; native must defer every SQL Python rejects."""
 
     native: list[tuple[CompileSqlReference, ...] | str | None] = [
         extract_native_sql_references(sql=sql, syntax=syntax) for sql in sqls
     ]
-    python: list[tuple[CompileSqlReference, ...] | str] = [
+    python: list[tuple[CompileSqlReference, ...] | str | None] = [
         python_outcome(sql=sql, syntax=syntax) for sql in sqls
     ]
-    scanned: list[bool] = [outcome is not None for outcome in native]
+    scanned: list[bool] = [
+        native_outcome is not None or python_result is None
+        for native_outcome, python_result in zip(native, python, strict=True)
+    ]
     extracted: list[tuple[CompileSqlReference, ...]] = cast(
         list[tuple[CompileSqlReference, ...]],
         list(compress(native, [isinstance(outcome, tuple) for outcome in native])),
@@ -211,7 +223,8 @@ def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceP
         ),
         extracted=len(extracted),
         failed=sum(isinstance(outcome, str) for outcome in native),
-        deferred=scanned.count(False),
+        deferred=native.count(None) - python.count(None),
+        rejected=python.count(None),
         table_functions=sum(
             reference.ref_kind is SqlReferenceKind.TABLE_FUNCTION
             for reference in chain.from_iterable(extracted)

@@ -73,7 +73,7 @@ def validate_compile_dbt_model_reference(
     if dbt_manifest is None:
         raise CompileInputError(
             f"Model file {model_relative_path} uses "
-            f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} but no dbt "
+            f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} but no dbt "
             "manifest was found",
             code="C214",
             help=(

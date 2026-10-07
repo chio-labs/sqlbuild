@@ -347,7 +347,9 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
         TargetWriterPlanningErrorTestCase(
             description="missing mock is reported on every write",
             expected_builder_calls=1,
-            expected_message=("model 'orders' references __source('raw_orders') which has no mock"),
+            expected_message=(
+                "model 'orders' references __source(\"raw_orders\") which has no mock"
+            ),
         ),
     ),
     ids=lambda case: case.description,

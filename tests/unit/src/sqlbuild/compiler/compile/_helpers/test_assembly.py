@@ -65,7 +65,7 @@ MODEL (description "Test model orders.",
   audits [not_null (column order_id, always_run true)],
 );
 
-select * from __source('raw_orders')
+select * from __source("raw_orders")
 """.strip()
                 + "\n",
                 "sources/raw.yml": """
@@ -87,7 +87,7 @@ seeds:
                 + "\n",
                 "seeds/country_codes.csv": "code\nUS\n",
                 "models/staging/_sqlbuild/_audits/generic/not_null.sql": "AUDIT ();\n\n"
-                "SELECT @column FROM __ref('@model') WHERE @column IS NULL\n",
+                'SELECT @column FROM __ref("@model") WHERE @column IS NULL\n',
                 "tests/unit/orders_test.sql": """
 TEST ();
 

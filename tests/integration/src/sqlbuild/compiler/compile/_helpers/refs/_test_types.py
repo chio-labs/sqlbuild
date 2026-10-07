@@ -25,6 +25,7 @@ class GeneratedReferenceParityTestCase:
     expected_minimum_extracted: int
     expected_minimum_failed: int
     expected_minimum_table_functions: int
+    expected_minimum_rejected: int
     expected_maximum_deferred: int
 
 

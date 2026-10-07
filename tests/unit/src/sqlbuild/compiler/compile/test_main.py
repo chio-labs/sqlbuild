@@ -53,6 +53,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     AuthoredRetentionCompileTestCase,
+    BuildCompileInputsDiagnosticTestCase,
     BuildCompileInputsErrorTestCase,
     BuildCompileInputsPythonHookValidationTestCase,
     BuildCompileInputsTestCase,
@@ -3246,6 +3247,77 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
 @pytest.mark.parametrize(
     "test_case",
     [
+        BuildCompileInputsDiagnosticTestCase(
+            description="reports a table function call without its argument list",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/orders.sql": (
+                    'MODEL (description "Test model orders.");\n\n'
+                    'SELECT * FROM __table_fn("customer_orders")\n'
+                ),
+                "functions/sql/customer_orders.sql": (
+                    'FUNCTION (description "Test function customer_orders.",\n'
+                    "  arguments (customer_id INTEGER),\n"
+                    "  returns table (order_id INTEGER)\n"
+                    ");\n\n"
+                    "SELECT customer_id AS order_id\n"
+                ),
+            },
+            expected_diagnostics=(
+                ("P012", "__table_fn must be followed by an argument list", 3, 15),
+            ),
+        ),
+        BuildCompileInputsDiagnosticTestCase(
+            description="reports a table function name that is not double quoted",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/orders.sql": (
+                    "MODEL (description 'Test model orders.');\n\n"
+                    "SELECT * FROM __table_fn('customer_orders')(1)\n"
+                ),
+            },
+            expected_diagnostics=(
+                (
+                    "P012",
+                    "__table_fn('customer_orders') is not a valid __table_fn() call",
+                    3,
+                    15,
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rejected_reference_calls_when_building_compile_inputs_then_reports_located_diagnostics(
+    test_case: BuildCompileInputsDiagnosticTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+
+    assert (
+        tuple(
+            (diagnostic.code, diagnostic.message, diagnostic.line, diagnostic.column)
+            for diagnostic in compile_inputs.diagnostics
+        )
+        == test_case.expected_diagnostics
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         BuildCompileInputsErrorTestCase(
             description="raises when a model references an unknown table function",
             repo_files=base_repo_files()
@@ -3309,45 +3381,6 @@ order_id
             selected_target=None,
             run_id=None,
             expected_error_fragment="references scalar function 'order_total' with __table_fn(...)",
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when a model omits table function call arguments",
-            repo_files=base_repo_files()
-            | {
-                "sqlbuild_project.toml": (
-                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
-                ),
-                "models/orders.sql": (
-                    'MODEL (description "Test model orders.");\n\nSELECT * FROM __table_fn("customer_orders")\n'
-                ),
-                "functions/sql/customer_orders.sql": """
-FUNCTION (description "Test function customer_orders.",
-  arguments (customer_id INTEGER),
-  returns table (order_id INTEGER)
-);
-
-SELECT customer_id AS order_id
-""".strip()
-                + "\n",
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment="must be followed by an argument list",
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when a table function name is not double quoted",
-            repo_files=base_repo_files()
-            | {
-                "sqlbuild_project.toml": (
-                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
-                ),
-                "models/orders.sql": (
-                    "MODEL (description 'Test model orders.');\n\nSELECT * FROM __table_fn('customer_orders')(1)\n"
-                ),
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment="name argument must be double quoted",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when table function argument count does not match",
@@ -3538,7 +3571,7 @@ SELECT * FROM __dbt_ref("stg_orders")
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"Model file models/staging/orders\.sql uses __dbt_ref\('stg_orders'\) "
+                r'Model file models/staging/orders\.sql uses __dbt_ref\("stg_orders"\) '
                 "but no dbt manifest was found"
             ),
         ),
@@ -3558,7 +3591,7 @@ SELECT * FROM __dbt_ref("stg_orders")
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"SQL function file functions/sql/orders\.sql uses __dbt_ref\('stg_orders'\) "
+                r'SQL function file functions/sql/orders\.sql uses __dbt_ref\("stg_orders"\) '
                 "but dbt refs are not supported yet"
             ),
         ),
@@ -3576,7 +3609,7 @@ SELECT * FROM __dbt_ref("stg_orders")
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"Audit file audits/singular/orders\.sql may not use __dbt_ref\('stg_orders'\); "
+                r'Audit file audits/singular/orders\.sql may not use __dbt_ref\("stg_orders"\); '
                 "audit dbt model checks belong in dbt"
             ),
         ),

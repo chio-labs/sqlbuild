@@ -475,6 +475,65 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="unquoted-ref-name",
+            expected_code="P012",
+            expected_message="__ref(stg_orders) is not a valid __ref() call",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    '__ref("stg_orders")', "__ref(stg_orders)"
+                )
+            },
+        ),
+        failure_case(
+            name="commented-ref-argument",
+            expected_code="P012",
+            expected_message="is not a valid __ref() call",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    '__ref("stg_orders")', "__ref( /* upstream */ 'stg_orders')"
+                )
+            },
+        ),
+        failure_case(
+            name="single-quoted-source-name",
+            expected_code="P012",
+            expected_message="__source('raw_orders') is not a valid __source() call",
+            files=staging_files(
+                FAILURE_BASE_STAGING.replace('__source("raw_orders")', "__source('raw_orders')")
+            ),
+        ),
+        failure_case(
+            name="invalid-reference-calls-in-two-files",
+            expected_code="P012",
+            expected_message="__ref(stg_orders) is not a valid __ref() call",
+            files={
+                **staging_files(
+                    FAILURE_BASE_STAGING.replace('__source("raw_orders")', "__source('raw_orders')")
+                ),
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    '__ref("stg_orders")', "__ref(stg_orders)"
+                ),
+            },
+        ),
+        failure_case(
+            name="macro-returned-invalid-reference-call",
+            expected_code="P012",
+            expected_message=(
+                "__ref(stg_orders) is not a valid __ref() call, returned by macro staged_orders()"
+            ),
+            files={
+                "models/marts/_sqlbuild/_macros/orders.py": (
+                    "def staged_orders() -> str:\n"
+                    '    """Return the staged orders relation."""\n'
+                    "    return '__ref(stg_orders)'\n"
+                ),
+                **mart_body_files(
+                    "SELECT customer_id, SUM(amount) AS total_amount\n"
+                    "FROM @staged_orders()\nGROUP BY customer_id\n"
+                ),
+            },
+        ),
+        failure_case(
             name="invalid-declaration-name",
             expected_code="D016",
             files={

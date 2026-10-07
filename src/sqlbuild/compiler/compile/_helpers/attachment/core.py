@@ -123,7 +123,10 @@ from sqlbuild.compiler.compile.models import (
     ModelHeaderColumnCache,
     ModelInputBuildContext,
     SqlAnalysisOptOutRequest,
+    SqlReferenceOrigin,
+    SqlReferenceScan,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceExtractor
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -254,7 +257,7 @@ class _ModelValidationContext:
     project_config_path: Path
     defer_model_sql_validation: bool
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
-    extract_references: Callable[[str], tuple[CompileSqlReference, ...]]
+    extract_references: SqlReferenceExtractor
     known_model_names: set[str]
     known_seed_names: set[str]
     known_source_names: set[str]
@@ -289,6 +292,7 @@ class _HookExpansionContext:
     consumer: ResourceIdentity | DeclarationIdentity
     facts: _HookExpansionFacts
     sql_lexical_syntax: SqlLexicalSyntax
+    reference_origin: SqlReferenceOrigin | None = None
 
 
 @dataclass
@@ -465,7 +469,7 @@ def _build_model_inputs(
     no_sql_validation: bool,
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-    extract_references: Callable[[str], tuple[CompileSqlReference, ...]],
+    extract_references: SqlReferenceExtractor,
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
     render_reuse: CompileRenderReuseSession | None,
 ) -> tuple[CompileModelInput, ...]:
@@ -713,7 +717,7 @@ def _build_model_input(
     )
     hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
         values=effective_config.values,
-        file_path=model_file.file_path,
+        model_file=_model_reference_origin(model_file),
         effective_vars=effective_vars,
         context_values=build_model_context_values(
             values=effective_config.values,
@@ -881,6 +885,16 @@ def _hook_expanded_config(
     )
 
 
+def _model_reference_origin(model_file: DiscoveredSqlModelFile) -> SqlReferenceOrigin:
+    return SqlReferenceOrigin(
+        file_path=model_file.file_path,
+        relative_path=model_file.relative_path,
+        contents=model_file.contents,
+        resource_type=CompiledResourceType.MODEL,
+        resource_name=model_file.file_path.stem,
+    )
+
+
 def _validate_model_input(
     *,
     context: _ModelValidationContext,
@@ -925,8 +939,11 @@ def _validate_model_input(
             file_path=model_file.file_path,
             placeholders=sql_validation_placeholders,
         )
+    reference_scan: SqlReferenceScan = context.extract_references(
+        sql=expanded_query_sql, origin=_model_reference_origin(model_file)
+    )
     references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-        references=context.extract_references(expanded_query_sql),
+        references=reference_scan.references,
         argument_references=argument_references,
     )
     validate_model_references(
@@ -971,7 +988,11 @@ def _validate_model_input(
         query_sql=expanded_query_sql,
         custom_materialization_names=context.custom_materialization_names,
     )
-    return sql_validation_enabled, references, rejected_opt_out
+    return (
+        sql_validation_enabled and not reference_scan.invalid_calls,
+        references,
+        rejected_opt_out,
+    )
 
 
 def _build_visible_declaration_indexes(
@@ -1325,7 +1346,7 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
 def expand_model_hook_macros_result(
     *,
     values: dict[str, object],
-    file_path: Path,
+    model_file: SqlReferenceOrigin,
     effective_vars: dict[str, object],
     context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
@@ -1347,16 +1368,18 @@ def expand_model_hook_macros_result(
         expanded_values[hook_key] = expand_sql_macros_in_value(
             value=raw_hook_value,
             context=_HookExpansionContext(
-                file_path=file_path,
+                file_path=model_file.file_path,
                 effective_vars=effective_vars,
                 context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
                 declaration_expansion=declaration_expansion,
                 sql_hook_definitions=sql_hook_definitions or {},
-                consumer=consumer or ResourceIdentity(ResourceKind.MODEL, file_path.stem),
+                consumer=consumer
+                or ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
                 facts=facts,
                 sql_lexical_syntax=sql_lexical_syntax,
+                reference_origin=model_file,
             ),
             hook_key=hook_key,
         )
@@ -1595,7 +1618,9 @@ def expand_sql_macros_in_value(
         facts.add_references(
             merge_call_site_references(
                 references=extract_sql_references(
-                    sql=expansion.sql, syntax=context.sql_lexical_syntax
+                    sql=expansion.sql,
+                    syntax=context.sql_lexical_syntax,
+                    origin=context.reference_origin,
                 ),
                 argument_references=expansion.argument_references,
             )

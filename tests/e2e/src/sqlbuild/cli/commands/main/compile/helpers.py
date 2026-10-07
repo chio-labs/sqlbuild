@@ -4215,3 +4215,51 @@ def store_digests(*, project_dir: Path, stores: tuple[str, ...]) -> dict[str, st
         path.relative_to(project_dir).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in files
     }
+
+
+_REFERENCE_CALL_PROJECT_TOML: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "warehouse.duckdb"\n'
+)
+_REFERENCE_CALL_SOURCES_YML: str = (
+    "sources:\n"
+    "  - name: raw_orders\n"
+    "    description: Raw orders.\n"
+    "    schema: main\n"
+    "    table: raw_orders\n"
+    "    columns:\n"
+    "      - name: order_id\n"
+    "        type: INTEGER\n"
+    "      - name: amount_cents\n"
+    "        type: INTEGER\n"
+)
+_REFERENCE_CALL_RAW_ORDERS_SQL: str = (
+    "CREATE TABLE main.raw_orders AS "
+    "SELECT * FROM (VALUES (1, 1200), (2, 1650)) AS t(order_id, amount_cents)"
+)
+
+
+def prepare_reference_call_project(*, tmp_path: Path, staging_from: str, mart_from: str) -> Path:
+    """Write an orders project whose models use the given reference calls, with raw data."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="orders",
+        repo_files={
+            "sqlbuild_project.toml": _REFERENCE_CALL_PROJECT_TOML,
+            "sources/raw.yml": _REFERENCE_CALL_SOURCES_YML,
+            "models/staging/stg_orders.sql": (
+                'MODEL (description "Staged orders.", materialized view);\n\n'
+                f"SELECT order_id, amount_cents FROM {staging_from}\n"
+            ),
+            "models/marts/order_totals.sql": (
+                'MODEL (description "Order totals.", materialized table);\n\n'
+                "SELECT COUNT(*) AS order_count, SUM(amount_cents) AS total_cents\n"
+                f"FROM {mart_from} AS orders\n"
+            ),
+        },
+    )
+    seeded: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("query", _REFERENCE_CALL_RAW_ORDERS_SQL)
+    )
+    assert seeded.returncode == 0, seeded.stdout + seeded.stderr
+    return project_dir

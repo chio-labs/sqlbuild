@@ -18,7 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _MISSING_MOCK_MESSAGE: str = (
-    "test 'orders_case': model 'orders' references __source('raw_refunds') which has no mock"
+    "test 'orders_case': model 'orders' references __source(\"raw_refunds\") which has no mock"
 )
 _EXPECTED_DIAGNOSTICS: tuple[tuple[str, str, str], ...] = (
     ("rule", "SQBRMODEL102", "SELECT * is allowed only inside dependency import CTEs"),

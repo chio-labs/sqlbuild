@@ -60,6 +60,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
     ModelInputBuildContext,
+    SqlReferenceOrigin,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -300,7 +301,10 @@ def _build_singular_audit_inputs(
                 )
             references: tuple[CompileSqlReference, ...] = merge_call_site_references(
                 references=_combined_references(
-                    expanded_sql_body, expanded_evidence_sql, syntax=sql_lexical_syntax
+                    expanded_sql_body,
+                    expanded_evidence_sql,
+                    syntax=sql_lexical_syntax,
+                    origin=_audit_reference_origin(audit_file),
                 ),
                 argument_references=_argument_references(expansion, evidence_expansion),
             )
@@ -727,7 +731,10 @@ def build_attached_audit_input(
         )
     references: tuple[CompileSqlReference, ...] = merge_call_site_references(
         references=_combined_references(
-            expanded_sql_body, expanded_evidence_sql, syntax=context.sql_lexical_syntax
+            expanded_sql_body,
+            expanded_evidence_sql,
+            syntax=context.sql_lexical_syntax,
+            origin=_audit_reference_origin(definition[0]),
         ),
         argument_references=_argument_references(expansion, evidence_expansion),
     )
@@ -1050,13 +1057,21 @@ def _argument_references(
     return tuple(references)
 
 
+def _audit_reference_origin(audit_file: DiscoveredAuditFile) -> SqlReferenceOrigin:
+    return SqlReferenceOrigin(
+        file_path=audit_file.file_path,
+        relative_path=audit_file.relative_path,
+        contents=audit_file.contents,
+    )
+
+
 def _combined_references(
-    *sql_values: str | None, syntax: SqlLexicalSyntax
+    *sql_values: str | None, syntax: SqlLexicalSyntax, origin: SqlReferenceOrigin
 ) -> tuple[CompileSqlReference, ...]:
     """Extract references from independently compiled measurement/evidence queries."""
 
     references: list[CompileSqlReference] = []
     for sql in sql_values:
         if sql is not None:
-            references.extend(extract_sql_references(sql=sql, syntax=syntax))
+            references.extend(extract_sql_references(sql=sql, syntax=syntax, origin=origin))
     return tuple(dict.fromkeys(references))
