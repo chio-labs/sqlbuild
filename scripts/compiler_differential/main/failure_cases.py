@@ -1,6 +1,6 @@
 """The failure corpus: one minimal failing project per diagnostic family member."""
 
-from scripts.compiler_differential._helpers.failure_cases import all_failure_cases
+from scripts.compiler_differential._helpers.corpus.failure_cases import all_failure_cases
 from scripts.compiler_differential.models import FailureCase
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.compiler_differential._helpers.compare import as_json_object
+from scripts.compiler_differential._helpers.comparing.compare import as_json_object
 from scripts.compiler_differential.constants import (
     ELAPSED_TIME_MASK,
     ELAPSED_TIME_PATTERN,

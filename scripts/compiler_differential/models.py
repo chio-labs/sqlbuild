@@ -17,9 +17,11 @@ class DifferentialCommand:
 
 @dataclass(frozen=True)
 class ExpectedOutcome:
-    """What a corpus project must produce: success, or failure with one diagnostic code."""
+    """Success, or failure whose first error is `error_code`, plus an optional expected warning."""
 
     error_code: str | None = None
+    succeeding_commands: tuple[str, ...] = ()
+    warning_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class CorpusProject:
     source_dir: Path | None = None
     writer: Callable[[Path], None] | None = None
     project_subdirectory: str | None = None
+    discovery_coverage: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,7 @@ class ProjectComparison:
     project: str
     differences: tuple[Difference, ...]
     seconds: float
+    discovered_kinds: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,7 @@ class DifferentialOptions:
     stage_captures: bool
     python: Path
     engine_environment: dict[str, dict[str, str]]
+    require_discovery_coverage: bool = False
 
 
 @dataclass(frozen=True)
@@ -121,6 +126,7 @@ class GeneratedProject(WritableProject):
     seed: int
     expected_error_code: str | None
     features: tuple[str, ...]
+    succeeding_commands: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -129,6 +135,7 @@ class FailureCase(WritableProject):
 
     name: str
     expected_code: str
+    expected_warning_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,3 +164,17 @@ class DeclarationPlan:
     consumers: tuple[ModelPlan, ...]
     body: str = ""
     private: bool = False
+
+
+@dataclass(frozen=True)
+class EmittedCodes:
+    """The error and warning codes one compile reported, in report order."""
+
+    errors: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+    @property
+    def first_error(self) -> str | None:
+        """Return the first reported error code, if any."""
+
+        return self.errors[0] if self.errors else None

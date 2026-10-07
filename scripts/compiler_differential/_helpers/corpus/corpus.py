@@ -5,7 +5,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.failure_cases import all_failure_cases
+from scripts.compiler_differential._helpers.corpus.failure_cases import all_failure_cases
 from scripts.compiler_differential.classes.dense_project import DenseProject
 from scripts.compiler_differential.classes.project_builder import ProjectBuilder
 from scripts.compiler_differential.constants import (
@@ -80,7 +80,9 @@ def build_corpus(
             CorpusProject(
                 name=f"failure/{case.name}",
                 commands=(COLD_COMPILE,),
-                expected=ExpectedOutcome(error_code=case.expected_code),
+                expected=ExpectedOutcome(
+                    error_code=case.expected_code, warning_code=case.expected_warning_code
+                ),
                 writer=case.write,
             )
             for case in all_failure_cases()
@@ -136,6 +138,10 @@ def _seed_project(seed: int) -> CorpusProject:
     return CorpusProject(
         name=f"seed/{seed}",
         commands=(COLD_COMPILE, PLAN),
-        expected=ExpectedOutcome(error_code=generated.expected_error_code),
+        expected=ExpectedOutcome(
+            error_code=generated.expected_error_code,
+            succeeding_commands=generated.succeeding_commands,
+        ),
         writer=generated.write,
+        discovery_coverage=True,
     )

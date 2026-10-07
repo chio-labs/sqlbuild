@@ -1,5 +1,6 @@
 """Stable constants for the compiler engine differential harness."""
 
+import json
 import re
 
 from scripts.compiler_differential.models import DifferentialCommand, ExpectedOutcome
@@ -33,6 +34,7 @@ MISSING_VALUE: str = "<missing>"
 DEFAULT_SEED_COUNT: int = 12
 PLAN_LABEL: str = "plan"
 ERROR_SEVERITY: str = "error"
+WARNING_SEVERITY: str = "warning"
 MODEL_RESOURCE_TYPE: str = "model"
 DEFAULT_DENSE_MODELS: int = 3000
 FIXTURE_ROOT: str = "tests/e2e/fixtures"
@@ -179,8 +181,174 @@ GENERATOR_ROLES: dict[str, str] = {
     GENERATOR_MACRO_KIND: "macros",
     GENERATOR_HOOK_KIND: "hooks",
 }
+GENERATOR_FEATURE_BLOCKS: tuple[str, ...] = (
+    "incremental_append",
+    "incremental_delete_insert",
+    "incremental_merge",
+    "microbatch_watermark",
+    "microbatch_rolling_window",
+    "snapshot_timestamp",
+    "snapshot_check",
+    "python_hook",
+    "managed_source_loader",
+    "asset_and_check",
+    "audit_factory",
+    "provider",
+    "lifecycle_sink",
+    "command_output_sink",
+    "custom_materialization",
+    "project_adapter",
+    "model_schema",
+    "list_constant",
+    "cross_file_macro_import",
+    "macro_test_mode",
+    "parameterized_test",
+    "generic_audit",
+    "functions",
+    "local_config",
+    "target_override",
+    "dbt_ref",
+    "line_endings",
+)
+GENERATOR_FEATURE_STRIDE: int = 4
+GENERATOR_OPTIONAL_FEATURE_SHARE: float = 0.2
+GENERATOR_RARE_FEATURE_PERIOD: int = 12
+GENERATOR_RARE_FEATURE_BLOCKS: dict[str, int] = {"dbt_ref": 1}
+GENERATOR_DBT_REF_ERROR_CODE: str = "C214"
+GENERATOR_FEATURE_FOLDER: str = "models/features"
+GENERATOR_PROJECT_ADAPTER: str = "generated_duckdb"
+GENERATOR_CRLF: str = "\r\n"
+GENERATOR_BOM: str = "\ufeff"
+GENERATOR_DBT_MODEL: str = "upstream_orders"
+GENERATOR_DBT_MANIFEST: str = (
+    json.dumps(
+        {
+            "metadata": {"dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"},
+            "nodes": {
+                f"model.upstream.{GENERATOR_DBT_MODEL}": {
+                    "resource_type": "model",
+                    "package_name": "upstream",
+                    "name": GENERATOR_DBT_MODEL,
+                    "database": "generated",
+                    "schema": "upstream",
+                    "alias": GENERATOR_DBT_MODEL,
+                    "fqn": ["upstream", GENERATOR_DBT_MODEL],
+                    "checksum": {"name": "sha256", "checksum": "0" * 64},
+                    "depends_on": {"nodes": []},
+                    "config": {"materialized": "table"},
+                    "columns": {
+                        "order_id": {"name": "order_id", "data_type": "integer"},
+                        "customer_id": {"name": "customer_id", "data_type": "integer"},
+                    },
+                    "compiled_code": "SELECT 1 AS order_id, 10 AS customer_id",
+                }
+            },
+            "sources": {},
+        },
+        indent=2,
+    )
+    + "\n"
+)
 GENERATOR_SUFFIXES: dict[str, str] = {
     GENERATOR_ENUM_KIND: ".sql",
     GENERATOR_CONSTANT_KIND: ".sql",
     GENERATOR_MACRO_KIND: ".py",
+}
+DISCOVERY_STAGE_CAPTURE_SUFFIX: str = "-discovered_project_inputs.json"
+DISCOVERY_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
+    {"project_config", "local_config", "project_dir"}
+)
+DISCOVERY_DECLARATION_FILE_COLLECTIONS: tuple[str, ...] = (
+    "enum_files",
+    "constant_files",
+    "model_schema_files",
+    "sql_hook_files",
+    "audit_files",
+    "macro_files",
+    "hook_functions",
+)
+DISCOVERY_TEXT_FILE_COLLECTIONS: tuple[str, ...] = (
+    "model_files",
+    "enum_files",
+    "constant_files",
+    "model_schema_files",
+    "sql_function_files",
+    "sql_hook_files",
+    "python_function_files",
+    "schema_files",
+    "source_files",
+    "test_files",
+    "scenario_files",
+    "audit_files",
+    "macro_files",
+)
+DISCOVERY_DETAIL_KINDS: tuple[str, ...] = (
+    "incremental_append",
+    "incremental_delete_insert",
+    "incremental_merge",
+    "microbatch_watermark",
+    "microbatch_rolling_window",
+    "snapshot_timestamp",
+    "snapshot_check",
+    "custom_materialized_model",
+    "model_local_declaration",
+    "dbt_ref_model",
+    "dbt_target_path_config",
+    "managed_source",
+    "unmanaged_source",
+    "scope_global",
+    "scope_inherited",
+    "scope_local",
+    "constant_string",
+    "constant_integer",
+    "constant_boolean",
+    "constant_float",
+    "constant_decimal",
+    "constant_list",
+    "non_ascii_constant",
+    "enum_string",
+    "enum_integer",
+    "cross_file_macro_import",
+    "test_mode_model",
+    "test_mode_macro",
+    "test_mode_udf",
+    "parameterized_test",
+    "singular_audit",
+    "generic_audit",
+    "path_defaults",
+    "local_config",
+    "target_override",
+    "project_adapter_config",
+    "crlf",
+    "tab",
+    "bom",
+    "non_ascii_comment",
+    "non_ascii_string",
+)
+MICROBATCH_MODE: str = "microbatch"
+STRATEGY_HEADER_KEYS: dict[str, str] = {
+    "incremental": "incremental_strategy",
+    "snapshot": "snapshot_strategy",
+}
+DBT_REF_CALL: str = "__dbt_ref("
+SINGULAR_AUDIT_KIND: str = "singular_audit"
+TAB: str = "\t"
+CRLF_BYTES: bytes = b"\r\n"
+TYPE_MARKER: str = "__type__"
+CALLABLE_MARKER: str = "__callable__"
+UNCANONICAL_CAPTURE_MARKERS: tuple[str, ...] = ("__opaque__", "__cycle__")
+CALLABLE_CAPTURE_FIELDS: frozenset[str] = frozenset({"function", "provider_class"})
+COLLECTION_CAPTURE_MARKERS: frozenset[str] = frozenset(
+    {"__set__", "__mapping__", "__unordered_mapping__"}
+)
+PATH_MARKER: str = "__path__"
+RELATIVE_PATH_FIELDS: frozenset[str] = frozenset({"relative_path"})
+CONFIG_ONLY_KINDS: dict[str, str] = {
+    "project_adapter_config": (
+        "the config names a non-built-in adapter; adapters/ modules are resolved after "
+        "discovery and are not in the capture"
+    ),
+    "dbt_target_path_config": (
+        "the config sets [dbt] target_path; the manifest is read after discovery"
+    ),
 }

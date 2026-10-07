@@ -6,13 +6,13 @@ import argparse
 
 import pytest
 
-from scripts.compiler_differential._helpers.options import (
+from scripts.compiler_differential._helpers.running.options import (
     parse_engine_environment,
     parse_expected_outcome,
 )
 from scripts.compiler_differential.exceptions import DifferentialUsageError
 from scripts.compiler_differential.models import ExpectedOutcome
-from tests.unit.scripts.compiler_differential._helpers._test_types import (
+from tests.unit.scripts.compiler_differential._helpers.running._test_types import (
     EngineEnvironmentErrorTestCase,
     EngineEnvironmentTestCase,
     ExpectedOutcomeErrorTestCase,

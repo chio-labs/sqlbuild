@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.compiler_differential._helpers.compare import (
+from scripts.compiler_differential._helpers.comparing.compare import (
     first_json_difference,
     first_text_difference,
 )
 from scripts.compiler_differential.models import Divergence
-from tests.unit.scripts.compiler_differential._helpers._test_types import (
+from tests.unit.scripts.compiler_differential._helpers.comparing._test_types import (
     JsonDifferenceTestCase,
     PreviewTestCase,
     TextDifferenceTestCase,
