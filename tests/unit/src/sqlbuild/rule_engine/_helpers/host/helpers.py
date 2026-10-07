@@ -322,7 +322,7 @@ class StateDetector(Protocol):
 
 
 class ReferenceStateDetector:
-    """The detector before CHI-491: re-fingerprint every remaining code after each call."""
+    """The previous detector: re-fingerprint every remaining code after each call."""
 
     def __init__(
         self, *, namespaces: dict[str, tuple[dict[str, object], ...]], rules_root: Path
