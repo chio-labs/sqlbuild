@@ -42,7 +42,7 @@ use crate::bindings::models::{
 };
 use crate::bindings::types::CompilerDetach;
 
-type PyObject = Py<PyAny>;
+pub(crate) type PyObject = Py<PyAny>;
 type Located = (String, usize, usize, usize, usize);
 type Listing = (PyObject, Vec<(PyObject, bool, bool)>);
 
@@ -53,16 +53,19 @@ fn located(locations: Vec<(String, LineColumnSpan)>) -> Vec<Located> {
         .collect()
 }
 
-fn tuple_object<'py>(py: Python<'py>, items: Vec<PyObject>) -> PyResult<PyObject> {
+pub(crate) fn tuple_object<'py>(py: Python<'py>, items: Vec<PyObject>) -> PyResult<PyObject> {
     Ok(PyTuple::new(py, items)?.unbind().into_any())
 }
 
-fn object<'py, T: IntoPyObject<'py>>(py: Python<'py>, value: T) -> PyResult<PyObject> {
+pub(crate) fn object<'py, T: IntoPyObject<'py>>(py: Python<'py>, value: T) -> PyResult<PyObject> {
     value.into_py_any(py)
 }
 
 /// The Python semantics native parsing reproduces; an unknown Python is rejected by the facade.
-fn python_semantics(python_version: (u8, u8), unicode_version: &str) -> PyResult<PythonText> {
+pub(crate) fn python_semantics(
+    python_version: (u8, u8),
+    unicode_version: &str,
+) -> PyResult<PythonText> {
     python_text(python_version, unicode_version).ok_or_else(|| {
         PyValueError::new_err(format!(
             "native discovery does not support Python {}.{} with Unicode {unicode_version}",
@@ -71,7 +74,7 @@ fn python_semantics(python_version: (u8, u8), unicode_version: &str) -> PyResult
     })
 }
 
-fn failure_object(py: Python<'_>, failure: DiscoveryFailure) -> PyResult<PyObject> {
+pub(crate) fn failure_object(py: Python<'_>, failure: DiscoveryFailure) -> PyResult<PyObject> {
     tuple_object(
         py,
         vec![
@@ -84,7 +87,7 @@ fn failure_object(py: Python<'_>, failure: DiscoveryFailure) -> PyResult<PyObjec
 }
 
 /// `("read", "os", errno, message, winerror)` or `("read", "decode", bytes, start, end, reason)`.
-fn read_object(py: Python<'_>, failure: ReadFailure) -> PyResult<PyObject> {
+pub(crate) fn read_object(py: Python<'_>, failure: ReadFailure) -> PyResult<PyObject> {
     match failure {
         ReadFailure::Io {
             errno,
@@ -120,7 +123,7 @@ fn read_object(py: Python<'_>, failure: ReadFailure) -> PyResult<PyObject> {
 }
 
 /// A collection's failure payload; an unlistable directory is `("unlistable", path, read)`.
-fn stage_failure_object(
+pub(crate) fn stage_failure_object(
     py: Python<'_>,
     tree: &ProjectTree,
     failure: StageFailure,
@@ -150,6 +153,7 @@ fn outcome_object<T>(
         FileOutcome::Parsed(value) => parsed(py, value),
         FileOutcome::Unreadable(failure) => read_object(py, failure),
         FileOutcome::Failed(failure) => failure_object(py, failure),
+        FileOutcome::Deferred => tuple_object(py, vec![object(py, "defer")?]),
     }
 }
 
@@ -190,7 +194,11 @@ fn model_object(py: Python<'_>, model: DiscoveredModelFile) -> PyResult<PyObject
 }
 
 /// A relative path as Python names it: the real, surrogate-escaped name where it is not UTF-8.
-fn path_object(py: Python<'_>, tree: &ProjectTree, relative_path: String) -> PyResult<PyObject> {
+pub(crate) fn path_object(
+    py: Python<'_>,
+    tree: &ProjectTree,
+    relative_path: String,
+) -> PyResult<PyObject> {
     match tree.raw_relative(&relative_path) {
         Some(raw) => object(py, raw.into_os_string()),
         None => object(py, relative_path),
