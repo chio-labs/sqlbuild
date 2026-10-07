@@ -31,6 +31,12 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.entry._test_types import (
             expected_engine="native",
         ),
         CompilerEngineOptionTestCase(
+            description="preview_flag",
+            argv=("--compiler-engine", "native-preview", "compile"),
+            environment_value="",
+            expected_engine="native-preview",
+        ),
+        CompilerEngineOptionTestCase(
             description="flag_after_subcommand",
             argv=("plan", "--compiler-engine", "python"),
             environment_value="",
@@ -73,7 +79,10 @@ def test_given_engine_selection_when_parsing_then_flag_value_is_recorded(
             argv=("compile",),
             environment_value="rust",
             expected_exit_code=2,
-            expected_error="SQLBUILD_COMPILER_ENGINE must be one of python, native (got 'rust')",
+            expected_error=(
+                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
+                "(got 'rust')"
+            ),
         ),
     ],
     ids=lambda case: case.description,

@@ -12,11 +12,13 @@ from tests.integration.src.sqlbuild.compiler.scopes._test_types import (
     GeneratedScopeParityTestCase,
     ScopeCommandParityTestCase,
     ScopeEngineParityTestCase,
+    ScopeEngineTierTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.scopes.helpers import (
     SCOPED_PROJECT,
     ScopeOutcome,
     generated_scope_files,
+    native_scope_attempts,
     scope_command_indexes,
     scope_engine_outcomes,
     write_project,
@@ -159,6 +161,33 @@ def test_given_scoped_project_when_scope_command_builds_index_then_engines_match
         True,
         True,
     ), test_case.description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScopeEngineTierTestCase(
+            description="python oracle", engine="python", expected_native_attempts=0
+        ),
+        ScopeEngineTierTestCase(
+            description="shipped native stages only", engine="native", expected_native_attempts=0
+        ),
+        ScopeEngineTierTestCase(
+            description="native preview", engine="native-preview", expected_native_attempts=1
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_engine_tier_when_building_scope_then_native_scopes_run_only_in_preview(
+    test_case: ScopeEngineTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_project(project_dir=tmp_path, files=SCOPED_PROJECT)
+
+    attempts, outcome = native_scope_attempts(
+        project_dir=tmp_path, engine=test_case.engine, monkeypatch=monkeypatch
+    )
+
+    assert (attempts, outcome.kind) == (test_case.expected_native_attempts, "ok")
 
 
 if __name__ == "__main__":

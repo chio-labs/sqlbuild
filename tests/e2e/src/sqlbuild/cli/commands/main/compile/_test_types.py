@@ -829,3 +829,14 @@ class CompilerEngineRulesStoreTestCase:
     native_marker: str
     expected_python_files: tuple[str, ...]
     expected_native_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompilerEngineTierStoreTestCase:
+    """Alternating compiles under two native tiers and the stores each tier must own alone."""
+
+    description: str
+    engines: tuple[str, ...]
+    expected_reused: tuple[bool, ...]
+    expected_first_engine_stores: tuple[str, ...]
+    expected_second_engine_stores: tuple[str, ...]

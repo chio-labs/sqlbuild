@@ -7,7 +7,8 @@ from scripts.compiler_differential.models import DifferentialCommand, ExpectedOu
 
 ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 STAGE_CAPTURE_ENV_VAR: str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR"
-DEFAULT_ENGINES: tuple[str, str] = ("python", "native")
+ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")
+DEFAULT_ENGINES: tuple[str, str] = ("python", "native-preview")
 SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
     {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR}

@@ -33,3 +33,12 @@ class ScopeCommandParityTestCase:
     description: str
     files: dict[str, str]
     expected_minimum_grants: int
+
+
+@dataclass(frozen=True)
+class ScopeEngineTierTestCase:
+    """One compiler engine and whether it runs the preview-tier native declaration scopes."""
+
+    description: str
+    engine: str
+    expected_native_attempts: int

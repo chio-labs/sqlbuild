@@ -22,8 +22,8 @@ from sqlbuild.compiler.compile.models import (
     ScopeRelationshipBuild,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
-from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
@@ -43,7 +43,7 @@ def build_declaration_scope(
 ) -> DeclarationScopeBuild:
     """Build one canonical index and validate it before SQL expansion."""
 
-    if resolve_compiler_engine() is CompilerEngine.NATIVE:
+    if native_stage_enabled(NativeStage.DECLARATION_SCOPES):
         native_scope: DeclarationScopeBuild | None = _build_native_declaration_scope(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,

@@ -7,7 +7,7 @@ SHELL := /bin/bash
 	test-e2e-duckdb-integrations test-e2e-performance \
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
 	test-e2e-dense-compile-performance test-e2e-varied-cache-performance \
-	compiler-differential compiler-differential-dense
+	compiler-differential compiler-differential-shipped compiler-differential-dense
 
 format:
 	uv run ruff format .
@@ -289,12 +289,21 @@ test-e2e-varied-cache-performance:
 
 COMPILER_DIFFERENTIAL_JOBS ?= 4
 COMPILER_DIFFERENTIAL_SEEDS ?= 12
+COMPILER_DIFFERENTIAL_SHIPPED_SEEDS ?= 12
 COMPILER_DIFFERENTIAL_DENSE_MODELS ?= 3000
 COMPILER_DIFFERENTIAL_ARGS ?=
 
 compiler-differential:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SEEDS) \
+		$(COMPILER_DIFFERENTIAL_ARGS)
+
+# python vs native-preview above covers every native stage; this keeps the shipped `native` default
+# covered on a bounded corpus.
+compiler-differential-shipped:
+	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
+		--engines python native --corpus seeds failures \
+		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SHIPPED_SEEDS) \
 		$(COMPILER_DIFFERENTIAL_ARGS)
 
 compiler-differential-dense:

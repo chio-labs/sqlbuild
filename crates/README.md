@@ -44,6 +44,28 @@ The same check fails when the workspace version, the `pyproject.toml` version an
 `fensu check` applies the Rust structure rules inside each crate: other crates use items through
 `main/` entry points, `models.rs`, `types.rs` and `constants.rs`, not through `_helpers/`.
 
+## Compiler engines
+
+`SQLBUILD_COMPILER_ENGINE` (or the hidden `--compiler-engine` flag) selects which compiler
+stages run natively:
+
+| Engine | Runs |
+|---|---|
+| `python` | The Python compiler only. It is the oracle every native stage must match byte for byte. |
+| `native` | The default: native stages that passed their flip gate (`shipped` tier). |
+| `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
+
+Each native stage declares its tier once, in `NATIVE_STAGE_TIERS` in
+`src/sqlbuild/compiler/frontier/constants.py`. A stage moves from `preview` to `shipped` by
+changing that line, after its flip gate passes: a byte-identical real project, a green
+differential, and no measured slowdown on cold, edit and no-change compiles. Every engine keeps
+its own compiler, Rules and compile-reuse stores, so preview output is never reused by `native`.
+
+`make compiler-differential` compares `python` with `native-preview` on the full per-PR corpus.
+`make compiler-differential-shipped` compares `python` with `native` on the generated seeds and
+the failure corpus, so the shipped default stays covered on its own. CI runs both, and compares
+`python` with `native` on Python 3.13 and 3.14 as well.
+
 ## Working on the crates
 
 - Tests live next to the module they cover; run them for one crate with

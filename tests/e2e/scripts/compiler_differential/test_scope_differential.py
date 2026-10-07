@@ -53,11 +53,22 @@ _SCOPED_FILES: dict[str, str] = {
             expected_exit_code=0,
             expected_lines=(
                 "OK   project/scoped_orders",
+                "Compiler differential passed: 1 projects identical (python vs native-preview)",
+            ),
+            expected_patterns=(),
+            expected_absent=("DIFF",),
+        ),
+        HarnessRunTestCase(
+            description="shipped_native_stages_only",
+            extra_arguments=("--engines", "python", "native"),
+            expected_exit_code=0,
+            expected_lines=(
+                "OK   project/scoped_orders",
                 "Compiler differential passed: 1 projects identical (python vs native)",
             ),
             expected_patterns=(),
             expected_absent=("DIFF",),
-        )
+        ),
     ],
     ids=lambda case: case.description,
 )

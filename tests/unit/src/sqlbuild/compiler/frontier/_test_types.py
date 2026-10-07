@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
+from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage, NativeStage
 
 
 @dataclass(frozen=True)
@@ -105,3 +105,13 @@ class SharedCaptureTestCase:
     description: str
     value: Callable[[], object]
     expected_shared_nodes: int
+
+
+@dataclass(frozen=True)
+class NativeStageTierTestCase:
+    """One engine, one native stage, and whether that engine runs it."""
+
+    description: str
+    engine: CompilerEngine
+    stage: NativeStage
+    expected_enabled: bool

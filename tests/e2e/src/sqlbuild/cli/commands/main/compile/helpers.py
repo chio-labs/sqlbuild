@@ -4151,7 +4151,7 @@ def json_report_keys(stdout: str) -> tuple[str, ...]:
     return tuple(cast(dict[str, object], json.loads(stdout)))
 
 
-_COMPILER_ENGINE_LINE: re.Pattern[str] = re.compile(r'\n  "compiler_engine": "([a-z]+)",')
+_COMPILER_ENGINE_LINE: re.Pattern[str] = re.compile(r'\n  "compiler_engine": "([a-z-]+)",')
 
 
 def copy_compile_project(*, source: Path, destination: Path) -> Path:

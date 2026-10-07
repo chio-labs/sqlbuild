@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -18,6 +19,8 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex, ScopeLookup
@@ -258,7 +261,7 @@ def scope_engine_outcomes(
         discovered=discovered,
         macros=macros,
         syntax=syntax,
-        engine="native",
+        engine=CompilerEngine.NATIVE_PREVIEW.value,
         monkeypatch=monkeypatch,
     )
     built: bool = (
@@ -274,9 +277,37 @@ def scope_command_indexes(
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
     python: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "native")
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
     native: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
     return python, native
+
+
+def native_scope_attempts(
+    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+) -> tuple[int, ScopeOutcome]:
+    """Build the declaration scope under `engine`; count how often the native index was opened."""
+
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    macros: dict[str, LoadedMacro] = load_project_macros(discovered.macro_files)
+    attempts: list[None] = []
+
+    def counted(
+        *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: Mapping[str, LoadedMacro]
+    ) -> NativeScopeIndex | None:
+        attempts.append(None)
+        return open_native_scope_index(
+            discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
+        )
+
+    monkeypatch.setattr(declaration_scope, "open_native_scope_index", counted)
+    outcome: ScopeOutcome = _scope_outcome(
+        discovered=discovered,
+        macros=macros,
+        syntax=DuckDbAdapter().sql_lexical_syntax,
+        engine=engine,
+        monkeypatch=monkeypatch,
+    )
+    return len(attempts), outcome
 
 
 def _scope_outcome(

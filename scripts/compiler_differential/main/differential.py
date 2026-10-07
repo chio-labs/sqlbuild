@@ -28,6 +28,7 @@ from scripts.compiler_differential.constants import (
     DEFAULT_DENSE_MODELS,
     DEFAULT_ENGINES,
     DEFAULT_SEED_COUNT,
+    ENGINE_NAMES,
     EXPECT_SUCCESS,
     PER_PULL_REQUEST_CORPORA,
 )
@@ -113,7 +114,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--seeds", type=int, default=DEFAULT_SEED_COUNT)
     parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--dense-models", type=int, default=DEFAULT_DENSE_MODELS)
-    parser.add_argument("--engines", nargs=2, default=list(DEFAULT_ENGINES), metavar="ENGINE")
+    parser.add_argument(
+        "--engines",
+        nargs=2,
+        choices=ENGINE_NAMES,
+        default=list(DEFAULT_ENGINES),
+        metavar="ENGINE",
+        help=(
+            "oracle and candidate engines (default: python native-preview, every native stage; "
+            "pass python native to cover only the shipped native stages)"
+        ),
+    )
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     parser.add_argument(
         "--stage-captures",

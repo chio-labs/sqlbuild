@@ -2,13 +2,28 @@
 
 import re
 
-from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.frontier.types import CompilerEngine, NativeStage, NativeStageTier
 
 COMPILER_ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 COMPILER_ENGINE_OPTION: str = "--compiler-engine"
 DEFAULT_COMPILER_ENGINE: CompilerEngine = CompilerEngine.NATIVE
 COMPILER_ENGINE_VALUES: tuple[str, ...] = tuple(engine.value for engine in CompilerEngine)
 NATIVE_CACHE_NAMESPACE_SUFFIX: str = "-native-v1"
+NATIVE_PREVIEW_CACHE_NAMESPACE_SUFFIX: str = "-native-preview-v1"
+ENGINE_CACHE_NAMESPACE_SUFFIXES: dict[CompilerEngine, str] = {
+    CompilerEngine.PYTHON: "",
+    CompilerEngine.NATIVE: NATIVE_CACHE_NAMESPACE_SUFFIX,
+    CompilerEngine.NATIVE_PREVIEW: NATIVE_PREVIEW_CACHE_NAMESPACE_SUFFIX,
+}
+NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
+    NativeStage.DISCOVERY: NativeStageTier.SHIPPED,
+    NativeStage.DECLARATION_SCOPES: NativeStageTier.PREVIEW,
+}
+ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
+    CompilerEngine.PYTHON: frozenset(),
+    CompilerEngine.NATIVE: frozenset({NativeStageTier.SHIPPED}),
+    CompilerEngine.NATIVE_PREVIEW: frozenset({NativeStageTier.SHIPPED, NativeStageTier.PREVIEW}),
+}
 TARGET_DIRECTORY_NAME: str = "target"
 CACHE_DIRECTORY_NAME: str = "cache"
 COMPILER_CACHE_DIRECTORY_NAME: str = "compiler"
@@ -23,7 +38,7 @@ STAGE_CAPTURE_RESERVED_KEYS: frozenset[str] = frozenset(
 )
 STAGE_CAPTURE_INVOCATION_ID_PATTERN: re.Pattern[str] = re.compile(r"\b\d{8}T\d{6}Z_[0-9a-f]{12}\b")
 STAGE_CAPTURE_INVOCATION_ID_MASK: str = "<invocation-id>"
-STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN: re.Pattern[str] = re.compile(r"-native-v\d+\b")
+STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN: re.Pattern[str] = re.compile(r"-native(?:-preview)?-v\d+\b")
 STAGE_CAPTURE_SKIPPED_SLOTS: frozenset[str] = frozenset({"__dict__", "__weakref__"})
 STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(

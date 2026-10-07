@@ -34,6 +34,11 @@ from tests.unit.scripts.compiler_differential._helpers.comparing._test_types imp
             raw="wrote target/cache/compiler-native-v1/facts",
             expected_text="wrote target/cache/compiler/facts",
         ),
+        NormalizationTestCase(
+            description="preview_engine_store_path",
+            raw="wrote target/rules-cache-native-preview-v1/bulk",
+            expected_text="wrote target/rules-cache/bulk",
+        ),
     ],
     ids=lambda case: case.description,
 )

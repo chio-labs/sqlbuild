@@ -30,6 +30,11 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
         EngineResolutionTestCase(
             description="native", raw_value="native", expected_engine=CompilerEngine.NATIVE
         ),
+        EngineResolutionTestCase(
+            description="native_preview",
+            raw_value="native-preview",
+            expected_engine=CompilerEngine.NATIVE_PREVIEW,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -64,20 +69,33 @@ def test_given_no_engine_variable_when_resolving_then_native_is_the_default(
         EngineErrorTestCase(
             description="unknown",
             raw_value="rust",
-            expected_message="SQLBUILD_COMPILER_ENGINE must be one of python, native (got 'rust')",
+            expected_message=(
+                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
+                "(got 'rust')"
+            ),
         ),
         EngineErrorTestCase(
             description="wrong_case",
             raw_value="Native",
             expected_message=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native (got 'Native')"
+                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
+                "(got 'Native')"
+            ),
+        ),
+        EngineErrorTestCase(
+            description="underscored_preview",
+            raw_value="native_preview",
+            expected_message=(
+                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
+                "(got 'native_preview')"
             ),
         ),
         EngineErrorTestCase(
             description="padded",
             raw_value=" python",
             expected_message=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native (got ' python')"
+                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
+                "(got ' python')"
             ),
         ),
     ],
