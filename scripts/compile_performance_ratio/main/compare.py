@@ -43,7 +43,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             print(f"Generating the base project with {args.base_root}'s generator", file=sys.stderr)
             write_base_benchmark_project(
                 base_root=args.base_root.absolute(),
-                python=args.head_python.absolute(),
+                python=args.base_python.absolute(),
                 kind=args.kind,
                 project_dir=base_project_dir,
                 models=args.models,
