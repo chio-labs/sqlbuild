@@ -1,7 +1,9 @@
 pub(crate) mod analysis;
 pub(crate) mod boundary;
+pub(crate) mod cache;
 pub(crate) mod discovery;
 pub(crate) mod model_config;
+pub(crate) mod render;
 pub(crate) mod rules;
 pub(crate) mod scopes;
 pub(crate) mod sqltext;

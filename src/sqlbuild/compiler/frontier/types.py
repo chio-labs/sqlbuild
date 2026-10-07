@@ -20,6 +20,8 @@ class NativeStage(StrEnum):
     REFERENCE_EXTRACTION = "reference_extraction"
     DECLARATION_FILES = "declaration_files"
     MODEL_LOOP = "model_loop"
+    MACRO_CALLS = "macro_calls"
+    MACRO_CALL_STORE = "macro_call_store"
 
 
 class NativeStageTier(StrEnum):

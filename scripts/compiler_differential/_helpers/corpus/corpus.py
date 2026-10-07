@@ -23,6 +23,7 @@ from scripts.compiler_differential.constants import (
     FIXTURE_ROOT,
     PLAN,
     PROJECT_CONFIG_FILE,
+    STORE_WARM_COMPILE,
     WARM_COMPILE,
 )
 from scripts.compiler_differential.models import (
@@ -91,7 +92,7 @@ def build_corpus(
         entries.extend(
             CorpusProject(
                 name=f"dense/{dense_models}{'-custom-rules' if custom_rules else ''}",
-                commands=(COLD_COMPILE, WARM_COMPILE),
+                commands=(COLD_COMPILE, WARM_COMPILE, STORE_WARM_COMPILE),
                 expected=EXPECT_SUCCESS,
                 writer=DenseProject(model_count=dense_models, custom_rules=custom_rules).write,
             )
@@ -115,7 +116,7 @@ def _authored_project(
     project_dir: Path = source_dir if subdirectory is None else source_dir / subdirectory
     return CorpusProject(
         name=name,
-        commands=(COLD_COMPILE, WARM_COMPILE, *_plan_commands(project_dir)),
+        commands=(COLD_COMPILE, WARM_COMPILE, STORE_WARM_COMPILE, *_plan_commands(project_dir)),
         expected=expected,
         source_dir=source_dir,
         project_subdirectory=subdirectory,
@@ -137,7 +138,7 @@ def _seed_project(seed: int) -> CorpusProject:
     generated: GeneratedProject = ProjectBuilder(seed).build()
     return CorpusProject(
         name=f"seed/{seed}",
-        commands=(COLD_COMPILE, PLAN),
+        commands=(COLD_COMPILE, STORE_WARM_COMPILE, PLAN),
         expected=ExpectedOutcome(
             error_code=generated.expected_error_code,
             succeeding_commands=generated.succeeding_commands,

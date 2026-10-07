@@ -69,9 +69,10 @@ def run_engine(
             _run_command(
                 command=command,
                 project_dir=project_dir,
-                environment=_command_environment(
-                    engine=engine, options=options, capture_dir=capture_dir
-                ),
+                environment={
+                    **_command_environment(engine=engine, options=options, capture_dir=capture_dir),
+                    **dict(command.environment),
+                },
                 python=options.python,
             )
         )

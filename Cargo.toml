@@ -1,11 +1,13 @@
 [workspace]
 members = [
     "crates/sqlbuild-core",
+    "crates/sqlbuild-cache",
     "crates/sqlbuild-sqltext",
     "crates/sqlbuild-config",
     "crates/sqlbuild-discovery",
     "crates/sqlbuild-scopes",
     "crates/sqlbuild-model-config",
+    "crates/sqlbuild-render",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
     "crates/sqlbuild-python",
@@ -18,11 +20,13 @@ resolver = "2"
 [workspace.metadata.native-layers]
 order = [
     "sqlbuild-core",
+    "sqlbuild-cache",
     "sqlbuild-sqltext",
     "sqlbuild-config",
     "sqlbuild-discovery",
     "sqlbuild-scopes",
     "sqlbuild-model-config",
+    "sqlbuild-render",
     "sqlbuild-analysis",
     "sqlbuild-rules",
     "sqlbuild-python",
@@ -61,6 +65,7 @@ polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "9ff0a
 polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.git", rev = "9ff0af282829d92efeeb36b6a820be2271e1da49", default-features = false, features = [
     "dialect-duckdb",
 ] }
+blake3 = { version = "1", features = ["rayon"] }
 quote = "1"
 rayon = "1"
 saphyr-parser = "0.1"
@@ -70,9 +75,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
+sqlbuild-cache = { path = "crates/sqlbuild-cache" }
 sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
+sqlbuild-render = { path = "crates/sqlbuild-render" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
 sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }

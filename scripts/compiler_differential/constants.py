@@ -85,6 +85,11 @@ COLD_COMPILE: DifferentialCommand = DifferentialCommand(
 WARM_COMPILE: DifferentialCommand = DifferentialCommand(
     label="compile-warm", arguments=("compile", "--json")
 )
+STORE_WARM_COMPILE: DifferentialCommand = DifferentialCommand(
+    label="compile-store-warm",
+    arguments=("compile", "--json"),
+    environment=(("SQLBUILD_DISABLE_COMPILE_REUSE", "1"),),
+)
 PLAN: DifferentialCommand = DifferentialCommand(label=PLAN_LABEL, arguments=("plan", "--json"))
 
 GENERATOR_DOMAINS: tuple[str, ...] = ("sales", "inventory", "support", "fulfillment", "billing")

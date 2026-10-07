@@ -9,10 +9,11 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class DifferentialCommand:
-    """One sqb invocation run identically under both engines."""
+    """One sqb invocation run identically under both engines, with extra environment values."""
 
     label: str
     arguments: tuple[str, ...]
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

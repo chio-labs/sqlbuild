@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import PreparedCompile
+
+if TYPE_CHECKING:
+    from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import CompileReuseRun
 
 
 @dataclass(frozen=True)
@@ -809,6 +813,16 @@ class CompilerEngineParityTestCase:
 
 
 @dataclass(frozen=True)
+class CompilerEngineMacroParityTestCase:
+    """Two engines compiling separate copies of one macro-heavy project."""
+
+    description: str
+    files: dict[str, str]
+    expected_exit_codes: tuple[int, int]
+    expected_compiled_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompilerEngineStoreTestCase:
     """A sequence of engine compiles in one project and which of them reuse a stored compile."""
 
@@ -884,3 +898,79 @@ class NativeModelLoopParityTestCase:
     engines: tuple[str, str]
     expected_exit_codes: tuple[int, int]
     expected_report_text: str
+
+
+@dataclass(frozen=True)
+class MacroReferenceCallStoreTestCase:
+    """Repeated compiles of models sharing a macro that returns a rejected reference call."""
+
+    description: str
+    engine: str
+    expected_logged_calls: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MacroCallStoreEditStep:
+    """One edit compiled with the macro call store, and the executions it expects."""
+
+    description: str
+    edit: Callable[[Path], object]
+    expected_logged_calls: int
+    args: tuple[str, ...] = ()
+    env: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class MacroCallStoreEditSequenceTestCase:
+    """Edits applied in order, each compiled with the macro call store and with --no-cache."""
+
+    description: str
+    project_reuse: bool
+    steps: tuple[MacroCallStoreEditStep, ...]
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class BrokenMacroCallStoreKeyTestCase:
+    """An edit the store key no longer covers, which the --no-cache oracle must catch."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_matches_uncached: bool
+
+
+@dataclass(frozen=True)
+class EngineMacroCallGateTestCase:
+    """Repeated full compiles under one engine and whether the bridge and store took part."""
+
+    description: str
+    engine: str
+    expected_logged_calls: tuple[int, ...]
+    expected_store_files: tuple[str, ...]
+
+
+class StaleStoreArrangement(NamedTuple):
+    """What an arrangement step may use to compile and edit before the fresh-process check."""
+
+    project_dir: Path
+    extlib: Path
+    monkeypatch: pytest.MonkeyPatch
+    capsys: pytest.CaptureFixture[str]
+
+
+@dataclass(frozen=True)
+class StaleMacroModuleStoreTestCase:
+    """An outside module a macro imported, edited after this process imported it."""
+
+    description: str
+    arrange: Callable[[StaleStoreArrangement], None]
+    compile_afresh: Callable[[StaleStoreArrangement], CompileReuseRun]
+    expected_flavor: str
+
+
+@dataclass(frozen=True)
+class SecondCompileStoreTestCase:
+    """Two compiles in one process; the second must run its macros without the store."""
+
+    description: str
+    expected_second_matches_first: bool

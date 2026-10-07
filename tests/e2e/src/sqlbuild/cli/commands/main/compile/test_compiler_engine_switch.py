@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    CompilerEngineMacroParityTestCase,
     CompilerEngineParityTestCase,
     CompilerEngineRulesStoreTestCase,
     CompilerEngineStoreTestCase,
@@ -21,6 +22,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     report_engine,
     report_without_engine,
     store_digests,
+)
+from tests.integration.src.sqlbuild.compiler.compile.helpers import (
+    MACRO_BRIDGE_PROJECT_FILES,
+    write_project,
 )
 
 
@@ -90,6 +95,40 @@ def test_given_no_engine_selection_when_compiling_then_native_runs_and_matches_p
     assert report_without_engine(default) == report_without_engine(oracle)
     assert default.compiled == oracle.compiled
     assert oracle.compiled
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompilerEngineMacroParityTestCase(
+            description="macros_in_models_hooks_tests_audits_sources_functions",
+            files={
+                path: content.replace("WHERE id IN @generated_join()\n", "")
+                for path, content in MACRO_BRIDGE_PROJECT_FILES.items()
+            },
+            expected_exit_codes=(0, 0),
+            expected_compiled_fragments=("amount * 21", "'__SQLBUILD_RELATION_1__'"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_heavy_project_when_compiling_with_each_engine_then_outputs_are_identical(
+    test_case: CompilerEngineMacroParityTestCase, tmp_path: Path
+) -> None:
+    python_run: CompileReuseRun = engine_reuse_compile(
+        project_dir=write_project(root=tmp_path / "python", files=test_case.files),
+        engine="python",
+    )
+    native_run: CompileReuseRun = engine_reuse_compile(
+        project_dir=write_project(root=tmp_path / "native", files=test_case.files),
+        engine="native-preview",
+    )
+    compiled_text: str = b"".join(python_run.compiled.values()).decode()
+
+    assert (python_run.returncode, native_run.returncode) == test_case.expected_exit_codes
+    assert report_without_engine(native_run) == report_without_engine(python_run)
+    assert native_run.compiled == python_run.compiled
+    assert all(map(compiled_text.__contains__, test_case.expected_compiled_fragments))
 
 
 @pytest.mark.parametrize(

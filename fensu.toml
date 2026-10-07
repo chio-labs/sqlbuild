@@ -305,11 +305,13 @@ remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
 [targets.rust.rule_options.FPRSL304]
 crate_names = [
     "sqlbuild-analysis",
+    "sqlbuild-cache",
     "sqlbuild-config",
     "sqlbuild-core",
     "sqlbuild-discovery",
     "sqlbuild-model-config",
     "sqlbuild-python",
+    "sqlbuild-render",
     "sqlbuild-rules",
     "sqlbuild-scopes",
     "sqlbuild-sqltext",

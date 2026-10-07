@@ -22,6 +22,8 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.REFERENCE_EXTRACTION: NativeStageTier.PREVIEW,
     NativeStage.DECLARATION_FILES: NativeStageTier.PREVIEW,
     NativeStage.MODEL_LOOP: NativeStageTier.PREVIEW,
+    NativeStage.MACRO_CALLS: NativeStageTier.PREVIEW,
+    NativeStage.MACRO_CALL_STORE: NativeStageTier.PREVIEW,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.PYTHON: frozenset(),
