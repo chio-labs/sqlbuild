@@ -32,3 +32,10 @@ pub(crate) struct MacroCallStoreTestCase {
     pub(crate) call_text: &'static str,
     pub(crate) expected_store_hit: bool,
 }
+
+pub(crate) struct DeepNestingTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) depth: usize,
+    pub(crate) expected_tree_names: &'static [&'static str],
+    pub(crate) expected_max_seconds: f64,
+}

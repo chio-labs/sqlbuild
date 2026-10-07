@@ -34,15 +34,45 @@ pub(crate) fn top_level_calls(
     Ok(calls)
 }
 
-/// Return the names of every call nested in `args`, depth first, with repeats.
+/// Names of every call nested in `args` in source order, in one pass without recursion.
 pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>, ScanDeferral> {
+    let bytes: &[u8] = args.as_bytes();
     let mut names: Vec<String> = Vec::new();
-    for call in top_level_calls(python, args)? {
-        let inner = nested_names(python, &args[call.open + 1..call.close])?;
-        names.push(call.name);
-        names.extend(inner);
+    let mut open_call_depths: Vec<usize> = Vec::new();
+    let mut depth: usize = 0;
+    let mut index: usize = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' | b'"' | b'`' => index = quote_end(bytes, index)?,
+            b'$' => index = dollar_quote_end(bytes, index)?.unwrap_or(index + 1),
+            b'-' if bytes.get(index + 1) == Some(&b'-') => index = line_comment_end(bytes, index),
+            b'/' if bytes.get(index + 1) == Some(&b'*') => index = block_comment_end(bytes, index)?,
+            b'@' if macro_call_starts_at(python, args, index)? => {
+                let (name, open) = call_header(python, args, index)?;
+                names.push(name);
+                depth += 1;
+                open_call_depths.push(depth);
+                index = open + 1;
+            }
+            b'(' => {
+                depth += 1;
+                index += 1;
+            }
+            b')' => {
+                if open_call_depths.last() == Some(&depth) {
+                    let _ = open_call_depths.pop();
+                }
+                depth = depth.checked_sub(1).ok_or(ScanDeferral)?;
+                index += 1;
+            }
+            _ => index += 1,
+        }
     }
-    Ok(names)
+    if open_call_depths.is_empty() {
+        Ok(names)
+    } else {
+        Err(ScanDeferral)
+    }
 }
 
 /// Whether call arguments mention a typed reference function name anywhere.
@@ -51,18 +81,27 @@ pub(crate) fn mentions_typed_reference(args: &str) -> bool {
 }
 
 fn call_at(python: PythonText, text: &str, start: usize) -> Result<ScannedCall, ScanDeferral> {
-    let name_end = identifier_end(python, text, start + 1);
-    let open = skip_whitespace(text, name_end);
-    if text.as_bytes().get(open) != Some(&b'(') {
-        return Err(ScanDeferral);
-    }
+    let (name, open) = call_header(python, text, start)?;
     let close = matching_paren(text.as_bytes(), open)?;
     Ok(ScannedCall {
         start,
         open,
         close,
-        name: text[start + 1..name_end].to_owned(),
+        name,
     })
+}
+
+fn call_header(
+    python: PythonText,
+    text: &str,
+    start: usize,
+) -> Result<(String, usize), ScanDeferral> {
+    let name_end = identifier_end(python, text, start + 1);
+    let open = skip_whitespace(text, name_end);
+    if text.as_bytes().get(open) != Some(&b'(') {
+        return Err(ScanDeferral);
+    }
+    Ok((text[start + 1..name_end].to_owned(), open))
 }
 
 fn next_macro_start(

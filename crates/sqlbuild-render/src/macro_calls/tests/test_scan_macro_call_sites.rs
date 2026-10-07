@@ -1,6 +1,10 @@
 use crate::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites;
 use crate::macro_calls::tests::helpers::python_312;
-use crate::macro_calls::tests::test_types::{ExpectedSite, ScanMacroCallSitesTestCase};
+use std::time::Instant;
+
+use crate::macro_calls::tests::test_types::{
+    DeepNestingTestCase, ExpectedSite, ScanMacroCallSitesTestCase,
+};
 
 #[test]
 fn given_authored_sql_when_scanning_macro_calls_then_sites_match_python_expansion() {
@@ -75,6 +79,21 @@ fn given_authored_sql_when_scanning_macro_calls_then_sites_match_python_expansio
             expected_sites: Some(&[(8, 12, "m", &["m"], false)]),
         },
         ScanMacroCallSitesTestCase {
+            description: "nested names follow source order across siblings and plain parentheses",
+            sql: "@a((@b(@c(1)), (@d()) ), \"@x()\", @c())",
+            expected_sites: Some(&[(0, 38, "a", &["a", "b", "c", "d"], false)]),
+        },
+        ScanMacroCallSitesTestCase {
+            description: "a quoted parenthesis inside a nested call does not close it",
+            sql: "@a(@b(')'))",
+            expected_sites: Some(&[(0, 11, "a", &["a", "b"], false)]),
+        },
+        ScanMacroCallSitesTestCase {
+            description: "a nested name without its parenthesis defers",
+            sql: "@a(@bb c(1))",
+            expected_sites: None,
+        },
+        ScanMacroCallSitesTestCase {
             description: "parentheses inside quoted arguments do not close the call",
             sql: "@m(')', \"(\", `)`) z",
             expected_sites: Some(&[(0, 17, "m", &["m"], false)]),
@@ -106,6 +125,56 @@ fn given_authored_sql_when_scanning_macro_calls_then_sites_match_python_expansio
         assert_eq!(
             actual,
             test_case.expected_sites.map(<[ExpectedSite]>::to_vec),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_deeply_nested_calls_when_scanning_then_time_is_linear_and_nothing_overflows() {
+    let test_cases = [
+        DeepNestingTestCase {
+            description: "one thousand levels",
+            depth: 1_000,
+            expected_tree_names: &["m"],
+            expected_max_seconds: 2.0,
+        },
+        DeepNestingTestCase {
+            description: "twenty thousand levels",
+            depth: 20_000,
+            expected_tree_names: &["m"],
+            expected_max_seconds: 2.0,
+        },
+        DeepNestingTestCase {
+            description: "one hundred thousand levels",
+            depth: 100_000,
+            expected_tree_names: &["m"],
+            expected_max_seconds: 2.0,
+        },
+    ];
+
+    for test_case in test_cases {
+        let sql = format!(
+            "{}x{}",
+            "@m(".repeat(test_case.depth),
+            ")".repeat(test_case.depth)
+        );
+        let started = Instant::now();
+
+        let sites = scan_macro_call_sites(python_312(), &sql).expect("scanned");
+
+        assert!(
+            started.elapsed().as_secs_f64() < test_case.expected_max_seconds,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            sites
+                .iter()
+                .map(|site| site.tree_names.clone())
+                .collect::<Vec<_>>(),
+            vec![test_case.expected_tree_names.to_vec()],
             "{}",
             test_case.description
         );
