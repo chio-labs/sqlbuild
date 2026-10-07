@@ -1564,6 +1564,7 @@ class ModelConfigScanCache:
 
     template_presence: IdentityPresenceCache = field(default_factory=IdentityPresenceCache)
     macro_presence: IdentityPresenceCache = field(default_factory=IdentityPresenceCache)
+    native: bool = False
 
 
 @dataclass(frozen=True)

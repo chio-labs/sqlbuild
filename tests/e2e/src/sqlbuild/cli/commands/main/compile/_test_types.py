@@ -840,3 +840,16 @@ class CompilerEngineTierStoreTestCase:
     expected_reused: tuple[bool, ...]
     expected_first_engine_stores: tuple[str, ...]
     expected_second_engine_stores: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeModelConfigParityTestCase:
+    """Authored model config compiled by two engines that must report and write the same."""
+
+    description: str
+    project_files: dict[str, str]
+    project_config_replacements: tuple[tuple[str, str], ...]
+    environment: dict[str, str]
+    engines: tuple[str, str]
+    expected_exit_codes: tuple[int, int]
+    expected_report_text: str

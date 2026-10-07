@@ -26,12 +26,13 @@ from sqlbuild.compiler.compile.constants import (
     MODEL_AUDIT_OVERRIDE_KEYS,
     MODEL_HEADER_METADATA_KEYS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeModelConfigMismatchError
 from sqlbuild.compiler.compile.models import (
     CachedModelHeaderColumns,
     CompileModelConfig,
     CompileModelInput,
     IdentityPresenceCache,
+    ModelConfigScanCache,
     ModelHeaderColumnCache,
 )
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
@@ -41,6 +42,13 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
+    native_config_contains_macro_call,
+)
+from sqlbuild.compiler.model_config.main._native_config_contains_template import (
+    native_config_contains_template,
+)
+from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
@@ -71,6 +79,36 @@ def _contains_template_data_cached(*, value: object, cache: IdentityPresenceCach
         result = any(_contains_template_data_cached(value=item, cache=cache) for item in value)
     cache.put(value=value, result=result)
     return result
+
+
+def contains_config_templates(
+    *, values: dict[str, object], scan_cache: ModelConfigScanCache | None
+) -> bool:
+    """Return whether layered model config holds a `${...}` template, scanning natively if set."""
+
+    if scan_cache is not None and scan_cache.native:
+        native: bool | None = native_config_contains_template(values)
+        if native is not None:
+            return native
+    return _contains_template_data_cached(
+        value=values, cache=scan_cache.template_presence if scan_cache is not None else None
+    )
+
+
+def contains_config_macro_calls(
+    *, values: dict[str, object], scan_cache: ModelConfigScanCache | None
+) -> bool:
+    """Return whether model config outside hooks holds a macro call, scanning natively if set."""
+
+    if scan_cache is not None and scan_cache.native:
+        native: bool | None = native_config_contains_macro_call(
+            [value for key, value in values.items() if key not in _MODEL_HOOK_KEYS]
+        )
+        if native is not None:
+            return native
+    return _contains_model_config_macro_cached(
+        values=values, cache=scan_cache.macro_presence if scan_cache is not None else None
+    )
 
 
 def _contains_model_config_macro_cached(
@@ -253,6 +291,7 @@ def build_model_header_schema_entry(
     model_schema_description: str | None = None,
     audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
     column_cache: ModelHeaderColumnCache | None = None,
+    native_metadata: NativeHeaderMetadata | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
@@ -279,11 +318,23 @@ def build_model_header_schema_entry(
         error_class=CompileInputError,
     )
     description: str | None = model_description or model_schema_description
-    local_columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
-        raw_columns=raw_columns,
-        file_path=file_path,
-        column_locations=column_locations or {},
-        column_cache=column_cache,
+    native: NativeHeaderMetadata | None = (
+        native_metadata
+        if native_metadata is not None
+        and native_metadata.applies_to(
+            raw_columns=raw_columns, raw_audits=raw_audits, column_locations=column_locations
+        )
+        else None
+    )
+    local_columns: tuple[SchemaColumn, ...] = (
+        native.columns
+        if native is not None and not native.invalid
+        else _parse_model_header_columns(
+            raw_columns=raw_columns,
+            file_path=file_path,
+            column_locations=column_locations or {},
+            column_cache=column_cache,
+        )
     )
     columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
         model_name=model_name,
@@ -296,13 +347,22 @@ def build_model_header_schema_entry(
         model_name=model_name,
         file_path=file_path,
     )
-    audits: tuple[SchemaAuditInstance, ...] = parse_audit_instances(
-        raw_audits=raw_audits,
-        file_path=file_path,
-        label="model",
-        error_class=CompileInputError,
-        null_as_empty=True,
+    audits: tuple[SchemaAuditInstance, ...] = (
+        native.audits
+        if native is not None and not native.invalid
+        else parse_audit_instances(
+            raw_audits=raw_audits,
+            file_path=file_path,
+            label="model",
+            error_class=CompileInputError,
+            null_as_empty=True,
+        )
     )
+    if native is not None and native.invalid:
+        raise NativeModelConfigMismatchError(
+            f"{file_path}: native model config rejected MODEL columns or audits that the Python "
+            "model config accepts; run with SQLBUILD_COMPILER_ENGINE=python"
+        )
     generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
         raw_audit_factories=raw_audit_factories,
         file_path=file_path,

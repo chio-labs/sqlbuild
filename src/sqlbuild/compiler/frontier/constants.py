@@ -18,6 +18,7 @@ ENGINE_CACHE_NAMESPACE_SUFFIXES: dict[CompilerEngine, str] = {
 NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.DISCOVERY: NativeStageTier.SHIPPED,
     NativeStage.DECLARATION_SCOPES: NativeStageTier.PREVIEW,
+    NativeStage.MODEL_CONFIG: NativeStageTier.PREVIEW,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.PYTHON: frozenset(),

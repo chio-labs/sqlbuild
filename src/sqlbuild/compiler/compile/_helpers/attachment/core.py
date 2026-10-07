@@ -13,13 +13,13 @@ from typing import Any, cast
 
 from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
-    _contains_model_config_macro_cached,
-    _contains_template_data_cached,
     _model_sql_validation_gate,
     _resolve_model_schema,
     _validate_model_header_tags,
     build_layered_model_values,
     build_model_header_schema_entry,
+    contains_config_macro_calls,
+    contains_config_templates,
     find_matching_path_default,
     find_schema_model_match,
     strip_model_header_metadata_from_config,
@@ -139,6 +139,12 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
+    parse_native_header_metadata,
+)
+from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -268,6 +274,7 @@ class _ModelInputLoop:
     config_scan_cache: ModelConfigScanCache
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
+    native_header_metadata: dict[Path, NativeHeaderMetadata]
 
 
 @dataclass(frozen=True)
@@ -507,6 +514,7 @@ def _build_model_inputs(
             strict=True,
         )
     )
+    native_model_config: bool = native_stage_enabled(NativeStage.MODEL_CONFIG)
     loop: _ModelInputLoop = _ModelInputLoop(
         discovered_inputs=discovered_inputs,
         context=context,
@@ -514,13 +522,16 @@ def _build_model_inputs(
         sql_hook_definitions=sql_hook_definitions,
         legacy_schema_files=legacy_schema_files,
         model_header_column_cache=ModelHeaderColumnCache(),
-        config_scan_cache=ModelConfigScanCache(),
+        config_scan_cache=ModelConfigScanCache(native=native_model_config),
         reusable_config_cache=_ReusableModelConfigCache(
             defaults=discovered_inputs.project_config.defaults,
             path_defaults=discovered_inputs.project_config.path_defaults,
             target_config=context.target_config,
         ),
         declaration_cache=_VisibleModelDeclarationCache.build(context),
+        native_header_metadata=(
+            parse_native_header_metadata(model_files=render_files) if native_model_config else {}
+        ),
     )
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
@@ -755,6 +766,7 @@ def _build_model_input(
         model_schema_description=model_schema.description if model_schema is not None else None,
         audit_factories=discovered_inputs.audit_factories,
         column_cache=model_header_column_cache,
+        native_metadata=loop.native_header_metadata.get(model_file.file_path),
     )
     model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
     header_schema_entry, enum_columns = resolve_enum_contract_columns(
@@ -1204,6 +1216,7 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
         request.materialization_defaults
     )
     scan_cache: ModelConfigScanCache | None = request.scan_cache
+    native: bool = scan_cache is not None and scan_cache.native
 
     _validate_model_header_tags(model_header_values=model_header_values, model_name=model_name)
     layered_values: dict[str, object] = build_layered_model_values(
@@ -1220,9 +1233,8 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
     }
     for hook_key in raw_hook_values:
         del layered_values[hook_key]
-    has_authored_templates: bool = _contains_template_data_cached(
-        value=layered_values,
-        cache=scan_cache.template_presence if scan_cache is not None else None,
+    has_authored_templates: bool = contains_config_templates(
+        values=layered_values, scan_cache=scan_cache
     )
     if has_authored_templates:
         early_resolved_values: dict[str, object] = resolve_early_model_templates(
@@ -1230,12 +1242,14 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
             effective_vars=effective_vars,
             effective_target_name=effective_target_name,
             run_id=run_id,
+            native=native,
         )
         model_resolved_values: dict[str, object] = resolve_chained_model_context_templates(
             values=early_resolved_values,
             model_name=model_name,
             effective_target_name=effective_target_name,
             run_id=run_id,
+            native=native,
         )
     else:
         model_resolved_values = layered_values
@@ -1266,6 +1280,7 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
             run_id=run_id,
             include_target_values=False,
         ),
+        native=native,
     )
     target_resolved_values: dict[str, object] = (
         resolve_target_context_templates(
@@ -1273,6 +1288,7 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
             model_name=model_name,
             effective_target_name=effective_target_name,
             run_id=run_id,
+            native=native,
         )
         if has_authored_templates
         or contains_template_data(model_resolved_values.get("database"))
@@ -1292,10 +1308,7 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
         and target_resolved_values.get("materialized") != MaterializationType.INCREMENTAL
     ):
         target_resolved_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
-    if _contains_model_config_macro_cached(
-        values=target_resolved_values,
-        cache=scan_cache.macro_presence if scan_cache is not None else None,
-    ):
+    if contains_config_macro_calls(values=target_resolved_values, scan_cache=scan_cache):
         validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values,
