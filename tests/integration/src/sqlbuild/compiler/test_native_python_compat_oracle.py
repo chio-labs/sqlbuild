@@ -15,12 +15,16 @@ from tests.integration.src.sqlbuild.compiler._test_types import (
     CharacterClassOracleTestCase,
     CloseMatchesOracleTestCase,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches, mutated_word
+from tests.integration.src.sqlbuild.compiler.helpers import (
+    TABLE_PYTHON_VERSION,
+    mismatches,
+    mutated_word,
+)
 
 
 @pytest.mark.skipif(
-    _native._oracle_python_alnum([])[0] != unicodedata.unidata_version,
-    reason="the native table was generated from a Python with another Unicode database",
+    sys.version_info[:2] != TABLE_PYTHON_VERSION,
+    reason="the native table reproduces the CI Python; other versions defer to Python discovery",
 )
 @pytest.mark.parametrize(
     "test_case",
@@ -31,6 +35,7 @@ def test_given_code_points_when_classifying_natively_then_isalnum_matches_python
     test_case: CharacterClassOracleTestCase,
 ) -> None:
     code_points: list[int] = list(range(test_case.first, test_case.last + 1))
+    assert _native.PYTHON_ALNUM_UNICODE_VERSION == unicodedata.unidata_version
 
     expected: list[object] = [chr(code_point).isalnum() for code_point in code_points]
     actual: list[object] = list(_native._oracle_python_alnum(code_points)[1])

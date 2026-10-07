@@ -43,9 +43,15 @@ def parse_model_headers(
     headers: list[str],
 ) -> list[tuple[dict[str, object] | None, list[tuple[str, int, int]] | None, str | None]]: ...
 def tokenize_model_header(header: str) -> list[tuple[int, str, int]]: ...
+
+PYTHON_ALNUM_UNICODE_VERSION: str
+
 def discover_model_files(
     request: dict[str, object],
-) -> list[tuple[str, tuple[object, ...]]] | None: ...
+) -> (
+    tuple[list[tuple[str, tuple[object, ...]]], list[tuple[str, list[tuple[str, bool, bool]]]]]
+    | None
+): ...
 def substitute_static_project_vars(
     sqls: list[str], variables: list[tuple[str, str]]
 ) -> list[tuple[int, str | None]]: ...

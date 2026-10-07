@@ -704,3 +704,15 @@ def generated_model_bytes(*, rng: random.Random) -> bytes:
         weights=(19, 1),
     )[0]
     return text.encode("utf-8")
+
+
+class CallCounter:
+    """Count calls and delegate to the wrapped function."""
+
+    def __init__(self, function: Callable[..., object]) -> None:
+        self.function: Callable[..., object] = function
+        self.calls: int = 0
+
+    def __call__(self, *args: object) -> object:
+        self.calls += 1
+        return self.function(*args)

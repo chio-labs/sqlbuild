@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import random
+import unicodedata
 from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as _native
+from sqlbuild.compiler.discovery._helpers.native.model_files import (
+    discover_native_model_files,
+)
+from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -14,8 +21,11 @@ from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     EngineSwitchParityTestCase,
     GeneratedModelParityTestCase,
     ModelDiscoveryParityTestCase,
+    NativeDeferralTestCase,
+    SharedSnapshotTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
+    CallCounter,
     generated_model_bytes,
     model_discovery_outcome,
     write_project,
@@ -144,3 +154,71 @@ def test_given_project_when_discovering_through_the_engine_switch_then_inputs_ma
     native: str = render_stage_capture(discover_project_inputs(project_dir=tmp_path))
 
     assert (native == python) is test_case.expected_identical
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeDeferralTestCase(
+            description="matching Unicode data and a UTF-8 root run natively",
+            project_name="orders",
+            expected_native_calls=1,
+        ),
+        NativeDeferralTestCase(
+            description="different Unicode data defers to Python",
+            project_name="orders",
+            unidata_version="0.0.0",
+            expected_native_calls=0,
+        ),
+        NativeDeferralTestCase(
+            description="a non-UTF-8 project root defers to Python",
+            project_name=os.fsdecode(b"orders\xff"),
+            expected_native_calls=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_and_root_when_discovering_natively_then_python_runs_where_native_cannot_match(
+    test_case: NativeDeferralTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir: Path = tmp_path / test_case.project_name
+    write_project(project_dir=project_dir, files=(("models/orders.sql", _VALID_MODEL),))
+    python: object = model_discovery_outcome(project_dir=project_dir, native=False)
+    counter: CallCounter = CallCounter(_native.discover_model_files)
+    monkeypatch.setattr(_native, "discover_model_files", counter)
+    monkeypatch.setattr(unicodedata, "unidata_version", test_case.unidata_version)
+
+    native: object = model_discovery_outcome(project_dir=project_dir, native=True)
+
+    assert (native, counter.calls) == (python, test_case.expected_native_calls)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedSnapshotTestCase(
+            description="a schema file created after the model walk stays unseen",
+            created_file="models/marts/schema.yml",
+            pattern="schema.yml",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_model_walk_when_globbing_models_later_in_the_pass_then_the_walk_is_shared(
+    test_case: SharedSnapshotTestCase, tmp_path: Path
+) -> None:
+    write_project(project_dir=tmp_path, files=(("models/marts/orders.sql", _VALID_MODEL),))
+    with DirectorySnapshot.scope(project_dir=tmp_path) as snapshot:
+        _ = discover_native_model_files(
+            project_dir=tmp_path,
+            extract_implicit_alias_columns=True,
+            extract_output_column_locations=True,
+        )
+        _ = (tmp_path / test_case.created_file).write_text("models: []\n", encoding="utf-8")
+        matches: tuple[Path, ...] = snapshot.rglob(
+            root=tmp_path / "models", pattern=test_case.pattern
+        )
+
+    assert tuple(path.relative_to(tmp_path).as_posix() for path in matches) == (
+        test_case.expected_matches
+    )

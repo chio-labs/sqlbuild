@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import os
+import unicodedata
 from pathlib import Path
 
+import sqlbuild._native as _native
+from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ModelSqlParseError
-from sqlbuild.compiler.discovery.types import NativeLocation
+from sqlbuild.compiler.discovery.types import (
+    DirectorySnapshotEntry,
+    NativeListing,
+    NativeLocation,
+)
 from sqlbuild.spec.contracts.models import SourceLocation
 
 _DISPLAY_PROBE: str = "_"
+_WINDOWS_OS_NAME: str = "nt"
+_PATH_ENCODING: str = "utf-8"
 _FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {"model_sql": ModelSqlParseError}
 
 
@@ -41,3 +51,39 @@ def native_locations(
         )
         for name, line, column, end_line, end_column in locations
     }
+
+
+def native_discovery_supported(*, project_dir: Path, display_prefix: str) -> bool:
+    """Whether native discovery reproduces Python here: same Unicode data, UTF-8 paths, POSIX."""
+
+    return (
+        os.name != _WINDOWS_OS_NAME
+        and unicodedata.unidata_version == _native.PYTHON_ALNUM_UNICODE_VERSION
+        and _is_utf8_text(str(project_dir))
+        and _is_utf8_text(display_prefix)
+    )
+
+
+def seed_snapshot_listings(*, project_dir: Path, listings: list[NativeListing]) -> None:
+    """Share the native walk's listings with the pass's Python directory snapshot."""
+
+    DirectorySnapshot.current(project_dir=project_dir).seed_listings(
+        {project_dir / directory: _snapshot_entries(entries) for directory, entries in listings}
+    )
+
+
+def _snapshot_entries(
+    entries: list[tuple[str, bool, bool]],
+) -> tuple[DirectorySnapshotEntry, ...]:
+    return tuple(
+        DirectorySnapshotEntry(name=name, is_dir=is_dir, is_walkable_dir=walkable)
+        for name, is_dir, walkable in entries
+    )
+
+
+def _is_utf8_text(text: str) -> bool:
+    try:
+        _ = text.encode(_PATH_ENCODING)
+    except UnicodeEncodeError:
+        return False
+    return True

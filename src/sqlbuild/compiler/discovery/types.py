@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 type ProjectProvider = Provider
 type NativeLocation = tuple[str, int, int, int, int]
+type NativeListing = tuple[str, list[tuple[str, bool, bool]]]
+type NativeModelDiscovery = tuple[list[tuple[str, tuple[object, ...]]], list[NativeListing]]
 
 
 class LoaderConnectionMode(StrEnum):

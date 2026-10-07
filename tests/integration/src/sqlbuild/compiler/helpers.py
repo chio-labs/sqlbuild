@@ -301,6 +301,7 @@ def python_read_text(*, path: Path, data: bytes) -> str:
     return path.read_text(encoding="utf-8")
 
 
+TABLE_PYTHON_VERSION: tuple[int, int] = (3, 12)
 MUTATION_ALPHABET: str = "abcdefghijklmnopqrstuvwxyz_0é"
 
 
