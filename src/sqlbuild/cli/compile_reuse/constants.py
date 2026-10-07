@@ -14,12 +14,6 @@ from sqlbuild.compiler.frontier.constants import (
 
 REUSE_FORMAT_VERSION: int = 1
 REUSE_ENTRY_DIRECTORY_NAME: str = "project-reuse-v1"
-REUSE_ENTRY_DIRECTORY_PARTS: tuple[str, ...] = (
-    "target",
-    "cache",
-    "compiler",
-    REUSE_ENTRY_DIRECTORY_NAME,
-)
 REUSE_ENTRY_MAGIC: bytes = b"SQBREUSE1\n"
 REUSE_ENTRY_SUFFIX: str = ".entry"
 REUSE_STDOUT_SUFFIX: str = ".stdout"

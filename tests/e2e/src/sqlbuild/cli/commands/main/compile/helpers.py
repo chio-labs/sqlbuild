@@ -50,7 +50,7 @@ from sqlbuild.cli.compile_reuse._helpers.entry_file import (
 from sqlbuild.cli.compile_reuse.classes.stored_artifacts import StoredArtifacts
 from sqlbuild.cli.compile_reuse.constants import (
     REUSE_DISABLE_ENV_VAR,
-    REUSE_ENTRY_DIRECTORY_PARTS,
+    REUSE_ENTRY_DIRECTORY_NAME,
     REUSE_RENDER_STATE_SUFFIX,
 )
 from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
@@ -3135,7 +3135,7 @@ def compile_reuse_entry_paths(*, project_dir: Path) -> tuple[Path, ...]:
     """Return every stored compile reuse entry of a project."""
 
     return tuple(
-        sorted((compiler_cache_directory(project_dir) / "project-reuse-v1").glob("*.entry"))
+        sorted((compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME).glob("*.entry"))
     )
 
 
@@ -4089,7 +4089,9 @@ def render_store_files(project_dir: Path) -> int:
 
     return len(
         list(
-            project_dir.joinpath(*REUSE_ENTRY_DIRECTORY_PARTS).glob(f"*{REUSE_RENDER_STATE_SUFFIX}")
+            (compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME).glob(
+                f"*{REUSE_RENDER_STATE_SUFFIX}"
+            )
         )
     )
 
