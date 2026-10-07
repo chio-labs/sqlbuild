@@ -13,7 +13,12 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import project_render_kinds
 from scripts.compiler_differential._helpers.running.execution import run_engine
-from scripts.compiler_differential.constants import ERROR_SEVERITY, WARNING_SEVERITY
+from scripts.compiler_differential.constants import (
+    ERROR_SEVERITY,
+    LEFT_SIDE,
+    RIGHT_SIDE,
+    WARNING_SEVERITY,
+)
 from scripts.compiler_differential.models import (
     CommandOutcome,
     CorpusProject,
@@ -42,6 +47,7 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         source_dir=source_dir,
         case_dir=case_dir,
         engine=left_engine,
+        side=LEFT_SIDE,
         options=options,
     )
     right: EngineRun = run_engine(
@@ -49,6 +55,7 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         source_dir=source_dir,
         case_dir=case_dir,
         engine=right_engine,
+        side=RIGHT_SIDE,
         options=options,
     )
     counted: bool = project.seed_coverage and options.stage_captures

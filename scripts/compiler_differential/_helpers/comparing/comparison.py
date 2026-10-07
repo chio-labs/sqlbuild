@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 
+from scripts.compiler_differential._helpers.comparing.capture import first_capture_difference
 from scripts.compiler_differential._helpers.comparing.compare import (
     as_json_object,
-    first_document_difference,
     first_json_difference,
     first_text_difference,
 )
@@ -237,12 +238,12 @@ def _loads(text: str | None) -> object:
 
 
 def _capture_differences(
-    *, left: dict[str, dict[str, str]], right: dict[str, dict[str, str]]
+    *, left: dict[str, dict[str, Path]], right: dict[str, dict[str, Path]]
 ) -> list[tuple[str, Divergence | None]]:
     differences: list[tuple[str, Divergence | None]] = []
     for command in sorted(set(left) | set(right)):
-        left_files: dict[str, str] = left.get(command, {})
-        right_files: dict[str, str] = right.get(command, {})
+        left_files: dict[str, Path] = left.get(command, {})
+        right_files: dict[str, Path] = right.get(command, {})
         for name in sorted(set(left_files) | set(right_files)):
             artifact: str = f"stage capture {command}/{name}"
             if name not in left_files or name not in right_files:
@@ -258,10 +259,7 @@ def _capture_differences(
             differences.append(
                 (
                     artifact,
-                    first_document_difference(
-                        left=normalize_artifact_text(left_files[name]),
-                        right=normalize_artifact_text(right_files[name]),
-                    ),
+                    first_capture_difference(left=left_files[name], right=right_files[name]),
                 )
             )
     return differences

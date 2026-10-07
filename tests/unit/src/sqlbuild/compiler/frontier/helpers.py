@@ -103,6 +103,22 @@ def orders_binding_catalog(
     return catalog
 
 
+def repeated_orders() -> dict[str, object]:
+    """Return equal large order lines and one long SQL text, each repeated several times."""
+
+    query_sql: str = "SELECT " + ", ".join(f"amount_{index:03d}" for index in range(120))
+    return {
+        "orders": [
+            {"order_id": index, "lines": _order_lines(), "query_sql": query_sql}
+            for index in range(3)
+        ],
+    }
+
+
+def _order_lines() -> list[dict[str, object]]:
+    return [{"sku": f"product-{line:03d}", "quantity": line} for line in range(40)]
+
+
 def order_line() -> OrderLine:
     """Return one neutral order line."""
 

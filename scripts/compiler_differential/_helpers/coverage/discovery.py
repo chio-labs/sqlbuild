@@ -17,6 +17,7 @@ from scripts.compiler_differential._helpers.coverage.capture_values import (
     named_values,
     records,
 )
+from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
     CALLABLE_CAPTURE_FIELDS,
     CRLF_BYTES,
@@ -59,7 +60,7 @@ def discovery_collection_kinds() -> tuple[str, ...]:
 
 
 def project_discovery_kinds(
-    *, captures: dict[str, dict[str, str]], source_dir: Path
+    *, captures: dict[str, dict[str, Path]], source_dir: Path
 ) -> frozenset[str]:
     """Return the kinds of every discovery capture plus CRLF, which only the bytes show."""
 
@@ -75,7 +76,7 @@ def project_discovery_kinds(
 def discovered_relative_paths(capture_text: str) -> frozenset[str]:
     """Return the project-relative path of every file a discovery capture says it read."""
 
-    capture: object = json.loads(capture_text)
+    capture: object = expand_capture_text(capture_text)
     return frozenset(
         str(path)
         for _, value in named_values(value=capture, names=RELATIVE_PATH_FIELDS)
@@ -94,17 +95,17 @@ def authored_byte_kinds(*, source_dir: Path, relative_paths: frozenset[str]) -> 
     )
 
 
-def _discovery_capture_texts(captures: dict[str, dict[str, str]]) -> Iterator[str]:
+def _discovery_capture_texts(captures: dict[str, dict[str, Path]]) -> Iterator[str]:
     for files in captures.values():
-        for name, text in files.items():
+        for name, path in files.items():
             if name.endswith(DISCOVERY_STAGE_CAPTURE_SUFFIX):
-                yield text
+                yield path.read_text(encoding="utf-8")
 
 
 def discovered_input_kinds(capture_text: str) -> frozenset[str]:
     """Return the input kinds one canonical discovery capture proves were discovered."""
 
-    capture: dict[str, object] = as_json_object(json.loads(capture_text)) or {}
+    capture: dict[str, object] = as_json_object(expand_capture_text(capture_text)) or {}
     kinds: set[str] = {
         kind for kind in discovery_collection_kinds() if has_content(capture.get(kind))
     }

@@ -9,8 +9,9 @@ from _pytest.capture import CaptureResult
 
 from scripts.cold_compile_performance._helpers.random_dag_project import write_random_dag_project
 from scripts.cold_compile_performance.models import RandomDagProject
-from scripts.compiler_differential._helpers.comparing.compare import first_document_difference
+from scripts.compiler_differential._helpers.comparing.capture import first_capture_difference
 from scripts.compiler_differential.main.generate_project import generate_project
+from scripts.compiler_differential.models import Divergence
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     CompileOutcome,
@@ -32,6 +33,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     interrupt_reacquiring_analysis,
     live_model_analysis_threads,
     perturb_dataflow_schedule,
+    random_dag_writer,
     reshape_models,
     use_wave_analysis,
 )
@@ -47,10 +49,6 @@ _EDITED: tuple[int, ...] = (10, 25)
 _REPEATS: tuple[int, ...] = (0, 1)
 _SETTLE_SECONDS: float = 0.3
 _INTERRUPT_NOTICE: str = "Interrupted; finishing in-flight model analysis..."
-
-
-def _write_random_dag(project_dir: Path) -> None:
-    _ = write_random_dag_project(project_dir=project_dir, project=_PROJECT)
 
 
 @pytest.mark.parametrize(
@@ -100,7 +98,7 @@ def test_given_perturbed_schedule_when_compiling_repeatedly_then_output_is_ident
     [
         DataflowCaptureCase(
             "random dag",
-            _write_random_dag,
+            random_dag_writer(_PROJECT),
             _CAPTURE_SCHEDULES,
         ),
         DataflowCaptureCase(
@@ -121,7 +119,7 @@ def test_given_perturbed_schedule_when_capturing_compiled_project_then_capture_i
     _ = test_case.write_project(project_dir)
     with monkeypatch.context() as waves_patch:
         use_wave_analysis(waves_patch)
-        reference: str = compiled_project_capture(
+        reference: Path = compiled_project_capture(
             project_dir=project_dir,
             capture_dir=tmp_path / "reference",
             capsys=capsys,
@@ -130,14 +128,15 @@ def test_given_perturbed_schedule_when_capturing_compiled_project_then_capture_i
     for index, schedule in enumerate(test_case.schedules):
         with monkeypatch.context() as schedule_patch:
             perturb_dataflow_schedule(monkeypatch=schedule_patch, case=schedule, seed=index)
-            actual: str = compiled_project_capture(
+            actual: Path = compiled_project_capture(
                 project_dir=project_dir,
                 capture_dir=tmp_path / f"schedule-{index}",
                 capsys=capsys,
                 monkeypatch=monkeypatch,
             )
 
-        assert first_document_difference(left=reference, right=actual) is None, schedule
+        difference: Divergence | None = first_capture_difference(left=reference, right=actual)
+        assert getattr(difference, "location", None) == test_case.expected_difference, schedule
 
 
 @pytest.mark.parametrize(

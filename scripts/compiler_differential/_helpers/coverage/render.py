@@ -6,7 +6,7 @@ import dataclasses
 import json
 import re
 from collections.abc import Iterator
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object
 from scripts.compiler_differential._helpers.coverage.capture_values import (
@@ -20,6 +20,7 @@ from scripts.compiler_differential._helpers.coverage.macro_sources import (
     macro_function_source,
     takes_typed_reference,
 )
+from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
     RENDER_CALLABLE_CAPTURE_FIELDS,
     RENDER_DETAIL_KINDS,
@@ -77,14 +78,14 @@ def render_collection_kinds() -> tuple[str, ...]:
     )
 
 
-def project_render_kinds(captures: dict[str, dict[str, str]]) -> frozenset[str]:
+def project_render_kinds(captures: dict[str, dict[str, Path]]) -> frozenset[str]:
     """Return the render kinds every `CompileProjectInputs` capture of one project proves."""
 
     kinds: set[str] = set()
     for files in captures.values():
-        for name, text in files.items():
+        for name, path in files.items():
             if name.endswith(RENDER_STAGE_CAPTURE_SUFFIX):
-                kinds.update(rendered_input_kinds(text))
+                kinds.update(rendered_input_kinds(path.read_text(encoding="utf-8")))
     return frozenset(kinds)
 
 
@@ -101,7 +102,7 @@ def render_capture_problems(capture_text: str) -> tuple[str, ...]:
 def rendered_input_kinds(capture_text: str) -> frozenset[str]:
     """Return the render input kinds one canonical `CompileProjectInputs` capture proves."""
 
-    capture: dict[str, object] = as_json_object(json.loads(capture_text)) or {}
+    capture: dict[str, object] = as_json_object(expand_capture_text(capture_text)) or {}
     kinds: set[str] = {kind for kind in render_collection_kinds() if has_content(capture.get(kind))}
     usages: list[tuple[str, dict[str, object]]] = list(_usages(capture))
     kinds.update(_macro_kinds(capture=capture, usages=usages))

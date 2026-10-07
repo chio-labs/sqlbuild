@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 
+from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild.compiler.frontier.classes.stage_capture_encoder import StageCaptureEncoder
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
+    STAGE_CAPTURE_SHARED_NODES_KEY,
     STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
+    SharedCaptureTestCase,
     StageCaptureOrderTestCase,
     StageCaptureTestCase,
     UnorderedAttributeTestCase,
@@ -29,6 +34,7 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
     order_total,
     orders_binding_catalog,
     orders_lineage,
+    repeated_orders,
 )
 
 _COMPILE_MODELS: str = "sqlbuild.compiler.compile.models"
@@ -96,6 +102,11 @@ _LINEAGE_TYPES: str = "sqlbuild.compiler.lineage.types"
                     "confidence": {"__enum__": f"{_LINEAGE_TYPES}:ColumnLineageConfidence.HIGH"},
                 }
             ],
+        ),
+        StageCaptureTestCase(
+            description="mapping_with_a_reserved_key_is_encoded_as_pairs",
+            value=lambda: {"__shared__": "orders", "status": "placed"},
+            expected_capture={"__mapping__": [["__shared__", "orders"], ["status", "placed"]]},
         ),
         StageCaptureTestCase(
             description="non_finite_float_and_bytes",
@@ -237,6 +248,34 @@ def test_given_declared_memo_attribute_when_rendering_capture_then_only_it_is_so
     )
 
     assert (first == second) is test_case.expected_identical
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedCaptureTestCase(
+            description="repeated_lines_and_sql_are_stored_once",
+            value=repeated_orders,
+            expected_shared_nodes=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_repeated_large_subtrees_when_rendering_capture_then_each_is_stored_once(
+    test_case: SharedCaptureTestCase,
+) -> None:
+    text: str = render_stage_capture(test_case.value())
+
+    shared: dict[str, object] = json.loads(text)[STAGE_CAPTURE_SHARED_NODES_KEY]
+    assert len(shared) == test_case.expected_shared_nodes
+    assert expand_capture_text(text) == StageCaptureEncoder().encode(test_case.value())
+    assert {
+        hashlib.sha256(
+            json.dumps(node, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+        for node in shared.values()
+    } == set(shared)
+    assert len(text.splitlines()) == test_case.expected_shared_nodes + 4
 
 
 @pytest.mark.parametrize(

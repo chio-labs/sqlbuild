@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from pathlib import Path
 
 import pytest
 
@@ -418,12 +419,14 @@ def test_given_render_capture_when_classifying_then_only_rendered_inputs_are_cre
     ids=lambda case: case.description,
 )
 def test_given_encoded_compile_inputs_when_classifying_then_encoded_empty_values_prove_nothing(
-    test_case: RenderEncodedInputsTestCase,
+    test_case: RenderEncodedInputsTestCase, tmp_path: Path
 ) -> None:
     capture: str = render_stage_capture(test_case.inputs)
+    capture_path: Path = tmp_path / "002-compile_project_inputs.json"
+    _ = capture_path.write_text(capture, encoding="utf-8")
 
     assert rendered_input_kinds(capture) == test_case.expected_kinds
-    assert project_render_kinds({"0-compile": {"002-compile_project_inputs.json": capture}}) == (
+    assert project_render_kinds({"0-compile": {capture_path.name: capture_path}}) == (
         test_case.expected_kinds
     )
 

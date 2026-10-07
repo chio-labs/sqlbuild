@@ -96,3 +96,12 @@ class FrontierCaptureTestCase:
     stages: tuple[CompilerStage, ...]
     expected_results: tuple[object, ...]
     expected_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SharedCaptureTestCase:
+    """A value with repeated large subtrees and how many distinct shared nodes its capture holds."""
+
+    description: str
+    value: Callable[[], object]
+    expected_shared_nodes: int

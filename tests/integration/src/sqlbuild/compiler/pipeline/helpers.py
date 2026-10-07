@@ -20,7 +20,6 @@ import sqlbuild._native as _native
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.cold_compile_performance._helpers.random_dag_project import write_random_dag_project
 from scripts.cold_compile_performance.models import RandomDagProject
-from scripts.compiler_differential._helpers.comparing.normalize import normalize_artifact_text
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
@@ -315,15 +314,14 @@ def compiled_project_capture(
     capture_dir: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
-) -> str:
-    """Cold-compile once with stage captures; return the normalized compiled-project capture."""
+) -> Path:
+    """Cold-compile once with stage captures; return the compiled-project capture file."""
 
     with monkeypatch.context() as capture_patch:
         capture_patch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(capture_dir))
         _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
     _ = capsys.readouterr()
-    capture: Path = next(capture_dir.glob(f"*-{CompilerStage.COMPILED_PROJECT.value}.json"))
-    return normalize_artifact_text(capture.read_text(encoding="utf-8"))
+    return next(capture_dir.glob(f"*-{CompilerStage.COMPILED_PROJECT.value}.json"))
 
 
 def reshape_models(*, project_dir: Path, names: tuple[str, ...], indexes: tuple[int, ...]) -> None:
