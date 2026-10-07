@@ -14,6 +14,7 @@ import statistics
 import subprocess
 import sys
 import time
+import zipfile
 from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
@@ -34,6 +35,7 @@ import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile.classes.binding_dataflow as binding_dataflow
 import sqlbuild.compiler.compile.classes.render_reuse_session as render_reuse_session
 import sqlbuild.compiler.compile.classes.stored_model_analyses as stored_model_analyses
@@ -63,6 +65,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     IncrementalEditStep,
     SemanticCorpusCase,
     SetOperationModel,
+    StaleStoreArrangement,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 from tests.integration.src.sqlbuild.compiler.compile.helpers import (
@@ -4275,8 +4278,16 @@ MACRO_CALL_STORE_ENGINE: str = "native-preview"
 STORE_ENVIRONMENT_REGION_VAR: str = "SQB_STORE_TEST_REGION"
 STORE_ARGUMENT_ENV_VAR: str = "STORE_TEST_ARGUMENT"
 _REUSE_DISABLED_VALUES: dict[bool, str] = {True: "0", False: "1"}
+STALE_FLAVOR_EDIT: str = "salty"
 _SOUTH_MODEL: str = "models/south/orders_south.sql"
 _STORE_EXTERNAL_MODULE: str = "store_flavor_values"
+_ZIPPED_FLAVOR_MODULE: str = "zipped_flavor_values"
+_STORE_IMPORTED_MODULES: tuple[str, ...] = (
+    _STORE_EXTERNAL_MODULE,
+    _ZIPPED_FLAVOR_MODULE,
+    "macros",
+    "macros._label_values",
+)
 _STORE_PROJECT_EXTRA_FILES: dict[str, str] = {
     "macros/context_labels.py": (
         '"""Macros that read the target, the environment and an outside module."""\n\n'
@@ -4405,7 +4416,170 @@ def freeze_macro_call_store_environment(monkeypatch: pytest.MonkeyPatch) -> None
     """Break the store key: every project and module state looks like the first one."""
 
     monkeypatch.setattr(macro_bridge_class, "store_environment", lambda **_kwargs: "frozen")
-    monkeypatch.setattr(macro_bridge_class, "unchanged_module_stamps", lambda _metadata: {})
+    monkeypatch.setattr(macro_bridge_class, "unchanged_module_digests", lambda **_kwargs: {})
+    monkeypatch.setattr(macro_bridge_class.MacroBridge, "_observe_modules", lambda _bridge: True)
+    monkeypatch.setattr(call_store_module, "claim_first_compile", lambda: True)
+
+
+def pretend_fresh_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Treat this test process as one no compile has run in yet."""
+
+    compiles: Iterator[int] = itertools.count()
+    monkeypatch.setattr(call_store_module, "claim_first_compile", lambda: next(compiles) == 0)
+
+
+def logged_in_process_compile(
+    *, project_dir: Path, log_path: Path, capsys: pytest.CaptureFixture[str]
+) -> int:
+    """Compile in this process and return how many macro calls ran."""
+
+    _ = log_path.write_text("", encoding="utf-8")
+    _ = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    return len(log_path.read_text(encoding="utf-8").splitlines())
+
+
+def _save_after(monkeypatch: pytest.MonkeyPatch, change: Callable[[], object]) -> None:
+    original: Callable[[macro_bridge_class.MacroBridge], None] = (
+        macro_bridge_class.MacroBridge.save_store
+    )
+    pending: Iterator[Callable[[], object]] = iter([change])
+
+    def change_then_save(bridge: macro_bridge_class.MacroBridge) -> None:
+        _ = [next_change() for next_change in itertools.islice(pending, 1)]
+        original(bridge)
+
+    monkeypatch.setattr(macro_bridge_class.MacroBridge, "save_store", change_then_save)
+
+
+def recompile_in_process_after_edit(arrangement: StaleStoreArrangement) -> None:
+    """Compile twice in one process, editing the flavor module between the compiles."""
+
+    pretend_fresh_process(arrangement.monkeypatch)
+    _ = in_process_reuse_run(project_dir=arrangement.project_dir, capsys=arrangement.capsys)
+    write_store_flavor(extlib=arrangement.extlib, value=STALE_FLAVOR_EDIT)
+    _ = in_process_reuse_run(project_dir=arrangement.project_dir, capsys=arrangement.capsys)
+
+
+def edit_flavor_while_saving(arrangement: StaleStoreArrangement) -> None:
+    """Compile in a fresh process that edits the flavor module just before saving the store."""
+
+    pretend_fresh_process(arrangement.monkeypatch)
+    _save_after(
+        arrangement.monkeypatch,
+        lambda: write_store_flavor(extlib=arrangement.extlib, value=STALE_FLAVOR_EDIT),
+    )
+    _ = in_process_reuse_run(project_dir=arrangement.project_dir, capsys=arrangement.capsys)
+
+
+def move_flavor_while_saving(arrangement: StaleStoreArrangement) -> None:
+    """Move the loaded flavor away before saving, then write a new one, keeping folder times."""
+
+    module_path: Path = arrangement.extlib / f"{_STORE_EXTERNAL_MODULE}.py"
+    folder: os.stat_result = arrangement.extlib.stat()
+    pretend_fresh_process(arrangement.monkeypatch)
+    _save_after(
+        arrangement.monkeypatch, lambda: module_path.rename(module_path.with_suffix(".moved"))
+    )
+    _ = in_process_reuse_run(project_dir=arrangement.project_dir, capsys=arrangement.capsys)
+    write_store_flavor(extlib=arrangement.extlib, value=STALE_FLAVOR_EDIT)
+    os.utime(arrangement.extlib, ns=(folder.st_atime_ns, folder.st_mtime_ns))
+
+
+def rezip_flavor_between_processes(arrangement: StaleStoreArrangement) -> None:
+    """Serve the flavor from a zip archive, compile in a process, then rebuild the archive."""
+
+    write_zipped_flavor(extlib=arrangement.extlib, value="sweet")
+    _ = fresh_process_compile(project_dir=arrangement.project_dir, extlib=arrangement.extlib)
+    write_zipped_flavor(extlib=arrangement.extlib, value=STALE_FLAVOR_EDIT)
+
+
+def backdate_flavor_between_processes(arrangement: StaleStoreArrangement) -> None:
+    """Compile in a process, then replace the flavor keeping its size and modification time."""
+
+    module_path: Path = arrangement.extlib / f"{_STORE_EXTERNAL_MODULE}.py"
+    _ = fresh_process_compile(project_dir=arrangement.project_dir, extlib=arrangement.extlib)
+    status: os.stat_result = module_path.stat()
+    write_store_flavor(extlib=arrangement.extlib, value=STALE_FLAVOR_EDIT)
+    os.utime(module_path, ns=(status.st_atime_ns, status.st_mtime_ns))
+
+
+def write_zipped_flavor(*, extlib: Path, value: str) -> None:
+    """Make the flavor module re-export a value from a module inside a zip archive."""
+
+    archive: Path = extlib / "flavors.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr(f"{_ZIPPED_FLAVOR_MODULE}.py", f"VALUE = {value!r}\n")
+    _ = (extlib / f"{_STORE_EXTERNAL_MODULE}.py").write_text(
+        f"import sys\n\nsys.path.insert(0, {str(archive)!r})\n"
+        f"from {_ZIPPED_FLAVOR_MODULE} import VALUE\n",
+        encoding="utf-8",
+    )
+
+
+def fresh_process_compile(*, project_dir: Path, extlib: Path) -> MacroCallStoreRun:
+    """Compile with the macro call store in a new process, then with --no-cache."""
+
+    return macro_call_store_compile(
+        project_dir=project_dir,
+        extlib=extlib,
+        log_path=project_dir.parent / "fresh-calls.log",
+        project_reuse=False,
+    )
+
+
+def compile_in_new_process(arrangement: StaleStoreArrangement) -> CompileReuseRun:
+    """Compile with the macro call store in a new process."""
+
+    return fresh_process_compile(
+        project_dir=arrangement.project_dir, extlib=arrangement.extlib
+    ).incremental
+
+
+def compile_as_new_process_here(arrangement: StaleStoreArrangement) -> CompileReuseRun:
+    """Compile in this process as if it had just started, re-importing the flavor modules."""
+
+    forget_store_flavor_module()
+    pretend_fresh_process(arrangement.monkeypatch)
+    return in_process_reuse_run(project_dir=arrangement.project_dir, capsys=arrangement.capsys)
+
+
+def uncached_reference_compile(*, project_dir: Path, extlib: Path) -> CompileReuseRun:
+    """Compile with --no-cache in a new process, the oracle for stored results."""
+
+    return run_reuse_compile(
+        project_dir=project_dir,
+        env={"PYTHONPATH": str(extlib), COMPILER_ENGINE_ENV_VAR: MACRO_CALL_STORE_ENGINE},
+        args=("--no-cache",),
+    )
+
+
+def block_proc_reads(extlib: Path) -> None:
+    """Make Python file reads under /proc fail in processes importing from `extlib`."""
+
+    _ = (extlib / "sitecustomize.py").write_text(
+        "import builtins\nimport io\n\n_open = io.open\n\n\n"
+        "def _guarded_open(file, *args, **kwargs):\n"
+        "    if str(file).startswith('/proc'):\n"
+        "        raise FileNotFoundError(file)\n"
+        "    return _open(file, *args, **kwargs)\n\n\n"
+        "builtins.open = io.open = _guarded_open\n",
+        encoding="utf-8",
+    )
+
+
+def forget_store_flavor_module() -> None:
+    """Drop the flavor and project macro helper modules in-process compiles imported."""
+
+    _ = [sys.modules.pop(name, None) for name in _STORE_IMPORTED_MODULES]
+
+
+def store_files(project_dir: Path) -> dict[str, bytes]:
+    """Every macro call store file under the project target folder, by relative path."""
+
+    return {
+        path.relative_to(project_dir).as_posix(): path.read_bytes()
+        for path in sorted((project_dir / "target").rglob(MACRO_CALL_STORE_FILE_NAME))
+    }
 
 
 class EngineMacroCallRuns(NamedTuple):

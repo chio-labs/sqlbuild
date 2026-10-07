@@ -50,8 +50,8 @@ class MacroStoreTokenTestCase:
 
 
 @dataclass(frozen=True)
-class ModuleStampsRoundTripTestCase:
-    """Module stamps encoded as store metadata and validated back."""
+class ModuleDigestsRoundTripTestCase:
+    """Module digests encoded as store metadata and validated back."""
 
     description: str
     module_text: str
@@ -78,9 +78,20 @@ class StoreEnvironmentVariableTestCase:
 
 
 @dataclass(frozen=True)
-class ModuleStampsTestCase:
-    """Stored module stamps, a change to the module file, and whether they still validate."""
+class ModuleDigestsTestCase:
+    """Stored module digests, a change to the module file, and whether they still validate."""
 
     description: str
     change: Callable[[Path], bytes]
     expected_valid: bool
+
+
+@dataclass(frozen=True)
+class ModuleSourcesTestCase:
+    """A loaded module and the file the store digests for it, if its code can be identified."""
+
+    description: str
+    module: Callable[[Path], object]
+    expected_paths: Callable[[Path], tuple[str, ...]]
+    expected_complete: bool
+    expected_digestible: bool

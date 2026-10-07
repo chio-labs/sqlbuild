@@ -218,7 +218,10 @@ SQLBuild relies on this contract to reuse macro results:
 - Macro call results may be kept between compiles under `target/cache/`. They are recomputed when
   macro or other Python files, configuration, declarations, seeds, sources, variables, the target,
   the adapter, the installed packages, or the SQLBuild version change. Editing only model SQL keeps
-  them, and a changed call is always run again.
+  them, and a changed call is always run again. Only the first compile in a process uses and saves
+  them: later compiles in the same process, such as in a notebook or a long-running server, run their
+  macros again. A compile that has loaded Python code it cannot read from a plain file, such as a
+  module imported from a zip archive, neither uses nor saves them.
 
 Pass configuration through what SQLBuild compares: macro arguments (including `@@ENV:NAME` and
 `@@var` values written in the calling SQL), `ctx.vars`, `ctx.target_name`, `ctx.adapter_name`,

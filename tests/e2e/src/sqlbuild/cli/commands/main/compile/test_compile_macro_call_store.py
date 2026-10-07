@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     EngineMacroCallGateTestCase,
     MacroCallStoreEditSequenceTestCase,
     MacroCallStoreEditStep,
+    SecondCompileStoreTestCase,
+    StaleMacroModuleStoreTestCase,
+    StaleStoreArrangement,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     MACRO_CALL_STORE_ENGINE,
@@ -19,15 +23,28 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     EngineMacroCallRuns,
     MacroCallStoreRun,
+    backdate_flavor_between_processes,
+    block_proc_reads,
+    compile_as_new_process_here,
+    compile_in_new_process,
+    edit_flavor_while_saving,
     edit_label_helper,
     edit_south_model,
     engine_macro_call_runs,
+    forget_store_flavor_module,
     freeze_macro_call_store_environment,
     in_process_reuse_run,
+    logged_in_process_compile,
     macro_call_store_compile,
+    move_flavor_while_saving,
     prepare_macro_call_store_project,
+    pretend_fresh_process,
+    recompile_in_process_after_edit,
     replace_project_text,
+    rezip_flavor_between_processes,
     run_reuse_compile,
+    store_files,
+    uncached_reference_compile,
     write_project_file,
     write_store_flavor,
 )
@@ -274,6 +291,145 @@ def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_st
     project_dir: Path = tmp_path / "project"
     extlib: Path = tmp_path / "extlib"
     prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
+
+    runs: EngineMacroCallRuns = engine_macro_call_runs(
+        project_dir=project_dir,
+        extlib=extlib,
+        log_path=tmp_path / "macro-calls.log",
+        engine=test_case.engine,
+        runs=2,
+    )
+
+    assert runs.returncodes == (0, 0)
+    assert runs.logged_calls == test_case.expected_logged_calls
+    assert runs.store_files == test_case.expected_store_files
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaleMacroModuleStoreTestCase(
+            description="edited_between_two_compiles_of_one_process",
+            arrange=recompile_in_process_after_edit,
+            compile_afresh=compile_as_new_process_here,
+            expected_flavor="'salty'",
+        ),
+        StaleMacroModuleStoreTestCase(
+            description="edited_between_store_attach_and_save",
+            arrange=edit_flavor_while_saving,
+            compile_afresh=compile_as_new_process_here,
+            expected_flavor="'salty'",
+        ),
+        StaleMacroModuleStoreTestCase(
+            description="moved_away_while_loaded",
+            arrange=move_flavor_while_saving,
+            compile_afresh=compile_as_new_process_here,
+            expected_flavor="'salty'",
+        ),
+        StaleMacroModuleStoreTestCase(
+            description="served_from_a_rebuilt_zip_archive",
+            arrange=rezip_flavor_between_processes,
+            compile_afresh=compile_in_new_process,
+            expected_flavor="'salty'",
+        ),
+        StaleMacroModuleStoreTestCase(
+            description="replaced_keeping_size_and_modification_time",
+            arrange=backdate_flavor_between_processes,
+            compile_afresh=compile_in_new_process,
+            expected_flavor="'salty'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_module_changed_after_use_when_compiling_in_a_new_process_then_no_stale_replay(
+    tmp_path: Path,
+    test_case: StaleMacroModuleStoreTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    extlib: Path = tmp_path / "extlib"
+    prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
+    monkeypatch.syspath_prepend(str(extlib))
+    monkeypatch.setenv("SQLBUILD_COMPILER_ENGINE", MACRO_CALL_STORE_ENGINE)
+    monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_REUSE", "1")
+    monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(tmp_path / "macro-calls.log"))
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    forget_store_flavor_module()
+    arrangement: StaleStoreArrangement = StaleStoreArrangement(
+        project_dir=project_dir, extlib=extlib, monkeypatch=monkeypatch, capsys=capsys
+    )
+    test_case.arrange(arrangement)
+
+    fresh: CompileReuseRun = test_case.compile_afresh(arrangement)
+    forget_store_flavor_module()
+    reference: CompileReuseRun = uncached_reference_compile(project_dir=project_dir, extlib=extlib)
+
+    assert (fresh.returncode, reference.returncode) == (0, 0), fresh.stderr
+    assert fresh.compiled == reference.compiled
+    assert test_case.expected_flavor in b"".join(fresh.compiled.values()).decode()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SecondCompileStoreTestCase(
+            description="second_compile_of_a_process", expected_second_matches_first=True
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_second_compile_in_one_process_when_compiling_then_the_store_is_not_touched(
+    tmp_path: Path,
+    test_case: SecondCompileStoreTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    extlib: Path = tmp_path / "extlib"
+    log_path: Path = tmp_path / "macro-calls.log"
+    prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
+    monkeypatch.syspath_prepend(str(extlib))
+    monkeypatch.setenv("SQLBUILD_COMPILER_ENGINE", MACRO_CALL_STORE_ENGINE)
+    monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_REUSE", "1")
+    monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
+    forget_store_flavor_module()
+    pretend_fresh_process(monkeypatch)
+    first: int = logged_in_process_compile(
+        project_dir=project_dir, log_path=log_path, capsys=capsys
+    )
+    stored: dict[str, bytes] = store_files(project_dir)
+
+    second: int = logged_in_process_compile(
+        project_dir=project_dir, log_path=log_path, capsys=capsys
+    )
+    forget_store_flavor_module()
+
+    assert first > 0
+    assert stored != {}
+    assert (second == first) is test_case.expected_second_matches_first
+    assert store_files(project_dir) == stored
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EngineMacroCallGateTestCase(
+            description="native_preview_without_proc",
+            engine="native-preview",
+            expected_logged_calls=(1, 0),
+            expected_store_files=("target/cache/compiler-native-preview-v1/macro-calls.bin",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still_serves_calls(
+    tmp_path: Path, test_case: EngineMacroCallGateTestCase
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    extlib: Path = tmp_path / "extlib"
+    prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
+    block_proc_reads(extlib)
 
     runs: EngineMacroCallRuns = engine_macro_call_runs(
         project_dir=project_dir,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Hashable, Mapping
 from pathlib import Path
 
@@ -14,10 +15,12 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
-    loaded_module_stamps,
-    module_stamps_metadata,
+    digest_module_files,
+    module_digests_metadata,
+    module_sources,
+    project_fingerprint,
     store_environment,
-    unchanged_module_stamps,
+    unchanged_module_digests,
 )
 from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
     call_class_store_text,
@@ -25,8 +28,8 @@ from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
     macro_store_token,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
-from sqlbuild.compiler.macro_bridge.models import MacroCallClass, MacroCallSite
-from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord, ModuleStamp
+from sqlbuild.compiler.macro_bridge.models import MacroCallClass, MacroCallSite, ModuleSources
+from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
@@ -44,10 +47,13 @@ class MacroBridge:
         self._name_tokens: dict[tuple[int, str], tuple[Hashable, str | None] | None] = {}
         self._context_tokens: dict[tuple[int, int], tuple[Hashable, str | None]] = {}
         self._store_path: Path | None = None
-        self._carried_module_stamps: dict[str, ModuleStamp] = {}
+        self._store_trusted: bool = False
+        self._module_digests: dict[str, str] = {}
+        self._observed_modules: dict[str, object] = {}
+        self._project_inputs: tuple[Path, list[str], str] = (Path(), [], "")
 
     def attach_store(self, *, cache_dir: Path, project_dir: Path, model_paths: list[str]) -> None:
-        """Reuse call results stored by earlier compiles whose environment matches this one."""
+        """Reuse call results stored by earlier compiles of the same code and project files."""
 
         if self._store_path is not None:
             return
@@ -55,33 +61,74 @@ class MacroBridge:
         metadata: bytes
         loaded: int
         try:
-            environment: str = store_environment(project_dir=project_dir, model_paths=model_paths)
+            if not self._observe_modules():
+                logging.getLogger(__name__).debug("Macro call store not used: unknown module code")
+                return
+            fingerprint: str = project_fingerprint(project_dir=project_dir, model_paths=model_paths)
+            environment: str = store_environment(project_dir=project_dir, fingerprint=fingerprint)
             metadata, loaded = self._memo.attach_store(str(path), environment)
         except (OSError, RuntimeError) as error:
             logging.getLogger(__name__).debug("Macro call store not loaded: %s", error)
             return
-        stamps: dict[str, ModuleStamp] | None = unchanged_module_stamps(metadata) if loaded else {}
-        if stamps is None:
+        carried: dict[str, str] | None = (
+            unchanged_module_digests(metadata=metadata, known=self._module_digests)
+            if loaded
+            else {}
+        )
+        if carried is None:
             self._memo.discard_store()
-            stamps = {}
+            carried = {}
         self._store_path = path
-        self._carried_module_stamps = stamps
+        self._store_trusted = True
+        self._module_digests = {**carried, **self._module_digests}
+        self._project_inputs = (project_dir, model_paths, fingerprint)
         self._name_tokens.clear()
         self._context_tokens.clear()
 
     def save_store(self) -> None:
-        """Save the stored results this compile used or recorded, with the modules they ran on."""
+        """Save the results this compile used or recorded, unless code or files it read changed."""
 
-        if self._store_path is None:
+        if self._store_path is None or not self._store_trusted:
             return
-        stamps: dict[str, ModuleStamp] = {
-            **self._carried_module_stamps,
-            **loaded_module_stamps(),
-        }
+        project_dir, model_paths, fingerprint = self._project_inputs
         try:
-            _ = self._memo.save_store(str(self._store_path), module_stamps_metadata(stamps))
+            if (
+                not self._observe_modules()
+                or digest_module_files(self._module_digests) != self._module_digests
+                or project_fingerprint(project_dir=project_dir, model_paths=model_paths)
+                != fingerprint
+            ):
+                logging.getLogger(__name__).debug(
+                    "Macro call store not saved: code or files changed"
+                )
+                return
+            _ = self._memo.save_store(
+                str(self._store_path), module_digests_metadata(self._module_digests)
+            )
         except (OSError, RuntimeError) as error:
             logging.getLogger(__name__).debug("Macro call store not saved: %s", error)
+
+    def _observe_modules(self) -> bool:
+        """Digest the files of modules loaded since the last look; False when one is unknown."""
+
+        loaded: dict[str, object] = dict(sys.modules)
+        added: list[object] = [
+            module
+            for name, module in loaded.items()
+            if self._observed_modules.get(name) is not module
+        ]
+        self._observed_modules = loaded
+        sources: ModuleSources = module_sources(added)
+        digests: dict[str, str] | None = (
+            digest_module_files(sources.paths) if sources.complete else None
+        )
+        if digests is None or any(
+            self._module_digests.get(path, digest) != digest for path, digest in digests.items()
+        ):
+            self._store_trusted = False
+            return False
+        self._module_digests.update(digests)
+        return True
 
     def scan(self, sql: str) -> tuple[MacroCallSite, ...] | None:
         """Return the top-level call sites of `sql`, or None when Python must expand it."""
@@ -192,6 +239,8 @@ class MacroBridge:
     ) -> None:
         """Record the result of one executed call for later calls of the same class and text."""
 
+        if self._store_trusted and len(sys.modules) != len(self._observed_modules):
+            _ = self._observe_modules()
         self._memo.record(
             class_id,
             call_text,

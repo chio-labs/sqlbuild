@@ -27,3 +27,9 @@ pub(crate) struct FingerprintFailureTestCase {
     pub(crate) root: fn(&Path) -> PathBuf,
     pub(crate) expected_failure: bool,
 }
+
+pub(crate) struct DigestFilesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) path: fn(&Path) -> PathBuf,
+    pub(crate) expected_digest_of: Option<&'static str>,
+}

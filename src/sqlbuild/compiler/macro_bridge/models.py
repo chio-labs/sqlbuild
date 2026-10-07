@@ -25,3 +25,11 @@ class MacroCallClass:
     macro_store_tokens: tuple[str, ...]
     context_store_token: str | None
     persistent: bool
+
+
+@dataclass(frozen=True)
+class ModuleSources:
+    """Files backing loaded modules, and whether every module's backing could be identified."""
+
+    paths: tuple[str, ...]
+    complete: bool

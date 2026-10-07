@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import PreparedCompile
+
+if TYPE_CHECKING:
+    from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import CompileReuseRun
 
 
 @dataclass(frozen=True)
@@ -934,3 +938,30 @@ class EngineMacroCallGateTestCase:
     engine: str
     expected_logged_calls: tuple[int, ...]
     expected_store_files: tuple[str, ...]
+
+
+class StaleStoreArrangement(NamedTuple):
+    """What an arrangement step may use to compile and edit before the fresh-process check."""
+
+    project_dir: Path
+    extlib: Path
+    monkeypatch: pytest.MonkeyPatch
+    capsys: pytest.CaptureFixture[str]
+
+
+@dataclass(frozen=True)
+class StaleMacroModuleStoreTestCase:
+    """An outside module a macro imported, edited after this process imported it."""
+
+    description: str
+    arrange: Callable[[StaleStoreArrangement], None]
+    compile_afresh: Callable[[StaleStoreArrangement], CompileReuseRun]
+    expected_flavor: str
+
+
+@dataclass(frozen=True)
+class SecondCompileStoreTestCase:
+    """Two compiles in one process; the second must run its macros without the store."""
+
+    description: str
+    expected_second_matches_first: bool
