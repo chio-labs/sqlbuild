@@ -150,8 +150,9 @@ schema = "dev"    # uses connections.local, the only named connection
 
 A command that needs the warehouse, such as `build`, `plan`, `query`, `diff`, or `debug`, fails
 with `D001` before connecting when no connection is configured at all: no named connection, no
-legacy `[connection]` block, and no inline target connection. Commands that do not connect,
-such as `compile`, `format`, `lineage`, `scope`, `rename`, and `mv`, keep working without one.
+legacy `[connection]` block, and no inline target connection. Commands and modes that do not
+connect, such as `compile`, `format`, `lineage`, `scope`, `rename`, `mv`, `test --inspect`, and
+`scenario test --local`, keep working without one.
 SQLBuild never falls back to an implicit in-memory DuckDB database; to use one, set it
 explicitly:
 

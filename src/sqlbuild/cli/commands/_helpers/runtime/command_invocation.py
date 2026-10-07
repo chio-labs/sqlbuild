@@ -54,7 +54,9 @@ def resolve_command_invocation[InvocationT](
 ) -> InvocationT:
     """Resolve discovery, adapter, connection, and output context for one command."""
 
-    context: _CommandInvocationContext = _resolve_command_invocation_context(request=request)
+    context: _CommandInvocationContext = _resolve_command_invocation_context(
+        request=request, require_connection=True
+    )
     return invocation_type(
         effective_project_dir=context.effective_project_dir,
         discovered_inputs=context.discovered_inputs,
@@ -67,11 +69,16 @@ def resolve_command_invocation[InvocationT](
 
 
 def resolve_reported_command_invocation[InvocationT](
-    *, request: _CommandInvocationRequest, invocation_type: Callable[..., InvocationT]
+    *,
+    request: _CommandInvocationRequest,
+    invocation_type: Callable[..., InvocationT],
+    require_connection: bool = True,
 ) -> InvocationT:
     """Resolve command context plus shared connection and planning progress reporters."""
 
-    context: _CommandInvocationContext = _resolve_command_invocation_context(request=request)
+    context: _CommandInvocationContext = _resolve_command_invocation_context(
+        request=request, require_connection=require_connection
+    )
     reporters: CommandProgressReporters = build_command_progress_reporters(
         adapter_name=context.adapter_context.adapter_name,
         stream=context.progress_stream,
@@ -91,7 +98,7 @@ def resolve_reported_command_invocation[InvocationT](
 
 
 def _resolve_command_invocation_context(
-    *, request: _CommandInvocationRequest
+    *, request: _CommandInvocationRequest, require_connection: bool
 ) -> _CommandInvocationContext:
     effective_project_dir: Path = (
         request.project_dir if request.project_dir is not None else Path.cwd()
@@ -104,6 +111,7 @@ def _resolve_command_invocation_context(
         effective_project_dir=effective_project_dir,
         selected_target=request.selected_target,
         cli_vars=request.cli_vars,
+        require_connection=require_connection,
     )
     machine_output: bool = request.json_output
     use_color: bool = not request.no_color and not machine_output and supports_color()

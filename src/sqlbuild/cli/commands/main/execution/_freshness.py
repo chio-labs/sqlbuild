@@ -67,12 +67,6 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
     adapter: BaseAdapter = resolve_adapter(
         adapter_name=adapter_name, project_dir=effective_project_dir
     )
-    connection_config: dict[str, object] = resolve_project_connection_config(
-        discovered_inputs=discovered_inputs,
-        project_dir=effective_project_dir,
-        selected_target=selected_target,
-        cli_vars=cli_vars,
-    )
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -91,6 +85,12 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
     if not selected_source_names:
         result: FreshnessCommandResult = FreshnessCommandResult()
     else:
+        connection_config: dict[str, object] = resolve_project_connection_config(
+            discovered_inputs=discovered_inputs,
+            project_dir=effective_project_dir,
+            selected_target=selected_target,
+            cli_vars=cli_vars,
+        )
         connection: Any = adapter.connect(connection_config)
         try:
             previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None = None

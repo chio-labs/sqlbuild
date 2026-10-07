@@ -118,3 +118,11 @@ class ExplicitMemoryConnectionTestCase:
     project_config: ProjectConfig
     local_config: LocalConfig
     expected_connection: dict[str, object]
+
+
+@dataclass(frozen=True)
+class OfflineConnectionResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    expected_connection: dict[str, object]

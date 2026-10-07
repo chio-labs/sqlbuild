@@ -111,14 +111,16 @@ def resolve_project_connection_config(
     project_dir: Path,
     selected_target: str | None = None,
     cli_vars: dict[str, object] | None = None,
+    require_connection: bool = True,
 ) -> dict[str, object]:
-    """Resolve the effective project connection config for CLI command execution."""
+    """Resolve the project connection; offline modes pass ``require_connection=False``."""
 
-    _require_configured_connection(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-        selected_target=selected_target,
-    )
+    if require_connection:
+        _require_configured_connection(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            selected_target=selected_target,
+        )
     return resolve_connection_config(
         raw_config=build_effective_connection_config(
             discovered_inputs=discovered_inputs,

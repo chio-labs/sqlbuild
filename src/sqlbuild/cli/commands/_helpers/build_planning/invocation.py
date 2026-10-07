@@ -6,12 +6,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
-    resolve_adapter_connection_context,
-)
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands._helpers.runtime.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
-    AdapterConnectionContext,
     BuildCommandRequest,
     BuildInvocation,
 )
@@ -23,6 +22,9 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, TargetConfig
@@ -44,9 +46,27 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
     )
     if request.defer_to is not None and effective_defer_clone_from is not None:
         raise CliUserError("--defer-clone-from cannot be used with --defer-to", code="C408")
-    adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
+    effective_target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=request.selected_target,
+    )
+    execution_limits: ExecutionLimitsConfig = _resolve_execution_limits(
         discovered_inputs=discovered_inputs,
-        effective_project_dir=effective_project_dir,
+        target_name=effective_target_name,
+        adapter_name=adapter_name,
+        adapter=adapter,
+    )
+    connection_config: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs,
+        project_dir=effective_project_dir,
         selected_target=request.selected_target,
         cli_vars=request.cli_vars,
     )
@@ -54,7 +74,7 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
     use_color: bool = not request.no_color and not machine_output and supports_color()
     progress_stream: TextIO = sys.stderr if request.debug or machine_output else sys.stdout
     reporters: CommandProgressReporters = build_command_progress_reporters(
-        adapter_name=adapter_context.adapter_name,
+        adapter_name=adapter_name,
         stream=progress_stream,
         use_color=use_color,
     )
@@ -63,51 +83,13 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
         if request.load_sources is not None
         else build_effective_settings_config(discovered_inputs=discovered_inputs).auto_load_sources
     )
-    effective_target_name: str | None = resolve_target_name(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
-        selected_target=request.selected_target,
-    )
-    execution_limits: ExecutionLimitsConfig = (
-        resolve_target_config(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            target_name=effective_target_name,
-        ).execution_limits
-        if effective_target_name is not None
-        else ExecutionLimitsConfig()
-    )
-    if (
-        execution_limits.max_duration is not None
-        and adapter_context.adapter.execution_duration_limit_seconds is None
-    ):
-        target_label: str = effective_target_name or "default"
-        raise CliUserError(
-            f"Target '{target_label}' configures max_duration, but adapter "
-            f"'{adapter_context.adapter_name}' cannot cancel active statements safely",
-            code="C415",
-            help=execution_limits.remediation,
-        )
-    maximum_duration_seconds: int | None = adapter_context.adapter.execution_duration_limit_seconds
-    if (
-        execution_limits.max_duration_seconds is not None
-        and maximum_duration_seconds is not None
-        and execution_limits.max_duration_seconds > maximum_duration_seconds
-    ):
-        target_label = effective_target_name or "default"
-        raise CliUserError(
-            f"Target '{target_label}' max_duration exceeds the largest duration supported by "
-            f"adapter '{adapter_context.adapter_name}' ({maximum_duration_seconds} seconds)",
-            code="C416",
-            help=execution_limits.remediation,
-        )
     return BuildInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
         effective_defer_clone_from=effective_defer_clone_from,
-        adapter_name=adapter_context.adapter_name,
-        adapter=adapter_context.adapter,
-        connection_config=adapter_context.connection_config,
+        adapter_name=adapter_name,
+        adapter=adapter,
+        connection_config=connection_config,
         use_color=use_color,
         progress_stream=progress_stream,
         connection_progress=reporters.connection,
@@ -116,6 +98,50 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
         effective_target_name=effective_target_name,
         execution_limits=execution_limits,
     )
+
+
+def _resolve_execution_limits(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    target_name: str | None,
+    adapter_name: str,
+    adapter: BaseAdapter,
+) -> ExecutionLimitsConfig:
+    """Resolve the target's execution limits and validate them against the project adapter."""
+
+    execution_limits: ExecutionLimitsConfig = (
+        resolve_target_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            target_name=target_name,
+        ).execution_limits
+        if target_name is not None
+        else ExecutionLimitsConfig()
+    )
+    target_label: str = target_name or "default"
+    if (
+        execution_limits.max_duration is not None
+        and adapter.execution_duration_limit_seconds is None
+    ):
+        raise CliUserError(
+            f"Target '{target_label}' configures max_duration, but adapter "
+            f"'{adapter_name}' cannot cancel active statements safely",
+            code="C415",
+            help=execution_limits.remediation,
+        )
+    maximum_duration_seconds: int | None = adapter.execution_duration_limit_seconds
+    if (
+        execution_limits.max_duration_seconds is not None
+        and maximum_duration_seconds is not None
+        and execution_limits.max_duration_seconds > maximum_duration_seconds
+    ):
+        raise CliUserError(
+            f"Target '{target_label}' max_duration exceeds the largest duration supported by "
+            f"adapter '{adapter_name}' ({maximum_duration_seconds} seconds)",
+            code="C416",
+            help=execution_limits.remediation,
+        )
+    return execution_limits
 
 
 def _resolve_defer_clone_from(

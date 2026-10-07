@@ -791,3 +791,21 @@ def write_default_connection_project(*, project_dir: Path, project_toml: str) ->
         'MODEL (description "Orders.", materialized table);\n\nSELECT 1 AS order_id\n',
         encoding="utf-8",
     )
+
+
+def write_default_connection_sql_test(*, project_dir: Path) -> None:
+    """Add a downstream model and a SQL test that mocks its orders dependency."""
+
+    _ = (project_dir / "models" / "order_totals.sql").write_text(
+        'MODEL (description "Order totals.", materialized table);\n\n'
+        'SELECT order_id FROM __ref("orders")\n',
+        encoding="utf-8",
+    )
+    (project_dir / "tests" / "unit").mkdir(parents=True)
+    _ = (project_dir / "tests" / "unit" / "test_order_totals.sql").write_text(
+        'TEST (name "order_totals_value");\n\n'
+        "WITH __ref__orders AS (SELECT 1 AS order_id),\n"
+        "__expected__order_totals AS (SELECT 1 AS order_id)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )

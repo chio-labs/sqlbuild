@@ -16,6 +16,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     execute_duckdb_sql,
     query_duckdb_rows,
     write_default_connection_project,
+    write_default_connection_sql_test,
 )
 
 _ONE_CONNECTION_PROJECT: str = (
@@ -124,6 +125,13 @@ def test_given_target_without_connection_when_building_then_only_named_connectio
             expected_output_fragments=("Project compiled",),
         ),
         DefaultConnectionCliTestCase(
+            description="freshness without selected sources works without any connection",
+            project_toml=_NO_CONNECTION_PROJECT,
+            argv=("freshness",),
+            expected_exit_code=0,
+            expected_output_fragments=("OBSERVED=0",),
+        ),
+        DefaultConnectionCliTestCase(
             description="build uses an explicit in-memory connection",
             project_toml=_MEMORY_CONNECTION_PROJECT,
             argv=("build",),
@@ -145,6 +153,46 @@ def test_given_target_without_connection_when_resolving_offline_then_connection_
     output: str = "".join(capsys.readouterr())
     assert exit_code == test_case.expected_exit_code, output
     assert all(fragment in output for fragment in test_case.expected_output_fragments), output
+    assert not (tmp_path / "shop.duckdb").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DefaultConnectionCliTestCase(
+            description="test inspection works without any connection",
+            project_toml=_NO_CONNECTION_PROJECT,
+            argv=("test", "--inspect"),
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "boundary: orders is replaced by __ref__orders",
+                "Test plan inspection complete: 1 selected, 0 errors.",
+            ),
+        ),
+        DefaultConnectionCliTestCase(
+            description="test execution fails before connecting without any connection",
+            project_toml=_NO_CONNECTION_PROJECT,
+            argv=("test",),
+            expected_exit_code=1,
+            expected_output_fragments=("error[D001]", "target dev has no connection"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_connection_when_running_sql_tests_then_only_inspection_succeeds(
+    test_case: DefaultConnectionCliTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_default_connection_project(project_dir=tmp_path, project_toml=test_case.project_toml)
+    write_default_connection_sql_test(project_dir=tmp_path)
+
+    exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), *test_case.argv])
+
+    output: str = "".join(capsys.readouterr())
+    assert exit_code == test_case.expected_exit_code, output
+    assert all(fragment in output for fragment in test_case.expected_output_fragments), output
+    assert "Connecting to" not in output
     assert not (tmp_path / "shop.duckdb").exists()
 
 

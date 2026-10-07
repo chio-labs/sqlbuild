@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     ExplicitMemoryConnectionTestCase,
     MissingConnectionTestCase,
     NamedConnectionBehaviorTestCase,
+    OfflineConnectionResolutionTestCase,
     ResolveConnectionConfigWarningTestCase,
     ResolveDbtProfileConnectionConfigTestCase,
     ResolveEnvironmentConnectionConfigTestCase,
@@ -544,6 +545,43 @@ def test_given_explicit_memory_connection_when_resolving_then_it_is_used(
 
     connection: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs, project_dir=tmp_path
+    )
+
+    assert connection == test_case.expected_connection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OfflineConnectionResolutionTestCase(
+            description="target without any connection resolves empty for offline modes",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                default_target="dev",
+                targets={"dev": TargetConfig(schema="dev")},
+            ),
+            local_config=LocalConfig(),
+            expected_connection={},
+        ),
+        OfflineConnectionResolutionTestCase(
+            description="no target and no connection resolves empty for offline modes",
+            project_config=ProjectConfig(name="shop", adapter="duckdb"),
+            local_config=LocalConfig(),
+            expected_connection={},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_configured_connection_when_resolving_for_offline_mode_then_it_is_not_required(
+    test_case: OfflineConnectionResolutionTestCase, tmp_path: Path
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=test_case.project_config, local_config=test_case.local_config
+    )
+
+    connection: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs, project_dir=tmp_path, require_connection=False
     )
 
     assert connection == test_case.expected_connection
