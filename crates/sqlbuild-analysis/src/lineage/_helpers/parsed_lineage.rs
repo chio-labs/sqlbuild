@@ -74,7 +74,7 @@ pub(crate) fn parsed_model_lineage(model: &ParsedModel<'_>) -> FastLineageOutcom
     }
     let parsed = statements.remove(0);
     let built = match parsed.variant_name() {
-        KIND_UNION => union_lineage(parsed, model, &physical),
+        KIND_UNION => union_lineage(&parsed, model, &physical),
         KIND_SELECT => select_lineage(&parsed, model, &physical),
         _ => Ok(None),
     };
@@ -130,7 +130,7 @@ fn select_lineage(
 }
 
 fn union_lineage(
-    parsed: Expression,
+    parsed: &Expression,
     model: &ParsedModel<'_>,
     physical: &[PhysicalResource],
 ) -> Result<BuiltLineage, UnreadableExpression> {

@@ -23,3 +23,12 @@ pub(crate) struct StarExpansionTestCase {
     pub(crate) existing_columns: &'static [&'static str],
     pub(crate) expected_lines: &'static [&'static str],
 }
+
+pub(crate) struct DeepUnionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) branches: usize,
+    pub(crate) stack_bytes: usize,
+    pub(crate) expected_status: &'static str,
+    pub(crate) expected_lines: &'static [&'static str],
+    pub(crate) expected_detail: Option<&'static str>,
+}

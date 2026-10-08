@@ -1,6 +1,8 @@
 use crate::lineage::models::FastLineageModel;
-use crate::lineage::tests::helpers::{outcome_lines, strings};
-use crate::lineage::tests::test_types::{ParsedLineageTestCase, StarExpansionTestCase};
+use crate::lineage::tests::helpers::{deep_union_outcome_lines, outcome_lines, strings};
+use crate::lineage::tests::test_types::{
+    DeepUnionTestCase, ParsedLineageTestCase, StarExpansionTestCase,
+};
 
 #[test]
 fn given_models_without_compact_facts_when_building_then_matches_python_lineage() {
@@ -279,6 +281,48 @@ fn given_compact_facts_with_unresolved_star_when_building_then_appends_unseen_co
         assert_eq!(
             outcomes,
             vec![("star", strings(test_case.expected_lines), true, None)],
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_deep_union_chain_when_building_from_small_stack_then_runs_on_the_analysis_pool() {
+    let test_cases = [
+        DeepUnionTestCase {
+            description: "the deepest chain the parser guard accepts",
+            branches: 512,
+            stack_bytes: 256 * 1024,
+            expected_status: "built",
+            expected_lines: &[
+                "order_id direct medium [model:orders.order_id]",
+                "amount direct medium [model:orders.amount]",
+            ],
+            expected_detail: None,
+        },
+        DeepUnionTestCase {
+            description: "one branch past the parser guard reports its parse error",
+            branches: 513,
+            stack_bytes: 256 * 1024,
+            expected_status: "unparsed",
+            expected_lines: &[],
+            expected_detail: Some(
+                "Parse error at line 0, column 0: E_GUARD_AST_DEPTH_EXCEEDED: value 513 exceeds configured limit 512",
+            ),
+        },
+    ];
+    for test_case in test_cases {
+        let outcomes: Vec<(&str, Vec<String>, bool, Option<String>)> =
+            deep_union_outcome_lines(test_case.branches, test_case.stack_bytes);
+        assert_eq!(
+            outcomes,
+            vec![(
+                test_case.expected_status,
+                strings(test_case.expected_lines),
+                false,
+                test_case.expected_detail.map(str::to_owned),
+            )],
             "{}",
             test_case.description
         );

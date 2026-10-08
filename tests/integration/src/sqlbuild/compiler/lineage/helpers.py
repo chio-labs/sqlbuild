@@ -237,7 +237,7 @@ def lineage_views(
     dialect: str | None,
     model_names: frozenset[str] | None,
 ) -> tuple[list[object], list[object], list[object]]:
-    """Each public lineage view's name, Python's value and the native engine's value."""
+    """Each public lineage view's name, Python's value and the native stage's value."""
 
     python: ProjectColumnLineage = cast(
         ProjectColumnLineage,
@@ -247,7 +247,10 @@ def lineage_views(
     )
     native: ProjectColumnLineage = cast(
         ProjectColumnLineage,
-        build_native_column_lineage(project=project, dialect=dialect, model_names=model_names),
+        build_native_column_lineage(project=project, dialect=dialect, model_names=model_names)
+        or build_fast_project_column_lineage(
+            project=project, dialect=dialect, model_names=model_names
+        ),
     )
     names, python_values = _public_views(project=project, lineage=python)
     return names, python_values, _public_views(project=project, lineage=native)[1]

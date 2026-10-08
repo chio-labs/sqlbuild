@@ -144,12 +144,21 @@ def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_l
         DeferredLineageTestCase(
             description="a dialect outside the native parser build",
             dialect="mysql",
+            keeps_catalog=True,
+            expected_native_statuses={"deferred": _MODEL_COUNT},
             expected_kind="unsupported_dialect",
-        )
+        ),
+        DeferredLineageTestCase(
+            description="a project without an analysis catalog to run on",
+            dialect="duckdb",
+            keeps_catalog=False,
+            expected_native_statuses={},
+            expected_kind="no_analysis_catalog",
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_unsupported_dialect_when_building_fast_lineage_then_python_builds_and_records(
+def test_given_deferred_models_when_building_fast_lineage_then_python_builds_and_records(
     test_case: DeferredLineageTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -157,11 +166,14 @@ def test_given_unsupported_dialect_when_building_fast_lineage_then_python_builds
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
-    project: CompiledProject = without_compact_facts(
+    compiled: CompiledProject = without_compact_facts(
         compiled_project(
             project_dir=tmp_path / "project",
             files=generated_lineage_files(rng=random.Random(7), model_count=_MODEL_COUNT),
         )
+    )
+    project: CompiledProject = replace(
+        compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
     names, python_views, native_views = lineage_views(
@@ -169,7 +181,7 @@ def test_given_unsupported_dialect_when_building_fast_lineage_then_python_builds
     )
 
     assert mismatches(inputs=names, expected=python_views, actual=native_views) == []
-    assert statuses == Counter({"deferred": _MODEL_COUNT})
+    assert statuses == Counter(test_case.expected_native_statuses)
     assert deferral_records(record_dir) == (
         [{"kind": test_case.expected_kind, "site": "fast_columns.py"}] * _MODEL_COUNT
     )

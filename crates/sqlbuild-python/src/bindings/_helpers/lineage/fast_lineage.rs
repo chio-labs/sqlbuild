@@ -1,30 +1,38 @@
 //! Fast column lineage for the preview compiler engine.
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::lineage::main::build_fast_lineage::build_fast_lineage;
 use sqlbuild_analysis::lineage::models::{
     FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageColumn, LineageResourceType,
     LineageSchemaResource, LineageSource,
 };
+use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
 type SourceRow = (&'static str, String, String);
 type ColumnRow = (String, &'static str, &'static str, Vec<SourceRow>);
+/// `(dialect, [(resource_type, name, columns)], [(star_expansion, query_sql, column_names)])`.
+type LineageRequestInput = (
+    Option<String>,
+    Vec<(String, String, Vec<String>)>,
+    Vec<(bool, String, Vec<String>)>,
+);
 /// `(status, columns, has_star, detail)`; see `FastLineageOutcome::into_parts`.
 type OutcomeRow = (&'static str, Vec<ColumnRow>, bool, Option<String>);
 
-/// Build fast lineage for `(star_expansion, query_sql, column_names)` models.
+/// Build fast lineage for the requested models on `catalog`'s analysis pool.
 #[pyfunction]
 fn build_fast_column_lineage(
     py: Python<'_>,
-    dialect: Option<String>,
-    schema: Vec<(String, String, Vec<String>)>,
-    models: Vec<(bool, String, Vec<String>)>,
+    catalog: PyRef<'_, ProjectCatalog>,
+    request: LineageRequestInput,
 ) -> PyResult<Vec<OutcomeRow>> {
+    let (dialect, schema, models) = request;
     let schema: Vec<LineageSchemaResource> = schema
         .into_iter()
         .map(schema_resource)
@@ -35,8 +43,9 @@ fn build_fast_column_lineage(
         schema,
         models,
     };
-    let outcomes = py
-        .compiler_detach(|| Ok(build_fast_lineage(&request)))
+    let catalog: &validation::ProjectCatalog = &catalog.inner;
+    let outcomes: Vec<FastLineageOutcome> = py
+        .compiler_detach(|| build_fast_lineage(&request, catalog))
         .map_err(compiler_error)?;
     Ok(outcomes.into_iter().map(outcome_row).collect())
 }

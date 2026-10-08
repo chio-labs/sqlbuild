@@ -22,6 +22,7 @@ from sqlbuild.compiler.lineage._helpers.native_deferrals import record_lineage_d
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
     NATIVE_LINEAGE_DEFERRED,
+    NATIVE_LINEAGE_NO_CATALOG,
     NATIVE_LINEAGE_STAR,
     NATIVE_LINEAGE_UNPARSED,
 )
@@ -62,8 +63,15 @@ def build_native_fast_project_column_lineage(
         request: tuple[bool, str, list[str]] | None = _native_request(model)
         if request is not None:
             requests.append(request)
+    catalog: object | None = (
+        project.binding_catalog.native if project.binding_catalog is not None else None
+    )
+    if catalog is None and requests:
+        for _ in requests:
+            record_lineage_deferral(kind=NATIVE_LINEAGE_NO_CATALOG)
+        return None
     outcomes: list[_NativeOutcome] = (
-        _native.build_fast_column_lineage(dialect, _schema_resources(project), requests)
+        _native.build_fast_column_lineage(catalog, (dialect, _schema_resources(project), requests))
         if requests
         else []
     )

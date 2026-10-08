@@ -1,8 +1,11 @@
+use polyglot_sql::{DialectType, SchemaValidationOptions};
+
 use crate::lineage::main::build_fast_lineage::build_fast_lineage;
 use crate::lineage::models::{
     FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageColumn, LineageResourceType,
     LineageSchemaResource,
 };
+use crate::semantic_validation::models::ProjectCatalog;
 
 pub(crate) fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
@@ -13,12 +16,46 @@ pub(crate) fn outcome_lines(
     dialect: Option<&str>,
     model: FastLineageModel,
 ) -> Vec<(&'static str, Vec<String>, bool, Option<String>)> {
-    let outcomes: Vec<FastLineageOutcome> = build_fast_lineage(&FastLineageRequest {
+    let request = FastLineageRequest {
         dialect: dialect.map(str::to_owned),
         schema: schema(),
         models: vec![model],
-    });
+    };
+    let outcomes: Vec<FastLineageOutcome> =
+        build_fast_lineage(&request, &catalog()).expect("the analysis pool builds");
     outcomes.into_iter().map(described_outcome).collect()
+}
+
+/// A `branches`-deep `UNION ALL` chain built from a caller thread with a `stack_bytes` stack.
+pub(crate) fn deep_union_outcome_lines(
+    branches: usize,
+    stack_bytes: usize,
+) -> Vec<(&'static str, Vec<String>, bool, Option<String>)> {
+    let sql: String =
+        vec!["SELECT order_id, amount FROM __ref('orders')"; branches].join(" UNION ALL ");
+    let worker = std::thread::Builder::new()
+        .stack_size(stack_bytes)
+        .spawn(move || {
+            outcome_lines(
+                Some("duckdb"),
+                FastLineageModel::Parse {
+                    query_sql: sql,
+                    inferred_columns: Vec::new(),
+                },
+            )
+        })
+        .expect("the test thread starts");
+    worker
+        .join()
+        .expect("the stage does not overflow the caller's stack")
+}
+
+fn catalog() -> ProjectCatalog {
+    ProjectCatalog::with_options(
+        DialectType::DuckDB,
+        SchemaValidationOptions::default(),
+        false,
+    )
 }
 
 fn described_outcome(

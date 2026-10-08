@@ -49,6 +49,23 @@ _PROJECT_FILES: dict[str, str] = {
     ),
 }
 
+_DEEP_UNION_BRANCHES: int = 480
+_DEEP_UNION_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _PROJECT_FILES["sqlbuild_project.toml"],
+    "sources/raw.yml": _PROJECT_FILES["sources/raw.yml"],
+    "models/marts/orders_union.sql": (
+        'MODEL (description "Orders repeated", sql_analysis false);\n\n'
+        + " UNION ALL ".join(
+            ['SELECT order_id, amount FROM __source("raw_orders")'] * _DEEP_UNION_BRANCHES
+        )
+        + "\n"
+    ),
+    "models/marts/orders_second.sql": (
+        'MODEL (description "Order ids", sql_analysis false);\n\n'
+        'SELECT order_id FROM __source("raw_orders")\n'
+    ),
+}
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -71,7 +88,28 @@ _PROJECT_FILES: dict[str, str] = {
             },
             expected_minimum_python_fallback_parses=2,
             expected_minimum_traced_edges=4,
-        )
+        ),
+        NativeFastLineageCliTestCase(
+            description="a 480-branch UNION ALL chain beside another opted-out model",
+            files=_DEEP_UNION_FILES,
+            lineage_targets=("orders_union.amount", "orders_second.order_id"),
+            expected_lineage={
+                "orders_union": {
+                    "available": True,
+                    "column_count": 0,
+                    "edge_count": 2,
+                    "has_star": False,
+                },
+                "orders_second": {
+                    "available": True,
+                    "column_count": 0,
+                    "edge_count": 1,
+                    "has_star": False,
+                },
+            },
+            expected_minimum_python_fallback_parses=2,
+            expected_minimum_traced_edges=2,
+        ),
     ],
     ids=lambda case: case.description,
 )

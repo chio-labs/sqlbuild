@@ -194,37 +194,60 @@ pub(crate) fn classify_transform(
     LineageTransformKind::Expression
 }
 
-/// Python's `_polyglot_set_expression_selects`, reading set-operation sides through `args`.
+/// Python's `_polyglot_set_expression_selects`, serialized once and walked iteratively, left first.
 pub(crate) fn set_expression_selects(
-    expression: Expression,
+    expression: &Expression,
 ) -> Result<Vec<Expression>, UnreadableExpression> {
     let kind = expression.variant_name();
     if kind == KIND_SELECT {
-        return Ok(vec![expression]);
+        return Ok(vec![expression.clone()]);
     }
     let mut selects: Vec<Expression> = Vec::new();
     if !SET_OPERATION_KINDS.contains(&kind) {
         return Ok(selects);
     }
-    let payload = serde_json::to_value(&expression).map_err(|_| UnreadableExpression)?;
-    let Some(Value::Object(arguments)) = payload_arguments(payload) else {
-        return Ok(selects);
-    };
-    for side in SET_OPERATION_SIDES {
-        let Some(value) = arguments.get(side) else {
+    let payload: Value = serde_json::to_value(expression).map_err(|_| UnreadableExpression)?;
+    let mut pending: Vec<&Value> = vec![&payload];
+    while let Some(node) = pending.pop() {
+        if set_operation_kind(node).is_some() {
+            let Some(Value::Object(arguments)) = payload_arguments(node) else {
+                continue;
+            };
+            for side in SET_OPERATION_SIDES.iter().rev() {
+                if let Some(child) = arguments.get(*side) {
+                    pending.push(child);
+                }
+            }
+            continue;
+        }
+        let Ok(child) = ast_json::expression_from_value(node.clone()) else {
             continue;
         };
-        if let Ok(child) = ast_json::expression_from_value(value.clone()) {
-            selects.extend(set_expression_selects(child)?);
+        if child.variant_name() == KIND_SELECT {
+            selects.push(child);
+        } else if SET_OPERATION_KINDS.contains(&child.variant_name()) {
+            return Err(UnreadableExpression);
         }
     }
     Ok(selects)
 }
 
+/// The set-operation kind a serialized expression is tagged with, if any.
+fn set_operation_kind(value: &Value) -> Option<&'static str> {
+    let Value::Object(map) = value else {
+        return None;
+    };
+    let (key, _) = map.iter().next().filter(|_| map.len() == 1)?;
+    SET_OPERATION_KINDS
+        .iter()
+        .copied()
+        .find(|kind| *kind == key.as_str())
+}
+
 /// The wheel's `args`: the payload under an expression's single variant key.
-fn payload_arguments(payload: Value) -> Option<Value> {
+fn payload_arguments(payload: &Value) -> Option<&Value> {
     match payload {
-        Value::Object(map) => map.into_iter().next().map(|(_, value)| value),
+        Value::Object(map) => map.values().next(),
         _ => None,
     }
 }

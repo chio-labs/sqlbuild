@@ -18,10 +18,12 @@ class GeneratedLineageParityTestCase:
 
 @dataclass(frozen=True)
 class DeferredLineageTestCase:
-    """A dialect the native parser does not carry, so each parsed model is deferred to Python."""
+    """Parsed models the native engine hands back to Python, which records each deferral."""
 
     description: str
     dialect: str
+    keeps_catalog: bool
+    expected_native_statuses: dict[str, int]
     expected_kind: str
 
 
