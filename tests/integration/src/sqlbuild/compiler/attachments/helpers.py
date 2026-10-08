@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -23,6 +24,7 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
     resolve_audit_run_scope,
     resolve_audit_severity,
 )
+from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -36,7 +38,8 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
+from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -289,6 +292,11 @@ ATTACHMENT_PROJECT: dict[str, str] = {
         '[connections.local]\ndatabase = "orders.duckdb"\n\n'
         '[targets.dev]\nconnection = "local"\nschema = "dev"\n'
     ),
+    "macros/labels.py": (
+        "def tidy_label(expression: str) -> str:\n"
+        '    """Trim and lower-case a label."""\n'
+        '    return f"LOWER(TRIM({expression}))"\n'
+    ),
     "seeds/channel_codes.csv": "id,label\n1,web\n2,store\n",
     "seeds/channel_codes.yml": (
         "seeds:\n  - name: channel_codes\n    description: Channel codes.\n    columns:\n"
@@ -302,7 +310,7 @@ ATTACHMENT_PROJECT: dict[str, str] = {
     "sources/events.yml": (
         "sources:\n  - name: order_events\n"
         f"    description: \"Order feed ${{coalesce(ENV:{_MISSING_ENV}, 'events')}}\"\n"
-        "    expression: \"(SELECT 1 AS id, '@@region' AS region)\"\n"
+        "    expression: \"(SELECT 1 AS id, @tidy_label('@@region') AS region)\"\n"
         "    columns:\n      - name: id\n        type: INTEGER\n        audits:\n"
         "          - accepted_values:\n              values: [1, 2]\n"
         "      - name: region\n        type: VARCHAR\n"
@@ -310,17 +318,32 @@ ATTACHMENT_PROJECT: dict[str, str] = {
     "functions/sql/order_label.sql": (
         'FUNCTION (\n  description "Label an order status.",\n'
         f"  schema \"${{coalesce(ENV:{_MISSING_ENV}, 'udfs')}}\",\n"
-        "  arguments (raw_status STRING),\n  returns STRING,\n);\n\nUPPER(raw_status)\n"
+        "  arguments (raw_status STRING),\n  returns STRING,\n);\n\n"
+        'UPPER(@tidy_label("raw_status"))\n'
     ),
     "audits/generic/amount_floor.sql": (
         'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column < @minimum '
-        "AND label <> @'label'\n"
+        "AND @tidy_label(\"label\") <> @'label'\n"
     ),
     "models/orders.sql": (
         'MODEL (\n  materialized table,\n  description "Orders.",\n'
         '  audits [amount_floor (column amount, minimum -5, label "it\'s", severity warn)],\n'
         ");\n\nSELECT c.id, 1.5 AS amount, c.label\n"
         'FROM __seed("channel_codes") c\nJOIN __source("order_events") e ON e.id = c.id\n'
+    ),
+    "tests/unit/test_orders.sql": (
+        "TEST();\n\nWITH\n__seed__channel_codes AS (\n"
+        "  SELECT 1 AS id, @tidy_label(\"' Web '\") AS label\n),\n"
+        "__source__order_events AS (\n  SELECT 1 AS id, 'north' AS region\n),\n"
+        "__expected__orders AS (\n  SELECT 1 AS id, 1.5 AS amount, 'web' AS label\n)\n"
+        "SELECT 1\n"
+    ),
+    "tests/scenarios/orders_scenario.sql": (
+        'SCENARIO (\n  description "Orders join their channel"\n);\n\n'
+        "WITH\n__seed__channel_codes AS (\n  SELECT 1 AS id, @tidy_label(\"'Web'\") AS label\n),\n"
+        "__source__order_events AS (\n  SELECT 1 AS id, 'north' AS region\n),\n"
+        "__expected__orders AS (\n  SELECT 1 AS id, 1.5 AS amount, 'web' AS label\n)\n"
+        "SELECT 1\n"
     ),
 }
 
@@ -340,8 +363,14 @@ def attachment_engine_outcome(
     called: set[str] = set()
     for name in NATIVE_ATTACHMENT_ENTRIES:
         monkeypatch.setattr(_native, name, _recorded(called=called, name=name))
+    bridged: list[Path] = []
+    monkeypatch.setattr(macros, "_bridged_sql_macros", _recorded_bridge(bridged=bridged))
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    inputs: CompileProjectInputs = _compile_inputs(project_dir=project_dir)
+    inputs: CompileProjectInputs = compile_frontier(
+        until=CompilerStage.COMPILE_PROJECT_INPUTS,
+        python_stage=partial(_compile_inputs, project_dir=project_dir),
+    )
+    called.update(f"bridged:{str(path).replace(str(project_dir), '<project>')}" for path in bridged)
     return frozenset(called), repr(
         (
             inputs.seed_inputs,
@@ -375,6 +404,16 @@ def _compile_inputs(*, project_dir: Path) -> CompileProjectInputs:
         defer_model_sql_validation=True,
         no_cache=True,
     )
+
+
+def _recorded_bridge(*, bridged: list[Path]) -> Callable[..., object]:
+    entry: Callable[..., object] = cast(Callable[..., object], macros._bridged_sql_macros)
+
+    def recorded(*, consumer_path: Path, **arguments: object) -> object:
+        bridged.append(consumer_path)
+        return entry(consumer_path=consumer_path, **arguments)
+
+    return recorded
 
 
 def _recorded(*, called: set[str], name: str) -> Callable[..., object]:

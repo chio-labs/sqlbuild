@@ -1,4 +1,4 @@
-"""Compile inputs of a project with every attachment kind match Python under the preview engine."""
+"""Every attachment kind compiles like Python under preview, with macros through the bridge."""
 
 from __future__ import annotations
 
@@ -14,8 +14,21 @@ from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
     attachment_engine_outcome,
 )
 
-_PREVIEW_ONLY_ENTRIES: frozenset[str] = frozenset(
-    {"pair_seed_files", "render_attached_generic_audit", "expand_config_templates"}
+_BRIDGED_CONSUMERS: frozenset[str] = frozenset(
+    {
+        "bridged:<built-in>/audits/generic/accepted_values.sql",
+        "bridged:<built-in>/audits/generic/not_null.sql",
+        "bridged:<project>/audits/generic/amount_floor.sql",
+        "bridged:<project>/functions/sql/order_label.sql",
+        "bridged:<project>/models/orders.sql",
+        "bridged:<project>/sources/events.yml",
+        "bridged:<project>/tests/scenarios/orders_scenario.sql",
+        "bridged:<project>/tests/unit/test_orders.sql",
+    }
+)
+_PREVIEW_ONLY_ENTRIES: frozenset[str] = (
+    frozenset({"pair_seed_files", "render_attached_generic_audit", "expand_config_templates"})
+    | _BRIDGED_CONSUMERS
 )
 _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
     {
@@ -32,8 +45,8 @@ _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
     "test_case",
     [
         AttachmentProjectTestCase(
-            description="seeds, templated source and function, and an attached generic audit",
-            expected_preview_entries=_ATTACHMENT_ENTRIES,
+            description="macros in every attachment kind, seeds, templates and generic audits",
+            expected_preview_entries=_ATTACHMENT_ENTRIES | _BRIDGED_CONSUMERS,
         ),
     ],
     ids=lambda case: case.description,
@@ -56,7 +69,7 @@ def test_given_attachment_project_when_building_inputs_then_preview_matches_pyth
     assert (
         preview_outcome.replace(CompilerEngine.NATIVE_PREVIEW.value, "python"),
         native_outcome.replace(CompilerEngine.NATIVE.value, "python"),
-        preview_called & _ATTACHMENT_ENTRIES >= test_case.expected_preview_entries,
+        preview_called >= test_case.expected_preview_entries,
         (python_called | native_called) & _PREVIEW_ONLY_ENTRIES,
     ) == (python_outcome, python_outcome, True, frozenset()), test_case.description
 
