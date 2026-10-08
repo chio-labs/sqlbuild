@@ -71,19 +71,6 @@ def loaded_module_stamps(*, covered_paths: frozenset[str]) -> tuple[tuple[str, i
     return tuple(sorted(stamps.values()))
 
 
-def with_carried_module_stamps(
-    *,
-    current: tuple[tuple[str, int, int], ...],
-    carried: tuple[tuple[str, int, int], ...],
-    covered_paths: frozenset[str],
-) -> tuple[tuple[str, int, int], ...]:
-    """Add stored stamps of modules a reused render imported but this process did not load."""
-
-    stamps: dict[str, tuple[str, int, int]] = {stamp[0]: stamp for stamp in carried}
-    stamps.update((stamp[0], stamp) for stamp in current)
-    return tuple(sorted(stamp for path, stamp in stamps.items() if path not in covered_paths))
-
-
 def module_stamps_unchanged(*, stamps: tuple[tuple[str, int, int], ...]) -> bool:
     """Return whether every recorded module file still has the same stat identity."""
 

@@ -9,17 +9,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild import _native
-from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
-from sqlbuild.compiler.compile.constants import RENDER_REUSE_DECLARATIONS_PREFIX
-from sqlbuild.compiler.compile.models import RenderReuseState
 from sqlbuild.compiler.discovery._helpers.filesystem import core
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryFileFault
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeclarationFilesParityTestCase,
-    DeclarationReuseTestCase,
     DeepDeclarationHeaderTestCase,
     GeneratedDeclarationFileTestCase,
     NativeDeclarationFailureTestCase,
@@ -502,48 +497,6 @@ def test_given_engine_when_discovering_then_native_session_is_kept_only_for_prev
         isinstance(discovered.native_session, _native.NativeDiscoverySession)
         is test_case.expected_session
     )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DeclarationReuseTestCase(
-            description="a model edit reuses every stored declaration file",
-            files=_EVERY_KIND,
-            edited_path="models/marts/orders.sql",
-            edited_contents=_MODEL + b" -- edited\n",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_preview_compile_when_only_a_model_changes_then_declaration_files_are_reused(
-    test_case: DeclarationReuseTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_project(project_dir=tmp_path, files=test_case.files)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, _PREVIEW)
-    first_session: CompileRenderReuseSession = CompileRenderReuseSession(
-        prior=None, changed_paths=None
-    )
-    first: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=tmp_path, declaration_reuse=first_session
-    )
-    first_session.plan_models(model_files=first.model_files)
-    state: RenderReuseState | None = first_session.stored_state()
-    assert state is not None
-    _ = (tmp_path / test_case.edited_path).write_bytes(test_case.edited_contents)
-    second_session: CompileRenderReuseSession = CompileRenderReuseSession(
-        prior=state, changed_paths=frozenset({test_case.edited_path})
-    )
-
-    second: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=tmp_path, declaration_reuse=second_session
-    )
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
-    fresh: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-
-    assert any(name.startswith(RENDER_REUSE_DECLARATIONS_PREFIX) for name in state.group_payloads)
-    assert second.native_session is test_case.expected_reused_session
-    assert render_stage_capture(second) == render_stage_capture(fresh)
 
 
 if __name__ == "__main__":

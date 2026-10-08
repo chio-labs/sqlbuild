@@ -225,6 +225,19 @@ class RulesEditChainCase:
 
 
 @dataclass(frozen=True)
+class OneModelCustomRuleEditCase:
+    """One model edited after a warm compile of a model-subject custom rule."""
+
+    description: str
+    edited_model: str
+    before: str
+    after: str
+    expected_warm_counts: tuple[int, int]
+    expected_edit_counts: tuple[int, int]
+    expected_edit_exit_code: int
+
+
+@dataclass(frozen=True)
 class BrokenInvalidationChainCase:
     """An edit chain compiled with deliberately stale fact digests against a cache-free oracle."""
 

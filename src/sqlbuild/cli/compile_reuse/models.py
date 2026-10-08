@@ -81,7 +81,6 @@ class StoredCompileInputs:
     target_tree: bool
     settings_inputs: tuple[SettingsEnvironmentInputs, ...]
     settings_digest: str
-    target_digests: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -94,7 +93,6 @@ class StoredCompileOutput:
     stdout_length: int
     stdout_checksum: int
     stdout_file: str
-    render_state_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,17 +128,3 @@ class CompileReuseAttempt:
     snapshot_ns: int = 0
     digests: dict[str, str] = field(default_factory=dict)
     restamped: frozenset[str] = frozenset()
-    changed_paths: frozenset[str] | None = None
-    render_state_path: Path | None = None
-    prior_entry: bool = False
-    prior_modules: tuple[tuple[str, int, int], ...] = ()
-    prior_target_files: dict[str, FileStamp] = field(default_factory=dict)
-    prior_target_digests: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class RenderStateLayer:
-    """One render layer to publish: its framed chunks, and the base layer it extends."""
-
-    chunks: tuple[bytes | memoryview, ...]
-    base_file: str | None

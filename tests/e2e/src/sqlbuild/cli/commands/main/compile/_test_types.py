@@ -389,7 +389,7 @@ class CompileCacheInvalidationTestCase:
     edited_env: dict[str, str] = field(default_factory=dict)
     expected_failure: bool = False
     expected_output_change: bool = True
-    expected_rewarmed_fact_cache_misses: int = 0
+    expected_rewarmed_analysis_cache_misses: int = 0
 
 
 @dataclass(frozen=True)
@@ -400,8 +400,8 @@ class CompileCacheDisabledTestCase:
     compile_args: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     edit: Callable[[Path], None] = lambda _root: None
-    expected_fact_cache_counts: tuple[int, int] = (0, 0)
-    expected_fact_databases: tuple[Path, ...] = ()
+    expected_analysis_cache_counts: tuple[int, int] = (0, 0)
+    expected_analysis_databases: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -693,12 +693,12 @@ class CompileReuseStoreFailureTestCase:
 
 @dataclass(frozen=True)
 class IncrementalEditStep:
-    """One authored edit, and whether its compile may reuse unaffected renders."""
+    """One authored edit, the command run over it before its compile, and whether it replays."""
 
     description: str
     edit: Callable[[Path], None]
-    expected_render_reuse: bool
     between: Callable[[Path], None]
+    expected_replayed: bool = False
 
 
 @dataclass(frozen=True)
@@ -723,48 +723,17 @@ class RandomEditChainTestCase:
 
 @dataclass(frozen=True)
 class BrokenEditInvalidationTestCase:
-    """An incremental invalidation deliberately broken, and edits whose output it must change."""
+    """A cache invalidation deliberately broken, and an edit whose output it must change."""
 
     description: str
-    compiled_edits: tuple[Callable[[Path], None], ...]
     edit: Callable[[Path], None]
     sabotage: Callable[[pytest.MonkeyPatch], None]
     expected_matches_uncached: bool
-    after_edit: Callable[[Path, pytest.MonkeyPatch], None]
-
-
-@dataclass(frozen=True)
-class BrokenChangeDetectionTestCase:
-    """A model edit compiled while change detection reports nothing changed."""
-
-    description: str
-    edit: Callable[[Path], None]
-    expected_matches_uncached: bool
-
-
-@dataclass(frozen=True)
-class RenderStoreNoticeTestCase:
-    """A render-count notice threshold and whether storing renders announces itself."""
-
-    description: str
-    notice_renders: int
-    expected_notice: bool
-
-
-@dataclass(frozen=True)
-class RenderSavePolicyTestCase:
-    """Compiles after a cold compile, and the render files and reuse each one must leave."""
-
-    description: str
-    edits: tuple[Callable[[Path], None], ...]
-    expected_cold_render_files: int
-    expected_render_files: tuple[int, ...]
-    expected_reused: tuple[bool, ...]
 
 
 @dataclass(frozen=True)
 class ExternalModuleEditTestCase:
-    """An outside module imported only while rendering, rewritten after its render is reused."""
+    """An outside module a macro imports while rendering, rewritten in place after a compile."""
 
     description: str
     initial_value: str
@@ -774,12 +743,23 @@ class ExternalModuleEditTestCase:
 
 
 @dataclass(frozen=True)
-class RenderLoadNoticeTestCase:
-    """A stored-render size threshold and whether loading the store announces itself."""
+class SqlTestScanStoreTestCase:
+    """A change between two compiles, and how many stored SQL-test scans it must invalidate."""
 
     description: str
-    notice_bytes: int
-    expected_notice: bool
+    change: Callable[[Path, pytest.MonkeyPatch], None]
+    expected_rescans: int
+    arrange: Callable[[pytest.MonkeyPatch], None] = lambda _monkeypatch: None
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
+class RetiredCompilerCacheTestCase:
+    """A compile over a project holding cache files older releases wrote."""
+
+    description: str
+    compile_args: tuple[str, ...]
+    expected_removed: bool
 
 
 @dataclass(frozen=True)
@@ -794,7 +774,7 @@ type DensePreparedCompile = PreparedCompile
 
 @dataclass(frozen=True)
 class SharedCacheKeyTestCase:
-    """A model analysis schedule under which a model shares a served model's cache key."""
+    """A model analysis schedule under which two models share one analysis cache key."""
 
     description: str
     schedule: Callable[[pytest.MonkeyPatch], None]

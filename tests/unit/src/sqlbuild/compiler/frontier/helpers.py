@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
+from sqlbuild.compiler.compile._helpers.attachment.target import compile_cache_root
 from sqlbuild.compiler.compile.models import CompactLineageFacts
-from sqlbuild.compiler.fact_cache.main._compile_cache_root import compile_cache_root
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME
 from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog

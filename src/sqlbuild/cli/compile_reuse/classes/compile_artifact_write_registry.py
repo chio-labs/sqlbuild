@@ -7,13 +7,9 @@ import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
 
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
 from sqlbuild.cli.compile_reuse.models import RecordedArtifact
-
-if TYPE_CHECKING:
-    from sqlbuild.cli.compile_reuse.classes.stored_artifacts import StoredArtifacts
 
 
 class CompileArtifactWriteRegistry:
@@ -23,41 +19,31 @@ class CompileArtifactWriteRegistry:
         self._digest_size: int = digest_size
         self._lock: threading.Lock = threading.Lock()
         self._recorders: tuple[CompileArtifactWrites, ...] = ()
-        self._stored: StoredArtifacts | None = None
 
     @contextmanager
-    def recording(
-        self, *, stored: StoredArtifacts | None = None
-    ) -> Iterator[CompileArtifactWrites]:
-        """Record artifact writes until the block exits, trusting unchanged stored artifacts."""
+    def recording(self) -> Iterator[CompileArtifactWrites]:
+        """Record artifact writes until the block exits."""
 
         recorder: CompileArtifactWrites = CompileArtifactWrites()
         with self._lock:
             self._recorders = (*self._recorders, recorder)
-            if stored is not None:
-                self._stored = stored
         try:
             yield recorder
         finally:
             with self._lock:
                 self._recorders = tuple(item for item in self._recorders if item is not recorder)
-                if stored is not None:
-                    self._stored = None
 
-    def written(self, *, path: str | os.PathLike[str], contents: bytes) -> bool:
-        """Note the exact bytes an artifact holds; return whether it already holds them."""
+    def written(self, *, path: str | os.PathLike[str], contents: bytes) -> None:
+        """Note the exact bytes an artifact holds after a write or an unchanged-file check."""
 
         recorders: tuple[CompileArtifactWrites, ...] = self._recorders
         if not recorders:
-            return False
-        absolute_path: str = os.path.abspath(path)
+            return
         artifact: RecordedArtifact = RecordedArtifact(
             digest=hashlib.blake2b(contents, digest_size=self._digest_size).hexdigest()
         )
         for recorder in recorders:
-            recorder.record(path=absolute_path, artifact=artifact)
-        stored: StoredArtifacts | None = self._stored
-        return stored is not None and stored.holds(path=absolute_path, digest=artifact.digest)
+            recorder.record(path=os.path.abspath(path), artifact=artifact)
 
     def kept(self, *, path: str | os.PathLike[str], size: int, mtime_ns: int) -> None:
         """Note an earlier artifact kept as-is after its size and mtime were validated."""

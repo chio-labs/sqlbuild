@@ -1,5 +1,6 @@
 """Incremental custom Rules across split hosts must equal a cache-free compile after every edit."""
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -10,14 +11,19 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
     BrokenInvalidationChainCase,
+    OneModelCustomRuleEditCase,
     RulesCacheEditCase,
     RulesEditChainCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
+    ONE_MODEL_EDIT_CACHED_RESULTS,
+    ONE_MODEL_EDIT_PROJECT,
     STALE_SOURCE_FACTS_SITECUSTOMIZE,
     custom_rules_edit_chain,
     rule_cache_counts,
     rules_compile_outcome,
+    rules_compile_run,
+    write_project_files,
 )
 
 CONFIG: str = "sqlbuild_project.toml"
@@ -130,6 +136,52 @@ def test_given_broken_invalidation_when_applying_edit_chain_then_oracle_detects_
     assert test_case.edits[matches.index(False)].description == (
         test_case.expected_first_divergent_edit
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OneModelCustomRuleEditCase(
+            description="edit_adds_a_finding",
+            edited_model="models/orders_002.sql",
+            before="SELECT 2 AS",
+            after="SELECT 3 AS",
+            expected_warm_counts=(ONE_MODEL_EDIT_CACHED_RESULTS, 0),
+            expected_edit_counts=(ONE_MODEL_EDIT_CACHED_RESULTS - 1, 1),
+            expected_edit_exit_code=1,
+        ),
+        OneModelCustomRuleEditCase(
+            description="edit_removes_the_finding",
+            edited_model="models/orders_003.sql",
+            before="SELECT 3 AS",
+            after="SELECT 30 AS",
+            expected_warm_counts=(ONE_MODEL_EDIT_CACHED_RESULTS, 0),
+            expected_edit_counts=(ONE_MODEL_EDIT_CACHED_RESULTS - 1, 1),
+            expected_edit_exit_code=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_model_custom_rule_when_one_model_is_edited_then_only_that_model_reruns(
+    tmp_path: Path, test_case: OneModelCustomRuleEditCase
+) -> None:
+    project_dir: Path = tmp_path / "orders"
+    write_project_files(project_dir=project_dir, files=ONE_MODEL_EDIT_PROJECT)
+    cold, cold_counts = rules_compile_run(project_dir)
+    _, warm_counts = rules_compile_run(project_dir)
+    replace_project_text(project_dir, test_case.edited_model, test_case.before, test_case.after)
+
+    edited, edit_counts = rules_compile_run(project_dir)
+    oracle_dir: Path = tmp_path / "oracle"
+    shutil.copytree(project_dir, oracle_dir, ignore=shutil.ignore_patterns("target"))
+    oracle: tuple[int, str, str] = rules_compile_outcome(oracle_dir, "--no-cache")
+
+    assert cold[0] == 1, cold[1]
+    assert cold_counts == (0, ONE_MODEL_EDIT_CACHED_RESULTS)
+    assert warm_counts == test_case.expected_warm_counts
+    assert edit_counts == test_case.expected_edit_counts
+    assert edited[0] == test_case.expected_edit_exit_code, edited[1]
+    assert edited == oracle
 
 
 if __name__ == "__main__":

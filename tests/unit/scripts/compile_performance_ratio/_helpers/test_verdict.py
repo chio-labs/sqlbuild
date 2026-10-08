@@ -67,6 +67,25 @@ from tests.unit.scripts.compile_performance_ratio._helpers.helpers import compar
             expected_failures=("dense 3000 warm: wall ratio 1.518 exceeds 1.10",),
         ),
         RatioFailuresTestCase(
+            description="an edit within its own looser limit passes while warm keeps the default",
+            comparisons=(
+                comparison(mode="warm", wall=(7.6, 7.6), cpu=(9.0, 9.0)),
+                comparison(mode="edit", wall=(8.0, 10.0), cpu=(10.0, 12.0)),
+            ),
+            modes=("warm", "edit"),
+            max_ratio=1.10,
+            mode_max_ratios={"edit": 1.30},
+            expected_failures=(),
+        ),
+        RatioFailuresTestCase(
+            description="an edit beyond its own limit fails against that limit",
+            comparisons=(comparison(mode="edit", wall=(8.0, 11.0), cpu=(10.0, 10.0)),),
+            modes=("edit",),
+            max_ratio=1.10,
+            mode_max_ratios={"edit": 1.30},
+            expected_failures=("dense 3000 edit: wall ratio 1.375 exceeds 1.30",),
+        ),
+        RatioFailuresTestCase(
             description="a requested mode without a measurement fails",
             comparisons=(comparison(mode="cold", wall=(18.0, 18.0), cpu=(40.0, 40.0)),),
             modes=("cold", "edit"),
@@ -102,6 +121,7 @@ def test_given_mode_comparisons_when_judging_then_reports_each_failed_limit(
         modes=test_case.modes,
         max_ratio=test_case.max_ratio,
         noise_floor_seconds=NOISE_FLOOR_SECONDS,
+        mode_max_ratios=test_case.mode_max_ratios,
     )
 
     assert failures == test_case.expected_failures

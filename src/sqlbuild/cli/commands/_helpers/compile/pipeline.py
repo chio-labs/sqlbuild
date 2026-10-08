@@ -34,7 +34,6 @@ from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.compiler.compile.constants import COMPILE_RENDER_REUSE
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
@@ -122,7 +121,6 @@ def _analyze_compile_project(
         sql_analysis_enabled_override=(
             False if profile_flags.skip_discovery_sql_analysis else None
         ),
-        declaration_reuse=COMPILE_RENDER_REUSE.claim_discovery(),
     )
     reject_unit_test_selectors(select=select, exclude=exclude, discovered_inputs=discovered_inputs)
     discover_ms: int = elapsed_ms(discover_start)
@@ -328,7 +326,7 @@ def write_compile_dag_artifact(
         python_graph=python_graph,
     )
     _ = resolved_dag_path.write_text(dag_json, encoding="utf-8")
-    _ = COMPILE_ARTIFACT_WRITES.written(
+    COMPILE_ARTIFACT_WRITES.written(
         path=resolved_dag_path, contents=dag_json.replace("\n", os.linesep).encode("utf-8")
     )
     _ = complete_compile_phase(

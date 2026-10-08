@@ -13,7 +13,6 @@ if TYPE_CHECKING:
         CompileProjectInputs,
         SqlReferenceOrigin,
         SqlReferenceScan,
-        StoredModelAnalysis,
     )
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
@@ -49,22 +48,6 @@ class CompileInputsReadyCallback(Protocol):
     """Invocation-local observer for the completed pre-semantic input snapshot."""
 
     def __call__(self, *, inputs: CompileProjectInputs) -> None: ...
-
-
-class ModelAnalysisReuse(Protocol):
-    """Analyses a previous compile stored for models whose renders this compile reused."""
-
-    def reused_model_names(self) -> frozenset[str]:
-        """Return the names of models whose stored renders this compile reused."""
-        ...
-
-    def stored_analyses(self) -> dict[str, StoredModelAnalysis]:
-        """Return stored analyses of reused models by model name."""
-        ...
-
-    def record_analyses(self, *, analyses: dict[str, StoredModelAnalysis | None]) -> None:
-        """Record every model's analysis for the next compile; absent or None drops it."""
-        ...
 
 
 class AttachedAuditTargetKind(StrEnum):

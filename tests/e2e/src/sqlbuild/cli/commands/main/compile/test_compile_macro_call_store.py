@@ -188,7 +188,7 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
             description="full_render_each_step", project_reuse=False, steps=_EDIT_STEPS
         ),
         MacroCallStoreEditSequenceTestCase(
-            description="with_project_and_render_reuse", project_reuse=True, steps=_EDIT_STEPS
+            description="with_project_reuse", project_reuse=True, steps=_EDIT_STEPS
         ),
     ],
     ids=lambda case: case.description,

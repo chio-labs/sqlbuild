@@ -14,7 +14,7 @@ from typing import Any
 import orjson
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.fact_cache.main.code_identity import compiled_code_identity
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,

@@ -131,12 +131,6 @@ def break_link(project_dir: Path) -> None:
     (project_dir.parent / "shared/customers.sql").unlink()
 
 
-def digested_project_files(project_dir: Path) -> dict[str, StoredProjectFile]:
-    """Record the project with digests and a snapshot time that leaves no file racy."""
-
-    return stored_project_files(project_dir=project_dir, snapshot_ns=later_snapshot_ns())
-
-
 def stat_only_project_files(*, project_dir: Path) -> dict[str, StoredProjectFile]:
     """Record the project as a stored compile does by default: stat stamps without digests."""
 

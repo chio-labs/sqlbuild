@@ -432,7 +432,6 @@ RENDER_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
         "external_sql_reference_resolver",
         "scope_index",
         "declaration_scope",
-        "analysis_reuse",
     }
 )
 RENDER_CALLABLE_CAPTURE_FIELDS: frozenset[str] = CALLABLE_CAPTURE_FIELDS

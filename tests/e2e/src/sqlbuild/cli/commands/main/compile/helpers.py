@@ -16,7 +16,7 @@ import sys
 import time
 import zipfile
 from bisect import bisect_left
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from io import StringIO
@@ -31,8 +31,6 @@ import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
-import sqlbuild.cli.compile_render_reuse._helpers.load_notice as render_load_notice
-import sqlbuild.cli.compile_render_reuse.main._render_reuse_session as render_reuse_main
 import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
@@ -42,32 +40,43 @@ import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_rec
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
-import sqlbuild.compiler.compile.classes.binding_dataflow as binding_dataflow
-import sqlbuild.compiler.compile.classes.render_reuse_session as render_reuse_session
-import sqlbuild.compiler.compile.classes.stored_model_analyses as stored_model_analyses
 import sqlbuild.compiler.contracts.main.validate as contract_validation
+import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.lineage.main.columns as column_lineage
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
+from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse._helpers.entry_file import (
     read_entry_header,
     read_entry_stdout,
     write_entry,
 )
-from sqlbuild.cli.compile_reuse.classes.stored_artifacts import StoredArtifacts
 from sqlbuild.cli.compile_reuse.constants import (
     REUSE_DISABLE_ENV_VAR,
     REUSE_ENTRY_DIRECTORY_NAME,
-    REUSE_RENDER_STATE_SUFFIX,
 )
-from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompileInputs
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.cli.compile_reuse.models import (
+    ProjectFilesComparison,
+    StoredCompileHeader,
+    StoredCompileInputs,
+)
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
+from sqlbuild.compiler.compile.constants import (
+    RETIRED_FACT_CACHE_DIRECTORY_NAME,
+    SQL_TEST_SCAN_STORE_FILE_NAME,
+)
+from sqlbuild.compiler.frontier.constants import (
+    COMPILER_CACHE_DIRECTORY_NAME,
+    COMPILER_ENGINE_ENV_VAR,
+    ENGINE_CACHE_NAMESPACE_SUFFIXES,
+)
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -2540,8 +2549,8 @@ class CompileCacheOutcome(NamedTuple):
     returncode: int
     diagnostics: tuple[str, ...]
     fingerprint: str
-    fact_cache_hits: int
-    fact_cache_misses: int
+    analysis_cache_hits: int
+    analysis_cache_misses: int
 
 
 def run_installed_sqb(
@@ -2567,7 +2576,7 @@ def run_installed_sqb(
 def compile_cache_outcome(
     *, project_dir: Path, env: dict[str, str], compile_args: tuple[str, ...] = ()
 ) -> CompileCacheOutcome:
-    """Compile in a fresh process and return its semantic fingerprint and fact-cache counts."""
+    """Compile in a fresh process and return its semantic fingerprint and analysis-cache counts."""
 
     result: subprocess.CompletedProcess[str] = run_installed_sqb(
         project_dir=project_dir, args=("compile", "--json", *compile_args), env=env
@@ -2580,8 +2589,9 @@ def compile_cache_outcome(
         fingerprint=semantic_compile_fingerprint(
             payload=values, compiled_dir=project_dir / "target" / "compiled"
         ),
-        fact_cache_hits=timings.get("fact_cache_hits", 0),
-        fact_cache_misses=timings.get("fact_cache_misses", 0),
+        analysis_cache_hits=timings.get("analysis_batch_cache_hits", 0)
+        + timings.get("analysis_entry_cache_hits", 0),
+        analysis_cache_misses=timings.get("analysis_cache_misses", 0),
     )
 
 
@@ -3378,10 +3388,6 @@ def compile_edit_without_reuse(project_dir: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, "0")
 
 
-def leave_edit_uncompiled(_project_dir: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
-    """Leave the edit for the compared compile to see first."""
-
-
 def write_before_reuse_store(
     *, monkeypatch: pytest.MonkeyPatch, project_dir: Path, write: Callable[[Path], None]
 ) -> None:
@@ -3501,12 +3507,6 @@ class IncrementalEditComparison(NamedTuple):
     reference: CompileReuseRun
 
     @property
-    def reused_renders(self) -> int:
-        """Return how many model renders the incremental compile reused."""
-
-        return self.incremental.timings.get("render_reuse_hits", 0)
-
-    @property
     def matches(self) -> bool:
         """Return whether exit code, report, and every compiled artifact are byte-identical."""
 
@@ -3577,18 +3577,6 @@ _RANDOM_EDIT_FOLLOW_UPS: dict[str, tuple[str, ...]] = {
     "introduce_error": ("introduce_error", "fix_error"),
     "drop_column": ("drop_column", "comment", "restore_column"),
 }
-_MODEL_ONLY_EDIT_KINDS: frozenset[str] = frozenset(
-    {
-        "comment",
-        "add_column",
-        "type_change",
-        "header_change",
-        "introduce_error",
-        "fix_error",
-        "drop_column",
-        "restore_column",
-    }
-)
 _DROPPED_COLUMN: str = "  customer_id,\n"
 _KEPT_COLUMN: str = "  order_id,\n"
 _EDIT_ANCHORS: dict[str, str] = {"type_change": "  quantity", "drop_column": _DROPPED_COLUMN}
@@ -3649,12 +3637,6 @@ def random_edit_plan(*, seed: int, step_count: int) -> tuple[str, ...]:
             )
         )
     )
-
-
-def is_model_only_edit(kind: str) -> bool:
-    """Return whether an edit kind touches model files only, so renders may be reused."""
-
-    return kind in _MODEL_ONLY_EDIT_KINDS
 
 
 def _swapped(contents: str, first: str, second: str) -> str:
@@ -3772,26 +3754,25 @@ def no_intervening_command(_root: Path) -> None:
     """Compile the edit directly after making it."""
 
 
-def model_edit_step(
+def edit_step(
     description: str,
     edit: Callable[[Path], None],
     between: Callable[[Path], None] = no_intervening_command,
 ) -> IncrementalEditStep:
-    """Return an edit to model files only, whose compile must reuse unaffected renders."""
+    """Return one edit, optionally followed by another command before the compared compile."""
 
-    return IncrementalEditStep(
-        description=description, edit=edit, expected_render_reuse=True, between=between
-    )
+    return IncrementalEditStep(description=description, edit=edit, between=between)
 
 
-def full_edit_step(description: str, edit: Callable[[Path], None]) -> IncrementalEditStep:
-    """Return an edit beyond model contents, whose compile must render everything again."""
+def star_chain_steps(*, between: Callable[[Path], None]) -> tuple[IncrementalEditStep, ...]:
+    """Add a star chain, then add and remove an upstream column with a command before each."""
 
-    return IncrementalEditStep(
-        description=description,
-        edit=edit,
-        expected_render_reuse=False,
-        between=no_intervening_command,
+    return (
+        edit_step("star_chain_added", star_chain_added),
+        edit_step("upstream_column_added", staging_extra_flag, between),
+        edit_step("edit_after_added_column", fact_comment),
+        edit_step("upstream_column_removed", staging_extra_flag_removed, between),
+        edit_step("edit_after_removed_column", payments_comment),
     )
 
 
@@ -3855,7 +3836,7 @@ def star_chain_with_twin_added(root: Path) -> None:
 
 
 def twin_header_changed(root: Path) -> None:
-    """Change the twin's header only, so its render is not reused while its SQL is unchanged."""
+    """Change the twin's header only, leaving its SQL and so its analysis cache key unchanged."""
 
     replace_project_text(
         root,
@@ -4086,86 +4067,191 @@ def stg_orders_test_edit(root: Path) -> None:
     )
 
 
-def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
-    """Leave every incremental invalidation intact."""
+def stg_orders_test_edited_again(root: Path) -> None:
+    """Change the staging orders SQL test's edited expected value once more."""
 
-
-def skip_upstream_analysis_checks(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Serve stored analyses even when an upstream model's final signature changed."""
-
-    for module in (stored_model_analyses, binding_dataflow):
-        monkeypatch.setattr(module, "dependencies_current", lambda **_kwargs: True)
-
-
-def reuse_declarations_after_any_edit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Load stored renders and reuse stored declaration files even after a non-model edit."""
-
-    read_render_state: Callable[..., object] = render_reuse_main.read_render_state
-    monkeypatch.setattr(
-        render_reuse_main,
-        "read_render_state",
-        lambda *, path, changed_paths: read_render_state(path=path, changed_paths=frozenset()),
+    replace_project_text(
+        root, "tests/unit/test_stg_orders.sql", "101 AS customer_id", "102 AS customer_id"
     )
-    monkeypatch.setattr(render_reuse_session, "edits_only_models", lambda **_kwargs: True)
 
 
-def trust_changed_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Trust stored artifact digests even when the artifact changed since it was stored."""
+def adapter_switched(*, before: str, after: str) -> Callable[[Path], None]:
+    """Return an edit that switches the project adapter."""
 
-    monkeypatch.setattr(StoredArtifacts, "unchanged_since_stored", lambda _self, **_kwargs: True)
+    def switch(root: Path) -> None:
+        replace_project_text(
+            root, "sqlbuild_project.toml", f'adapter = "{before}"', f'adapter = "{after}"'
+        )
+
+    return switch
 
 
-def disable_change_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+def disable_project_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set the fixture environment but compile every time, so the finer caches are exercised."""
+
+    enable_compile_reuse(monkeypatch)
+    monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, "1")
+
+
+def sql_test_scan_counts(run: CompileReuseRun) -> tuple[int, int]:
+    """Return the SQL-test scan store hits and misses of one compile."""
+
+    return run.timings["sql_test_scan_cache_hits"], run.timings["sql_test_scan_cache_misses"]
+
+
+def edit_sql_test_scan_input(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Edit one SQL test file between compiles."""
+
+    stg_orders_test_edit(root)
+
+
+def edit_unrelated_model(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Edit a model no SQL test text contains."""
+
+    fact_comment(root)
+
+
+def change_adapter_lexical_rules(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give the project adapter different lexical rules that leave this project's SQL unchanged."""
+
+    monkeypatch.setattr(
+        DuckDbBackedAdapter,
+        "sql_lexical_syntax",
+        replace(DuckDbBackedAdapter.sql_lexical_syntax, triple_quoted_strings=True),
+    )
+
+
+def upgrade_native_build(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend the native extension was rebuilt from different source."""
+
+    monkeypatch.setattr(native_module, "BUILD_IDENTITY", f"{native_module.BUILD_IDENTITY}-rebuilt")
+
+
+def corrupt_sql_test_scan_store(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overwrite the stored SQL-test scans with bytes that are not a store file."""
+
+    path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
+    assert path.is_file()
+    _ = path.write_bytes(b"not a native store")
+
+
+def edit_installed_code(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend the installed Python code changed, as a local edit of an editable install does."""
+
+    monkeypatch.setattr(
+        compiled_code_identity_module, "installed_code_identity", lambda: "edited-python-code"
+    )
+
+
+RETIRED_RENDER_FILES: tuple[str, ...] = (
+    "0123456789abcdef-0000.render",
+    "fedcba9876543210-1111.render",
+)
+
+
+def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
+    """Leave every engine's fact cache and render files of other target slots from old releases."""
+
+    written: list[Path] = [
+        compiler_cache_directory(project_dir).parent
+        / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
+        / RETIRED_FACT_CACHE_DIRECTORY_NAME
+        / "sql-tests.sqlite3"
+        for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values()
+    ]
+    written.extend(
+        compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME / name
+        for name in RETIRED_RENDER_FILES
+    )
+    for path in written:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_bytes(b"retired")
+    return tuple(written)
+
+
+_ORIGINAL_SCAN_WRITE: Callable[..., None] = SqlTestScanCache.write
+
+
+def _stored_scans_replaced(replacement: bytes) -> Callable[[pytest.MonkeyPatch], None]:
+    def arrange(monkeypatch: pytest.MonkeyPatch) -> None:
+        def write(
+            self: SqlTestScanCache,
+            *,
+            algorithm: str,
+            syntax: SqlLexicalSyntax,
+            parts: Sequence[str],
+            value: bytes,
+        ) -> None:
+            del value
+            _ORIGINAL_SCAN_WRITE(
+                self, algorithm=algorithm, syntax=syntax, parts=parts, value=replacement
+            )
+
+        monkeypatch.setattr(SqlTestScanCache, "write", write)
+
+    return arrange
+
+
+store_undecodable_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(b"{]")
+store_misshapen_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(
+    b'[{"mode": "model"}]'
+)
+
+
+def ignore_test_text_in_scan_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Key stored SQL-test scans by file path only, so an edited test reads a stale scan."""
+
+    read: Callable[..., object] = SqlTestScanCache.read
+    write: Callable[..., None] = SqlTestScanCache.write
+
+    def path_only(kwargs: dict[str, Any]) -> dict[str, Any]:
+        return {**kwargs, "parts": kwargs["parts"][:1]}
+
+    monkeypatch.setattr(
+        SqlTestScanCache, "read", lambda self, **kwargs: read(self, **path_only(kwargs))
+    )
+    monkeypatch.setattr(
+        SqlTestScanCache, "write", lambda self, **kwargs: write(self, **path_only(kwargs))
+    )
+
+
+def restore_sql_test_scan_writes(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Store real scan results again after an arrangement replaced them."""
+
+    monkeypatch.setattr(SqlTestScanCache, "write", _ORIGINAL_SCAN_WRITE)
+
+
+def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave every cache invalidation intact."""
+
+
+def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make compile reuse believe no project file changed since the stored compile."""
 
-    monkeypatch.setattr(reuse_attempt, "changed_project_paths", lambda **_kwargs: (frozenset(), {}))
-
-
-def set_store_notice_renders(monkeypatch: pytest.MonkeyPatch, renders: int) -> None:
-    """Announce storing a compile once it has at least this many new renders to record."""
-
-    monkeypatch.setattr(reuse_store, "REUSE_STORE_NOTICE_RENDERS", renders)
-
-
-def prime_render_store(project_dir: Path) -> CompileReuseRun:
-    """After a cold compile, compile one leaf edit so the stored compile also holds renders."""
-
-    fact_comment(project_dir)
-    return run_reuse_compile(project_dir=project_dir)
-
-
-def prime_render_store_in_process(project_dir: Path) -> int:
-    """In this process: compile cold, then compile one leaf edit so renders are stored."""
-
-    cold: int = compile_in_process(project_dir=project_dir)
-    fact_comment(project_dir)
-    return max(cold, compile_in_process(project_dir=project_dir))
-
-
-def render_store_files(project_dir: Path) -> int:
-    """Return how many stored render files the project's compile reuse folder holds."""
-
-    return len(
-        list(
-            (compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME).glob(
-                f"*{REUSE_RENDER_STATE_SUFFIX}"
-            )
-        )
+    monkeypatch.setattr(
+        reuse_attempt,
+        "compare_project_files",
+        lambda **_kwargs: ProjectFilesComparison(unchanged=True, verified={}),
     )
 
 
-def edit_and_compile(*, project_dir: Path, edit: Callable[[Path], None]) -> CompileReuseRun:
-    """Apply one edit, compile with reuse enabled, and return the run."""
+def ignore_query_in_analysis_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Key cached model analyses without their query, so an edited query reads a stale analysis."""
 
-    edit(project_dir)
-    return run_reuse_compile(project_dir=project_dir)
+    analysis_key: Callable[..., str] = project_assembly.model_analysis_cache_key
+
+    def query_blind_key(**kwargs: Any) -> str:
+        kwargs["query_sql"] = ""
+        return analysis_key(**kwargs)
+
+    monkeypatch.setattr(project_assembly, "model_analysis_cache_key", query_blind_key)
 
 
 EXTERNAL_FLAVOR_MODULE: str = "extflavor"
 
 
 def write_external_flavor(extlib: Path, value: str) -> None:
-    """Write, or rewrite in place, an outside module that a macro imports only while rendering."""
+    """Write, or rewrite in place, an outside module that a macro imports while rendering."""
 
     extlib.mkdir(parents=True, exist_ok=True)
     (extlib / f"{EXTERNAL_FLAVOR_MODULE}.py").write_text(f"VALUE = {value!r}\n", encoding="utf-8")
@@ -4195,18 +4281,6 @@ def compiled_text(*, run: CompileReuseRun, suffix: str) -> str:
 
     path: str = next(filter(lambda path: path.endswith(suffix), sorted(run.compiled)))
     return run.compiled[path].decode("utf-8")
-
-
-def set_render_load_notice_bytes(monkeypatch: pytest.MonkeyPatch, stored_bytes: int) -> None:
-    """Announce loading stored renders once their files hold at least this many bytes."""
-
-    monkeypatch.setattr(render_load_notice, "RENDER_LOAD_NOTICE_BYTES", stored_bytes)
-
-
-def json_report_keys(stdout: str) -> tuple[str, ...]:
-    """Parse a JSON compile report and return its top-level keys."""
-
-    return tuple(cast(dict[str, object], json.loads(stdout)))
 
 
 _COMPILER_ENGINE_LINE: re.Pattern[str] = re.compile(r'\n  "compiler_engine": "([a-z-]+)",')

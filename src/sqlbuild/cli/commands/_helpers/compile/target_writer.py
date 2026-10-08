@@ -688,7 +688,7 @@ def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
 
 def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
-        _ = COMPILE_ARTIFACT_WRITES.written(
+        COMPILE_ARTIFACT_WRITES.written(
             path=path,
             contents=contents.replace(_POSIX_LINE_SEPARATOR, os.linesep).encode("utf-8"),
         )
@@ -703,9 +703,7 @@ def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = 
 
 def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
-        unchanged: bool = COMPILE_ARTIFACT_WRITES.written(path=path, contents=contents)
-        if check_existing and unchanged:
-            return
+        COMPILE_ARTIFACT_WRITES.written(path=path, contents=contents)
         if check_existing:
             existing: bytes | None = _read_existing_file(path=path)
             if existing == contents:

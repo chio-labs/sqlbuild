@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
@@ -244,13 +245,15 @@ def start_custom_rules(
     dialect: str,
     verify_determinism: bool = False,
 ) -> Future[CustomRulesOutcome] | None:
-    """Submit selected custom rules, reusing the implementation fingerprints of their payloads."""
+    """Submit selected custom rules after digesting installed code here, clear of GIL contention."""
 
     custom_rules: tuple[Rule, ...] = _selected_custom_rules(
         config=config, catalogue=catalogue, custom_payloads=custom_payloads
     )
     if not custom_rules:
         return None
+    if config.cache.enabled:
+        _ = compiled_code_identity()
     return executor.submit(
         evaluate_custom_rules_cached,
         project=project,

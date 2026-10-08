@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from functools import partial
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
@@ -70,7 +69,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     TolerantScopeDiscovery,
 )
-from sqlbuild.compiler.discovery.types import DeclarationFilesReuse
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -82,32 +80,16 @@ def build_discovered_project_inputs(
     local_config: LocalConfig,
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool = True,
-    declaration_reuse: DeclarationFilesReuse | None = None,
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
     with OperationLifecycle(
         operation_kind="project", operation_name="discovery_declaration_parse"
     ) as declaration_lifecycle:
-        discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]] = partial(
-            _discover_model_files,
+        declarations: DiscoveredDeclarationFiles = _discover_declaration_files(
             project_dir=project_dir,
             sql_analysis_enabled=sql_analysis_enabled,
             extract_output_column_locations=extract_output_column_locations,
-        )
-        discover: Callable[[], DiscoveredDeclarationFiles] = partial(
-            _discover_declaration_files,
-            project_dir=project_dir,
-            discover_models=discover_models,
-        )
-        declarations: DiscoveredDeclarationFiles = (
-            discover()
-            if declaration_reuse is None
-            else declaration_reuse.declaration_files(
-                variant=f"{int(sql_analysis_enabled)}{int(extract_output_column_locations)}",
-                discover=discover,
-                discover_models=discover_models,
-            )
         )
         declaration_lifecycle.completed(
             metadata={
@@ -216,13 +198,18 @@ def build_discovered_project_inputs(
 def _discover_declaration_files(
     *,
     project_dir: Path,
-    discover_models: Callable[[], tuple[DiscoveredSqlModelFile, ...]],
+    sql_analysis_enabled: bool,
+    extract_output_column_locations: bool,
 ) -> DiscoveredDeclarationFiles:
     with DirectorySnapshot.scope(project_dir=project_dir):
         source_files: tuple[DiscoveredSourceFile, ...] = discover_native_source_files(
             project_dir=project_dir
         )
-        model_files: tuple[DiscoveredSqlModelFile, ...] = discover_models()
+        model_files: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
+            project_dir=project_dir,
+            extract_implicit_alias_columns=sql_analysis_enabled,
+            extract_output_column_locations=extract_output_column_locations,
+        )
         return DiscoveredDeclarationFiles(
             source_files=source_files,
             model_files=model_files,
@@ -241,19 +228,6 @@ def _discover_declaration_files(
             adapter_file=discover_adapter_file(project_dir=project_dir),
             native_session=retained_discovery_session(project_dir=project_dir),
         )
-
-
-def _discover_model_files(
-    *,
-    project_dir: Path,
-    sql_analysis_enabled: bool,
-    extract_output_column_locations: bool,
-) -> tuple[DiscoveredSqlModelFile, ...]:
-    return discover_native_model_files(
-        project_dir=project_dir,
-        extract_implicit_alias_columns=sql_analysis_enabled,
-        extract_output_column_locations=extract_output_column_locations,
-    )
 
 
 def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:

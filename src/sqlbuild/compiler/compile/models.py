@@ -13,6 +13,7 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
@@ -23,7 +24,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
-    ModelAnalysisReuse,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -334,6 +334,7 @@ class DeclarationScopeBuild:
     loaded_macros: dict[str, LoadedMacro]
     index: ScopeIndex
     resolver: DeclarationScopeResolver
+    sql_test_scans: SqlTestScanCache
 
 
 @dataclass(frozen=True)
@@ -827,44 +828,6 @@ class ModelSqlAnalysis:
 
 
 @dataclass(frozen=True)
-class DataflowReuse:
-    """Analyses a binding dataflow may reuse, and the signatures that decide whether it may."""
-
-    cached: dict[str, PolyglotAnalysisResult]
-    previous_signatures: dict[str, str]
-    served: dict[str, dict[str, str]]
-
-
-@dataclass(frozen=True)
-class StoredModelAnalysis:
-    """One model's analysis as the analysis cache held it after a compile, kept for reuse."""
-
-    context: str
-    cache_key: str
-    analysis: PolyglotAnalysisResult
-    output_signature: str
-    dependencies: dict[str, str]
-    signature: str | None
-
-
-@dataclass(frozen=True)
-class StoredAnalysisScope:
-    """Stored analyses one compile may serve, and the session recording its own analyses."""
-
-    reuse: ModelAnalysisReuse
-    context: str
-    stored: dict[str, StoredModelAnalysis]
-
-
-@dataclass(frozen=True)
-class ModelAnalysisCaching:
-    """The analysis cache one compile reads and writes, and its stored analysis reuse."""
-
-    cache: AnalysisCacheContext
-    reuse: ModelAnalysisReuse | None = None
-
-
-@dataclass(frozen=True)
 class ModelSqlAnalysisRequest:
     """Inputs to one model's SQL analysis."""
 
@@ -978,7 +941,6 @@ class CompileProjectInputs:
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
     declaration_scope: DeclarationScopeBuild | None = field(default=None, repr=False, compare=False)
-    analysis_reuse: ModelAnalysisReuse | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -1748,21 +1710,3 @@ class SqlAnalysisOptOutRequest:
     query_sql: str
     placeholders: dict[str, str] | None
     project_config_path: Path
-
-
-@dataclass(frozen=True)
-class StoredRender:
-    """One stored render with the diagnostics it reported and environment variables it read."""
-
-    value: object
-    diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]
-    environment_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class RenderReuseState:
-    """Serialized renders of one compile by model path and group; None marks released bytes."""
-
-    model_paths: tuple[str, ...]
-    model_payloads: dict[str, memoryview | None]
-    group_payloads: dict[str, memoryview | None]

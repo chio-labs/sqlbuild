@@ -1,9 +1,9 @@
-"""Public identity of the installed compiler code for derived caches."""
+"""Identity of the installed and native code behind cached compiler and rule results."""
 
 import hashlib
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.fact_cache._helpers.code_identity import installed_code_identity
+from sqlbuild.compiler.frontier._helpers.code_identity import installed_code_identity
 
 
 def compiled_code_identity() -> str:

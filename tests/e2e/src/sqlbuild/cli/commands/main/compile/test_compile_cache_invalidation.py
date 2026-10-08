@@ -194,13 +194,13 @@ def test_given_warm_compile_cache_when_input_changes_then_output_matches_cache_d
     cold: CompileCacheOutcome = compile_cache_outcome(project_dir=project_dir, env=initial_env)
     warm: CompileCacheOutcome = compile_cache_outcome(project_dir=project_dir, env=initial_env)
     assert cold.returncode == 0
-    assert cold.fact_cache_misses > 0
+    assert cold.analysis_cache_misses > 0
     assert warm == CompileCacheOutcome(
         returncode=0,
         diagnostics=cold.diagnostics,
         fingerprint=cold.fingerprint,
-        fact_cache_hits=cold.fact_cache_misses,
-        fact_cache_misses=0,
+        analysis_cache_hits=cold.analysis_cache_misses,
+        analysis_cache_misses=0,
     )
 
     test_case.edit(project_dir)
@@ -217,7 +217,7 @@ def test_given_warm_compile_cache_when_input_changes_then_output_matches_cache_d
     ) is test_case.expected_output_change
     assert edited[:3] == reference[:3]
     assert rewarmed[:3] == reference[:3]
-    assert rewarmed.fact_cache_misses == test_case.expected_rewarmed_fact_cache_misses
+    assert rewarmed.analysis_cache_misses == test_case.expected_rewarmed_analysis_cache_misses
 
 
 @pytest.mark.parametrize(
@@ -240,7 +240,7 @@ def test_given_warm_compile_cache_when_input_changes_then_output_matches_cache_d
     ],
     ids=lambda case: case.description,
 )
-def test_given_disabled_compile_cache_when_compiling_then_no_facts_are_read_or_written(
+def test_given_disabled_compile_cache_when_compiling_then_no_analyses_are_read_or_written(
     cache_invalidation_project: Path, test_case: CompileCacheDisabledTestCase
 ) -> None:
     project_dir: Path = cache_invalidation_project
@@ -258,11 +258,14 @@ def test_given_disabled_compile_cache_when_compiling_then_no_facts_are_read_or_w
     first_timings: dict[str, int] = json.loads(first.stdout)["compile_timings"]
     second_timings: dict[str, int] = json.loads(second.stdout)["compile_timings"]
     assert (
-        first_timings["fact_cache_hits"],
-        first_timings["fact_cache_misses"],
-    ) == test_case.expected_fact_cache_counts
+        first_timings["analysis_batch_cache_hits"] + first_timings["analysis_entry_cache_hits"],
+        first_timings["analysis_cache_misses"],
+    ) == test_case.expected_analysis_cache_counts
     assert (
-        second_timings["fact_cache_hits"],
-        second_timings["fact_cache_misses"],
-    ) == test_case.expected_fact_cache_counts
-    assert tuple((project_dir / "target").rglob("facts-v*")) == test_case.expected_fact_databases
+        second_timings["analysis_batch_cache_hits"] + second_timings["analysis_entry_cache_hits"],
+        second_timings["analysis_cache_misses"],
+    ) == test_case.expected_analysis_cache_counts
+    assert (
+        tuple((project_dir / "target").rglob("model-analysis.sqlite3"))
+        == test_case.expected_analysis_databases
+    )

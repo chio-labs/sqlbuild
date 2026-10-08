@@ -507,6 +507,32 @@ fact_digests.FactDigests.digest = _stale_sources
 """
 
 
+ONE_MODEL_EDIT_MODEL_COUNT: int = 6
+# One cached result per model for the custom rule, plus the cached built-in rules request.
+ONE_MODEL_EDIT_CACHED_RESULTS: int = ONE_MODEL_EDIT_MODEL_COUNT + 1
+ONE_MODEL_EDIT_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        '[rules]\nselect = ["XSQBRONE001"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
+    ),
+    "rules/orders.py": (
+        "from sqlbuild.rules import Finding, Model, RuleContext, rule\n\n\n"
+        '@rule(code="XSQBRONE001", slug="literal-order", message="Order 3 is a literal", '
+        'remediation="Select order 3 from a source.")\n'
+        "def literal_order(*, model: Model, ctx: RuleContext) -> list[Finding]:\n"
+        "    source: str = ctx.sql.for_model(model).expanded.source\n"
+        '    return [ctx.finding(subject=model)] if "SELECT 3 " in source else []\n'
+    ),
+    **{
+        f"models/orders_{index:03d}.sql": (
+            f'MODEL (description "Orders {index}");\n\nSELECT {index} AS order_id\n'
+        )
+        for index in range(ONE_MODEL_EDIT_MODEL_COUNT)
+    },
+}
+
+
 def custom_rules_edit_chain(
     *, root: Path, edits: tuple[Any, ...], environment: tuple[tuple[str, str], ...] = ()
 ) -> tuple[
@@ -542,6 +568,14 @@ def rules_compile_outcome(
 ) -> tuple[int, str, str]:
     """Compile in a fresh process and return its exit code, diagnostics, and artifacts digest."""
 
+    return rules_compile_run(project_dir, *arguments, environment=environment)[0]
+
+
+def rules_compile_run(
+    project_dir: Path, *arguments: str, environment: tuple[tuple[str, str], ...] = ()
+) -> tuple[tuple[int, str, str], tuple[int, int]]:
+    """Compile in a fresh process; return its comparable outcome and rule cache hits and misses."""
+
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
             str(Path(sys.executable).with_name("sqb")),
@@ -563,10 +597,14 @@ def rules_compile_outcome(
     for path in sorted(filter(Path.is_file, compiled.rglob("*"))):
         artifacts.update(path.relative_to(compiled).as_posix().encode())
         artifacts.update(path.read_bytes())
+    timings: dict[str, int] = payload.get("compile_timings", {})
     return (
-        result.returncode,
-        json.dumps(payload.get("diagnostics"), sort_keys=True),
-        artifacts.hexdigest(),
+        (
+            result.returncode,
+            json.dumps(payload.get("diagnostics"), sort_keys=True),
+            artifacts.hexdigest(),
+        ),
+        (timings.get("rule_cache_hits", 0), timings.get("rule_cache_misses", 0)),
     )
 
 

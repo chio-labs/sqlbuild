@@ -18,6 +18,11 @@ from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_fu
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_table_function_call_arities,
 )
+from sqlbuild.compiler.compile._helpers.attachment.sources import build_source_inputs
+from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
+    build_scenario_inputs,
+    build_test_inputs_with_cache,
+)
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
@@ -39,11 +44,6 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_model_schema_index,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile._helpers.render.reuse import (
-    build_sql_resource_inputs,
-    claimed_render_reuse,
-)
-from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
@@ -126,15 +126,12 @@ def build_compile_inputs(
         _enforce_explicit_references=(discovered_inputs.project_config.references.enforce_explicit),
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
-    render_reuse: CompileRenderReuseSession | None = claimed_render_reuse(
-        discovered_inputs=discovered_inputs
-    )
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     declaration_scope: DeclarationScopeBuild = build_declaration_scope(
         discovered_inputs=discovered_inputs,
         loaded_macros=loaded_macros,
-        compile_cache_dir=compile_cache_dir,
         sql_lexical_syntax=adapter_context.sql_lexical_syntax,
+        compile_cache_dir=compile_cache_dir,
     )
     model_context: ModelInputBuildContext = ModelInputBuildContext(
         effective_vars=effective_vars,
@@ -156,7 +153,6 @@ def build_compile_inputs(
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=compile_cache_dir,
-        render_reuse=render_reuse,
     )
     model_context = model_build.context
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
@@ -170,17 +166,34 @@ def build_compile_inputs(
             adapter_context.python_functions_inherit_default_namespace
         ),
     )
-    source_inputs: tuple[CompileSourceInput, ...]
-    test_inputs: tuple[CompileSqlTestInput, ...]
-    scenario_inputs: tuple[CompileSqlScenarioInput, ...]
-    source_inputs, test_inputs, scenario_inputs = build_sql_resource_inputs(
+    source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
         discovered_inputs=discovered_inputs,
-        context=model_context,
-        sql_function_inputs=sql_function_inputs,
+        effective_vars=model_context.effective_vars,
+        effective_settings=model_context.effective_settings,
+        macro_context=model_context.macro_context,
+        loaded_macros=model_context.loaded_macros,
+        declaration_expansion=model_context.declaration_expansion,
         no_sql_validation=no_sql_validation,
+    )
+    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs_with_cache(
+        discovered_inputs=discovered_inputs,
+        effective_vars=model_context.effective_vars,
+        macro_context=model_context.macro_context,
+        loaded_macros=model_context.loaded_macros,
+        declaration_expansion=model_context.declaration_expansion,
         external_sql_reference_resolver=external_sql_reference_resolver,
-        compile_cache_dir=compile_cache_dir,
-        render_reuse=render_reuse,
+        sql_function_inputs=sql_function_inputs,
+        sql_lexical_syntax=model_context.sql_lexical_syntax,
+        scan_cache=declaration_scope.sql_test_scans,
+    )
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
+        discovered_inputs=discovered_inputs,
+        effective_vars=model_context.effective_vars,
+        macro_context=model_context.macro_context,
+        loaded_macros=model_context.loaded_macros,
+        declaration_expansion=model_context.declaration_expansion,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+        sql_lexical_syntax=model_context.sql_lexical_syntax,
     )
     audit_inputs: tuple[CompileAuditInput, ...]
     audit_diagnostics: tuple[CompilerDiagnostic, ...]
@@ -190,10 +203,7 @@ def build_compile_inputs(
         model_inputs=model_build.inputs,
         source_inputs=source_inputs,
         seed_inputs=seed_inputs,
-        render_reuse=render_reuse,
     )
-    if render_reuse is not None:
-        render_reuse.release_stored()
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *audit_diagnostics,
         *model_build.diagnostics,
@@ -243,7 +253,6 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         scope_index=declaration_scope.index,
         declaration_scope=declaration_scope,
-        analysis_reuse=render_reuse,
     )
 
 
@@ -283,7 +292,6 @@ def _build_models_with_declarations(
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     reference_cache_dir: Path | None,
-    render_reuse: CompileRenderReuseSession | None,
 ) -> ModelInputScopeBuild:
     public_enums: dict[str, EnumDeclaration]
     public_constants: dict[str, ConstantDeclaration]
@@ -309,7 +317,6 @@ def _build_models_with_declarations(
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=reference_cache_dir,
-        render_reuse=render_reuse,
     )
     return ModelInputScopeBuild(
         inputs=model_inputs,

@@ -1,4 +1,4 @@
-"""Identity of the installed code that produces cached compile facts."""
+"""Identity of the installed SQLBuild code that produces cached compiler and rule results."""
 
 from __future__ import annotations
 
