@@ -229,19 +229,19 @@ def test_given_command_minimum_version_when_checking_versions_then_explains_skip
         ConfiguredTimeLimitTestCase(
             description="a dense one-model edit within the edit limit passes",
             command="dense compile (one-model edit)",
-            wall_ratio=1.232,
+            wall_ratio=1.289,
             expected_regressed=False,
         ),
         ConfiguredTimeLimitTestCase(
             description="a one-model edit within the edit limit passes",
             command="compile (one-model edit)",
-            wall_ratio=1.24,
+            wall_ratio=1.34,
             expected_regressed=False,
         ),
         ConfiguredTimeLimitTestCase(
             description="a dense one-model edit beyond the edit limit fails",
             command="dense compile (one-model edit)",
-            wall_ratio=1.26,
+            wall_ratio=1.36,
             expected_regressed=True,
         ),
         ConfiguredTimeLimitTestCase(
