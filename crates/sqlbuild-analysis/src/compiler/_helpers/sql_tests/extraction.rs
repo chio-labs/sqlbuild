@@ -785,10 +785,9 @@ fn projection_names(
             }
         }
     }
-    let mut end = branch.len();
+    let mut end = select_list_from(branch, select_end, syntax)?.unwrap_or(branch.len());
     for keyword in [
-        "FROM", "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET",
-        "FETCH",
+        "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET", "FETCH",
     ] {
         if let Some(position) = find_top_level_clause_keyword(branch, select_end, keyword, syntax)?
         {
@@ -1354,10 +1353,16 @@ pub(crate) fn split_top_level<'a>(
 ) -> Result<Vec<&'a str>, String> {
     let mut values: Vec<&str> = Vec::new();
     let mut start = 0;
+    let mut bracket_depth: isize = 0;
     scan_code::<()>(sql, 0, syntax, |index, depth| {
-        if depth == 0 && byte_at(sql, index) == Some(separator) {
-            values.extend(non_empty_trimmed(&sql[start..index], syntax)?);
-            start = index + 1;
+        match byte_at(sql, index) {
+            Some(b'[' | b'{') => bracket_depth += 1,
+            Some(b']' | b'}') => bracket_depth -= 1,
+            Some(byte) if byte == separator && depth == 0 && bracket_depth == 0 => {
+                values.extend(non_empty_trimmed(&sql[start..index], syntax)?);
+                start = index + 1;
+            }
+            _ => {}
         }
         Ok(CodeStep::Advance)
     })?;
@@ -1380,6 +1385,64 @@ pub(crate) fn find_top_level_keyword(
             },
         )
     })
+}
+
+/// The top-level `FROM` that ends a select list, skipping the `FROM` of `IS [NOT] DISTINCT FROM`.
+fn select_list_from(
+    sql: &str,
+    start: usize,
+    syntax: &LexicalSyntax,
+) -> Result<Option<usize>, String> {
+    let mut search_start = start;
+    while let Some(position) = find_top_level_clause_keyword(sql, search_start, "FROM", syntax)? {
+        if !trailing_distinct_operator(&sql[start..position], syntax)? {
+            return Ok(Some(position));
+        }
+        search_start = position + "FROM".len();
+    }
+    Ok(None)
+}
+
+/// Whether `prefix` ends with `IS DISTINCT` or `IS NOT DISTINCT`, ignoring comments.
+fn trailing_distinct_operator(prefix: &str, syntax: &LexicalSyntax) -> Result<bool, String> {
+    let Some((rest, word)) = trailing_word(prefix, syntax)? else {
+        return Ok(false);
+    };
+    if !word.eq_ignore_ascii_case("DISTINCT") {
+        return Ok(false);
+    }
+    let Some((rest, word)) = trailing_word(rest, syntax)? else {
+        return Ok(false);
+    };
+    if word.eq_ignore_ascii_case("IS") {
+        return Ok(true);
+    }
+    if !word.eq_ignore_ascii_case("NOT") {
+        return Ok(false);
+    }
+    let Some((_, word)) = trailing_word(rest, syntax)? else {
+        return Ok(false);
+    };
+    Ok(word.eq_ignore_ascii_case("IS"))
+}
+
+/// The code before the last word of `value` and that word, ignoring trailing comments.
+fn trailing_word<'a>(
+    value: &'a str,
+    syntax: &LexicalSyntax,
+) -> Result<Option<(&'a str, &'a str)>, String> {
+    let Some(trimmed) = non_empty_trimmed(value, syntax)? else {
+        return Ok(None);
+    };
+    let trimmed_end = trimmed.as_ptr() as usize - value.as_ptr() as usize + trimmed.len();
+    let code = &value[..trimmed_end];
+    let word_start = code
+        .char_indices()
+        .rev()
+        .take_while(|(_, character)| is_identifier_continue(*character))
+        .last()
+        .map(|(index, _)| index);
+    Ok(word_start.map(|start| (&code[..start], &code[start..])))
 }
 
 fn find_top_level_clause_keyword(

@@ -160,6 +160,18 @@ fn given_expected_cte_sql_when_scanning_top_level_then_set_operations_commas_and
             expected_from: Ok(Some(54)),
         },
         TopLevelScanTestCase {
+            description: "commas inside brackets and braces do not split",
+            sql: "SELECT [1, 2] AS status, {'a': 1, 'b': 2} AS m FROM t",
+            expected_unions: Ok(vec![
+                "SELECT [1, 2] AS status, {'a': 1, 'b': 2} AS m FROM t",
+            ]),
+            expected_commas: Ok(vec![
+                "SELECT [1, 2] AS status",
+                "{'a': 1, 'b': 2} AS m FROM t",
+            ]),
+            expected_from: Ok(Some(47)),
+        },
+        TopLevelScanTestCase {
             description: "unclosed quote",
             sql: "SELECT 'a, b FROM t",
             expected_unions: Err(unclosed_quote.clone()),

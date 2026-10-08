@@ -7,7 +7,7 @@ pub(crate) const QUOTED_IDENTIFIER_DELIMITER_BYTES: usize = 2;
 pub(crate) const OPERAND_KEYWORDS: &[&str] = &[
     "AND", "OR", "NOT", "IS", "IN", "LIKE", "ILIKE", "SIMILAR", "BETWEEN", "CASE", "WHEN", "THEN",
     "ELSE", "DISTINCT", "ALL", "ANY", "SOME", "EXISTS", "COLLATE", "ESCAPE", "INTERVAL", "ZONE",
-    "OVER", "AS",
+    "OVER", "AS", "FROM",
 ];
 /// Keywords that end an expression, so a trailing one is part of it rather than an implicit alias.
 pub(crate) const VALUE_KEYWORDS: &[&str] = &["NULL", "TRUE", "FALSE", "UNKNOWN", "END"];

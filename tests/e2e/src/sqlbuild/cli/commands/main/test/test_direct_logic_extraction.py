@@ -136,6 +136,43 @@ _REPEATED_MALFORMED_SOURCE: dict[str, str] = {
         "__udf_expected__ AS (SELECT 'PLACED' AS label)\n"
     )
 }
+_OPERATOR_MODEL: str = (
+    "MODEL (description 'Order summary.', materialized table);\n\n"
+    "SELECT order_id, TRIM(status) AS status, order_id * 100 AS amount_cents,\n"
+    "  TRIM(status) IS DISTINCT FROM 'shipped' AS is_open,\n"
+    "  TRIM(status) IS NOT DISTINCT FROM 'placed' AS is_placed\n"
+    'FROM __ref("stg_orders")\n'
+)
+_ALIASED_OPERATORS: dict[str, str] = {
+    "models/order_summary.sql": _OPERATOR_MODEL,
+    _MODEL_TEST: (
+        "TEST ();\n\nWITH\n"
+        "__ref__stg_orders AS (SELECT 1 AS order_id, 'placed' AS status),\n"
+        "__expected__order_summary AS (\n"
+        "  SELECT 1 order_id, 'placed' \"status\", CAST(100 AS INTEGER) amount_cents,\n"
+        "    'placed' IS DISTINCT FROM 'shipped' AS is_open,\n"
+        "    'placed' IS NOT DISTINCT FROM 'placed' AS is_placed\n"
+        ")\n"
+    ),
+    _MACRO_TEST: (
+        "TEST (mode macro);\n\nWITH\n"
+        "input_values AS (SELECT ' Placed ' AS status),\n"
+        "__macro_actual__ AS (\n"
+        '  SELECT @tidy_label("status") AS status, [1, 2] AS item_ids FROM input_values\n'
+        "),\n"
+        "__macro_expected__ AS (SELECT 'placed' AS status, [1, 2] AS item_ids)\n"
+    ),
+}
+_UNALIASED_DISTINCT_FROM: dict[str, str] = {
+    "models/order_summary.sql": _OPERATOR_MODEL,
+    _MODEL_TEST: (
+        "TEST ();\n\nWITH\n"
+        "__ref__stg_orders AS (SELECT 1 AS order_id, 'placed' AS status),\n"
+        "__expected__order_summary AS (\n"
+        "  SELECT 1 order_id, 'placed' IS DISTINCT FROM 'shipped'\n"
+        ")\n"
+    ),
+}
 _TESTS: tuple[str, ...] = (
     "test_tidy_label",
     "test_order_label",
@@ -173,6 +210,12 @@ _MALFORMED_SOURCE_FRAGMENTS: tuple[str, ...] = (
     "error[P012]:",
     "tests/unit/test_order_label.sql:4:37",
     '__source("raw", "orders") is not a valid __source() call',
+)
+
+_UNALIASED_DISTINCT_FROM_FRAGMENTS: tuple[str, ...] = (
+    "SQL test 'tests/unit/test_order_summary.sql' must alias every non-trivial "
+    "__expected__order_summary projection",
+    "for example 'placed' IS DISTINCT FROM 'shipped' AS <name>",
 )
 
 
@@ -325,6 +368,48 @@ _MALFORMED_SOURCE_FRAGMENTS: tuple[str, ...] = (
             overrides=_REPEATED_MALFORMED_SOURCE,
             expected_exit_code=1,
             expected_output_fragments=_REPEATED_MALFORMED_SOURCE_FRAGMENTS,
+        ),
+        DirectLogicExtractionE2ETestCase(
+            description="aliased IS [NOT] DISTINCT FROM and list projections pass on python",
+            engine="python",
+            overrides=_ALIASED_OPERATORS,
+            expected_exit_code=0,
+            expected_output_fragments=_PASSING_FRAGMENTS,
+        ),
+        DirectLogicExtractionE2ETestCase(
+            description="an unaliased IS DISTINCT FROM projection is rejected on python",
+            engine="python",
+            overrides=_UNALIASED_DISTINCT_FROM,
+            expected_exit_code=1,
+            expected_output_fragments=_UNALIASED_DISTINCT_FROM_FRAGMENTS,
+        ),
+        DirectLogicExtractionE2ETestCase(
+            description="aliased IS [NOT] DISTINCT FROM and list projections pass on native",
+            engine="native",
+            overrides=_ALIASED_OPERATORS,
+            expected_exit_code=0,
+            expected_output_fragments=_PASSING_FRAGMENTS,
+        ),
+        DirectLogicExtractionE2ETestCase(
+            description="an unaliased IS DISTINCT FROM projection is rejected on native",
+            engine="native",
+            overrides=_UNALIASED_DISTINCT_FROM,
+            expected_exit_code=1,
+            expected_output_fragments=_UNALIASED_DISTINCT_FROM_FRAGMENTS,
+        ),
+        DirectLogicExtractionE2ETestCase(
+            description="aliased IS [NOT] DISTINCT FROM and list projections pass on native-preview",
+            engine="native-preview",
+            overrides=_ALIASED_OPERATORS,
+            expected_exit_code=0,
+            expected_output_fragments=_PASSING_FRAGMENTS,
+        ),
+        DirectLogicExtractionE2ETestCase(
+            description="an unaliased IS DISTINCT FROM projection is rejected on native-preview",
+            engine="native-preview",
+            overrides=_UNALIASED_DISTINCT_FROM,
+            expected_exit_code=1,
+            expected_output_fragments=_UNALIASED_DISTINCT_FROM_FRAGMENTS,
         ),
     ],
     ids=lambda case: case.description,

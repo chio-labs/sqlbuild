@@ -162,6 +162,50 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             ),
         },
         ExtractionRuleTestCase {
+            description: "IS [NOT] DISTINCT FROM stays in the projection and its alias is accepted",
+            mode: "model",
+            raw: false,
+            syntax: "generic",
+            sql: "WITH __ref__orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 'completed' IS DISTINCT FROM 'x' AS status, a IS NOT /* c */ DISTINCT FROM b AS same FROM __ref__orders) SELECT 1",
+            expected_outcome: accepted_outcome(false),
+        },
+        ExtractionRuleTestCase {
+            description: "IS DISTINCT FROM without an alias is rejected",
+            mode: "model",
+            raw: false,
+            syntax: "generic",
+            sql: "WITH __ref__orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 'completed' IS DISTINCT FROM 'x') SELECT 1",
+            expected_outcome: rejected_outcome(
+                "SQL test 'tests/t.sql' must alias every non-trivial __expected__orders projection",
+                Some(
+                    "name the column with an alias, for example 'completed' IS DISTINCT FROM 'x' AS <name>; only a bare or qualified column reference may go unaliased",
+                ),
+                None,
+            ),
+        },
+        ExtractionRuleTestCase {
+            description: "the operand after IS NOT DISTINCT FROM is not an implicit alias",
+            mode: "model",
+            raw: false,
+            syntax: "generic",
+            sql: "WITH __ref__orders AS (SELECT 1 AS id), __expected__orders AS (SELECT a IS NOT DISTINCT FROM b) SELECT 1",
+            expected_outcome: rejected_outcome(
+                "SQL test 'tests/t.sql' must alias every non-trivial __expected__orders projection",
+                Some(
+                    "name the column with an alias, for example a IS NOT DISTINCT FROM b AS <name>; only a bare or qualified column reference may go unaliased",
+                ),
+                None,
+            ),
+        },
+        ExtractionRuleTestCase {
+            description: "a bracketed list with an alias is one projection",
+            mode: "model",
+            raw: false,
+            syntax: "duckdb",
+            sql: "WITH __ref__orders AS (SELECT 1 AS id), __expected__orders AS (SELECT [1, 2] AS status, {'a': 1, 'b': 2} AS details) SELECT 1",
+            expected_outcome: accepted_outcome(false),
+        },
+        ExtractionRuleTestCase {
             description: "bare, qualified and DISTINCT column references go unaliased",
             mode: "model",
             raw: false,
