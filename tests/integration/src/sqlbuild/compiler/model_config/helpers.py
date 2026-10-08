@@ -483,7 +483,13 @@ def _native_shape(metadata: NativeHeaderMetadata | None) -> object:
     parsed: NativeHeaderMetadata = cast(NativeHeaderMetadata, metadata)
     error: _native.NativeConfigError | None = _native_error(parsed)
     shapes: list[object] = [
-        list(error_shape(native_config_error(error=cast(_native.NativeConfigError, error)))[:4])
+        list(
+            error_shape(
+                native_config_error(
+                    error=cast(_native.NativeConfigError, error), bridge_independent=True
+                )
+            )[:4]
+        )
         for _ in range(error is not None)
     ]
     return (*shapes, _shape((parsed.columns, parsed.audits)))[0]

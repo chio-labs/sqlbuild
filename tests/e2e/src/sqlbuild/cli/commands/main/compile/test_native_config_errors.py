@@ -1,4 +1,4 @@
-"""The preview engine reports model config, template and header errors as Python does, once."""
+"""The preview engine reports model config, template and header errors as Python does."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import sqlbuild.compiler.compile._helpers.attachment.model_config as model_confi
 import sqlbuild.compiler.compile._helpers.render.context_templates as context_templates
 from scripts.compiler_differential.constants import FAILURE_BASE_MART
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    MacroExpandedValidatorErrorTestCase,
     NativeConfigErrorTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
@@ -37,6 +38,9 @@ _COUNTED_MACRO: str = (
     "    return expression\n"
 )
 _COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@counted('amount'))")
+_UPSTREAM_MACRO: str = _COUNTED_MACRO.replace(
+    "def counted(expression: str) -> str:", "def upstream() -> str:"
+).replace("    return expression\n", "    return '__ref(\"ghost\")'\n")
 _STAGING_PATH: str = "models/staging/stg_orders.sql"
 _STAGING_BODY: str = (
     '\n);\n\nSELECT order_id, customer_id, amount, status\nFROM __source("raw_orders")\n'
@@ -69,7 +73,7 @@ _PROJECT_FILES: dict[str, str] = {
                 + _STAGING_BODY
             },
             expected_report_text="unknown incremental_strategy 'upsert'",
-            expected_macro_calls=1,
+            expected_macro_calls=[1, 2],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
@@ -81,7 +85,7 @@ _PROJECT_FILES: dict[str, str] = {
                 + _STAGING_BODY
             },
             expected_report_text="cursor_start must be before exclusive cursor_end",
-            expected_macro_calls=1,
+            expected_macro_calls=[1, 2],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
@@ -90,7 +94,7 @@ _PROJECT_FILES: dict[str, str] = {
                 _STAGING_PATH: 'MODEL (\n  schema "${missing_region}_core",' + _STAGING_BODY
             },
             expected_report_text="model config references unknown variable 'missing_region'",
-            expected_macro_calls=1,
+            expected_macro_calls=[1, 1],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
@@ -100,7 +104,7 @@ _PROJECT_FILES: dict[str, str] = {
                 + _STAGING_BODY
             },
             expected_report_text="column 'order_id' has unknown metadata keys: format",
-            expected_macro_calls=1,
+            expected_macro_calls=[1, 1],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
@@ -110,14 +114,14 @@ _PROJECT_FILES: dict[str, str] = {
                 "severity fatal)]," + _STAGING_BODY
             },
             expected_report_text="'severity' must be one of: warn, error",
-            expected_macro_calls=1,
+            expected_macro_calls=[1, 1],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
             description="config_build_error_after_a_macro_ran",
             project_files={_STAGING_PATH: 'MODEL (\n  tags "orders",' + _STAGING_BODY},
             expected_report_text="tags must be a list",
-            expected_macro_calls=1,
+            expected_macro_calls=[1, 1],
             expected_python_fallbacks=[],
         ),
     ],
@@ -169,11 +173,57 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
         True,
         True,
         True,
-        [test_case.expected_macro_calls] * 2,
+        test_case.expected_macro_calls,
         python_run.returncode,
         report_without_engine(python_run).replace("preview", "python"),
         test_case.expected_python_fallbacks,
     ), (runs[0].report, runs[1].report, runs[1].stderr)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroExpandedValidatorErrorTestCase(
+            description="unknown_model_reference_from_a_macro",
+            project_files={
+                "macros/upstream.py": _UPSTREAM_MACRO,
+                "models/marts/customer_totals.sql": (
+                    'MODEL (\n  description "Order totals per customer",\n);\n\n'
+                    "SELECT * FROM @upstream()\n"
+                ),
+                _CALL_LOG: "",
+            },
+            engines=("python", "native-preview", "native"),
+            expected_report_text="references unknown model 'ghost'",
+            expected_macro_calls=[1, 2, 1],
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_validator_error_from_macro_sql_when_compiling_then_preview_bridge_reruns_it(
+    test_case: MacroExpandedValidatorErrorTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "orders"
+    runs: list[CompileReuseRun] = []
+    macro_calls: list[int] = []
+    for engine in test_case.engines:
+        write_counted_error_project(project_dir=project_dir, files=test_case.project_files)
+        runs.append(
+            run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
+        )
+        macro_calls.append(len((project_dir / _CALL_LOG).read_text(encoding="utf-8").splitlines()))
+
+    assert (
+        [run.returncode for run in runs],
+        [test_case.expected_report_text in run.report + run.stderr for run in runs],
+        {report_without_engine(run) for run in runs} == {report_without_engine(runs[0])},
+        macro_calls,
+    ) == (
+        [1] * len(test_case.engines),
+        [True] * len(test_case.engines),
+        True,
+        test_case.expected_macro_calls,
+    ), [run.report + run.stderr for run in runs]
 
 
 if __name__ == "__main__":

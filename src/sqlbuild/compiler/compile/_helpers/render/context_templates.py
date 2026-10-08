@@ -283,7 +283,7 @@ def expand_config_templates(
         context_label
     ):
         record_template_reads(outcome.reads)
-        raise native_config_error(error=outcome.error)
+        raise native_config_error(error=outcome.error, bridge_independent=True)
     return expand_template_data(
         value=value,
         variables=variables,

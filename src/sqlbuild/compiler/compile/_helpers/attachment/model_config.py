@@ -373,7 +373,7 @@ def build_model_header_schema_entry(
         else None
     )
     if native is not None and native.columns_error is not None:
-        raise native_config_error(error=native.columns_error)
+        raise native_config_error(error=native.columns_error, bridge_independent=True)
     local_columns: tuple[SchemaColumn, ...] = (
         native.columns
         if native is not None
@@ -396,7 +396,7 @@ def build_model_header_schema_entry(
         file_path=file_path,
     )
     if native is not None and native.audits_error is not None:
-        raise native_config_error(error=native.audits_error)
+        raise native_config_error(error=native.audits_error, bridge_independent=True)
     audits: tuple[SchemaAuditInstance, ...] = (
         native.audits
         if native is not None
@@ -915,7 +915,7 @@ def native_path_default(
         str(model_file.relative_path)
     )
     if isinstance(selected, _native.NativeConfigError):
-        raise native_config_error(error=selected)
+        raise native_config_error(error=selected, bridge_independent=True)
     return selected
 
 
@@ -933,7 +933,7 @@ def build_native_model_config(
     if built is None:
         return None
     if isinstance(built, _native.NativeConfigError):
-        raise native_config_error(error=built)
+        raise native_config_error(error=built, bridge_independent=True)
     values, header_keys, namespace, overrides, reads = built
     logical_schema, layer_schema_configured, logical_database = namespace
     retention_override, table_type_override = overrides
@@ -998,6 +998,14 @@ def native_model_validation(
     )
 
 
+def native_validation_error(
+    *, error: _native.NativeConfigError, values: dict[str, object]
+) -> Exception:
+    """Return a native validator error; validators read expanded SQL, so the bridge decides."""
+
+    return native_config_error(error=error, bridge_independent=False, values=values)
+
+
 def validate_model_config(
     *, context: ModelValidatorContext, request: ModelValidationRequest
 ) -> None:
@@ -1008,7 +1016,7 @@ def validate_model_config(
             session=context.native_config, request=request
         )
         if isinstance(outcome, _native.NativeConfigError):
-            raise native_config_error(error=outcome, values=request.config.values)
+            raise native_validation_error(error=outcome, values=request.config.values)
         if outcome:
             return
     run_python_model_validators(context=context, request=request)

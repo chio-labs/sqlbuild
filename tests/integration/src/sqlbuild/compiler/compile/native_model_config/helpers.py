@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     native_model_config_session,
     native_model_validation,
     native_path_default,
+    native_validation_error,
     run_python_model_validators,
 )
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
@@ -37,7 +38,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     DefaultsConfig,
@@ -411,7 +411,7 @@ def _python_validation(request: ModelValidationRequest) -> object:
     try:
         run_python_model_validators(context=_VALIDATOR_CONTEXT, request=request)
     except Exception as error:  # noqa: BLE001 - the exact Python outcome, whatever it is
-        return _python_error_shape(error)
+        return raised_error_shape(error)
     return _ACCEPTED
 
 
@@ -423,7 +423,7 @@ def _native_validation(
     )
     errors: list[object] = [
         raised_error_shape(
-            native_config_error(
+            native_validation_error(
                 error=cast(_native.NativeConfigError, error), values=request.config.values
             )
         )

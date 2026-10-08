@@ -18,9 +18,12 @@ from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 
 
 def native_config_error(
-    *, error: _native.NativeConfigError, values: Mapping[str, object] | None = None
+    *,
+    error: _native.NativeConfigError,
+    bridge_independent: bool,
+    values: Mapping[str, object] | None = None,
 ) -> Exception:
-    """Return the exception Python raises for `error`; `values` holds a mistyped config key."""
+    """Return Python's exception for `error`; mark it bridge-independent only if SQL is unread."""
 
     if error.class_name == CONFIG_VALUE_TYPE_ERROR and error.key is not None and values is not None:
         return ConfigValueTypeError(
@@ -31,5 +34,5 @@ def native_config_error(
     if error.class_name == DISCOVERY_CONFLICT_ERROR:
         return DiscoveryConflictError(error.message, help=error.help)
     return CompileInputError(
-        error.message, code=error.code, help=error.help, bridge_independent=True
+        error.message, code=error.code, help=error.help, bridge_independent=bridge_independent
     )

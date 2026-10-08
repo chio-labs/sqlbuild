@@ -915,8 +915,19 @@ class NativeConfigErrorTestCase:
     description: str
     project_files: dict[str, str]
     expected_report_text: str
-    expected_macro_calls: int
+    expected_macro_calls: list[int]
     expected_python_fallbacks: list[str]
+
+
+@dataclass(frozen=True)
+class MacroExpandedValidatorErrorTestCase:
+    """A validator error from macro-expanded SQL that the preview bridge must re-run."""
+
+    description: str
+    project_files: dict[str, str]
+    engines: tuple[str, ...]
+    expected_report_text: str
+    expected_macro_calls: list[int]
 
 
 @dataclass(frozen=True)
