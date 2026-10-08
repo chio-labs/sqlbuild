@@ -251,15 +251,18 @@ def report_test_without_target_model(
         for key in reachable_cte_keys(graph=graph, roots=graph.reader_reads)
         if graph.ctes[key].name.startswith(_MOCK_CTE_PREFIXES)
     ]
-    first_call: str | None = None
+    first_calls: dict[SqlReferenceKind, tuple[str, str]] = {}
+    called_models: set[str] = set()
     for cte in _reader_ctes(payload):
         for reference in _references(sql=cte.sql_body, syntax=syntax):
             kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
             if reference.ref_name not in mocked.get(kind, frozenset()):
                 continue
             read_mocks.append(f"{kind.fixture_cte_prefix}{reference.ref_name}")
-            if first_call is None and kind is not SqlReferenceKind.TABLE_FUNCTION:
-                first_call = _reference_call(reference)
+            if kind is SqlReferenceKind.REF:
+                called_models.add(reference.ref_name)
+            if kind is not SqlReferenceKind.TABLE_FUNCTION:
+                first_calls.setdefault(kind, (cte.name, _reference_call(reference)))
     mocks: tuple[str, ...] = tuple(dict.fromkeys(read_mocks))
     mocked_models: tuple[str, ...] = tuple(
         mock.removeprefix(REF_TEST_CTE_PREFIX)
@@ -267,12 +270,17 @@ def report_test_without_target_model(
         if mock.startswith(REF_TEST_CTE_PREFIX)
     )
     reader: CompileSqlTestCte | None = next(iter(_reader_ctes(payload)), None)
+    located: tuple[str, str] | None = first_calls.get(SqlReferenceKind.REF) or (
+        _mock_name_read(readers=_reader_ctes(payload), mocks=mocks)
+        or next(iter(first_calls.values()), None)
+    )
     test_name: str = test_block.name or test_file.relative_path.stem
     message: str
     help_text: str
     if mocked_models:
         plural: str = "s" if len(mocked_models) > 1 else ""
         owner: str = "models'" if plural else "model's"
+        verb: str = "keep" if called_models.issuperset(mocked_models) else "call"
         mocked_ctes: str = ", ".join(f"{REF_TEST_CTE_PREFIX}{name}" for name in mocked_models)
         calls: str = " and ".join(
             SqlReferenceKind.REF.example_call(name, quote='"') for name in mocked_models
@@ -283,7 +291,7 @@ def report_test_without_target_model(
         )
         help_text = (
             f"Mock the {owner} inputs instead (for example __source__<source> or "
-            f"__ref__<upstream model>) and keep {calls} in the __assert__ or __expected__ CTE, "
+            f"__ref__<upstream model>) and {verb} {calls} in the __assert__ or __expected__ CTE, "
             "or remove the test."
         )
     else:
@@ -294,11 +302,25 @@ def report_test_without_target_model(
             "runs that model with its mocks, or remove the test."
         )
     _HelperDiagnostics(test_file=test_file, test_block=test_block).report(
-        cte_name=reader.name if reader is not None else test_name,
-        call=first_call,
+        cte_name=located[0] if located else (reader.name if reader is not None else test_name),
+        call=located[1] if located else None,
         message=message,
         help=help_text,
     )
+
+
+def _mock_name_read(
+    *, readers: tuple[CompileSqlTestCte, ...], mocks: tuple[str, ...]
+) -> tuple[str, str] | None:
+    """Return the first check reading a mocked model by CTE name, with that name."""
+
+    for mock in mocks:
+        if not mock.startswith(REF_TEST_CTE_PREFIX):
+            continue
+        for reader in readers:
+            if re.search(rf"(?<![\w$]){re.escape(mock)}(?![\w$])", reader.sql_body, re.IGNORECASE):
+                return reader.name, mock
+    return None
 
 
 def report_mocks_reading_referencing_helpers(
@@ -333,8 +355,18 @@ def report_mocks_reading_referencing_helpers(
     graph: SqlTestCteGraph = sql_test_cte_graph(
         authored_ctes=authored_ctes, reader_ctes=reader_ctes
     )
+    called_mocks: list[str] = []
+    for sql in (
+        *(cte.sql_body for cte in reader_ctes),
+        *(graph.ctes[key].sql_body for key in _read_helper_keys(graph)),
+    ):
+        for reference in _references(sql=sql, syntax=syntax):
+            called_mocks.extend(
+                _mock_keys(kind=SqlReferenceKind(reference.ref_kind), reference=reference)
+            )
     used_mocks: tuple[str, ...] = _used_mock_keys(
         graph=graph,
+        called_mocks=tuple(called_mocks),
         model_references={
             model_input.model_file.file_path.stem: model_input.references
             for model_input in model_inputs
@@ -386,17 +418,19 @@ def _read_helper_keys(graph: SqlTestCteGraph) -> tuple[str, ...]:
 def _used_mock_keys(
     *,
     graph: SqlTestCteGraph,
+    called_mocks: tuple[str, ...],
     model_references: dict[str, tuple[CompileSqlReference, ...]],
     target_model_names: tuple[str, ...],
     mocked: frozenset[str],
 ) -> tuple[str, ...]:
-    """Return mocks the test's readers or the models it runs read, in a stable order."""
+    """Return mocks the test's checks and read helpers, or the models it runs, read in order."""
 
     used: list[str] = [
         key
         for key in reachable_cte_keys(graph=graph, roots=graph.reader_reads)
         if graph.ctes[key].name.startswith(_MOCK_CTE_PREFIXES)
     ]
+    used.extend(key for key in dict.fromkeys(called_mocks) if key in graph.ctes and key not in used)
     pending: list[str] = [name for name in target_model_names if name not in mocked]
     visited: set[str] = set(pending)
     while pending:
