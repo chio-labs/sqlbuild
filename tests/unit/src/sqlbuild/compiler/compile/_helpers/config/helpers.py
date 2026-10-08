@@ -11,6 +11,8 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import CompileModelConfig, CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.spec.contracts.models import SchemaColumn
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -22,8 +24,9 @@ def compile_with_config_build_count(
     project_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[CompileProjectInputs, int]:
-    """Compile a project while counting effective model configuration builds."""
+    """Compile a project on the Python engine while counting its model configuration builds."""
 
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.PYTHON.value)
     build_counts: list[int] = [0]
     original_build_model_config: Callable[..., CompileModelConfig] = (
         attachment_core.build_model_config

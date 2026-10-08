@@ -793,6 +793,18 @@ class CompilerEngineParityTestCase:
 
 
 @dataclass(frozen=True)
+class DefaultEngineParityTestCase:
+    """The Python oracle and the unset default compiling copies of one project, with stores."""
+
+    description: str
+    oracle_engine: str
+    default_engine: str
+    expected_engines: tuple[str, str]
+    expected_exit_codes: tuple[int, int]
+    expected_macro_call_stores: tuple[tuple[str, ...], tuple[str, ...]]
+
+
+@dataclass(frozen=True)
 class NativeTypeSystemTestCase:
     """Python and preview compiles of one project whose contracts compare type spellings."""
 

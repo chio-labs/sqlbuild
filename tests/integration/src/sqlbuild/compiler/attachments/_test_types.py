@@ -37,7 +37,7 @@ class AttachmentProjectTestCase:
 
     description: str
     overrides: dict[str, str]
-    expected_preview_entries: frozenset[str]
+    expected_native_entries: frozenset[str]
     expected_outcome_fragment: str
 
 

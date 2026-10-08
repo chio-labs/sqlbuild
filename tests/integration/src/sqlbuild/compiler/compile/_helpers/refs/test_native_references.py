@@ -247,7 +247,7 @@ def test_given_generated_reference_sql_when_extracting_natively_then_matches_pyt
             sql=sql,
             expected_references=expected_references,
             expected_error=expected_error,
-            expected_native_calls=int(engine is CompilerEngine.NATIVE_PREVIEW),
+            expected_native_calls=int(engine is not CompilerEngine.PYTHON),
         )
         for engine, (name, sql, expected_references, expected_error) in product(
             CompilerEngine, _ENGINE_SQLS
@@ -255,7 +255,7 @@ def test_given_generated_reference_sql_when_extracting_natively_then_matches_pyt
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_extracting_references_then_only_preview_runs_native_scanner(
+def test_given_engine_when_extracting_references_then_only_native_engines_run_native_scanner(
     test_case: ReferenceEngineTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)

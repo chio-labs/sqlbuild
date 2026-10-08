@@ -1,4 +1,4 @@
-"""The preview engine's native model loop compiles exactly as the Python engine does."""
+"""The default engine's native model loop compiles exactly as the Python engine does."""
 
 from __future__ import annotations
 
@@ -49,14 +49,14 @@ FROM __ref("stg_orders")
                 **_MARTS_DECLARATIONS,
                 "models/marts/order_flags.sql": _DECLARATION_MODEL,
             },
-            engines=("python", "native-preview"),
+            engines=("python", "native"),
             expected_exit_codes=(0, 0),
             expected_report_text="order_flags",
         ),
         NativeModelLoopParityTestCase(
             description="python_identity_error_for_a_folder_containing_a_colon",
             project_files={**_DECLARATIONS, "models/a:b/order_flags.sql": _DECLARATION_MODEL},
-            engines=("python", "native-preview"),
+            engines=("python", "native"),
             expected_exit_codes=(1, 1),
             expected_report_text="Unknown qualified identity kind",
         ),
@@ -68,14 +68,14 @@ FROM __ref("stg_orders")
                     '__ref("stg_orders")', "__ref('stg_orders')"
                 ),
             },
-            engines=("python", "native-preview"),
+            engines=("python", "native"),
             expected_exit_codes=(1, 1),
             expected_report_text="P012",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_model_declarations_when_compiling_with_preview_then_output_matches_python(
+def test_given_model_declarations_when_compiling_natively_then_output_matches_python(
     test_case: NativeModelLoopParityTestCase, tmp_path: Path
 ) -> None:
     prepared_project: Path = tmp_path / "orders"

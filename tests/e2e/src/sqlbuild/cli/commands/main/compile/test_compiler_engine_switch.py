@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompilerEngineParityTestCase,
     CompilerEngineRulesStoreTestCase,
     CompilerEngineStoreTestCase,
+    DefaultEngineParityTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
@@ -22,6 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     report_engine,
     report_without_engine,
     store_digests,
+    store_files,
 )
 from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_BRIDGE_PROJECT_FILES,
@@ -66,28 +68,33 @@ def test_given_same_project_when_compiling_with_each_engine_then_outputs_are_ide
 @pytest.mark.parametrize(
     "test_case",
     [
-        CompilerEngineParityTestCase(
+        DefaultEngineParityTestCase(
             description="python_oracle_and_unset_default",
-            left_engine="python",
-            right_engine="",
+            oracle_engine="python",
+            default_engine="",
             expected_engines=("python", "native"),
             expected_exit_codes=(0, 0),
+            expected_macro_call_stores=((), ("target/cache/compiler-native-v1/macro-calls.bin",)),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_no_engine_selection_when_compiling_then_native_runs_and_matches_python(
-    test_case: CompilerEngineParityTestCase, tmp_path: Path
+def test_given_no_engine_selection_when_compiling_then_native_rendering_runs_and_matches_python(
+    test_case: DefaultEngineParityTestCase, tmp_path: Path
 ) -> None:
     prepared_project: Path = tmp_path / "orders"
     prepare_compile_reuse_project(project_dir=prepared_project)
+    oracle_dir: Path = copy_compile_project(
+        source=prepared_project, destination=tmp_path / "oracle"
+    )
+    default_dir: Path = copy_compile_project(
+        source=prepared_project, destination=tmp_path / "default"
+    )
     oracle: CompileReuseRun = environment_engine_reuse_compile(
-        project_dir=copy_compile_project(source=prepared_project, destination=tmp_path / "oracle"),
-        engine=test_case.left_engine,
+        project_dir=oracle_dir, engine=test_case.oracle_engine
     )
     default: CompileReuseRun = environment_engine_reuse_compile(
-        project_dir=copy_compile_project(source=prepared_project, destination=tmp_path / "default"),
-        engine=test_case.right_engine,
+        project_dir=default_dir, engine=test_case.default_engine
     )
 
     assert (oracle.returncode, default.returncode) == test_case.expected_exit_codes
@@ -95,6 +102,10 @@ def test_given_no_engine_selection_when_compiling_then_native_runs_and_matches_p
     assert report_without_engine(default) == report_without_engine(oracle)
     assert default.compiled == oracle.compiled
     assert oracle.compiled
+    assert (
+        tuple(store_files(oracle_dir)),
+        tuple(store_files(default_dir)),
+    ) == test_case.expected_macro_call_stores
 
 
 @pytest.mark.parametrize(
@@ -121,7 +132,7 @@ def test_given_macro_heavy_project_when_compiling_with_each_engine_then_outputs_
     )
     native_run: CompileReuseRun = engine_reuse_compile(
         project_dir=write_project(root=tmp_path / "native", files=test_case.files),
-        engine="native-preview",
+        engine="native",
     )
     compiled_text: str = b"".join(python_run.compiled.values()).decode()
 

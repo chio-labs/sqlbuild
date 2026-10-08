@@ -37,7 +37,7 @@ class ScopeCommandParityTestCase:
 
 @dataclass(frozen=True)
 class ScopeEngineTierTestCase:
-    """One compiler engine and whether it runs the preview-tier native declaration scopes."""
+    """One compiler engine and whether it runs the native declaration scopes."""
 
     description: str
     engine: str

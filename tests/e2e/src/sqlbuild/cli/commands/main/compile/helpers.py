@@ -4480,7 +4480,7 @@ def macro_reference_call_runs(
     )
 
 
-MACRO_CALL_STORE_ENGINE: str = "native-preview"
+MACRO_CALL_STORE_ENGINE: str = "native"
 STORE_ENVIRONMENT_REGION_VAR: str = "SQB_STORE_TEST_REGION"
 STORE_ARGUMENT_ENV_VAR: str = "STORE_TEST_ARGUMENT"
 _REUSE_DISABLED_VALUES: dict[bool, str] = {True: "0", False: "1"}

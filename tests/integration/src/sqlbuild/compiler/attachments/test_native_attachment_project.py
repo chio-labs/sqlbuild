@@ -1,4 +1,4 @@
-"""Every attachment kind compiles like Python under preview, with macros through the bridge."""
+"""Every attachment kind compiles like Python natively, with macros through the bridge."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ _BRIDGED_CONSUMERS: frozenset[str] = frozenset(
         "bridged:<project>/tests/unit/test_orders.sql",
     }
 )
-_PREVIEW_ONLY_ENTRIES: frozenset[str] = (
+_NATIVE_ONLY_ENTRIES: frozenset[str] = (
     frozenset(
         {
             "pair_seed_files",
@@ -69,7 +69,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
         AttachmentProjectTestCase(
             description="macros in every attachment kind, seeds, templates and generic audits",
             overrides={},
-            expected_preview_entries=_ATTACHMENT_ENTRIES | _BRIDGED_CONSUMERS,
+            expected_native_entries=_ATTACHMENT_ENTRIES | _BRIDGED_CONSUMERS,
             expected_outcome_fragment="((CompileSeedInput(",
         ),
         AttachmentProjectTestCase(
@@ -79,7 +79,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
                 + '__expected__orders AS (SELECT id, 1.5 AS amount, label FROM __source("order_events"))\n'
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE",
         ),
         AttachmentProjectTestCase(
@@ -90,7 +90,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
             "references unknown source 'missing_events'",
         ),
@@ -102,7 +102,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + ",\n__assert__has_rows AS (SELECT 1 FROM built_orders WHERE id IS NULL)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="reference_target_model_names=('orders',)",
         ),
         AttachmentProjectTestCase(
@@ -114,7 +114,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + ",\n__assert__has_ids AS (SELECT 1 FROM built_ids WHERE id IS NULL)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="reference_target_model_names=('orders',)",
         ),
         AttachmentProjectTestCase(
@@ -125,7 +125,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + "\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="read_helper_names=(), reference_target_model_names=()",
         ),
         AttachmentProjectTestCase(
@@ -136,7 +136,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + ",\n__assert__no_returns AS (SELECT 1 FROM built_returns)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="P013",
         ),
         AttachmentProjectTestCase(
@@ -145,14 +145,14 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 _UNIT_TEST: "TEST();\n\nWITH\n__seed__channel_codes AS (SELECT 1 AS id),\n"
                 "__expected__returns AS (SELECT 1 AS id)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL test file tests/unit/test_orders.sql expects "
             "unknown model 'returns'",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_attachment_project_when_building_inputs_then_preview_matches_python(
+def test_given_attachment_project_when_building_inputs_then_native_engines_match_python(
     test_case: AttachmentProjectTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     outcomes: dict[CompilerEngine, tuple[frozenset[str], str]] = {
@@ -172,9 +172,10 @@ def test_given_attachment_project_when_building_inputs_then_preview_matches_pyth
         preview_outcome.replace(CompilerEngine.NATIVE_PREVIEW.value, "python"),
         native_outcome.replace(CompilerEngine.NATIVE.value, "python"),
         test_case.expected_outcome_fragment in python_outcome,
-        preview_called >= test_case.expected_preview_entries,
-        (python_called | native_called) & _PREVIEW_ONLY_ENTRIES,
-    ) == (python_outcome, python_outcome, True, True, frozenset()), test_case.description
+        native_called >= test_case.expected_native_entries,
+        preview_called >= test_case.expected_native_entries,
+        python_called & _NATIVE_ONLY_ENTRIES,
+    ) == (python_outcome, python_outcome, True, True, True, frozenset()), test_case.description
 
 
 if __name__ == "__main__":

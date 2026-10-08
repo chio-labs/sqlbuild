@@ -305,10 +305,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Compare generated seeds and the failure corpus (python vs shipped native)
-        run: make compiler-differential-shipped
+        run: >-
+          make compiler-differential-shipped
+          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
+          --require-render-coverage"
 
   compiler_differential_python_versions:
-    name: Native discovery on Python ${{ matrix.python }}
+    name: Native compiler on Python ${{ matrix.python }}
     needs: [changes, lockfile]
     if: needs.changes.outputs.compiler_differential == 'true'
     runs-on: ubuntu-24.04
@@ -351,9 +354,15 @@ jobs:
           uv run --no-sync python -m scripts.run_compiler_differential
           --engines python native-preview
           --corpus fixtures examples failures seeds --seeds 4 --jobs 4
+      - name: Compare python with shipped native on the failure corpus and a few seeds
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: >-
+          uv run --no-sync python -m scripts.run_compiler_differential
+          --engines python native --corpus failures seeds --seeds 4 --jobs 4
 
   native_discovery_windows:
-    name: Native discovery on Windows
+    name: Native compiler on Windows
     needs: [changes, lockfile]
     if: needs.changes.outputs.compiler_differential == 'true'
     runs-on: windows-2025
@@ -388,12 +397,16 @@ jobs:
           tests/integration/src/sqlbuild/compiler/discovery/test_native_yaml_oracle.py
           tests/integration/src/sqlbuild/compiler/discovery/test_native_toml_oracle.py
           -n auto --dist loadfile
-      - name: Compile and build playground projects
+      - name: Compile playground projects on the default and Python engines, and build
         run: |
           project="${RUNNER_TEMP}/waffle-shop"
+          oracle="${RUNNER_TEMP}/waffle-shop-python"
           uv run --no-sync sqb playground "${project}"
+          cp -r "${project}" "${oracle}"
           uv run --no-sync sqb --project-dir "${project}" --no-color compile
-          SQLBUILD_COMPILER_ENGINE=python uv run --no-sync sqb --project-dir "${project}" --no-color compile
+          SQLBUILD_COMPILER_ENGINE=python uv run --no-sync sqb --project-dir "${oracle}" --no-color compile
+          diff -r "${oracle}/target/compiled" "${project}/target/compiled"
+          test -f "${project}/target/cache/compiler-native-v1/macro-calls.bin"
           uv run --no-sync sqb --project-dir "${project}" --no-color build
           nodes="${RUNNER_TEMP}/python-nodes"
           uv run --no-sync sqb playground --template python_nodes "${nodes}"

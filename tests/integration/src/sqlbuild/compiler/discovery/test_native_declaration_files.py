@@ -473,9 +473,9 @@ def test_given_native_declaration_failure_when_discovering_then_python_is_not_re
             expected_session=True,
         ),
         NativeSessionTestCase(
-            description="the shipped engine reads declaration files in Python",
+            description="the shipped engine keeps its declaration session",
             engine="native",
-            expected_session=False,
+            expected_session=True,
         ),
         NativeSessionTestCase(
             description="the Python engine reads declaration files in Python",
@@ -485,7 +485,7 @@ def test_given_native_declaration_failure_when_discovering_then_python_is_not_re
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_discovering_then_native_session_is_kept_only_for_preview(
+def test_given_engine_when_discovering_then_native_session_is_kept_only_for_native_engines(
     test_case: NativeSessionTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=_EVERY_KIND)
