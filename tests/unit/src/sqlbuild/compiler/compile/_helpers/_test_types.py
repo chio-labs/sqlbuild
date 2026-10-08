@@ -873,6 +873,13 @@ class MicrobatchGrainOwnershipTestCase:
 
 
 @dataclass(frozen=True)
+class ExpectedMessageTestCase:
+    description: str
+    value: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
 class ExpectedBooleanTestCase:
     description: str
     expected_result: bool
@@ -912,17 +919,6 @@ class CompleteCeremonialSelectTestCase:
     description: str
     sql: str
     expected_sql: str
-
-
-@dataclass(frozen=True)
-class ExpectedProjectionScanTestCase:
-    description: str
-    sql: str
-    expected_branches: tuple[str, ...]
-    expected_select_list_end: int
-    expected_commas: tuple[str, ...]
-    expected_alias: str | None
-    expected_contains_select_star: bool
 
 
 @dataclass(frozen=True)
@@ -1151,14 +1147,6 @@ class RequiredDescriptionLocationCase:
 
 
 @dataclass(frozen=True)
-class DialectSetOperationSplitTestCase:
-    description: str
-    sql: str
-    syntax: SqlLexicalSyntax | None
-    expected_branches: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class CursorModelWithoutInputsCase:
     """One model header and query checked by the cursor-input compile check (P011)."""
 
@@ -1175,3 +1163,11 @@ class CollectedReferenceCallSyntaxTestCase:
     contents: str
     sql: str
     expected_diagnostics: tuple[tuple[str, str, Path, SourceLocation | None], ...]
+
+
+@dataclass(frozen=True)
+class AuthoredOffsetTestCase:
+    description: str
+    contents: str
+    marker: str
+    expected_line_column: tuple[int, int]

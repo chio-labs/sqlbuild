@@ -15,6 +15,9 @@ from sqlbuild.compiler.compile._helpers.attachment.scope_relationships import (
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_declaration_scope_resolver,
 )
+from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
+    validate_authored_test_cte_names,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationScopeBuild,
@@ -43,6 +46,9 @@ def build_declaration_scope(
 ) -> DeclarationScopeBuild:
     """Build one canonical index and validate it before SQL expansion."""
 
+    validate_authored_test_cte_names(
+        test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
+    )
     if native_stage_enabled(NativeStage.DECLARATION_SCOPES):
         native_scope: DeclarationScopeBuild | None = _build_native_declaration_scope(
             discovered_inputs=discovered_inputs,

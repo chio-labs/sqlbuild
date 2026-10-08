@@ -9,15 +9,17 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
-    extract_sql_test_ctes,
 )
-from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_expanded_sql_tests
+from sqlbuild.compiler.compile._helpers.sql_tests.native import (
+    extract_expanded_sql_tests,
+    extract_unexpanded_sql_test,
+)
 from sqlbuild.compiler.compile.models import CompileModelSqlTestCtes, CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     DialectCteScanTestCase,
-    ExpectedBooleanTestCase,
+    ExpectedMessageTestCase,
     NativeSqlTestExtractionParityTestCase,
 )
 
@@ -97,90 +99,67 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
     ),
     ids=lambda case: case.description,
 )
-def test_given_expanded_sql_tests_when_native_batch_extracting_then_matches_reference_semantics(
+def test_given_macro_free_sql_tests_when_extracting_before_and_after_expansion_then_payloads_match(
     test_case: NativeSqlTestExtractionParityTestCase,
 ) -> None:
-    expected: CompileSqlTestCtes = extract_sql_test_ctes(
-        syntax=_GENERIC_SQL_SYNTAX,
-        sql=test_case.sql,
-        file_label="tests/unit/example.sql",
-        mode=test_case.mode,
-    )
-
-    actual: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
+    expanded: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
         tests=((test_case.sql, "tests/unit/example.sql", test_case.mode),),
         syntax=_GENERIC_SQL_SYNTAX,
     )
-
-    assert (actual == (expected,)) is test_case.expected_matches
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [ExpectedBooleanTestCase(description="cross-check diagnostic matches", expected_result=True)],
-    ids=lambda case: case.description,
-)
-def test_given_cross_check_dependency_when_native_batch_extracting_then_matches_reference_diagnostic(
-    test_case: ExpectedBooleanTestCase,
-) -> None:
-    sql: str = (
-        "WITH __source__raw_orders AS (SELECT 1 AS order_id), "
-        "__expected__orders AS (SELECT 1 AS order_id), "
-        "helper AS (SELECT order_id FROM __expected__orders), "
-        "__assert__same AS (SELECT order_id FROM helper) SELECT 1"
+    unexpanded: tuple[CompileSqlTestCtes, bool] = extract_unexpanded_sql_test(
+        sql=test_case.sql,
+        file_label="tests/unit/example.sql",
+        mode=test_case.mode,
+        syntax=_GENERIC_SQL_SYNTAX,
     )
-    with pytest.raises(ValueError) as reference_error:
-        extract_sql_test_ctes(
-            syntax=_GENERIC_SQL_SYNTAX,
-            sql=sql,
-            file_label="tests/unit/example.sql",
-            mode=SqlTestMode.MODEL,
-        )
 
-    with pytest.raises(ValueError) as native_error:
-        extract_expanded_sql_tests(
-            tests=((sql, "tests/unit/example.sql", SqlTestMode.MODEL),),
-            syntax=_GENERIC_SQL_SYNTAX,
-        )
-
-    assert (str(native_error.value) == str(reference_error.value)) is test_case.expected_result
+    assert (expanded == (unexpanded[0],), unexpanded[1]) == (test_case.expected_matches, False)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        ExpectedBooleanTestCase(
-            description="comma-separated cross-check diagnostic matches",
-            expected_result=True,
-        )
+        ExpectedMessageTestCase(
+            description="a check reading an expected CTE through a helper",
+            value=(
+                "WITH __source__raw_orders AS (SELECT 1 AS order_id), "
+                "__expected__orders AS (SELECT 1 AS order_id), "
+                "helper AS (SELECT order_id FROM __expected__orders), "
+                "__assert__same AS (SELECT order_id FROM helper) SELECT 1"
+            ),
+            expected_message=(
+                "SQL test 'tests/unit/example.sql' check CTE '__assert__same' must not depend on "
+                "'__expected__orders' through 'helper'; expected results and assertions must be "
+                "independent"
+            ),
+        ),
+        ExpectedMessageTestCase(
+            description="a check joining an expected CTE in a comma-separated FROM",
+            value=(
+                "WITH __source__orders AS (SELECT 1 AS id), "
+                "__expected__orders AS (SELECT 1 AS id), "
+                "__assert__valid AS ("
+                "SELECT expected.id FROM __source__orders source, __expected__orders expected"
+                ") SELECT 1"
+            ),
+            expected_message=(
+                "SQL test 'tests/unit/example.sql' check CTE '__assert__valid' must not depend on "
+                "'__expected__orders'; expected results and assertions must be independent"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_comma_separated_cross_check_dependency_when_extracting_then_native_matches_reference_diagnostic(
-    test_case: ExpectedBooleanTestCase,
+def test_given_cross_check_dependency_when_extracting_then_independence_error_is_raised(
+    test_case: ExpectedMessageTestCase,
 ) -> None:
-    sql: str = (
-        "WITH __source__orders AS (SELECT 1 AS id), "
-        "__expected__orders AS (SELECT 1 AS id), "
-        "__assert__valid AS ("
-        "SELECT expected.id FROM __source__orders source, __expected__orders expected"
-        ") SELECT 1"
-    )
-    with pytest.raises(ValueError) as reference_error:
-        extract_sql_test_ctes(
-            syntax=_GENERIC_SQL_SYNTAX,
-            sql=sql,
-            file_label="tests/unit/example.sql",
-            mode=SqlTestMode.MODEL,
-        )
-
     with pytest.raises(ValueError) as native_error:
         extract_expanded_sql_tests(
-            tests=((sql, "tests/unit/example.sql", SqlTestMode.MODEL),),
+            tests=((test_case.value, "tests/unit/example.sql", SqlTestMode.MODEL),),
             syntax=_GENERIC_SQL_SYNTAX,
         )
 
-    assert (str(native_error.value) == str(reference_error.value)) is test_case.expected_result
+    assert str(native_error.value) == test_case.expected_message
 
 
 @pytest.mark.parametrize(

@@ -37,6 +37,24 @@ class NativeSqlTestResponseError(CompileInputError):
     """Raised when native SQL-test extraction returns malformed data."""
 
 
+class SqlTestExtractionError(CompileInputError):
+    """Raised when a SQL test cannot be split into CTEs; names the test and offending text."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        help: str | None = None,
+        test_index: int = 0,
+        token: str | None = None,
+        token_offset: int | None = None,
+    ) -> None:
+        super().__init__(message, help=help)
+        self.test_index = test_index
+        self.token = token
+        self.token_offset = token_offset
+
+
 class CompactAnalysisInputError(CompileInputError):
     """Raised when compact SQL-analysis batch inputs are inconsistent."""
 

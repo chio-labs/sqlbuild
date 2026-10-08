@@ -1,7 +1,20 @@
 pub(crate) const DATETIME_TYPE: &str = "DATETIME";
+pub(crate) const DBT_REF_REFERENCE_KIND: &str = "dbt_ref";
 pub(crate) const DIRECT_DEPENDENCY_PATH_LENGTH: usize = 2;
 pub(crate) const MACRO_TEST_MODE: &str = "macro";
 pub(crate) const QUOTED_IDENTIFIER_DELIMITER_BYTES: usize = 2;
+/// Keywords after which a trailing projection token is an operand, not an implicit alias.
+pub(crate) const OPERAND_KEYWORDS: &[&str] = &[
+    "AND", "OR", "NOT", "IS", "IN", "LIKE", "ILIKE", "SIMILAR", "BETWEEN", "CASE", "WHEN", "THEN",
+    "ELSE", "DISTINCT", "ALL", "ANY", "SOME", "EXISTS", "COLLATE", "ESCAPE", "INTERVAL", "ZONE",
+    "OVER", "AS", "FROM",
+];
+/// Keywords that end an expression, so a trailing one is part of it rather than an implicit alias.
+pub(crate) const VALUE_KEYWORDS: &[&str] = &["NULL", "TRUE", "FALSE", "UNKNOWN", "END"];
+/// Characters after which a trailing projection token is an operand, not an implicit alias.
+pub(crate) const OPERATOR_CHARACTERS: &str = "+-*/%=<>|&^~!:.,";
+/// A projection that selects every column.
+pub(crate) const SELECT_STAR_PROJECTION: &str = "*";
 pub(crate) const SQL_TEST_ACTUAL_CTE: &str = "__actual";
 pub(crate) const SQL_TEST_EXPECTED_CTE: &str = "__expected";
 pub(crate) const SQL_TEST_ACTUAL_CTE_PREFIX: &str = "__actual__";

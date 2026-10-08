@@ -111,8 +111,24 @@ and `//` line comments on Snowflake.
 
 An `__expected__<model>` CTE compares only the columns it lists, matched by name, so column order
 does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
-column the model does not output is a test error. When the expected CTE's columns are not explicit
-(for example `SELECT *` from another CTE), SQLBuild compares every column by position.
+column the model does not output is a test error.
+
+SQLBuild reads test CTEs strictly, the same way on every compiler engine, and rejects other forms
+with a compile error that names the CTE:
+
+- A CTE name is an unquoted identifier of ASCII letters, digits and underscores that starts with a
+  letter or underscore. Quoted names such as `"recent orders"` or `` `recent orders` ``, and names
+  with `$` or non-ASCII characters, are errors that point at the name.
+- `WITH`, `AS`, `SELECT` and the other keywords match ASCII letters in any case.
+- Every column of an expected CTE (`__expected__<model>`, `__macro_expected__`, `__udf_expected__`
+  or `__table_fn_expected__`) needs a name. A bare or qualified column reference such as `order_id`
+  or `o.order_id` names itself; any other expression, including `amount IS NULL` or
+  `CASE ... END`, needs an alias (`<expr> AS <name>`). An alias without `AS`, such as
+  `1 order_id`, also names the column.
+- An expected CTE is a plain `SELECT`, optionally combined with `UNION`, `INTERSECT` or `EXCEPT`.
+  Branches wrapped in parentheses and a `WITH` inside the CTE are errors; put shared rows in a
+  helper CTE instead. `SELECT *`, `SELECT DISTINCT *` and `t.*` are errors too, except
+  `SELECT * FROM __empty_fixture()` in a contracted `__expected__` CTE.
 
 Helper CTEs can read other helpers and mocks by CTE name, such as `__ref__stg_orders`. Shared
 expected rows can therefore live in one helper that both an `__expected__` CTE and an assertion
@@ -580,6 +596,11 @@ Each mode has strict CTE validation:
 | `table_fn` | `__table_fn_actual__` | `__table_fn_expected__` | Helper CTEs, `__table_fn()` calls in actual |
 
 CTE prefixes from other modes are not allowed. For example, `__source__` in a macro test or `__macro_actual__` in a test declared `TEST (mode model)` will produce a clear error pointing you to the right mode. Expected CTEs must not call macros, UDFs, or table functions - they should be independent, inspectable expected data.
+
+Helper CTEs follow the same rule in every mode: only the actual CTE calls the macro, UDF or table
+function under test, so a helper of a macro test must not call `__udf()` or `__table_fn()` either.
+A malformed reference call in a helper or expected CTE, such as `__source("raw", "orders")`, is a
+P012 error at the call.
 
 ## Multiple tests per file
 

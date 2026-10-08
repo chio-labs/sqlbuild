@@ -42,6 +42,15 @@ _HOOK_READING_TOTALS: str = (
     'def note_refresh(ctx):\n    """Note a refresh."""\n    return None\n'
 )
 _UPSTREAM_DBT_PROJECT: str = "name: upstream\nversion: '1.0.0'\nprofile: upstream\n"
+_RAW_ORDERS_MOCK: str = (
+    "__source__raw_orders AS (\n"
+    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,"
+    " 'placed' AS status\n),\n"
+)
+_CENTS_TEST_PREFIX: str = (
+    "TEST (mode macro);\n\nWITH\ninput_values AS (SELECT 5 AS amount),\n"
+    '__macro_actual__ AS (SELECT @cents("amount") AS cents FROM input_values),\n'
+)
 
 
 def _staging_header(extra: str) -> dict[str, str]:
@@ -325,6 +334,75 @@ def _reference_cases() -> tuple[FailureCase, ...]:
                     '  SELECT order_id FROM __ref("archived_orders")\n'
                     ")\nSELECT 1\n"
                 )
+            },
+        ),
+        failure_case(
+            name="test-quoted-cte-name",
+            expected_code="P001",
+            expected_message='CTE name "recent orders" must be an unquoted identifier',
+            expected_help="rename the CTE, for example recent_orders",
+            files={
+                "tests/unit/test_stg_orders.sql": (
+                    "TEST();\n\nWITH\n"
+                    + _RAW_ORDERS_MOCK
+                    + '"recent orders" AS (SELECT 1 AS order_id),\n'
+                    "__expected__stg_orders AS (\n  SELECT 1 AS order_id\n)\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
+            name="test-expected-implicit-alias",
+            expected_code="P001",
+            expected_message="must alias every non-trivial __expected__stg_orders projection",
+            expected_help="amount IS NULL AS <name>",
+            files={
+                "tests/unit/test_stg_orders.sql": (
+                    "TEST();\n\nWITH\n"
+                    + _RAW_ORDERS_MOCK
+                    + "__expected__stg_orders AS (\n  SELECT amount IS NULL\n)\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
+            name="test-expected-parenthesised-branch",
+            expected_code="P001",
+            expected_message=(
+                "must write each __expected__stg_orders set-operation branch as a plain SELECT"
+            ),
+            files={
+                "tests/unit/test_stg_orders.sql": (
+                    "TEST();\n\nWITH\n" + _RAW_ORDERS_MOCK + "__expected__stg_orders AS (\n"
+                    "  (SELECT 1 AS order_id) UNION ALL (SELECT 2 AS order_id)\n)\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
+            name="macro-test-helper-calls-udf",
+            expected_code="P001",
+            expected_message=(
+                "mode 'macro' helper CTE 'labels' must not call udf; call reusable logic only in "
+                "__macro_actual__"
+            ),
+            files={
+                "tests/unit/_macros/orders.py": _CENTS_MACRO,
+                "tests/unit/test_cents.sql": (
+                    _CENTS_TEST_PREFIX + 'labels AS (SELECT __udf("is_large")(5) AS is_large),\n'
+                    "__macro_expected__ AS (SELECT 500 AS cents)\n"
+                ),
+            },
+        ),
+        failure_case(
+            name="macro-test-helper-malformed-reference",
+            expected_code="P012",
+            expected_message='__source("raw", "orders") is not a valid __source() call',
+            expected_location=(6, 33),
+            files={
+                "tests/unit/_macros/orders.py": _CENTS_MACRO,
+                "tests/unit/test_cents.sql": (
+                    _CENTS_TEST_PREFIX
+                    + 'sample_orders AS (SELECT * FROM __source("raw", "orders")),\n'
+                    "__macro_expected__ AS (SELECT 500 AS cents)\n"
+                ),
             },
         ),
         failure_case(

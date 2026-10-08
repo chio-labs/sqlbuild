@@ -120,3 +120,13 @@ class FunctionHeaderParityTestCase:
     inherit_default_namespace: bool
     expected_minimum_attached: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class BodyCallParityTestCase:
+    """Seeded helper bodies whose call reading the native extractor shares with a Python scanner."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_calls: int

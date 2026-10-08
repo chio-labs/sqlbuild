@@ -362,6 +362,7 @@ class DiscoveredSqlTestBlock:
     cases: tuple[DiscoveredSqlTestCase, ...] = field(default_factory=tuple)
     cursor_start: str | None = None
     cursor_end: str | None = None
+    sql_body_span: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)

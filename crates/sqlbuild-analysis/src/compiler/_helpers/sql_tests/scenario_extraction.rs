@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 use crate::compiler::_helpers::sql_tests::extraction::{
-    Cte, extract_ctes_with_quoting, validate_independence,
+    Cte, NameRule, extract_ctes_with_quoting, generic_syntax, validate_independence,
 };
 
 /// Characters whose Python case mapping reaches ASCII, which Python's keyword match would accept.
@@ -33,13 +33,15 @@ pub(crate) fn extract_scenario_json(sql: &str, file: &str) -> Result<Option<Stri
     }) {
         return Ok(None);
     }
-    let Ok((ctes, quoted)) = extract_ctes_with_quoting(sql, file) else {
+    let syntax = generic_syntax();
+    let Ok((ctes, quoted)) = extract_ctes_with_quoting(sql, file, &syntax, NameRule::Lenient)
+    else {
         return Ok(None);
     };
     if quoted || !ctes.iter().all(|cte| is_plain_identifier(&cte.0)) {
         return Ok(None);
     }
-    if validate_independence(&ctes, file).is_err() {
+    if validate_independence(&ctes, file, &syntax).is_err() {
         return Ok(None);
     }
     let Some(scenario) = classify(ctes) else {

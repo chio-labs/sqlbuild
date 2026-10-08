@@ -180,7 +180,12 @@ def _infer_sql_test_mode(*, sql_body: str, file_path: Path) -> SqlTestMode:
 
 
 def build_sql_test_block(
-    *, header_values: dict[str, object], sql_body: str, file_path: Path, test_index: int
+    *,
+    header_values: dict[str, object],
+    sql_body: str,
+    file_path: Path,
+    test_index: int,
+    sql_body_span: tuple[int, int] | None = None,
 ) -> DiscoveredSqlTestBlock:
     """Validate a header-parsed TEST block with only supported keys and build its record."""
 
@@ -228,6 +233,7 @@ def build_sql_test_block(
         cases=cases,
         cursor_start=cursor_start,
         cursor_end=cursor_end,
+        sql_body_span=sql_body_span,
     )
 
 

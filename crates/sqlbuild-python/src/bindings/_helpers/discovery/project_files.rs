@@ -392,6 +392,7 @@ fn test_block_object(py: Python<'_>, block: SqlTestBlock) -> PyResult<PyObject> 
         vec![
             map_to_python(py, block.header_values)?,
             object(py, block.sql_body)?,
+            object(py, block.body_span)?,
         ],
     )
 }

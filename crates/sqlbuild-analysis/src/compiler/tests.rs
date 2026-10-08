@@ -10,6 +10,8 @@ mod sql_test_cte_slices;
 mod sql_test_expected_columns;
 #[path = "tests/test_sql_test_extraction.rs"]
 mod sql_test_extraction;
+#[path = "tests/test_sql_test_extraction_rules.rs"]
+mod sql_test_extraction_rules;
 #[path = "tests/test_sql_test_helper_references.rs"]
 mod sql_test_helper_references;
 #[path = "tests/test_sql_test_markers.rs"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -29,15 +30,15 @@ from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_test_inputs,
     validate_test_ctes,
 )
+from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile._helpers.sql_tests.core import (
-    complete_omitted_ceremonial_select,
-    extract_sql_test_ctes,
-)
+from sqlbuild.compiler.compile._helpers.sql_tests.core import complete_omitted_ceremonial_select
+from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -50,6 +51,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
+    SqlReferenceScan,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -742,11 +744,11 @@ def generated_raw_direct_logic_test(*, rng: random.Random) -> tuple[str, SqlTest
     return f"WITH {body}" + rng.choice(("", "", " SELECT 1", ";")), mode
 
 
-def python_raw_extraction_accepts(*, sql: str, mode: SqlTestMode) -> bool:
-    """Whether Python's raw direct-logic pass accepts `sql` before expansion."""
+def raw_extraction_accepts(*, sql: str, mode: SqlTestMode) -> bool:
+    """Whether the raw direct-logic pass accepts `sql` before expansion."""
 
     try:
-        extract_sql_test_ctes(
+        _ = extract_unexpanded_sql_test(
             sql=sql,
             file_label="tests/unit/test_logic.sql",
             syntax=DuckDbAdapter().sql_lexical_syntax,
@@ -1028,3 +1030,156 @@ def function_outcome(
         )
     except CompileInputError as error:
         return f"error: {error}"
+
+
+_MACRO_PIECES: tuple[str, ...] = (
+    "a",
+    "@m(1)",
+    "@m (1)",
+    "@ab (1)",
+    "@ab cd(1)",
+    "@enum('Status', 'PAID')",
+    "@const(@m(1))",
+    "@var('x')",
+    '@param("p")',
+    "@@region",
+    "@m$x(1)",
+    '@"m"(1)',
+    "@\u00e9t\u00e9(1)",
+    "@m\u00a0(1)",
+    "@mm\u3000(1)",
+    "@mm\x1c(1)",
+    "'@m(1)'",
+    "-- @m(1)\n",
+    "/* @m(1) */",
+    "$$@m(1)$$",
+    "$t$@m(1)$t$",
+    "`@m(1)`",
+    '"@m(1)"',
+    "x@m(1)",
+    "@m(@n(1))",
+    "@_m(1)",
+    "@1m(1)",
+    "@\u216b(1)",
+)
+_REFERENCE_PIECES: tuple[str, ...] = (
+    "a",
+    '__udf("order_label")(a)',
+    '__table_fn("order_rows")(1)',
+    '__ref("orders")',
+    '__source("events", "orders")',
+    '__source("events")',
+    '__dbt_ref("shop", "orders")',
+    '__dbt_ref("orders")',
+    "__dbt_ref(orders)",
+    "__udf('order_label')",
+    '__udf("order_label", 1)',
+    "__udf(order_label)",
+    '__udf("")',
+    '__udf(  "order_label" )',
+    '__table_fn("order_rows")',
+    '__table_fn("order_rows")\u00a0(1)',
+    '__table_fn("order_rows") (1)',
+    '__UDF("order_label")',
+    '__udf ("order_label")',
+    'x__udf("order_label")(a)',
+    "'__udf(\"order_label\")'",
+    '-- __udf("order_label")\n',
+    '# __udf("order_label")\n',
+    '// __udf("order_label")\n',
+    '/* /* __udf("order_label") */ */',
+    "'it''s'",
+    '$$__udf("order_label")$$',
+    '`__udf("order_label")`',
+)
+_LOGIC_REFERENCE_KINDS: frozenset[str] = frozenset({"udf", "table_fn"})
+BODY_CALL_SYNTAXES: dict[str, SqlLexicalSyntax] = {
+    "generic": SqlLexicalSyntax(),
+    "duckdb": SqlLexicalSyntax(escape_string_prefix=True, nested_block_comments=True),
+    "bigquery": SqlLexicalSyntax(
+        backslash_escape_quotes=frozenset({"'", '"', "`"}),
+        triple_quoted_strings=True,
+        line_comment_prefixes=frozenset({"--", "#"}),
+    ),
+    "snowflake": SqlLexicalSyntax(
+        backslash_escape_quotes=frozenset({"'"}), line_comment_prefixes=frozenset({"--", "//"})
+    ),
+}
+
+
+def generated_macro_body(*, rng: random.Random) -> str:
+    """Return one helper body mixing macro calls and macro-like text."""
+
+    pieces: list[str] = [rng.choice(_MACRO_PIECES) for _ in range(rng.randint(1, 3))]
+    return "SELECT " + " + ".join(pieces) + " AS a"
+
+
+def generated_reference_body(*, rng: random.Random) -> str:
+    """Return one helper body mixing valid, malformed and hidden reference calls."""
+
+    pieces: list[str] = [rng.choice(_REFERENCE_PIECES) for _ in range(rng.randint(1, 3))]
+    return "SELECT " + " + ".join(pieces) + "\n AS a"
+
+
+def python_macro_outcome(*, body: str) -> str:
+    """Whether expansion's macro scanner finds a call in `body`, or that it raises."""
+
+    try:
+        return f"calls macros {bool(find_macro_call_names(body))}"
+    except CompileInputError:
+        return "unscannable"
+
+
+def macro_scannable(body: str) -> bool:
+    """Whether expansion's macro scanner reads `body` without raising."""
+
+    return python_macro_outcome(body=body) != "unscannable"
+
+
+def native_macro_outcome(*, body: str) -> str:
+    """Whether the raw extractor rejects a macro-test helper `body` for calling macros."""
+
+    try:
+        _ = extract_unexpanded_sql_test(
+            sql=(
+                f"WITH h AS ({body}), __macro_actual__ AS (SELECT @m(1) AS a), "
+                "__macro_expected__ AS (SELECT 1 AS a)"
+            ),
+            file_label="tests/unit/test_logic.sql",
+            mode=SqlTestMode.MACRO,
+            syntax=SqlLexicalSyntax(),
+        )
+    except CompileInputError as error:
+        return f"calls macros {'must not call macros' in str(error)}"
+    return "calls macros False"
+
+
+def python_reference_outcome(*, body: str, syntax: SqlLexicalSyntax) -> str:
+    """Python's first `__udf`/`__table_fn` kind in `body`, or whether it has P012 calls."""
+
+    try:
+        scan: SqlReferenceScan = scan_sql_reference_calls(sql=body, syntax=syntax)
+    except CompileInputError as error:
+        return f"error: {error}"
+    kinds: list[str] = [str(reference.ref_kind) for reference in scan.references]
+    kind: str | None = next(filter(_LOGIC_REFERENCE_KINDS.__contains__, kinds), None)
+    return (kind and f"calls {kind}") or f"malformed calls {bool(scan.invalid_calls)}"
+
+
+def native_reference_outcome(*, body: str, syntax: SqlLexicalSyntax) -> str:
+    """The raw extractor's reading of a UDF-test helper `body`, as `python_reference_outcome`."""
+
+    try:
+        _, invalid_calls = extract_unexpanded_sql_test(
+            sql=(
+                f"WITH h AS ({body}), __udf_actual__ AS (SELECT 1 AS a), "
+                "__udf_expected__ AS (SELECT 1 AS a)"
+            ),
+            file_label="tests/unit/test_logic.sql",
+            mode=SqlTestMode.UDF,
+            syntax=syntax,
+        )
+    except CompileInputError as error:
+        called: re.Match[str] | None = re.search(r"must not call (\w+);", str(error))
+        return (called and f"calls {called.group(1)}") or f"error: {error}"
+    return f"malformed calls {invalid_calls}"

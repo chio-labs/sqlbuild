@@ -97,7 +97,7 @@ def parse_native_sql_test_contents(
     _tag, _contents, native_blocks, block_failure = payload
     return _test_blocks(
         file_path=file_path,
-        native_blocks=cast(list[tuple[dict[str, object], str]], native_blocks),
+        native_blocks=cast(list[tuple[dict[str, object], str, tuple[int, int]]], native_blocks),
         block_failure=cast(tuple[object, ...] | None, block_failure),
     )
 
@@ -148,7 +148,7 @@ def _test_file(
         contents=str(native_contents),
         blocks=_test_blocks(
             file_path=file_path,
-            native_blocks=cast(list[tuple[dict[str, object], str]], native_blocks),
+            native_blocks=cast(list[tuple[dict[str, object], str, tuple[int, int]]], native_blocks),
             block_failure=cast(tuple[object, ...] | None, block_failure),
         ),
         ownership_root=Path(SQL_TESTS_OWNERSHIP_ROOT),
@@ -158,7 +158,7 @@ def _test_file(
 def _test_blocks(
     *,
     file_path: Path,
-    native_blocks: list[tuple[dict[str, object], str]],
+    native_blocks: list[tuple[dict[str, object], str, tuple[int, int]]],
     block_failure: tuple[object, ...] | None,
 ) -> tuple[DiscoveredSqlTestBlock, ...]:
     blocks: tuple[DiscoveredSqlTestBlock, ...] = tuple(
@@ -167,8 +167,9 @@ def _test_blocks(
             sql_body=sql_body,
             file_path=file_path,
             test_index=test_index,
+            sql_body_span=sql_body_span,
         )
-        for test_index, (values, sql_body) in enumerate(native_blocks, start=1)
+        for test_index, (values, sql_body, sql_body_span) in enumerate(native_blocks, start=1)
     )
     if block_failure is not None:
         raise native_failure(block_failure)

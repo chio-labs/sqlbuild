@@ -48,14 +48,17 @@ pub(crate) fn parse_sql_test_file(
         let header: &str = &contents[block.header_start..block.header_end];
         let header_line: usize = contents[..block.header_start].matches('\n').count() + 1;
         match parse_statement_header(&contract, header, header_line) {
-            Ok(header_values) => blocks.push(SqlTestBlock {
-                header_values,
-                sql_body: python_cleandoc(
-                    options.python,
-                    contents[block.end.min(next_start)..next_start]
-                        .trim_end_matches(is_python_space),
-                ),
-            }),
+            Ok(header_values) => {
+                let body_start: usize = block.end.min(next_start);
+                let authored: &str =
+                    contents[body_start..next_start].trim_end_matches(is_python_space);
+                let span_start: usize = contents[..body_start].chars().count();
+                blocks.push(SqlTestBlock {
+                    header_values,
+                    sql_body: python_cleandoc(options.python, authored),
+                    body_span: (span_start, span_start + authored.chars().count()),
+                });
+            }
             Err(block_failure) => {
                 failure = Some(block_failure);
                 break;
