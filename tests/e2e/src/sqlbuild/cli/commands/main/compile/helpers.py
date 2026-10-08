@@ -21,12 +21,13 @@ from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
-from types import FrameType
+from types import FrameType, ModuleType
 from typing import Any, NamedTuple, cast
 
 import duckdb
 import pytest
 
+import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_render_reuse._helpers.load_notice as render_load_notice
 import sqlbuild.cli.compile_render_reuse.main._render_reuse_session as render_reuse_main
@@ -35,10 +36,15 @@ import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
+import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
+import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.compile.classes.binding_dataflow as binding_dataflow
 import sqlbuild.compiler.compile.classes.render_reuse_session as render_reuse_session
 import sqlbuild.compiler.compile.classes.stored_model_analyses as stored_model_analyses
+import sqlbuild.compiler.contracts.main.validate as contract_validation
+import sqlbuild.compiler.lineage.main.columns as column_lineage
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
@@ -4741,3 +4747,58 @@ def engine_macro_call_runs(
             )
         ),
     )
+
+
+_ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
+    (native_stages, "assemble_native_project"),
+    (native_stages, "infer_native_expression_source_shapes"),
+    (native_stages, "analyze_native_model_sql"),
+    (native_sql_test_stage, "assemble_native_sql_tests"),
+    (diagnostic_recovery, "complete_native_semantic_diagnostics"),
+    (contract_validation, "evaluate_native_model_contracts"),
+    (column_lineage, "build_native_column_lineage"),
+    (target_writer, "plan_native_sql_test_artifacts"),
+)
+
+
+def record_analysis_seams(*, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[object]]:
+    """Record what each native analysis stage seam returns, keyed by its entry name."""
+
+    results: dict[str, list[object]] = {}
+    for module, name in _ANALYSIS_SEAMS:
+        monkeypatch.setattr(
+            module, name, _recorded_seam(entry=getattr(module, name), name=name, results=results)
+        )
+    return results
+
+
+def _recorded_seam(
+    *, entry: Callable[..., object], name: str, results: dict[str, list[object]]
+) -> Callable[..., object]:
+    def recorded(**arguments: object) -> object:
+        result: object = entry(**arguments)
+        results.setdefault(name, []).append(result)
+        return result
+
+    return recorded
+
+
+def engine_in_process_compile(
+    *,
+    project_dir: Path,
+    engine: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[CompileReuseRun, dict[str, list[object]]]:
+    """Compile in this process under `engine`; return the run and what each seam returned."""
+
+    with monkeypatch.context() as patch:
+        for name, value in {
+            **COMPILE_REUSE_ENV,
+            COMPILER_ENGINE_ENV_VAR: engine,
+            REUSE_DISABLE_ENV_VAR: "1",
+        }.items():
+            patch.setenv(name, value)
+        seams: dict[str, list[object]] = record_analysis_seams(monkeypatch=patch)
+        run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    return run, seams

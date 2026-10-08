@@ -823,6 +823,7 @@ class ModelSqlAnalysis:
     fused_binding_validated: bool = False
     cleaned_sql: str | None = None
     validated_schema: dict[str, dict[str, str]] | None = None
+    dynamic_column_contract: DynamicColumnContractProof | None = None
 
 
 @dataclass(frozen=True)
@@ -1184,6 +1185,7 @@ class CompiledProject:
     sql_expansions: dict[Path, CompiledSqlExpansion] = field(
         default_factory=dict, compare=False, repr=False
     )
+    native_session: Any | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

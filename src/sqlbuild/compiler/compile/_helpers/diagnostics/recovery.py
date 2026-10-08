@@ -27,6 +27,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompilerDiagnostic,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
+    complete_native_semantic_diagnostics,
+)
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 _MISSING_CODE: str = "B002"
@@ -41,6 +46,15 @@ def complete_semantic_diagnostics(
     resource_sql_analysis: bool = True,
 ) -> CompiledProject:
     """Recover type facts before metadata checks, then explain retained root diagnostics."""
+    if native_stage_enabled(NativeStage.SEMANTIC_CHECKS):
+        native_project: CompiledProject | None = complete_native_semantic_diagnostics(
+            project=project,
+            profile=profile,
+            binding_results=binding_results,
+            resource_sql_analysis=resource_sql_analysis,
+        )
+        if native_project is not None:
+            return native_project
     project = recover_output_types(project=project, binding_results=binding_results)
     project = replace(
         project,

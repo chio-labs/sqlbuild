@@ -1,10 +1,17 @@
 pub(crate) mod analysis;
+pub(crate) mod analysis_session;
 pub(crate) mod attachments;
 pub(crate) mod boundary;
 pub(crate) mod cache;
+pub(crate) mod contracts;
 pub(crate) mod discovery;
+pub(crate) mod lineage;
 pub(crate) mod model_config;
+pub(crate) mod project_assembly;
 pub(crate) mod render;
 pub(crate) mod rules;
 pub(crate) mod scopes;
+pub(crate) mod semantic_checks;
+pub(crate) mod sql_test_glue;
 pub(crate) mod sqltext;
+pub(crate) mod type_system;

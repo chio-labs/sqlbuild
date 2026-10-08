@@ -23,6 +23,13 @@ class NativeStage(StrEnum):
     MACRO_CALLS = "macro_calls"
     MACRO_CALL_STORE = "macro_call_store"
     ATTACHMENTS = "attachments"
+    TYPE_SYSTEM = "type_system"
+    MODEL_ANALYSIS = "model_analysis"
+    SEMANTIC_CHECKS = "semantic_checks"
+    CONTRACTS = "contracts"
+    LINEAGE_FACTS = "lineage_facts"
+    SQL_TEST_GLUE = "sql_test_glue"
+    PROJECT_ASSEMBLY = "project_assembly"
 
 
 class NativeStageTier(StrEnum):
