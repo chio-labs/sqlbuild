@@ -624,6 +624,7 @@ ANALYSIS_INDIRECT_KINDS: dict[str, str] = {
 ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "compile/_helpers/assembly",
     "compile/_helpers/analysis",
+    "compile/_helpers/attachment/model_config.py",
     "compile/_helpers/diagnostics",
     "contracts",
     "pipeline/_helpers/target_validation.py",
@@ -639,12 +640,8 @@ ANALYSIS_UNREACHABLE_CODES: dict[str, str] = {
     ),
     "B210": _NEVER_REPORTED_BY_POLYGLOT,
     "B214": (
-        "polyglot reports assignment types only for INSERT statements; compiled models, tests "
-        "and audits are queries"
+        "polyglot reports assignment types only for INSERT and UPDATE statements; compiled "
+        "models, tests and audits are queries"
     ),
     "B219": _NEVER_REPORTED_BY_POLYGLOT,
-    "P003": (
-        "the contract check raises it for a declared column without a type, which it skips "
-        "first; compile reports P003 only as the built-in audit shadow warning"
-    ),
 }

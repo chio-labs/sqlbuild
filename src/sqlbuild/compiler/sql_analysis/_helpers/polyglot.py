@@ -96,11 +96,13 @@ class _SiteRecorder:
             self._calls[(f"{site}:{code.co_qualname}", api)] += 1
 
     def _write(self) -> None:
-        if not self._calls:
+        with self._lock:
+            calls: Counter[tuple[str, str]] = self._calls.copy()
+        if not calls:
             return
         self._directory.mkdir(parents=True, exist_ok=True)
         rows: list[list[object]] = [
-            [site, api, count] for (site, api), count in sorted(self._calls.items())
+            [site, api, count] for (site, api), count in sorted(calls.items())
         ]
         target: Path = self._directory / f"{POLYGLOT_SITE_RECORD_PREFIX}{os.getpid()}.json"
         _ = target.write_text(json.dumps({"calls": rows}) + "\n", encoding="utf-8")

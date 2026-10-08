@@ -474,6 +474,12 @@ def _syntax_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
+        failure_case(
+            name="analysis-opt-out-conflicts-with-legacy-key",
+            expected_code="P003",
+            expected_message="MODEL sql_analysis conflicts with legacy sql_validation",
+            files=_mart_header(extra="  sql_analysis false,\n  sql_validation true,"),
+        ),
     )
 
 

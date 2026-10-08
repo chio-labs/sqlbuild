@@ -21,6 +21,7 @@ from tests.unit.scripts.compiler_differential._helpers.coverage.helpers import (
     compiled_model,
     compiled_source,
     empty_compiled_capture,
+    hooked_compiled_capture,
     inferred_column,
     reference,
 )
@@ -34,6 +35,12 @@ _CONTRACT_COLUMNS: list[dict[str, object]] = [
     {"name": "label", "type": "VARCHAR(24)", "nullable": None},
 ]
 _CONTRACT: dict[str, object] = {"contract": "enforced", "materialized": "table"}
+_CONFIG_KINDS: tuple[str, ...] = (
+    "explicit_promotion_mode",
+    "inline_sql_hook",
+    "named_sql_hook",
+    "hook_list",
+)
 
 
 @pytest.mark.parametrize(
@@ -167,6 +174,11 @@ _CONTRACT: dict[str, object] = {"contract": "enforced", "materialized": "table"}
             description="selection_leaves_unselected_models_unanalysed",
             capture=empty_compiled_capture(
                 sources=[compiled_source(name="raw_orders", expression="(SELECT 1 AS id)")],
+                binding_catalog={
+                    "expression_shapes": {
+                        "__unordered_mapping__": [["(SELECT 1 AS id)", {"id": "INT"}]]
+                    }
+                },
                 models=[
                     compiled_model(
                         name="stg_orders",
@@ -183,6 +195,57 @@ _CONTRACT: dict[str, object] = {"contract": "enforced", "materialized": "table"}
             ),
             expected_present=frozenset({"select_limited_analysis", "batch_binding"}),
             expected_absent=frozenset({"sql_analysis_disabled", "dataflow_binding"}),
+        ),
+        AnalysisCaptureKindsTestCase(
+            description="unresolved_expression_source_is_not_a_complete_input",
+            capture=empty_compiled_capture(
+                sources=[compiled_source(name="raw_orders", expression="(SELECT 1 AS id)")],
+                binding_catalog={
+                    "expression_shapes": {"__unordered_mapping__": [["(SELECT 1 AS id)", None]]}
+                },
+                models=[
+                    compiled_model(
+                        name="stg_orders",
+                        columns=_TYPED_ORDERS,
+                        references=[reference(kind="SOURCE", name="raw_orders")],
+                    )
+                ],
+            ),
+            expected_present=frozenset({"dataflow_binding"}),
+            expected_absent=frozenset({"batch_binding"}),
+        ),
+        AnalysisCaptureKindsTestCase(
+            description="dynamic_column_contract_is_not_a_complete_input",
+            capture=empty_compiled_capture(
+                models=[
+                    compiled_model(
+                        name="contracted",
+                        columns=[inferred_column(name="id", type_sql="INT")],
+                        values=_CONTRACT,
+                        schema_columns=_CONTRACT_COLUMNS,
+                        dynamic_columns=[{"name": "status_amounts"}],
+                    ),
+                    compiled_model(
+                        name="below",
+                        columns=[inferred_column(name="id", type_sql="INT")],
+                        references=[reference(kind="REF", name="contracted")],
+                    ),
+                ],
+            ),
+            expected_present=frozenset({"dataflow_binding"}),
+            expected_absent=frozenset({"batch_binding"}),
+        ),
+        AnalysisCaptureKindsTestCase(
+            description="hooks_and_promotion_on_an_analysed_model",
+            capture=hooked_compiled_capture(columns=_TYPED_ORDERS),
+            expected_present=frozenset(_CONFIG_KINDS),
+            expected_absent=frozenset(),
+        ),
+        AnalysisCaptureKindsTestCase(
+            description="hooks_and_promotion_on_an_unanalysed_model_are_not_credited",
+            capture=hooked_compiled_capture(columns=None),
+            expected_present=frozenset({"models"}),
+            expected_absent=frozenset(_CONFIG_KINDS),
         ),
         AnalysisCaptureKindsTestCase(
             description="literal_sql_relations_need_explicit_references",

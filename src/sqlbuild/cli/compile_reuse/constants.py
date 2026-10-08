@@ -8,9 +8,11 @@ from sqlbuild.cli.compile_reuse.classes.compile_artifact_write_registry import (
     CompileArtifactWriteRegistry,
 )
 from sqlbuild.compiler.frontier.constants import (
+    COMPILE_REUSE_DISABLE_ENV_VAR,
     COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
 )
+from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 
 REUSE_FORMAT_VERSION: int = 1
 REUSE_ENTRY_DIRECTORY_NAME: str = "project-reuse-v1"
@@ -25,12 +27,17 @@ REUSE_ENTRY_CHECKSUM_BYTES: int = 4
 REUSE_ENTRY_BYTE_ORDER: Literal["big"] = "big"
 REUSE_MAX_ENTRY_BYTES: int = 512 * 1024 * 1024
 REUSE_MAX_STORED_ENTRIES: int = 8
-REUSE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_REUSE"
+REUSE_DISABLE_ENV_VAR: str = COMPILE_REUSE_DISABLE_ENV_VAR
 REUSE_DISABLE_VALUE: str = "1"
 REUSE_LOGGER_NAME: str = "sqlbuild.compile.reuse"
 TRACKED_ENVIRONMENT_PREFIXES: tuple[str, ...] = ("SQLBUILD_", "SQB_")
 UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
-    {COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR}
+    {
+        ANALYSIS_RECORD_DIR_ENV_VAR,
+        COMPILE_REUSE_DISABLE_ENV_VAR,
+        COMPILER_ENGINE_ENV_VAR,
+        STAGE_CAPTURE_DIR_ENV_VAR,
+    }
 )
 MISSING_ENVIRONMENT_VALUE: str = "\0missing"
 MISSING_FILE_DIGEST: str = "\0missing"

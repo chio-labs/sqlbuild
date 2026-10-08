@@ -5,8 +5,13 @@ from __future__ import annotations
 import itertools
 from contextvars import ContextVar
 
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
+from sqlbuild.compiler.frontier.constants import (
+    COMPILE_REUSE_DISABLE_ENV_VAR,
+    COMPILER_ENGINE_ENV_VAR,
+    STAGE_CAPTURE_DIR_ENV_VAR,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 
 MACRO_USE_EVENT: int = 0
 DECLARATION_READ_EVENT: int = 1
@@ -31,5 +36,10 @@ INSTALLED_RECORD_FILE_NAME: str = "RECORD"
 INTERPRETER_MODULE_ORIGINS: frozenset[str] = frozenset({"built-in", "frozen"})
 STORE_TRACKED_ENVIRONMENT_PREFIXES: tuple[str, ...] = ("SQLBUILD_", "SQB_")
 STORE_UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
-    {COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR}
+    {
+        ANALYSIS_RECORD_DIR_ENV_VAR,
+        COMPILE_REUSE_DISABLE_ENV_VAR,
+        COMPILER_ENGINE_ENV_VAR,
+        STAGE_CAPTURE_DIR_ENV_VAR,
+    }
 )

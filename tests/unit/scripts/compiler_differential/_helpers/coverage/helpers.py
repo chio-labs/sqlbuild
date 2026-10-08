@@ -143,6 +143,7 @@ def compiled_model(
     validated: bool = True,
     values: dict[str, object] | None = None,
     schema_columns: list[dict[str, object]] | None = None,
+    dynamic_columns: list[dict[str, object]] | None = None,
     star: tuple[bool, bool] = (False, False),
 ) -> dict[str, object]:
     """Return one captured compiled model; `columns=None` means it was not analysed."""
@@ -152,7 +153,11 @@ def compiled_model(
         "query_sql": query_sql,
         "config": {"values": values or {}},
         "references": references or [],
-        "schema_entry": {"columns": schema_columns or [], "audits": []},
+        "schema_entry": {
+            "columns": schema_columns or [],
+            "dynamic_columns": dynamic_columns or [],
+            "audits": [],
+        },
         "inferred_columns": columns,
         "binding_validated": validated,
         "binding_diagnostics": [],
@@ -168,3 +173,24 @@ def compiled_source(*, name: str, expression: str | None) -> dict[str, object]:
     """Return one captured compiled source with an optional SQL expression."""
 
     return {"source_entry": {"name": name, "expression": expression, "columns": []}}
+
+
+def hooked_compiled_capture(*, columns: list[object] | None) -> dict[str, object]:
+    """Return a staged-promotion capture whose contracted model has inline and named SQL hooks."""
+
+    hooks: list[dict[str, object]] = [
+        {"__type__": "sqlbuild:SqlHookEntry", "definition_sql": None},
+        {"__type__": "sqlbuild:SqlHookEntry", "definition_sql": "SELECT 1"},
+    ]
+    return empty_compiled_capture(
+        settings={"table_promotion_mode": "staged"},
+        models=[
+            compiled_model(
+                name="contracted",
+                columns=columns,
+                validated=columns is not None,
+                values={"contract": "enforced", "materialized": "table", "post_hooks": hooks},
+                schema_columns=[{"name": "id", "type": "INTEGER", "nullable": False}],
+            )
+        ],
+    )

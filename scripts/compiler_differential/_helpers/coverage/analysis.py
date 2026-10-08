@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object
 from scripts.compiler_differential._helpers.coverage.capture_values import (
     capture_problems,
+    decoded,
     enum_name,
     has_content,
     records,
@@ -308,18 +309,19 @@ def _binding_path_kinds(project: _Project) -> set[str]:
 
 
 def _reads_complete_inputs(*, project: _Project, model: dict[str, object]) -> bool:
-    """Whether every relation the model reads has a schema known before any model is analysed."""
+    """Mirror `build_complete_binding_schemas` plus resolved expression-source shapes."""
 
+    resolved_expressions: frozenset[str] = _resolved_expression_sources(project)
     for kind, name in _references(model):
         if kind == _MODEL_REFERENCE:
             upstream: dict[str, object] | None = project.models.get(name)
-            if upstream is None or not (_contract_enforced(upstream) and _schema_columns(upstream)):
+            if upstream is None or not _declares_complete_schema(upstream):
                 return False
         elif kind == _SOURCE_REFERENCE:
             entry: dict[str, object] = (
                 as_json_object((project.sources.get(name) or {}).get("source_entry")) or {}
             )
-            if not entry.get("expression") and not (
+            if str(entry.get("expression")) not in resolved_expressions and not (
                 entry.get("contract") == _ENFORCED and records(entry.get("columns"))
             ):
                 return False
@@ -330,6 +332,38 @@ def _reads_complete_inputs(*, project: _Project, model: dict[str, object]) -> bo
             if not records((project.functions.get(name) or {}).get("return_columns")):
                 return False
     return True
+
+
+def _declares_complete_schema(model: dict[str, object]) -> bool:
+    schema_entry: dict[str, object] = as_json_object(model.get("schema_entry")) or {}
+    return (
+        _contract_enforced(model)
+        and bool(_schema_columns(model))
+        and not has_content(schema_entry.get("dynamic_columns"))
+    )
+
+
+def _resolved_expression_sources(project: _Project) -> frozenset[str]:
+    """Return the source expressions whose shape compile resolved before analysis."""
+
+    shapes: object = decoded(
+        (as_json_object(project.capture.get("binding_catalog")) or {}).get("expression_shapes")
+    )
+    pairs: Sequence[object] = (
+        list(shapes.items())
+        if isinstance(shapes, dict)
+        else shapes
+        if isinstance(shapes, list)
+        else []
+    )
+    resolved: set[str] = set()
+    for pair in pairs:
+        match pair:
+            case [expression, shape] if shape is not None:
+                resolved.add(str(expression))
+            case _:
+                pass
+    return frozenset(resolved)
 
 
 def _longest_analysed_chain(project: _Project) -> int:
@@ -441,6 +475,8 @@ def _configuration_kinds(project: _Project) -> set[str]:
             and model.get("rejected_sql_analysis_opt_out") is None
         ):
             kinds.add("sql_analysis_opt_out")
+        if model.get("inferred_columns") is None:
+            continue
         for key in _HOOK_KEYS:
             hooks: list[dict[str, object]] = [
                 hook
