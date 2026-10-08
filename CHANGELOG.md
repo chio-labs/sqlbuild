@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.140.0](https://github.com/chio-labs/sqlbuild/compare/v0.139.0...v0.140.0) (2026-10-08)
+
+
+### Features
+
+* **native:** attach SQL tests, scenarios and functions natively behind the preview engine ([#1022](https://github.com/chio-labs/sqlbuild/issues/1022)) ([4f9a9b7](https://github.com/chio-labs/sqlbuild/commit/4f9a9b7b0d995da796c4f19f846259394a5ddebd))
+* **native:** batch and cache macro calls behind the preview engine ([#1013](https://github.com/chio-labs/sqlbuild/issues/1013)) ([8bc5325](https://github.com/chio-labs/sqlbuild/commit/8bc532556ca211de689d8a70c84dc1520058c20e))
+* **native:** build compile attachments natively behind the preview engine ([#1018](https://github.com/chio-labs/sqlbuild/issues/1018)) ([79a5b45](https://github.com/chio-labs/sqlbuild/commit/79a5b45407f9f5eadc6e061781be50f0958952b9))
+* **native:** extract model references natively behind the preview engine ([#1008](https://github.com/chio-labs/sqlbuild/issues/1008)) ([3fb32ee](https://github.com/chio-labs/sqlbuild/commit/3fb32eec9cdbbe98fbe198bdb421ae8112f4a19c))
+* **native:** make native discovery the default compiler engine ([#1003](https://github.com/chio-labs/sqlbuild/issues/1003)) ([d0c6760](https://github.com/chio-labs/sqlbuild/commit/d0c6760b97e286fff945bf41c4ea51dc42dcacaa))
+* **native:** parse declaration files natively behind the preview engine ([#1014](https://github.com/chio-labs/sqlbuild/issues/1014)) ([2cb1514](https://github.com/chio-labs/sqlbuild/commit/2cb151480da21249c6a715054eb655a74a729909))
+* **native:** resolve declaration contexts and references natively in the preview model loop ([#1012](https://github.com/chio-labs/sqlbuild/issues/1012)) ([b5a2453](https://github.com/chio-labs/sqlbuild/commit/b5a24532295dd05229135aead535db7206e2c873))
+* **native:** resolve declaration scopes natively behind a native-preview engine tier ([#1006](https://github.com/chio-labs/sqlbuild/issues/1006)) ([799db35](https://github.com/chio-labs/sqlbuild/commit/799db3580ce36a8b75ba123a0bf603ce7f4ddc52))
+* **native:** resolve model configuration natively behind the preview engine ([#1009](https://github.com/chio-labs/sqlbuild/issues/1009)) ([e166844](https://github.com/chio-labs/sqlbuild/commit/e1668441f98c721027118125a00d848926aefeac))
+
+
+### Bug Fixes
+
+* **compiler:** keep shared-analysis lineage and stage captures deterministic ([#1005](https://github.com/chio-labs/sqlbuild/issues/1005)) ([1175b83](https://github.com/chio-labs/sqlbuild/commit/1175b8367384b11f0ef618dea05aec8e15af12a1))
+* **compiler:** reject reference calls that compile cannot replace ([#1011](https://github.com/chio-labs/sqlbuild/issues/1011)) ([57c6da6](https://github.com/chio-labs/sqlbuild/commit/57c6da632edba32d0459e63be0d1facf226cf0f9))
+* **compiler:** treat dollar-quoted strings as quoted text in variable substitution ([#1020](https://github.com/chio-labs/sqlbuild/issues/1020)) ([c9b0985](https://github.com/chio-labs/sqlbuild/commit/c9b09854d08ea5b67debe3305dcd9404df7c8f75))
+* **native:** report deeply nested header values instead of crashing ([#1015](https://github.com/chio-labs/sqlbuild/issues/1015)) ([eca2cec](https://github.com/chio-labs/sqlbuild/commit/eca2cecc5dc7966d02923cb088b75f5edc36ed02))
+* **test:** rewrite references in helper CTEs and order them after their dependencies ([#1019](https://github.com/chio-labs/sqlbuild/issues/1019)) ([620bca0](https://github.com/chio-labs/sqlbuild/commit/620bca02b0a39fd990595d61cba8b23dc8376191))
+
 ## [0.139.0](https://github.com/chio-labs/sqlbuild/compare/v0.138.0...v0.139.0) (2026-10-07)
 
 
