@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.145.0](https://github.com/chio-labs/sqlbuild/compare/v0.144.0...v0.145.0) (2026-10-08)
+
+
+### Features
+
+* **native:** report model config errors natively ([#1042](https://github.com/chio-labs/sqlbuild/issues/1042)) ([19ae79e](https://github.com/chio-labs/sqlbuild/commit/19ae79ebf10aaa96bb381e2a9baa5ea05bb65b8c))
+
 ## [0.144.0](https://github.com/chio-labs/sqlbuild/compare/v0.143.1...v0.144.0) (2026-10-08)
 
 
