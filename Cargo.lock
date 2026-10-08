@@ -693,7 +693,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sqlbuild-analysis"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "polyglot-sql",
  "polyglot-sql-function-catalogs",
@@ -708,7 +708,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-attachments"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "sqlbuild-core",
  "sqlbuild-sqltext",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-cache"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "blake3",
  "rayon",
@@ -727,7 +727,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-config"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "saphyr-parser",
  "tempfile",
@@ -737,11 +737,11 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-core"
-version = "0.142.0"
+version = "0.143.0"
 
 [[package]]
 name = "sqlbuild-discovery"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "junction",
  "rayon",
@@ -753,11 +753,11 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-model-config"
-version = "0.142.0"
+version = "0.143.0"
 
 [[package]]
 name = "sqlbuild-python"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "fensu-policy",
  "mimalloc",
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-render"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "sqlbuild-cache",
  "sqlbuild-core",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-rules"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "fensu-policy",
  "globset",
@@ -808,14 +808,14 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-scopes"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "sqlbuild-sqltext",
 ]
 
 [[package]]
 name = "sqlbuild-sqltext"
-version = "0.142.0"
+version = "0.143.0"
 dependencies = [
  "rayon",
  "serde",

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.143.0](https://github.com/chio-labs/sqlbuild/compare/v0.142.0...v0.143.0) (2026-10-08)
+
+
+### Features
+
+* **native:** build fast column lineage natively behind the preview engine ([#1029](https://github.com/chio-labs/sqlbuild/issues/1029)) ([e074bd1](https://github.com/chio-labs/sqlbuild/commit/e074bd14e6562132dba7633c3da6485809baa7d9))
+* **native:** normalise and compare types natively behind the preview engine ([#1028](https://github.com/chio-labs/sqlbuild/issues/1028)) ([37df06a](https://github.com/chio-labs/sqlbuild/commit/37df06a16390c0b2eba2106d6e521cb765fd1729))
+
 ## [0.142.0](https://github.com/chio-labs/sqlbuild/compare/v0.141.0...v0.142.0) (2026-10-08)
 
 
