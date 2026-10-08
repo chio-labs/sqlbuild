@@ -703,6 +703,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlbuild-core",
+ "sqlbuild-scopes",
  "sqlbuild-sqltext",
 ]
 
@@ -810,6 +811,7 @@ dependencies = [
 name = "sqlbuild-scopes"
 version = "0.146.0"
 dependencies = [
+ "sqlbuild-core",
  "sqlbuild-sqltext",
 ]
 

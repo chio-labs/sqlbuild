@@ -241,7 +241,8 @@ def build_test_inputs(
                         raise CompileInputError(
                             f"SQL test '{test_block.name or test_file.file_path.stem}' declares "
                             f"unused parameters: {', '.join(unused_parameters)} in case "
-                            f"'{test_case.name}'"
+                            f"'{test_case.name}'",
+                            bridge_independent=True,
                         )
                 expanded_test_block: DiscoveredSqlTestBlock = (
                     test_block
@@ -543,7 +544,8 @@ def _infer_tested_direct_logic_resource_names(
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode '{raw_test_ctes.mode.value}' must "
-            "define exactly one actual CTE and exactly one expected CTE"
+            "define exactly one actual CTE and exactly one expected CTE",
+            bridge_independent=True,
         )
     if raw_test_ctes.mode == SqlTestMode.UDF:
         return _infer_tested_udf_names(
@@ -568,14 +570,16 @@ def _infer_tested_direct_logic_resource_names(
     if not tested_macro_names:
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'macro' must call at least one "
-            "macro in __macro_actual__"
+            "macro in __macro_actual__",
+            bridge_independent=True,
         )
     tested_macro_name: str
     for tested_macro_name in tested_macro_names:
         if tested_macro_name not in loaded_macros:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references unknown macro "
-                f"'@{tested_macro_name}'"
+                f"'@{tested_macro_name}'",
+                bridge_independent=True,
             )
     return tested_macro_names
 
@@ -591,7 +595,8 @@ def _infer_tested_udf_names(
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'udf' must define exactly one "
-            "__udf_actual__ CTE and exactly one __udf_expected__ CTE"
+            "__udf_actual__ CTE and exactly one __udf_expected__ CTE",
+            bridge_independent=True,
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
         sql=raw_test_ctes.payload.actual_cte.sql_body,
@@ -608,20 +613,23 @@ def _infer_tested_udf_names(
     if not tested_udf_names:
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'udf' must call at least one "
-            "scalar UDF in __udf_actual__"
+            "scalar UDF in __udf_actual__",
+            bridge_independent=True,
         )
     tested_udf_name: str
     for tested_udf_name in tested_udf_names:
         if tested_udf_name not in known_function_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references unknown SQL function "
-                f"'{tested_udf_name}'"
+                f"'{tested_udf_name}'",
+                bridge_independent=True,
             )
         if tested_udf_name in known_table_function_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references table function "
                 f"'{tested_udf_name}' with {SqlReferenceKind.UDF.placeholder_call()}; use "
-                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} for table functions"
+                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} for table functions",
+                bridge_independent=True,
             )
     return tested_udf_names
 
@@ -638,7 +646,8 @@ def _infer_tested_table_function_names(
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'table_fn' must define exactly one "
-            "__table_fn_actual__ CTE and exactly one __table_fn_expected__ CTE"
+            "__table_fn_actual__ CTE and exactly one __table_fn_expected__ CTE",
+            bridge_independent=True,
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
         sql=raw_test_ctes.payload.actual_cte.sql_body,
@@ -660,14 +669,16 @@ def _infer_tested_table_function_names(
     if not tested_table_function_names:
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'table_fn' must call at least one "
-            "table function in __table_fn_actual__"
+            "table function in __table_fn_actual__",
+            bridge_independent=True,
         )
     tested_table_function_name: str
     for tested_table_function_name in tested_table_function_names:
         if tested_table_function_name not in known_function_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references unknown SQL function "
-                f"'{tested_table_function_name}'"
+                f"'{tested_table_function_name}'",
+                bridge_independent=True,
             )
         if tested_table_function_name not in known_table_function_names:
             raise CompileInputError(
@@ -792,19 +803,19 @@ def _validate_scenario_source_references(
     syntax: SqlLexicalSyntax,
     target_catalog: _native.SqlTestTargetCatalog | None = None,
 ) -> None:
-    native_sources: list[tuple[str, bool, list[str]]] | None = (
-        _native_scenario_cte_sources(
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        cte_sources: list[tuple[str, bool, list[str]]]
+        extraction_error: CompileInputError | None
+        cte_sources, extraction_error = _scenario_cte_sources(
             scenario_ctes=scenario_ctes, scenario_file=scenario_file, syntax=syntax
         )
-        if native_stage_enabled(NativeStage.ATTACHMENTS)
-        else None
-    )
-    if native_sources is not None:
         error: str | None = (
             target_catalog or native_test_target_catalog(sources=known_source_names)
-        ).scenario_source_error(str(scenario_file.relative_path), native_sources)
+        ).scenario_source_error(str(scenario_file.relative_path), cte_sources)
         if error is not None:
-            raise CompileInputError(error)
+            raise CompileInputError(error, bridge_independent=True)
+        if extraction_error is not None:
+            raise extraction_error
         return
     cte: CompileSqlScenarioCte
     for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
@@ -837,38 +848,38 @@ def _validate_scenario_source_references(
             )
 
 
-def _native_scenario_cte_sources(
+def _scenario_cte_sources(
     *,
     scenario_ctes: CompileSqlScenarioCtes,
     scenario_file: DiscoveredSqlScenarioFile,
     syntax: SqlLexicalSyntax,
-) -> list[tuple[str, bool, list[str]]] | None:
-    """Every CTE's source references, or None where extraction raises so Python orders errors."""
+) -> tuple[list[tuple[str, bool, list[str]]], CompileInputError | None]:
+    """Each check-then-fixture CTE's source references, up to the first CTE whose scan raises."""
 
     checks: tuple[CompileSqlScenarioCte, ...] = (
         *scenario_ctes.expected_ctes,
         *scenario_ctes.assertion_ctes,
     )
     cte_sources: list[tuple[str, bool, list[str]]] = []
-    try:
-        for position, cte in enumerate((*checks, *scenario_ctes.authored_ctes)):
+    for position, cte in enumerate((*checks, *scenario_ctes.authored_ctes)):
+        try:
             references: tuple[CompileSqlReference, ...] = extract_sql_references(
                 sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
             )
-            cte_sources.append(
-                (
-                    cte.name,
-                    position < len(checks),
-                    [
-                        reference.ref_name
-                        for reference in references
-                        if reference.ref_kind == SqlReferenceKind.SOURCE
-                    ],
-                )
+        except CompileInputError as error:
+            return cte_sources, error
+        cte_sources.append(
+            (
+                cte.name,
+                position < len(checks),
+                [
+                    reference.ref_name
+                    for reference in references
+                    if reference.ref_kind == SqlReferenceKind.SOURCE
+                ],
             )
-    except CompileInputError:
-        return None
-    return cte_sources
+        )
+    return cte_sources, None
 
 
 def validate_test_ctes(
@@ -910,7 +921,7 @@ def validate_test_ctes(
             ),
         )
         if error is not None:
-            raise CompileInputError(error)
+            raise CompileInputError(error, bridge_independent=True)
         return
 
     mock_model_name: str

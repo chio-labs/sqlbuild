@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import cast
 
+import orjson
 import pytest
 
 import sqlbuild._native as _native
@@ -845,6 +846,37 @@ _SCENARIO_CTES: tuple[str, ...] = (
     "dollar AS (SELECT $$ ) $$ AS note)",
     "hashed AS (SELECT 1 # )\n)",
 )
+_SCENARIO_ERROR_CTES: tuple[str, ...] = (
+    "__ref__ AS (SELECT 1)",
+    "__seed__ AS (SELECT 1)",
+    "__dbt_ref__ AS (SELECT 1)",
+    "__assert__ AS (SELECT 1)",
+    "missing_as (SELECT 1)",
+    "no_body AS SELECT 1",
+    "columns (id, label) AS (SELECT 1, 'x')",
+    "unclosed AS (SELECT (1)",
+    "open_quote AS (SELECT 'x)",
+    "/* open AS (SELECT 1)",
+    "__assert__reads_expected AS (SELECT id FROM __expected__orders_view)",
+    "caf\u00e9 AS (SELECT 1)",
+)
+_SCENARIO_ERROR_WEIGHTS: tuple[int, int] = (3, 1)
+_DEFERRED_ANSWER: str = '{"deferred": true}'
+_NATIVE_SCENARIO_ANSWERS: dict[tuple[frozenset[str], bool], str] = {
+    (frozenset({"deferred"}), False): "deferred",
+    (frozenset({"deferred"}), True): "deferred",
+    (frozenset({"scanError"}), False): "error",
+    (frozenset({"scanError"}), True): "polyglot",
+    (frozenset({"independence", "scenario"}), False): "independence",
+    (frozenset({"independence", "scenario"}), True): "independence",
+    (frozenset({"independence", "error"}), False): "independence",
+    (frozenset({"independence", "error"}), True): "independence",
+    (frozenset({"error"}), False): "error",
+    (frozenset({"error"}), True): "error",
+    (frozenset({"scenario"}), False): "extracted",
+    (frozenset({"scenario"}), True): "extracted",
+}
+_CEREMONIAL_SELECT_TAIL: re.Pattern[str] = re.compile(r"\bSELECT\s+1\s*;?\s*$", re.IGNORECASE)
 _SCENARIO_TAILS: tuple[str, ...] = ("\nSELECT 1\n", "", ";", "\nSELECT 2", " -- end", ";\n")
 _SCENARIO_KEYWORDS: tuple[str, ...] = (
     "WITH\n",
@@ -859,7 +891,11 @@ def generated_scenario(*, rng: random.Random) -> str:
     """Return one scenario body mixing fixtures, checks, helpers and invalid CTEs."""
 
     ctes: list[str] = rng.sample(_SCENARIO_CTES, k=rng.randint(1, 5))
-    return rng.choice(_SCENARIO_KEYWORDS) + ",\n".join(ctes) + rng.choice(_SCENARIO_TAILS)
+    errors: list[str] = rng.sample(
+        _SCENARIO_ERROR_CTES, k=rng.choices((0, 1), weights=_SCENARIO_ERROR_WEIGHTS)[0]
+    )
+    mixed: list[str] = rng.sample([*ctes, *errors], k=len(ctes) + len(errors))
+    return rng.choice(_SCENARIO_KEYWORDS) + ",\n".join(mixed) + rng.choice(_SCENARIO_TAILS)
 
 
 def scenario_outcome(
@@ -880,10 +916,16 @@ def scenario_outcome(
         return str(error)
 
 
-def native_scenario_answered(sql: str) -> bool:
-    """Whether the native extraction answers instead of deferring to Python."""
+def native_scenario_answer(*, sql: str, syntax: SqlLexicalSyntax) -> str:
+    """How the native extraction answers: extracted, error, or the Python step it leaves."""
 
-    return _native.extract_sql_scenario_json(sql, "tests/scenarios/orders.sql") is not None
+    response: str | None = _native.extract_sql_scenario_json(
+        sql, "tests/scenarios/orders.sql", syntax.native_mapping
+    )
+    outcome: dict[str, object] = orjson.loads(response or _DEFERRED_ANSWER)
+    return _NATIVE_SCENARIO_ANSWERS[
+        (frozenset(outcome), _CEREMONIAL_SELECT_TAIL.search(sql) is not None)
+    ]
 
 
 _TARGET_NAMES: tuple[str, ...] = ("orders", "customers", "channel_codes", "returns", "order_rows")

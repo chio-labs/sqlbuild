@@ -1,4 +1,4 @@
-"""Minimal projects whose audits, functions or sources fail while attaching compile inputs."""
+"""Minimal projects whose audits, functions, sources, SQL tests or scenarios fail to attach."""
 
 from scripts.compiler_differential._helpers.corpus.case_builder import config_files, failure_case
 from scripts.compiler_differential.constants import (
@@ -16,6 +16,19 @@ _FRESH_AUDIT: str = (
     'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE ordered_at >= __cursor_start()\n'
 )
 _ORDER_LABEL_PATH: str = "functions/sql/order_label.sql"
+_SCENARIO_PATH: str = "tests/scenarios/orders.sql"
+_SCENARIO_HEADER: str = 'SCENARIO (\n  description "Order flow"\n);\n\n'
+_SOURCE_FIXTURE: str = (
+    "__source__raw_orders AS (\n"
+    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount, 'placed' AS status\n"
+    ")"
+)
+_EXPECTED_STAGING: str = "__expected__stg_orders AS (\n  SELECT 1 AS order_id\n)"
+_TEST_PATH: str = "tests/unit/test_stg_orders.sql"
+
+
+def _scenario(*ctes: str, tail: str = "\nSELECT 1\n") -> str:
+    return _SCENARIO_HEADER + "WITH\n" + ",\n".join(ctes) + tail
 
 
 def _staging_audits(audits: str) -> dict[str, str]:
@@ -31,7 +44,7 @@ def _order_label(header: str) -> dict[str, str]:
 
 
 def attachment_failure_cases() -> tuple[FailureCase, ...]:
-    """Return audit, function and source attachment failures the native stage reports."""
+    """Return audit, function, source, SQL test and scenario failures the native stage reports."""
 
     return (
         failure_case(
@@ -104,6 +117,91 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
                 FAILURE_SOURCES_PATH: FAILURE_BASE_SOURCES.replace(
                     "description: Orders feed.", 'description: "Orders from ${channel}"'
                 )
+            },
+        ),
+        failure_case(
+            name="scenario-fixture-without-target",
+            expected_code="P001",
+            expected_message=(
+                f"SQL scenario '{_SCENARIO_PATH}' must use __seed__<seed> to identify a target"
+            ),
+            files={_SCENARIO_PATH: _scenario("__seed__ AS (SELECT 1 AS id)", _EXPECTED_STAGING)},
+        ),
+        failure_case(
+            name="scenario-macro-mock",
+            expected_code="P001",
+            expected_message="does not support macro mock CTE '__macro__tidy'",
+            files={
+                _SCENARIO_PATH: _scenario(
+                    _SOURCE_FIXTURE, "__macro__tidy AS (SELECT 'x')", _EXPECTED_STAGING
+                )
+            },
+        ),
+        failure_case(
+            name="scenario-without-checks",
+            expected_code="P001",
+            expected_message=(
+                f"SQL scenario '{_SCENARIO_PATH}' must define at least one __expected__<model> "
+                "or __assert__<assertion> CTE"
+            ),
+            files={_SCENARIO_PATH: _scenario(_SOURCE_FIXTURE)},
+        ),
+        failure_case(
+            name="scenario-statement-after-ctes",
+            expected_code="P001",
+            expected_message="must end after its CTEs",
+            files={
+                _SCENARIO_PATH: _scenario(
+                    _SOURCE_FIXTURE, _EXPECTED_STAGING, tail="\nSELECT order_id FROM orders\n"
+                )
+            },
+        ),
+        failure_case(
+            name="scenario-check-reads-source",
+            expected_code="P001",
+            expected_message="CTE '__expected__stg_orders' must not reference project source",
+            files={
+                _SCENARIO_PATH: _scenario(
+                    _SOURCE_FIXTURE,
+                    '__expected__stg_orders AS (\n  SELECT order_id FROM __source("raw_orders")\n)',
+                )
+            },
+        ),
+        failure_case(
+            name="scenario-dependent-checks",
+            expected_code="P001",
+            expected_message=(
+                "check CTE '__expected__stg_orders' must not depend on '__assert__no_rows'"
+            ),
+            files={
+                _SCENARIO_PATH: _scenario(
+                    _SOURCE_FIXTURE,
+                    "__assert__no_rows AS (\n  SELECT 1 FROM __source__raw_orders WHERE false\n)",
+                    "__expected__stg_orders AS (\n  SELECT 1 AS order_id FROM __assert__no_rows\n)",
+                )
+            },
+        ),
+        failure_case(
+            name="scenario-first-of-two-errors",
+            expected_code="P001",
+            expected_message=(
+                "SQL scenario 'tests/scenarios/a_orders.sql' must use __seed__<seed> to identify "
+                "a target"
+            ),
+            files={
+                "tests/scenarios/a_orders.sql": _scenario(
+                    "__seed__ AS (SELECT 1 AS id)", _EXPECTED_STAGING
+                ),
+                "tests/scenarios/b_orders.sql": _scenario(_SOURCE_FIXTURE),
+            },
+        ),
+        failure_case(
+            name="test-mocks-unknown-source",
+            expected_code="P001",
+            expected_message="mocks unknown source 'raw_payments'",
+            files={
+                _TEST_PATH: "TEST();\n\nWITH\n__source__raw_payments AS (\n  SELECT 1 AS id\n),\n"
+                f"{_EXPECTED_STAGING}\nSELECT 1\n"
             },
         ),
     )

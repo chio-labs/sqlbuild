@@ -1,8 +1,12 @@
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::relationship_names::main::expected_model_names::expected_model_names;
-use crate::relationship_names::models::ExpectedNames;
+use crate::relationship_names::main::top_level_ctes::scan_top_level_ctes;
+use crate::relationship_names::models::{ExpectedNames, RelationshipSource, TopLevelCtes};
 use crate::relationship_names::tests::test_types::SyntaxTestCase;
+
+const TEST_FILE: &str = "tests/unit/test_orders.sql";
+const SCENARIO_FILE: &str = "tests/scenarios/orders.sql";
 
 /// The generic lexical rules of the base adapter.
 pub(super) fn generic_syntax() -> LexicalSyntax {
@@ -22,16 +26,48 @@ pub(super) fn dialect_syntax(test_case: &SyntaxTestCase) -> LexicalSyntax {
     }
 }
 
-/// The native outcome for one SQL text.
+/// The native outcome for one SQL test body.
 pub(super) fn names(sql: &str, syntax: &LexicalSyntax) -> ExpectedNames {
-    expected_model_names(&[sql.to_owned()], syntax).remove(0)
+    expected_model_names(
+        &[(sql.to_owned(), TEST_FILE.to_owned())],
+        RelationshipSource::Test,
+        syntax,
+    )
+    .remove(0)
 }
 
-/// The outcome a case expects: its names, or a deferral when it has none.
-pub(super) fn expected(names: Option<&[&str]>) -> ExpectedNames {
-    names.map_or(ExpectedNames::Deferred, |names| {
-        ExpectedNames::Scanned(owned(names))
-    })
+/// The native outcome for one scenario body.
+pub(super) fn scenario_names(sql: &str) -> ExpectedNames {
+    expected_model_names(
+        &[(sql.to_owned(), SCENARIO_FILE.to_owned())],
+        RelationshipSource::Scenario,
+        &generic_syntax(),
+    )
+    .remove(0)
+}
+
+/// The top-level CTEs of one SQL test body.
+pub(super) fn ctes(sql: &str) -> TopLevelCtes {
+    scan_top_level_ctes(sql, TEST_FILE, RelationshipSource::Test, &generic_syntax())
+}
+
+/// Expected-model names a case expects the scan to return.
+pub(super) fn scanned(names: &[&str]) -> ExpectedNames {
+    ExpectedNames::Scanned(owned(names))
+}
+
+/// The error a case expects Python to raise.
+pub(super) fn failed(message: &str) -> ExpectedNames {
+    ExpectedNames::Failed(message.to_owned())
+}
+
+/// The CTE names and bodies a scan case expects.
+pub(super) fn scanned_ctes(ctes: &[(&str, &str)]) -> TopLevelCtes {
+    TopLevelCtes::Scanned(
+        ctes.iter()
+            .map(|(name, body)| ((*name).to_owned(), (*body).to_owned()))
+            .collect(),
+    )
 }
 
 fn owned(values: &[&str]) -> Vec<String> {
