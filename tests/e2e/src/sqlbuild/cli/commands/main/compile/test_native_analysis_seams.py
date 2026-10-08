@@ -27,7 +27,9 @@ _ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
             description="models_contracts_lineage_and_sql_tests",
             expected_preview_returns={
                 "assemble_native_project": [None],
+                "infer_native_expression_source_shapes": [None],
                 "analyze_native_model_sql": [None],
+                "assemble_native_sql_tests": [None],
                 "complete_native_semantic_diagnostics": [None],
                 "evaluate_native_model_contracts": [None],
                 "build_native_column_lineage": [None],

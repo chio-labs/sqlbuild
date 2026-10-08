@@ -823,6 +823,7 @@ class ModelSqlAnalysis:
     fused_binding_validated: bool = False
     cleaned_sql: str | None = None
     validated_schema: dict[str, dict[str, str]] | None = None
+    dynamic_column_contract: DynamicColumnContractProof | None = None
 
 
 @dataclass(frozen=True)

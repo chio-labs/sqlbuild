@@ -53,7 +53,6 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_schema_for_model,
     build_column_nullability_by_table,
     build_complete_binding_schemas,
-    get_expression_source_shapes,
     published_model_shape,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
@@ -80,6 +79,11 @@ from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_in
 from sqlbuild.compiler.compile._helpers.native_stages.assembly import (
     analyze_model_sql_by_engine,
     assemble_project_by_engine,
+    dynamic_column_contract_by_engine,
+    expression_source_shapes_by_engine,
+)
+from sqlbuild.compiler.compile._helpers.native_stages.sql_tests import (
+    assemble_sql_tests_by_engine,
 )
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
@@ -271,7 +275,7 @@ def assemble_compiled_project(
             for source_input in inputs.source_inputs
             if source_input.source_entry.expression
         )
-        expression_shapes: tuple[dict[str, str] | None, ...] = get_expression_source_shapes(
+        expression_shapes: tuple[dict[str, str] | None, ...] = expression_source_shapes_by_engine(
             expressions=tuple(
                 cast(str, source_input.source_entry.expression)
                 for source_input in expression_sources
@@ -360,7 +364,8 @@ def assemble_compiled_project(
                 complete_binding_schemas=complete_binding_schemas,
             )
             model_sql_analysis_by_name = analyze_model_sql_by_engine(
-                python_analysis=python_analysis
+                python_analysis=python_analysis,
+                dynamic_families_by_table=dynamic_families_by_table,
             )
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
     report_scope_index_errors(index=scope_index)
@@ -446,11 +451,11 @@ def assemble_compiled_project(
             for function_input in inputs.sql_function_inputs
         ),
         audits=tuple(_assemble_compiled_audit(audit_input) for audit_input in inputs.audit_inputs),
-        sql_tests=tuple(
-            _assemble_compiled_sql_test(
+        sql_tests=assemble_sql_tests_by_engine(
+            inputs=inputs,
+            assemble_python_test=lambda test_input: _assemble_compiled_sql_test(
                 test_input=test_input, model_inputs=inputs.model_inputs, inputs=inputs
-            )
-            for test_input in inputs.test_inputs
+            ),
         ),
         sql_scenarios=tuple(
             _assemble_compiled_sql_scenario(scenario_input)
@@ -578,30 +583,36 @@ def _assemble_compiled_model(
             placeholders=placeholders,
             dialect=profile.sql_analysis_dialect,
         )
-    dynamic_column_contract: DynamicColumnContractProof | None = analyze_dynamic_column_contract(
-        query_sql=(
-            substitute_placeholder_defaults(
-                query_sql=analysis_query_sql,
-                placeholders=placeholders,
-            )
-            if placeholders
-            else analysis_query_sql
-        ),
-        dialect=profile.sql_analysis_dialect,
-        families=(
-            model_input.schema_entry.dynamic_columns if model_input.schema_entry is not None else ()
-        ),
-        column_types_by_table=column_types_by_table or {},
-        authoritative_column_types_by_table=(
-            dynamic_contract_analysis_inputs.authoritative_column_types_by_table
-            if dynamic_contract_analysis_inputs is not None
-            else {}
-        ),
-        column_nullability_by_table=column_nullability_by_table or {},
-        dynamic_families_by_table=(
-            dynamic_contract_analysis_inputs.families_by_table
-            if dynamic_contract_analysis_inputs is not None
-            else {}
+    dynamic_column_contract: DynamicColumnContractProof | None = dynamic_column_contract_by_engine(
+        sql_analysis=sql_analysis,
+        python_proof=partial(
+            analyze_dynamic_column_contract,
+            query_sql=(
+                substitute_placeholder_defaults(
+                    query_sql=analysis_query_sql,
+                    placeholders=placeholders,
+                )
+                if placeholders
+                else analysis_query_sql
+            ),
+            dialect=profile.sql_analysis_dialect,
+            families=(
+                model_input.schema_entry.dynamic_columns
+                if model_input.schema_entry is not None
+                else ()
+            ),
+            column_types_by_table=column_types_by_table or {},
+            authoritative_column_types_by_table=(
+                dynamic_contract_analysis_inputs.authoritative_column_types_by_table
+                if dynamic_contract_analysis_inputs is not None
+                else {}
+            ),
+            column_nullability_by_table=column_nullability_by_table or {},
+            dynamic_families_by_table=(
+                dynamic_contract_analysis_inputs.families_by_table
+                if dynamic_contract_analysis_inputs is not None
+                else {}
+            ),
         ),
     )
     if dynamic_column_contract is not None and dynamic_column_contract.output_proven:

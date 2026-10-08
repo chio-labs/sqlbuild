@@ -39,6 +39,7 @@ import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
+import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.compile.classes.binding_dataflow as binding_dataflow
 import sqlbuild.compiler.compile.classes.render_reuse_session as render_reuse_session
 import sqlbuild.compiler.compile.classes.stored_model_analyses as stored_model_analyses
@@ -4750,7 +4751,9 @@ def engine_macro_call_runs(
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_stages, "assemble_native_project"),
+    (native_stages, "infer_native_expression_source_shapes"),
     (native_stages, "analyze_native_model_sql"),
+    (native_sql_test_stage, "assemble_native_sql_tests"),
     (diagnostic_recovery, "complete_native_semantic_diagnostics"),
     (contract_validation, "evaluate_native_model_contracts"),
     (column_lineage, "build_native_column_lineage"),
