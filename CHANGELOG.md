@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.141.0](https://github.com/chio-labs/sqlbuild/compare/v0.140.1...v0.141.0) (2026-10-08)
+
+
+### Features
+
+* **native:** register the analysis stages behind the preview engine ([#1024](https://github.com/chio-labs/sqlbuild/issues/1024)) ([18ed683](https://github.com/chio-labs/sqlbuild/commit/18ed6830b2faa9d41d420d3407530b94132add47))
+
 ## [0.140.1](https://github.com/chio-labs/sqlbuild/compare/v0.140.0...v0.140.1) (2026-10-08)
 
 
