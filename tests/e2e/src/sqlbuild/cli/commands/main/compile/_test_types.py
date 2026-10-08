@@ -954,6 +954,16 @@ class NativeMacroErrorTestCase:
 
 
 @dataclass(frozen=True)
+class UnkeyableMacroCallTestCase:
+    """Compile arguments whose values no store key can hold; every engine must match Python."""
+
+    description: str
+    project_files: dict[str, str]
+    compile_args: tuple[str, ...]
+    expected_returncodes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class MacroErrorLifecycleTestCase:
     """A failing macro project whose invocation lifecycle every engine reports the same way."""
 

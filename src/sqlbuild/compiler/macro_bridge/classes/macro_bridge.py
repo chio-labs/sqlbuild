@@ -209,15 +209,17 @@ class MacroBridge:
         class_id: int | None = self._class_ids.get(class_key)
         if class_id is None:
             class_id = self._class_ids[class_key] = len(self._class_ids)
-            if self._store_path is not None and call_class.persistent:
-                self._memo.set_persistent_class(
-                    class_id,
-                    call_class_store_text(
-                        macro_tokens=call_class.macro_store_tokens,
-                        context_token=call_class.context_store_token,
-                        prior_relations=prior_relations,
-                    ),
+            class_text: str | None = (
+                call_class_store_text(
+                    macro_tokens=call_class.macro_store_tokens,
+                    context_token=call_class.context_store_token,
+                    prior_relations=prior_relations,
                 )
+                if self._store_path is not None and call_class.persistent
+                else None
+            )
+            if class_text is not None:
+                self._memo.set_persistent_class(class_id, class_text)
         found: tuple[str, list[tuple[str, str]], list[tuple[int, str, str]]] | None = (
             self._memo.lookup(class_id, call_text)
         )
