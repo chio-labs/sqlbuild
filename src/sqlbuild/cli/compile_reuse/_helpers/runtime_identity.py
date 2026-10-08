@@ -55,12 +55,16 @@ def search_path_stamps(*, project_dir: str) -> tuple[tuple[str, int], ...]:
     return tuple(stamps)
 
 
-def loaded_module_stamps(*, covered_paths: frozenset[str]) -> tuple[tuple[str, int, int], ...]:
-    """Stat every loaded module file that the project walk does not already cover."""
+def loaded_module_stamps(
+    *, covered_paths: frozenset[str], extra_paths: frozenset[str]
+) -> tuple[tuple[str, int, int], ...]:
+    """Stat every loaded module file, and `extra_paths`, that the project walk does not cover."""
 
     stamps: dict[str, tuple[str, int, int]] = {}
-    for module in tuple(sys.modules.values()):
-        path: object = getattr(module, "__file__", None)
+    module_paths: tuple[object, ...] = tuple(
+        getattr(module, "__file__", None) for module in tuple(sys.modules.values())
+    )
+    for path in (*module_paths, *sorted(extra_paths)):
         if not isinstance(path, str) or path in stamps or path in covered_paths:
             continue
         try:

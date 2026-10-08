@@ -1,6 +1,6 @@
 """E2E: layered, templated and validated model config builds the same on every compiler engine.
 
-The preview engine builds model config (path defaults, templates, storage policies) and checks the
+The native and preview engines build model config (path defaults, templates, storage policies) and checks the
 model validators natively; a validator rejection re-runs Python for the exact error. Every engine
 must build the same relations and report the same validator errors.
 """

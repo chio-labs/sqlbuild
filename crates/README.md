@@ -62,6 +62,15 @@ stages run natively:
 | `native` | The default: native stages that passed their flip gate (`shipped` tier). |
 | `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
 
+The shipped tier covers discovery and rendering: declaration files and scopes, model config,
+reference extraction, the model loop, macro calls and the macro-call store, and attachments. SQL
+analysis, contracts, lineage, SQL-test glue and project assembly are still `preview`. When a
+native render stage fails, the compile runs the Python stage again so the error is exactly
+Python's; native error messages replace that re-run later. Because the macro-call store is
+shipped, the [macro determinism contract](../website/src/content/docs/docs/concepts/macros.mdx)
+applies to every default compile; `SQLBUILD_COMPILER_ENGINE=python` runs every macro call each
+time.
+
 Each native stage declares its tier once, in `NATIVE_STAGE_TIERS` in
 `src/sqlbuild/compiler/frontier/constants.py`. A stage moves from `preview` to `shipped` by
 changing that line, after its flip gate passes: a byte-identical real project, a green
@@ -70,8 +79,10 @@ its own compiler, Rules and compile-reuse stores, so preview output is never reu
 
 `make compiler-differential` compares `python` with `native-preview` on the full per-PR corpus.
 `make compiler-differential-shipped` compares `python` with `native` on the generated seeds and
-the failure corpus, so the shipped default stays covered on its own. CI runs both, and compares
-`python` with `native` on Python 3.13 and 3.14 as well.
+the failure corpus, so the shipped default stays covered on its own; CI runs it with stage
+captures and requires full discovery and render coverage. CI runs both, compares `python` with
+`native` and `native-preview` on Python 3.13 and 3.14 as well, and on Windows checks that the
+default compiles a playground project to the same files as `python`.
 
 ## Working on the crates
 

@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import sysconfig
+import zipimport
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from sqlbuild.compiler.macro_bridge.constants import (
     INSTALLED_RECORD_FILE_NAME,
     INTERPRETER_MODULE_ORIGINS,
     MACRO_CALL_STORE_ENVIRONMENT_VERSION,
+    MAIN_MODULE_NAME,
     MISSING_SEARCH_PATH_STAMP,
     MODULE_DIGEST_ROW_FIELDS,
     PROJECT_ROOT_SEARCH_PATH_STAMP,
@@ -114,6 +116,9 @@ def _backing_file(module: object) -> tuple[str | None, bool]:
     file: object = getattr(module, "__file__", None)
     if spec is None:
         return (file, True) if isinstance(file, str) and os.path.isfile(file) else (None, True)
+    launcher: str | None = _launcher_executable(spec)
+    if launcher is not None:
+        return launcher, True
     origin: object = getattr(spec, "origin", None)
     if getattr(spec, "has_location", False) and isinstance(origin, str):
         return origin, True
@@ -126,6 +131,17 @@ def _backing_file(module: object) -> tuple[str | None, bool]:
     ):
         return None, True
     return None, False
+
+
+def _launcher_executable(spec: object) -> str | None:
+    """The launcher executable (as uv's on Windows) whose appended zip `__main__` ran from."""
+
+    loader: object = getattr(spec, "loader", None)
+    if getattr(spec, "name", None) == MAIN_MODULE_NAME and isinstance(
+        loader, zipimport.zipimporter
+    ):
+        return loader.archive
+    return None
 
 
 def _covered_without_content(path: str) -> bool:

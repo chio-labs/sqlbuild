@@ -24,6 +24,7 @@ from tests.unit.src.sqlbuild.compiler.macro_bridge._helpers.helpers import (
     environment_of,
     file_module,
     interpreter_module,
+    launcher_main_module,
     moved_module,
     removed_module,
     sqlbuild_module,
@@ -32,6 +33,7 @@ from tests.unit.src.sqlbuild.compiler.macro_bridge._helpers.helpers import (
     write_environment_project,
     write_module,
     zip_member_module,
+    zipped_module,
 )
 
 
@@ -185,6 +187,20 @@ def test_given_environment_variable_change_when_digesting_store_environment_then
             expected_paths=lambda root: (str(root / "flavors.zip" / "zipped_flavor.py"),),
             expected_complete=True,
             expected_digestible=False,
+        ),
+        ModuleSourcesTestCase(
+            description="module imported from a zip archive",
+            module=zipped_module,
+            expected_paths=lambda root: (str(root / "flavors.zip" / "zipped_flavor.py"),),
+            expected_complete=True,
+            expected_digestible=False,
+        ),
+        ModuleSourcesTestCase(
+            description="launcher entry point run from the launcher's own zip",
+            module=launcher_main_module,
+            expected_paths=lambda root: (str(root / "sqb.exe"),),
+            expected_complete=True,
+            expected_digestible=True,
         ),
         ModuleSourcesTestCase(
             description="file moved after loading",

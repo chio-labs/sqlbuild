@@ -7,7 +7,10 @@ import pytest
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.types import CompilerEngine, NativeStage
-from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTierTestCase
+from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
+    DefaultEngineStageTestCase,
+    NativeStageTierTestCase,
+)
 
 
 @pytest.mark.parametrize(
@@ -35,7 +38,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             description="native_declaration_scopes",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.DECLARATION_SCOPES,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_discovery",
@@ -50,6 +53,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             expected_enabled=True,
         ),
         NativeStageTierTestCase(
+            description="python_model_config",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.MODEL_CONFIG,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_model_config",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.MODEL_CONFIG,
+            expected_enabled=True,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_model_config",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.MODEL_CONFIG,
+            expected_enabled=True,
+        ),
+        NativeStageTierTestCase(
             description="python_reference_extraction",
             engine=CompilerEngine.PYTHON,
             stage=NativeStage.REFERENCE_EXTRACTION,
@@ -59,7 +80,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             description="native_reference_extraction",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.REFERENCE_EXTRACTION,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_reference_extraction",
@@ -77,7 +98,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             description="native_declaration_files",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.DECLARATION_FILES,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_declaration_files",
@@ -95,7 +116,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             description="native_model_loop",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.MODEL_LOOP,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_model_loop",
@@ -119,13 +140,13 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             description="native_macro_calls",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.MACRO_CALLS,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_macro_call_store",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.MACRO_CALL_STORE,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_macro_calls",
@@ -149,7 +170,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeStageTie
             description="native_attachments",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.ATTACHMENTS,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_attachments",
@@ -292,6 +313,50 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)
 
     assert native_stage_enabled(test_case.stage) is test_case.expected_enabled
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DefaultEngineStageTestCase(
+            description="discovery_and_rendering_native_analysis_python",
+            expected_enabled=frozenset(
+                {
+                    NativeStage.DISCOVERY,
+                    NativeStage.DECLARATION_SCOPES,
+                    NativeStage.MODEL_CONFIG,
+                    NativeStage.REFERENCE_EXTRACTION,
+                    NativeStage.DECLARATION_FILES,
+                    NativeStage.MODEL_LOOP,
+                    NativeStage.MACRO_CALLS,
+                    NativeStage.MACRO_CALL_STORE,
+                    NativeStage.ATTACHMENTS,
+                }
+            ),
+            expected_disabled=frozenset(
+                {
+                    NativeStage.TYPE_SYSTEM,
+                    NativeStage.MODEL_ANALYSIS,
+                    NativeStage.SEMANTIC_CHECKS,
+                    NativeStage.CONTRACTS,
+                    NativeStage.LINEAGE_FACTS,
+                    NativeStage.SQL_TEST_GLUE,
+                    NativeStage.PROJECT_ASSEMBLY,
+                }
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_engine_selection_when_checking_native_stages_then_rendering_runs_natively(
+    test_case: DefaultEngineStageTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(COMPILER_ENGINE_ENV_VAR, raising=False)
+
+    assert {stage: native_stage_enabled(stage) for stage in NativeStage} == {
+        **dict.fromkeys(test_case.expected_enabled, True),
+        **dict.fromkeys(test_case.expected_disabled, False),
+    }
 
 
 if __name__ == "__main__":

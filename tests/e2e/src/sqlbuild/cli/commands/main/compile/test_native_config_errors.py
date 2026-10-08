@@ -195,7 +195,7 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
             },
             engines=("python", "native-preview", "native"),
             expected_report_text="references unknown model 'ghost'",
-            expected_macro_calls=[1, 2, 1],
+            expected_macro_calls=[1, 2, 2],
         )
     ],
     ids=lambda case: case.description,

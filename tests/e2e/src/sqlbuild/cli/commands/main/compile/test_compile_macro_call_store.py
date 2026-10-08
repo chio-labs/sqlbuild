@@ -270,8 +270,8 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
         EngineMacroCallGateTestCase(
             description="default_engine",
             engine="",
-            expected_logged_calls=(3, 3),
-            expected_store_files=(),
+            expected_logged_calls=(1, 0),
+            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         ),
         EngineMacroCallGateTestCase(
             description="python",
@@ -282,8 +282,8 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
         EngineMacroCallGateTestCase(
             description="native",
             engine="native",
-            expected_logged_calls=(3, 3),
-            expected_store_files=(),
+            expected_logged_calls=(1, 0),
+            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         ),
         EngineMacroCallGateTestCase(
             description="native_preview",
@@ -294,7 +294,7 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_stores_macro_calls(
+def test_given_engine_when_compiling_repeatedly_then_only_native_engines_batch_and_store_macro_calls(
     tmp_path: Path, test_case: EngineMacroCallGateTestCase
 ) -> None:
     project_dir: Path = tmp_path / "project"
@@ -323,8 +323,8 @@ def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_st
             expected_logged_calls=(2, 2),
         ),
         MacroReferenceCallStoreTestCase(
-            description="native_preview_memo_then_store",
-            engine="native-preview",
+            description="native_memo_then_store",
+            engine="native",
             expected_logged_calls=(1, 0),
         ),
     ],
@@ -466,10 +466,10 @@ def test_given_second_compile_in_one_process_when_compiling_then_the_store_is_no
     "test_case",
     [
         EngineMacroCallGateTestCase(
-            description="native_preview_without_proc",
-            engine="native-preview",
+            description="native_without_proc",
+            engine="native",
             expected_logged_calls=(1, 0),
-            expected_store_files=("target/cache/compiler-native-preview-v1/macro-calls.bin",),
+            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         )
     ],
     ids=lambda case: case.description,

@@ -104,7 +104,7 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}: SQL reference contains an unclosed parenthesis"
             ),
-            expected_macro_calls=(1, 1, 2),
+            expected_macro_calls=(1, 2, 2),
             expected_error_types=("CompileInputError",) * 3,
         ),
         ReferenceScanErrorTestCase(
