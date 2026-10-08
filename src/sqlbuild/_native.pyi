@@ -262,6 +262,9 @@ def fingerprint_project_files(root: str, excluded_files: list[str]) -> str: ...
 def digest_files(paths: list[str]) -> list[str | None]: ...
 
 # Native analysis: type system.
+def normalize_type(
+    type_sql: str, dialect: str
+) -> tuple[tuple[str, str, int | None, int | None, int | None], str | None] | None: ...
 
 # Native analysis: model analysis session.
 

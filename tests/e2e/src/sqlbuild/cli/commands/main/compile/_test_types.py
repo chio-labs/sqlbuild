@@ -813,6 +813,16 @@ class CompilerEngineParityTestCase:
 
 
 @dataclass(frozen=True)
+class NativeTypeSystemTestCase:
+    """Python and preview compiles of one project whose contracts compare type spellings."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_exit_code: int
+    expected_report_text: str
+
+
+@dataclass(frozen=True)
 class NativeAnalysisSeamTestCase:
     """Every engine compiling a copy of one project while the analysis stage seams are recorded."""
 
