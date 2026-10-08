@@ -566,10 +566,10 @@ jobs:
         include:
           - kind: dense
             max_ratio: "1.10"
-            edit_max_ratio: "1.45"
+            edit_max_ratio: "1.25"
           - kind: fresh
             max_ratio: "1.10"
-            edit_max_ratio: "1.25"
+            edit_max_ratio: "1.20"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base
