@@ -1752,7 +1752,7 @@ def _assemble_compiled_sql_test(
                 (
                     *model_payload.expected_model_names,
                     *model_payload.assertion_target_model_names,
-                    *model_payload.helper_target_model_names,
+                    *model_payload.reference_target_model_names,
                 )
             )
         )
@@ -1841,8 +1841,13 @@ def _assemble_compiled_sql_test(
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
             else ()
         ),
-        helper_target_model_names=(
-            test_input.payload.helper_target_model_names
+        read_helper_names=(
+            test_input.payload.read_helper_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        reference_target_model_names=(
+            test_input.payload.reference_target_model_names
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
             else ()
         ),

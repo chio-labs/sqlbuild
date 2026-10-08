@@ -1805,6 +1805,50 @@ _HELPER_REFERENCE_TESTS: dict[str, str] = {
         '  SELECT item_id FROM __ref("item_totals") JOIN missing_rows USING (item_id)\n'
         ")\n"
     ),
+    "mocked_model_read_by_expected_and_assertion": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        "__expected__item_totals AS (\n"
+        '  SELECT item_id, amount * 2 AS amount_doubled FROM __ref("items")\n'
+        "),\n"
+        "__assert__reads_mocked_items AS (\n"
+        '  SELECT item_id FROM __ref("items") WHERE item_id <> 7 OR amount <> 5\n'
+        ")\n"
+    ),
+    "expected_reads_unmocked_model": (
+        "__ref__items AS (\n  SELECT 3 AS item_id, 4 AS amount\n),\n"
+        "__expected__item_totals AS (\n"
+        '  SELECT item_id, amount * 2 AS amount_doubled FROM __ref("item_extras")\n'
+        ")\n"
+    ),
+    "assertion_reads_unmocked_source": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "__expected__item_totals AS (\n  SELECT 1 AS item_id, 20 AS amount_doubled\n),\n"
+        "__assert__no_returns AS (\n"
+        '  SELECT item_id FROM __source("item_returns")\n'
+        ")\n"
+    ),
+    "helper_named_like_column_reads_unknown_model": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        'amount_doubled AS (SELECT item_id FROM __ref("item_archive")),\n'
+        "__expected__item_totals AS (\n  SELECT 7 AS item_id, 10 AS amount_doubled\n)\n"
+    ),
+    "helper_named_like_column_reads_model": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        'amount_doubled AS (SELECT item_id FROM __ref("item_extras")),\n'
+        "__expected__item_totals AS (\n  SELECT 7 AS item_id, 10 AS amount_doubled\n)\n"
+    ),
+    "assertion_reads_only_mocks": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        "__assert__only_mocked_items AS (\n"
+        '  SELECT item_id FROM __ref("items") WHERE item_id <> 7\n'
+        ")\n"
+    ),
+    "expected_reads_unknown_model": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "__expected__item_totals AS (\n"
+        '  SELECT item_id, amount_doubled FROM __ref("item_archive")\n'
+        ")\n"
+    ),
     "mock_reads_referencing_helper": (
         "__ref__items AS (\n  SELECT item_id, 10 AS amount FROM base_rows\n),\n"
         'base_rows AS (SELECT item_id FROM __ref("item_totals")),\n'
@@ -1828,6 +1872,12 @@ def build_helper_reference_project_files(
             'database = "helper_reference_demo.duckdb"\n\n'
             "[settings]\n"
             f"sql_analysis = {str(sql_analysis).lower()}\n"
+        ),
+        "sources/item_returns.yml": (
+            "sources:\n"
+            "  - name: item_returns\n"
+            "    description: Returned items\n"
+            "    expression: SELECT 1 AS item_id\n"
         ),
         "models/item_extras.sql": (
             "MODEL (description 'Extra item amounts', materialized table);\n\n"

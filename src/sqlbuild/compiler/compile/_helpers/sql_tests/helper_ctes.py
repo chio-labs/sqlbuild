@@ -21,10 +21,12 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.models import (
     CompileModelInput,
+    CompileModelSqlTestCtes,
     CompilerDiagnostic,
     CompileSqlReference,
     CompileSqlTestCte,
     SqlTestCteGraph,
+    SqlTestReads,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
@@ -110,71 +112,102 @@ def reachable_cte_keys(*, graph: SqlTestCteGraph, roots: Iterable[str]) -> tuple
     return tuple(visited)
 
 
-def helper_target_model_names(
-    *,
-    authored_ctes: tuple[CompileSqlTestCte, ...],
-    reader_ctes: tuple[CompileSqlTestCte, ...],
-    mock_model_names: tuple[str, ...],
-    syntax: SqlLexicalSyntax,
-) -> tuple[str, ...]:
-    """Return unmocked models that helpers the test reads call ``__ref()`` on."""
+def sql_test_reads(*, payload: CompileModelSqlTestCtes, syntax: SqlLexicalSyntax) -> SqlTestReads:
+    """Return the helpers a test reads and the unmocked models they and expected rows read."""
 
     graph: SqlTestCteGraph = sql_test_cte_graph(
-        authored_ctes=authored_ctes, reader_ctes=reader_ctes
+        authored_ctes=payload.authored_ctes, reader_ctes=_reader_ctes(payload)
     )
-    mocked: frozenset[str] = frozenset(mock_model_names)
+    read_helpers: tuple[str, ...] = _read_helper_keys(graph)
+    mocked: frozenset[str] = frozenset(payload.mock_model_names)
+    sqls: tuple[str, ...] = (
+        *(cte.sql_body for cte in payload.expected_ctes),
+        *(graph.ctes[key].sql_body for key in read_helpers),
+    )
     targets: list[str] = []
-    for key in _read_helper_keys(graph):
+    for sql in sqls:
         targets.extend(
             reference.ref_name
-            for reference in _references(sql=graph.ctes[key].sql_body, syntax=syntax)
+            for reference in _references(sql=sql, syntax=syntax)
             if reference.ref_kind == SqlReferenceKind.REF and reference.ref_name not in mocked
         )
-    return tuple(dict.fromkeys(targets))
+    return SqlTestReads(
+        read_helper_names=tuple(graph.ctes[key].name for key in read_helpers),
+        reference_target_model_names=tuple(dict.fromkeys(targets)),
+    )
 
 
-def report_unresolvable_helper_ctes(
+def report_unresolvable_test_references(
     *,
-    authored_ctes: tuple[CompileSqlTestCte, ...],
-    reader_ctes: tuple[CompileSqlTestCte, ...],
-    mock_model_names: tuple[str, ...],
+    payload: CompileModelSqlTestCtes,
     test_file: DiscoveredSqlTestFile,
     test_block: DiscoveredSqlTestBlock,
     known_model_names: set[str],
     syntax: SqlLexicalSyntax,
 ) -> bool:
-    """Report read helpers with unknown models or read cycles; return whether any was found."""
+    """Report unresolvable references in expected rows, assertions and read helpers, or cycles."""
 
     graph: SqlTestCteGraph = sql_test_cte_graph(
-        authored_ctes=authored_ctes, reader_ctes=reader_ctes
+        authored_ctes=payload.authored_ctes, reader_ctes=_reader_ctes(payload)
     )
     read_helpers: tuple[str, ...] = _read_helper_keys(graph)
-    if not read_helpers:
-        return False
+    readers: tuple[tuple[str, CompileSqlTestCte], ...] = (
+        *(("helper CTE", graph.ctes[key]) for key in read_helpers),
+        *(("expected CTE", cte) for cte in payload.expected_ctes),
+        *(("assertion CTE", cte) for cte in payload.assertion_ctes),
+    )
     reporter: _HelperDiagnostics = _HelperDiagnostics(test_file=test_file, test_block=test_block)
-    mocked: frozenset[str] = frozenset(mock_model_names)
-    for key in read_helpers:
-        cte: CompileSqlTestCte = graph.ctes[key]
+    mocked: dict[SqlReferenceKind, frozenset[str]] = {
+        SqlReferenceKind.REF: frozenset(payload.mock_model_names),
+        SqlReferenceKind.SOURCE: frozenset(payload.mock_source_names),
+        SqlReferenceKind.SEED: frozenset(payload.mock_seed_names),
+        SqlReferenceKind.DBT_REF: frozenset(payload.mock_dbt_ref_names),
+    }
+    for label, cte in readers:
         for reference in _references(sql=cte.sql_body, syntax=syntax):
-            if (
-                reference.ref_kind == SqlReferenceKind.REF
-                and reference.ref_name not in mocked
-                and reference.ref_name not in known_model_names
-            ):
+            kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
+            if kind not in mocked:
+                continue
+            mock_name: str = (
+                f"{reference.ref_package}__{reference.ref_name}"
+                if reference.ref_package is not None
+                else reference.ref_name
+            )
+            if mock_name in mocked[kind]:
+                continue
+            if kind is SqlReferenceKind.REF:
+                if reference.ref_name in known_model_names:
+                    continue
                 reporter.report(
                     cte_name=cte.name,
-                    call=SqlReferenceKind.REF.example_call(reference.ref_name, quote='"'),
+                    call=kind.example_call(reference.ref_name, quote='"'),
                     message=(
-                        f"SQL test helper CTE '{cte.name}' references unknown model "
+                        f"SQL test {label} '{cte.name}' references unknown model "
                         f"'{reference.ref_name}'"
                     ),
                     help=(
                         'Read a model defined in the project, for example __ref("<model>"), '
-                        f"or remove the reference from helper CTE '{cte.name}'."
+                        f"or remove the reference from {label} '{cte.name}'."
                     ),
                 )
-    cycle: tuple[str, ...] | None = _first_cycle(
-        graph=graph, keys=reachable_cte_keys(graph=graph, roots=graph.reader_reads)
+                continue
+            call: str = _reference_call(reference)
+            reporter.report(
+                cte_name=cte.name,
+                call=call,
+                message=(
+                    f"SQL test {label} '{cte.name}' calls {call}, which the test does not "
+                    "mock, so the test query cannot resolve it"
+                ),
+                help=(
+                    f"Mock it in the test, for example {kind.fixture_cte_prefix}{mock_name} "
+                    f"AS (SELECT ...), or remove the call from {label} '{cte.name}'."
+                ),
+            )
+    cycle: tuple[str, ...] | None = (
+        _first_cycle(graph=graph, keys=reachable_cte_keys(graph=graph, roots=graph.reader_reads))
+        if read_helpers
+        else None
     )
     if cycle is not None:
         names: tuple[str, ...] = tuple(graph.ctes[key].name for key in cycle)
@@ -192,6 +225,80 @@ def report_unresolvable_helper_ctes(
             ),
         )
     return reporter.reported
+
+
+def report_test_without_target_model(
+    *,
+    payload: CompileModelSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    test_block: DiscoveredSqlTestBlock,
+    syntax: SqlLexicalSyntax,
+) -> None:
+    """Report a model test whose checks read only mocks, so it would run no model."""
+
+    mocked: dict[SqlReferenceKind, frozenset[str]] = {
+        SqlReferenceKind.REF: frozenset(payload.mock_model_names),
+        SqlReferenceKind.SOURCE: frozenset(payload.mock_source_names),
+        SqlReferenceKind.SEED: frozenset(payload.mock_seed_names),
+        SqlReferenceKind.DBT_REF: frozenset(payload.mock_dbt_ref_names),
+        SqlReferenceKind.TABLE_FUNCTION: frozenset(payload.mock_table_function_names),
+    }
+    graph: SqlTestCteGraph = sql_test_cte_graph(
+        authored_ctes=payload.authored_ctes, reader_ctes=_reader_ctes(payload)
+    )
+    read_mocks: list[str] = [
+        graph.ctes[key].name
+        for key in reachable_cte_keys(graph=graph, roots=graph.reader_reads)
+        if graph.ctes[key].name.startswith(_MOCK_CTE_PREFIXES)
+    ]
+    first_call: str | None = None
+    for cte in _reader_ctes(payload):
+        for reference in _references(sql=cte.sql_body, syntax=syntax):
+            kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
+            if reference.ref_name not in mocked.get(kind, frozenset()):
+                continue
+            read_mocks.append(f"{kind.fixture_cte_prefix}{reference.ref_name}")
+            if first_call is None and kind is not SqlReferenceKind.TABLE_FUNCTION:
+                first_call = _reference_call(reference)
+    mocks: tuple[str, ...] = tuple(dict.fromkeys(read_mocks))
+    mocked_models: tuple[str, ...] = tuple(
+        mock.removeprefix(REF_TEST_CTE_PREFIX)
+        for mock in mocks
+        if mock.startswith(REF_TEST_CTE_PREFIX)
+    )
+    reader: CompileSqlTestCte | None = next(iter(_reader_ctes(payload)), None)
+    test_name: str = test_block.name or test_file.relative_path.stem
+    message: str
+    help_text: str
+    if mocked_models:
+        plural: str = "s" if len(mocked_models) > 1 else ""
+        owner: str = "models'" if plural else "model's"
+        mocked_ctes: str = ", ".join(f"{REF_TEST_CTE_PREFIX}{name}" for name in mocked_models)
+        calls: str = " and ".join(
+            SqlReferenceKind.REF.example_call(name, quote='"') for name in mocked_models
+        )
+        message = (
+            f"SQL test '{test_name}' mocks the model{plural} it tests ({mocked_ctes}), so the "
+            "test has no model to run against"
+        )
+        help_text = (
+            f"Mock the {owner} inputs instead (for example __source__<source> or "
+            f"__ref__<upstream model>) and keep {calls} in the __assert__ or __expected__ CTE, "
+            "or remove the test."
+        )
+    else:
+        reads: str = f"reads only mocks ({', '.join(mocks)})" if mocks else "reads no model"
+        message = f"SQL test '{test_name}' {reads}, so the test has no model to run against"
+        help_text = (
+            'Call __ref("<model under test>") in an __assert__ or __expected__ CTE so the test '
+            "runs that model with its mocks, or remove the test."
+        )
+    _HelperDiagnostics(test_file=test_file, test_block=test_block).report(
+        cte_name=reader.name if reader is not None else test_name,
+        call=first_call,
+        message=message,
+        help=help_text,
+    )
 
 
 def report_mocks_reading_referencing_helpers(
@@ -262,6 +369,10 @@ def report_mocks_reading_referencing_helpers(
                 mock_name=mock_name, call=call, reference=referencing[helper_key]
             ),
         )
+
+
+def _reader_ctes(payload: CompileModelSqlTestCtes) -> tuple[CompileSqlTestCte, ...]:
+    return (*payload.expected_ctes, *payload.assertion_ctes)
 
 
 def _read_helper_keys(graph: SqlTestCteGraph) -> tuple[str, ...]:
@@ -407,6 +518,33 @@ def _first_cycle(*, graph: SqlTestCteGraph, keys: tuple[str, ...]) -> tuple[str,
     return None
 
 
+def sql_test_cte_location(
+    *,
+    test_file: DiscoveredSqlTestFile,
+    test_block: DiscoveredSqlTestBlock,
+    cte_name: str,
+    call: str | None,
+) -> SourceLocation:
+    """Locate a call inside one CTE of a SQL test block, else the CTE header, else the block."""
+
+    contents: str = test_file.contents
+    block_offset: int = max(contents.find(test_block.sql_body), 0)
+    header: re.Match[str] | None = re.compile(
+        rf"(?<![\w$]){re.escape(cte_name)}[\"`]?\s+AS\s*\(", re.IGNORECASE
+    ).search(contents, block_offset)
+    start: int = header.start() if header is not None else block_offset
+    text: str = cte_name if header is not None else ""
+    if call is not None and header is not None:
+        found: re.Match[str] | None = re.compile(re.escape(call), re.IGNORECASE).search(
+            contents, header.end()
+        )
+        if found is not None:
+            start, text = found.start(), call
+    return reference_call_location(
+        path=test_file.relative_path, text=contents, start=start, call=text
+    )
+
+
 class _HelperDiagnostics:
     """Located P013 diagnostics for one SQL test block."""
 
@@ -414,12 +552,14 @@ class _HelperDiagnostics:
         self, *, test_file: DiscoveredSqlTestFile, test_block: DiscoveredSqlTestBlock
     ) -> None:
         self._test_file: DiscoveredSqlTestFile = test_file
-        self._block_offset: int = max(test_file.contents.find(test_block.sql_body), 0)
+        self._test_block: DiscoveredSqlTestBlock = test_block
         self._test_name: str = test_block.name or test_file.relative_path.stem
         self.reported: bool = False
 
     def report(self, *, cte_name: str, call: str | None, message: str, help: str) -> None:
-        location: SourceLocation = self._location(cte_name=cte_name, call=call)
+        location: SourceLocation = sql_test_cte_location(
+            test_file=self._test_file, test_block=self._test_block, cte_name=cte_name, call=call
+        )
         self.reported = True
         report_compile_diagnostic(
             key=(
@@ -438,21 +578,4 @@ class _HelperDiagnostics:
                 location=location,
                 help=help,
             ),
-        )
-
-    def _location(self, *, cte_name: str, call: str | None) -> SourceLocation:
-        contents: str = self._test_file.contents
-        header: re.Match[str] | None = re.compile(
-            rf"(?<![\w$]){re.escape(cte_name)}[\"`]?\s+AS\s*\(", re.IGNORECASE
-        ).search(contents, self._block_offset)
-        start: int = header.start() if header is not None else self._block_offset
-        text: str = cte_name if header is not None else ""
-        if call is not None and header is not None:
-            found: re.Match[str] | None = re.compile(re.escape(call), re.IGNORECASE).search(
-                contents, header.end()
-            )
-            if found is not None:
-                start, text = found.start(), call
-        return reference_call_location(
-            path=self._test_file.relative_path, text=contents, start=start, call=text
         )

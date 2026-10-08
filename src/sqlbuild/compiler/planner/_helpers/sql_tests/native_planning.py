@@ -9,7 +9,9 @@ import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.classes.sql_test_cte_locator import SqlTestCteLocator
+from sqlbuild.compiler.compile.constants import SQL_TEST_HELPER_REFERENCE_CODE
+from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModel,
@@ -37,6 +39,8 @@ from sqlbuild.compiler.profiling.classes.context import CompileTimingContext
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
+
+_UNRESOLVED_REFERENCE_PREFIX: str = "sql_test_reference:"
 
 _CALL_SUFFIX_SENTINEL: str = "__SQLBUILD_CALL_SUFFIX__"
 _NATIVE_WORKERS: int = 4
@@ -116,7 +120,7 @@ def plan_sql_tests_natively(
             orjson.dumps(request, option=orjson.OPT_SORT_KEYS).decode()
         )
     except ValueError as error:
-        raise _planning_error(error=error) from None
+        raise _planning_error(error=error, tests=tests) from None
     response_payload: object = orjson.loads(native_response)
     if not isinstance(response_payload, dict):
         raise NativeSqlTestPlanningError(
@@ -168,7 +172,7 @@ def resolve_sql_test_model_chains(
             NativeSqlTestRenderingModule, _native
         ).resolve_sql_test_chains_json(orjson.dumps(request, option=orjson.OPT_SORT_KEYS).decode())
     except ValueError as error:
-        raise _planning_error(error=error) from None
+        raise _planning_error(error=error, tests=tests) from None
     response_payload: object = orjson.loads(native_response)
     chains: object = response_payload.get("chains") if isinstance(response_payload, dict) else None
     if not isinstance(chains, list) or len(chains) != len(tests):
@@ -178,13 +182,49 @@ def resolve_sql_test_model_chains(
     return tuple(_string_tuple(value=chain, context="chain") for chain in chains)
 
 
-def _planning_error(*, error: ValueError) -> Exception:
+def _planning_error(*, error: ValueError, tests: tuple[CompiledSqlTest, ...]) -> Exception:
     message: str = str(error)
+    if message.startswith(_UNRESOLVED_REFERENCE_PREFIX):
+        return _unresolved_reference_error(
+            payload=orjson.loads(message.removeprefix(_UNRESOLVED_REFERENCE_PREFIX)), tests=tests
+        )
     if message.startswith("compile_input:"):
         return CompileInputError(message.removeprefix("compile_input:"))
     if message.startswith("planner_input:"):
         return PlannerInputError(message.removeprefix("planner_input:"))
     return NativeSqlTestPlanningError(f"native SQL-test planning failed: {message}")
+
+
+def _unresolved_reference_error(
+    *, payload: dict[str, str], tests: tuple[CompiledSqlTest, ...]
+) -> Exception:
+    """Locate a reference call the native planner could not resolve in its test file."""
+
+    test: CompiledSqlTest | None = next(
+        (
+            test
+            for test in tests
+            if test.name == payload["testName"]
+            and str(test.test_file.relative_path) == payload["fileLabel"]
+        ),
+        None,
+    )
+    cte_name: str = payload["cteName"]
+    call: str = payload["call"]
+    message: str = f"SQL test CTE '{cte_name}' calls {call}, which the test query cannot resolve"
+    help_text: str = (
+        f"Mock it in the test, for example {payload['mockCte']} AS (SELECT ...), or call "
+        '__ref("<model>") on a model the test runs.'
+    )
+    if test is None:
+        return CompileInputError(message, code=SQL_TEST_HELPER_REFERENCE_CODE, help=help_text)
+    return SqlTestReferenceError(
+        message,
+        location=SqlTestCteLocator.locate(
+            test_file=test.test_file, test_block=test.test_block, cte_name=cte_name, call=call
+        ),
+        help=help_text,
+    )
 
 
 def _plan_from_payload(*, value: object) -> NativeSqlTestPlan:
@@ -413,7 +453,8 @@ def _test_request(
             "expectedCtes": [_cte_request(cte=cte) for cte in payload.expected_ctes],
             "expectedModelNames": list(payload.expected_model_names),
             "assertionCtes": [_cte_request(cte=cte) for cte in payload.assertion_ctes],
-            "helperTargetModelNames": list(test.helper_target_model_names),
+            "readHelperNames": list(test.read_helper_names),
+            "referenceTargetModelNames": list(test.reference_target_model_names),
         }
     return {
         "name": test.name,

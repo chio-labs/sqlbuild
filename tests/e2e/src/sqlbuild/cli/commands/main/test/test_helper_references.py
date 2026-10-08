@@ -181,6 +181,279 @@ _ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
             expected_compiled_fragments=(),
             expected_absent_compiled_fragments=("archived_rows", "other_rows"),
         ),
+        HelperReferenceE2ETestCase(
+            description="expected rows and assertion read a mock on the python engine",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=(
+                "PASS=1  FAIL=0  TOTAL=1",
+                "assertion reads_mocked_items",
+            ),
+            expected_compiled_fragments=(
+                "SELECT item_id, amount * 2 AS amount_doubled FROM __ref__items",
+                "SELECT item_id FROM __ref__items WHERE item_id <> 7 OR amount <> 5",
+            ),
+            expected_absent_compiled_fragments=(
+                "__ref(",
+                "SELECT 1 AS item_id, 10 AS amount",
+            ),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows and assertion read a mock on the python engine without sql analysis",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test"),
+            engine="python",
+            sql_analysis=False,
+            expected_output_fragments=(
+                "PASS=1  FAIL=0  TOTAL=1",
+                "assertion reads_mocked_items",
+            ),
+            expected_compiled_fragments=(
+                "SELECT item_id, amount * 2 AS amount_doubled FROM __ref__items",
+                "SELECT item_id FROM __ref__items WHERE item_id <> 7 OR amount <> 5",
+            ),
+            expected_absent_compiled_fragments=(
+                "__ref(",
+                "SELECT 1 AS item_id, 10 AS amount",
+            ),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows and assertion read a mock on the native engine",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=(
+                "PASS=1  FAIL=0  TOTAL=1",
+                "assertion reads_mocked_items",
+            ),
+            expected_compiled_fragments=(
+                "SELECT item_id, amount * 2 AS amount_doubled FROM __ref__items",
+                "SELECT item_id FROM __ref__items WHERE item_id <> 7 OR amount <> 5",
+            ),
+            expected_absent_compiled_fragments=(
+                "__ref(",
+                "SELECT 1 AS item_id, 10 AS amount",
+            ),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows and assertion read a mock on the native engine without sql analysis",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test"),
+            engine="native",
+            sql_analysis=False,
+            expected_output_fragments=(
+                "PASS=1  FAIL=0  TOTAL=1",
+                "assertion reads_mocked_items",
+            ),
+            expected_compiled_fragments=(
+                "SELECT item_id, amount * 2 AS amount_doubled FROM __ref__items",
+                "SELECT item_id FROM __ref__items WHERE item_id <> 7 OR amount <> 5",
+            ),
+            expected_absent_compiled_fragments=(
+                "__ref(",
+                "SELECT 1 AS item_id, 10 AS amount",
+            ),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows and assertion read a mock on the native-preview engine",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test"),
+            engine="native-preview",
+            sql_analysis=True,
+            expected_output_fragments=(
+                "PASS=1  FAIL=0  TOTAL=1",
+                "assertion reads_mocked_items",
+            ),
+            expected_compiled_fragments=(
+                "SELECT item_id, amount * 2 AS amount_doubled FROM __ref__items",
+                "SELECT item_id FROM __ref__items WHERE item_id <> 7 OR amount <> 5",
+            ),
+            expected_absent_compiled_fragments=(
+                "__ref(",
+                "SELECT 1 AS item_id, 10 AS amount",
+            ),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows and assertion read a mock on the native-preview engine without sql analysis",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test"),
+            engine="native-preview",
+            sql_analysis=False,
+            expected_output_fragments=(
+                "PASS=1  FAIL=0  TOTAL=1",
+                "assertion reads_mocked_items",
+            ),
+            expected_compiled_fragments=(
+                "SELECT item_id, amount * 2 AS amount_doubled FROM __ref__items",
+                "SELECT item_id FROM __ref__items WHERE item_id <> 7 OR amount <> 5",
+            ),
+            expected_absent_compiled_fragments=(
+                "__ref(",
+                "SELECT 1 AS item_id, 10 AS amount",
+            ),
+        ),
+        HelperReferenceE2ETestCase(
+            description="selecting a mocked model does not select its test on the python engine",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test", "--select", "items"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows read an unmocked model the test runs on the python engine",
+            tests=("expected_reads_unmocked_model",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=(
+                "1 selected",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_compiled_fragments=("amount * 2 AS amount_doubled FROM __ref__item_extras",),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="selecting a mocked model does not select its test on the native engine",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test", "--select", "items"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows read an unmocked model the test runs on the native engine",
+            tests=("expected_reads_unmocked_model",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=(
+                "1 selected",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_compiled_fragments=("amount * 2 AS amount_doubled FROM __ref__item_extras",),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="selecting a mocked model does not select its test on the native-preview engine",
+            tests=("mocked_model_read_by_expected_and_assertion",),
+            command=("--no-color", "test", "--select", "items"),
+            engine="native-preview",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="expected rows read an unmocked model the test runs on the native-preview engine",
+            tests=("expected_reads_unmocked_model",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="native-preview",
+            sql_analysis=True,
+            expected_output_fragments=(
+                "1 selected",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_compiled_fragments=("amount * 2 AS amount_doubled FROM __ref__item_extras",),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column reads an unknown model on the python engine",
+            tests=("helper_named_like_column_reads_unknown_model",),
+            command=("--no-color", "test"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "item_archive"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column reads an unknown model on the python engine without sql analysis",
+            tests=("helper_named_like_column_reads_unknown_model",),
+            command=("--no-color", "test"),
+            engine="python",
+            sql_analysis=False,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "item_archive"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column selects no model on the python engine",
+            tests=("helper_named_like_column_reads_model",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "__ref__item_extras"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column reads an unknown model on the native engine",
+            tests=("helper_named_like_column_reads_unknown_model",),
+            command=("--no-color", "test"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "item_archive"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column reads an unknown model on the native engine without sql analysis",
+            tests=("helper_named_like_column_reads_unknown_model",),
+            command=("--no-color", "test"),
+            engine="native",
+            sql_analysis=False,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "item_archive"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column selects no model on the native engine",
+            tests=("helper_named_like_column_reads_model",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "__ref__item_extras"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column reads an unknown model on the native-preview engine",
+            tests=("helper_named_like_column_reads_unknown_model",),
+            command=("--no-color", "test"),
+            engine="native-preview",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "item_archive"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column reads an unknown model on the native-preview engine without sql analysis",
+            tests=("helper_named_like_column_reads_unknown_model",),
+            command=("--no-color", "test"),
+            engine="native-preview",
+            sql_analysis=False,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "item_archive"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helper named like a column selects no model on the native-preview engine",
+            tests=("helper_named_like_column_reads_model",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="native-preview",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("__ref(", "__ref__item_extras"),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -303,6 +576,135 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             expected_line=7,
             expected_column=35,
             expected_help_fragment='FROM __ref__item_totals rather than FROM __ref("item_totals")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="assertion reading an unmocked source on the python engine",
+            test_name="assertion_reads_unmocked_source",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test assertion CTE '__assert__no_returns' calls "
+                '__source("item_returns"), which the test does not mock, so the test query '
+                "cannot resolve it"
+            ),
+            expected_line=11,
+            expected_column=23,
+            expected_help_fragment="__source__item_returns AS (SELECT ...)",
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading only mocks on the python engine",
+            test_name="assertion_reads_only_mocks",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_only_mocks' mocks the model it tests (__ref__items), "
+                "so the test has no model to run against"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment=(
+                "Mock the model's inputs instead (for example __source__<source> or "
+                '__ref__<upstream model>) and keep __ref("items")'
+            ),
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="expected rows reading an unknown model on the python engine",
+            test_name="expected_reads_unknown_model",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test expected CTE '__expected__item_totals' references unknown model "
+                "'item_archive'"
+            ),
+            expected_line=8,
+            expected_column=39,
+            expected_help_fragment='__ref("<model>")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="assertion reading an unmocked source on the native engine",
+            test_name="assertion_reads_unmocked_source",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test assertion CTE '__assert__no_returns' calls "
+                '__source("item_returns"), which the test does not mock, so the test query '
+                "cannot resolve it"
+            ),
+            expected_line=11,
+            expected_column=23,
+            expected_help_fragment="__source__item_returns AS (SELECT ...)",
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading only mocks on the native engine",
+            test_name="assertion_reads_only_mocks",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_only_mocks' mocks the model it tests (__ref__items), "
+                "so the test has no model to run against"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment=(
+                "Mock the model's inputs instead (for example __source__<source> or "
+                '__ref__<upstream model>) and keep __ref("items")'
+            ),
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="expected rows reading an unknown model on the native engine",
+            test_name="expected_reads_unknown_model",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test expected CTE '__expected__item_totals' references unknown model "
+                "'item_archive'"
+            ),
+            expected_line=8,
+            expected_column=39,
+            expected_help_fragment='__ref("<model>")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="assertion reading an unmocked source on the native-preview engine",
+            test_name="assertion_reads_unmocked_source",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test assertion CTE '__assert__no_returns' calls "
+                '__source("item_returns"), which the test does not mock, so the test query '
+                "cannot resolve it"
+            ),
+            expected_line=11,
+            expected_column=23,
+            expected_help_fragment="__source__item_returns AS (SELECT ...)",
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading only mocks on the native-preview engine",
+            test_name="assertion_reads_only_mocks",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_only_mocks' mocks the model it tests (__ref__items), "
+                "so the test has no model to run against"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment=(
+                "Mock the model's inputs instead (for example __source__<source> or "
+                '__ref__<upstream model>) and keep __ref("items")'
+            ),
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="expected rows reading an unknown model on the native-preview engine",
+            test_name="expected_reads_unknown_model",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test expected CTE '__expected__item_totals' references unknown model "
+                "'item_archive'"
+            ),
+            expected_line=8,
+            expected_column=39,
+            expected_help_fragment='__ref("<model>")',
         ),
     ),
     ids=lambda case: case.description,

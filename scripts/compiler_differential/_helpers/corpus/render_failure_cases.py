@@ -272,6 +272,62 @@ def _reference_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="test-assertion-reads-unmocked-source",
+            expected_code="P013",
+            expected_message=(
+                "SQL test assertion CTE '__assert__no_negative_orders' calls "
+                '__source("raw_orders"), which the test does not mock'
+            ),
+            files={
+                "tests/unit/test_customer_totals.sql": (
+                    "TEST();\n\nWITH\n__ref__stg_orders AS (\n"
+                    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,"
+                    " 'placed' AS status\n),\n"
+                    "__expected__customer_totals AS (\n"
+                    "  SELECT 10 AS customer_id, CAST(5 AS DOUBLE) AS total_amount\n),\n"
+                    "__assert__no_negative_orders AS (\n"
+                    '  SELECT order_id FROM __source("raw_orders") WHERE amount < 0\n'
+                    ")\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
+            name="test-reads-only-mocks",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'test_stg_orders' mocks the model it tests (__ref__stg_orders), so "
+                "the test has no model to run against"
+            ),
+            files={
+                "tests/unit/test_stg_orders.sql": (
+                    "TEST();\n\nWITH\n__ref__stg_orders AS (\n"
+                    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,"
+                    " 'placed' AS status\n),\n"
+                    "__assert__no_negative_amounts AS (\n"
+                    '  SELECT order_id FROM __ref("stg_orders") WHERE amount < 0\n'
+                    ")\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
+            name="test-expected-reads-unknown-model",
+            expected_code="P013",
+            expected_message=(
+                "SQL test expected CTE '__expected__stg_orders' references unknown model "
+                "'archived_orders'"
+            ),
+            files={
+                "tests/unit/test_stg_orders.sql": (
+                    "TEST();\n\nWITH\n__source__raw_orders AS (\n"
+                    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,"
+                    " 'placed' AS status\n),\n"
+                    "__expected__stg_orders AS (\n"
+                    '  SELECT order_id FROM __ref("archived_orders")\n'
+                    ")\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
             name="dbt-reference-without-manifest",
             expected_code="C214",
             files={

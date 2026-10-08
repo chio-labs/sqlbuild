@@ -7,6 +7,7 @@ pub mod helper_names;
 pub mod helper_scope;
 pub mod markers;
 pub mod planning;
+pub mod reader_references;
 pub mod relation_markers;
 pub mod rendering;
 pub mod scenario_extraction;

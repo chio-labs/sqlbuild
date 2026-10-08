@@ -103,7 +103,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + ",\n__assert__has_rows AS (SELECT 1 FROM built_orders WHERE id IS NULL)\n"
             },
             expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
-            expected_outcome_fragment="helper_target_model_names=('orders',)",
+            expected_outcome_fragment="reference_target_model_names=('orders',)",
         ),
         AttachmentProjectTestCase(
             description="a helper chain where one helper reads another",
@@ -115,7 +115,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + ",\n__assert__has_ids AS (SELECT 1 FROM built_ids WHERE id IS NULL)\n"
             },
             expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
-            expected_outcome_fragment="helper_target_model_names=('orders',)",
+            expected_outcome_fragment="reference_target_model_names=('orders',)",
         ),
         AttachmentProjectTestCase(
             description="an unread helper referencing an unknown model",
@@ -126,7 +126,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "\n"
             },
             expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
-            expected_outcome_fragment="helper_target_model_names=()",
+            expected_outcome_fragment="read_helper_names=(), reference_target_model_names=()",
         ),
         AttachmentProjectTestCase(
             description="a read helper referencing an unknown model reports P013",

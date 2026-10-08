@@ -15,6 +15,7 @@ use crate::compiler::_helpers::sql_tests::planning::{
     DBT_REF_PREFIX, REF_PREFIX, SEED_PREFIX, SOURCE_PREFIX, SqlTestPatterns, TABLE_FUNCTION_PREFIX,
     TestFixtures, compile_error,
 };
+use crate::compiler::_helpers::sql_tests::reader_references::calls_reference;
 use crate::constants::{
     QUOTED_IDENTIFIER_DELIMITER_BYTES, SQL_TEST_ACTUAL_CTE, SQL_TEST_ACTUAL_CTE_PREFIX,
     SQL_TEST_EXPECTED_CTE,
@@ -80,6 +81,8 @@ pub(crate) struct ScopeRequest<'a> {
     pub(crate) rename_dialect: Option<&'a Dialect>,
     pub(crate) flat_dialect: bool,
     pub(crate) slice_dialect: SliceDialect,
+    /// Helpers the compiler found the test reads; an unread helper calling a reference is left out.
+    pub(crate) read_helper_names: &'a [String],
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -160,13 +163,17 @@ impl ScopeGraph {
                 .mocks_by_generated_name
                 .insert(mock.generated_name.clone(), index);
         }
-        if fixtures.helpers.is_empty() {
-            return Ok(graph);
-        }
-        for (index, cte) in fixtures.helpers.iter().enumerate() {
-            graph
-                .helper_indexes
-                .insert(cte.name.to_ascii_lowercase(), index);
+        let read: HashSet<String> = request
+            .read_helper_names
+            .iter()
+            .map(|name| name.to_ascii_lowercase())
+            .collect();
+        for cte in &fixtures.helpers {
+            let key = cte.name.to_ascii_lowercase();
+            if !read.contains(&key) && calls_reference(&cte.sql_body, patterns) {
+                continue;
+            }
+            graph.helper_indexes.insert(key, graph.helpers.len());
             graph.helpers.push(ScopeHelper {
                 name: cte.name.clone(),
                 original: cte.sql_body.clone(),
@@ -175,6 +182,9 @@ impl ScopeGraph {
                 tokens: identifier_tokens(&cte.sql_body, patterns),
                 resolved: None,
             });
+        }
+        if graph.helpers.is_empty() {
+            return Ok(graph);
         }
         let readers = test_readers(fixtures);
         graph.reject_shadowed_helpers(&readers, request)?;
@@ -294,36 +304,12 @@ impl ScopeGraph {
         order.ordered
     }
 
-    /// Helpers the test's expected rows and assertions read, except those a mock it uses reads.
-    pub(crate) fn read_helpers(
-        &self,
-        readers: &[&str],
-        used_mocks: &HashSet<String>,
-        patterns: &SqlTestPatterns,
-    ) -> HashSet<usize> {
-        let helpers = |nodes: Vec<ScopeNode>| -> HashSet<usize> {
-            nodes
-                .into_iter()
-                .filter_map(|node| match node {
-                    ScopeNode::Helper(index) => Some(index),
-                    ScopeNode::Mock(_) => None,
-                })
-                .collect()
-        };
-        let mut read: HashSet<usize> = HashSet::new();
-        for sql in readers {
-            read.extend(helpers(
-                self.closure(&identifier_tokens(sql, patterns), true),
-            ));
-        }
-        for mock in &self.mocks {
-            if used_mocks.contains(&mock.mock_name) {
-                for index in helpers(self.closure(&mock.tokens, true)) {
-                    read.remove(&index);
-                }
-            }
-        }
-        read
+    /// Indexes of the helpers the compiler found the test's expected rows and assertions read.
+    pub(crate) fn read_helper_indexes(&self, names: &[String]) -> HashSet<usize> {
+        names
+            .iter()
+            .filter_map(|name| self.helper_indexes.get(&name.to_ascii_lowercase()).copied())
+            .collect()
     }
 
     /// Read helpers whose SQL, as placed in the test query, calls a reference such as `__ref()`.
@@ -342,6 +328,11 @@ impl ScopeGraph {
                     .then(|| (index, sql.to_string()))
             })
             .collect()
+    }
+
+    /// The authored name of one helper.
+    pub(crate) fn helper_name(&self, index: usize) -> &str {
+        &self.helpers[index].name
     }
 
     /// Replace a helper's references with the CTEs a reader must define ahead of it.
@@ -549,35 +540,21 @@ pub(crate) fn helper_scope_ctes(
     Ok(graph.collect_scope(nodes))
 }
 
-/// Merge scoped CTEs into a step's CTEs; relations resolved helpers read come first and win.
+/// Append scoped CTEs after a step's CTEs; a same-named mock or model CTE keeps the step's copy.
 pub(crate) fn merged_scoped_ctes(
     lifted: Vec<(String, String)>,
     scoped: HelperScope,
     file_label: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    type Ctes = Vec<(String, String)>;
-    let (generated, authored): (Ctes, Ctes) = scoped
-        .ctes
-        .into_iter()
-        .partition(|(name, _)| scoped.generated.contains(&name.to_ascii_lowercase()));
     let mut merged: Vec<(String, String)> = lifted;
-    if !generated.is_empty() {
-        let own = std::mem::replace(&mut merged, generated);
-        for (name, sql) in own {
-            if !merged
-                .iter()
-                .any(|(existing, _)| existing.eq_ignore_ascii_case(&name))
-            {
-                merged.push((name, sql));
-            }
-        }
-    }
-    for (name, sql) in authored {
+    for (name, sql) in scoped.ctes {
         match merged
             .iter()
             .find(|(existing, _)| existing.eq_ignore_ascii_case(&name))
         {
-            Some((_, existing_sql)) if *existing_sql == sql => {}
+            Some((_, existing_sql))
+                if *existing_sql == sql
+                    || scoped.generated.contains(&name.to_ascii_lowercase()) => {}
             Some(_) => {
                 return Err(compile_error(&format!(
                     "SQL test '{file_label}' defines CTE '{name}', which conflicts with the generated CTE"
