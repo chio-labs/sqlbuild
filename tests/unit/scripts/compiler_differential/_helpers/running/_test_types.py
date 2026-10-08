@@ -64,3 +64,14 @@ class SummaryTestCase:
     missing_coverage: dict[str, tuple[str, ...]]
     expected_lines: tuple[str, ...]
     expected_absent: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AnalysisRecordsTestCase:
+    """Record files two engine processes wrote and the report lines they must produce."""
+
+    description: str
+    files: dict[str, str]
+    expected_wheel_sites: dict[tuple[str, str], int]
+    expected_deferrals: dict[tuple[str, str], int]
+    expected_lines: tuple[str, ...]

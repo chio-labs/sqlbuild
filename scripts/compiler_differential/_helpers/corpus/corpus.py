@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import tomllib
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from scripts.compiler_differential._helpers.corpus.failure_cases import all_fail
 from scripts.compiler_differential.classes.dense_project import DenseProject
 from scripts.compiler_differential.classes.project_builder import ProjectBuilder
 from scripts.compiler_differential.constants import (
+    ANALYSIS_DIALECT_VARIANTS,
     COLD_COMPILE,
     CORPUS_DENSE,
     CORPUS_EXAMPLES,
@@ -21,6 +23,7 @@ from scripts.compiler_differential.constants import (
     FIXTURE_EXPECTED_OUTCOMES,
     FIXTURE_PROJECT_SUBDIRECTORIES,
     FIXTURE_ROOT,
+    GENERATOR_DIALECT_BLOCKS,
     PLAN,
     PROJECT_CONFIG_FILE,
     STORE_WARM_COMPILE,
@@ -76,6 +79,10 @@ def build_corpus(
         )
     if CORPUS_SEEDS in corpora:
         entries.extend(_seed_project(seed) for seed in seeds)
+        entries.extend(
+            _dialect_seed_project(seed=seed, dialect=dialect)
+            for seed, dialect in itertools.product(seeds[:1], ANALYSIS_DIALECT_VARIANTS)
+        )
     if CORPUS_FAILURES in corpora:
         entries.extend(
             CorpusProject(
@@ -138,11 +145,26 @@ def _seed_project(seed: int) -> CorpusProject:
     generated: GeneratedProject = ProjectBuilder(seed).build()
     return CorpusProject(
         name=f"seed/{seed}",
-        commands=(COLD_COMPILE, STORE_WARM_COMPILE, PLAN),
+        commands=(COLD_COMPILE, STORE_WARM_COMPILE, PLAN, *generated.extra_commands),
         expected=ExpectedOutcome(
             error_code=generated.expected_error_code,
             succeeding_commands=generated.succeeding_commands,
         ),
+        writer=generated.write,
+        seed_coverage=True,
+    )
+
+
+def _dialect_seed_project(*, seed: int, dialect: str) -> CorpusProject:
+    """Compile a seed's analysis blocks under another adapter's dialect; plan needs a warehouse."""
+
+    generated: GeneratedProject = ProjectBuilder(
+        seed, blocks=GENERATOR_DIALECT_BLOCKS, dialect=dialect
+    ).build()
+    return CorpusProject(
+        name=f"seed/{seed}-{dialect}",
+        commands=(COLD_COMPILE,),
+        expected=EXPECT_SUCCESS,
         writer=generated.write,
         seed_coverage=True,
     )

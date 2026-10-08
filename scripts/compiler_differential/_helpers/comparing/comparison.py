@@ -86,6 +86,13 @@ def first_diagnostic_message(*, outcome: CommandOutcome, severity: str) -> str |
     return str(diagnostics[0].get("message")) if diagnostics else None
 
 
+def first_diagnostic(*, outcome: CommandOutcome, severity: str) -> dict[str, object]:
+    """Return a JSON compile report's first diagnostic of one severity, or an empty mapping."""
+
+    diagnostics: list[dict[str, object]] = _diagnostics(outcome=outcome, severity=severity)
+    return diagnostics[0] if diagnostics else {}
+
+
 def _diagnostics(*, outcome: CommandOutcome, severity: str | None) -> list[dict[str, object]]:
     payload: dict[str, object] = as_json_object(_loads(outcome.stdout)) or {}
     diagnostics: object = payload.get("diagnostics")

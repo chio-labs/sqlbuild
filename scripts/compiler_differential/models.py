@@ -50,6 +50,14 @@ class CommandOutcome:
 
 
 @dataclass(frozen=True)
+class AnalysisRecords:
+    """Wheel calls by `(site, api)` and analysis deferrals by `(kind, site)` for one run."""
+
+    wheel_sites: dict[tuple[str, str], int] = field(default_factory=dict)
+    deferrals: dict[tuple[str, str], int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class EngineRun:
     """Everything one engine produced for one corpus project."""
 
@@ -59,6 +67,7 @@ class EngineRun:
     manifest: str | None
     dag: str | None
     captures: dict[str, dict[str, Path]] = field(default_factory=dict)
+    records: AnalysisRecords | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +100,8 @@ class ProjectComparison:
     seconds: float
     discovered_kinds: frozenset[str] = frozenset()
     rendered_kinds: frozenset[str] = frozenset()
+    analysed_kinds: frozenset[str] = frozenset()
+    records: tuple[AnalysisRecords | None, AnalysisRecords | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +116,8 @@ class DifferentialOptions:
     engine_environment: dict[str, dict[str, str]]
     require_discovery_coverage: bool = False
     require_render_coverage: bool = False
+    require_analysis_coverage: bool = False
+    analysis_records: bool = False
 
 
 @dataclass(frozen=True)
@@ -130,6 +143,7 @@ class GeneratedProject(WritableProject):
     expected_error_code: str | None
     features: tuple[str, ...]
     succeeding_commands: tuple[str, ...] = ()
+    extra_commands: tuple[DifferentialCommand, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,6 +154,10 @@ class FailureCase(WritableProject):
     expected_code: str
     expected_warning_code: str | None = None
     expected_message: str | None = None
+    expected_help: str | None = None
+    expected_notes: tuple[str, ...] = ()
+    expected_location: tuple[int, int] | None = None
+    expected_codes: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +195,10 @@ class EmittedCodes:
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
     first_error_message: str | None = None
+    first_error_help: str | None = None
+    first_error_notes: tuple[str, ...] = ()
+    first_error_location: tuple[int, int] | None = None
+    codes: tuple[str, ...] = ()
 
     @property
     def first_error(self) -> str | None:

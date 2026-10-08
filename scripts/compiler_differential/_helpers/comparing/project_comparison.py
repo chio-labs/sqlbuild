@@ -10,6 +10,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
     compare_engine_runs,
     diagnostic_codes,
 )
+from scripts.compiler_differential._helpers.coverage.analysis import project_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import project_render_kinds
 from scripts.compiler_differential._helpers.running.execution import run_engine
@@ -74,6 +75,8 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
             else frozenset()
         ),
         rendered_kinds=project_render_kinds(left.captures) if counted else frozenset(),
+        analysed_kinds=project_analysis_kinds(left.captures) if counted else frozenset(),
+        records=(left.records, right.records) if options.analysis_records else None,
     )
 
 

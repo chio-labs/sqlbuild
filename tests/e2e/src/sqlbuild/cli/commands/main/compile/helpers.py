@@ -3965,6 +3965,39 @@ def fact_comment(root: Path) -> None:
     replace_project_text(root, FACT_ORDERS_MODEL, "FROM __ref", "-- leaf\nFROM __ref")
 
 
+def payment_expression_type_change(root: Path) -> None:
+    """Widen one column of the payments source expression, which changes its inferred shape."""
+
+    replace_project_text(
+        root,
+        "sources/raw.yml",
+        "SELECT 1 AS id, 1 AS order_id,",
+        "SELECT 1 AS id, CAST(1 AS BIGINT) AS order_id,",
+    )
+
+
+def completed_order_udf_signature_change(root: Path) -> None:
+    """Change the completed-order UDF's declared return type, which its callers' shapes read."""
+
+    replace_project_text(
+        root,
+        "functions/sql/udf__is_completed_order.sql",
+        "returns BOOLEAN,\n);\n\norder_status = 'completed'",
+        "returns INTEGER,\n);\n\nCAST(order_status = 'completed' AS INTEGER)",
+    )
+
+
+def order_status_nullability_change(root: Path) -> None:
+    """Declare one raw orders source column non-null in its schema entry."""
+
+    replace_project_text(
+        root,
+        "sources/raw.yml",
+        "      - name: status\n        type: VARCHAR\n",
+        "      - name: status\n        type: VARCHAR\n        nullable: false\n",
+    )
+
+
 def staging_column_removed(root: Path) -> None:
     """Drop the quantity column from staging orders, which downstream models and tests read."""
 

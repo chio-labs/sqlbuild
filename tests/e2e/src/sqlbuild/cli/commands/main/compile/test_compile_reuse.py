@@ -9,6 +9,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileReuseBypassTestCase,
     CompileReuseConcurrentWriterTestCase,
@@ -278,6 +279,11 @@ def test_given_reused_compile_when_input_changes_then_it_misses_and_matches_unca
             description="unrelated_environment_variable",
             edit=lambda _root: None,
             edited_env={"ORDERS_UNRELATED_SETTING": "1"},
+        ),
+        CompileReuseHitTestCase(
+            description="analysis_record_directory",
+            edit=lambda _root: None,
+            edited_env={ANALYSIS_RECORD_DIR_ENV_VAR: "target/analysis-records"},
         ),
         CompileReuseHitTestCase(
             description="editor_settings_added",
