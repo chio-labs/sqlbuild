@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.142.0](https://github.com/chio-labs/sqlbuild/compare/v0.141.0...v0.142.0) (2026-10-08)
+
+
+### Features
+
+* **native:** extract raw and expanded SQL tests with one native extractor ([#1026](https://github.com/chio-labs/sqlbuild/issues/1026)) ([82b33b0](https://github.com/chio-labs/sqlbuild/commit/82b33b040ff4abb874b56a1fb7fa433610822028))
+
 ## [0.141.0](https://github.com/chio-labs/sqlbuild/compare/v0.140.1...v0.141.0) (2026-10-08)
 
 
