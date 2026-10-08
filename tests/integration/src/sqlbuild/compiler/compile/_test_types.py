@@ -40,3 +40,18 @@ class MacroExpansionDifferentialTestCase:
     samples: int
     expected_minimum_successes: int
     expected_mismatches: list[tuple[object, object, object]]
+
+
+@dataclass(frozen=True)
+class FailingMacroProjectParityTestCase:
+    """Seeded projects whose failing macros every engine must report identically, running once."""
+
+    description: str
+    seed: int
+    projects: int
+    engines: tuple[str, ...]
+    expected_minimum_failures: int
+    expected_minimum_successes: int
+    expected_minimum_errors_after_macro_runs: int
+    expected_minimum_distinct_errors: int
+    expected_mismatches: list[tuple[object, object, object]]

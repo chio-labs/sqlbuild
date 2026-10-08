@@ -944,6 +944,25 @@ class ReferenceScanErrorTestCase:
 
 
 @dataclass(frozen=True)
+class NativeMacroErrorTestCase:
+    """A failing macro project every engine must report identically, running each call once."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_report_text: str
+    expected_macro_runs: list[str]
+
+
+@dataclass(frozen=True)
+class MacroErrorLifecycleTestCase:
+    """A failing macro project whose invocation lifecycle every engine reports the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_error_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class NativeConfigErrorTestCase:
     """A failing project whose model config error both engines must report the same way."""
 
@@ -956,7 +975,7 @@ class NativeConfigErrorTestCase:
 
 @dataclass(frozen=True)
 class MacroExpandedValidatorErrorTestCase:
-    """A validator error from macro-expanded SQL that the preview bridge must re-run."""
+    """A validator error from macro-expanded SQL that every engine reports, running macros once."""
 
     description: str
     project_files: dict[str, str]
