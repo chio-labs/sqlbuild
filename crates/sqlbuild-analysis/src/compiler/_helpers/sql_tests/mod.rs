@@ -9,3 +9,4 @@ pub mod markers;
 pub mod planning;
 pub mod relation_markers;
 pub mod rendering;
+pub mod scenario_extraction;

@@ -77,7 +77,6 @@ def _execute_scenario_snapshot_capture_steps(
     settings: ScenarioCaptureSettings,
     local_type_overrides: dict[str, str] | None,
 ) -> ScenarioSnapshotCaptureRunResult:
-
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,
         adapter=adapter,

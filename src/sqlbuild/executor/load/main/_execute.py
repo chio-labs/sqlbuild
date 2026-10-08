@@ -105,7 +105,6 @@ def _execute_source_load(
     ref_bindings: LoaderRefBindings,
     on_progress: Callable[[str], None] | None = None,
 ) -> LoadExecutionResult:
-
     destination_name: str = (
         source_entry.table if source_entry.table is not None else source_entry.name
     )

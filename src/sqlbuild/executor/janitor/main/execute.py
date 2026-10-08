@@ -51,7 +51,6 @@ def _execute_janitor_plan(
     adapter: BaseAdapter,
     connection: Any,
 ) -> JanitorExecutionResult:
-
     recorder: StatementRecorder = StatementRecorder()
     candidate: JanitorDeleteCandidate
     for candidate in () if plan.direct_mode else plan.candidates:

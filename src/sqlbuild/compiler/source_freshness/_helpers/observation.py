@@ -63,7 +63,6 @@ def _observe_configured_source_freshness(
     source: SourceEntry,
     observed_at: datetime,
 ) -> SourceFreshnessObservation:
-
     config: SourceFreshnessConfig | None = source.freshness
     if config is None:
         raise SourceFreshnessObservationError(

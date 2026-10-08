@@ -175,7 +175,46 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...
+def extract_sql_scenario_json(sql: str, file_label: str) -> str | None: ...
+
+class SqlTestTargetCatalog:
+    def __init__(
+        self,
+        models: set[str],
+        sources: set[str],
+        seeds: set[str],
+        resources: tuple[set[str], set[str]],
+    ) -> None: ...
+    def unknown_test_target(
+        self,
+        file_label: str,
+        targets: tuple[list[str], list[str], list[str], list[str], list[str], list[str], list[str]],
+    ) -> str | None: ...
+    def scenario_source_error(
+        self, file_label: str, ctes: list[tuple[str, bool, list[str]]]
+    ) -> str | None: ...
+
+def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> tuple[bool, int | None]: ...
+def scan_test_parameter_references(
+    sql: str, declared: list[str]
+) -> list[tuple[int, int, str]] | None: ...
 def sql_free_of_cursor_intrinsics(sql: str, reserved_markers: list[str]) -> bool: ...
+def parse_function_header_values(
+    header_values: dict[str, object], python: bool
+) -> (
+    tuple[
+        list[tuple[str, str, str]],
+        str | None,
+        list[tuple[str, str, str]] | None,
+        list[str],
+        str | None,
+        str | None,
+        str | None,
+        list[str],
+    ]
+    | None
+): ...
+def resolve_function_namespace_values(inputs: dict[str, object]) -> list[str | None]: ...
 def pair_seed_files(
     declarations: list[str], stems: list[str]
 ) -> tuple[list[int], None] | tuple[None, int]: ...

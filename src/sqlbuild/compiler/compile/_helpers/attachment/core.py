@@ -480,7 +480,6 @@ def _build_model_inputs(
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
     render_reuse: CompileRenderReuseSession | None,
 ) -> tuple[CompileModelInput, ...]:
-
     effective_vars: dict[str, object] = context.effective_vars
     effective_settings: SettingsConfig = context.effective_settings
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)

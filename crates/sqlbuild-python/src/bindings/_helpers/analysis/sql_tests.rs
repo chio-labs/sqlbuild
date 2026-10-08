@@ -50,7 +50,23 @@ fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String
     .map_err(value_error)
 }
 
+/// Python's extracted scenario CTEs as JSON, or `None` where Python must extract the scenario.
+#[pyfunction]
+fn extract_sql_scenario_json(
+    py: Python<'_>,
+    sql: &str,
+    file_label: &str,
+) -> PyResult<Option<String>> {
+    py.compiler_detach(|| {
+        sqlbuild_analysis::compiler::main::sql_scenario_extraction::extract_scenario_json(
+            sql, file_label,
+        )
+    })
+    .map_err(value_error)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(extract_sql_scenario_json, module)?)?;
     module.add_function(wrap_pyfunction!(render_sql_test_comparisons_json, module)?)?;
     module.add_function(wrap_pyfunction!(plan_and_render_sql_tests_json, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_sql_test_chains_json, module)?)?;

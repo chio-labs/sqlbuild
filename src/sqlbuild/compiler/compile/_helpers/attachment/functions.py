@@ -6,6 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild.compiler.attachments.main._parse_native_function_header import (
+    parse_native_function_header,
+)
+from sqlbuild.compiler.attachments.main._resolve_native_function_namespace import (
+    resolve_native_function_namespace,
+)
+from sqlbuild.compiler.attachments.models import (
+    NativeFunctionHeader,
+    NativeFunctionNamespace,
+    NativeFunctionNamespaceInputs,
+)
 from sqlbuild.compiler.compile._helpers.analysis.compact import infer_columns_with_sql_analysis
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_function_sql_syntax,
@@ -99,6 +110,7 @@ def build_sql_function_inputs(
     """Attach and validate SQL function metadata."""
 
     adapter_name: str = macro_context.adapter_name
+    native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -121,21 +133,12 @@ def build_sql_function_inputs(
             raise CompileInputError(f"Duplicate SQL function name '{function_name}'")
         known_names.add(function_name)
         header_values: dict[str, object] = function_file.header_values
-        raw_returns: object | None = header_values.get("returns")
-        if raw_returns is None:
-            raise CompileInputError(
-                f"SQL function file {function_file.relative_path} must declare returns"
-            )
-        arguments: tuple[FunctionArgument, ...] = _parse_function_arguments(
-            function_file=function_file,
-            effective_vars=effective_vars,
-        )
+        native_header: NativeFunctionHeader | None
+        arguments: tuple[FunctionArgument, ...]
         returns: str
         return_columns: tuple[FunctionReturnColumn, ...]
-        returns, return_columns = _parse_sql_function_returns(
-            raw_returns=raw_returns,
-            function_file=function_file,
-            effective_vars=effective_vars,
+        native_header, arguments, returns, return_columns = _sql_function_header(
+            function_file=function_file, effective_vars=effective_vars, native=native
         )
         raw_database: object | None = header_values.get("database")
         raw_schema: object | None = header_values.get("schema")
@@ -163,11 +166,13 @@ def build_sql_function_inputs(
             logical_schema=function_logical_schema,
             target_config=target_config,
         )
-        function_database: str | None = (
-            function_logical_database if target_database is None else target_database
-        )
-        function_schema: str | None = (
-            function_logical_schema if target_schema is None else target_schema
+        function_database, function_schema = _sql_function_namespace(
+            header_database=function_logical_database if isinstance(raw_database, str) else None,
+            header_schema=function_logical_schema if isinstance(raw_schema, str) else None,
+            logical_namespace=(function_logical_database, function_logical_schema),
+            defaults=(logical_database, logical_schema),
+            targets=(target_database, target_schema),
+            native=native,
         )
         scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
             context=declaration_expansion,
@@ -266,12 +271,16 @@ def build_sql_function_inputs(
                 fingerprint_schema=function_schema,
                 fingerprint_logical_database=function_logical_database,
                 fingerprint_logical_schema=function_logical_schema,
-                tags=_parse_function_tags(
+                tags=native_header.tags
+                if native_header is not None
+                else _parse_function_tags(
                     header_values=header_values,
                     relative_path=function_file.relative_path,
                     language="SQL",
                 ),
-                description=_parse_function_description(
+                description=native_header.description
+                if native_header is not None
+                else _parse_function_description(
                     header_values=header_values,
                     relative_path=function_file.relative_path,
                     language="SQL",
@@ -306,6 +315,119 @@ def build_sql_function_inputs(
     return tuple(function_inputs)
 
 
+def _sql_function_header(
+    *, function_file: DiscoveredSqlFunctionFile, effective_vars: dict[str, object], native: bool
+) -> tuple[
+    NativeFunctionHeader | None, tuple[FunctionArgument, ...], str, tuple[FunctionReturnColumn, ...]
+]:
+    header_values: dict[str, object] = function_file.header_values
+    native_header: NativeFunctionHeader | None = (
+        parse_native_function_header(header_values=header_values, python=False) if native else None
+    )
+    if native_header is not None:
+        arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
+            header=native_header,
+            label=f"SQL function {function_file.relative_path}",
+            effective_vars=effective_vars,
+        )
+        return (
+            native_header,
+            arguments,
+            *_expanded_native_sql_returns(
+                header=native_header,
+                relative_path=function_file.relative_path,
+                effective_vars=effective_vars,
+            ),
+        )
+    raw_returns: object | None = header_values.get("returns")
+    if raw_returns is None:
+        raise CompileInputError(
+            f"SQL function file {function_file.relative_path} must declare returns"
+        )
+    arguments = _parse_function_arguments(
+        function_file=function_file,
+        effective_vars=effective_vars,
+    )
+    return (
+        None,
+        arguments,
+        *_parse_sql_function_returns(
+            raw_returns=raw_returns,
+            function_file=function_file,
+            effective_vars=effective_vars,
+        ),
+    )
+
+
+def _sql_function_namespace(
+    *,
+    header_database: str | None,
+    header_schema: str | None,
+    logical_namespace: tuple[str | None, str | None],
+    defaults: tuple[str | None, str | None],
+    targets: tuple[str | None, str | None],
+    native: bool,
+) -> tuple[str | None, str | None]:
+    if not native:
+        return (
+            logical_namespace[0] if targets[0] is None else targets[0],
+            logical_namespace[1] if targets[1] is None else targets[1],
+        )
+    namespace: NativeFunctionNamespace = resolve_native_function_namespace(
+        NativeFunctionNamespaceInputs(
+            header_database=header_database,
+            header_schema=header_schema,
+            default_database=defaults[0],
+            default_schema=defaults[1],
+            target_database=targets[0],
+            target_schema=targets[1],
+            python=False,
+            inherit_default_namespace=True,
+        )
+    )
+    return namespace.database, namespace.schema
+
+
+def _expanded_native_arguments(
+    *, header: NativeFunctionHeader, label: str, effective_vars: dict[str, object]
+) -> tuple[FunctionArgument, ...]:
+    return tuple(
+        FunctionArgument(
+            name=argument.name,
+            type=_expand_function_header_value(
+                raw_value=argument.type_text,
+                effective_vars=effective_vars,
+                context_label=f"{label} argument '{argument.raw_name}' type",
+            ),
+        )
+        for argument in header.arguments
+    )
+
+
+def _expanded_native_sql_returns(
+    *, header: NativeFunctionHeader, relative_path: Path, effective_vars: dict[str, object]
+) -> tuple[str, tuple[FunctionReturnColumn, ...]]:
+    if header.return_columns is None:
+        return _expand_function_header_value(
+            raw_value=cast(str, header.returns),
+            effective_vars=effective_vars,
+            context_label=f"SQL function {relative_path} returns",
+        ), ()
+    return "TABLE", tuple(
+        FunctionReturnColumn(
+            name=column.name,
+            type=_expand_function_header_value(
+                raw_value=column.type_text,
+                effective_vars=effective_vars,
+                context_label=(
+                    f"SQL function {relative_path} return column '{column.raw_name}' type"
+                ),
+            ),
+        )
+        for column in header.return_columns
+    )
+
+
 def _validate_table_function_output_contract(
     *,
     body_sql: str,
@@ -334,6 +456,139 @@ def _build_python_function_input(
 ) -> CompileSqlFunctionInput:
     effective_vars: dict[str, object] = context.effective_vars
     function_name: str = python_function_file.file_path.stem
+    header_values: dict[str, object] = python_function_file.header_values
+    native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
+    native_header: NativeFunctionHeader | None = (
+        parse_native_function_header(header_values=header_values, python=True) if native else None
+    )
+    arguments: tuple[FunctionArgument, ...]
+    returns: str
+    runtime_version: str
+    entry_point: str
+    packages: tuple[str, ...]
+    if native_header is not None:
+        arguments = _expanded_native_arguments(
+            header=native_header,
+            label=f"Python function {python_function_file.relative_path}",
+            effective_vars=effective_vars,
+        )
+        returns = _expand_function_header_value(
+            raw_value=cast(str, native_header.returns),
+            effective_vars=effective_vars,
+            context_label=f"Python function {python_function_file.relative_path} returns",
+        )
+        runtime_version = cast(str, native_header.runtime_version)
+        entry_point = cast(str, native_header.entry_point)
+        packages = native_header.packages
+    else:
+        arguments, returns, runtime_version, entry_point, packages = _python_function_header(
+            python_function_file=python_function_file, effective_vars=effective_vars
+        )
+    raw_database: object | None = header_values.get("database")
+    raw_schema: object | None = header_values.get("schema")
+    inherit: bool = context.python_functions_inherit_default_namespace
+    function_logical_database: str | None
+    if isinstance(raw_database, str):
+        function_logical_database = _expand_function_header_value(
+            raw_value=raw_database,
+            effective_vars=effective_vars,
+            context_label=f"Python function {python_function_file.relative_path} database",
+        )
+    else:
+        function_logical_database = context.logical_database if inherit else None
+    function_logical_schema: str | None
+    if isinstance(raw_schema, str):
+        function_logical_schema = _expand_function_header_value(
+            raw_value=raw_schema,
+            effective_vars=effective_vars,
+            context_label=f"Python function {python_function_file.relative_path} schema",
+        )
+    else:
+        function_logical_schema = context.logical_schema if inherit else None
+    namespace: NativeFunctionNamespace = (
+        resolve_native_function_namespace(
+            NativeFunctionNamespaceInputs(
+                header_database=function_logical_database
+                if isinstance(raw_database, str)
+                else None,
+                header_schema=function_logical_schema if isinstance(raw_schema, str) else None,
+                default_database=context.logical_database,
+                default_schema=context.logical_schema,
+                target_database=context.target_database,
+                target_schema=context.target_schema,
+                python=True,
+                inherit_default_namespace=inherit,
+            )
+        )
+        if native
+        else _python_function_namespace(
+            raw_database=raw_database,
+            raw_schema=raw_schema,
+            logical_database=function_logical_database,
+            logical_schema=function_logical_schema,
+            context=context,
+        )
+    )
+    validate_preserved_logical_namespace(
+        resource_label=f"Python function '{function_name}'",
+        logical_database=namespace.fingerprint_logical_database,
+        logical_schema=namespace.fingerprint_logical_schema,
+        target_config=context.target_config,
+    )
+    if context.effective_settings.sql_analysis and not context.no_sql_validation:
+        argument: FunctionArgument
+        for argument in arguments:
+            validate_native_type(
+                type_sql=argument.type,
+                adapter_name=context.adapter_name,
+                context=(
+                    f"Python function {python_function_file.relative_path} "
+                    f"argument '{argument.name}'"
+                ),
+            )
+        validate_native_type(
+            type_sql=returns,
+            adapter_name=context.adapter_name,
+            context=f"Python function {python_function_file.relative_path} return type",
+        )
+    return CompileSqlFunctionInput(
+        function_file=python_function_file,
+        name=function_name,
+        arguments=arguments,
+        returns=returns,
+        body_sql=python_function_file.body_python,
+        database=namespace.database,
+        schema=namespace.schema,
+        logical_database=function_logical_database,
+        logical_schema=function_logical_schema,
+        fingerprint_database=namespace.fingerprint_database,
+        fingerprint_schema=namespace.fingerprint_schema,
+        fingerprint_logical_database=namespace.fingerprint_logical_database,
+        fingerprint_logical_schema=namespace.fingerprint_logical_schema,
+        language=FunctionLanguage.PYTHON,
+        runtime_version=runtime_version,
+        entry_point=entry_point,
+        packages=packages,
+        tags=native_header.tags
+        if native_header is not None
+        else _parse_function_tags(
+            header_values=header_values,
+            relative_path=python_function_file.relative_path,
+            language="Python",
+        ),
+        description=native_header.description
+        if native_header is not None
+        else _parse_function_description(
+            header_values=header_values,
+            relative_path=python_function_file.relative_path,
+            language="Python",
+        ),
+    )
+
+
+def _python_function_header(
+    *, python_function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, object]
+) -> tuple[tuple[FunctionArgument, ...], str, str, str, tuple[str, ...]]:
     header_values: dict[str, object] = python_function_file.header_values
     raw_returns: object | None = header_values.get("returns")
     if not isinstance(raw_returns, str) or not raw_returns.strip():
@@ -364,103 +619,45 @@ def _build_python_function_input(
         raw_packages=header_values.get("packages"),
         relative_path=python_function_file.relative_path,
     )
-    raw_database: object | None = header_values.get("database")
-    raw_schema: object | None = header_values.get("schema")
+    return arguments, returns, runtime_version, entry_point, packages
+
+
+def _python_function_namespace(
+    *,
+    raw_database: object | None,
+    raw_schema: object | None,
+    logical_database: str | None,
+    logical_schema: str | None,
+    context: _PythonFunctionBuildContext,
+) -> NativeFunctionNamespace:
     inherit: bool = context.python_functions_inherit_default_namespace
-    function_logical_database: str | None
-    if isinstance(raw_database, str):
-        function_logical_database = _expand_function_header_value(
-            raw_value=raw_database,
-            effective_vars=effective_vars,
-            context_label=f"Python function {python_function_file.relative_path} database",
-        )
-    else:
-        function_logical_database = context.logical_database if inherit else None
-    function_logical_schema: str | None
-    if isinstance(raw_schema, str):
-        function_logical_schema = _expand_function_header_value(
-            raw_value=raw_schema,
-            effective_vars=effective_vars,
-            context_label=f"Python function {python_function_file.relative_path} schema",
-        )
-    else:
-        function_logical_schema = context.logical_schema if inherit else None
-    function_database: str | None = (
-        function_logical_database
+    fingerprint_logical_database: str | None = (
+        logical_database if isinstance(raw_database, str) else context.logical_database
+    )
+    fingerprint_logical_schema: str | None = (
+        logical_schema if isinstance(raw_schema, str) else context.logical_schema
+    )
+    return NativeFunctionNamespace(
+        database=logical_database
         if context.target_database is None
         else context.target_database
         if isinstance(raw_database, str) or inherit
-        else None
-    )
-    function_schema: str | None = (
-        function_logical_schema
+        else None,
+        schema=logical_schema
         if context.target_schema is None
         else context.target_schema
         if isinstance(raw_schema, str) or inherit
-        else None
-    )
-    fingerprint_logical_database: str | None = (
-        function_logical_database if isinstance(raw_database, str) else context.logical_database
-    )
-    fingerprint_logical_schema: str | None = (
-        function_logical_schema if isinstance(raw_schema, str) else context.logical_schema
-    )
-    validate_preserved_logical_namespace(
-        resource_label=f"Python function '{function_name}'",
-        logical_database=fingerprint_logical_database,
-        logical_schema=fingerprint_logical_schema,
-        target_config=context.target_config,
-    )
-    fingerprint_database: str | None = (
-        fingerprint_logical_database if context.target_database is None else context.target_database
-    )
-    fingerprint_schema: str | None = (
-        fingerprint_logical_schema if context.target_schema is None else context.target_schema
-    )
-    if context.effective_settings.sql_analysis and not context.no_sql_validation:
-        argument: FunctionArgument
-        for argument in arguments:
-            validate_native_type(
-                type_sql=argument.type,
-                adapter_name=context.adapter_name,
-                context=(
-                    f"Python function {python_function_file.relative_path} "
-                    f"argument '{argument.name}'"
-                ),
-            )
-        validate_native_type(
-            type_sql=returns,
-            adapter_name=context.adapter_name,
-            context=f"Python function {python_function_file.relative_path} return type",
-        )
-    return CompileSqlFunctionInput(
-        function_file=python_function_file,
-        name=function_name,
-        arguments=arguments,
-        returns=returns,
-        body_sql=python_function_file.body_python,
-        database=function_database,
-        schema=function_schema,
-        logical_database=function_logical_database,
-        logical_schema=function_logical_schema,
-        fingerprint_database=fingerprint_database,
-        fingerprint_schema=fingerprint_schema,
+        else None,
+        logical_database=logical_database,
+        logical_schema=logical_schema,
+        fingerprint_database=fingerprint_logical_database
+        if context.target_database is None
+        else context.target_database,
+        fingerprint_schema=fingerprint_logical_schema
+        if context.target_schema is None
+        else context.target_schema,
         fingerprint_logical_database=fingerprint_logical_database,
         fingerprint_logical_schema=fingerprint_logical_schema,
-        language=FunctionLanguage.PYTHON,
-        runtime_version=runtime_version,
-        entry_point=entry_point,
-        packages=packages,
-        tags=_parse_function_tags(
-            header_values=header_values,
-            relative_path=python_function_file.relative_path,
-            language="Python",
-        ),
-        description=_parse_function_description(
-            header_values=header_values,
-            relative_path=python_function_file.relative_path,
-            language="Python",
-        ),
     )
 
 

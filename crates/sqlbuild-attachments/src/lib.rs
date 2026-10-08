@@ -3,5 +3,10 @@
 #![forbid(unsafe_code)]
 
 pub mod audits;
+pub mod ceremonial_select;
 pub mod cursor_intrinsics;
+pub mod functions;
 pub mod seeds;
+pub mod sql_lexing;
+pub mod test_parameters;
+pub mod test_targets;

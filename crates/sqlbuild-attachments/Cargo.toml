@@ -12,3 +12,4 @@ workspace = true
 
 [dependencies]
 sqlbuild-sqltext.workspace = true
+sqlbuild-core.workspace = true

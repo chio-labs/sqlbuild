@@ -84,7 +84,6 @@ def _execute_scenario_run_steps(
     retain: bool,
     options: ScenarioRunOptions,
 ) -> ScenarioRunResult:
-
     _raise_if_stop_requested(options)
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,

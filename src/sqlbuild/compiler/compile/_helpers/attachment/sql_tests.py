@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+import sqlbuild._native as _native
+from sqlbuild.compiler.attachments.main._native_test_target_catalog import (
+    native_test_target_catalog,
+)
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
     build_known_ref_names,
@@ -74,6 +78,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
@@ -302,6 +308,17 @@ def build_test_inputs(
         cache_root=compile_cache_dir,
         syntax=sql_lexical_syntax,
     )
+    target_catalog: _native.SqlTestTargetCatalog | None = (
+        native_test_target_catalog(
+            models=known_model_names,
+            sources=known_source_names,
+            seeds=known_seed_names,
+            table_functions=known_table_function_names,
+            macros=loaded_macros,
+        )
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else None
+    )
     for test, test_ctes in zip(expanded_tests, test_ctes_batch, strict=True):
         assertion_target_model_names: tuple[str, ...] = (
             extract_assertion_target_model_names(
@@ -321,6 +338,7 @@ def build_test_inputs(
             known_table_function_names=known_table_function_names,
             loaded_macros=loaded_macros,
             assertion_target_model_names=assertion_target_model_names,
+            target_catalog=target_catalog,
         )
         helper_targets: tuple[str, ...] = ()
         if isinstance(test_ctes.payload, CompileModelSqlTestCtes):
@@ -632,6 +650,11 @@ def build_scenario_inputs(
             )
         )
     scenario_inputs: list[CompileSqlScenarioInput] = []
+    source_catalog: _native.SqlTestTargetCatalog | None = (
+        native_test_target_catalog(sources=known_source_names)
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else None
+    )
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:
         resource: ResourceIdentity = ResourceIdentity(ResourceKind.SCENARIO, scenario_file.name)
@@ -669,6 +692,7 @@ def build_scenario_inputs(
             scenario_file=scenario_file,
             known_source_names=known_source_names,
             syntax=sql_lexical_syntax,
+            target_catalog=source_catalog,
         )
         assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
             assertion_sql=tuple(cte.sql_body for cte in scenario_ctes.assertion_ctes),
@@ -716,7 +740,22 @@ def _validate_scenario_source_references(
     scenario_file: DiscoveredSqlScenarioFile,
     known_source_names: set[str],
     syntax: SqlLexicalSyntax,
+    target_catalog: _native.SqlTestTargetCatalog | None = None,
 ) -> None:
+    native_sources: list[tuple[str, bool, list[str]]] | None = (
+        _native_scenario_cte_sources(
+            scenario_ctes=scenario_ctes, scenario_file=scenario_file, syntax=syntax
+        )
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else None
+    )
+    if native_sources is not None:
+        error: str | None = (
+            target_catalog or native_test_target_catalog(sources=known_source_names)
+        ).scenario_source_error(str(scenario_file.relative_path), native_sources)
+        if error is not None:
+            raise CompileInputError(error)
+        return
     cte: CompileSqlScenarioCte
     for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
         references: tuple[CompileSqlReference, ...] = extract_sql_references(
@@ -748,6 +787,40 @@ def _validate_scenario_source_references(
             )
 
 
+def _native_scenario_cte_sources(
+    *,
+    scenario_ctes: CompileSqlScenarioCtes,
+    scenario_file: DiscoveredSqlScenarioFile,
+    syntax: SqlLexicalSyntax,
+) -> list[tuple[str, bool, list[str]]] | None:
+    """Every CTE's source references, or None where extraction raises so Python orders errors."""
+
+    checks: tuple[CompileSqlScenarioCte, ...] = (
+        *scenario_ctes.expected_ctes,
+        *scenario_ctes.assertion_ctes,
+    )
+    cte_sources: list[tuple[str, bool, list[str]]] = []
+    try:
+        for position, cte in enumerate((*checks, *scenario_ctes.authored_ctes)):
+            references: tuple[CompileSqlReference, ...] = extract_sql_references(
+                sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
+            )
+            cte_sources.append(
+                (
+                    cte.name,
+                    position < len(checks),
+                    [
+                        reference.ref_name
+                        for reference in references
+                        if reference.ref_kind == SqlReferenceKind.SOURCE
+                    ],
+                )
+            )
+    except CompileInputError:
+        return None
+    return cte_sources
+
+
 def validate_test_ctes(
     *,
     test_ctes: CompileSqlTestCtes,
@@ -758,13 +831,37 @@ def validate_test_ctes(
     known_table_function_names: set[str],
     loaded_macros: dict[str, LoadedMacro],
     assertion_target_model_names: tuple[str, ...],
+    target_catalog: _native.SqlTestTargetCatalog | None = None,
 ) -> None:
-    """Validate SQL-native test CTE targets against discovered inputs."""
+    """Validate SQL-native test CTE targets; preview reuses one native catalog per compile."""
 
     if isinstance(test_ctes.payload, CompileDirectLogicSqlTestCtes):
         return
 
     model_payload: CompileModelSqlTestCtes = test_ctes.payload
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        catalog: _native.SqlTestTargetCatalog = target_catalog or native_test_target_catalog(
+            models=known_model_names,
+            sources=known_source_names,
+            seeds=known_seed_names,
+            table_functions=known_table_function_names,
+            macros=loaded_macros,
+        )
+        error: str | None = catalog.unknown_test_target(
+            str(test_file.relative_path),
+            (
+                [*model_payload.mock_model_names],
+                [*model_payload.mock_source_names],
+                [*model_payload.mock_seed_names],
+                [*model_payload.mock_table_function_names],
+                [*model_payload.macro_mocks],
+                [*model_payload.expected_model_names],
+                [*assertion_target_model_names],
+            ),
+        )
+        if error is not None:
+            raise CompileInputError(error)
+        return
 
     mock_model_name: str
     for mock_model_name in model_payload.mock_model_names:
