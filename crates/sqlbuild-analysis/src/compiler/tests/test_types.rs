@@ -150,3 +150,18 @@ pub(crate) struct UnresolvedReaderReferenceTestCase {
     pub(crate) sends_compiler_reads: bool,
     pub(crate) expected_error_fragments: &'static [&'static str],
 }
+
+pub(crate) struct ExtractionRuleTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) mode: &'static str,
+    pub(crate) raw: bool,
+    pub(crate) syntax: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_outcome: String,
+}
+
+pub(crate) struct AuthoredCtesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_response: serde_json::Value,
+}

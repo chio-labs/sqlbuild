@@ -1,3 +1,4 @@
+pub mod authored_macro_calls;
 pub mod cte_rename;
 pub mod cte_slices;
 pub mod cte_sql;
@@ -8,6 +9,7 @@ pub mod helper_scope;
 pub mod markers;
 pub mod planning;
 pub mod reader_references;
+pub mod reference_calls;
 pub mod relation_markers;
 pub mod rendering;
 pub mod scenario_extraction;

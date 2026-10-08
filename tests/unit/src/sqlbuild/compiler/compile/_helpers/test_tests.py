@@ -3,15 +3,14 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
-    CompileSqlTestCtes,
     complete_omitted_ceremonial_select,
-    extract_sql_test_ctes,
     extract_sql_test_expected_model_names,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
+    CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -21,6 +20,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExtractSqlTestCtesErrorTestCase,
     ExtractSqlTestCtesTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import extract_test_sql
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
@@ -312,19 +312,6 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
             expected_expected_model_names=("orders",),
         ),
         ExtractSqlTestCtesTestCase(
-            description="extracts model test ctes with sql_analysis fallback syntax",
-            sql="""
-        WITH
-        "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),
-        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders")
-        SELECT 1
-        """.strip(),
-            expected_authored_cte_names=("__source__raw_orders",),
-            expected_mock_model_names=(),
-            expected_mock_source_names=("raw_orders",),
-            expected_expected_model_names=("orders",),
-        ),
-        ExtractSqlTestCtesTestCase(
             description="allows cast expressions with explicit aliases in expected ctes",
             sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
@@ -365,11 +352,8 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlTestCtesTestCase,
 ) -> None:
-    extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
-        syntax=_GENERIC_SQL_SYNTAX,
-        sql=test_case.sql,
-        file_label="tests/unit/orders.sql",
-        mode=test_case.mode,
+    extracted_ctes: CompileSqlTestCtes = extract_test_sql(
+        sql=test_case.sql, file_label="tests/unit/orders.sql", mode=test_case.mode
     )
 
     assert isinstance(extracted_ctes.payload, CompileModelSqlTestCtes)
@@ -466,11 +450,8 @@ def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expec
 def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlTestCtesTestCase,
 ) -> None:
-    extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
-        syntax=_GENERIC_SQL_SYNTAX,
-        sql=test_case.sql,
-        file_label="tests/unit/orders.sql",
-        mode=test_case.mode,
+    extracted_ctes: CompileSqlTestCtes = extract_test_sql(
+        sql=test_case.sql, file_label="tests/unit/orders.sql", mode=test_case.mode
     )
 
     assert isinstance(extracted_ctes.payload, CompileDirectLogicSqlTestCtes)
@@ -677,7 +658,26 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         test_result AS (SELECT 1)
         SELECT 2 UNION ALL SELECT * FROM test_result
         """.strip(),
-            expected_error_fragment="expected a CTE name",
+            expected_error_fragment='CTE name "__source__raw_orders" must be an unquoted identifier',
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises for quoted CTE names instead of re-parsing the test",
+            sql="""
+        WITH
+        "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),
+        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders")
+        SELECT 1
+        """.strip(),
+            expected_error_fragment='CTE name "__source__raw_orders" must be an unquoted identifier',
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises for materialized CTEs",
+            sql="""
+        WITH __source__raw_orders AS MATERIALIZED (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT order_id FROM __source__raw_orders)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment="CTE '__source__raw_orders' must use AS \\(\\.\\.\\.\\)",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when expected cte omits target name",
@@ -877,12 +877,7 @@ def test_given_invalid_sql_test_cte_variants_when_extracting_then_it_raises_clea
     test_case: ExtractSqlTestCtesErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        extract_sql_test_ctes(
-            syntax=_GENERIC_SQL_SYNTAX,
-            sql=test_case.sql,
-            file_label="tests/unit/orders.sql",
-            mode=test_case.mode,
-        )
+        extract_test_sql(sql=test_case.sql, file_label="tests/unit/orders.sql", mode=test_case.mode)
 
 
 @pytest.mark.parametrize(
@@ -920,9 +915,7 @@ def test_given_malformed_sql_test_ctes_when_extracting_then_messages_name_the_sq
     test_case: CteScannerMessageTestCase,
 ) -> None:
     with pytest.raises(CompileInputError) as error_info:
-        _ = extract_sql_test_ctes(
-            sql=test_case.sql, file_label="tests/unit/orders.sql", syntax=_GENERIC_SQL_SYNTAX
-        )
+        _ = extract_test_sql(sql=test_case.sql, file_label="tests/unit/orders.sql")
 
     assert str(error_info.value) == test_case.expected_message
 

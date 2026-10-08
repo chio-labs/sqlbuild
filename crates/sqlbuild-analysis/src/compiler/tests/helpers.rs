@@ -9,12 +9,13 @@ use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
 use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, split_top_level_with};
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::main::sql_test_extraction::extract_batch_json;
+use crate::compiler::tests::test_types::ExtractionRuleTestCase;
 use crate::compiler::tests::test_types::{
     HelperReferenceTestCase, PlanShape, RenderedShapeTestCase, SharedNameTestCase,
 };
 
 pub(crate) fn mixed_expanded_tests_preserve_order_and_payloads() -> bool {
-    let response = extract_batch_json(r#"{"tests":[{"sql":"WITH helper AS (SELECT 1 AS id), __source__raw_orders AS (SELECT id FROM helper), __expected__orders AS (SELECT id FROM helper), __assert__positive AS (SELECT id FROM helper WHERE id < 0) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"},{"sql":"WITH input AS (SELECT 1 AS value), __udf_actual__ AS (SELECT __udf(\"increment\")(value) AS value FROM input), __udf_expected__ AS (SELECT 2 AS value) SELECT 1","fileLabel":"tests/increment.sql","mode":"udf"}]}"#).expect("batch succeeds");
+    let response = extracted(r#"{"tests":[{"sql":"WITH helper AS (SELECT 1 AS id), __source__raw_orders AS (SELECT id FROM helper), __expected__orders AS (SELECT id FROM helper), __assert__positive AS (SELECT id FROM helper WHERE id < 0) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"},{"sql":"WITH input AS (SELECT 1 AS value), __udf_actual__ AS (SELECT __udf(\"increment\")(value) AS value FROM input), __udf_expected__ AS (SELECT 2 AS value) SELECT 1","fileLabel":"tests/increment.sql","mode":"udf"}]}"#).expect("batch succeeds");
     let payload: serde_json::Value = serde_json::from_str(&response).expect("valid JSON");
     assert_eq!(payload[0]["kind"], "model");
     assert_eq!(payload[0]["authored"][0][0], "helper");
@@ -27,35 +28,27 @@ pub(crate) fn mixed_expanded_tests_preserve_order_and_payloads() -> bool {
 }
 
 pub(crate) fn trailing_ceremonial_select_is_optional() -> bool {
-    let response = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id); -- done","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("omitted select succeeds");
+    let response = extracted(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id); -- done","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("omitted select succeeds");
     let payload: serde_json::Value = serde_json::from_str(&response).expect("valid JSON");
     assert_eq!(payload[0]["expectedModels"][0], "orders");
 
-    let error = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id) SELECT * FROM __expected__orders","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect_err("other final statement is rejected");
+    let error = extracted(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id) SELECT * FROM __expected__orders","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect_err("other final statement is rejected");
     assert!(error.contains("must end after its CTEs"));
     true
 }
 
 pub(crate) fn dependent_assertion_returns_authoritative_error() -> bool {
-    let error = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id), __assert__same AS (SELECT id FROM __expected__orders) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect_err("dependency is rejected");
+    let error = extracted(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id), __assert__same AS (SELECT id FROM __expected__orders) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect_err("dependency is rejected");
     assert!(error.contains("'__assert__same' must not depend on '__expected__orders'"));
     true
 }
 
-pub(crate) fn quoted_ctes_and_implicit_alias_preserve_payload() -> bool {
-    let response = extract_batch_json(r#"{"tests":[{"sql":"WITH \"__source__raw_orders\" AS (SELECT 1 AS id), \"__expected__orders\" AS (SELECT CAST(1 AS INTEGER) id) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("batch succeeds");
-    let payload: serde_json::Value = serde_json::from_str(&response).expect("valid JSON");
-    assert_eq!(payload[0]["authored"][0][0], "__source__raw_orders");
-    assert_eq!(payload[0]["expected"][0][1], "SELECT CAST(1 AS INTEGER) id");
-    true
-}
-
 pub(crate) fn empty_model_fixture_marker_preserves_direct_mode_validation() -> bool {
-    let response = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT * FROM __empty_fixture()), __expected__orders AS (SELECT * FROM __empty_fixture()) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("model marker succeeds");
+    let response = extracted(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT * FROM __empty_fixture()), __expected__orders AS (SELECT * FROM __empty_fixture()) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("model marker succeeds");
     let payload: serde_json::Value = serde_json::from_str(&response).expect("valid JSON");
     assert_eq!(payload[0]["expectedModels"][0], "orders");
 
-    let error = extract_batch_json(r#"{"tests":[{"sql":"WITH __udf_actual__ AS (SELECT 1 AS value), __udf_expected__ AS (SELECT * FROM __empty_fixture()) SELECT 1","fileLabel":"tests/function.sql","mode":"udf"}]}"#).expect_err("direct marker is rejected");
+    let error = extracted(r#"{"tests":[{"sql":"WITH __udf_actual__ AS (SELECT 1 AS value), __udf_expected__ AS (SELECT * FROM __empty_fixture()) SELECT 1","fileLabel":"tests/function.sql","mode":"udf"}]}"#).expect_err("direct marker is rejected");
     assert!(error.contains("must not use SELECT * in __udf_expected__ CTEs"));
     true
 }
@@ -76,10 +69,20 @@ pub(crate) fn expected_projection_errors_name_the_expected_cte() -> bool {
         ),
     ];
     for (request, expected_error) in cases {
-        let error = extract_batch_json(request).expect_err("expected projection is rejected");
+        let error = extracted(request).expect_err("expected projection is rejected");
         assert_eq!(error, expected_error);
     }
     true
+}
+
+/// The extracted tests as JSON, or the message of the batch's first error.
+pub(crate) fn extracted(request: &str) -> Result<String, String> {
+    let response =
+        batch_response(&serde_json::from_str(request).map_err(|error| error.to_string())?);
+    response.get("error").map_or_else(
+        || Ok(response["tests"].to_string()),
+        |error| Err(error["message"].as_str().unwrap_or_default().to_owned()),
+    )
 }
 
 fn extract_expected(
@@ -89,7 +92,7 @@ fn extract_expected(
     expected_sql: &str,
 ) -> Result<String, String> {
     let sql = format!("WITH {actual}, {expected_name} AS ({expected_sql}) SELECT 1");
-    extract_batch_json(
+    extracted(
         &json!({"tests": [{"sql": sql, "fileLabel": "tests/orders.sql", "mode": mode}]})
             .to_string(),
     )
@@ -1934,4 +1937,62 @@ fn with_empty_compiler_reads(request_json: &str) -> String {
         }
     }
     request.to_string()
+}
+
+/// The lexical rules of each adapter family the rule cases use, as the Python adapters declare them.
+const LEXICAL_SYNTAXES: &str = r##"{"bigquery": {"backslashEscapeQuotes": ["\"", "'", "`"], "escapeStringPrefix": false, "rawStringPrefix": true, "tripleQuotedStrings": true, "nestedBlockComments": false, "lineCommentPrefixes": ["#", "--"]}, "duckdb": {"backslashEscapeQuotes": [], "escapeStringPrefix": true, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": true, "lineCommentPrefixes": ["--"]}, "snowflake": {"backslashEscapeQuotes": ["'"], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--", "//"]}, "generic": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}}"##;
+
+/// Extract one rule case and describe the outcome as `accepted_outcome` or `rejected_outcome` do.
+pub(crate) fn extraction_rule_outcome(test_case: &ExtractionRuleTestCase) -> String {
+    let syntaxes: Value = serde_json::from_str(LEXICAL_SYNTAXES).expect("the syntaxes are JSON");
+    let response = batch_response(&json!({
+        "syntax": syntaxes[test_case.syntax],
+        "tests": [{"sql": test_case.sql, "fileLabel": "tests/t.sql", "mode": test_case.mode, "raw": test_case.raw}],
+    }));
+    let invalid_calls = response["tests"][0]["invalidCalls"]
+        .as_bool()
+        .unwrap_or(false);
+    response.get("error").map_or_else(
+        || accepted_outcome(invalid_calls),
+        |error| {
+            let offset = error["tokenOffset"]
+                .as_u64()
+                .and_then(|offset| usize::try_from(offset).ok());
+            rejected_outcome(
+                error["message"].as_str().unwrap_or_default(),
+                error["help"].as_str(),
+                error["token"].as_str().zip(offset),
+            )
+        },
+    )
+}
+
+fn batch_response(request: &Value) -> Value {
+    serde_json::from_str(&extract_batch_json(&request.to_string()).expect("the request is valid"))
+        .expect("the response is JSON")
+}
+
+/// An accepted test; `invalid_calls` when a helper or expected CTE has a malformed reference call.
+pub(crate) fn accepted_outcome(invalid_calls: bool) -> String {
+    format!("accepted: invalid calls {invalid_calls}")
+}
+
+/// A rejected test's first error message, its help, and its offending text with its offset.
+pub(crate) fn rejected_outcome(
+    message: &str,
+    help: Option<&str>,
+    token: Option<(&str, usize)>,
+) -> String {
+    format!(
+        "rejected: {message} | help: {} | token: {}",
+        help.map_or(Value::Null, |help| Value::String(help.to_owned())),
+        token.map_or(json!([null, null]), |(text, offset)| json!([text, offset])),
+    )
+}
+
+/// The authored-block reading of `sql`: its CTEs with body offsets, or its first error.
+pub(crate) fn authored_ctes_response(sql: &str) -> Value {
+    batch_response(
+        &json!({"tests": [{"sql": sql, "fileLabel": "tests/t.sql", "mode": "model", "authored": true}]}),
+    )
 }

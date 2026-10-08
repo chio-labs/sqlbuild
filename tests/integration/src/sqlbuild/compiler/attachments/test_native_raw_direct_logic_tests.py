@@ -1,7 +1,7 @@
-"""Unexpanded direct-logic SQL tests keep Python's extraction under the preview engine.
+"""Unexpanded direct-logic SQL tests build identical inputs under every compiler engine.
 
-The native extractor reads expanded tests and accepts shapes Python rejects before expansion,
-such as quoted CTE names or calls in `__macro_expected__`; the raw pass must stay Python's.
+Every engine extracts tests before expansion with the native extractor, so quoted CTE names,
+calls in `__macro_expected__` and malformed reference calls are rejected the same way.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
 )
 from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
     generated_raw_direct_logic_test,
-    python_raw_extraction_accepts,
+    raw_extraction_accepts,
     raw_test_compile_outcome,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
@@ -59,7 +59,7 @@ def test_given_unexpanded_direct_logic_tests_when_compiling_in_preview_then_pyth
 
     assert (
         mismatches(inputs=[*tests], expected=[*python], actual=[*native]),
-        sum(python_raw_extraction_accepts(sql=sql, mode=mode) for sql, mode in tests)
+        sum(raw_extraction_accepts(sql=sql, mode=mode) for sql, mode in tests)
         >= test_case.expected_minimum_extracted,
         sum(item.startswith("error: ") for item in python)
         >= test_case.expected_minimum_python_errors,

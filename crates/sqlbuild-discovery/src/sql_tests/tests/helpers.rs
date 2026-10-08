@@ -61,6 +61,7 @@ pub(super) fn scenario_rows(test_case: &StatementFileTestCase) -> (Vec<BlockRow>
                 vec![block_row(&SqlTestBlock {
                     header_values: file.header_values,
                     sql_body: file.sql_body,
+                    body_span: (0, 0),
                 })],
                 None,
             )

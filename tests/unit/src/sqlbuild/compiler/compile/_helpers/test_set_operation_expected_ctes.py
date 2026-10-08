@@ -6,15 +6,15 @@ from itertools import product
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.sql_tests.core import classify_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
+from sqlbuild.compiler.compile.models import CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SetOperationExpectedKind,
     SetOperationExpectedTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import extract_test_ctes
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
@@ -93,16 +93,13 @@ _REJECTED_SQL: tuple[tuple[str, str], ...] = (
 def test_given_set_operation_expected_cte_when_classifying_then_it_is_accepted(
     test_case: SetOperationExpectedTestCase,
 ) -> None:
-    ctes: tuple[CompileSqlTestCte, ...] = (
-        *(
-            CompileSqlTestCte(name=name, sql_body=body)
-            for name, body in test_case.kind.support_ctes
-        ),
-        CompileSqlTestCte(name=test_case.kind.expected_cte_name, sql_body=test_case.sql),
+    ctes: tuple[tuple[str, str], ...] = (
+        *test_case.kind.support_ctes,
+        (test_case.kind.expected_cte_name, test_case.sql),
     )
 
-    classified: CompileSqlTestCtes = classify_sql_test_ctes(
-        ctes=ctes, file_label=_FILE, mode=test_case.kind.mode, syntax=_GENERIC_SQL_SYNTAX
+    classified: CompileSqlTestCtes = extract_test_ctes(
+        ctes=ctes, file_label=_FILE, mode=test_case.kind.mode
     )
 
     assert type(classified.payload).__name__ == test_case.expected_payload_type
@@ -124,18 +121,13 @@ def test_given_set_operation_expected_cte_when_classifying_then_it_is_accepted(
 def test_given_invalid_set_operation_branch_when_classifying_then_it_names_the_expected_cte(
     test_case: SetOperationExpectedTestCase,
 ) -> None:
-    ctes: tuple[CompileSqlTestCte, ...] = (
-        *(
-            CompileSqlTestCte(name=name, sql_body=body)
-            for name, body in test_case.kind.support_ctes
-        ),
-        CompileSqlTestCte(name=test_case.kind.expected_cte_name, sql_body=test_case.sql),
+    ctes: tuple[tuple[str, str], ...] = (
+        *test_case.kind.support_ctes,
+        (test_case.kind.expected_cte_name, test_case.sql),
     )
 
     with pytest.raises(CompileInputError) as error_info:
-        _ = classify_sql_test_ctes(
-            ctes=ctes, file_label=_FILE, mode=test_case.kind.mode, syntax=_GENERIC_SQL_SYNTAX
-        )
+        _ = extract_test_ctes(ctes=ctes, file_label=_FILE, mode=test_case.kind.mode)
 
     assert str(error_info.value) == test_case.expected_error_template.format(
         file=_FILE, cte=test_case.kind.expected_cte_name

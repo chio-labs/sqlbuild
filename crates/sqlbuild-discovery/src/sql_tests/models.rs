@@ -18,6 +18,8 @@ pub struct SqlTestBlock {
     pub header_values: Vec<(String, AuthoredValue)>,
     /// `inspect.cleandoc` of the SQL after the header.
     pub sql_body: String,
+    /// Code-point range in the file contents of the authored text `sql_body` is cleaned from.
+    pub body_span: (usize, usize),
 }
 
 /// A test file split into blocks; parsing stops at the first block whose header fails.

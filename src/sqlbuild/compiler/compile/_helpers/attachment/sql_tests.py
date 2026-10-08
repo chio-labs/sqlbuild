@@ -35,7 +35,10 @@ from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenar
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     complete_omitted_ceremonial_select,
     extract_assertion_target_model_names,
-    extract_sql_test_ctes,
+)
+from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
+    located_extraction_error,
+    report_authored_invalid_calls,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     report_test_without_target_model,
@@ -44,8 +47,9 @@ from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
     extract_expanded_sql_tests_cached,
+    extract_unexpanded_sql_test,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestExtractionError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileDirectLogicSqlTestCtes,
@@ -245,7 +249,8 @@ def build_test_inputs(
                 tested_resource_names: tuple[str, ...] = ()
                 if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN}:
                     raw_test_ctes: CompileSqlTestCtes = _validate_raw_direct_logic_test_ctes(
-                        test_block=expanded_test_block,
+                        sql=expanded_test_block.sql_body,
+                        test_block=test_block,
                         test_file=test_file,
                         test_mode=test_mode,
                         syntax=sql_lexical_syntax,
@@ -302,13 +307,23 @@ def build_test_inputs(
                         test_case=test_case,
                     )
                 )
-    test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests_cached(
-        tests=tuple(
-            (test.sql_body, str(test.test_file.relative_path), test.mode) for test in expanded_tests
-        ),
-        cache_root=compile_cache_dir,
-        syntax=sql_lexical_syntax,
-    )
+    try:
+        test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests_cached(
+            tests=tuple(
+                (test.sql_body, str(test.test_file.relative_path), test.mode)
+                for test in expanded_tests
+            ),
+            cache_root=compile_cache_dir,
+            syntax=sql_lexical_syntax,
+        )
+    except SqlTestExtractionError as error:
+        failed: _ExpandedSqlTest = expanded_tests[error.test_index]
+        raise located_extraction_error(
+            error=error,
+            test_file=failed.test_file,
+            test_block=failed.test_block,
+            sql=failed.sql_body,
+        ) from None
     target_catalog: _native.SqlTestTargetCatalog | None = (
         native_test_target_catalog(
             models=known_model_names,
@@ -480,17 +495,34 @@ def _build_test_input_payload(
 
 def _validate_raw_direct_logic_test_ctes(
     *,
+    sql: str,
     test_block: DiscoveredSqlTestBlock,
     test_file: DiscoveredSqlTestFile,
     test_mode: SqlTestMode,
     syntax: SqlLexicalSyntax,
 ) -> CompileSqlTestCtes:
-    return extract_sql_test_ctes(
-        sql=test_block.sql_body,
-        file_label=str(test_file.relative_path),
+    try:
+        test_ctes, invalid_calls = extract_unexpanded_sql_test(
+            sql=sql, file_label=str(test_file.relative_path), mode=test_mode, syntax=syntax
+        )
+    except SqlTestExtractionError as error:
+        raise located_extraction_error(
+            error=error, test_file=test_file, test_block=test_block, sql=sql
+        ) from None
+    if not (invalid_calls and isinstance(test_ctes.payload, CompileDirectLogicSqlTestCtes)):
+        return test_ctes
+    reported: int = report_authored_invalid_calls(
+        test_file=test_file,
+        test_block=test_block,
+        actual_cte_name=test_ctes.payload.actual_cte.name,
         syntax=syntax,
-        mode=test_mode,
     )
+    if reported == 0:
+        for cte in (*test_ctes.payload.helper_ctes, test_ctes.payload.expected_cte):
+            _ = extract_sql_references(
+                sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(test_file)
+            )
+    return test_ctes
 
 
 def _infer_tested_direct_logic_resource_names(

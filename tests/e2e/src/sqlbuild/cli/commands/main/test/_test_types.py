@@ -359,3 +359,14 @@ class HelperRedefinitionE2ETestCase:
     engine: str
     expected_output_fragments: tuple[str, ...]
     expected_absent_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DirectLogicExtractionE2ETestCase:
+    """One direct-logic test project variant run through `sqb test` on one compiler engine."""
+
+    description: str
+    engine: str
+    overrides: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]

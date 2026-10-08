@@ -1,12 +1,11 @@
 use crate::compiler::_helpers::sql_tests::extraction::{
-    find_top_level_keyword, split_set_operations, split_top_level,
+    find_top_level_keyword, generic_syntax, split_set_operations, split_top_level,
 };
 use crate::compiler::tests::helpers::{
     dependent_assertion_returns_authoritative_error,
     empty_model_fixture_marker_preserves_direct_mode_validation,
     expected_projection_errors_name_the_expected_cte,
     mixed_expanded_tests_preserve_order_and_payloads,
-    quoted_ctes_and_implicit_alias_preserve_payload,
     set_operation_expected_ctes_validate_every_branch, trailing_ceremonial_select_is_optional,
 };
 use crate::compiler::tests::test_types::{SqlTestExtractionTestCase, TopLevelScanTestCase};
@@ -22,11 +21,6 @@ fn given_sql_test_cases_when_extracting_native_payloads_then_expected_behavior_h
         SqlTestExtractionTestCase {
             description: "dependent assertions return the authoritative error",
             run: dependent_assertion_returns_authoritative_error,
-            expected_success: true,
-        },
-        SqlTestExtractionTestCase {
-            description: "quoted CTEs and implicit aliases preserve payloads",
-            run: quoted_ctes_and_implicit_alias_preserve_payload,
             expected_success: true,
         },
         SqlTestExtractionTestCase {
@@ -182,19 +176,19 @@ fn given_expected_cte_sql_when_scanning_top_level_then_set_operations_commas_and
     ];
     for test_case in test_cases {
         assert_eq!(
-            split_set_operations(test_case.sql),
+            split_set_operations(test_case.sql, &generic_syntax()),
             test_case.expected_unions,
             "unions: {}",
             test_case.description
         );
         assert_eq!(
-            split_top_level(test_case.sql, b','),
+            split_top_level(test_case.sql, b',', &generic_syntax()),
             test_case.expected_commas,
             "commas: {}",
             test_case.description
         );
         assert_eq!(
-            find_top_level_keyword(test_case.sql, 0, "FROM"),
+            find_top_level_keyword(test_case.sql, 0, "FROM", &generic_syntax()),
             test_case.expected_from,
             "FROM: {}",
             test_case.description

@@ -1,20 +1,22 @@
-"""Native batch boundary for expanded SQL-test extraction."""
+"""Native boundary for SQL-test extraction before and after expansion, under adapter rules."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Protocol, cast
 
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_ctes
 from sqlbuild.compiler.compile.constants import (
     SQL_TEST_FACT_CACHE_ALGORITHM,
     SQL_TEST_FACT_CACHE_NAMESPACE,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError, NativeSqlTestResponseError
+from sqlbuild.compiler.compile.exceptions import (
+    CompileInputError,
+    NativeSqlTestResponseError,
+    SqlTestExtractionError,
+)
 from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
@@ -31,8 +33,17 @@ class _NativeSqlTestModule(Protocol):
 
 
 _DIRECT_KIND: str = "direct"
+_SYNTAX_FIELDS: dict[str, str] = {
+    "backslash_escape_quotes": "backslashEscapeQuotes",
+    "escape_string_prefix": "escapeStringPrefix",
+    "raw_string_prefix": "rawStringPrefix",
+    "triple_quoted_strings": "tripleQuotedStrings",
+    "nested_block_comments": "nestedBlockComments",
+    "line_comment_prefixes": "lineCommentPrefixes",
+}
 _MODEL_KIND: str = "model"
 _PAIR_LENGTH: int = 2
+_AUTHORED_CTE_LENGTH: int = 3
 
 
 def extract_expanded_sql_tests_cached(
@@ -78,9 +89,13 @@ def extract_expanded_sql_tests_cached(
         for file_label in missing_files:
             missing_indexes.extend(indexes_by_file[file_label])
         if missing_indexes:
-            extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
-                tests=tuple(tests[index] for index in missing_indexes), syntax=syntax
-            )
+            try:
+                extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
+                    tests=tuple(tests[index] for index in missing_indexes), syntax=syntax
+                )
+            except SqlTestExtractionError as error:
+                error.test_index = missing_indexes[error.test_index]
+                raise
             for index, test_ctes in zip(missing_indexes, extracted, strict=True):
                 results[index] = test_ctes
             for file_label in missing_files:
@@ -118,39 +133,94 @@ def extract_expanded_sql_tests(
     tests: tuple[tuple[str, str, SqlTestMode], ...],
     syntax: SqlLexicalSyntax,
 ) -> tuple[CompileSqlTestCtes, ...]:
-    """Extract and classify expanded tests, natively unless the dialect reads a test differently."""
+    """Extract and classify expanded tests natively under the adapter's lexical rules."""
 
-    dialect_indexes: frozenset[int] = frozenset(
-        index
-        for index, (sql, _file_label, _mode) in enumerate(tests)
-        if syntax.reads_differently_from_generic(sql)
-    )
-    if not dialect_indexes:
-        return _extract_expanded_sql_tests_natively(tests)
-    native_results: Iterator[CompileSqlTestCtes] = iter(
-        _extract_expanded_sql_tests_natively(
-            tuple(test for index, test in enumerate(tests) if index not in dialect_indexes)
-        )
-    )
-    return tuple(
-        extract_sql_test_ctes(sql=sql, file_label=file_label, syntax=syntax, mode=mode)
-        if index in dialect_indexes
-        else next(native_results)
-        for index, (sql, file_label, mode) in enumerate(tests)
-    )
-
-
-def _extract_expanded_sql_tests_natively(
-    tests: tuple[tuple[str, str, SqlTestMode], ...],
-) -> tuple[CompileSqlTestCtes, ...]:
     if not tests:
         return ()
+    expanded: tuple[tuple[str, str, SqlTestMode, bool], ...] = tuple(
+        (sql, file_label, mode, False) for sql, file_label, mode in tests
+    )
+    extracted: tuple[tuple[CompileSqlTestCtes, bool], ...] = _extract_natively(
+        tests=expanded, syntax=syntax
+    )
+    return tuple(test_ctes for test_ctes, _invalid_calls in extracted)
+
+
+def extract_unexpanded_sql_test(
+    *, sql: str, file_label: str, mode: SqlTestMode, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlTestCtes, bool]:
+    """Extract a direct-logic test before expansion; also report whether it has P012 calls."""
+
+    return _extract_natively(tests=((sql, file_label, mode, True),), syntax=syntax)[0]
+
+
+def authored_sql_test_ctes(
+    *, sql: str, file_label: str, syntax: SqlLexicalSyntax
+) -> tuple[tuple[str, int, str], ...]:
+    """Read an authored block's CTEs with body offsets; only a CTE-name error is raised."""
+
+    return authored_sql_test_cte_batch(tests=((sql, file_label),), syntax=syntax)[0]
+
+
+def authored_sql_test_cte_batch(
+    *, tests: tuple[tuple[str, str], ...], syntax: SqlLexicalSyntax
+) -> tuple[tuple[tuple[str, int, str], ...], ...]:
+    """Read many authored blocks at once; a CTE-name error names its block by `test_index`."""
+
+    if not tests:
+        return ()
+    results: list[object] = _native_batch(
+        tests=[
+            {"sql": sql, "fileLabel": file_label, "mode": "model", "authored": True}
+            for sql, file_label in tests
+        ],
+        syntax=syntax,
+    )
+    return tuple(_authored_ctes(item) for item in results)
+
+
+def _authored_ctes(item: object) -> tuple[tuple[str, int, str], ...]:
+    ctes: object = cast(dict[str, object], item).get("ctes") if isinstance(item, dict) else None
+    if not isinstance(ctes, list):
+        raise CompileInputError("native SQL test extraction returned an invalid CTE response")
+    return tuple(_authored_cte(value) for value in ctes)
+
+
+def _authored_cte(value: object) -> tuple[str, int, str]:
+    if not (
+        isinstance(value, list)
+        and len(value) == _AUTHORED_CTE_LENGTH
+        and isinstance(value[0], str)
+        and isinstance(value[1], int)
+        and isinstance(value[2], str)
+    ):
+        raise CompileInputError("native SQL test extraction returned an invalid CTE")
+    return value[0], value[1], value[2]
+
+
+def _extract_natively(
+    *, tests: tuple[tuple[str, str, SqlTestMode, bool], ...], syntax: SqlLexicalSyntax
+) -> tuple[tuple[CompileSqlTestCtes, bool], ...]:
+    results: list[object] = _native_batch(
+        tests=[
+            {"sql": sql, "fileLabel": file_label, "mode": mode.value, "raw": raw}
+            for sql, file_label, mode, raw in tests
+        ],
+        syntax=syntax,
+    )
+    return tuple((_test_ctes_from_native(item), _invalid_calls(item)) for item in results)
+
+
+def _invalid_calls(item: object) -> bool:
+    return isinstance(item, dict) and cast(dict[str, object], item).get("invalidCalls") is True
+
+
+def _native_batch(*, tests: list[dict[str, object]], syntax: SqlLexicalSyntax) -> list[object]:
+    native_syntax: dict[str, object] = syntax.native_mapping
     request_json: str = orjson.dumps(
         {
-            "tests": [
-                {"sql": sql, "fileLabel": file_label, "mode": mode.value}
-                for sql, file_label, mode in tests
-            ]
+            "syntax": {_SYNTAX_FIELDS[key]: value for key, value in native_syntax.items()},
+            "tests": tests,
         }
     ).decode()
     try:
@@ -159,9 +229,27 @@ def _extract_expanded_sql_tests_natively(
         )
     except ValueError as error:
         raise CompileInputError(str(error)) from None
-    if not isinstance(response, list) or len(response) != len(tests):
+    if isinstance(response, dict) and isinstance(response.get("error"), dict):
+        raise _extraction_error(cast(dict[str, object], response["error"]))
+    results: object = response.get("tests") if isinstance(response, dict) else None
+    if not isinstance(results, list) or len(results) != len(tests):
         raise CompileInputError("native SQL test extraction returned an invalid batch response")
-    return tuple(_test_ctes_from_native(item) for item in response)
+    return cast(list[object], results)
+
+
+def _extraction_error(error: dict[str, object]) -> SqlTestExtractionError:
+    message: object = error.get("message")
+    help_text: object = error.get("help")
+    index: object = error.get("index")
+    token: object = error.get("token")
+    token_offset: object = error.get("tokenOffset")
+    return SqlTestExtractionError(
+        message if isinstance(message, str) else "native SQL test extraction failed",
+        help=help_text if isinstance(help_text, str) else None,
+        test_index=index if isinstance(index, int) else 0,
+        token=token if isinstance(token, str) else None,
+        token_offset=token_offset if isinstance(token_offset, int) else None,
+    )
 
 
 def _test_ctes_from_native(value: object) -> CompileSqlTestCtes:

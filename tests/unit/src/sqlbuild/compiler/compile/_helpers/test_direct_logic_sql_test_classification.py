@@ -1,17 +1,19 @@
-"""Characterisation tests for macro, UDF, and table_fn SQL-test CTE classification errors."""
+"""Characterisation tests for macro, UDF, and table_fn SQL-test CTE classification errors.
+
+Duplicate actual or expected CTEs are duplicate CTE names, which the CTE scan rejects first.
+"""
 
 from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.sql_tests.core import classify_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ClassifyDirectLogicSqlTestCtesErrorTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import extract_test_ctes
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
@@ -25,9 +27,7 @@ _FILE: str = "tests/unit/orders.sql"
             description="macro duplicate actual",
             mode=SqlTestMode.MACRO,
             ctes=(("__macro_actual__", "SELECT 1"), ("__macro_actual__", "SELECT 2")),
-            expected_message=(
-                f"SQL test '{_FILE}' mode 'macro' must define exactly one __macro_actual__ CTE"
-            ),
+            expected_message=f"SQL test '{_FILE}' defines duplicate CTE '__macro_actual__'",
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="macro duplicate expected",
@@ -36,9 +36,7 @@ _FILE: str = "tests/unit/orders.sql"
                 ("__macro_expected__", "SELECT 1 AS value"),
                 ("__macro_expected__", "SELECT 2 AS value"),
             ),
-            expected_message=(
-                f"SQL test '{_FILE}' mode 'macro' must define exactly one __macro_expected__ CTE"
-            ),
+            expected_message=f"SQL test '{_FILE}' defines duplicate CTE '__macro_expected__'",
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="macro model-test cte",
@@ -131,9 +129,7 @@ _FILE: str = "tests/unit/orders.sql"
             description="udf duplicate actual",
             mode=SqlTestMode.UDF,
             ctes=(("__udf_actual__", "SELECT 1"), ("__udf_actual__", "SELECT 2")),
-            expected_message=(
-                f"SQL test '{_FILE}' mode 'udf' must define exactly one __udf_actual__ CTE"
-            ),
+            expected_message=f"SQL test '{_FILE}' defines duplicate CTE '__udf_actual__'",
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="udf duplicate expected",
@@ -142,9 +138,7 @@ _FILE: str = "tests/unit/orders.sql"
                 ("__udf_expected__", "SELECT 1 AS value"),
                 ("__udf_expected__", "SELECT 2 AS value"),
             ),
-            expected_message=(
-                f"SQL test '{_FILE}' mode 'udf' must define exactly one __udf_expected__ CTE"
-            ),
+            expected_message=f"SQL test '{_FILE}' defines duplicate CTE '__udf_expected__'",
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="udf model-test cte",
@@ -214,10 +208,7 @@ _FILE: str = "tests/unit/orders.sql"
             description="table_fn duplicate actual",
             mode=SqlTestMode.TABLE_FN,
             ctes=(("__table_fn_actual__", "SELECT 1"), ("__table_fn_actual__", "SELECT 2")),
-            expected_message=(
-                f"SQL test '{_FILE}' mode 'table_fn' must define exactly one "
-                "__table_fn_actual__ CTE"
-            ),
+            expected_message=f"SQL test '{_FILE}' defines duplicate CTE '__table_fn_actual__'",
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="table_fn duplicate expected",
@@ -226,10 +217,7 @@ _FILE: str = "tests/unit/orders.sql"
                 ("__table_fn_expected__", "SELECT 1 AS value"),
                 ("__table_fn_expected__", "SELECT 2 AS value"),
             ),
-            expected_message=(
-                f"SQL test '{_FILE}' mode 'table_fn' must define exactly one "
-                "__table_fn_expected__ CTE"
-            ),
+            expected_message=f"SQL test '{_FILE}' defines duplicate CTE '__table_fn_expected__'",
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="table_fn model-test cte",
@@ -279,13 +267,7 @@ _FILE: str = "tests/unit/orders.sql"
 def test_given_invalid_direct_logic_ctes_when_classifying_then_raises_mode_specific_message(
     test_case: ClassifyDirectLogicSqlTestCtesErrorTestCase,
 ) -> None:
-    ctes: tuple[CompileSqlTestCte, ...] = tuple(
-        CompileSqlTestCte(name=name, sql_body=body) for name, body in test_case.ctes
-    )
-
     with pytest.raises(CompileInputError) as error_info:
-        _ = classify_sql_test_ctes(
-            ctes=ctes, file_label=_FILE, mode=test_case.mode, syntax=_GENERIC_SQL_SYNTAX
-        )
+        _ = extract_test_ctes(ctes=test_case.ctes, file_label=_FILE, mode=test_case.mode)
 
     assert str(error_info.value) == test_case.expected_message
