@@ -6,6 +6,7 @@ import random
 from collections.abc import Callable
 from dataclasses import replace
 
+from scripts.compiler_differential.classes.analysis_features import AnalysisFeatureWriter
 from scripts.compiler_differential.classes.discovery_features import (
     DiscoveryFeatureWriter,
     feature_blocks_for_seed,
@@ -15,6 +16,8 @@ from scripts.compiler_differential.constants import (
     DUCKDB_ADAPTER,
     GENERATOR_CONSTANT_KIND,
     GENERATOR_CROSS_DOMAIN_SHARE,
+    GENERATOR_DIALECT_CONNECTIONS,
+    GENERATOR_DIALECT_TARGETS,
     GENERATOR_DOMAINS,
     GENERATOR_ENUM_KIND,
     GENERATOR_FLOAT_VALUES,
@@ -44,9 +47,12 @@ _MARTS: str = GENERATOR_LAYERS[1]
 class ProjectBuilder:
     """Accumulate the files of one generated project from a seeded random source."""
 
-    def __init__(self, seed: int, *, blocks: tuple[str, ...] | None = None) -> None:
+    def __init__(
+        self, seed: int, *, blocks: tuple[str, ...] | None = None, dialect: str | None = None
+    ) -> None:
         self._seed: int = seed
         self._forced_blocks: tuple[str, ...] | None = blocks
+        self._dialect: str | None = dialect
         self._random: random.Random = random.Random(seed)
         self._files: dict[str, str] = {}
         self._features: set[str] = set()
@@ -80,6 +86,7 @@ class ProjectBuilder:
             self._random.choice(sorted(GENERATOR_INVALID_CODES))
             if self._random.random() < GENERATOR_INVALID_SHARE
             and not set(blocks) & set(GENERATOR_RARE_FEATURE_BLOCKS)
+            and self._dialect is None
             else None
         )
         self._write_declarations()
@@ -107,10 +114,20 @@ class ProjectBuilder:
             label=self._label,
         )
         rendering.write()
+        analysis: AnalysisFeatureWriter = AnalysisFeatureWriter(
+            blocks=blocks,
+            rng=self._random,
+            files=self._files,
+            features=self._features,
+            staging=[model for model in self._models if model.layer == _STAGING],
+            sources=self._sources,
+        )
+        analysis.write()
         self._write_config(
             domains=domains,
             adapter=extras.adapter,
-            extra_lines=[*extras.config_lines, *rendering.config_lines],
+            extra_lines=[*extras.config_lines, *rendering.config_lines, *analysis.config_lines],
+            settings_lines=analysis.settings_lines,
             templated_target=rendering.templated_target,
         )
         if invalid_kind is not None:
@@ -125,6 +142,7 @@ class ProjectBuilder:
             ),
             features=tuple(sorted(self._features)),
             succeeding_commands=extras.succeeding_commands,
+            extra_commands=analysis.commands,
         )
 
     def _target_schema(self, *, schema: str, templated: bool) -> str:
@@ -144,15 +162,18 @@ class ProjectBuilder:
         domains: list[str],
         adapter: str | None,
         extra_lines: list[str],
+        settings_lines: list[str],
         templated_target: bool,
     ) -> None:
         lines: list[str] = [
             f'name = "generated_{self._seed}"',
-            f'adapter = "{adapter or DUCKDB_ADAPTER}"',
+            f'adapter = "{self._dialect or adapter or DUCKDB_ADAPTER}"',
             'default_target = "dev"',
             "",
             "[connection]",
-            'database = "generated.duckdb"',
+            *GENERATOR_DIALECT_CONNECTIONS.get(
+                self._dialect or "", ('database = "generated.duckdb"',)
+            ),
             "",
             "[vars]",
             f'region = "{self._random.choice(("north", "south", "east"))}"',
@@ -165,9 +186,11 @@ class ProjectBuilder:
                     schema=self._random.choice(("analytics", "main")), templated=templated_target
                 )
             ),
+            *GENERATOR_DIALECT_TARGETS.get(self._dialect or "", ()),
             "",
             "[settings]",
             f'default_audit_severity = "{self._random.choice(("warn", "error"))}"',
+            *settings_lines,
             "",
             "[defaults]",
             f'materialized = "{self._random.choice(("table", "view"))}"',

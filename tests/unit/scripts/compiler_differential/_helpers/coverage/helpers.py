@@ -1,4 +1,4 @@
-"""Capture fragments for discovery coverage tests."""
+"""Capture fragments for discovery, render and analysis coverage tests."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import dataclasses
 from itertools import filterfalse
 from typing import cast
 
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_OMITTED_ATTRIBUTES
 
@@ -106,3 +106,65 @@ def audit_input(*, definition: str, template: str, rendered: str) -> dict[str, o
         "attached_target_name": "orders",
         "attached_column_name": "amount",
     }
+
+
+_NULLABILITY: str = "sqlbuild.compiler.lineage.types:InferredNullability"
+
+
+def empty_compiled_capture(**overrides: object) -> dict[str, object]:
+    """Return a capture with every captured `CompiledProject` field, in order, then overrides."""
+
+    type_name: str = "sqlbuild.compiler.compile.models:CompiledProject"
+    omitted: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(type_name, frozenset())
+    names: list[str] = [field.name for field in dataclasses.fields(CompiledProject)]
+    return {
+        "__type__": type_name,
+        **dict.fromkeys(filterfalse(omitted.__contains__, names), []),
+        **overrides,
+    }
+
+
+def inferred_column(*, name: str, type_sql: str | None, nullability: str = "UNKNOWN") -> object:
+    """Return one captured inferred output column."""
+
+    return {
+        "name": name,
+        "type": type_sql,
+        "nullability": {"__enum__": f"{_NULLABILITY}.{nullability}"},
+    }
+
+
+def compiled_model(
+    *,
+    name: str,
+    query_sql: str = "SELECT 1 AS id",
+    columns: list[object] | None = None,
+    references: list[dict[str, object]] | None = None,
+    validated: bool = True,
+    values: dict[str, object] | None = None,
+    schema_columns: list[dict[str, object]] | None = None,
+    star: tuple[bool, bool] = (False, False),
+) -> dict[str, object]:
+    """Return one captured compiled model; `columns=None` means it was not analysed."""
+
+    return {
+        "name": name,
+        "query_sql": query_sql,
+        "config": {"values": values or {}},
+        "references": references or [],
+        "schema_entry": {"columns": schema_columns or [], "audits": []},
+        "inferred_columns": columns,
+        "binding_validated": validated,
+        "binding_diagnostics": [],
+        "fast_lineage_has_star": star[0],
+        "fast_lineage_star_resolved": star[1],
+        "dynamic_column_contract": None,
+        "rejected_sql_analysis_opt_out": None,
+        "destination": {"schema": "analytics"},
+    }
+
+
+def compiled_source(*, name: str, expression: str | None) -> dict[str, object]:
+    """Return one captured compiled source with an optional SQL expression."""
+
+    return {"source_entry": {"name": name, "expression": expression, "columns": []}}

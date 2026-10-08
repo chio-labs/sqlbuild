@@ -19,8 +19,12 @@ def failure_case(
     files: dict[str, str],
     expected_warning_code: str | None = None,
     expected_message: str | None = None,
+    expected_help: str | None = None,
+    expected_notes: tuple[str, ...] = (),
+    expected_location: tuple[int, int] | None = None,
+    expected_codes: tuple[str, ...] | None = None,
 ) -> FailureCase:
-    """Return the base project with `files` added or replaced."""
+    """Return the base project with `files` added or replaced; notes are whole note lines."""
 
     return FailureCase(
         files={**FAILURE_BASE_FILES, **files},
@@ -28,6 +32,10 @@ def failure_case(
         expected_code=expected_code,
         expected_warning_code=expected_warning_code,
         expected_message=expected_message,
+        expected_help=expected_help,
+        expected_notes=expected_notes,
+        expected_location=expected_location,
+        expected_codes=expected_codes,
     )
 
 

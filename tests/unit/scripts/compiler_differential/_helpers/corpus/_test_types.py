@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.compiler_differential.models import ExpectedOutcome
+from scripts.compiler_differential.models import DifferentialCommand, ExpectedOutcome
 
 
 @dataclass(frozen=True)
@@ -25,3 +25,22 @@ class InlineCompileCodesTestCase:
     compile_root: Path
     accounted_codes: frozenset[str]
     expected_unaccounted: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class DialectVariantTestCase:
+    """A seed range and the dialect variants its first seed must add to the corpus."""
+
+    description: str
+    seeds: range
+    expected_names: tuple[str, ...]
+    expected_variant_commands: tuple[DifferentialCommand, ...]
+
+
+@dataclass(frozen=True)
+class AnalysisCodesTestCase:
+    """The compiler package and the analysis codes its scan must find and document."""
+
+    description: str
+    compiler_root: Path
+    expected_codes: frozenset[str]

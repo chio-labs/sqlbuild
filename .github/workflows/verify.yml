@@ -294,7 +294,16 @@ jobs:
         run: >-
           make compiler-differential
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
-          --require-render-coverage"
+          --require-render-coverage --require-analysis-coverage
+          --wheel-site-report ${{ runner.temp }}/compiler-differential-wheel-sites.json"
+      - name: Upload the Polyglot wheel-site and deferral report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiler-differential-wheel-sites-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/compiler-differential-wheel-sites.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Compare generated seeds and the failure corpus (python vs shipped native)
         run: make compiler-differential-shipped
 

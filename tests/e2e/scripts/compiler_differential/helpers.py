@@ -73,6 +73,18 @@ def _perturbed(*, until, **stages):
 frontier.native_frontier = _perturbed
 """
 
+DEFERRAL_PERTURBATION: str = """
+import json
+import os
+from pathlib import Path
+
+_directory = os.environ.get("SQLBUILD_ANALYSIS_RECORD_DIR")
+if _directory:
+    Path(_directory).mkdir(parents=True, exist_ok=True)
+    with open(Path(_directory) / f"analysis-deferrals-{os.getpid()}.jsonl", "a") as _record:
+        _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
+"""
+
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "broken_orders"\nadapter = "duckdb"\n\n'

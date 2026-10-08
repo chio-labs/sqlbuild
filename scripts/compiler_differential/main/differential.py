@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import tempfile
 import time
 from pathlib import Path
 
+from scripts.compiler_differential._helpers.coverage.analysis import required_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import required_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import required_render_kinds
 from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
+from scripts.compiler_differential._helpers.running.records import (
+    format_wheel_site_report,
+    wheel_site_report,
+)
 from scripts.compiler_differential._helpers.running.report import (
+    format_analysis_coverage,
     format_discovery_coverage,
     format_render_coverage,
     format_summary,
@@ -52,6 +59,15 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
         if options.stage_captures and CORPUS_SEEDS in args.corpus
         else {}
     )
+    if args.wheel_site_report is not None:
+        report: dict[str, object] = wheel_site_report(
+            comparisons=comparisons, engines=options.engines
+        )
+        args.wheel_site_report.parent.mkdir(parents=True, exist_ok=True)
+        _ = args.wheel_site_report.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(format_wheel_site_report(report))
     print(
         format_summary(
             comparisons=comparisons,
@@ -71,7 +87,7 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
 def _seed_coverage(
     *, comparisons: list[ProjectComparison], options: DifferentialOptions
 ) -> dict[str, tuple[str, ...]]:
-    """Print discovery and render coverage; return the missing kinds each requirement enforces."""
+    """Print each stage's coverage; return the missing kinds each requirement enforces."""
 
     discovered: frozenset[str] = frozenset().union(
         *(comparison.discovered_kinds for comparison in comparisons)
@@ -80,14 +96,21 @@ def _seed_coverage(
         *(comparison.rendered_kinds for comparison in comparisons)
     )
     required_discovery: tuple[str, ...] = required_discovery_kinds()
+    analysed: frozenset[str] = frozenset().union(
+        *(comparison.analysed_kinds for comparison in comparisons)
+    )
     required_render: tuple[str, ...] = required_render_kinds()
+    required_analysis: tuple[str, ...] = required_analysis_kinds()
     print(format_discovery_coverage(covered=discovered, required=required_discovery))
     print(format_render_coverage(covered=rendered, required=required_render))
+    print(format_analysis_coverage(covered=analysed, required=required_analysis))
     missing: dict[str, tuple[str, ...]] = {}
     if options.require_discovery_coverage:
         missing["discovery"] = tuple(kind for kind in required_discovery if kind not in discovered)
     if options.require_render_coverage:
         missing["render"] = tuple(kind for kind in required_render if kind not in rendered)
+    if options.require_analysis_coverage:
+        missing["analysis"] = tuple(kind for kind in required_analysis if kind not in analysed)
     return missing
 
 
@@ -142,6 +165,21 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="fail unless the seed corpus exercises every render input kind (needs captures)",
     )
     parser.add_argument(
+        "--require-analysis-coverage",
+        action="store_true",
+        help="fail unless the seed corpus exercises every analysis input kind (needs captures)",
+    )
+    parser.add_argument(
+        "--wheel-site-report",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "record Polyglot wheel calls by calling site and analysis deferrals in every engine "
+            "process, print them and write them to PATH as JSON (reported, never gated)"
+        ),
+    )
+    parser.add_argument(
         "--engine-env",
         action="append",
         default=[],
@@ -154,6 +192,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     for flag, required in (
         ("--require-discovery-coverage", args.require_discovery_coverage),
         ("--require-render-coverage", args.require_render_coverage),
+        ("--require-analysis-coverage", args.require_analysis_coverage),
     ):
         if required and not (args.stage_captures and CORPUS_SEEDS in args.corpus):
             parser.error(f"{flag} needs --stage-captures and the seeds corpus")

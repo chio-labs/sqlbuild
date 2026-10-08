@@ -1,5 +1,8 @@
 """Minimal failing projects, each derived from the shared base project."""
 
+from scripts.compiler_differential._helpers.analysis_corpus.failure_cases import (
+    analysis_failure_cases,
+)
 from scripts.compiler_differential._helpers.corpus.case_builder import (
     failure_case,
     mart_body_files,
@@ -45,6 +48,7 @@ def all_failure_cases() -> tuple[FailureCase, ...]:
         *render_failure_cases(),
         *scope_failure_cases(),
         *reference_failure_cases(),
+        *analysis_failure_cases(),
     )
 
 

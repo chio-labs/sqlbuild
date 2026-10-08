@@ -7,11 +7,15 @@ from scripts.compiler_differential.models import DifferentialCommand, ExpectedOu
 
 ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 STAGE_CAPTURE_ENV_VAR: str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR"
+ANALYSIS_RECORD_ENV_VAR: str = "SQLBUILD_ANALYSIS_RECORD_DIR"
+WHEEL_SITE_RECORD_PREFIX: str = "polyglot-sites-"
+ANALYSIS_DEFERRAL_RECORD_PREFIX: str = "analysis-deferrals-"
+RECORDS_DIRECTORY: str = "records"
 ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")
 DEFAULT_ENGINES: tuple[str, str] = ("python", "native-preview")
 SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
-    {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR}
+    {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR, ANALYSIS_RECORD_ENV_VAR}
 )
 EXCLUDED_ENVIRONMENT_PREFIX: str = "DBT_"
 PROJECT_CONFIG_FILE: str = "sqlbuild_project.toml"
@@ -198,6 +202,18 @@ GENERATOR_RENDER_BLOCKS: tuple[str, ...] = (
     "resource_audits",
     "model_config",
 )
+GENERATOR_ANALYSIS_BLOCKS: tuple[str, ...] = (
+    "column_shapes",
+    "contract_chain",
+    "udf_signatures",
+    "dynamic_columns",
+    "quoted_identifiers",
+    "metadata_checks",
+    "sql_test_mocks",
+    "analysis_opt_out",
+    "python_sql",
+    "analysis_modes",
+)
 GENERATOR_FEATURE_BLOCKS: tuple[str, ...] = (
     "incremental_append",
     "incremental_delete_insert",
@@ -227,6 +243,7 @@ GENERATOR_FEATURE_BLOCKS: tuple[str, ...] = (
     "dbt_ref",
     "line_endings",
     *GENERATOR_RENDER_BLOCKS,
+    *GENERATOR_ANALYSIS_BLOCKS,
 )
 GENERATOR_FEATURE_STRIDE: int = 4
 GENERATOR_OPTIONAL_FEATURE_SHARE: float = 0.2
@@ -236,6 +253,26 @@ GENERATOR_DBT_REF_ERROR_CODE: str = "C214"
 GENERATOR_FEATURE_FOLDER: str = "models/features"
 GENERATOR_RENDER_FOLDER: str = "models/rendering"
 GENERATOR_RENDER_TEST_FOLDER: str = "tests/unit/rendering"
+GENERATOR_ANALYSIS_FOLDER: str = "models/analysis"
+GENERATOR_ANALYSIS_TEST_FOLDER: str = "tests/unit/analysis"
+GENERATOR_OPEN_SOURCE: str = "open_events"
+GENERATOR_DIALECT_CONNECTIONS: dict[str, tuple[str, ...]] = {
+    "postgres": ('host = "localhost"', 'database = "generated"'),
+    "snowflake": ('account = "example"', 'user = "builder"', 'database = "GENERATED"'),
+}
+GENERATOR_DIALECT_TARGETS: dict[str, tuple[str, ...]] = {"snowflake": ('database = "GENERATED"',)}
+GENERATOR_DIALECT_EXCLUDED_BLOCKS: frozenset[str] = frozenset(
+    {"dynamic_columns", "quoted_identifiers", "analysis_modes"}
+)
+GENERATOR_DIALECT_BLOCKS: tuple[str, ...] = tuple(
+    block for block in GENERATOR_ANALYSIS_BLOCKS if block not in GENERATOR_DIALECT_EXCLUDED_BLOCKS
+)
+GENERATOR_SELECTED_MODEL: str = "{model}"
+GENERATOR_ANALYSIS_MODE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("compile-select", ("compile", "--json", "--select", GENERATOR_SELECTED_MODEL)),
+    ("compile-no-analysis", ("compile", "--json", "--no-sql-analysis")),
+    ("compile-rich-lineage", ("compile", "--json", "--lineage-mode", "rich")),
+)
 GENERATOR_CHANNEL_ENV_VAR: str = "SQB_DIFFERENTIAL_CHANNEL"
 GENERATOR_MISSING_ENV_VAR: str = "SQB_DIFFERENTIAL_UNSET"
 GENERATOR_ENVIRONMENT: dict[str, str] = {GENERATOR_CHANNEL_ENV_VAR: "web-orders"}
@@ -505,4 +542,109 @@ RENDER_UNREACHABLE_CODES: dict[str, str] = {
     "S021": _TOLERANT_SCOPE_ONLY,
     "S022": _TOLERANT_SCOPE_ONLY,
     "S023": _TOLERANT_SCOPE_ONLY,
+}
+ANALYSIS_STAGE_CAPTURE_SUFFIX: str = "-compiled_project.json"
+COMPILED_PROJECT_CAPTURE_TYPE: str = "sqlbuild.compiler.compile.models:CompiledProject"
+ANALYSIS_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
+    {
+        "run_id",
+        "effective_target_name",
+        "effective_connection",
+        "effective_vars",
+        "binding_catalog",
+        "effective_target_database",
+        "effective_target_schema",
+        "sql_analysis_dialect",
+        "sql_lexical_syntax",
+        "compile_cache_dir",
+        "settings",
+        "scenario",
+        "enforce_explicit_references",
+        "diagnostics",
+        "external_sql_reference_resolver",
+        "scope_index",
+        "native_session",
+    }
+)
+ANALYSIS_CALLABLE_CAPTURE_FIELDS: frozenset[str] = CALLABLE_CAPTURE_FIELDS
+ANALYSIS_OPAQUE_CAPTURE_VALUES: re.Pattern[str] = re.compile(
+    r'\{"__opaque__":\s*"sqlbuild\._native:ProjectCatalog"\}'
+)
+ANALYSIS_EXPLICIT_WRITE_SCHEMA_DIALECTS: frozenset[str] = frozenset({"snowflake"})
+ANALYSIS_DIALECT_VARIANTS: tuple[str, ...] = ("postgres", "snowflake")
+ANALYSIS_UPSTREAM_CHAIN_HOPS: int = 3
+ANALYSIS_DETAIL_KINDS: tuple[str, ...] = (
+    "typed_column",
+    "untyped_column",
+    "star_over_complete_input",
+    "star_over_published_shape",
+    "star_unresolved",
+    "set_operation",
+    "cte",
+    "cte_passthrough_type",
+    "quoted_identifier_case",
+    "dynamic_column_proof",
+    "cursor_intrinsic",
+    "runtime_placeholder",
+    "batch_binding",
+    "dataflow_binding",
+    "select_limited_analysis",
+    "sql_analysis_disabled",
+    "upstream_chain",
+    "sized_contract_shape",
+    "contract_nullability_shape",
+    "source_expression_shape",
+    "seed_column_types",
+    "scalar_udf",
+    "table_function",
+    "udf_argument_types",
+    "sql_analysis_opt_out",
+    "inline_sql_hook",
+    "named_sql_hook",
+    "hook_list",
+    "explicit_promotion_mode",
+    "python_sql_literal_relation",
+    "managed_write_schema",
+    "accepted_values_audit",
+    "relationships_audit",
+    "expression_audit",
+    "metadata_column_reference",
+    "sql_test_expected_columns",
+    "sql_test_macro_mock",
+    "dialect_duckdb",
+    "dialect_postgresql",
+    "dialect_snowflake",
+)
+ANALYSIS_INDIRECT_KINDS: dict[str, str] = {
+    "managed_write_schema": (
+        "every destination resolved an explicit schema under an adapter that requires one; "
+        "the capture does not record the write-schema check itself"
+    ),
+}
+ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
+    "compile/_helpers/assembly",
+    "compile/_helpers/analysis",
+    "compile/_helpers/diagnostics",
+    "contracts",
+    "pipeline/_helpers/target_validation.py",
+    "sql_analysis",
+)
+_NEVER_REPORTED_BY_POLYGLOT: str = (
+    "polyglot defines the finding but never reports it, and no SQLBuild check maps to it"
+)
+ANALYSIS_UNREACHABLE_CODES: dict[str, str] = {
+    "B000": (
+        "the binding layer's internal unknown-relation code; compile drops it because an "
+        "unknown relation is an open input"
+    ),
+    "B210": _NEVER_REPORTED_BY_POLYGLOT,
+    "B214": (
+        "polyglot reports assignment types only for INSERT statements; compiled models, tests "
+        "and audits are queries"
+    ),
+    "B219": _NEVER_REPORTED_BY_POLYGLOT,
+    "P003": (
+        "the contract check raises it for a declared column without a type, which it skips "
+        "first; compile reports P003 only as the built-in audit shadow warning"
+    ),
 }

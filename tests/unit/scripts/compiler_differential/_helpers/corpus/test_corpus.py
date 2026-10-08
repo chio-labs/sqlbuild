@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
+from scripts.compiler_differential.constants import COLD_COMPILE
 from scripts.compiler_differential.models import CorpusProject, ExpectedOutcome
 from tests.unit.scripts.compiler_differential._helpers.corpus._test_types import (
     CorpusExpectationTestCase,
+    DialectVariantTestCase,
 )
 
 _REPO_ROOT: Path = Path(__file__).resolve().parents[6]
@@ -63,6 +65,42 @@ def test_given_corpus_selection_when_building_then_entries_declare_expected_outc
     assert {
         name: outcomes.get(name) for name in test_case.expected_outcomes
     } == test_case.expected_outcomes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DialectVariantTestCase(
+            description="first_seed_compiles_under_each_dialect",
+            seeds=range(5, 7),
+            expected_names=(
+                "seed/5",
+                "seed/6",
+                "seed/5-postgres",
+                "seed/5-snowflake",
+            ),
+            expected_variant_commands=(COLD_COMPILE,),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_seed_range_when_building_then_first_seed_adds_compile_only_dialect_variants(
+    test_case: DialectVariantTestCase,
+) -> None:
+    corpus: list[CorpusProject] = build_corpus(
+        repo_root=_REPO_ROOT,
+        corpora=("seeds",),
+        seeds=test_case.seeds,
+        dense_models=20,
+        projects=(),
+        project_expectation=ExpectedOutcome(),
+    )
+    variants: list[CorpusProject] = corpus[len(test_case.seeds) :]
+
+    assert tuple(entry.name for entry in corpus) == test_case.expected_names
+    assert all(entry.seed_coverage for entry in corpus)
+    assert {entry.commands for entry in variants} == {test_case.expected_variant_commands}
+    assert all(entry.expected == ExpectedOutcome() for entry in variants)
 
 
 if __name__ == "__main__":

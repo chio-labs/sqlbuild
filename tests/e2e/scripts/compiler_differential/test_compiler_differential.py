@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from pathlib import Path
@@ -14,9 +15,11 @@ from tests.e2e.scripts.compiler_differential._test_types import (
     HarnessRunTestCase,
     ProjectExpectationTestCase,
     SharedAnalysisSeedTestCase,
+    WheelSiteReportTestCase,
 )
 from tests.e2e.scripts.compiler_differential.helpers import (
     COMPILED_PROJECT_CAPTURE,
+    DEFERRAL_PERTURBATION,
     DISCOVERY_PERTURBATION,
     NATIVE_ONLY_STDERR_LINE,
     RENDER_PERTURBATION,
@@ -240,7 +243,7 @@ def test_given_both_engines_fail_alike_when_outcome_is_unexpected_then_harness_f
             expected_exit_code=1,
             expected_lines=(
                 "OK   seed/0",
-                "Compiler differential FAILED: 0 of 1 projects differ",
+                "Compiler differential FAILED: 0 of 3 projects differ",
                 "Required discovery coverage missing: ",
             ),
             expected_absent=("passed",),
@@ -259,10 +262,31 @@ def test_given_both_engines_fail_alike_when_outcome_is_unexpected_then_harness_f
             expected_lines=(
                 "OK   seed/0",
                 "Render coverage: ",
-                "Compiler differential FAILED: 0 of 1 projects differ",
+                "Compiler differential FAILED: 0 of 3 projects differ",
                 "Required render coverage missing: ",
             ),
             expected_absent=("passed", "Required discovery coverage missing"),
+        ),
+        CoverageFailureTestCase(
+            description="one_seed_cannot_cover_every_analysis_kind",
+            extra_arguments=(
+                "--corpus",
+                "seeds",
+                "--seeds",
+                "1",
+                "--stage-captures",
+                "--require-analysis-coverage",
+            ),
+            expected_exit_code=1,
+            expected_lines=(
+                "OK   seed/0",
+                "OK   seed/0-postgres",
+                "OK   seed/0-snowflake",
+                "Analysis coverage: ",
+                "Compiler differential FAILED: 0 of 3 projects differ",
+                "Required analysis coverage missing: ",
+            ),
+            expected_absent=("passed", "Required render coverage missing"),
         ),
     ],
     ids=lambda case: case.description,
@@ -288,7 +312,7 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
             seed=SHARED_ANALYSIS_SEED,
             expected_lines=(
                 f"OK   seed/{SHARED_ANALYSIS_SEED}",
-                "Compiler differential passed: 1 projects identical (python vs python)",
+                "Compiler differential passed: 3 projects identical (python vs python)",
             ),
             expected_capture_sides=("left-python-captures", "right-python-captures"),
             expected_compile_exit_code=0,
@@ -372,6 +396,69 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WheelSiteReportTestCase(
+            description="python_and_preview_wheel_calls_without_deferrals",
+            perturbation="",
+            expected_lines=(
+                "Polyglot wheel calls (python):",
+                "Polyglot wheel calls (native-preview):",
+                "Analysis deferrals (python): none recorded",
+                "Analysis deferrals (native-preview): none recorded",
+                "Compiler differential passed: 1 projects identical",
+            ),
+            expected_sites=frozenset(
+                {
+                    "compiler/compile/_helpers/analysis/validation.py:"
+                    "_validate_sql_syntax_with_message parse_one",
+                }
+            ),
+            expected_deferrals=frozenset(),
+        ),
+        WheelSiteReportTestCase(
+            description="preview_deferrals_are_counted_per_kind_and_site",
+            perturbation=DEFERRAL_PERTURBATION,
+            expected_lines=(
+                "Analysis deferrals (python): none recorded",
+                "Analysis deferrals (native-preview):",
+                " legacy_fallback orders.sql (project ",
+            ),
+            expected_sites=frozenset(),
+            expected_deferrals=frozenset({"legacy_fallback orders.sql"}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wheel_site_report_when_comparing_then_sites_and_deferrals_are_reported(
+    test_case: WheelSiteReportTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    report_path: Path = tmp_path / "report" / "wheel-sites.json"
+    exit_code: int = run_compiler_differential(
+        harness_arguments(
+            work_dir=tmp_path / "work",
+            extra=(
+                *perturbation_arguments(tmp_path / "perturbation", source=test_case.perturbation),
+                "--wheel-site-report",
+                str(report_path),
+            ),
+        )
+    )
+
+    output: str = capsys.readouterr().out
+    report: dict[str, dict[str, dict[str, dict[str, int]]]] = json.loads(
+        report_path.read_text(encoding="utf-8")
+    )
+    preview: dict[str, dict[str, dict[str, int]]] = report["native-preview"]
+    assert exit_code == 0, output
+    assert all(line in output for line in test_case.expected_lines), output
+    assert test_case.expected_sites <= set(report["python"]["wheel_sites"]), report
+    assert set(preview["deferrals"]) == test_case.expected_deferrals
+    assert all(sum(by_corpus.values()) > 0 for by_corpus in preview["deferrals"].values())
+    assert report["python"]["deferrals"] == {}
 
 
 if __name__ == "__main__":

@@ -8,11 +8,13 @@ from pathlib import Path
 
 from scripts.compiler_differential._helpers.comparing.comparison import (
     diagnostic_codes,
+    first_diagnostic,
     first_diagnostic_message,
 )
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
+    ANALYSIS_CODE_SCAN_ROOTS,
     CORPUS_FAILURES,
     DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
@@ -30,6 +32,7 @@ from scripts.compiler_differential.models import (
 )
 from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_SHADOW_CODE
 from sqlbuild.compiler.compile import constants as compile_constants
+from sqlbuild.compiler.compile._helpers.diagnostics.help import semantic_help_catalogue
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
@@ -91,6 +94,17 @@ def render_error_codes() -> frozenset[str]:
     )
 
 
+def analysis_error_codes(compiler_root: Path) -> frozenset[str]:
+    """Return the help-catalogue codes plus every code literal in the analysis-stage modules."""
+
+    found: set[str] = set(semantic_help_catalogue())
+    for root in ANALYSIS_CODE_SCAN_ROOTS:
+        path: Path = compiler_root / root
+        for module in sorted(path.rglob("*.py")) if path.is_dir() else (path,):
+            found.update(_module_codes(module))
+    return frozenset(found)
+
+
 def inline_compile_codes(compile_root: Path) -> dict[str, tuple[str, ...]]:
     """Map each `code="X###"` literal in render-stage compile modules to where it is written."""
 
@@ -118,6 +132,30 @@ def unaccounted_inline_codes(
     }
 
 
+def _module_codes(path: Path) -> set[str]:
+    codes: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        literal: str | None = _code_literal(node) or _code_constant(node)
+        if literal is not None:
+            codes.add(literal)
+    return codes
+
+
+def _code_constant(node: ast.AST) -> str | None:
+    if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+        return None
+    targets: list[ast.expr] = node.targets if isinstance(node, ast.Assign) else [node.target]
+    value: ast.expr | None = node.value
+    if not (
+        any(isinstance(target, ast.Name) and target.id.endswith("_CODE") for target in targets)
+        and isinstance(value, ast.Constant)
+        and isinstance(value.value, str)
+        and DIAGNOSTIC_CODE_PATTERN.fullmatch(value.value)
+    ):
+        return None
+    return value.value
+
+
 def _code_literal(node: ast.AST) -> str | None:
     if not (
         isinstance(node, ast.keyword)
@@ -143,10 +181,20 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
         side=LEFT_SIDE,
         options=options,
     )
+    first: dict[str, object] = first_diagnostic(outcome=run.outcomes[0], severity=ERROR_SEVERITY)
+    notes: object = first.get("notes")
+    line: object = first.get("line")
+    column: object = first.get("column")
     return EmittedCodes(
         errors=diagnostic_codes(outcome=run.outcomes[0], severity=ERROR_SEVERITY),
         warnings=diagnostic_codes(outcome=run.outcomes[0], severity=WARNING_SEVERITY),
         first_error_message=first_diagnostic_message(
             outcome=run.outcomes[0], severity=ERROR_SEVERITY
         ),
+        first_error_help=None if first.get("help") is None else str(first.get("help")),
+        first_error_notes=tuple(str(note) for note in notes) if isinstance(notes, list) else (),
+        first_error_location=(
+            (line, column) if isinstance(line, int) and isinstance(column, int) else None
+        ),
+        codes=diagnostic_codes(outcome=run.outcomes[0], severity=None),
     )

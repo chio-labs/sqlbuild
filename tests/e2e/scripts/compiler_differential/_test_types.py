@@ -61,6 +61,12 @@ class FailureCorpusCodesTestCase:
     expected_discovery_codes: frozenset[str]
     expected_render_codes: frozenset[str]
     unreachable_render_codes: frozenset[str]
+    expected_first_helps: dict[str, str]
+    expected_first_notes: dict[str, frozenset[str]]
+    expected_first_locations: dict[str, tuple[int, int]]
+    expected_code_orders: dict[str, tuple[str, ...]]
+    expected_analysis_codes: frozenset[str]
+    unreachable_analysis_codes: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -83,3 +89,28 @@ class RenderCaptureTestCase:
     blocks: tuple[str, ...]
     command: tuple[str, ...]
     expected_kinds: frozenset[str]
+
+
+@dataclass(frozen=True)
+class AnalysisCaptureTestCase:
+    """A generated project, the commands it runs, and the analysis kinds their captures prove."""
+
+    description: str
+    seed: int
+    blocks: tuple[str, ...]
+    dialect: str | None
+    commands: tuple[tuple[str, ...], ...]
+    generated_command_count: int
+    expected_kinds: frozenset[str]
+    expected_absent: frozenset[str]
+
+
+@dataclass(frozen=True)
+class WheelSiteReportTestCase:
+    """A harness run that records wheel sites, optionally with an injected native deferral."""
+
+    description: str
+    perturbation: str
+    expected_lines: tuple[str, ...]
+    expected_sites: frozenset[str]
+    expected_deferrals: frozenset[str]

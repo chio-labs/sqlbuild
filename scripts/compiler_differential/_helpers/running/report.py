@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from scripts.compiler_differential.constants import (
+    ANALYSIS_INDIRECT_KINDS,
     CONFIG_ONLY_KINDS,
     RENDER_CONFIG_ONLY_KINDS,
     RENDER_INDIRECT_KINDS,
@@ -78,6 +79,17 @@ def format_render_coverage(*, covered: frozenset[str], required: tuple[str, ...]
             ("config-only kinds", "only proves", RENDER_CONFIG_ONLY_KINDS),
             ("indirect kinds", "credited because", RENDER_INDIRECT_KINDS),
         ),
+    )
+
+
+def format_analysis_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:
+    """Report how many required analysis input kinds the seed corpus exercised."""
+
+    return _format_coverage(
+        stage="Analysis",
+        covered=covered,
+        required=required,
+        notes=(("indirect kinds", "credited because", ANALYSIS_INDIRECT_KINDS),),
     )
 
 

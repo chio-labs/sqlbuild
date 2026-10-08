@@ -71,3 +71,22 @@ class RenderEncodedInputsTestCase:
     description: str
     inputs: CompileProjectInputs
     expected_kinds: frozenset[str]
+
+
+@dataclass(frozen=True)
+class AnalysisCaptureKindsTestCase:
+    """One compiled-project capture fragment and the analysis kinds it must and must not prove."""
+
+    description: str
+    capture: dict[str, object]
+    expected_present: frozenset[str]
+    expected_absent: frozenset[str]
+
+
+@dataclass(frozen=True)
+class AnalysisCaptureProblemsTestCase:
+    """A compiled-project capture text and how many problems make it unsound."""
+
+    description: str
+    capture_text: str
+    expected_problem_count: int
