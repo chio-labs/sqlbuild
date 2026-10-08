@@ -2866,15 +2866,15 @@ wheels = [
 
 [[package]]
 name = "polyglot-sql-chio"
-version = "0.13.8"
+version = "0.13.9"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/44/21/dcacff0ca62efb8ed3b6e238e60f17c6d2de46347817d8326eeaccfc8f01/polyglot_sql_chio-0.13.8.tar.gz", hash = "sha256:dc0ac2278546da4008a8c73774723746ebc92caa35fa37f3c26d33dcfe8351cf", size = 2103046, upload-time = "2026-09-27T10:58:10.281Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/60/57a3b6fe1cea85c5229f32dc6becb3ad445f8318dd53623fcfaafdbaaa0c/polyglot_sql_chio-0.13.9.tar.gz", hash = "sha256:99655df81e3fb2d1b4017bdb382ed39eac104e7afdb502f9fb32d2ef4a63d166", size = 2112062, upload-time = "2026-10-08T01:26:30.773Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/42/b85b763f848761d32c71c74b84a255b6bb650c7aa371d262fefa668ab917/polyglot_sql_chio-0.13.8-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:8fc651ea987e204ddc7e7373199fcda01b60b411f9c08c05701fa33c2401ded6", size = 12726373, upload-time = "2026-09-27T10:57:58.775Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/f5/46e52ae235c5528dea8216ae1f34118e6eea74871e2dda9306a132ad3125/polyglot_sql_chio-0.13.8-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:7bfc7a5b0faf0837fe05b6fb58f77908559a98e4fe4df194ba7861c0b2b365e5", size = 11952980, upload-time = "2026-09-27T10:58:01.445Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/7d/fc30adbc583dc3f02834ed14392bd91a05fb00e827d3fccfe1f11fe14274/polyglot_sql_chio-0.13.8-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:193a69cecc4d09c6c354e9e01e3c5eaae197e3058717bd7c83805744726064a7", size = 12864167, upload-time = "2026-09-27T10:58:03.921Z" },
-    { url = "https://files.pythonhosted.org/packages/cf/44/008c6f32fd65f568a88aaff99de00619ae8a62ca8f819625a88a5d5dee46/polyglot_sql_chio-0.13.8-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0a16fc856425a9905b1a55a07d7a44f2fbe7c09f0bc64efed85b41a8b490a57e", size = 11929491, upload-time = "2026-09-27T10:58:06.019Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/d2/3f669e9fbc40236b15a750f531579a1af9b935963f949ae26fb8bec2a442/polyglot_sql_chio-0.13.8-cp312-abi3-win_amd64.whl", hash = "sha256:956c67ab78b470cb4cb320e290d7a1b3a987463e720667c7a71980efb34ea0d9", size = 11692992, upload-time = "2026-09-27T10:58:08.175Z" },
+    { url = "https://files.pythonhosted.org/packages/52/de/b8b877381aa2cf530dcc74e83d47a636f68a777d3682fc9fb080e03d4f3c/polyglot_sql_chio-0.13.9-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:ee8246059495e7808a0ac3a3306375124d268088912b0e3020d5b2a64587c4ad", size = 12727017, upload-time = "2026-10-08T01:26:18.545Z" },
+    { url = "https://files.pythonhosted.org/packages/87/9e/8ed75a9f9cd324d0305080e1f6d4b54c17d88d21a2935200f38b422dfd0c/polyglot_sql_chio-0.13.9-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:63d38d1b20731c4cd6f3a370e34a8cd0023d99071b4b665fd645943b36d03617", size = 11972559, upload-time = "2026-10-08T01:26:20.877Z" },
+    { url = "https://files.pythonhosted.org/packages/43/32/ed55ff16069f60d8d6f3fe744a28026be0cbaf1b4965220940bf9883847d/polyglot_sql_chio-0.13.9-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b9c881b7e4c7c098ab4ec605918c45bbc25f2b953a36e1d9902305cd2c18157f", size = 12831250, upload-time = "2026-10-08T01:26:23.269Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/34/f016ab19dc804321c49564ab67a15b2bd232a6e6facbd6c7d98252fbae1d/polyglot_sql_chio-0.13.9-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:32bd401b19431e96b148a38f08f610d75f06fbf7f4f72d5bd790dae5fb4397f6", size = 11997845, upload-time = "2026-10-08T01:26:26.139Z" },
+    { url = "https://files.pythonhosted.org/packages/de/ea/79b0e54a12b0dd9a0fb7df57184df3c8fb22edfe8438702994659f2eb813/polyglot_sql_chio-0.13.9-cp312-abi3-win_amd64.whl", hash = "sha256:afacd08235f149348893f4a574d357bb54d8cd42875527c1934de586941323df", size = 11695291, upload-time = "2026-10-08T01:26:28.451Z" },
 ]
 
 [[package]]
@@ -4218,7 +4218,7 @@ requires-dist = [
     { name = "ingestr", marker = "extra == 'ingestr'", specifier = ">=1.0.0" },
     { name = "jinja2", marker = "extra == 'dbt'", specifier = ">=3.1" },
     { name = "orjson", specifier = ">=3.11.7" },
-    { name = "polyglot-sql-chio", specifier = "==0.13.8" },
+    { name = "polyglot-sql-chio", specifier = "==0.13.9" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2.0" },
     { name = "pydantic-settings", specifier = ">=2,<3" },
     { name = "pymssql", marker = "extra == 'sqlserver'", specifier = ">=2.3.0" },
