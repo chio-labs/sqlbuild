@@ -1,4 +1,4 @@
-"""The preview engine reports declaration and scope errors as Python does, without a re-run."""
+"""Native engines report declaration and scope errors as Python does, without a re-run."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_project_file,
 )
 
-_ENGINES: tuple[str, str] = ("python", "native-preview")
+_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
 _CALL_LOG: str = "macro_calls.log"
 _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
@@ -110,7 +110,7 @@ _STATUS_ENUM: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_declaration_error_when_compiling_with_preview_then_error_matches_python_once(
+def test_given_declaration_error_when_compiling_natively_then_error_matches_python_once(
     test_case: NativeDeclarationErrorTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = tmp_path / "orders"
@@ -133,16 +133,18 @@ def test_given_declaration_error_when_compiling_with_preview_then_error_matches_
 
     assert (
         tuple(run.returncode for run in runs),
-        report_without_engine(runs[1]) == report_without_engine(runs[0]),
-        stderr_without_durations(stderr=runs[1].stderr)
-        == stderr_without_durations(stderr=runs[0].stderr),
+        {report_without_engine(run) for run in runs} == {report_without_engine(runs[0])},
+        {stderr_without_durations(stderr=run.stderr) for run in runs}
+        == {stderr_without_durations(stderr=runs[0].stderr)},
         test_case.expected_report_text in runs[0].report + runs[0].stderr,
         macro_calls,
-    ) == ((1, 1), True, True, True, [test_case.expected_macro_calls] * 2), (
-        runs[0].report,
-        runs[1].report,
-        runs[1].stderr,
-    )
+    ) == (
+        (1,) * len(_ENGINES),
+        True,
+        True,
+        True,
+        [test_case.expected_macro_calls] * len(_ENGINES),
+    ), tuple(run.report + run.stderr for run in runs)
 
 
 @pytest.mark.parametrize(

@@ -12,7 +12,7 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
-from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
+from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE, STORE_MODULE_PATHS
 
 
 def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
@@ -36,6 +36,7 @@ def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
         native_error = error
     else:
         bridge.save_store()
+        STORE_MODULE_PATHS.update(bridge.store_module_paths())
         hits, misses, recorded = bridge.stats()
         store_hits, store_records = bridge.store_stats()
         logging.getLogger(__name__).debug(

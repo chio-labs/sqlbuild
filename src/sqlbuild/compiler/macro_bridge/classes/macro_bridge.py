@@ -280,6 +280,11 @@ class MacroBridge:
 
         return self._memo.stats()
 
+    def store_module_paths(self) -> tuple[str, ...]:
+        """Module files the stored call results depend on, imported this compile or not."""
+
+        return tuple(self._module_digests) if self._store_path is not None else ()
+
     def store_stats(self) -> tuple[int, int]:
         """Calls found in the store and calls recorded into it."""
 

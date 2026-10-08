@@ -129,8 +129,8 @@ prints `Recording compile for reuse...` and a completion line to stderr before t
 
 Any change runs the whole compile again: every model, test, and audit is rendered again, and
 contracts and semantic validation run for the whole project. No render is carried over from the
-previous compile, so until the native compiler ships, an edited model is recompiled without any
-cache. A few caches under `target/cache/` shorten the rest:
+previous compile; rendering runs natively and does not run unchanged macro calls again. A few
+caches under `target/cache/` shorten the rest:
 
 - An unchanged model takes its column analysis from the analysis cache when its query and the
   analyses of its upstream models are unchanged.
@@ -138,7 +138,7 @@ cache. A few caches under `target/cache/` shorten the rest:
   it, from `sql-test-scans.bin`. Entries are keyed by the file's expanded text, the adapter's SQL
   lexical rules, and the SQLBuild build; a damaged or unreadable entry is scanned again.
 - Rule results are reused for unchanged inputs.
-- Macro call results may be reused as described in
+- Macro call results are reused as described in
   [Macros must be deterministic](../concepts/macros.md#macros-must-be-deterministic).
 
 An edit therefore costs a full render of the project plus the analysis, test scans, and rules of
