@@ -13,6 +13,14 @@ class MetricVerdictTestCase:
 
 
 @dataclass(frozen=True)
+class ConfiguredTimeLimitTestCase:
+    description: str
+    command: str
+    wall_ratio: float
+    expected_regressed: bool
+
+
+@dataclass(frozen=True)
 class SkipReasonTestCase:
     description: str
     minimum_version: str | None

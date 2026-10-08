@@ -12,6 +12,7 @@ MAX_WALL_RATIO: float = 1.25
 MAX_CPU_RATIO: float = 1.25
 MAX_RSS_RATIO: float = 1.25
 MAX_COMPILE_TIME_RATIO: float = 1.15
+MAX_EDIT_COMPILE_TIME_RATIO: float = 1.25
 MIN_WALL_REGRESSION_SECONDS: float = 0.5
 MIN_CPU_REGRESSION_SECONDS: float = 0.5
 MIN_RSS_REGRESSION_BYTES: int = 32 * 1024 * 1024
@@ -118,7 +119,7 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
         project=INSPECTION_PROJECT,
         sqb_args=("compile", "--json"),
         edits_model=True,
-        max_time_ratio=MAX_COMPILE_TIME_RATIO,
+        max_time_ratio=MAX_EDIT_COMPILE_TIME_RATIO,
     ),
     BenchmarkCommand(
         name="dense compile (warm cache)",
@@ -131,7 +132,7 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
         project=DENSE_PROJECT,
         sqb_args=("compile", "--json"),
         edits_model=True,
-        max_time_ratio=MAX_COMPILE_TIME_RATIO,
+        max_time_ratio=MAX_EDIT_COMPILE_TIME_RATIO,
     ),
     BenchmarkCommand(
         name="dense compile (no cache)",

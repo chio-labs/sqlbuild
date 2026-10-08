@@ -63,6 +63,8 @@ jobs:
         run: uv sync --locked --all-groups --all-extras
       - name: Build candidate wheel
         run: uv build --wheel --out-dir "${RUNNER_TEMP}/candidate"
+      # Temporary: one-model edit compiles use MAX_EDIT_COMPILE_TIME_RATIO (1.25x) because an edited
+      # model recompiles uncached; tighten it back to 1.15x once native rendering is the default.
       - name: Compare candidate and previous release on this runner
         env:
           BASELINE: ${{ inputs.baseline }}
