@@ -1833,8 +1833,7 @@ fn helper_reference_test(case: &HelperReferenceTestCase) -> Value {
                 .iter()
                 .map(|(name, _)| name.trim_start_matches("__expected__"))
                 .collect::<Vec<_>>(),
-            "assertionCtes": named(case.assertions),
-            "helperTargetModelNames": case.helper_targets
+            "assertionCtes": named(case.assertions)
         }
     })
 }
@@ -1854,21 +1853,27 @@ fn helper_reference_models() -> Value {
     ])
 }
 
+/// Plan and render one helper-reference case through the native planner's JSON entry point.
+pub(crate) fn plan_helper_reference_response(
+    case: &HelperReferenceTestCase,
+) -> Result<String, String> {
+    crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &json!({
+            "lexicalSyntax": generic_lexical_syntax(),
+            "models": helper_reference_models(),
+            "tests": [helper_reference_test(case)],
+            "sqlAnalysisEnabled": case.sql_analysis_enabled,
+            "sqlAnalysisDialect": "duckdb",
+            "setDifferenceOperator": "EXCEPT"
+        })
+        .to_string(),
+    )
+}
+
 /// Plan and render one helper-reference case, returning its SQL, chain and warnings.
 pub(crate) fn plan_helper_reference_case(case: &HelperReferenceTestCase) -> Value {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
-            &json!({
-                "lexicalSyntax": generic_lexical_syntax(),
-                "models": helper_reference_models(),
-                "tests": [helper_reference_test(case)],
-                "sqlAnalysisEnabled": case.sql_analysis_enabled,
-                "sqlAnalysisDialect": "duckdb",
-                "setDifferenceOperator": "EXCEPT"
-            })
-            .to_string(),
-        )
-        .expect("test assumption must hold"),
+        &plan_helper_reference_response(case).expect("test assumption must hold"),
     )
     .expect("test assumption must hold");
     response["artifacts"][0].clone()

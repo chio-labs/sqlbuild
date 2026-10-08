@@ -538,9 +538,7 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
             expected_warning_count=1,
             expected_warning_severity=WarningSeverity.ERROR,
             expected_error_fragments=("__dbt_ref__stripe__payments which has no mock",),
-            expected_cte_bodies={
-                "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
-            },
+            expected_cte_bodies={"payments": "SELECT 1 AS payment_id"},
         ),
         PlanTestChainTestCase(
             description=("unresolved ref produces error warning"),

@@ -125,7 +125,6 @@ pub(crate) struct HelperReferenceTestCase {
     pub(crate) helpers: &'static [(&'static str, &'static str)],
     pub(crate) expected: &'static [(&'static str, &'static str)],
     pub(crate) assertions: &'static [(&'static str, &'static str)],
-    pub(crate) helper_targets: &'static [&'static str],
     pub(crate) expected_chain: &'static [&'static str],
     pub(crate) expected_order: &'static [(&'static str, &'static str)],
     pub(crate) expected_fragments: &'static [&'static str],
@@ -136,4 +135,13 @@ pub(crate) struct ScenarioExtractionTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
     pub(crate) expected_json: Option<&'static str>,
+}
+
+pub(crate) struct UnresolvedReaderReferenceTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql_analysis_enabled: bool,
+    pub(crate) helpers: &'static [(&'static str, &'static str)],
+    pub(crate) expected: &'static [(&'static str, &'static str)],
+    pub(crate) assertions: &'static [(&'static str, &'static str)],
+    pub(crate) expected_error_fragments: &'static [&'static str],
 }

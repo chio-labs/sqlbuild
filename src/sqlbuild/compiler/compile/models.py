@@ -1245,7 +1245,7 @@ class CompileModelSqlTestInputPayload:
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    helper_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    reference_target_model_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -1394,7 +1394,6 @@ class CompiledSqlTest:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    helper_target_model_names: tuple[str, ...] = field(default_factory=tuple)
     target_model_names: tuple[str, ...] = field(default_factory=tuple)
     tested_resources: tuple[CompiledSqlTestResource, ...] = field(default_factory=tuple)
 

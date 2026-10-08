@@ -413,7 +413,6 @@ def _test_request(
             "expectedCtes": [_cte_request(cte=cte) for cte in payload.expected_ctes],
             "expectedModelNames": list(payload.expected_model_names),
             "assertionCtes": [_cte_request(cte=cte) for cte in payload.assertion_ctes],
-            "helperTargetModelNames": list(test.helper_target_model_names),
         }
     return {
         "name": test.name,

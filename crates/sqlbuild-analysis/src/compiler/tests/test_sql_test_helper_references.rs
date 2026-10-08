@@ -2,12 +2,28 @@ use serde_json::{Value, json};
 
 use crate::compiler::tests::helpers::{
     chain_helper_reference_case, defined_before, plan_helper_reference_case,
+    plan_helper_reference_response,
 };
-use crate::compiler::tests::test_types::HelperReferenceTestCase;
+use crate::compiler::tests::test_types::{
+    HelperReferenceTestCase, UnresolvedReaderReferenceTestCase,
+};
 
 const HELPER_READS_MODEL: (&str, &str) = (
     "doubled",
     "SELECT order_id, amount_doubled FROM __ref(\"orders\")",
+);
+const MOCK_STG_ORDERS: (&str, &str) = (
+    "__ref__stg_orders",
+    "SELECT 5 AS order_id, 10 AS amount, 7 AS region_id",
+);
+const REAL_STG_ORDERS_BODY: &str = "SELECT order_id, amount, region_id FROM __source__raw_orders";
+const ASSERT_MOCK_ROWS: (&str, &str) = (
+    "__assert__mock_rows",
+    "SELECT order_id FROM __ref(\"stg_orders\") WHERE order_id <> 5",
+);
+const EXPECTED_FROM_MOCK: (&str, &str) = (
+    "__expected__orders",
+    "SELECT order_id, amount * 2 AS amount_doubled FROM __ref(\"stg_orders\")",
 );
 const ASSERT_DOUBLED: (&str, &str) = (
     "__assert__doubles_amount",
@@ -23,7 +39,6 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             helpers: &[HELPER_READS_MODEL],
             expected: &[],
             assertions: &[ASSERT_DOUBLED],
-            helper_targets: &["orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__source__raw_orders", "__ref__stg_orders"),
@@ -42,7 +57,6 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             helpers: &[HELPER_READS_MODEL],
             expected: &[],
             assertions: &[ASSERT_DOUBLED],
-            helper_targets: &["orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__source__raw_orders", "__ref__orders"),
@@ -73,7 +87,6 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "__assert__has_region",
                 "SELECT order_id FROM with_region WHERE region_name IS NULL",
             )],
-            helper_targets: &["stg_orders", "orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__ref__orders", "__helper__base"),
@@ -101,7 +114,6 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "SELECT order_id, amount_doubled FROM expected_rows",
             )],
             assertions: &[],
-            helper_targets: &[],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__source__raw_orders", "__helper__expected_rows"),
@@ -122,7 +134,6 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "SELECT order_id, amount_doubled FROM doubled",
             )],
             assertions: &[],
-            helper_targets: &["orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[("__ref__orders", "__expected__orders")],
             expected_fragments: &[
@@ -150,8 +161,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "SELECT order_id FROM doubled JOIN __ref(\"stg_orders\") USING (order_id) \
                  WHERE amount_doubled <> 20",
             )],
-            helper_targets: &["orders"],
-            expected_chain: &["orders", "stg_orders"],
+            expected_chain: &["orders"],
             expected_order: &[
                 ("__helper__base_ids", "__ref__orders"),
                 ("__ref__orders", "__helper__doubled"),
@@ -169,11 +179,101 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "SELECT 1 AS order_id, 10 AS amount, 7 AS region_id",
             )],
             assertions: &[],
-            helper_targets: &[],
             expected_chain: &["stg_orders"],
             expected_order: &[("__source__raw_orders", "__expected__stg_orders")],
             expected_fragments: &[],
             expected_absent_fragments: &["unused_rows", "__ref__orders"],
+        },
+        HelperReferenceTestCase {
+            description: "assertion reading a mocked model reads the mock, not the model",
+            sql_analysis_enabled: true,
+            helpers: &[MOCK_STG_ORDERS],
+            expected: &[(
+                "__expected__orders",
+                "SELECT 5 AS order_id, 20 AS amount_doubled",
+            )],
+            assertions: &[ASSERT_MOCK_ROWS],
+            expected_chain: &["orders"],
+            expected_order: &[("__ref__stg_orders", "__assert__mock_rows")],
+            expected_fragments: &["FROM __ref__stg_orders WHERE order_id <> 5"],
+            expected_absent_fragments: &[REAL_STG_ORDERS_BODY, "__sqb_cte_"],
+        },
+        HelperReferenceTestCase {
+            description: "assertion reading a mocked model reads the mock without sql analysis",
+            sql_analysis_enabled: false,
+            helpers: &[MOCK_STG_ORDERS],
+            expected: &[],
+            assertions: &[
+                ASSERT_MOCK_ROWS,
+                (
+                    "__assert__doubled",
+                    "SELECT order_id FROM __ref(\"orders\") WHERE amount_doubled <> 20",
+                ),
+            ],
+            expected_chain: &["orders"],
+            expected_order: &[
+                ("__ref__stg_orders", "__ref__orders"),
+                ("__ref__orders", "__assert__doubled"),
+            ],
+            expected_fragments: &["FROM __ref__stg_orders WHERE order_id <> 5"],
+            expected_absent_fragments: &[REAL_STG_ORDERS_BODY, "__sqb_cte_"],
+        },
+        HelperReferenceTestCase {
+            description: "expected rows reading a mocked model resolve to the mock",
+            sql_analysis_enabled: true,
+            helpers: &[MOCK_STG_ORDERS],
+            expected: &[EXPECTED_FROM_MOCK],
+            assertions: &[],
+            expected_chain: &["orders"],
+            expected_order: &[("__ref__stg_orders", "__expected__orders")],
+            expected_fragments: &[
+                "__expected__orders AS (SELECT order_id, amount * 2 AS amount_doubled FROM __ref__stg_orders)",
+            ],
+            expected_absent_fragments: &[REAL_STG_ORDERS_BODY, "__sqb_cte_"],
+        },
+        HelperReferenceTestCase {
+            description: "expected rows reading a mocked model resolve to the mock without sql analysis",
+            sql_analysis_enabled: false,
+            helpers: &[MOCK_STG_ORDERS],
+            expected: &[EXPECTED_FROM_MOCK],
+            assertions: &[],
+            expected_chain: &["orders"],
+            expected_order: &[("__ref__stg_orders", "__expected__orders")],
+            expected_fragments: &[
+                "__expected__orders AS (SELECT order_id, amount * 2 AS amount_doubled FROM __ref__stg_orders)",
+            ],
+            expected_absent_fragments: &[REAL_STG_ORDERS_BODY, "__sqb_cte_"],
+        },
+        HelperReferenceTestCase {
+            description: "expected rows reading an unmocked model run that model",
+            sql_analysis_enabled: true,
+            helpers: &[],
+            expected: &[EXPECTED_FROM_MOCK],
+            assertions: &[],
+            expected_chain: &["stg_orders", "orders"],
+            expected_order: &[("__ref__stg_orders", "__expected__orders")],
+            expected_fragments: &["amount * 2 AS amount_doubled FROM __ref__stg_orders)"],
+            expected_absent_fragments: &[],
+        },
+        HelperReferenceTestCase {
+            description: "expected rows reading a source and a seed resolve to their mocks without sql analysis",
+            sql_analysis_enabled: false,
+            helpers: &[],
+            expected: &[(
+                "__expected__stg_orders",
+                "SELECT s.order_id, s.amount, r.region_id FROM __source(\"raw_orders\") AS s \
+                 JOIN __seed(\"regions\") AS r USING (region_id)",
+            )],
+            assertions: &[],
+            expected_chain: &["stg_orders"],
+            expected_order: &[
+                ("__source__raw_orders", "__expected__stg_orders"),
+                ("__seed__regions", "__expected__stg_orders"),
+            ],
+            expected_fragments: &[
+                "FROM __source__raw_orders AS s JOIN __seed__regions AS r USING (region_id)",
+            ],
+            expected_absent_fragments: &[],
         },
     ];
     for test_case in test_cases {
@@ -214,9 +314,87 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 test_case.description
             );
         }
-        for marker in ["__ref(", "__source(", "__seed("] {
+        for marker in ["__ref(", "__source(", "__seed(", "__dbt_ref("] {
             assert!(!sql.contains(marker), "{}: {sql}", test_case.description);
         }
         assert!(errors.is_empty(), "{}: {errors:?}", test_case.description);
+    }
+}
+
+#[test]
+fn given_unresolvable_reader_references_when_planning_directly_then_planner_rejects_test() {
+    let test_cases = [
+        UnresolvedReaderReferenceTestCase {
+            description: "assertion calling an unmocked source",
+            sql_analysis_enabled: true,
+            helpers: &[],
+            expected: &[(
+                "__expected__stg_orders",
+                "SELECT 1 AS order_id, 10 AS amount, 7 AS region_id",
+            )],
+            assertions: &[(
+                "__assert__no_returns",
+                "SELECT order_id FROM __source(\"returns\")",
+            )],
+            expected_error_fragments: &[
+                "compile_input:",
+                "CTE '__assert__no_returns' calls __source(\"returns\")",
+                "__source__returns AS (SELECT ...)",
+            ],
+        },
+        UnresolvedReaderReferenceTestCase {
+            description: "expected rows calling an unmocked seed without sql analysis",
+            sql_analysis_enabled: false,
+            helpers: &[],
+            expected: &[(
+                "__expected__stg_orders",
+                "SELECT order_id, amount, region_id FROM __seed(\"returns\")",
+            )],
+            assertions: &[],
+            expected_error_fragments: &[
+                "CTE '__expected__stg_orders' calls __seed(\"returns\")",
+                "__seed__returns AS (SELECT ...)",
+            ],
+        },
+        UnresolvedReaderReferenceTestCase {
+            description: "helper read by an assertion calling an unmocked dbt model",
+            sql_analysis_enabled: true,
+            helpers: &[(
+                "legacy_orders",
+                "SELECT order_id FROM __dbt_ref(\"warehouse\", \"orders\")",
+            )],
+            expected: &[(
+                "__expected__stg_orders",
+                "SELECT 1 AS order_id, 10 AS amount, 7 AS region_id",
+            )],
+            assertions: &[("__assert__no_legacy", "SELECT order_id FROM legacy_orders")],
+            expected_error_fragments: &[
+                "CTE 'legacy_orders' calls __dbt_ref(\"warehouse\", \"orders\")",
+                "__dbt_ref__warehouse__orders AS (SELECT ...)",
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        let error = plan_helper_reference_response(&HelperReferenceTestCase {
+            description: test_case.description,
+            sql_analysis_enabled: test_case.sql_analysis_enabled,
+            helpers: test_case.helpers,
+            expected: test_case.expected,
+            assertions: test_case.assertions,
+            expected_chain: &[],
+            expected_order: &[],
+            expected_fragments: &[],
+            expected_absent_fragments: &[],
+        })
+        .expect_err(test_case.description);
+
+        assert!(
+            test_case
+                .expected_error_fragments
+                .iter()
+                .all(|fragment| error.contains(fragment)),
+            "{}: {error}",
+            test_case.description
+        );
     }
 }

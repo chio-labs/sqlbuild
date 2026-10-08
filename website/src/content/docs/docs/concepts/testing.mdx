@@ -141,11 +141,18 @@ __assert__no_unexpected_order_ids AS (
 SQLBuild emits each helper and mock a query needs once, in dependency order, including mocks that
 a helper reaches through another mock.
 
-Helpers can also call the references an `__assert__` CTE can, such as `__ref()`, `__source()` and
-`__seed()`, and they resolve exactly as there: a mocked relation reads its mock, and an unmocked
-`__ref("<model>")` reads the model's real SQL, so the test runs that model and
-`sqb test --select <model>` selects the test even when only a helper reads it. SQLBuild emits a
-helper after the mocks and models it reads:
+`__expected__` and `__assert__` CTEs, and the helpers they read, can call `__ref()`,
+`__source()`, `__seed()` and `__dbt_ref()`. They resolve the same way in every test CTE:
+
+- A mocked name always means the mock. `__ref("stg_orders")` reads `__ref__stg_orders` when the
+  test defines it, and a mocked model is neither run nor counted as a model the test covers, so
+  `sqb test --select stg_orders` does not select the test because of it.
+- An unmocked `__ref("<model>")` reads the model's real SQL, so the test runs that model and
+  `sqb test --select <model>` selects the test, even when only a helper or expected rows read it.
+- `__source()`, `__seed()` and `__dbt_ref()` must be mocked, for example with
+  `__source__raw__orders AS (SELECT ...)`.
+
+SQLBuild emits a helper after the mocks and models it reads:
 
 ```sql
 TEST();
@@ -165,9 +172,9 @@ __assert__quantities_are_positive AS (
 Only helpers the test reads count: those its `__expected__` and `__assert__` CTEs reach, directly
 or through other helpers and mocks. A helper nothing reads is left out of the test query, and its
 references are neither checked nor run. Compile rejects references the test query cannot resolve
-with `P013`, at the helper or call that causes it: a `__ref()` to a model that does not exist,
-helpers or mocks that read each other in a cycle, and a mock or `__table_fn__` fixture the test
-uses that reads a helper calling a reference. Mocks are defined before the models a test runs, so
+with `P013`, at the CTE or call that causes it: a `__ref()` to a model that does not exist, an
+unmocked `__source()`, `__seed()` or `__dbt_ref()`, helpers or mocks that read each other in a
+cycle, and a mock or `__table_fn__` fixture the test uses that reads a helper calling a reference. Mocks are defined before the models a test runs, so
 a mock reads other mocks by CTE name, such as `FROM __ref__stg_orders`, rather than through
 `__ref("stg_orders")`.
 
@@ -421,6 +428,10 @@ __assert__order_ids_are_not_null AS (
   SELECT * FROM __ref("stg_orders") WHERE order_id IS NULL
 )
 ```
+
+The assertion reads the `__ref__stg_orders` mock, not the real `stg_orders` model: a mocked name
+always means the mock. Earlier SQLBuild versions ran the model's real SQL for an assertion calling
+`__ref()` on a mocked model.
 
 Assertions can be mixed with `__expected__` CTEs in the same test, or used on their own. They are useful when the natural check is "no rows should violate this rule" rather than "the output should exactly equal these rows" - for example, duplicate checks, negative-value constraints, or conditional business rules.
 
