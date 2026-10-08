@@ -270,6 +270,11 @@ def digest_files(paths: list[str]) -> list[str | None]: ...
 # Native analysis: contracts.
 
 # Native analysis: column lineage facts.
+def build_fast_column_lineage(
+    dialect: str | None,
+    schema: list[tuple[str, str, list[str]]],
+    models: list[tuple[bool, str, list[str]]],
+) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
 
 # Native analysis: SQL test planning glue.
 

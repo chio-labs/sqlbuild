@@ -1,0 +1,171 @@
+//! Plain-data request and outcomes for fast column lineage.
+
+/// The SQLBuild resource kinds a `__ref`, `__source` or `__seed` call names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LineageResourceType {
+    Model,
+    Source,
+    Seed,
+}
+
+impl LineageResourceType {
+    /// Python's `CompiledResourceType` value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Model => "model",
+            Self::Source => "source",
+            Self::Seed => "seed",
+        }
+    }
+
+    /// Parse Python's `CompiledResourceType` value for the kinds lineage reads.
+    pub fn from_value(value: &str) -> Option<Self> {
+        match value {
+            "model" => Some(Self::Model),
+            "source" => Some(Self::Source),
+            "seed" => Some(Self::Seed),
+            _ => None,
+        }
+    }
+}
+
+/// Python's `ColumnTransformKind` values that fast lineage produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineageTransformKind {
+    Direct,
+    Cast,
+    Expression,
+    Aggregation,
+    Star,
+    Constant,
+}
+
+impl LineageTransformKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Direct => "direct",
+            Self::Cast => "cast",
+            Self::Expression => "expression",
+            Self::Aggregation => "aggregation",
+            Self::Star => "star",
+            Self::Constant => "constant",
+        }
+    }
+}
+
+/// Python's `ColumnLineageConfidence` values that fast lineage produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineageConfidence {
+    High,
+    Medium,
+    Unknown,
+}
+
+impl LineageConfidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// One resource's known columns, in the order Python's schema mapping lists them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineageSchemaResource {
+    pub resource_type: LineageResourceType,
+    pub name: String,
+    /// Inferred then declared column names; repeats keep their first position.
+    pub columns: Vec<String>,
+}
+
+/// The work one model needs: star expansion over compact facts, or a parse of its SQL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FastLineageModel {
+    /// A model with compact facts and an unresolved root star.
+    StarExpansion {
+        query_sql: String,
+        existing_columns: Vec<String>,
+    },
+    /// A model without compact facts.
+    Parse {
+        query_sql: String,
+        inferred_columns: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FastLineageRequest {
+    /// The adapter's analysis dialect; `None` parses as generic SQL.
+    pub dialect: Option<String>,
+    pub schema: Vec<LineageSchemaResource>,
+    pub models: Vec<FastLineageModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineageSource {
+    pub resource_type: LineageResourceType,
+    pub resource_name: String,
+    pub column_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineageColumn {
+    pub output_column: String,
+    pub transform_kind: LineageTransformKind,
+    pub confidence: LineageConfidence,
+    pub upstream_columns: Vec<LineageSource>,
+}
+
+/// Why a model is handed back to Python, which builds its lineage exactly as before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineageDeferral {
+    /// The dialect is not compiled into the native parser.
+    UnsupportedDialect,
+    /// The parsed SQL could not be read as Python reads it.
+    NativeFailure,
+}
+
+impl LineageDeferral {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedDialect => "unsupported_dialect",
+            Self::NativeFailure => "native_failure",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FastLineageOutcome {
+    /// Star columns to append to the model's compact facts.
+    StarColumns(Vec<LineageColumn>),
+    /// Lineage built from the parsed SQL.
+    Built {
+        columns: Vec<LineageColumn>,
+        has_star: bool,
+    },
+    /// Python records no lineage for this model.
+    Omitted,
+    /// The SQL did not parse; Python logs this message and records no lineage.
+    Unparsed(String),
+    Deferred(LineageDeferral),
+}
+
+impl FastLineageOutcome {
+    /// `(status, columns, has_star, detail)`: detail is the parse error or the deferral kind.
+    pub fn into_parts(self) -> (&'static str, Vec<LineageColumn>, bool, Option<String>) {
+        match self {
+            Self::StarColumns(columns) => ("star", columns, true, None),
+            Self::Built { columns, has_star } => ("built", columns, has_star, None),
+            Self::Omitted => ("omitted", Vec::new(), false, None),
+            Self::Unparsed(message) => ("unparsed", Vec::new(), false, Some(message)),
+            Self::Deferred(kind) => (
+                "deferred",
+                Vec::new(),
+                false,
+                Some(kind.as_str().to_owned()),
+            ),
+        }
+    }
+}
