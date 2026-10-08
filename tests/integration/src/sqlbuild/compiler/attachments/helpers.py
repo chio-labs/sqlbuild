@@ -92,6 +92,40 @@ def generated_authored_sql(*, rng: random.Random) -> str:
     return " ".join(parts)
 
 
+_DOLLAR_PIECES: tuple[str, ...] = (
+    "$",
+    "$$",
+    "$t$",
+    "$tag$",
+    "a$",
+    "$1",
+    "$1$",
+    "--",
+    "/*",
+    "*/",
+    "'",
+    "\n",
+    " ",
+    "@@region",
+    "@@limit_rows",
+    "@@missing",
+    "@@ENV:SQB_ORDERS_REGION",
+    '@const("sales_cap")',
+    '@enum("order_status").PLACED',
+)
+
+
+def generated_dollar_authored_sql(*, rng: random.Random) -> str:
+    """Return SQL dense in dollar quotes around variables, enum and constant references."""
+
+    parts: list[str] = [
+        generated_reference_sql(rng=rng),
+        *rng.choices(_DOLLAR_PIECES, k=rng.randint(1, 10)),
+    ]
+    rng.shuffle(parts)
+    return "".join(parts)
+
+
 def authored_outcome(
     *, sql: str, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> AuthoredSqlExpansionResult | str:
@@ -310,7 +344,8 @@ ATTACHMENT_PROJECT: dict[str, str] = {
     "sources/events.yml": (
         "sources:\n  - name: order_events\n"
         f"    description: \"Order feed ${{coalesce(ENV:{_MISSING_ENV}, 'events')}}\"\n"
-        "    expression: \"(SELECT 1 AS id, @tidy_label('@@region') AS region)\"\n"
+        "    expression: \"(SELECT 1 AS id, @tidy_label('@@region') AS region, "
+        '$$--@@region /* $$ AS note)"\n'
         "    columns:\n      - name: id\n        type: INTEGER\n        audits:\n"
         "          - accepted_values:\n              values: [1, 2]\n"
         "      - name: region\n        type: VARCHAR\n"
@@ -323,7 +358,7 @@ ATTACHMENT_PROJECT: dict[str, str] = {
     ),
     "audits/generic/amount_floor.sql": (
         'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column < @minimum '
-        "AND @tidy_label(\"label\") <> @'label'\n"
+        "AND @tidy_label(\"label\") <> @'label' AND $tag$--@@region$tag$ <> @'label'\n"
     ),
     "models/orders.sql": (
         'MODEL (\n  materialized table,\n  description "Orders.",\n'
@@ -333,7 +368,8 @@ ATTACHMENT_PROJECT: dict[str, str] = {
     ),
     "tests/unit/test_orders.sql": (
         "TEST();\n\nWITH\n__seed__channel_codes AS (\n"
-        "  SELECT 1 AS id, @tidy_label(\"' Web '\") AS label\n),\n"
+        "  SELECT 1 AS id, @tidy_label(\"' Web '\") AS label, $$ /* $$ AS note, "
+        "'@@region' AS region -- */\n),\n"
         "__source__order_events AS (\n  SELECT 1 AS id, 'north' AS region\n),\n"
         "__expected__orders AS (\n  SELECT 1 AS id, 1.5 AS amount, 'web' AS label\n)\n"
         "SELECT 1\n"

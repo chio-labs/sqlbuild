@@ -21,7 +21,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 from sqlbuild.compiler.compile.constants import (
     COMPILE_INPUT_READS,
     SQL_CONTEXT_NAME_EXTRA_TOKENS,
-    SQL_DOLLAR_QUOTE_TOKEN,
     SQL_IDENTIFIER_EXTRA_TOKEN,
     SQL_INTERPOLATION_TOKEN,
     SQL_QUOTE_TOKENS,
@@ -81,7 +80,7 @@ def expand_authored_sql_result(  # noqa: PLR0913
     native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
     prepared_sql: str | None = (
         prepare_static_project_vars_batch(sqls=(sql,), effective_vars=effective_vars)[0]
-        if native and SQL_DOLLAR_QUOTE_TOKEN not in sql
+        if native
         else None
     )
     interpolated_sql: str = (

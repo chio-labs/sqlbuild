@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -10,6 +12,7 @@ class AuthoredSqlParityTestCase:
     description: str
     seed: int
     count: int
+    generate: Callable[[random.Random], str]
     expected_minimum_expanded: int
     expected_minimum_python_errors: int
 
