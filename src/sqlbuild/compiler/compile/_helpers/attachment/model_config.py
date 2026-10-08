@@ -65,13 +65,13 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
 )
 from sqlbuild.compiler.model_config.main._native_config_contains_template import (
     native_config_contains_template,
 )
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -372,9 +372,11 @@ def build_model_header_schema_entry(
         )
         else None
     )
+    if native is not None and native.columns_error is not None:
+        raise native_config_error(error=native.columns_error)
     local_columns: tuple[SchemaColumn, ...] = (
         native.columns
-        if native is not None and not native.invalid
+        if native is not None
         else _parse_model_header_columns(
             raw_columns=raw_columns,
             file_path=file_path,
@@ -393,9 +395,11 @@ def build_model_header_schema_entry(
         model_name=model_name,
         file_path=file_path,
     )
+    if native is not None and native.audits_error is not None:
+        raise native_config_error(error=native.audits_error)
     audits: tuple[SchemaAuditInstance, ...] = (
         native.audits
-        if native is not None and not native.invalid
+        if native is not None
         else parse_audit_instances(
             raw_audits=raw_audits,
             file_path=file_path,
@@ -404,11 +408,6 @@ def build_model_header_schema_entry(
             null_as_empty=True,
         )
     )
-    if native is not None and native.invalid:
-        raise NativeStageMismatchError(
-            f"{file_path}: native model config rejected MODEL columns or audits that the Python "
-            "model config accepts; run with SQLBUILD_COMPILER_ENGINE=python"
-        )
     generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
         raw_audit_factories=raw_audit_factories,
         file_path=file_path,
@@ -910,12 +909,14 @@ def native_model_config_session(
 def native_path_default(
     *, session: NativeModelConfigSession, model_file: DiscoveredSqlModelFile
 ) -> str | None:
-    """Select a model's path default natively; Python reports equally specific matches."""
+    """Select a model's path default natively, raising Python's error for equal matches."""
 
-    selected, key = session.builder.path_default(str(model_file.relative_path))
-    if selected:
-        return key
-    return find_matching_path_default(model_file=model_file, path_defaults=session.path_defaults)
+    selected: str | _native.NativeConfigError | None = session.builder.path_default(
+        str(model_file.relative_path)
+    )
+    if isinstance(selected, _native.NativeConfigError):
+        raise native_config_error(error=selected)
+    return selected
 
 
 def build_native_model_config(
@@ -924,13 +925,15 @@ def build_native_model_config(
     model_file: DiscoveredSqlModelFile,
     matched_path_default: str | None,
 ) -> CompileModelConfig | None:
-    """Build a model's effective config natively, or return None where Python must build it."""
+    """Build a model's effective config natively, raising Python's error; None defers to Python."""
 
-    built: _BuiltConfig | None = session.builder.build(
+    built: _BuiltConfig | _native.NativeConfigError | None = session.builder.build(
         model_file.header_values, matched_path_default, model_file.file_path.stem
     )
     if built is None:
         return None
+    if isinstance(built, _native.NativeConfigError):
+        raise native_config_error(error=built)
     values, header_keys, namespace, overrides, reads = built
     logical_schema, layer_schema_configured, logical_database = namespace
     retention_override, table_type_override = overrides
@@ -969,15 +972,19 @@ def build_native_model_config(
     )
 
 
-def native_model_validators_accept(
+def native_model_validation(
     *, session: NativeModelConfigSession, request: ModelValidationRequest
-) -> bool:
-    """Return whether every Python model validator accepts the model; False runs them."""
+) -> bool | _native.NativeConfigError:
+    """Return True when every model validator accepts, the first error, or False to run Python."""
 
     config: CompileModelConfig = request.config
-    return session.validator.accepts(
+    return session.validator.validate(
         config.values,
-        (request.model_file.file_path.stem, request.query_sql),
+        (
+            request.model_file.file_path.stem,
+            request.query_sql,
+            str(request.model_file.relative_path),
+        ),
         (
             request.references,
             (
@@ -994,12 +1001,16 @@ def native_model_validators_accept(
 def validate_model_config(
     *, context: ModelValidatorContext, request: ModelValidationRequest
 ) -> None:
-    """Validate one model; a native acceptance skips Python, any rejection runs it."""
+    """Validate one model natively, raising the first validator error; deferrals run Python."""
 
-    if context.native_config is not None and native_model_validators_accept(
-        session=context.native_config, request=request
-    ):
-        return
+    if context.native_config is not None:
+        outcome: bool | _native.NativeConfigError = native_model_validation(
+            session=context.native_config, request=request
+        )
+        if isinstance(outcome, _native.NativeConfigError):
+            raise native_config_error(error=outcome, values=request.config.values)
+        if outcome:
+            return
     run_python_model_validators(context=context, request=request)
 
 

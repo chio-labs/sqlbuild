@@ -36,7 +36,7 @@ pub enum ContextValue<V> {
 pub enum TemplateFailure {
     /// A missing variable, environment variable or context value, which `coalesce` skips.
     Missing(TemplateError),
-    /// Python raises this error for the template.
+    /// Another error Python raises for this template.
     Invalid(TemplateError),
     /// Python expands this template with rules the native expansion does not reproduce.
     Unsupported,

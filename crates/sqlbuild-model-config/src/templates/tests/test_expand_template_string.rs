@@ -60,35 +60,35 @@ fn given_template_strings_when_expanding_then_values_and_reads_match_python() {
         TemplateTestCase {
             description: "a context key without a value is missing",
             text: "${CTX:model.schema}",
-            expected: Err(TemplateFailure::Missing(
-                TemplateError::UnavailableContextKey("model.schema".to_owned()),
-            )),
+            expected: Err(TemplateFailure::Missing(TemplateError::UnavailableContext(
+                "model.schema".to_owned(),
+            ))),
             expected_reads: &["CTX:model.schema"],
         },
         TemplateTestCase {
             description: "a missing variable after a coalesce names itself",
             text: "${coalesce(missing, '')}_${ENV:UNSET}",
-            expected: Err(TemplateFailure::Missing(
-                TemplateError::MissingEnvironmentVariable("UNSET".to_owned()),
-            )),
+            expected: Err(TemplateFailure::Missing(TemplateError::MissingEnvironment(
+                "UNSET".to_owned(),
+            ))),
             expected_reads: &["ENV:UNSET"],
         },
         TemplateTestCase {
             description: "an unexpected token reports its unquoted value and position",
             text: "${coalesce(a,,b)}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::UnexpectedToken(
-                ",".to_owned(),
-                11,
-            ))),
+            expected: Err(TemplateFailure::Invalid(TemplateError::UnexpectedToken {
+                token: ",".to_owned(),
+                position: 11,
+            })),
             expected_reads: &[],
         },
         TemplateTestCase {
             description: "a trailing token after the expression",
             text: "${env 'x y'}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::UnexpectedToken(
-                "x y".to_owned(),
-                4,
-            ))),
+            expected: Err(TemplateFailure::Invalid(TemplateError::UnexpectedToken {
+                token: "x y".to_owned(),
+                position: 4,
+            })),
             expected_reads: &[],
         },
         TemplateTestCase {
@@ -100,33 +100,38 @@ fn given_template_strings_when_expanding_then_values_and_reads_match_python() {
         TemplateTestCase {
             description: "an unclosed call inside a template expects its parenthesis",
             text: "${eq(flag env)}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::ExpectedSymbol(
-                ')', 8,
-            ))),
+            expected: Err(TemplateFailure::Invalid(TemplateError::ExpectedSymbol {
+                symbol: ')',
+                position: 8,
+            })),
             expected_reads: &[],
         },
         TemplateTestCase {
             description: "an unterminated string reports where it opens",
             text: "${'abc}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::UnterminatedString(
-                "single", 0,
-            ))),
+            expected: Err(TemplateFailure::Invalid(
+                TemplateError::UnterminatedString {
+                    quote: "single",
+                    position: 0,
+                },
+            )),
             expected_reads: &[],
         },
         TemplateTestCase {
             description: "an escape at the end of the expression",
             text: "${\"ab\\}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::UnterminatedEscape(
-                3,
-            ))),
+            expected: Err(TemplateFailure::Invalid(
+                TemplateError::UnterminatedEscape { position: 3 },
+            )),
             expected_reads: &[],
         },
         TemplateTestCase {
             description: "argument counts are checked before arguments are evaluated",
             text: "${ne(missing)}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::ArgumentCount(
-                "ne", 2,
-            ))),
+            expected: Err(TemplateFailure::Invalid(TemplateError::ArgumentCount {
+                function: "ne",
+                expected: "2 arguments",
+            })),
             expected_reads: &[],
         },
         TemplateTestCase {

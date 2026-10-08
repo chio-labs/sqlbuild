@@ -6,10 +6,7 @@ import os
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.model_config.constants import (
-    NATIVE_TEMPLATE_REJECTION_LENGTH,
-    UNSUPPORTED_OUTCOME,
-)
+from sqlbuild.compiler.model_config.constants import UNSUPPORTED_OUTCOME
 from sqlbuild.compiler.model_config.models import (
     NativeTemplateExpansion,
     NativeTemplateRejection,
@@ -23,14 +20,12 @@ def expand_native_config_templates(
     variables: dict[str, object],
     context_values: dict[str, str | None],
     flags: TemplateResolutionFlags,
-    context_label: str | None = None,
+    context_label: str,
 ) -> NativeTemplateExpansion | NativeTemplateRejection | str:
-    """Return the expansion, a rejection (exact with `context_label`), or `unsupported`."""
+    """Return the expansion, the error Python raises, or `unsupported` (Python must run)."""
 
     try:
-        outcome: (
-            tuple[object, list[tuple[str, str]]] | tuple[str, str, list[tuple[str, str]]] | str
-        ) = _native.expand_config_templates(
+        outcome: tuple[object, list[tuple[str, str]]] | str = _native.expand_config_templates(
             value,
             (variables, os.environ, context_values),
             (
@@ -44,12 +39,8 @@ def expand_native_config_templates(
         return UNSUPPORTED_OUTCOME
     if isinstance(outcome, str):
         return outcome
-    if len(outcome) == NATIVE_TEMPLATE_REJECTION_LENGTH:
-        rejection: tuple[str, str, list[tuple[str, str]]] = cast(
-            tuple[str, str, list[tuple[str, str]]], outcome
+    if isinstance(outcome[0], _native.NativeConfigError):
+        return NativeTemplateRejection(
+            error=cast(_native.NativeConfigError, outcome[0]), reads=tuple(outcome[1])
         )
-        return NativeTemplateRejection(message=rejection[1], reads=tuple(rejection[2]))
-    expansion: tuple[object, list[tuple[str, str]]] = cast(
-        tuple[object, list[tuple[str, str]]], outcome
-    )
-    return NativeTemplateExpansion(value=expansion[0], reads=tuple(expansion[1]))
+    return NativeTemplateExpansion(value=outcome[0], reads=tuple(outcome[1]))

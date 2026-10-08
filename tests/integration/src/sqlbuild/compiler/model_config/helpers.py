@@ -28,14 +28,14 @@ from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-from sqlbuild.compiler.model_config.constants import INVALID_OUTCOME, UNSUPPORTED_OUTCOME
+from sqlbuild.compiler.model_config.constants import UNSUPPORTED_OUTCOME
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
 )
 from sqlbuild.compiler.model_config.main._native_config_contains_template import (
     native_config_contains_template,
 )
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
 )
@@ -100,7 +100,6 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
 )
 
 
-_RAISES: str = "Python raises"
 NATIVE_MODEL_CONFIG_ENTRIES: tuple[str, ...] = (
     "parse_model_header_metadata",
     "expand_config_templates",
@@ -218,35 +217,16 @@ def model_config_engine_outcome(
     )
 
 
-def native_rejection_error(
-    *, project_dir: Path, native_entry: str, monkeypatch: pytest.MonkeyPatch
-) -> str:
-    """Build model inputs in preview while `native_entry` rejects everything; return the error."""
+def error_shape(error: Exception) -> tuple[object, ...]:
+    """Return what a user sees of an error: its type, message, code and help."""
 
-    monkeypatch.setattr(_native, native_entry, _REJECTIONS[native_entry])
-    try:
-        _ = model_config_engine_outcome(
-            project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
-        )
-    except NativeStageMismatchError as error:
-        return str(error)
-    return "no error"
-
-
-def _reject_header_metadata(requests: list[object], classes: object) -> list[str]:
-    del classes
-    return [INVALID_OUTCOME for _ in requests]
-
-
-def _reject_templates(*args: object) -> str:
-    del args
-    return INVALID_OUTCOME
-
-
-_REJECTIONS: dict[str, Callable[..., object]] = {
-    "parse_model_header_metadata": _reject_header_metadata,
-    "expand_config_templates": _reject_templates,
-}
+    return (
+        type(error).__name__,
+        str(error),
+        getattr(error, "code", None),
+        getattr(error, "help", None),
+        getattr(error, "bridge_independent", None),
+    )
 
 
 def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
@@ -287,8 +267,8 @@ def config_template_parity(*, values: list[object], flags: TemplateFlags) -> Con
             expected=[expected for _, expected, _ in outcomes],
             actual=[actual for _, _, actual in outcomes],
         ),
-        expanded=sum(actual != _RAISES for _, _, actual in outcomes),
-        rejected=sum(actual == _RAISES for _, _, actual in outcomes),
+        expanded=sum(not _is_error(actual) for _, _, actual in outcomes),
+        rejected=sum(_is_error(actual) for _, _, actual in outcomes),
         unsupported=len(values) - len(outcomes),
     )
 
@@ -305,16 +285,29 @@ def _python_expansion(*, value: object, flags: TemplateFlags) -> object:
                 preserve_context_tokens=flags.preserve_context_tokens,
                 preserve_unknown_context=flags.preserve_unknown_context,
             )
-        except CompileInputError:
-            return _RAISES
+        except CompileInputError as error:
+            return _python_error_shape(error)
     return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
+
+
+def _python_error_shape(error: Exception) -> tuple[object, ...]:
+    return (*error_shape(error)[:4], True)
+
+
+def _is_error(outcome: object) -> bool:
+    return isinstance(outcome, tuple) and len(outcome) == len(error_shape(ValueError()))
 
 
 def _native_classification(*, value: object, flags: TemplateFlags) -> object:
     return _native.expand_config_templates(
         value,
         (TEMPLATE_VARIABLES, os.environ, TEMPLATE_CONTEXT),
-        (flags.allow_context, flags.preserve_context_tokens, flags.preserve_unknown_context, None),
+        (
+            flags.allow_context,
+            flags.preserve_context_tokens,
+            flags.preserve_unknown_context,
+            "model config",
+        ),
     )
 
 
@@ -331,10 +324,8 @@ def _native_expansion(value: object, flags: TemplateFlags) -> object:
                 preserve_unknown_context=flags.preserve_unknown_context,
                 native=True,
             )
-        except CompileInputError:
-            return _RAISES
-        except NativeStageMismatchError as error:
-            return str(error)
+        except CompileInputError as error:
+            return error_shape(error)
     return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
 
 
@@ -391,8 +382,8 @@ def header_metadata_parity(*, headers: list[tuple[object, object]]) -> HeaderMet
             expected=[_shape(value) for _, value, _ in compared],
             actual=[_native_shape(metadata) for _, _, metadata in compared],
         ),
-        parsed=sum(not metadata.invalid for metadata in native.values()),
-        rejected=sum(metadata.invalid for metadata in native.values()),
+        parsed=sum(_native_error(metadata) is None for metadata in native.values()),
+        rejected=sum(_native_error(metadata) is not None for metadata in native.values()),
         unsupported=len(model_files) - len(compared),
     )
 
@@ -472,17 +463,16 @@ def _python_metadata(*, model_file: DiscoveredSqlModelFile) -> object:
                 null_as_empty=True,
             ),
         )
-    except Exception as error:
-        return f"{type(error).__name__}: {error}"
+    except Exception as error:  # noqa: BLE001 - the exact Python outcome, whatever it is
+        return list(error_shape(error)[:4])
 
 
 def _shape(value: object) -> object:
-    return _SHAPES.get(type(value), _raises)(value)
+    return _SHAPES.get(type(value), _unchanged)(value)
 
 
-def _raises(value: object) -> object:
-    del value
-    return _RAISES
+def _unchanged(value: object) -> object:
+    return value
 
 
 def _metadata_shape(value: object) -> object:
@@ -491,22 +481,16 @@ def _metadata_shape(value: object) -> object:
 
 def _native_shape(metadata: NativeHeaderMetadata | None) -> object:
     parsed: NativeHeaderMetadata = cast(NativeHeaderMetadata, metadata)
-    return _NATIVE_SHAPES[parsed.invalid](parsed)
+    error: _native.NativeConfigError | None = _native_error(parsed)
+    shapes: list[object] = [
+        list(error_shape(native_config_error(error=cast(_native.NativeConfigError, error)))[:4])
+        for _ in range(error is not None)
+    ]
+    return (*shapes, _shape((parsed.columns, parsed.audits)))[0]
 
 
-def _parsed_shape(metadata: NativeHeaderMetadata) -> object:
-    return _shape((metadata.columns, metadata.audits))
-
-
-def _rejected_shape(metadata: NativeHeaderMetadata) -> object:
-    del metadata
-    return _RAISES
-
-
-_NATIVE_SHAPES: dict[bool, Callable[[NativeHeaderMetadata], object]] = {
-    False: _parsed_shape,
-    True: _rejected_shape,
-}
+def _native_error(metadata: NativeHeaderMetadata) -> _native.NativeConfigError | None:
+    return metadata.columns_error or metadata.audits_error
 
 
 _SHAPES: dict[type, Callable[[object], object]] = {tuple: _metadata_shape}

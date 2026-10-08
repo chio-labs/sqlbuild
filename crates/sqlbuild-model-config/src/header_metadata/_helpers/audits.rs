@@ -1,68 +1,100 @@
 //! Audit lists and instances, as `parse_audit_instances` reads them with `null_as_empty`.
 
+use crate::header_metadata::_helpers::identity::check_identity;
 use crate::header_metadata::_helpers::text::{
-    entry, is_snake_case, non_blank_text, optional_bool, optional_count, optional_text,
+    Site, entry, non_blank_text, optional_bool, optional_count, optional_text,
 };
 use crate::header_metadata::constants::{AUDIT_OPTION_KEYS, AUDIT_SEVERITIES};
-use crate::header_metadata::models::{HeaderMetadataDeferral, ParsedAudit};
+use crate::header_metadata::models::{HeaderMetadataStop, ParsedAudit};
 use crate::types::{AuthoredNode, NodeKind};
 
 /// Parse an authored audit list; Python's `None` is an empty list.
 pub(crate) fn audit_list<N: AuthoredNode>(
     node: &N,
-) -> Result<Vec<ParsedAudit<N>>, HeaderMetadataDeferral> {
+    site: Site<'_>,
+) -> Result<Vec<ParsedAudit<N>>, HeaderMetadataStop> {
     match node.kind() {
         NodeKind::Null => Ok(Vec::new()),
-        NodeKind::List => node.items().iter().map(audit_instance).collect(),
-        _ => Err(HeaderMetadataDeferral::Invalid),
+        NodeKind::List => node
+            .items()
+            .iter()
+            .map(|item| audit_instance(item, site))
+            .collect(),
+        _ => Err(site.error("audits must be a list")),
     }
 }
 
-fn audit_instance<N: AuthoredNode>(node: &N) -> Result<ParsedAudit<N>, HeaderMetadataDeferral> {
-    match node.kind() {
-        NodeKind::Str => {
-            identity(node)?;
-            Ok(bare_audit(node.clone()))
-        }
-        NodeKind::Map => {
-            let entries = node.entries();
-            let [(definition_name, arguments)] = entries.as_slice() else {
-                return Err(HeaderMetadataDeferral::Invalid);
-            };
-            identity(definition_name)?;
-            match arguments.kind() {
-                NodeKind::Null => Ok(bare_audit(definition_name.clone())),
-                NodeKind::Map => configured_audit(definition_name, &arguments.entries()),
-                _ => Err(HeaderMetadataDeferral::Invalid),
-            }
-        }
-        _ => Err(HeaderMetadataDeferral::Invalid),
+fn audit_instance<N: AuthoredNode>(
+    node: &N,
+    site: Site<'_>,
+) -> Result<ParsedAudit<N>, HeaderMetadataStop> {
+    let definition_kind = format!("{} audit definition", site.label);
+    if node.kind() == NodeKind::Str {
+        let Some(text) = non_blank_text(node)? else {
+            return Err(site.error("audits must not contain empty names"));
+        };
+        check_identity(&text, &definition_kind, site.path)?;
+        return Ok(bare_audit(node.clone()));
+    }
+    let entries = node.entries();
+    let [(definition_name, arguments)] = entries.as_slice() else {
+        return Err(site.error("audits must be strings or single-key mappings"));
+    };
+    if node.kind() != NodeKind::Map {
+        return Err(site.error("audits must be strings or single-key mappings"));
+    }
+    let Some(definition) = non_blank_text(definition_name)? else {
+        return Err(site.error("audit names must be non-empty strings"));
+    };
+    check_identity(&definition, &definition_kind, site.path)?;
+    match arguments.kind() {
+        NodeKind::Null => Ok(bare_audit(definition_name.clone())),
+        NodeKind::Map => configured_audit(definition_name, &definition, &arguments.entries(), site),
+        _ => Err(site.error(&format!("audit '{definition}' arguments must be a mapping"))),
     }
 }
 
 fn configured_audit<N: AuthoredNode>(
     definition_name: &N,
+    definition: &str,
     options: &[(N, N)],
-) -> Result<ParsedAudit<N>, HeaderMetadataDeferral> {
-    let name = optional_text(entry(options, "name"))?;
+    site: Site<'_>,
+) -> Result<ParsedAudit<N>, HeaderMetadataStop> {
+    let option_label = format!("{} audit '{definition}'", site.label);
+    let option_site = Site {
+        path: site.path,
+        label: &option_label,
+    };
+    let name = optional_text(entry(options, "name"), option_site, "name")?;
     if let Some(name) = &name {
-        identity(name)?;
+        let text = name.text().ok_or(HeaderMetadataStop::Unsupported)?;
+        check_identity(&text, &format!("{} audit instance", site.label), site.path)?;
     }
-    let description = optional_text(entry(options, "description"))?;
-    let severity = optional_text(entry(options, "severity"))?;
-    if let Some(severity) = &severity {
-        let text = severity.text().ok_or(HeaderMetadataDeferral::Unsupported)?;
-        if !AUDIT_SEVERITIES.contains(&text.as_str()) {
-            return Err(HeaderMetadataDeferral::Invalid);
-        }
+    let description = optional_text(entry(options, "description"), option_site, "description")?;
+    let severity = optional_text(entry(options, "severity"), option_site, "severity")?;
+    if let Some(severity) = &severity
+        && !AUDIT_SEVERITIES.iter().any(|value| severity.is_text(value))
+    {
+        return Err(option_site.error(&format!(
+            "'severity' must be one of: {}",
+            AUDIT_SEVERITIES.join(", ")
+        )));
     }
-    let run_scope = optional_text(entry(options, "run_scope"))?;
-    let always_run = optional_bool(entry(options, "always_run"))?;
+    let run_scope = optional_text(entry(options, "run_scope"), option_site, "run_scope")?;
+    let always_run = optional_bool(entry(options, "always_run"), option_site, "always_run")?;
     if entry(options, "thresholds").is_some_and(|value| value.kind() != NodeKind::Null) {
-        return Err(HeaderMetadataDeferral::Unsupported);
+        return Err(HeaderMetadataStop::Unsupported);
     }
-    let minimum_samples = optional_count(entry(options, "minimum_samples"))?;
-    let evidence_limit = optional_count(entry(options, "evidence_limit"))?;
+    let minimum_samples = optional_count(
+        entry(options, "minimum_samples"),
+        option_site,
+        "minimum_samples",
+    )?;
+    let evidence_limit = optional_count(
+        entry(options, "evidence_limit"),
+        option_site,
+        "evidence_limit",
+    )?;
     let arguments: Vec<(N, N)> = options
         .iter()
         .filter(|(key, _)| !is_option_key(key))
@@ -92,14 +124,6 @@ fn bare_audit<N: AuthoredNode>(definition_name: N) -> ParsedAudit<N> {
         always_run: None,
         minimum_samples: None,
         evidence_limit: None,
-    }
-}
-
-fn identity<N: AuthoredNode>(node: &N) -> Result<(), HeaderMetadataDeferral> {
-    if is_snake_case(&non_blank_text(node)?) {
-        Ok(())
-    } else {
-        Err(HeaderMetadataDeferral::Invalid)
     }
 }
 

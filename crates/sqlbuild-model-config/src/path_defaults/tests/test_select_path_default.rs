@@ -1,3 +1,5 @@
+use crate::errors::{ConfigError, ErrorClass};
+use crate::path_defaults::constants::CONFLICT_HELP;
 use crate::path_defaults::main::select_path_default::select_path_default;
 use crate::path_defaults::models::PathDefaultChoice;
 use crate::path_defaults::tests::test_types::SelectTestCase;
@@ -33,7 +35,15 @@ fn given_path_default_keys_when_selecting_then_the_python_choice_is_made() {
             description: "equally specific wildcards conflict",
             model_path: "marts/finance/revenue.sql",
             keys: &["*/finance", "marts/*"],
-            expected_choice: PathDefaultChoice::Conflict,
+            expected_choice: PathDefaultChoice::Conflict(
+                ConfigError::compile(
+                    "Model path 'marts/finance/revenue.sql' matches equally specific \
+                     path_defaults keys: '*/finance', 'marts/*'."
+                        .to_owned(),
+                )
+                .with_class(ErrorClass::DiscoveryConflict)
+                .with_help(CONFLICT_HELP),
+            ),
         },
         SelectTestCase {
             description: "no key matches",

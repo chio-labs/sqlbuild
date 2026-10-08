@@ -16,6 +16,9 @@ const EQ_FUNCTION: &str = "eq";
 const NE_FUNCTION: &str = "ne";
 const COALESCE_FUNCTION: &str = "coalesce";
 const CONTEXT_NAMESPACE: &str = "CTX";
+const CONDITIONAL_ARGUMENTS: &str = "3 arguments";
+const COMPARISON_ARGUMENTS: &str = "2 arguments";
+const COALESCE_ARGUMENTS: &str = "at least 1 argument";
 
 /// Evaluate one expression to the value Python's resolver returns.
 pub(crate) fn evaluate<H: TemplateHost>(
@@ -58,7 +61,7 @@ fn evaluate_reference<H: TemplateHost>(
     };
     match namespace {
         ENVIRONMENT_NAMESPACE => host.environment(name)?.ok_or_else(|| {
-            TemplateFailure::Missing(TemplateError::MissingEnvironmentVariable(name.to_owned()))
+            TemplateFailure::Missing(TemplateError::MissingEnvironment(name.to_owned()))
         }),
         CONTEXT_NAMESPACE if !options.allow_context => {
             if options.preserve_context_tokens {
@@ -72,11 +75,11 @@ fn evaluate_reference<H: TemplateHost>(
             ContextValue::Unknown if options.preserve_unknown_context => {
                 host.text(&format!("${{{CONTEXT_NAMESPACE}:{name}}}"))
             }
-            ContextValue::Unknown => Err(TemplateFailure::Missing(
-                TemplateError::UnknownContextKey(name.to_owned()),
-            )),
+            ContextValue::Unknown => Err(TemplateFailure::Missing(TemplateError::UnknownContext(
+                name.to_owned(),
+            ))),
             ContextValue::Unavailable => Err(TemplateFailure::Missing(
-                TemplateError::UnavailableContextKey(name.to_owned()),
+                TemplateError::UnavailableContext(name.to_owned()),
             )),
         },
         _ => Err(TemplateFailure::Invalid(
@@ -100,12 +103,15 @@ fn evaluate_function<H: TemplateHost>(
                 evaluate(host, when_false, options)
             }
         }
+        (IF_FUNCTION, _) => Err(argument_count(IF_FUNCTION, CONDITIONAL_ARGUMENTS)),
         (EQ_FUNCTION | NE_FUNCTION, [left, right]) => {
             let left = evaluate(host, left, options)?;
             let right = evaluate(host, right, options)?;
             let equal = comparison_text(host, &left)? == comparison_text(host, &right)?;
             host.boolean(equal == (name == EQ_FUNCTION))
         }
+        (EQ_FUNCTION, _) => Err(argument_count(EQ_FUNCTION, COMPARISON_ARGUMENTS)),
+        (NE_FUNCTION, _) => Err(argument_count(NE_FUNCTION, COMPARISON_ARGUMENTS)),
         (COALESCE_FUNCTION, [.., last]) => {
             for argument in arguments {
                 match evaluate(host, argument, options) {
@@ -116,26 +122,15 @@ fn evaluate_function<H: TemplateHost>(
             }
             evaluate(host, last, options)
         }
-        (IF_FUNCTION, _) => Err(argument_count(IF_FUNCTION, 3)),
-        (EQ_FUNCTION | NE_FUNCTION, _) => Err(argument_count(
-            if name == EQ_FUNCTION {
-                EQ_FUNCTION
-            } else {
-                NE_FUNCTION
-            },
-            2,
-        )),
-        (COALESCE_FUNCTION, []) => Err(TemplateFailure::Invalid(
-            TemplateError::CoalesceWithoutArguments,
-        )),
+        (COALESCE_FUNCTION, []) => Err(argument_count(COALESCE_FUNCTION, COALESCE_ARGUMENTS)),
         _ => Err(TemplateFailure::Invalid(
             TemplateError::UnsupportedFunction(name.to_owned()),
         )),
     }
 }
 
-fn argument_count(function: &'static str, count: usize) -> TemplateFailure {
-    TemplateFailure::Invalid(TemplateError::ArgumentCount(function, count))
+fn argument_count(function: &'static str, expected: &'static str) -> TemplateFailure {
+    TemplateFailure::Invalid(TemplateError::ArgumentCount { function, expected })
 }
 
 fn comparison_text<H: TemplateHost>(host: &H, value: &H::Value) -> Result<String, TemplateFailure> {
