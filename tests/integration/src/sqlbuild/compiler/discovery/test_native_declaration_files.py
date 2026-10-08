@@ -19,10 +19,10 @@ from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_captu
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeclarationFilesParityTestCase,
-    DeclarationMismatchTestCase,
     DeclarationReuseTestCase,
     DeepDeclarationHeaderTestCase,
     GeneratedDeclarationFileTestCase,
+    NativeDeclarationFailureTestCase,
     NativeSessionTestCase,
     TolerantDeclarationFilesTestCase,
 )
@@ -433,27 +433,29 @@ def test_given_broken_declaration_files_when_discovering_tolerantly_then_faults_
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeclarationMismatchTestCase(
-            description="Python accepting a file native rejects is a mismatch",
+        NativeDeclarationFailureTestCase(
+            description="a native parse error stands even where Python would accept the file",
             relative_path="enums/status.sql",
             contents=b"ENUM (name order_status);\n",
             patched_parser="parse_enum_declaration_file",
             patched=accept_any_declarations,
-            expected_error_fragment="native declaration_files raised DeclarationParseError",
+            expected_failure_type="DeclarationParseError",
+            expected_error_fragment="enums/status.sql",
         ),
-        DeclarationMismatchTestCase(
-            description="Python failing differently from native is a mismatch",
+        NativeDeclarationFailureTestCase(
+            description="a native parse error stands where Python would fail differently",
             relative_path="audits/generic/is_true.sql",
             contents=b"SELECT 1\n",
             patched_parser="parse_sql_audit_file",
             patched=reject_any_contents,
-            expected_error_fragment="but the Python compiler raised ValueError('different')",
+            expected_failure_type="SqlAuditParseError",
+            expected_error_fragment="audits/generic/is_true.sql",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_python_disagrees_with_a_native_failure_when_discovering_then_mismatch_raises(
-    test_case: DeclarationMismatchTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_given_native_declaration_failure_when_discovering_then_python_is_not_rerun(
+    test_case: NativeDeclarationFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=((test_case.relative_path, test_case.contents),))
     monkeypatch.setattr(core, test_case.patched_parser, test_case.patched)
@@ -461,8 +463,10 @@ def test_given_python_disagrees_with_a_native_failure_when_discovering_then_mism
         project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch
     )
 
-    assert outcome[1] == "NativeStageMismatchError"
-    assert test_case.expected_error_fragment in str(outcome[2])
+    assert (outcome[1], test_case.expected_error_fragment in str(outcome[2])) == (
+        test_case.expected_failure_type,
+        True,
+    ), outcome
 
 
 @pytest.mark.parametrize(

@@ -27,7 +27,7 @@ fn given_sql_when_scanning_declaration_references_then_python_offsets_are_return
         DeclarationReferenceScanTestCase {
             description: "doubled backticks close and reopen quoted text, leaving it unclosed",
             sql: "SELECT 'it''s @const(\"a\")', `x``@const(\"b\")",
-            expected_references: None,
+            expected_references: Some(" | stop:quote"),
         },
         DeclarationReferenceScanTestCase {
             description: "SQL without references is not scanned for unclosed quotes",
@@ -35,14 +35,24 @@ fn given_sql_when_scanning_declaration_references_then_python_offsets_are_return
             expected_references: Some(""),
         },
         DeclarationReferenceScanTestCase {
-            description: "an unclosed quote before a reference defers to Python",
-            sql: "SELECT 'unterminated @const(\"a\")",
-            expected_references: None,
+            description: "an unclosed quote before a reference stops the walk",
+            sql: "SELECT @const(\"a\"), 'unterminated @const(\"b\")",
+            expected_references: Some("const:a@7..18 | stop:quote"),
         },
         DeclarationReferenceScanTestCase {
-            description: "a malformed reference defers to Python",
-            sql: "SELECT @enum(\"order_status\")",
-            expected_references: None,
+            description: "a malformed enum reference stops the walk after earlier references",
+            sql: "SELECT @const(\"a\"), @enum(\"order_status\"), @const(\"b\")",
+            expected_references: Some("const:a@7..18 | stop:invalid enum"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "a malformed constant reference at the end of the text stops the walk",
+            sql: "SELECT @const",
+            expected_references: Some(" | stop:invalid const"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "Unicode whitespace inside and after the keyword matches Python's \\s",
+            sql: "SELECT @enum\u{a0}(\u{2003}'order_status'\u{1c}) .\u{3000}PLACED",
+            expected_references: Some("enum:order_status.PLACED@7..40"),
         },
         DeclarationReferenceScanTestCase {
             description: "a non-ASCII character after the keyword defers its word boundary to Python",
@@ -50,9 +60,14 @@ fn given_sql_when_scanning_declaration_references_then_python_offsets_are_return
             expected_references: None,
         },
         DeclarationReferenceScanTestCase {
-            description: "an unclosed block comment before a reference defers to Python",
+            description: "an unclosed block comment before a reference stops the walk",
             sql: "SELECT /* open @const(\"a\")",
-            expected_references: None,
+            expected_references: Some(" | stop:comment"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "an unclosed dollar literal before a reference stops the walk",
+            sql: "SELECT $tag$ @const(\"a\")",
+            expected_references: Some(" | stop:quote"),
         },
     ];
 

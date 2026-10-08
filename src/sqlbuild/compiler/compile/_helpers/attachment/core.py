@@ -153,7 +153,7 @@ from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
-from sqlbuild.compiler.model_loop.types import NativeDeclarationReference
+from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -284,7 +284,7 @@ class _ModelInputLoop:
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
     native_header_metadata: dict[Path, NativeHeaderMetadata]
-    native_declaration_references: dict[Path, tuple[NativeDeclarationReference, ...] | None]
+    native_declaration_references: dict[Path, NativeDeclarationScan | None]
 
 
 @dataclass(frozen=True)

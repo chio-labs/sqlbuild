@@ -190,14 +190,15 @@ class DeclarationFilesParityTestCase:
 
 
 @dataclass(frozen=True)
-class DeclarationMismatchTestCase:
-    """A declaration file the Python parser is patched to accept, which native discovery rejects."""
+class NativeDeclarationFailureTestCase:
+    """A declaration file native discovery rejects while the Python parser is patched away."""
 
     description: str
     relative_path: str
     contents: bytes
     patched_parser: str
     patched: Callable[..., object]
+    expected_failure_type: str
     expected_error_fragment: str
 
 

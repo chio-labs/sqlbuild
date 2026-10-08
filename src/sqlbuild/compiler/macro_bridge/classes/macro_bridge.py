@@ -51,6 +51,7 @@ class MacroBridge:
         self._module_digests: dict[str, str] = {}
         self._observed_modules: dict[str, object] = {}
         self._project_inputs: tuple[Path, list[str], str] = (Path(), [], "")
+        self._scanned: bool = False
 
     def attach_store(self, *, cache_dir: Path, project_dir: Path, model_paths: list[str]) -> None:
         """Reuse call results stored by earlier compiles of the same code and project files."""
@@ -133,6 +134,7 @@ class MacroBridge:
     def scan(self, sql: str) -> tuple[MacroCallSite, ...] | None:
         """Return the top-level call sites of `sql`, or None when Python must expand it."""
 
+        self._scanned = True
         rows: list[tuple[int, int, str, list[str], bool]] | None = _native.scan_macro_call_sites(
             sql, self._python_version, self._unicode_version
         )
@@ -148,6 +150,12 @@ class MacroBridge:
             )
             for start, end, name, tree_names, typed_reference_text in rows
         )
+
+    @property
+    def scanned(self) -> bool:
+        """Whether any authored string has been scanned, so this compile left the Python path."""
+
+        return self._scanned
 
     def call_class(
         self,

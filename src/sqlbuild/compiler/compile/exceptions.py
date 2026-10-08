@@ -29,6 +29,10 @@ class SqlTestReferenceError(CompileInputError):
         self.location: SourceLocation = location
 
 
+class DeclarationReferenceError(CompileInputError):
+    """Raised for an `@enum` or `@const` reference authored SQL cannot resolve."""
+
+
 class MacroDeclarationLookupError(CompileInputError, KeyError):
     """Retain authored diagnostics while honoring the Mapping lookup contract."""
 
