@@ -1,0 +1,1 @@
+"""SQL analysis integration tests."""
