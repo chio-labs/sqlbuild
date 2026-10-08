@@ -1,4 +1,5 @@
 pub(crate) mod _helpers;
+pub(crate) mod errors;
 pub mod main;
 pub mod models;
 

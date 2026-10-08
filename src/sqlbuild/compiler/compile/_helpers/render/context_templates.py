@@ -7,14 +7,24 @@ from typing import cast
 from uuid import uuid4
 
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, PRESERVE_TARGET_VALUE
+from sqlbuild.compiler.compile.constants import (
+    COMPILE_INPUT_READS,
+    MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
+    MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
+    MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
+    PRESERVE_TARGET_VALUE,
+)
 from sqlbuild.compiler.compile.types import CompileContextKey
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ, INVALID_OUTCOME
+from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
     expand_native_config_templates,
 )
-from sqlbuild.compiler.model_config.models import NativeTemplateExpansion, TemplateResolutionFlags
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
+from sqlbuild.compiler.model_config.models import (
+    NativeTemplateExpansion,
+    NativeTemplateRejection,
+    TemplateResolutionFlags,
+)
 from sqlbuild.spec.contracts.models import TargetConfig
 
 
@@ -249,9 +259,9 @@ def expand_config_templates(
     preserve_unknown_context: bool,
     native: bool,
 ) -> object:
-    """Expand like `expand_template_data`, natively when set; native rejections re-run Python."""
+    """Expand like `expand_template_data`, natively when set; unsupported values run Python."""
 
-    outcome: NativeTemplateExpansion | str | None = (
+    outcome: NativeTemplateExpansion | NativeTemplateRejection | str | None = (
         expand_native_config_templates(
             value=value,
             variables=variables,
@@ -261,6 +271,7 @@ def expand_config_templates(
                 preserve_context_tokens=preserve_context_tokens,
                 preserve_unknown_context=preserve_unknown_context,
             ),
+            context_label=context_label,
         )
         if native
         else None
@@ -268,7 +279,12 @@ def expand_config_templates(
     if isinstance(outcome, NativeTemplateExpansion):
         record_template_reads(outcome.reads)
         return outcome.value
-    expanded: object = expand_template_data(
+    if isinstance(outcome, NativeTemplateRejection) and not _names_missing_template_value(
+        context_label
+    ):
+        record_template_reads(outcome.reads)
+        raise native_config_error(error=outcome.error, bridge_independent=True)
+    return expand_template_data(
         value=value,
         variables=variables,
         context_values=context_values,
@@ -277,12 +293,19 @@ def expand_config_templates(
         preserve_context_tokens=preserve_context_tokens,
         preserve_unknown_context=preserve_unknown_context,
     )
-    if outcome == INVALID_OUTCOME:
-        raise NativeStageMismatchError(
-            f"Native template expansion rejected {context_label} templates that Python "
-            "expands; run with SQLBUILD_COMPILER_ENGINE=python"
+
+
+def _names_missing_template_value(context_label: str) -> bool:
+    """Whether Python's `coalesce` would read errors naming this label as missing values."""
+
+    return any(
+        part in context_label
+        for part in (
+            *MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
+            MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
+            MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
         )
-    return expanded
+    )
 
 
 def record_template_reads(reads: tuple[tuple[str, str], ...]) -> None:

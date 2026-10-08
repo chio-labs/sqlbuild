@@ -933,6 +933,28 @@ class NativeDeclarationErrorTestCase:
 
 
 @dataclass(frozen=True)
+class NativeConfigErrorTestCase:
+    """A failing project whose model config error both engines must report the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_report_text: str
+    expected_macro_calls: list[int]
+    expected_python_fallbacks: list[str]
+
+
+@dataclass(frozen=True)
+class MacroExpandedValidatorErrorTestCase:
+    """A validator error from macro-expanded SQL that the preview bridge must re-run."""
+
+    description: str
+    project_files: dict[str, str]
+    engines: tuple[str, ...]
+    expected_report_text: str
+    expected_macro_calls: list[int]
+
+
+@dataclass(frozen=True)
 class DeclarationErrorLifecycleTestCase:
     """A failing project whose invocation lifecycle every engine must report the same way."""
 

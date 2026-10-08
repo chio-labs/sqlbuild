@@ -1,6 +1,8 @@
+use crate::audits::_helpers::parameters::RenderStop;
 use crate::audits::_helpers::parameters::render_parameterized_sql;
-use crate::audits::main::render_attached_audit::render_attached_audit;
-use crate::audits::models::{ArgumentValue, AuditAttachment, RenderedAudit};
+use crate::audits::models::{
+    ArgumentValue, AuditAttachment, AuditRendering, PolicySource, RenderedAudit,
+};
 
 /// Arguments shared by the parameter rendering cases.
 pub(super) fn order_arguments() -> Vec<(String, ArgumentValue)> {
@@ -21,7 +23,7 @@ pub(super) fn order_arguments() -> Vec<(String, ArgumentValue)> {
     ]
 }
 
-pub(super) fn rendered_sql(sql: &str, reject_unused: bool) -> Option<String> {
+pub(super) fn rendered_sql(sql: &str, reject_unused: bool) -> Result<String, RenderStop> {
     render_parameterized_sql(sql, &order_arguments(), reject_unused)
 }
 
@@ -32,6 +34,8 @@ pub(super) fn attachment(
     run_scope: Option<&str>,
 ) -> AuditAttachment {
     AuditAttachment {
+        owner_label: "models/schema.yml".to_owned(),
+        definition_name: "accepted_values".to_owned(),
         sql_body: "SELECT * FROM t WHERE @column NOT IN (@'values')".to_owned(),
         evidence_sql: Some("SELECT @column FROM t".to_owned()),
         implicit_arguments: vec![(
@@ -50,13 +54,18 @@ pub(super) fn attachment(
     }
 }
 
-pub(super) fn rendering_text(attachment: &AuditAttachment) -> Option<String> {
-    let rendered: RenderedAudit = render_attached_audit(attachment)?;
-    Some(format!(
-        "{} | {} | {} | {:?}",
-        rendered.sql_body,
-        rendered.evidence_sql.unwrap_or_default(),
-        rendered.severity,
-        rendered.run_scope_source
-    ))
+/// The rendering of `attachment()` SQL: `sql_body`, the fixed evidence and these policies.
+pub(super) fn rendered(
+    sql_body: &str,
+    policies: Result<(&'static str, PolicySource), &str>,
+) -> Option<AuditRendering> {
+    Some(AuditRendering::Rendered(RenderedAudit {
+        sql_body: sql_body.to_owned(),
+        evidence_sql: Some("SELECT status FROM t".to_owned()),
+        policies: policies.map_err(str::to_owned),
+    }))
+}
+
+pub(super) fn failed(message: &str) -> Option<AuditRendering> {
+    Some(AuditRendering::Failed(message.to_owned()))
 }

@@ -78,7 +78,9 @@ class StaticProjectVarDifferentialTestCase:
     seed: int
     sql_count: int
     effective_vars: dict[str, object]
+    fragments: tuple[str, ...]
     expected_minimum_dollar_quote_substitutions: int
+    expected_minimum_doubled_backtick_substitutions: int
 
 
 @dataclass(frozen=True)

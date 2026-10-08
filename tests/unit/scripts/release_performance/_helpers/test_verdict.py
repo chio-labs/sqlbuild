@@ -7,8 +7,10 @@ from scripts.release_performance._helpers.verdict import (
     regression_messages,
     skip_reason,
 )
+from scripts.release_performance.constants import BENCHMARK_COMMANDS
 from scripts.release_performance.models import BenchmarkCommand, MetricVerdict
 from tests.unit.scripts.release_performance._helpers._test_types import (
+    ConfiguredTimeLimitTestCase,
     MetricVerdictTestCase,
     SkipReasonTestCase,
 )
@@ -219,6 +221,65 @@ def test_given_command_minimum_version_when_checking_versions_then_explains_skip
     )
 
     assert reason == test_case.expected_reason
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ConfiguredTimeLimitTestCase(
+            description="a dense one-model edit within the edit limit passes",
+            command="dense compile (one-model edit)",
+            wall_ratio=1.289,
+            expected_regressed=False,
+        ),
+        ConfiguredTimeLimitTestCase(
+            description="a one-model edit within the edit limit passes",
+            command="compile (one-model edit)",
+            wall_ratio=1.34,
+            expected_regressed=False,
+        ),
+        ConfiguredTimeLimitTestCase(
+            description="a dense one-model edit beyond the edit limit fails",
+            command="dense compile (one-model edit)",
+            wall_ratio=1.36,
+            expected_regressed=True,
+        ),
+        ConfiguredTimeLimitTestCase(
+            description="an unchanged warm compile keeps the tighter compile limit",
+            command="dense compile (warm cache)",
+            wall_ratio=1.232,
+            expected_regressed=True,
+        ),
+        ConfiguredTimeLimitTestCase(
+            description="a cold compile keeps the tighter compile limit",
+            command="dense compile (no cache)",
+            wall_ratio=1.16,
+            expected_regressed=True,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_configured_command_when_judging_time_then_its_own_limit_applies(
+    test_case: ConfiguredTimeLimitTestCase,
+) -> None:
+    configured: BenchmarkCommand = {command.name: command for command in BENCHMARK_COMMANDS}[
+        test_case.command
+    ]
+    wall: float = 10.0 * test_case.wall_ratio
+
+    verdicts: tuple[MetricVerdict, ...] = metric_verdicts(
+        comparison=comparison(
+            name=configured.name,
+            baseline=((10.0, 10.0, 400),) * 3,
+            candidate=((wall, wall, 400),) * 3,
+            max_time_ratio=configured.max_time_ratio,
+        )
+    )
+
+    assert (verdicts[0].regressed, verdicts[1].regressed) == (
+        test_case.expected_regressed,
+        test_case.expected_regressed,
+    )
 
 
 if __name__ == "__main__":

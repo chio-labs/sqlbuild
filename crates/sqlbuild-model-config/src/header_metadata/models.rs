@@ -1,5 +1,7 @@
 //! Parsed MODEL header metadata whose leaves are the caller's own authored values.
 
+use crate::errors::ConfigError;
+
 /// One audit instance; every field holds the authored value Python would store.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedAudit<N> {
@@ -27,18 +29,18 @@ pub struct ParsedColumn<N> {
     pub migrate_from: Option<N>,
 }
 
-/// The MODEL header's columns and model-level audits.
+/// The MODEL header's columns and model-level audits, each parsed or stopped on its own.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeaderMetadata<N> {
-    pub columns: Vec<ParsedColumn<N>>,
-    pub audits: Vec<ParsedAudit<N>>,
+    pub columns: Result<Vec<ParsedColumn<N>>, HeaderMetadataStop>,
+    pub audits: Result<Vec<ParsedAudit<N>>, HeaderMetadataStop>,
 }
 
-/// Why Python must parse a header's metadata instead.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HeaderMetadataDeferral {
-    /// Python's parse raises; it runs to raise its exact error.
-    Invalid,
+/// Why a header's columns or audits did not parse natively.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HeaderMetadataStop {
+    /// The first error Python's parse raises.
+    Error(ConfigError),
     /// Python parses it with rules the native parser does not reproduce.
     Unsupported,
 }

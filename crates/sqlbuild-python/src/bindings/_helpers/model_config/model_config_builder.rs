@@ -5,24 +5,33 @@ use pyo3::types::{
     PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple, PyTupleMethods,
 };
 use pyo3::{IntoPyObject, PyErr, pyclass, pymethods};
-use sqlbuild_model_config::config_presence::main::contains_macro_call::contains_macro_call;
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
-use sqlbuild_model_config::config_presence::models::Presence;
+use sqlbuild_model_config::config_presence::main::first_macro_path::first_macro_path;
+use sqlbuild_model_config::config_presence::models::{MacroPath, Presence};
+use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::model_validation::main::retention_override::retention_override;
 use sqlbuild_model_config::model_validation::main::table_type_override::table_type_override;
-use sqlbuild_model_config::model_validation::models::{RetentionOverride, TableTypeOverride};
+use sqlbuild_model_config::model_validation::models::{
+    RetentionOverride, TableTypeOverride, ValidationStop,
+};
 use sqlbuild_model_config::path_defaults::main::select_path_default::select_path_default;
 use sqlbuild_model_config::path_defaults::models::PathDefaultChoice;
-use sqlbuild_model_config::templates::models::{TemplateFailure, TemplateOptions};
+use sqlbuild_model_config::templates::models::TemplateOptions;
 use sqlbuild_model_config::types::AuthoredNode;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_templates::{
-    PythonHost, Stop, TemplateSources, expanded,
+    PythonHost, Stop, TemplateSources, expanded, template_error,
 };
 
 const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
+/// Hook keys in the sorted order `validate_model_hook_config` checks them.
+const SORTED_HOOK_KEYS: [&str; 2] = ["post_hooks", "pre_hooks"];
+const MODEL_CONFIG_LABEL: &str = "model config";
+const ENVIRONMENT_DATABASE_LABEL: &str = "environment database";
+const ENVIRONMENT_SCHEMA_LABEL: &str = "environment schema";
 const TAGS_KEY: &str = "tags";
 const ROW_DIFF_EXCLUDE_COLUMNS_KEY: &str = "row_diff_exclude_columns";
 const ROW_DIFF_TOLERANCES_KEY: &str = "row_diff_tolerances";
@@ -47,9 +56,10 @@ const DESTINATION_SCHEMA_CONTEXT: &str = "destination.schema";
 const DESTINATION_TABLE_CONTEXT: &str = "destination.table";
 const DESTINATION_QUALIFIED_CONTEXT: &str = "destination.qualified";
 
-/// Why the native build stops: Python builds this model's config, or a Python error.
+/// Why the native build stops: a deferral to Python, the exact error, or a Python error.
 enum Halt {
     Defer,
+    Config(ConfigError),
     Error(PyErr),
 }
 
@@ -59,19 +69,18 @@ impl From<PyErr> for Halt {
     }
 }
 
-impl From<Stop> for Halt {
-    fn from(stop: Stop) -> Self {
+impl From<ValidationStop> for Halt {
+    fn from(stop: ValidationStop) -> Self {
         match stop {
-            Stop::Failure(_) => Self::Defer,
-            Stop::Python(error) => Self::Error(error),
+            ValidationStop::Defer => Self::Defer,
+            ValidationStop::Error(error) => Self::Config(error),
         }
     }
 }
 
-impl From<TemplateFailure> for Halt {
-    fn from(_: TemplateFailure) -> Self {
-        Self::Defer
-    }
+/// The `CompileInputError` `model '<name>' <text>`, raised by the model config build.
+fn model_error(model_name: &str, text: &str) -> Halt {
+    Halt::Config(ConfigError::compile(format!("model '{model_name}' {text}")))
 }
 
 type Built<T> = Result<T, Halt>;
@@ -132,28 +141,29 @@ impl NativeModelConfigBuilder {
         })
     }
 
-    /// Return `(True, key)` for the selected path default, or `(False, None)` on a conflict.
-    fn path_default(&self, model_path: &str) -> PyResult<(bool, Option<String>)> {
+    /// Return the selected path-default key, `None`, or the conflict error Python raises.
+    fn path_default(&self, py: Python<'_>, model_path: &str) -> PyResult<Py<PyAny>> {
         compiler_guard(|| {
             Ok(match select_path_default(model_path, &self.path_keys) {
-                PathDefaultChoice::Selected(key) => (true, key),
-                PathDefaultChoice::Conflict => (false, None),
+                PathDefaultChoice::Selected(key) => key.into_pyobject(py)?.into_any().unbind(),
+                PathDefaultChoice::Conflict(error) => native_config_error(py, error)?.into_any(),
             })
         })
     }
 
-    /// Return the built config parts, or `None` when Python must build this model's config.
+    /// Return the built config parts, the first error, or `None` when Python must build it.
     fn build<'py>(
         &self,
         py: Python<'py>,
         header: Bound<'py, PyDict>,
         matched_path_default: Option<&str>,
         model_name: &str,
-    ) -> PyResult<Option<Bound<'py, PyTuple>>> {
+    ) -> PyResult<Option<Py<PyAny>>> {
         compiler_guard(
             || match self.build_config(py, &header, matched_path_default, model_name) {
-                Ok(built) => built_tuple(py, built).map(Some),
+                Ok(built) => built_tuple(py, built).map(|built| Some(built.into_any().unbind())),
                 Err(Halt::Defer) => Ok(None),
+                Err(Halt::Config(error)) => Ok(Some(native_config_error(py, error)?.into_any())),
                 Err(Halt::Error(error)) => Err(error),
             },
         )
@@ -168,7 +178,7 @@ impl NativeModelConfigBuilder {
         matched_path_default: Option<&str>,
         model_name: &str,
     ) -> Built<BuiltConfig<'py>> {
-        check_header_tags(header)?;
+        check_header_tags(header, model_name)?;
         let path_values = matched_path_default
             .map(|key| self.path_default_values(py, key))
             .transpose()?;
@@ -177,7 +187,7 @@ impl NativeModelConfigBuilder {
             layered = merged_layer(py, &layered, path_values)?;
         }
         let layered = merged_layer(py, &layered, header)?;
-        self.check_hooks(py, &layered)?;
+        self.check_hooks(py, &layered, model_name)?;
         let mut hooks: Vec<(&str, Bound<'py, PyAny>)> = Vec::new();
         for key in HOOK_KEYS {
             if let Some(value) = layered.get_item(key)? {
@@ -197,20 +207,20 @@ impl NativeModelConfigBuilder {
                 &layered,
                 &self.variables.bind(py).clone(),
                 expansion.run_context()?,
-                true,
+                (true, MODEL_CONFIG_LABEL),
             )?;
             let empty = PyDict::new(py);
             let first = expansion.expand(
                 &early,
                 &empty,
                 expansion.model_context(&early, false)?,
-                true,
+                (true, MODEL_CONFIG_LABEL),
             )?;
             expansion.expand(
                 &first,
                 &empty,
                 expansion.model_context(&first, false)?,
-                true,
+                (true, MODEL_CONFIG_LABEL),
             )?
         } else {
             layered
@@ -238,7 +248,7 @@ impl NativeModelConfigBuilder {
                 &namespaced,
                 &empty,
                 expansion.model_context(&namespaced, true)?,
-                false,
+                (false, MODEL_CONFIG_LABEL),
             )?
         } else {
             namespaced
@@ -247,11 +257,15 @@ impl NativeModelConfigBuilder {
             resolved.set_item(key, value)?;
         }
         let values = storage_free_values(py, &resolved, header)?;
-        let retention = retention_override(header.get_item(RETENTION_KEY)?.map(PyNode).as_ref())
-            .map_err(|_| Halt::Defer)?;
-        let table_type = table_type_override(header.get_item(TABLE_TYPE_KEY)?.map(PyNode).as_ref())
-            .map_err(|_| Halt::Defer)?;
-        check_no_config_macros(py, &values)?;
+        let retention = retention_override(
+            header.get_item(RETENTION_KEY)?.map(PyNode).as_ref(),
+            model_name,
+        )?;
+        let table_type = table_type_override(
+            header.get_item(TABLE_TYPE_KEY)?.map(PyNode).as_ref(),
+            model_name,
+        )?;
+        check_no_config_macros(&values)?;
         Ok(BuiltConfig {
             values,
             header_keys: sorted_keys(header)?,
@@ -283,17 +297,33 @@ impl NativeModelConfigBuilder {
         Ok(defaults)
     }
 
-    /// Accept hook keys `validate_model_hook_config` accepts.
-    fn check_hooks(&self, py: Python<'_>, values: &Bound<'_, PyDict>) -> Built<()> {
+    /// Check hook keys as `validate_model_hook_config` does.
+    fn check_hooks(
+        &self,
+        py: Python<'_>,
+        values: &Bound<'_, PyDict>,
+        model_name: &str,
+    ) -> Built<()> {
         let entry_types = self.hook_entry_types.bind(py);
-        for key in HOOK_KEYS {
+        for key in SORTED_HOOK_KEYS {
             let Some(value) = values.get_item(key)? else {
                 continue;
             };
-            let entries = sequence_items(&value).ok_or(Halt::Defer)?;
+            let Some(entries) = sequence_items(&value) else {
+                return Err(model_error(
+                    model_name,
+                    &format!("{key} must be a list of typed hook entries"),
+                ));
+            };
             for entry in entries {
                 if !entry.is_instance(entry_types)? {
-                    return Err(Halt::Defer);
+                    return Err(model_error(
+                        model_name,
+                        &format!(
+                            "{key} entries must use typed inline_sql(...), sql(...), or \
+                             python(...) hook syntax"
+                        ),
+                    ));
                 }
             }
         }
@@ -310,19 +340,15 @@ struct Expansion<'a, 'py> {
 }
 
 impl<'py> Expansion<'_, 'py> {
+    /// Expand `values`; `scope` is `preserve_unknown_context` and the context label.
     fn expand(
         &mut self,
         values: &Bound<'py, PyDict>,
         variables: &Bound<'py, PyDict>,
         context: Bound<'py, PyDict>,
-        preserve_unknown_context: bool,
+        scope: (bool, &str),
     ) -> Built<Bound<'py, PyDict>> {
-        let result = self.expand_value(
-            values.as_any(),
-            variables,
-            context,
-            preserve_unknown_context,
-        )?;
+        let result = self.expand_value(values.as_any(), variables, context, scope)?;
         result.downcast_into::<PyDict>().map_err(|_| Halt::Defer)
     }
 
@@ -331,8 +357,9 @@ impl<'py> Expansion<'_, 'py> {
         value: &Bound<'py, PyAny>,
         variables: &Bound<'py, PyDict>,
         context: Bound<'py, PyDict>,
-        preserve_unknown_context: bool,
+        scope: (bool, &str),
     ) -> Built<Bound<'py, PyAny>> {
+        let (preserve_unknown_context, label) = scope;
         let environment = self.builder.environment.bind(self.py).clone();
         let host = PythonHost::new(
             self.py,
@@ -345,7 +372,12 @@ impl<'py> Expansion<'_, 'py> {
         };
         let result = expanded(&host, value, options);
         self.reads.extend(host.into_reads());
-        Ok(result?)
+        result.map_err(|stop| match stop {
+            Stop::Failure(failure) => {
+                template_error(&failure, label).map_or(Halt::Defer, Halt::Config)
+            }
+            Stop::Python(error) => Halt::Error(error),
+        })
     }
 
     fn run_context(&self) -> Built<Bound<'py, PyDict>> {
@@ -433,19 +465,38 @@ impl<'py> Expansion<'_, 'py> {
         ];
         let preserved =
             |value: &Bound<'py, PyAny>| PyNode(value.clone()).is_text(PRESERVE_TARGET_VALUE);
-        if namespace
+        let missing: Vec<&str> = namespace
             .iter()
-            .any(|(_, value, logical)| preserved(value) && !logical)
-        {
-            return Err(Halt::Defer);
+            .filter(|(_, value, logical)| preserved(value) && !logical)
+            .map(|(key, _, _)| *key)
+            .collect();
+        if !missing.is_empty() {
+            let dimensions = missing.join(" and ");
+            return Err(Halt::Config(
+                ConfigError::compile(format!(
+                    "Model '{}' has no logical {dimensions}, but the selected target sets \
+                     {dimensions} to 'preserve'",
+                    self.model_name
+                ))
+                .with_help(format!(
+                    "Set {dimensions} on the resource or its defaults, or configure a literal \
+                     target {dimensions}."
+                )),
+            ));
         }
         let context = self.model_context(values, false)?;
         for (key, value, _) in namespace {
             if value.is_none() || preserved(&value) {
                 continue;
             }
+            let label = if key == DATABASE_KEY {
+                ENVIRONMENT_DATABASE_LABEL
+            } else {
+                ENVIRONMENT_SCHEMA_LABEL
+            };
             let variables = self.builder.variables.bind(py).clone();
-            let expanded_value = self.expand_value(&value, &variables, context.copy()?, false)?;
+            let expanded_value =
+                self.expand_value(&value, &variables, context.copy()?, (false, label))?;
             overridden.set_item(key, expanded_value)?;
         }
         Ok(overridden)
@@ -587,16 +638,18 @@ fn entry_has_template(values: &Bound<'_, PyDict>, key: &str) -> Built<bool> {
     }
 }
 
-/// Accept header tags `_validate_model_header_tags` accepts.
-fn check_header_tags(header: &Bound<'_, PyDict>) -> Built<()> {
+/// Check header tags as `_validate_model_header_tags` does.
+fn check_header_tags(header: &Bound<'_, PyDict>, model_name: &str) -> Built<()> {
     let Some(tags) = set_entry(header, TAGS_KEY)? else {
         return Ok(());
     };
-    let tags = tags.downcast::<PyList>().map_err(|_| Halt::Defer)?;
+    let Ok(tags) = tags.downcast::<PyList>() else {
+        return Err(model_error(model_name, "tags must be a list"));
+    };
     if tags.iter().all(|tag| tag.is_instance_of::<PyString>()) {
         Ok(())
     } else {
-        Err(Halt::Defer)
+        Err(model_error(model_name, "tags entries must be strings"))
     }
 }
 
@@ -629,21 +682,15 @@ fn storage_free_values<'py>(
     Ok(values)
 }
 
-/// Defer when config outside hooks holds a macro call `validate_model_config_has_no_macros` rejects.
-fn check_no_config_macros(py: Python<'_>, values: &Bound<'_, PyDict>) -> Built<()> {
-    let scanned = PyList::empty(py);
-    for (key, value) in values.iter() {
-        if !HOOK_KEYS
-            .iter()
-            .any(|hook| PyNode(key.clone()).is_text(hook))
-        {
-            scanned.append(value)?;
-        }
-    }
-    if present(contains_macro_call(&PyNode(scanned.into_any())))? {
-        Err(Halt::Defer)
-    } else {
-        Ok(())
+/// Raise for the first config field outside hooks holding a macro call, as Python's walk does.
+fn check_no_config_macros(values: &Bound<'_, PyDict>) -> Built<()> {
+    match first_macro_path(&PyNode(values.clone().into_any()), &HOOK_KEYS) {
+        MacroPath::Absent => Ok(()),
+        MacroPath::Deferred => Err(Halt::Defer),
+        MacroPath::Found(path) => Err(Halt::Config(ConfigError::compile(format!(
+            "model config field '{}' does not allow macros",
+            path.join(".")
+        )))),
     }
 }
 

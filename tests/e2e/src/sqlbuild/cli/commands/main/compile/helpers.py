@@ -48,6 +48,7 @@ from scripts.cold_compile_performance.main.read_compile_measurement import read_
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
+from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse._helpers.entry_file import (
@@ -4971,3 +4972,55 @@ def lifecycle_error_type(*, project_dir: Path, engine: str, monkeypatch: pytest.
         with redirect_stdout(StringIO()):
             _ = main(["--project-dir", str(project_dir), "--no-color", "compile"])
     return str(published[-1].payload.get("error_type"))
+
+
+def fallback_free_preview_compile(
+    *,
+    project_dir: Path,
+    fallbacks: tuple[tuple[ModuleType, str], ...],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[CompileReuseRun, list[str]]:
+    """Compile under native-preview in this process; return the run and fallbacks it called."""
+
+    called: list[str] = []
+
+    def recorder(name: str) -> Callable[..., object]:
+        def fallback(**_kwargs: object) -> object:
+            called.append(name)
+            raise AssertionError(name)
+
+        return fallback
+
+    with monkeypatch.context() as patch:
+        for module, name in fallbacks:
+            patch.setattr(module, name, recorder(name))
+        for variable, value in {
+            COMPILER_ENGINE_ENV_VAR: "native-preview",
+            REUSE_DISABLE_ENV_VAR: "1",
+        }.items():
+            patch.setenv(variable, value)
+        run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    return run, called
+
+
+def python_engine_compile(
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> CompileReuseRun:
+    """Compile under the Python engine in this process."""
+
+    with monkeypatch.context() as patch:
+        for variable, value in {
+            COMPILER_ENGINE_ENV_VAR: "python",
+            REUSE_DISABLE_ENV_VAR: "1",
+        }.items():
+            patch.setenv(variable, value)
+        return in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+
+
+def write_counted_error_project(*, project_dir: Path, files: dict[str, str]) -> None:
+    """Write the failure base project with `files` added or replaced into a fresh directory."""
+
+    shutil.rmtree(project_dir, ignore_errors=True)
+    for relative_path, contents in {**FAILURE_BASE_FILES, **files}.items():
+        write_project_file(project_dir, relative_path, contents)

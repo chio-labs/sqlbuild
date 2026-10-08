@@ -1,13 +1,13 @@
-use crate::model_validation::main::accept_model_config::accept_model_config;
-use crate::model_validation::models::{ModelReference, ModelValidationFacts};
-use crate::model_validation::tests::helpers::{incremental, map, project, snapshot, strings};
-use crate::model_validation::tests::test_types::AcceptTestCase;
+use crate::model_validation::tests::helpers::{
+    incremental, map, snapshot, strings, validation_outcome,
+};
+use crate::model_validation::tests::test_types::ValidateTestCase;
 use crate::tests::test_types::Value;
 
 #[test]
-fn given_effective_configs_when_validating_natively_then_only_python_valid_configs_pass() {
+fn given_effective_configs_when_validating_natively_then_python_outcomes_result() {
     let test_cases = [
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a plain table with known references",
             config: vec![("materialized", Value::Str("table"))],
             references: &[
@@ -17,30 +17,30 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
                 "udf:cents",
             ],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an unknown model reference",
             config: vec![("materialized", Value::Str("table"))],
             references: &["ref:invoices"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "Model file models/marts/orders_daily.sql references unknown model 'invoices'",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a table function called as a scalar function",
             config: vec![],
             references: &["udf:order_lines"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "Model file models/marts/orders_daily.sql references table function 'order_lines' with __udf(); use __table_fn() in SQL contexts that support table-valued functions",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a dbt reference always defers to Python",
             config: vec![],
             references: &["dbt_ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "deferred",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an append incremental with ordered ISO bounds",
             config: incremental(vec![
                 ("cursor_start", Value::Str("2024-01-01")),
@@ -49,9 +49,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "cursor bounds out of order",
             config: incremental(vec![
                 ("cursor_start", Value::Str("2024-02-01")),
@@ -59,29 +59,29 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': cursor_start must be before exclusive cursor_end",
         },
-        AcceptTestCase {
-            description: "a start bound shifted before year 1 in UTC defers",
+        ValidateTestCase {
+            description: "a start bound shifted before year 1 in UTC fails",
             config: incremental(vec![
                 ("cursor_start", Value::Str("0001-01-01T00:00:00+01:00")),
                 ("cursor_end", Value::Str("2024-01-01")),
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': cursor_start value '0001-01-01T00:00:00+01:00' falls outside years 1-9999 once converted to UTC",
         },
-        AcceptTestCase {
-            description: "an end bound shifted past year 9999 in UTC defers",
+        ValidateTestCase {
+            description: "an end bound shifted past year 9999 in UTC fails",
             config: incremental(vec![
                 ("cursor_start", Value::Str("2024-01-01")),
                 ("cursor_end", Value::Str("9999-12-31T23:59:00-01:00")),
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': cursor_end value '9999-12-31T23:59:00-01:00' falls outside years 1-9999 once converted to UTC",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "bounds at the edges of years 1 and 9999 in UTC",
             config: incremental(vec![
                 ("cursor_start", Value::Str("0001-01-01T01:00:00+01:00")),
@@ -89,16 +89,16 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an unusual ISO timestamp defers",
             config: incremental(vec![("cursor_start", Value::Str("2024-W01-1"))]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "deferred",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a timestamp cursor without a grain",
             config: vec![
                 ("materialized", Value::Str("incremental")),
@@ -108,9 +108,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ],
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': cursor_type=timestamp requires cursor_grain (valid values: day, hour, minute, month, second, year)",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a watermark microbatch with a satisfiable limit",
             config: incremental(vec![
                 ("incremental_strategy", Value::Str("delete_insert")),
@@ -139,9 +139,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a watermark limit below the lookback requirement",
             config: incremental(vec![
                 ("incremental_strategy", Value::Str("delete_insert")),
@@ -164,9 +164,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': max_microbatches 3 is below the ordinary lookback requirement of 4 batches",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "merge exclusions overlapping the unique key",
             config: incremental(vec![
                 ("incremental_strategy", Value::Str("merge")),
@@ -175,16 +175,16 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': merge_exclude_columns cannot include unique_key column(s): order_id",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a bounded replay policy",
             config: incremental(vec![("replay_on_change", Value::Str("bounded- 14d"))]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an incremental-only key on a table",
             config: vec![
                 ("materialized", Value::Str("table")),
@@ -192,9 +192,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ],
             references: &[],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': full_refresh is only valid for incremental models",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a timestamp snapshot with observed history",
             config: snapshot(vec![
                 ("observed_at", Value::Str("loaded_at")),
@@ -203,9 +203,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a check snapshot mixing the wildcard",
             config: snapshot(vec![
                 ("snapshot_strategy", Value::Str("check")),
@@ -213,9 +213,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': check_columns [*] cannot be combined with explicit columns",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an enforced contract naming an undeclared unique key",
             config: snapshot(vec![
                 ("contract", Value::Str("enforced")),
@@ -223,9 +223,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': unique_key references column 'order_id' not declared in enforced contract",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a custom materialization with matching placeholders",
             config: vec![
                 ("materialized", Value::Str("ledger")),
@@ -233,23 +233,23 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ],
             references: &[],
             query_sql: "select @@@region, '@@@' as marker",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "placeholders on a built-in materialization",
             config: vec![("materialized", Value::Str("view"))],
             references: &[],
             query_sql: "select @@@region",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': @@@placeholders are only allowed on custom materializations",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an unknown custom materialization",
             config: vec![("materialized", Value::Str("archive"))],
             references: &[],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': unknown materialization 'archive'; not a built-in type and no custom materialization with that name was discovered",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a table migrating from an old name with an old-name view",
             config: vec![
                 ("materialized", Value::Str("table")),
@@ -258,9 +258,9 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ],
             references: &[],
             query_sql: "select 1",
-            expected_accepted: true,
+            expected_outcome: "accepted",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "a view forcing a migration",
             config: vec![
                 ("materialized", Value::Str("view")),
@@ -269,52 +269,30 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             ],
             references: &[],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': migrate_force is only valid for incremental and snapshot models; nothing is replaced when a 'view' model migrates, because tables and views are rebuilt under their new name",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "an old-name view without a duration",
             config: vec![("old_name_view", Value::Null)],
             references: &[],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': old_name_view must be a positive duration such as 7d, or false; got None",
         },
-        AcceptTestCase {
+        ValidateTestCase {
             description: "concurrent batches without the project capability",
             config: incremental(vec![("batch_concurrency", Value::Int(2))]),
             references: &["ref:orders"],
             query_sql: "select 1",
-            expected_accepted: false,
+            expected_outcome: "model 'orders_daily': batch_concurrency > 1 requires incremental_mode=microbatch",
         },
     ];
 
     for test_case in test_cases {
-        let references: Vec<ModelReference> = test_case
-            .references
-            .iter()
-            .filter_map(|reference| reference.split_once(':'))
-            .map(|(kind, name)| ModelReference {
-                kind: kind.to_owned(),
-                name: name.to_owned(),
-            })
-            .collect();
-        let facts = ModelValidationFacts {
-            model_name: "orders_daily",
-            references: &references,
-            declared_columns: None,
-            query_sql: test_case.query_sql,
-            retention_unmanaged: true,
-            table_type_declared: false,
-        };
-        let entries = test_case
-            .config
-            .into_iter()
-            .map(|(key, value)| (Value::Str(key), value))
-            .collect();
-
-        let accepted = accept_model_config(entries, &project(), &facts) == Ok(());
+        let outcome =
+            validation_outcome(test_case.config, test_case.references, test_case.query_sql);
 
         assert_eq!(
-            accepted, test_case.expected_accepted,
+            outcome, test_case.expected_outcome,
             "{}",
             test_case.description
         );

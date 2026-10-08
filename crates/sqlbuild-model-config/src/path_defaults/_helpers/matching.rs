@@ -1,6 +1,8 @@
 //! Path-default glob matching and specificity, as `path_defaults/_helpers/matching.py`.
 
-use crate::path_defaults::constants::{RECURSIVE_SEGMENT_GLOB, SINGLE_SEGMENT_GLOB};
+use crate::errors::{ConfigError, ErrorClass};
+use crate::path_defaults::constants::{CONFLICT_HELP, RECURSIVE_SEGMENT_GLOB, SINGLE_SEGMENT_GLOB};
+use crate::path_defaults::models::PathDefaultChoice;
 
 /// Return whether a path-default pattern matches a prefix of the model path's segments.
 pub(crate) fn matches_prefix(path_parts: &[&str], key: &str) -> bool {
@@ -54,4 +56,30 @@ pub(crate) fn specificity(key: &str) -> (usize, usize, isize) {
         single,
         -isize::try_from(recursive).unwrap_or(isize::MAX),
     )
+}
+
+/// Choose the most specific wildcard key, or the conflict Python raises for equal matches.
+pub(crate) fn wildcard_choice(normalized_path: &str, matched: &[&String]) -> PathDefaultChoice {
+    let Some(best_score) = matched.iter().map(|key| specificity(key)).max() else {
+        return PathDefaultChoice::Selected(None);
+    };
+    let best: Vec<&&String> = matched
+        .iter()
+        .filter(|key| specificity(key) == best_score)
+        .collect();
+    if let [key] = best.as_slice() {
+        return PathDefaultChoice::Selected(Some((**key).clone()));
+    }
+    PathDefaultChoice::Conflict(conflict_error(normalized_path, &best))
+}
+
+/// The `DiscoveryConflictError` Python raises when `keys` match equally specifically.
+fn conflict_error(normalized_path: &str, keys: &[&&String]) -> ConfigError {
+    let conflicting: Vec<String> = keys.iter().map(|key| format!("'{key}'")).collect();
+    ConfigError::compile(format!(
+        "Model path '{normalized_path}' matches equally specific path_defaults keys: {}.",
+        conflicting.join(", ")
+    ))
+    .with_class(ErrorClass::DiscoveryConflict)
+    .with_help(CONFLICT_HELP)
 }

@@ -1,8 +1,9 @@
 //! Outcome of the native cursor intrinsic check.
 
-/// Whether SQL is free of cursor intrinsics, or Python must decide (and usually raise).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Whether Python accepts SQL as intrinsic-free, rejects it with this error, or must decide.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IntrinsicCheck {
     Free,
+    Rejected(String),
     Deferred,
 }

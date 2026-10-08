@@ -21,12 +21,14 @@ class NativeAuditPolicies:
 
 @dataclass(frozen=True, slots=True)
 class NativeRenderedAudit:
-    """Rendered audit SQL, the severity value and where the run scope comes from."""
+    """Rendered audit SQL and policies, or Python's render error and later policy error."""
 
+    render_error: str | None
     sql_body: str
     evidence_sql: str | None
     severity: str
     run_scope_source: str
+    policy_error: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +42,7 @@ class NativeNamedType:
 
 @dataclass(frozen=True, slots=True)
 class NativeFunctionHeader:
-    """A function header Python accepts, with argument and return types still unexpanded."""
+    """A function header with unexpanded types and Python's first `(stage, message)` error."""
 
     arguments: tuple[NativeNamedType, ...]
     returns: str | None
@@ -50,6 +52,7 @@ class NativeFunctionHeader:
     runtime_version: str | None
     entry_point: str | None
     packages: tuple[str, ...]
+    failure: tuple[str, str] | None
 
 
 @dataclass(frozen=True, slots=True)

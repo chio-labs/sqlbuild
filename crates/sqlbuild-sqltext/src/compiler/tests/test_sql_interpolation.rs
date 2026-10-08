@@ -1,6 +1,8 @@
 use crate::compiler::tests::helpers::{
-    dollar_quoted_text_is_quoted_for_substitution, dynamic_or_malformed_sql_requests_fallback,
-    scalar_variables_preserve_lexical_boundaries, unclosed_dollar_quote_requests_fallback,
+    dollar_quoted_text_is_quoted_for_substitution,
+    doubled_backticks_close_one_segment_and_open_the_next,
+    dynamic_or_malformed_sql_requests_fallback, scalar_variables_preserve_lexical_boundaries,
+    unclosed_dollar_quote_stops_as_unclosed_quote,
 };
 use crate::compiler::tests::test_types::StaticSqlOperationTestCase;
 
@@ -8,12 +10,17 @@ use crate::compiler::tests::test_types::StaticSqlOperationTestCase;
 fn given_sql_interpolation_cases_when_substituting_then_expected_behavior_holds() {
     let test_cases = [
         StaticSqlOperationTestCase {
+            description: "doubled backticks close one quoted segment and open the next",
+            run: doubled_backticks_close_one_segment_and_open_the_next,
+            expected_success: true,
+        },
+        StaticSqlOperationTestCase {
             description: "scalar variables preserve lexical boundaries",
             run: scalar_variables_preserve_lexical_boundaries,
             expected_success: true,
         },
         StaticSqlOperationTestCase {
-            description: "dynamic and malformed SQL requests Python fallback",
+            description: "dynamic SQL falls back; unknown names and unclosed text stop",
             run: dynamic_or_malformed_sql_requests_fallback,
             expected_success: true,
         },
@@ -23,8 +30,8 @@ fn given_sql_interpolation_cases_when_substituting_then_expected_behavior_holds(
             expected_success: true,
         },
         StaticSqlOperationTestCase {
-            description: "unclosed dollar quotes request Python fallback",
-            run: unclosed_dollar_quote_requests_fallback,
+            description: "unclosed dollar quotes stop as unclosed quoted text",
+            run: unclosed_dollar_quote_stops_as_unclosed_quote,
             expected_success: true,
         },
     ];

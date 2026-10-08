@@ -32,17 +32,40 @@ pub enum FunctionReturns {
     Table(Vec<NamedType>),
 }
 
-/// Stripped header values; argument, return and column types are still unexpanded templates.
+/// Where in Python's attachment a header error is raised, relative to template expansion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeaderStage {
+    /// Before anything is expanded: a missing `returns`.
+    Start,
+    /// After expanding the arguments before the failing one.
+    Arguments,
+    /// After expanding every argument and the return columns before the failing one.
+    Returns,
+    /// After expanding a Python function's return type: runtime, entry point and packages.
+    PythonValues,
+    /// When the attachment builds the function: tags, then the description.
+    Metadata,
+}
+
+/// Python's first header error and where it raises it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeaderFailure {
+    pub stage: HeaderStage,
+    pub message: String,
+}
+
+/// Stripped header values with unexpanded types; after a failure, what Python parsed before it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionHeader {
     pub arguments: Vec<NamedType>,
-    pub returns: FunctionReturns,
+    pub returns: Option<FunctionReturns>,
     pub tags: Vec<String>,
     pub description: Option<String>,
     /// Python functions only: `runtime_version`, `entry_point` and `packages`.
     pub runtime_version: Option<String>,
     pub entry_point: Option<String>,
     pub packages: Vec<String>,
+    pub failure: Option<HeaderFailure>,
 }
 
 /// The project and target namespace a function resolves against, already expanded.

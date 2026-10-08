@@ -12,7 +12,6 @@ from tests.integration.src.sqlbuild.compiler.model_config._test_types import (
     ConfigTemplateParityTestCase,
     HeaderMetadataParityTestCase,
     ModelConfigTierTestCase,
-    NativeRejectionTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
     TEMPLATE_ENVIRONMENT,
@@ -27,7 +26,6 @@ from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
     generated_template_values,
     header_metadata_parity,
     model_config_engine_outcome,
-    native_rejection_error,
 )
 
 
@@ -199,38 +197,6 @@ def test_given_engine_tier_when_building_model_inputs_then_native_config_runs_on
         test_case.expected_native_calls,
         python_config,
     )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        NativeRejectionTestCase(
-            description="header metadata",
-            native_entry="parse_model_header_metadata",
-            expected_message="native model config rejected MODEL columns or audits",
-        ),
-        NativeRejectionTestCase(
-            description="templates",
-            native_entry="expand_config_templates",
-            expected_message="templates that Python expands",
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_native_rejects_valid_config_when_python_accepts_then_a_mismatch_is_raised(
-    test_case: NativeRejectionTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    message: str = native_rejection_error(
-        project_dir=tmp_path, native_entry=test_case.native_entry, monkeypatch=monkeypatch
-    )
-
-    assert (
-        test_case.expected_message in message,
-        "SQLBUILD_COMPILER_ENGINE=python" in message,
-    ) == (
-        True,
-        True,
-    ), message
 
 
 if __name__ == "__main__":

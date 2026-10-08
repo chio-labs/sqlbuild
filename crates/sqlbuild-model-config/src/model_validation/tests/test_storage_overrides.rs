@@ -1,6 +1,7 @@
 use crate::model_validation::main::retention_override::retention_override;
 use crate::model_validation::main::table_type_override::table_type_override;
-use crate::model_validation::models::{Rejected, RetentionOverride, TableTypeOverride};
+use crate::model_validation::models::{RetentionOverride, TableTypeOverride};
+use crate::model_validation::tests::helpers::validator_error;
 use crate::model_validation::tests::test_types::{
     RetentionOverrideTestCase, TableTypeOverrideTestCase,
 };
@@ -37,17 +38,22 @@ fn given_header_retention_values_when_reading_then_python_policies_result() {
         RetentionOverrideTestCase {
             description: "hours are not whole days",
             value: Some(Value::Str("1d6h")),
-            expected_override: Err(Rejected),
+            expected_override: Err(validator_error(
+                "time_travel_retention must be a whole-day string like '7d', 'inherit', or \
+                 'disabled'",
+            )),
         },
         RetentionOverrideTestCase {
             description: "not a string",
             value: Some(Value::Int(7)),
-            expected_override: Err(Rejected),
+            expected_override: Err(validator_error(
+                "time_travel_retention must be a whole-day string like '7d'",
+            )),
         },
     ];
 
     for test_case in test_cases {
-        let resolved = retention_override(test_case.value.as_ref());
+        let resolved = retention_override(test_case.value.as_ref(), "orders_daily");
 
         assert_eq!(
             resolved, test_case.expected_override,
@@ -83,12 +89,14 @@ fn given_header_table_types_when_reading_then_python_types_result() {
         TableTypeOverrideTestCase {
             description: "unknown",
             value: Some(Value::Str("temporary")),
-            expected_override: Err(Rejected),
+            expected_override: Err(validator_error(
+                "table_type must be permanent, transient, or inherit",
+            )),
         },
     ];
 
     for test_case in test_cases {
-        let resolved = table_type_override(test_case.value.as_ref());
+        let resolved = table_type_override(test_case.value.as_ref(), "orders_daily");
 
         assert_eq!(
             resolved, test_case.expected_override,

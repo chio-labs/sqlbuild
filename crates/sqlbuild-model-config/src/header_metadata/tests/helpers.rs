@@ -1,7 +1,5 @@
 use crate::header_metadata::main::parse_header_metadata::parse_header_metadata;
-use crate::header_metadata::models::{
-    HeaderMetadata, HeaderMetadataDeferral, ParsedAudit, ParsedColumn,
-};
+use crate::header_metadata::models::{HeaderMetadataStop, ParsedAudit, ParsedColumn};
 use crate::tests::test_types::Value;
 use crate::types::AuthoredNode;
 
@@ -15,21 +13,30 @@ pub(super) fn map(entries: &[(&'static str, Value)]) -> Value {
     )
 }
 
-/// The parse as one line per column and model audit, or why Python must parse it.
-pub(super) fn summary(
-    columns: &Value,
-    audits: &Value,
-) -> Result<Vec<String>, HeaderMetadataDeferral> {
-    parse_header_metadata(columns, audits).map(|metadata| metadata_summary(&metadata))
-}
+/// The model file path the parse errors name.
+pub(super) const MODEL_PATH: &str = "/project/models/orders.sql";
 
-fn metadata_summary(metadata: &HeaderMetadata<Value>) -> Vec<String> {
-    metadata
+/// The parse as one line per column and model audit, or the first error or `unsupported`.
+pub(super) fn summary(columns: &Value, audits: &Value) -> Result<Vec<String>, String> {
+    let metadata = parse_header_metadata(columns, audits, MODEL_PATH);
+    let columns: Vec<String> = metadata
         .columns
+        .map_err(stop_summary)?
         .iter()
         .map(column_summary)
-        .chain(metadata.audits.iter().map(audit_summary))
-        .collect()
+        .collect();
+    let audits = metadata.audits.map_err(stop_summary)?;
+    Ok(columns
+        .into_iter()
+        .chain(audits.iter().map(audit_summary))
+        .collect())
+}
+
+fn stop_summary(stop: HeaderMetadataStop) -> String {
+    let HeaderMetadataStop::Error(error) = stop else {
+        return "unsupported".to_owned();
+    };
+    error.message
 }
 
 fn column_summary(column: &ParsedColumn<Value>) -> String {

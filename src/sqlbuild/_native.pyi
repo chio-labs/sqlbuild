@@ -155,16 +155,28 @@ def build_native_scope_index(
         ]
     ],
 ) -> NativeScopeIndex | None: ...
+
+class NativeConfigError:
+    class_name: str
+    message: str
+    code: str | None
+    help: str | None
+    key: str | None
+
 def parse_model_header_metadata(
-    requests: list[tuple[object, object, dict[str, Any]]], classes: dict[str, object]
-) -> list[tuple[tuple[Any, ...], tuple[Any, ...]] | str]: ...
+    requests: list[tuple[object, object, dict[str, Any], str]], classes: dict[str, object]
+) -> list[
+    tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None] | str
+]: ...
 def config_contains_template(value: object) -> bool | None: ...
 def config_contains_macro_call(value: object) -> bool | None: ...
 def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],
-    flags: tuple[bool, bool, bool],
-) -> tuple[object, list[tuple[str, str]]] | str: ...
+    flags: tuple[bool, bool, bool, str],
+) -> (
+    tuple[object, list[tuple[str, str]]] | tuple[NativeConfigError, list[tuple[str, str]]] | str
+): ...
 
 class NativeModelConfigBuilder:
     def __init__(
@@ -174,7 +186,7 @@ class NativeModelConfigBuilder:
         run: tuple[str | None, str],
         target_namespace: tuple[str | None, str | None] | None,
     ) -> None: ...
-    def path_default(self, model_path: str) -> tuple[bool, str | None]: ...
+    def path_default(self, model_path: str) -> str | NativeConfigError | None: ...
     def build(
         self, header: dict[str, object], matched_path_default: str | None, model_name: str
     ) -> (
@@ -185,6 +197,7 @@ class NativeModelConfigBuilder:
             tuple[tuple[int | None, bool] | None, str | None],
             list[tuple[str, str]],
         ]
+        | NativeConfigError
         | None
     ): ...
 
@@ -195,12 +208,12 @@ class NativeModelValidator:
         custom_materializations: set[str],
         microbatch_concurrency: bool,
     ) -> None: ...
-    def accepts(
+    def validate(
         self,
         values: dict[str, object],
-        model: tuple[str, str],
+        model: tuple[str, str, str],
         facts: tuple[tuple[object, ...], list[str] | None, bool, bool],
-    ) -> bool: ...
+    ) -> bool | NativeConfigError: ...
 
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...
@@ -232,11 +245,13 @@ class SqlTestTargetCatalog:
 
 def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> tuple[bool, int | None]: ...
 def scan_test_parameter_references(
-    sql: str, declared: list[str]
-) -> list[tuple[int, int, str]] | None: ...
-def sql_free_of_cursor_intrinsics(sql: str, reserved_markers: list[str]) -> bool: ...
+    sql: str, declared: list[str], owner: str
+) -> tuple[list[tuple[int, int, str]], str | None]: ...
+def sql_free_of_cursor_intrinsics(
+    sql: str, reserved_markers: list[str], context: str
+) -> tuple[bool, str | None]: ...
 def parse_function_header_values(
-    header_values: dict[str, object], python: bool
+    header_values: dict[str, object], python: bool, relative_path: str
 ) -> (
     tuple[
         list[tuple[str, str, str]],
@@ -247,6 +262,7 @@ def parse_function_header_values(
         str | None,
         str | None,
         list[str],
+        tuple[str, str] | None,
     ]
     | None
 ): ...
@@ -255,10 +271,11 @@ def pair_seed_files(
     declarations: list[str], stems: list[str]
 ) -> tuple[list[int], None] | tuple[None, int]: ...
 def render_attached_generic_audit(
+    labels: tuple[str, str],
     sql: tuple[str, str | None],
     arguments: tuple[dict[str, object], dict[str, object]],
     policies: dict[str, object],
-) -> tuple[str, str | None, str, str] | None: ...
+) -> tuple[str | None, str, str | None, str, str, str | None] | None: ...
 def scan_sql_declaration_references(
     sqls: list[str],
 ) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None] | None]: ...

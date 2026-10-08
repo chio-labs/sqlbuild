@@ -8,15 +8,15 @@ use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::functions::main::parse_function_header::parse_function_header;
 use sqlbuild_attachments::functions::main::resolve_function_namespace::resolve_function_namespace;
 use sqlbuild_attachments::functions::models::{
-    FunctionHeader, FunctionLanguage, FunctionNamespace, FunctionReturns, HeaderValue, NamedType,
-    NamespaceInputs,
+    FunctionHeader, FunctionLanguage, FunctionNamespace, FunctionReturns, HeaderStage, HeaderValue,
+    NamedType, NamespaceInputs,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
 /// `(authored name, name, type)` rows.
 type Pairs = Vec<(String, String, String)>;
-/// Arguments, scalar type, table columns, tags, description, runtime, entry point, packages.
+/// Parsed header fields in Python's order, then its first error as `(stage, message)`.
 type HeaderRow = (
     Pairs,
     Option<String>,
@@ -26,6 +26,7 @@ type HeaderRow = (
     Option<String>,
     Option<String>,
     Vec<String>,
+    Option<(&'static str, String)>,
 );
 type NamespaceRow = [Option<String>; 8];
 
@@ -43,11 +44,12 @@ struct NamespaceInput {
     inherit_default_namespace: bool,
 }
 
-/// Parse a function header, or return `None` where Python raises for its shape.
+/// Parse one function file's header with Python's first error, or `None` for unreadable text.
 #[pyfunction]
 fn parse_function_header_values(
     header_values: Bound<'_, PyDict>,
     python: bool,
+    relative_path: &str,
 ) -> PyResult<Option<HeaderRow>> {
     compiler_guard(|| {
         let mut header: Vec<(String, HeaderValue)> = Vec::with_capacity(header_values.len());
@@ -55,17 +57,21 @@ fn parse_function_header_values(
             if value.is_none() {
                 continue;
             }
-            let Some(name) = text_value(&key) else {
+            let (Some(name), Some(value)) = (text_value(&key), header_value(&value)?) else {
                 return Ok(None);
             };
-            header.push((name, header_value(&value)?));
+            header.push((name, value));
         }
         let language: FunctionLanguage = if python {
             FunctionLanguage::Python
         } else {
             FunctionLanguage::Sql
         };
-        Ok(parse_function_header(&header, language).map(header_row))
+        Ok(Some(header_row(parse_function_header(
+            &header,
+            language,
+            relative_path,
+        ))))
     })
 }
 
@@ -100,32 +106,36 @@ fn resolve_function_namespace_values(inputs: NamespaceInput) -> PyResult<Namespa
     })
 }
 
-fn header_value(value: &Bound<'_, PyAny>) -> PyResult<HeaderValue> {
+/// One header value; `None` when a string inside it is text Rust cannot hold.
+fn header_value(value: &Bound<'_, PyAny>) -> PyResult<Option<HeaderValue>> {
     if value.is_instance_of::<PyString>() {
-        return Ok(text_value(value).map_or(HeaderValue::Other, HeaderValue::Text));
+        return Ok(text_value(value).map(HeaderValue::Text));
     }
     if let Ok(mapping) = value.downcast::<PyDict>() {
         let mut entries: Vec<(HeaderValue, HeaderValue)> = Vec::with_capacity(mapping.len());
         for (key, item) in mapping.iter() {
-            entries.push((header_value(&key)?, header_value(&item)?));
+            let (Some(key), Some(item)) = (header_value(&key)?, header_value(&item)?) else {
+                return Ok(None);
+            };
+            entries.push((key, item));
         }
-        return Ok(HeaderValue::Map(entries));
+        return Ok(Some(HeaderValue::Map(entries)));
     }
-    if let Ok(list) = value.downcast::<PyList>() {
-        let mut items: Vec<HeaderValue> = Vec::with_capacity(list.len());
-        for item in list.iter() {
-            items.push(header_value(&item)?);
-        }
-        return Ok(HeaderValue::Sequence(items));
+    let items: Vec<Bound<'_, PyAny>> = if let Ok(list) = value.downcast::<PyList>() {
+        list.iter().collect()
+    } else if let Ok(tuple) = value.downcast::<PyTuple>() {
+        tuple.iter().collect()
+    } else {
+        return Ok(Some(HeaderValue::Other));
+    };
+    let mut sequence: Vec<HeaderValue> = Vec::with_capacity(items.len());
+    for item in &items {
+        let Some(item) = header_value(item)? else {
+            return Ok(None);
+        };
+        sequence.push(item);
     }
-    if let Ok(tuple) = value.downcast::<PyTuple>() {
-        let mut items: Vec<HeaderValue> = Vec::with_capacity(tuple.len());
-        for item in tuple.iter() {
-            items.push(header_value(&item)?);
-        }
-        return Ok(HeaderValue::Sequence(items));
-    }
-    Ok(HeaderValue::Other)
+    Ok(Some(HeaderValue::Sequence(sequence)))
 }
 
 /// A `str` (or subclass) as text; text Rust cannot hold, such as lone surrogates, is `None`.
@@ -141,8 +151,9 @@ fn text_value(value: &Bound<'_, PyAny>) -> Option<String> {
 
 fn header_row(header: FunctionHeader) -> HeaderRow {
     let (scalar, table): (Option<String>, Option<Pairs>) = match header.returns {
-        FunctionReturns::Type(text) => (Some(text), None),
-        FunctionReturns::Table(columns) => (None, Some(rows(columns))),
+        Some(FunctionReturns::Type(text)) => (Some(text), None),
+        Some(FunctionReturns::Table(columns)) => (None, Some(rows(columns))),
+        None => (None, None),
     };
     (
         rows(header.arguments),
@@ -153,7 +164,20 @@ fn header_row(header: FunctionHeader) -> HeaderRow {
         header.runtime_version,
         header.entry_point,
         header.packages,
+        header
+            .failure
+            .map(|failure| (stage_name(failure.stage), failure.message)),
     )
+}
+
+fn stage_name(stage: HeaderStage) -> &'static str {
+    match stage {
+        HeaderStage::Start => "start",
+        HeaderStage::Arguments => "arguments",
+        HeaderStage::Returns => "returns",
+        HeaderStage::PythonValues => "python_values",
+        HeaderStage::Metadata => "metadata",
+    }
 }
 
 fn rows(named: Vec<NamedType>) -> Pairs {

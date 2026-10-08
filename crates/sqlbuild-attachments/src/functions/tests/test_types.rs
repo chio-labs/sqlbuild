@@ -6,7 +6,7 @@ pub(super) struct FunctionHeaderTestCase {
     pub(super) description: &'static str,
     pub(super) header: Vec<(String, HeaderValue)>,
     pub(super) language: FunctionLanguage,
-    pub(super) expected_header: Option<FunctionHeader>,
+    pub(super) expected_header: FunctionHeader,
 }
 
 pub(super) struct FunctionNamespaceTestCase {

@@ -5,15 +5,15 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_header_metadata;
 use sqlbuild_model_config::header_metadata::models::{
-    HeaderMetadata, HeaderMetadataDeferral, ParsedAudit, ParsedColumn,
+    HeaderMetadataStop, ParsedAudit, ParsedColumn,
 };
 
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 
-/// A model's `(columns, audits)` tuples, or the outcome name `invalid` or `unsupported`.
+/// A model's columns and audits, each a contract tuple or its error, or `unsupported`.
 type ParsedMetadataRow = Py<PyAny>;
 
-const INVALID_OUTCOME: &str = "invalid";
 const UNSUPPORTED_OUTCOME: &str = "unsupported";
 
 /// The Python classes the parsed metadata becomes, read from a Python mapping.
@@ -26,11 +26,16 @@ struct ContractClasses<'py> {
     allocate: Bound<'py, PyAny>,
 }
 
-/// One model's authored `columns` and `audits` values and its column locations.
+/// One model's authored `columns` and `audits` values, its column locations and its file path.
 #[derive(FromPyObject)]
-struct HeaderMetadataRequest<'py>(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyDict>);
+struct HeaderMetadataRequest<'py>(
+    Bound<'py, PyAny>,
+    Bound<'py, PyAny>,
+    Bound<'py, PyDict>,
+    String,
+);
 
-/// Return each model's `(columns, audits)` contract tuples, or why Python must parse it.
+/// Return each model's columns and audits, each as contract tuples or its error, or `unsupported`.
 #[pyfunction]
 fn parse_model_header_metadata<'py>(
     py: Python<'py>,
@@ -38,41 +43,62 @@ fn parse_model_header_metadata<'py>(
     classes: ContractClasses<'py>,
 ) -> PyResult<Vec<ParsedMetadataRow>> {
     let mut rows: Vec<ParsedMetadataRow> = Vec::with_capacity(requests.len());
-    for HeaderMetadataRequest(columns, audits, locations) in requests {
-        rows.push(
-            match parse_header_metadata(&PyNode(columns), &PyNode(audits)) {
-                Ok(metadata) => metadata_row(py, &classes, &metadata, &locations)?,
-                Err(HeaderMetadataDeferral::Invalid) => {
-                    PyString::new(py, INVALID_OUTCOME).into_any().unbind()
-                }
-                Err(HeaderMetadataDeferral::Unsupported) => {
-                    PyString::new(py, UNSUPPORTED_OUTCOME).into_any().unbind()
-                }
-            },
-        );
+    for HeaderMetadataRequest(columns, audits, locations, path) in requests {
+        let metadata = parse_header_metadata(&PyNode(columns), &PyNode(audits), &path);
+        rows.push(match (metadata.columns, metadata.audits) {
+            (Err(HeaderMetadataStop::Unsupported), _)
+            | (Ok(_), Err(HeaderMetadataStop::Unsupported)) => {
+                PyString::new(py, UNSUPPORTED_OUTCOME).into_any().unbind()
+            }
+            (Err(HeaderMetadataStop::Error(error)), _) => {
+                (native_config_error(py, error)?, py.None())
+                    .into_pyobject(py)?
+                    .into_any()
+                    .unbind()
+            }
+            (Ok(columns), Err(HeaderMetadataStop::Error(error))) => (
+                column_tuple(py, &classes, &columns, &locations)?,
+                native_config_error(py, error)?,
+            )
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+            (Ok(columns), Ok(audits)) => (
+                column_tuple(py, &classes, &columns, &locations)?,
+                audit_tuple(py, &classes, &audits)?,
+            )
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        });
     }
     Ok(rows)
 }
 
-fn metadata_row<'py>(
+fn column_tuple<'py>(
     py: Python<'py>,
     classes: &ContractClasses<'py>,
-    metadata: &HeaderMetadata<PyNode<'py>>,
+    parsed: &[ParsedColumn<PyNode<'py>>],
     locations: &Bound<'py, PyDict>,
-) -> PyResult<ParsedMetadataRow> {
-    let no_location: Bound<'py, PyAny> = py.None().into_bound(py);
-    let mut columns: Vec<Bound<'py, PyAny>> = Vec::with_capacity(metadata.columns.len());
-    for column in &metadata.columns {
+) -> PyResult<Bound<'py, PyTuple>> {
+    let mut columns: Vec<Bound<'py, PyAny>> = Vec::with_capacity(parsed.len());
+    for column in parsed {
         columns.push(schema_column(py, classes, column, locations)?);
     }
-    let mut audits: Vec<Bound<'py, PyAny>> = Vec::with_capacity(metadata.audits.len());
-    for audit in &metadata.audits {
+    PyTuple::new(py, columns)
+}
+
+fn audit_tuple<'py>(
+    py: Python<'py>,
+    classes: &ContractClasses<'py>,
+    parsed: &[ParsedAudit<PyNode<'py>>],
+) -> PyResult<Bound<'py, PyTuple>> {
+    let no_location: Bound<'py, PyAny> = py.None().into_bound(py);
+    let mut audits: Vec<Bound<'py, PyAny>> = Vec::with_capacity(parsed.len());
+    for audit in parsed {
         audits.push(audit_instance(py, classes, audit, &no_location)?);
     }
-    Ok((PyTuple::new(py, columns)?, PyTuple::new(py, audits)?)
-        .into_pyobject(py)?
-        .into_any()
-        .unbind())
+    PyTuple::new(py, audits)
 }
 
 /// Build a frozen contract dataclass the way `copy` does: allocate, then fill its `__dict__`.
