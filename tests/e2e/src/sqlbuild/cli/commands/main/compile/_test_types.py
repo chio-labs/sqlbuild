@@ -754,6 +754,15 @@ class SqlTestScanStoreTestCase:
 
 
 @dataclass(frozen=True)
+class RetiredCompilerCacheTestCase:
+    """A compile over a project holding cache files older releases wrote."""
+
+    description: str
+    compile_args: tuple[str, ...]
+    expected_removed: bool
+
+
+@dataclass(frozen=True)
 class DenseBatchedPreparationTestCase:
     description: str
     model_count: int

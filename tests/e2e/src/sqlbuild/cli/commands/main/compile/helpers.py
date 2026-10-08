@@ -41,6 +41,7 @@ import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.contracts.main.validate as contract_validation
+import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.lineage.main.columns as column_lineage
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
@@ -64,8 +65,15 @@ from sqlbuild.cli.compile_reuse.models import (
     StoredCompileInputs,
 )
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
-from sqlbuild.compiler.compile.constants import SQL_TEST_SCAN_STORE_FILE_NAME
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.compile.constants import (
+    RETIRED_FACT_CACHE_DIRECTORY_NAME,
+    SQL_TEST_SCAN_STORE_FILE_NAME,
+)
+from sqlbuild.compiler.frontier.constants import (
+    COMPILER_CACHE_DIRECTORY_NAME,
+    COMPILER_ENGINE_ENV_VAR,
+    ENGINE_CACHE_NAMESPACE_SUFFIXES,
+)
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -4125,6 +4133,40 @@ def corrupt_sql_test_scan_store(root: Path, _monkeypatch: pytest.MonkeyPatch) ->
     path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
     assert path.is_file()
     _ = path.write_bytes(b"not a native store")
+
+
+def edit_installed_code(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend the installed Python code changed, as a local edit of an editable install does."""
+
+    monkeypatch.setattr(
+        compiled_code_identity_module, "installed_code_identity", lambda: "edited-python-code"
+    )
+
+
+RETIRED_RENDER_FILES: tuple[str, ...] = (
+    "0123456789abcdef-0000.render",
+    "fedcba9876543210-1111.render",
+)
+
+
+def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
+    """Leave every engine's fact cache and render files of other target slots from old releases."""
+
+    written: list[Path] = [
+        compiler_cache_directory(project_dir).parent
+        / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
+        / RETIRED_FACT_CACHE_DIRECTORY_NAME
+        / "sql-tests.sqlite3"
+        for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values()
+    ]
+    written.extend(
+        compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME / name
+        for name in RETIRED_RENDER_FILES
+    )
+    for path in written:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_bytes(b"retired")
+    return tuple(written)
 
 
 _ORIGINAL_SCAN_WRITE: Callable[..., None] = SqlTestScanCache.write

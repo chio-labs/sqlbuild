@@ -33,6 +33,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     completed_order_udf_signature_change,
     corrupt_sql_test_scan_store,
     disable_project_reuse,
+    edit_installed_code,
     edit_sql_test_scan_input,
     edit_step,
     edit_unrelated_model,
@@ -471,6 +472,11 @@ def test_given_models_sharing_an_analysis_cache_key_when_upstream_changes_then_i
         SqlTestScanStoreTestCase(
             description="native_build_upgraded",
             change=upgrade_native_build,
+            expected_rescans=12,
+        ),
+        SqlTestScanStoreTestCase(
+            description="installed_python_code_changed",
+            change=edit_installed_code,
             expected_rescans=12,
         ),
         SqlTestScanStoreTestCase(

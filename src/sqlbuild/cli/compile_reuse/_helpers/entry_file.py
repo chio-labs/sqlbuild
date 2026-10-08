@@ -21,6 +21,7 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_FORMAT_VERSION,
     REUSE_MAX_ENTRY_BYTES,
     REUSE_MAX_STORED_ENTRIES,
+    REUSE_RETIRED_RENDER_SUFFIX,
     REUSE_STDOUT_SEPARATOR,
     REUSE_STDOUT_SUFFIX,
 )
@@ -179,6 +180,10 @@ def _read_section(*, handle: BinaryIO) -> bytes:
 def _prune_entries(*, directory: Path, keep: Path) -> None:
     entries: list[tuple[int, Path]] = []
     for candidate in directory.iterdir():
+        if candidate.suffix == REUSE_RETIRED_RENDER_SUFFIX:
+            with contextlib.suppress(OSError):
+                candidate.unlink()
+            continue
         if candidate.suffix != REUSE_ENTRY_SUFFIX or candidate == keep:
             continue
         with contextlib.suppress(OSError):

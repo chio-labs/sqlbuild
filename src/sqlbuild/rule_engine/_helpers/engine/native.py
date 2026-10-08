@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
@@ -35,7 +36,6 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
 )
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
-from sqlbuild.rule_engine._helpers.run.code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.run.native_memo import (
     native_payload_digests,
     native_request_identity,

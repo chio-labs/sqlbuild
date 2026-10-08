@@ -10,8 +10,8 @@ from typing import Any
 
 import orjson
 
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
-from sqlbuild.rule_engine._helpers.run.code_identity import compiled_code_identity
 from sqlbuild.rule_engine.constants import NATIVE_RULES_MEMO_FILE, NATIVE_RULES_MEMO_VERSION
 
 

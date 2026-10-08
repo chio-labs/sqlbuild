@@ -1,4 +1,4 @@
-"""Identity of the installed code that produces cached rule results."""
+"""Identity of the installed SQLBuild code that produces cached compiler and rule results."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 from typing import Any
 
-import sqlbuild._native as _native
-
 _PACKAGE_NAME: str = "sqlbuild"
 _POLYGLOT_PACKAGE_NAME: str = "polyglot-sql-chio"
 _YAML_PACKAGE_NAME: str = "PyYAML"
@@ -22,16 +20,8 @@ _BYTECODE_CACHE_DIRECTORY: str = "__pycache__"
 _PACKAGE_ROOT_PARENT_DEPTH: int = 3
 
 
-def compiled_code_identity() -> str:
-    """Return the digest that changes with every released, locally edited, or rebuilt version."""
-
-    return hashlib.sha256(
-        f"{_installed_code_identity()}\0{_native.BUILD_IDENTITY}".encode()
-    ).hexdigest()
-
-
 @cache
-def _installed_code_identity() -> str:
+def installed_code_identity() -> str:
     """Return a digest that changes with every released or locally edited code version."""
 
     digest: Any = hashlib.sha256()

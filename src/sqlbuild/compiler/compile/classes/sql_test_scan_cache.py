@@ -11,12 +11,13 @@ from sqlbuild.compiler.compile.constants import (
     SQL_TEST_SCAN_STORE_FILE_NAME,
     SQL_TEST_SCAN_STORE_VERSION,
 )
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
 class SqlTestScanCache:
-    """Whole per-file scan results keyed by scan algorithm, lexical rules and scanned text."""
+    """Whole per-file scan results keyed by installed code, scan algorithm, rules and text."""
 
     def __init__(self, *, cache_dir: Path | None) -> None:
         self._path: Path | None = (
@@ -73,7 +74,7 @@ class SqlTestScanCache:
             return None
         if self._store is None:
             environment: str = _native.content_digest(
-                [SQL_TEST_SCAN_STORE_VERSION, _native.BUILD_IDENTITY]
+                [SQL_TEST_SCAN_STORE_VERSION, compiled_code_identity()]
             )
             try:
                 self._store = _native.SqlTestScanStore(str(self._path), environment)

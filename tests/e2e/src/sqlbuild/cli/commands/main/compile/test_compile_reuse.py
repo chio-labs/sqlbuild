@@ -23,6 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileReuseReplayTestCase,
     CompileReuseStoreFailureTestCase,
     CompileReuseTimingsTestCase,
+    RetiredCompilerCacheTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     COMPILE_REUSE_HIT_LINE,
@@ -72,6 +73,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_orders_api_timeout_file,
     write_project_file,
     write_recording_sink,
+    write_retired_compiler_cache_files,
 )
 
 _CONTRACT_ERROR_MODEL: str = (
@@ -805,6 +807,33 @@ def test_given_store_is_interrupted_when_compiling_then_the_interrupt_propagates
         _ = compile_in_process(project_dir=project_dir)
 
     assert raised.type is test_case.expected_raised
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RetiredCompilerCacheTestCase(
+            description="cached_compile_removes_them", compile_args=(), expected_removed=True
+        ),
+        RetiredCompilerCacheTestCase(
+            description="uncached_compile_leaves_the_cache_alone",
+            compile_args=("--no-cache",),
+            expected_removed=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cache_files_of_older_releases_when_compiling_then_cached_compile_deletes_them(
+    compile_reuse_project: Path, test_case: RetiredCompilerCacheTestCase
+) -> None:
+    retired: tuple[Path, ...] = write_retired_compiler_cache_files(compile_reuse_project)
+
+    run: CompileReuseRun = run_reuse_compile(
+        project_dir=compile_reuse_project, args=test_case.compile_args
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert [path.exists() for path in retired] == [not test_case.expected_removed] * len(retired)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
@@ -13,8 +14,13 @@ from sqlbuild.compiler.compile._helpers.render.context_templates import (
 from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_ENV_VAR,
     COMPILE_CACHE_DISABLE_VALUE,
+    RETIRED_FACT_CACHE_DIRECTORY_NAME,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.constants import (
+    COMPILER_CACHE_DIRECTORY_NAME,
+    ENGINE_CACHE_NAMESPACE_SUFFIXES,
+)
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
@@ -63,7 +69,22 @@ def compile_cache_root(
         or os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE
     ):
         return None
-    return compiler_cache_directory(project_dir)
+    root: Path = compiler_cache_directory(project_dir)
+    _remove_retired_fact_caches(root=root)
+    return root
+
+
+def _remove_retired_fact_caches(*, root: Path) -> None:
+    """Delete the per-file fact caches older releases kept under every engine's compiler root."""
+
+    for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values():
+        retired: Path = (
+            root.parent
+            / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
+            / (RETIRED_FACT_CACHE_DIRECTORY_NAME)
+        )
+        if retired.is_dir():
+            shutil.rmtree(retired, ignore_errors=True)
 
 
 def build_effective_target_namespace(
