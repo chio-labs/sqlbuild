@@ -1,3 +1,4 @@
+import random
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -22,6 +23,11 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
 )
+from sqlbuild.compiler.compile._helpers.render.sql_vars import (
+    prepare_static_project_vars_batch,
+    substitute_sql_vars,
+)
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -815,3 +821,85 @@ def diagnostic_spans(
         (location.path.as_posix(), location.line, location.column, location.end_column)
         for location in locations
     )
+
+
+@dataclass(frozen=True)
+class StaticProjectVarDifferential:
+    """Native static substitutions beside the pure-Python scanner's output for the same SQL."""
+
+    native: dict[str, str]
+    python: dict[str, str | None]
+    substituted_dollar_quotes: int
+
+
+_LEXICAL_SQL_FRAGMENTS: tuple[str, ...] = (
+    "$",
+    "$$",
+    "$t$",
+    "$tag$",
+    "a$",
+    "$1",
+    "$1$",
+    "--",
+    "/*",
+    "*/",
+    "'",
+    '"',
+    "`",
+    "@@revision",
+    "@@status",
+    "@@@window_start",
+    "@@",
+    "@",
+    " ",
+    "\n",
+    "x",
+    "_",
+    "\u00e9",
+)
+_LEXICAL_SQL_MAX_FRAGMENTS: int = 12
+_DIFFERENTIAL_FILE_PATH: Path = Path("models/generated.sql")
+
+
+def generated_lexical_sqls(*, seed: int, count: int) -> tuple[str, ...]:
+    """Generate SQL-like strings mixing quotes, dollar quotes, comments and variable tokens."""
+
+    rng: random.Random = random.Random(seed)
+    sqls: list[str] = []
+    for _ in range(count):
+        fragment_count: int = rng.randint(1, _LEXICAL_SQL_MAX_FRAGMENTS)
+        sqls.append("".join(rng.choices(_LEXICAL_SQL_FRAGMENTS, k=fragment_count)))
+    return tuple(sqls)
+
+
+def native_static_project_var_differential(
+    *, sqls: tuple[str, ...], effective_vars: dict[str, object]
+) -> StaticProjectVarDifferential:
+    """Pair every native static substitution with the pure-Python scanner's output."""
+
+    prepared: tuple[str | None, ...] = prepare_static_project_vars_batch(
+        sqls=sqls, effective_vars=effective_vars
+    )
+    native: dict[str, str] = cast(
+        dict[str, str],
+        dict(filter(lambda pair: pair[1] is not None, zip(sqls, prepared, strict=True))),
+    )
+    python: dict[str, str | None] = {
+        sql: _python_substituted_sql(sql=sql, effective_vars=effective_vars) for sql in native
+    }
+    return StaticProjectVarDifferential(
+        native=native,
+        python=python,
+        substituted_dollar_quotes=sum(
+            sql != rendered and "$$" in sql for sql, rendered in native.items()
+        ),
+    )
+
+
+def _python_substituted_sql(*, sql: str, effective_vars: dict[str, object]) -> str | None:
+    try:
+        return substitute_sql_vars(
+            sql=sql, file_path=_DIFFERENTIAL_FILE_PATH, effective_vars=effective_vars
+        )
+    except CompileInputError:
+        return None

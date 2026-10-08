@@ -146,6 +146,15 @@ def _interpolation_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="unclosed-dollar-quote-with-project-variable",
+            expected_code="P001",
+            expected_message="SQL interpolation contains an unclosed quoted string",
+            files={
+                **config_files('\n[vars]\nregion = "north"\n'),
+                **_staging_columns(columns="amount, status, $tag$ @@region AS region"),
+            },
+        ),
+        failure_case(
             name="context-variable-in-model-sql",
             expected_code="P001",
             expected_message="does not allow @@CTX templates",

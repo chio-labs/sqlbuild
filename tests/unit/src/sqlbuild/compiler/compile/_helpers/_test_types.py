@@ -73,6 +73,15 @@ class StaticProjectVarBatchTestCase:
 
 
 @dataclass(frozen=True)
+class StaticProjectVarDifferentialTestCase:
+    description: str
+    seed: int
+    sql_count: int
+    effective_vars: dict[str, object]
+    expected_minimum_dollar_quote_substitutions: int
+
+
+@dataclass(frozen=True)
 class AuditFactoryAttachmentTestCase:
     description: str
     model_header: str
