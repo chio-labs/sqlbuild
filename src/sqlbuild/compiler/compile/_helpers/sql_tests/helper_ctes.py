@@ -1,8 +1,9 @@
-"""Relation references in SQL-test helper CTEs: the models they read and what cannot resolve."""
+"""Relation references in the SQL-test helper CTEs a test reads, and what cannot resolve."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any
 
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
@@ -19,10 +20,11 @@ from sqlbuild.compiler.compile.constants import (
     TABLE_FN_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
-    CompileModelSqlTestCtes,
+    CompileModelInput,
     CompilerDiagnostic,
     CompileSqlReference,
     CompileSqlTestCte,
+    SqlTestCteGraph,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
@@ -51,30 +53,81 @@ _RELATION_REFERENCE_KINDS: frozenset[SqlReferenceKind] = frozenset(
         SqlReferenceKind.TABLE_FUNCTION,
     }
 )
+_MOCK_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
+    SqlReferenceKind.REF: REF_TEST_CTE_PREFIX,
+    SqlReferenceKind.SOURCE: SOURCE_TEST_CTE_PREFIX,
+    SqlReferenceKind.SEED: SEED_TEST_CTE_PREFIX,
+    SqlReferenceKind.DBT_REF: DBT_REF_TEST_CTE_PREFIX,
+    SqlReferenceKind.TABLE_FUNCTION: TABLE_FN_TEST_CTE_PREFIX,
+}
+_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"[A-Za-z_][\w$]*")
 
 
-def sql_test_helper_ctes(
-    authored_ctes: tuple[CompileSqlTestCte, ...],
-) -> tuple[CompileSqlTestCte, ...]:
-    """Return the authored CTEs that are helpers rather than mocks or fixtures."""
-
-    return tuple(cte for cte in authored_ctes if not cte.name.startswith(_MOCK_CTE_PREFIXES))
-
-
-def extract_helper_target_model_names(
+def sql_test_cte_graph(
     *,
-    helper_ctes: tuple[CompileSqlTestCte, ...],
+    authored_ctes: tuple[CompileSqlTestCte, ...],
+    reader_ctes: tuple[CompileSqlTestCte, ...],
+) -> SqlTestCteGraph:
+    """Return the authored CTEs each test CTE reads, ignoring names its own nested CTEs define."""
+
+    ctes: dict[str, CompileSqlTestCte] = {cte.name.casefold(): cte for cte in authored_ctes}
+    keys: frozenset[str] = frozenset(ctes)
+    reads: dict[str, tuple[str, ...]] = {}
+    parsed_reads: dict[str, tuple[str, ...]] = {}
+    for key, cte in ctes.items():
+        parsed: tuple[str, ...] | None = _parsed_reads(sql=cte.sql_body, keys=keys - {key})
+        parsed_reads[key] = parsed or ()
+        reads[key] = (
+            parsed if parsed is not None else _token_reads(sql=cte.sql_body, keys=keys - {key})
+        )
+    reader_reads: list[str] = []
+    for reader in reader_ctes:
+        parsed_reader: tuple[str, ...] | None = _parsed_reads(sql=reader.sql_body, keys=keys)
+        reader_reads.extend(
+            parsed_reader
+            if parsed_reader is not None
+            else _token_reads(sql=reader.sql_body, keys=keys)
+        )
+    return SqlTestCteGraph(
+        ctes=ctes,
+        reads=reads,
+        parsed_reads=parsed_reads,
+        reader_reads=tuple(dict.fromkeys(reader_reads)),
+    )
+
+
+def reachable_cte_keys(*, graph: SqlTestCteGraph, roots: Iterable[str]) -> tuple[str, ...]:
+    """Return the authored CTEs reachable from ``roots``, including the roots, in visit order."""
+
+    pending: list[str] = [root for root in roots if root in graph.ctes]
+    visited: list[str] = list(dict.fromkeys(pending))
+    while pending:
+        key: str = pending.pop(0)
+        for dependency in graph.reads.get(key, ()):
+            if dependency not in visited:
+                visited.append(dependency)
+                pending.append(dependency)
+    return tuple(visited)
+
+
+def helper_target_model_names(
+    *,
+    authored_ctes: tuple[CompileSqlTestCte, ...],
+    reader_ctes: tuple[CompileSqlTestCte, ...],
     mock_model_names: tuple[str, ...],
     syntax: SqlLexicalSyntax,
 ) -> tuple[str, ...]:
-    """Return unmocked models helper CTEs read with ``__ref()``, which the test must run."""
+    """Return unmocked models that helpers the test reads call ``__ref()`` on."""
 
+    graph: SqlTestCteGraph = sql_test_cte_graph(
+        authored_ctes=authored_ctes, reader_ctes=reader_ctes
+    )
     mocked: frozenset[str] = frozenset(mock_model_names)
     targets: list[str] = []
-    for cte in helper_ctes:
+    for key in _read_helper_keys(graph):
         targets.extend(
             reference.ref_name
-            for reference in _references(sql=cte.sql_body, syntax=syntax)
+            for reference in _references(sql=graph.ctes[key].sql_body, syntax=syntax)
             if reference.ref_kind == SqlReferenceKind.REF and reference.ref_name not in mocked
         )
     return tuple(dict.fromkeys(targets))
@@ -82,20 +135,26 @@ def extract_helper_target_model_names(
 
 def report_unresolvable_helper_ctes(
     *,
-    model_payload: CompileModelSqlTestCtes,
+    authored_ctes: tuple[CompileSqlTestCte, ...],
+    reader_ctes: tuple[CompileSqlTestCte, ...],
+    mock_model_names: tuple[str, ...],
     test_file: DiscoveredSqlTestFile,
     test_block: DiscoveredSqlTestBlock,
     known_model_names: set[str],
     syntax: SqlLexicalSyntax,
 ) -> bool:
-    """Report helper CTEs the test query cannot place or resolve; return whether any was found."""
+    """Report read helpers with unknown models or read cycles; return whether any was found."""
 
-    helper_ctes: tuple[CompileSqlTestCte, ...] = sql_test_helper_ctes(model_payload.authored_ctes)
-    if not helper_ctes:
+    graph: SqlTestCteGraph = sql_test_cte_graph(
+        authored_ctes=authored_ctes, reader_ctes=reader_ctes
+    )
+    read_helpers: tuple[str, ...] = _read_helper_keys(graph)
+    if not read_helpers:
         return False
     reporter: _HelperDiagnostics = _HelperDiagnostics(test_file=test_file, test_block=test_block)
-    mocked: frozenset[str] = frozenset(model_payload.mock_model_names)
-    for cte in helper_ctes:
+    mocked: frozenset[str] = frozenset(mock_model_names)
+    for key in read_helpers:
+        cte: CompileSqlTestCte = graph.ctes[key]
         for reference in _references(sql=cte.sql_body, syntax=syntax):
             if (
                 reference.ref_kind == SqlReferenceKind.REF
@@ -114,35 +173,238 @@ def report_unresolvable_helper_ctes(
                         f"or remove the reference from helper CTE '{cte.name}'."
                     ),
                 )
-    dependencies: dict[str, tuple[str, ...]] = _authored_cte_dependencies(
-        authored_ctes=model_payload.authored_ctes
+    cycle: tuple[str, ...] | None = _first_cycle(
+        graph=graph, keys=reachable_cte_keys(graph=graph, roots=graph.reader_reads)
     )
-    names_by_key: dict[str, str] = {
-        cte.name.casefold(): cte.name for cte in model_payload.authored_ctes
-    }
-    cycle: tuple[str, ...] | None = _first_cycle(dependencies)
     if cycle is not None:
-        path: str = " -> ".join(f"'{names_by_key[key]}'" for key in cycle)
+        names: tuple[str, ...] = tuple(graph.ctes[key].name for key in cycle)
+        path: str = " -> ".join(f"'{name}'" for name in names)
         reporter.report(
-            cte_name=names_by_key[cycle[0]],
+            cte_name=names[0],
             call=None,
             message=(
-                f"SQL test CTE '{names_by_key[cycle[0]]}' reads itself through {path}, so the "
-                "test query cannot define its CTEs in dependency order"
+                f"SQL test CTE '{names[0]}' reads itself through {path}, so the test query "
+                "cannot define its CTEs in dependency order"
             ),
             help=(
                 "Break the cycle by moving the shared rows into a helper CTE that reads neither, "
                 "for example shared_rows AS (SELECT ...), and read shared_rows from both CTEs."
             ),
         )
-    _report_mocks_reading_references(
-        reporter=reporter,
-        model_payload=model_payload,
-        helper_ctes=helper_ctes,
-        dependencies=dependencies,
-        syntax=syntax,
-    )
     return reporter.reported
+
+
+def report_mocks_reading_referencing_helpers(
+    *,
+    authored_ctes: tuple[CompileSqlTestCte, ...],
+    reader_ctes: tuple[CompileSqlTestCte, ...],
+    model_inputs: tuple[CompileModelInput, ...],
+    target_model_names: tuple[str, ...],
+    mock_model_names: tuple[str, ...],
+    test_file: DiscoveredSqlTestFile,
+    test_block: DiscoveredSqlTestBlock,
+    syntax: SqlLexicalSyntax,
+) -> None:
+    """Report mocks the test reads that read a helper calling a reference, which cannot resolve."""
+
+    referencing: dict[str, CompileSqlReference] = {}
+    for cte in authored_ctes:
+        if cte.name.startswith(_MOCK_CTE_PREFIXES):
+            continue
+        reference: CompileSqlReference | None = next(
+            (
+                reference
+                for reference in _references(sql=cte.sql_body, syntax=syntax)
+                if reference.ref_kind in _RELATION_REFERENCE_KINDS
+            ),
+            None,
+        )
+        if reference is not None:
+            referencing[cte.name.casefold()] = reference
+    if not referencing:
+        return
+    graph: SqlTestCteGraph = sql_test_cte_graph(
+        authored_ctes=authored_ctes, reader_ctes=reader_ctes
+    )
+    used_mocks: tuple[str, ...] = _used_mock_keys(
+        graph=graph,
+        model_references={
+            model_input.model_file.file_path.stem: model_input.references
+            for model_input in model_inputs
+        },
+        target_model_names=target_model_names,
+        mocked=frozenset(mock_model_names),
+    )
+    reporter: _HelperDiagnostics = _HelperDiagnostics(test_file=test_file, test_block=test_block)
+    for mock_key in used_mocks:
+        helper_key: str | None = next(
+            (
+                key
+                for key in reachable_cte_keys(graph=graph, roots=graph.reads.get(mock_key, ()))
+                if key in referencing
+            ),
+            None,
+        )
+        if helper_key is None:
+            continue
+        mock_name: str = graph.ctes[mock_key].name
+        helper_name: str = graph.ctes[helper_key].name
+        call: str = _reference_call(referencing[helper_key])
+        reporter.report(
+            cte_name=helper_name,
+            call=call,
+            message=(
+                f"SQL test mock '{mock_name}' reads helper CTE '{helper_name}', which calls "
+                f"{call}; mocks and fixtures are defined before the models the test runs, so "
+                "the helper cannot be resolved for them"
+            ),
+            help=_mock_reference_help(
+                mock_name=mock_name, call=call, reference=referencing[helper_key]
+            ),
+        )
+
+
+def _read_helper_keys(graph: SqlTestCteGraph) -> tuple[str, ...]:
+    return tuple(
+        key
+        for key in reachable_cte_keys(graph=graph, roots=graph.reader_reads)
+        if not graph.ctes[key].name.startswith(_MOCK_CTE_PREFIXES)
+    )
+
+
+def _used_mock_keys(
+    *,
+    graph: SqlTestCteGraph,
+    model_references: dict[str, tuple[CompileSqlReference, ...]],
+    target_model_names: tuple[str, ...],
+    mocked: frozenset[str],
+) -> tuple[str, ...]:
+    """Return mocks the test's readers or the models it runs read, in a stable order."""
+
+    used: list[str] = [
+        key
+        for key in reachable_cte_keys(graph=graph, roots=graph.reader_reads)
+        if graph.ctes[key].name.startswith(_MOCK_CTE_PREFIXES)
+    ]
+    pending: list[str] = [name for name in target_model_names if name not in mocked]
+    visited: set[str] = set(pending)
+    while pending:
+        model_name: str = pending.pop(0)
+        for reference in model_references.get(model_name, ()):
+            kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
+            for mock_key in _mock_keys(kind=kind, reference=reference):
+                if mock_key in graph.ctes and mock_key not in used:
+                    used.append(mock_key)
+            if (
+                kind is SqlReferenceKind.REF
+                and reference.ref_name not in mocked
+                and reference.ref_name not in visited
+            ):
+                visited.add(reference.ref_name)
+                pending.append(reference.ref_name)
+    return tuple(used)
+
+
+def _mock_keys(*, kind: SqlReferenceKind, reference: CompileSqlReference) -> tuple[str, ...]:
+    prefix: str | None = _MOCK_PREFIX_BY_KIND.get(kind)
+    if prefix is None:
+        return ()
+    names: list[str] = [reference.ref_name]
+    if reference.ref_package is not None:
+        names.append(f"{reference.ref_package}__{reference.ref_name}")
+    return tuple(f"{prefix}{name}".casefold() for name in names)
+
+
+def _mock_reference_help(*, mock_name: str, call: str, reference: CompileSqlReference) -> str:
+    kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
+    if kind is not SqlReferenceKind.TABLE_FUNCTION and reference.ref_package is None:
+        mock_cte: str = f"{kind.fixture_cte_prefix}{reference.ref_name}"
+        return (
+            f"Read a mock by its CTE name instead, for example FROM {mock_cte} rather than "
+            f"FROM {call}, defining {mock_cte} AS (SELECT ...) if the test does not mock it, "
+            f"or write the rows of '{mock_name}' directly."
+        )
+    return f"Write the rows of '{mock_name}' directly, for example {mock_name} AS (SELECT ...)."
+
+
+def _reference_call(reference: CompileSqlReference) -> str:
+    kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
+    if kind is SqlReferenceKind.DBT_REF and reference.ref_package is not None:
+        return kind.example_call(reference.ref_package, reference.ref_name, quote='"')
+    return kind.example_call(reference.ref_name, quote='"')
+
+
+def _references(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[CompileSqlReference, ...]:
+    return scan_sql_reference_calls(sql=sql, syntax=syntax).references
+
+
+def _parsed_reads(*, sql: str, keys: frozenset[str]) -> tuple[str, ...] | None:
+    """Return unqualified table reads of ``keys`` not shadowed by a nested CTE, or None."""
+
+    folded: str = sql.casefold()
+    if not any(key in folded for key in keys):
+        return ()
+    polyglot_module: Any = import_polyglot_sql()
+    try:
+        parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
+    except polyglot_module.PolyglotError:
+        return None
+    nested: frozenset[str] = _defined_cte_keys(parsed.to_dict())
+    reads: list[str] = []
+    for table in parsed.find_all("table"):
+        if table.arg("schema") is not None or table.arg("catalog") is not None:
+            continue
+        key: str = str(getattr(table, "name", "") or "").casefold()
+        if key in keys and key not in nested and key not in reads:
+            reads.append(key)
+    return tuple(reads)
+
+
+def _defined_cte_keys(tree: Any) -> frozenset[str]:
+    """Return the case-folded names of every CTE a parsed query defines, at any depth."""
+
+    keys: set[str] = set()
+    pending: list[Any] = [tree]
+    while pending:
+        value: Any = pending.pop()
+        if isinstance(value, list):
+            pending.extend(value)
+            continue
+        if not isinstance(value, dict):
+            continue
+        ctes: Any = value.get("ctes")
+        for cte in ctes if isinstance(ctes, list) else ():
+            alias: Any = cte.get("alias") if isinstance(cte, dict) else None
+            name: Any = alias.get("name") if isinstance(alias, dict) else None
+            if isinstance(name, str):
+                keys.add(name.casefold())
+        pending.extend(value.values())
+    return frozenset(keys)
+
+
+def _token_reads(*, sql: str, keys: frozenset[str]) -> tuple[str, ...]:
+    tokens: tuple[str, ...] = tuple(
+        dict.fromkeys(match.casefold() for match in _IDENTIFIER_PATTERN.findall(sql))
+    )
+    return tuple(token for token in tokens if token in keys)
+
+
+def _first_cycle(*, graph: SqlTestCteGraph, keys: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Return the first parsed read cycle among ``keys``, closed on its first CTE."""
+
+    allowed: frozenset[str] = frozenset(keys)
+    for origin in keys:
+        pending: list[tuple[str, ...]] = [(origin,)]
+        visited: set[str] = set()
+        while pending:
+            path: tuple[str, ...] = pending.pop(0)
+            for dependency in graph.parsed_reads.get(path[-1], ()):
+                if dependency == origin:
+                    return (*path, origin)
+                if dependency in allowed and dependency not in visited:
+                    visited.add(dependency)
+                    pending.append((*path, dependency))
+    return None
 
 
 class _HelperDiagnostics:
@@ -194,139 +456,3 @@ class _HelperDiagnostics:
         return reference_call_location(
             path=self._test_file.relative_path, text=contents, start=start, call=text
         )
-
-
-def _report_mocks_reading_references(
-    *,
-    reporter: _HelperDiagnostics,
-    model_payload: CompileModelSqlTestCtes,
-    helper_ctes: tuple[CompileSqlTestCte, ...],
-    dependencies: dict[str, tuple[str, ...]],
-    syntax: SqlLexicalSyntax,
-) -> None:
-    referencing: dict[str, tuple[CompileSqlTestCte, CompileSqlReference]] = {}
-    for cte in helper_ctes:
-        reference: CompileSqlReference | None = next(
-            (
-                reference
-                for reference in _references(sql=cte.sql_body, syntax=syntax)
-                if reference.ref_kind in _RELATION_REFERENCE_KINDS
-            ),
-            None,
-        )
-        if reference is not None:
-            referencing[cte.name.casefold()] = (cte, reference)
-    if not referencing:
-        return
-    for mock in model_payload.authored_ctes:
-        if not mock.name.startswith(_MOCK_CTE_PREFIXES):
-            continue
-        helper_key: str | None = _first_reachable(
-            origin=mock.name.casefold(), targets=referencing, dependencies=dependencies
-        )
-        if helper_key is None:
-            continue
-        helper, reference = referencing[helper_key]
-        call: str = _reference_call(reference)
-        reporter.report(
-            cte_name=helper.name,
-            call=call,
-            message=(
-                f"SQL test mock '{mock.name}' reads helper CTE '{helper.name}', which calls "
-                f"{call}; mocks and fixtures are defined before the models the test runs, so "
-                "the helper cannot be resolved for them"
-            ),
-            help=_mock_reference_help(mock_name=mock.name, call=call, reference=reference),
-        )
-
-
-def _mock_reference_help(*, mock_name: str, call: str, reference: CompileSqlReference) -> str:
-    kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
-    if kind is not SqlReferenceKind.TABLE_FUNCTION and reference.ref_package is None:
-        mock_cte: str = f"{kind.fixture_cte_prefix}{reference.ref_name}"
-        return (
-            f"Read a mock by its CTE name instead, for example FROM {mock_cte} rather than "
-            f"FROM {call}, defining {mock_cte} AS (SELECT ...) if the test does not mock it, "
-            f"or write the rows of '{mock_name}' directly."
-        )
-    return f"Write the rows of '{mock_name}' directly, for example {mock_name} AS (SELECT ...)."
-
-
-def _reference_call(reference: CompileSqlReference) -> str:
-    kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
-    if kind is SqlReferenceKind.DBT_REF and reference.ref_package is not None:
-        return kind.example_call(reference.ref_package, reference.ref_name, quote='"')
-    return kind.example_call(reference.ref_name, quote='"')
-
-
-def _references(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[CompileSqlReference, ...]:
-    return scan_sql_reference_calls(sql=sql, syntax=syntax).references
-
-
-def _authored_cte_dependencies(
-    *, authored_ctes: tuple[CompileSqlTestCte, ...]
-) -> dict[str, tuple[str, ...]]:
-    """Return each authored CTE's unqualified table reads of other authored CTEs."""
-
-    keys: frozenset[str] = frozenset(cte.name.casefold() for cte in authored_ctes)
-    dependencies: dict[str, tuple[str, ...]] = {}
-    for cte in authored_ctes:
-        key: str = cte.name.casefold()
-        references: tuple[str, ...] = _table_reference_keys(sql=cte.sql_body, keys=keys)
-        dependencies[key] = tuple(reference for reference in references if reference != key)
-    return dependencies
-
-
-def _table_reference_keys(*, sql: str, keys: frozenset[str]) -> tuple[str, ...]:
-    folded: str = sql.casefold()
-    if not any(key in folded for key in keys):
-        return ()
-    polyglot_module: Any = import_polyglot_sql()
-    try:
-        parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
-    except polyglot_module.PolyglotError:
-        return ()
-    references: list[str] = []
-    for table in parsed.find_all("table"):
-        if table.arg("schema") is not None or table.arg("catalog") is not None:
-            continue
-        key: str = str(getattr(table, "name", "") or "").casefold()
-        if key in keys and key not in references:
-            references.append(key)
-    return tuple(references)
-
-
-def _first_cycle(dependencies: dict[str, tuple[str, ...]]) -> tuple[str, ...] | None:
-    """Return the first dependency cycle in authored order, closed on its first node."""
-
-    for origin in dependencies:
-        pending: list[tuple[str, ...]] = [(origin,)]
-        visited: set[str] = set()
-        while pending:
-            path: tuple[str, ...] = pending.pop(0)
-            for dependency in dependencies.get(path[-1], ()):
-                if dependency == origin:
-                    return (*path, origin)
-                if dependency not in visited:
-                    visited.add(dependency)
-                    pending.append((*path, dependency))
-    return None
-
-
-def _first_reachable(
-    *,
-    origin: str,
-    targets: dict[str, tuple[CompileSqlTestCte, CompileSqlReference]],
-    dependencies: dict[str, tuple[str, ...]],
-) -> str | None:
-    pending: list[str] = list(dependencies.get(origin, ()))
-    visited: set[str] = set(pending)
-    while pending:
-        key: str = pending.pop(0)
-        if key in targets:
-            return key
-        for dependency in dependencies.get(key, ()):
-            if dependency not in visited:
-                visited.add(dependency)
-                pending.append(dependency)
-    return None

@@ -125,7 +125,9 @@ pub(crate) struct HelperReferenceTestCase {
     pub(crate) helpers: &'static [(&'static str, &'static str)],
     pub(crate) expected: &'static [(&'static str, &'static str)],
     pub(crate) assertions: &'static [(&'static str, &'static str)],
+    pub(crate) helper_targets: &'static [&'static str],
     pub(crate) expected_chain: &'static [&'static str],
     pub(crate) expected_order: &'static [(&'static str, &'static str)],
     pub(crate) expected_fragments: &'static [&'static str],
+    pub(crate) expected_absent_fragments: &'static [&'static str],
 }

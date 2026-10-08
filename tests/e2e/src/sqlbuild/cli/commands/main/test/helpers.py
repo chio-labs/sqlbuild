@@ -1765,6 +1765,31 @@ _HELPER_REFERENCE_TESTS: dict[str, str] = {
         "  SELECT item_id FROM joined WHERE amount_doubled <> amount * 2\n"
         ")\n"
     ),
+    "mocked_model_read_by_helper_and_assertion": (
+        "__ref__items AS (\n  SELECT item_id, 10 AS amount FROM base_ids\n),\n"
+        "base_ids AS (SELECT 1 AS item_id),\n"
+        'doubled AS (SELECT t.item_id, t.amount_doubled FROM __ref("item_totals") AS t),\n'
+        "__assert__doubles_amount AS (\n"
+        '  SELECT item_id FROM doubled JOIN __ref("items") USING (item_id)\n'
+        "  WHERE amount_doubled <> 20\n"
+        ")\n"
+    ),
+    "unread_helpers_and_mocks": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        'archived_rows AS (SELECT item_id FROM __ref("item_archive")),\n'
+        'other_rows AS (SELECT item_id, amount FROM __ref("item_extras")),\n'
+        "__ref__item_extras AS (SELECT item_id, amount FROM other_rows),\n"
+        "__expected__item_totals AS (\n  SELECT 1 AS item_id, 20 AS amount_doubled\n)\n"
+    ),
+    "nested_cte_shadows_helper": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "expected_rows AS (\n"
+        "  WITH doubled AS (SELECT 1 AS item_id, 20 AS amount_doubled)\n"
+        "  SELECT item_id, amount_doubled FROM doubled\n"
+        "),\n"
+        "doubled AS (SELECT item_id, amount_doubled FROM expected_rows),\n"
+        "__expected__item_totals AS (\n  SELECT item_id, amount_doubled FROM doubled\n)\n"
+    ),
     "helper_cycle": (
         "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
         "first_rows AS (SELECT item_id FROM second_rows),\n"
@@ -1790,7 +1815,9 @@ _HELPER_REFERENCE_TESTS: dict[str, str] = {
 }
 
 
-def build_helper_reference_project_files(*, tests: tuple[str, ...]) -> dict[str, str]:
+def build_helper_reference_project_files(
+    *, tests: tuple[str, ...], sql_analysis: bool = True
+) -> dict[str, str]:
     """Build an items project whose SQL tests read models through helper CTEs."""
 
     files: dict[str, str] = {
@@ -1798,7 +1825,13 @@ def build_helper_reference_project_files(*, tests: tuple[str, ...]) -> dict[str,
             'name = "helper_reference_demo"\n'
             'adapter = "duckdb"\n\n'
             "[connection]\n"
-            'database = "helper_reference_demo.duckdb"\n'
+            'database = "helper_reference_demo.duckdb"\n\n'
+            "[settings]\n"
+            f"sql_analysis = {str(sql_analysis).lower()}\n"
+        ),
+        "models/item_extras.sql": (
+            "MODEL (description 'Extra item amounts', materialized table);\n\n"
+            'SELECT item_id, amount FROM __ref("items")\n'
         ),
         "models/items.sql": (
             "MODEL (description 'Base items', materialized table);\n\n"

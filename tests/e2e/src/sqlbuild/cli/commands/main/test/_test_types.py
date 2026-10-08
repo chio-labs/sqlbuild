@@ -331,7 +331,10 @@ class HelperReferenceE2ETestCase:
     tests: tuple[str, ...]
     command: tuple[str, ...]
     engine: str
+    sql_analysis: bool
     expected_output_fragments: tuple[str, ...]
+    expected_compiled_fragments: tuple[str, ...]
+    expected_absent_compiled_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -343,5 +346,16 @@ class HelperReferenceErrorE2ETestCase:
     engine: str
     expected_message: str
     expected_line: int
+    expected_code: str
     expected_column: int
     expected_help_fragment: str
+
+
+@dataclass(frozen=True)
+class HelperRedefinitionE2ETestCase:
+    """Test case for a nested CTE that redefines a helper CTE's name."""
+
+    description: str
+    engine: str
+    expected_output_fragments: tuple[str, ...]
+    expected_absent_output_fragments: tuple[str, ...]

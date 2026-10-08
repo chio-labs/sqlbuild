@@ -23,6 +23,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             helpers: &[HELPER_READS_MODEL],
             expected: &[],
             assertions: &[ASSERT_DOUBLED],
+            helper_targets: &["orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__source__raw_orders", "__ref__stg_orders"),
@@ -33,6 +34,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             expected_fragments: &[
                 "__helper__doubled AS (SELECT order_id, amount_doubled FROM __ref__orders)",
             ],
+            expected_absent_fragments: &[],
         },
         HelperReferenceTestCase {
             description: "helper inlined without sql analysis reads the model CTE",
@@ -40,6 +42,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             helpers: &[HELPER_READS_MODEL],
             expected: &[],
             assertions: &[ASSERT_DOUBLED],
+            helper_targets: &["orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__source__raw_orders", "__ref__orders"),
@@ -48,6 +51,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             expected_fragments: &[
                 "WITH doubled AS (SELECT order_id, amount_doubled FROM __ref__orders)",
             ],
+            expected_absent_fragments: &[],
         },
         HelperReferenceTestCase {
             description: "helper reading another helper, a model and a seed is ordered after all three",
@@ -69,6 +73,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "__assert__has_region",
                 "SELECT order_id FROM with_region WHERE region_name IS NULL",
             )],
+            helper_targets: &["stg_orders", "orders"],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__ref__orders", "__helper__base"),
@@ -81,6 +86,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "FROM __helper__base AS b JOIN __ref__stg_orders AS s USING (order_id) \
                  JOIN __seed__regions AS r USING (region_id)",
             ],
+            expected_absent_fragments: &[],
         },
         HelperReferenceTestCase {
             description: "helper read by expected rows resolves sources and seeds to their mocks",
@@ -95,6 +101,7 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
                 "SELECT order_id, amount_doubled FROM expected_rows",
             )],
             assertions: &[],
+            helper_targets: &[],
             expected_chain: &["stg_orders", "orders"],
             expected_order: &[
                 ("__source__raw_orders", "__helper__expected_rows"),
@@ -104,6 +111,69 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             expected_fragments: &[
                 "FROM __source__raw_orders AS s JOIN __seed__regions AS r USING (region_id)",
             ],
+            expected_absent_fragments: &[],
+        },
+        HelperReferenceTestCase {
+            description: "inlined helper read by expected rows reads the model CTE",
+            sql_analysis_enabled: false,
+            helpers: &[HELPER_READS_MODEL],
+            expected: &[(
+                "__expected__orders",
+                "SELECT order_id, amount_doubled FROM doubled",
+            )],
+            assertions: &[],
+            helper_targets: &["orders"],
+            expected_chain: &["stg_orders", "orders"],
+            expected_order: &[("__ref__orders", "__expected__orders")],
+            expected_fragments: &[
+                "__expected__orders AS (WITH doubled AS (SELECT order_id, amount_doubled FROM __ref__orders)",
+            ],
+            expected_absent_fragments: &["__helper__"],
+        },
+        HelperReferenceTestCase {
+            description: "helper and assertion reading a mocked model through different paths share one mock CTE",
+            sql_analysis_enabled: true,
+            helpers: &[
+                (
+                    "__ref__stg_orders",
+                    "SELECT order_id, 10 AS amount FROM base_ids",
+                ),
+                ("base_ids", "SELECT 1 AS order_id"),
+                (
+                    "doubled",
+                    "SELECT o.order_id, o.amount_doubled FROM __ref(\"orders\") AS o",
+                ),
+            ],
+            expected: &[],
+            assertions: &[(
+                "__assert__doubles_amount",
+                "SELECT order_id FROM doubled JOIN __ref(\"stg_orders\") USING (order_id) \
+                 WHERE amount_doubled <> 20",
+            )],
+            helper_targets: &["orders"],
+            expected_chain: &["orders", "stg_orders"],
+            expected_order: &[
+                ("__helper__base_ids", "__ref__orders"),
+                ("__ref__orders", "__helper__doubled"),
+                ("__helper__doubled", "__assert__doubles_amount"),
+            ],
+            expected_fragments: &[],
+            expected_absent_fragments: &[],
+        },
+        HelperReferenceTestCase {
+            description: "helper nothing reads is neither resolved nor emitted",
+            sql_analysis_enabled: true,
+            helpers: &[("unused_rows", "SELECT order_id FROM __ref(\"orders\")")],
+            expected: &[(
+                "__expected__stg_orders",
+                "SELECT 1 AS order_id, 10 AS amount, 7 AS region_id",
+            )],
+            assertions: &[],
+            helper_targets: &[],
+            expected_chain: &["stg_orders"],
+            expected_order: &[("__source__raw_orders", "__expected__stg_orders")],
+            expected_fragments: &[],
+            expected_absent_fragments: &["unused_rows", "__ref__orders"],
         },
     ];
     for test_case in test_cases {
@@ -127,6 +197,13 @@ fn given_helper_cte_references_when_planning_then_references_resolve_in_dependen
             assert!(
                 defined_before(sql, first, second),
                 "{}: {first} before {second}: {sql}",
+                test_case.description
+            );
+        }
+        for fragment in test_case.expected_absent_fragments {
+            assert!(
+                !sql.contains(fragment),
+                "{}: {fragment}: {sql}",
                 test_case.description
             );
         }

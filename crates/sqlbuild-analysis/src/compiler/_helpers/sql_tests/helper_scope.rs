@@ -24,6 +24,8 @@ use crate::constants::{
 pub(crate) struct HelperScope {
     pub(crate) ctes: Vec<(String, String)>,
     pub(crate) reached_mocks: HashSet<String>,
+    /// Mock and model CTEs resolved helpers read, which defer to the reader's own copy.
+    pub(crate) generated: HashSet<String>,
 }
 
 /// One mock CTE other test CTEs can read by its generated name.
@@ -292,12 +294,48 @@ impl ScopeGraph {
         order.ordered
     }
 
-    /// Helpers whose SQL, as placed in the test query, calls a reference such as `__ref()`.
-    pub(crate) fn referencing_helpers(&self, patterns: &SqlTestPatterns) -> Vec<(usize, String)> {
+    /// Helpers the test's expected rows and assertions read, except those a mock it uses reads.
+    pub(crate) fn read_helpers(
+        &self,
+        readers: &[&str],
+        used_mocks: &HashSet<String>,
+        patterns: &SqlTestPatterns,
+    ) -> HashSet<usize> {
+        let helpers = |nodes: Vec<ScopeNode>| -> HashSet<usize> {
+            nodes
+                .into_iter()
+                .filter_map(|node| match node {
+                    ScopeNode::Helper(index) => Some(index),
+                    ScopeNode::Mock(_) => None,
+                })
+                .collect()
+        };
+        let mut read: HashSet<usize> = HashSet::new();
+        for sql in readers {
+            read.extend(helpers(
+                self.closure(&identifier_tokens(sql, patterns), true),
+            ));
+        }
+        for mock in &self.mocks {
+            if used_mocks.contains(&mock.mock_name) {
+                for index in helpers(self.closure(&mock.tokens, true)) {
+                    read.remove(&index);
+                }
+            }
+        }
+        read
+    }
+
+    /// Read helpers whose SQL, as placed in the test query, calls a reference such as `__ref()`.
+    pub(crate) fn referencing_helpers(
+        &self,
+        read: &HashSet<usize>,
+        patterns: &SqlTestPatterns,
+    ) -> Vec<(usize, String)> {
         self.helpers
             .iter()
             .enumerate()
-            .filter(|(_, helper)| helper.resolved.is_none())
+            .filter(|(index, helper)| helper.resolved.is_none() && read.contains(index))
             .filter_map(|(index, _)| {
                 let sql = self.placed_helper_sql(index);
                 (patterns.test_reference.is_match(sql) || patterns.udf.is_match(sql))
@@ -388,6 +426,7 @@ impl ScopeGraph {
         let mut scope = HelperScope {
             ctes: Vec::new(),
             reached_mocks: HashSet::new(),
+            generated: HashSet::new(),
         };
         for node in nodes {
             if let ScopeNode::Mock(index) = node {
@@ -401,6 +440,12 @@ impl ScopeGraph {
                 scope
                     .reached_mocks
                     .extend(resolved.reached_mocks.iter().cloned());
+                scope.generated.extend(
+                    resolved
+                        .lifted_ctes
+                        .iter()
+                        .map(|(name, _)| name.to_ascii_lowercase()),
+                );
                 scope.ctes = with_unique_ctes(
                     std::mem::take(&mut scope.ctes),
                     resolved.lifted_ctes.iter().cloned(),
@@ -487,6 +532,7 @@ pub(crate) fn helper_scope_ctes(
         return Ok(HelperScope {
             ctes: Vec::new(),
             reached_mocks: HashSet::new(),
+            generated: HashSet::new(),
         });
     }
     let nodes = graph.closure(&identifier_tokens(sql, patterns), true);
@@ -503,14 +549,31 @@ pub(crate) fn helper_scope_ctes(
     Ok(graph.collect_scope(nodes))
 }
 
-/// Append scoped CTEs after a step's generated CTEs, keeping one definition per name.
+/// Merge scoped CTEs into a step's CTEs; relations resolved helpers read come first and win.
 pub(crate) fn merged_scoped_ctes(
-    mut lifted: Vec<(String, String)>,
-    scoped: Vec<(String, String)>,
+    lifted: Vec<(String, String)>,
+    scoped: HelperScope,
     file_label: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    for (name, sql) in scoped {
-        match lifted
+    type Ctes = Vec<(String, String)>;
+    let (generated, authored): (Ctes, Ctes) = scoped
+        .ctes
+        .into_iter()
+        .partition(|(name, _)| scoped.generated.contains(&name.to_ascii_lowercase()));
+    let mut merged: Vec<(String, String)> = lifted;
+    if !generated.is_empty() {
+        let own = std::mem::replace(&mut merged, generated);
+        for (name, sql) in own {
+            if !merged
+                .iter()
+                .any(|(existing, _)| existing.eq_ignore_ascii_case(&name))
+            {
+                merged.push((name, sql));
+            }
+        }
+    }
+    for (name, sql) in authored {
+        match merged
             .iter()
             .find(|(existing, _)| existing.eq_ignore_ascii_case(&name))
         {
@@ -520,10 +583,10 @@ pub(crate) fn merged_scoped_ctes(
                     "SQL test '{file_label}' defines CTE '{name}', which conflicts with the generated CTE"
                 )));
             }
-            None => lifted.push((name, sql)),
+            None => merged.push((name, sql)),
         }
     }
-    Ok(lifted)
+    Ok(merged)
 }
 
 /// Names the comparison renderer generates, which a scoped helper CTE must not shadow.

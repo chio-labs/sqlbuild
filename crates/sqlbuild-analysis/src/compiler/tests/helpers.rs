@@ -1833,7 +1833,8 @@ fn helper_reference_test(case: &HelperReferenceTestCase) -> Value {
                 .iter()
                 .map(|(name, _)| name.trim_start_matches("__expected__"))
                 .collect::<Vec<_>>(),
-            "assertionCtes": named(case.assertions)
+            "assertionCtes": named(case.assertions),
+            "helperTargetModelNames": case.helper_targets
         }
     })
 }

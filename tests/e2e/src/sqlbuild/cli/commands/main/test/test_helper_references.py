@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
+    HelperRedefinitionE2ETestCase,
     HelperReferenceE2ETestCase,
     HelperReferenceErrorE2ETestCase,
 )
@@ -19,7 +20,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
-_HELPER_ERROR_CODE: str = "P013"
 
 
 @pytest.mark.parametrize(
@@ -30,76 +30,156 @@ _HELPER_ERROR_CODE: str = "P013"
             tests=("helper_and_assertion_read_model",),
             command=("--no-color", "test"),
             engine="python",
+            sql_analysis=True,
             expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1", "assertion doubles_amount"),
+            expected_compiled_fragments=("\n__helper__doubled AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
         ),
         HelperReferenceE2ETestCase(
             description="only a helper reads the model on the python engine",
             tests=("only_helper_reads_model",),
             command=("--no-color", "test", "--select", "item_totals"),
             engine="python",
-            expected_output_fragments=(
-                "1 selected",
-                "PASS=1  FAIL=0  TOTAL=1",
-                "assertion doubles_amount",
-            ),
+            sql_analysis=True,
+            expected_output_fragments=("1 selected", "PASS=1  FAIL=0  TOTAL=1"),
+            expected_compiled_fragments=("\n__ref__item_totals AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
         ),
         HelperReferenceE2ETestCase(
             description="helper reads a helper and a mock on the python engine",
             tests=("helper_reads_helper_and_mock",),
             command=("--no-color", "test"),
             engine="python",
+            sql_analysis=True,
             expected_output_fragments=(
                 "PASS=1  FAIL=0  TOTAL=1",
                 "assertion doubles_mocked_amount",
             ),
+            expected_compiled_fragments=("\n__helper__joined AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
         ),
         HelperReferenceE2ETestCase(
-            description="helper reads a helper and a mock without sql analysis on the python engine",
+            description="inlined helpers read by expected rows and assertions on the python engine",
             tests=("helper_reads_helper_and_mock",),
-            command=("--no-color", "test", "--no-sql-analysis"),
+            command=("--no-color", "test"),
             engine="python",
+            sql_analysis=False,
             expected_output_fragments=(
                 "PASS=1  FAIL=0  TOTAL=1",
                 "assertion doubles_mocked_amount",
             ),
+            expected_compiled_fragments=(
+                "(WITH doubled AS (SELECT item_id, amount_doubled FROM __ref__item_totals)",
+            ),
+            expected_absent_compiled_fragments=("__ref(", "__helper__"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="helper and assertion read a mocked model on the python engine",
+            tests=("mocked_model_read_by_helper_and_assertion",),
+            command=("--no-color", "test"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1", "assertion doubles_amount"),
+            expected_compiled_fragments=("\n__helper__doubled AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helpers and mocks are ignored on the python engine",
+            tests=("unread_helpers_and_mocks",),
+            command=("--no-color", "test"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("archived_rows", "other_rows", "__ref("),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helpers add no tested models on the python engine",
+            tests=("unread_helpers_and_mocks",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="python",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("archived_rows", "other_rows"),
         ),
         HelperReferenceE2ETestCase(
             description="helper and assertion read the model on the native engine",
             tests=("helper_and_assertion_read_model",),
             command=("--no-color", "test"),
             engine="native",
+            sql_analysis=True,
             expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1", "assertion doubles_amount"),
+            expected_compiled_fragments=("\n__helper__doubled AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
         ),
         HelperReferenceE2ETestCase(
             description="only a helper reads the model on the native engine",
             tests=("only_helper_reads_model",),
             command=("--no-color", "test", "--select", "item_totals"),
             engine="native",
-            expected_output_fragments=(
-                "1 selected",
-                "PASS=1  FAIL=0  TOTAL=1",
-                "assertion doubles_amount",
-            ),
+            sql_analysis=True,
+            expected_output_fragments=("1 selected", "PASS=1  FAIL=0  TOTAL=1"),
+            expected_compiled_fragments=("\n__ref__item_totals AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
         ),
         HelperReferenceE2ETestCase(
             description="helper reads a helper and a mock on the native engine",
             tests=("helper_reads_helper_and_mock",),
             command=("--no-color", "test"),
             engine="native",
+            sql_analysis=True,
             expected_output_fragments=(
                 "PASS=1  FAIL=0  TOTAL=1",
                 "assertion doubles_mocked_amount",
             ),
+            expected_compiled_fragments=("\n__helper__joined AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
         ),
         HelperReferenceE2ETestCase(
-            description="helper reads a helper and a mock without sql analysis on the native engine",
+            description="inlined helpers read by expected rows and assertions on the native engine",
             tests=("helper_reads_helper_and_mock",),
-            command=("--no-color", "test", "--no-sql-analysis"),
+            command=("--no-color", "test"),
             engine="native",
+            sql_analysis=False,
             expected_output_fragments=(
                 "PASS=1  FAIL=0  TOTAL=1",
                 "assertion doubles_mocked_amount",
             ),
+            expected_compiled_fragments=(
+                "(WITH doubled AS (SELECT item_id, amount_doubled FROM __ref__item_totals)",
+            ),
+            expected_absent_compiled_fragments=("__ref(", "__helper__"),
+        ),
+        HelperReferenceE2ETestCase(
+            description="helper and assertion read a mocked model on the native engine",
+            tests=("mocked_model_read_by_helper_and_assertion",),
+            command=("--no-color", "test"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1", "assertion doubles_amount"),
+            expected_compiled_fragments=("\n__helper__doubled AS (",),
+            expected_absent_compiled_fragments=("__ref(",),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helpers and mocks are ignored on the native engine",
+            tests=("unread_helpers_and_mocks",),
+            command=("--no-color", "test"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("archived_rows", "other_rows", "__ref("),
+        ),
+        HelperReferenceE2ETestCase(
+            description="unread helpers add no tested models on the native engine",
+            tests=("unread_helpers_and_mocks",),
+            command=("--no-color", "test", "--select", "item_extras"),
+            engine="native",
+            sql_analysis=True,
+            expected_output_fragments=("0 selected",),
+            expected_compiled_fragments=(),
+            expected_absent_compiled_fragments=("archived_rows", "other_rows"),
         ),
     ),
     ids=lambda case: case.description,
@@ -110,7 +190,9 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="helper_reference_project",
-        repo_files=build_helper_reference_project_files(tests=test_case.tests),
+        repo_files=build_helper_reference_project_files(
+            tests=test_case.tests, sql_analysis=test_case.sql_analysis
+        ),
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -118,11 +200,25 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
         project_dir=project_dir,
         env={_ENGINE_ENV_VAR: test_case.engine},
     )
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"),
+        project_dir=project_dir,
+        env={_ENGINE_ENV_VAR: test_case.engine},
+    )
 
     output: str = result.stdout + result.stderr
     assert result.returncode == 0, output
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     for fragment in test_case.expected_output_fragments:
         assert fragment in output, output
+    compiled_sql: str = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((project_dir / "target" / "compiled" / "tests").rglob("*.sql"))
+    )
+    for fragment in test_case.expected_compiled_fragments:
+        assert fragment in compiled_sql, compiled_sql
+    for fragment in test_case.expected_absent_compiled_fragments:
+        assert fragment not in compiled_sql, compiled_sql
 
 
 @pytest.mark.parametrize(
@@ -132,6 +228,7 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             description="helpers reading each other on the python engine",
             test_name="helper_cycle",
             engine="python",
+            expected_code="P013",
             expected_message=(
                 "SQL test CTE 'first_rows' reads itself through 'first_rows' -> "
                 "'second_rows' -> 'first_rows', so the test query cannot define its CTEs in "
@@ -145,6 +242,7 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             description="helper reading an unknown model on the python engine",
             test_name="helper_reads_unknown_model",
             engine="python",
+            expected_code="P013",
             expected_message=(
                 "SQL test helper CTE 'missing_rows' references unknown model 'item_archive'"
             ),
@@ -156,6 +254,7 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             description="mock reading a helper that reads a model on the python engine",
             test_name="mock_reads_referencing_helper",
             engine="python",
+            expected_code="P013",
             expected_message=(
                 "SQL test mock '__ref__items' reads helper CTE 'base_rows', which calls "
                 '__ref("item_totals"); mocks and fixtures are defined before the models the '
@@ -169,6 +268,7 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             description="helpers reading each other on the native engine",
             test_name="helper_cycle",
             engine="native",
+            expected_code="P013",
             expected_message=(
                 "SQL test CTE 'first_rows' reads itself through 'first_rows' -> "
                 "'second_rows' -> 'first_rows', so the test query cannot define its CTEs in "
@@ -182,6 +282,7 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             description="helper reading an unknown model on the native engine",
             test_name="helper_reads_unknown_model",
             engine="native",
+            expected_code="P013",
             expected_message=(
                 "SQL test helper CTE 'missing_rows' references unknown model 'item_archive'"
             ),
@@ -193,6 +294,7 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             description="mock reading a helper that reads a model on the native engine",
             test_name="mock_reads_referencing_helper",
             engine="native",
+            expected_code="P013",
             expected_message=(
                 "SQL test mock '__ref__items' reads helper CTE 'base_rows', which calls "
                 '__ref("item_totals"); mocks and fixtures are defined before the models the '
@@ -223,11 +325,51 @@ def test_given_unresolvable_helper_references_when_compiling_then_compile_report
     output: str = result.stdout + result.stderr
     assert result.returncode == 1, output
     payload: dict[str, Any] = json.loads(result.stdout)
-    codes: list[str] = [diagnostic["code"] for diagnostic in payload["diagnostics"]]
-    assert codes == [_HELPER_ERROR_CODE], output
     diagnostic: dict[str, Any] = payload["diagnostics"][0]
+    assert diagnostic["code"] == test_case.expected_code, output
     assert diagnostic["message"] == test_case.expected_message, output
     assert diagnostic["location"]["path"] == f"tests/unit/test_{test_case.test_name}.sql"
     assert diagnostic["location"]["line"] == test_case.expected_line, output
     assert diagnostic["location"]["column"] == test_case.expected_column, output
     assert test_case.expected_help_fragment in diagnostic["help"], output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        HelperRedefinitionE2ETestCase(
+            description="nested CTE redefining a helper on the python engine",
+            engine="python",
+            expected_output_fragments=("error[P001]", "which redefines helper CTE 'doubled'"),
+            expected_absent_output_fragments=("P013",),
+        ),
+        HelperRedefinitionE2ETestCase(
+            description="nested CTE redefining a helper on the native engine",
+            engine="native",
+            expected_output_fragments=("error[P001]", "which redefines helper CTE 'doubled'"),
+            expected_absent_output_fragments=("P013",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_nested_cte_shadowing_a_helper_when_compiling_then_the_redefinition_is_reported(
+    test_case: HelperRedefinitionE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="helper_reference_project",
+        repo_files=build_helper_reference_project_files(tests=("nested_cte_shadows_helper",)),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"),
+        project_dir=project_dir,
+        env={_ENGINE_ENV_VAR: test_case.engine},
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    for fragment in test_case.expected_absent_output_fragments:
+        assert fragment not in output, output

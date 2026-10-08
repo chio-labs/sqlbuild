@@ -186,11 +186,14 @@ __assert__quantities_are_positive AS (
 )
 ```
 
-Compile rejects helper references the test query cannot resolve with `P013`, at the helper or call
-that causes it: a `__ref()` to a model that does not exist, helpers or mocks that read each other
-in a cycle, and a mock or `__table_fn__` fixture that reads a helper calling a reference. Mocks
-are defined before the models a test runs, so a mock reads other mocks by CTE name, such as
-`FROM __ref__stg_orders`, rather than through `__ref("stg_orders")`.
+Only helpers the test reads count: those its `__expected__` and `__assert__` CTEs reach, directly
+or through other helpers and mocks. A helper nothing reads is left out of the test query, and its
+references are neither checked nor run. Compile rejects references the test query cannot resolve
+with `P013`, at the helper or call that causes it: a `__ref()` to a model that does not exist,
+helpers or mocks that read each other in a cycle, and a mock or `__table_fn__` fixture the test
+uses that reads a helper calling a reference. Mocks are defined before the models a test runs, so
+a mock reads other mocks by CTE name, such as `FROM __ref__stg_orders`, rather than through
+`__ref("stg_orders")`.
 
 ## Multi-model tests
 
