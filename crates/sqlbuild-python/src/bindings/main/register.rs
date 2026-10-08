@@ -4,7 +4,7 @@ use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
-    analysis, boundary, cache, discovery, model_config, render, rules, scopes, sqltext,
+    analysis, attachments, boundary, cache, discovery, model_config, render, rules, scopes, sqltext,
 };
 use crate::bindings::models;
 
@@ -31,6 +31,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     model_config::registration::register(module)?;
     render::macro_calls::register(module)?;
     cache::native_store::register(module)?;
+    attachments::registration::register(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
     Ok(())

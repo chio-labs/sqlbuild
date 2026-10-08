@@ -175,6 +175,11 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...
+def render_attached_generic_audit(
+    sql: tuple[str, str | None],
+    arguments: tuple[dict[str, object], dict[str, object]],
+    policies: dict[str, object],
+) -> tuple[str, str | None, str, str] | None: ...
 def scan_sql_declaration_references(
     sqls: list[str],
 ) -> list[list[tuple[int, str, str | None, int, int]] | None]: ...

@@ -1,13 +1,26 @@
-"""Generated authored SQL for the native attachment parity tests."""
+"""Generated authored SQL and attached audits for the native attachment parity tests."""
 
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.attachments.main._render_native_attached_audit import (
+    render_native_attached_audit,
+)
+from sqlbuild.compiler.attachments.models import NativeAuditPolicies, NativeRenderedAudit
+from sqlbuild.compiler.auditing.types import AuditRunScope, AuditSeverity
+from sqlbuild.compiler.compile._helpers.attachment.audits import (
+    merge_audit_arguments,
+    render_generic_audit_sql,
+    resolve_audit_run_scope,
+    resolve_audit_severity,
+)
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import AuthoredSqlExpansionResult, MacroContext
@@ -78,3 +91,166 @@ def authored_outcome(
         )
     except CompileInputError as error:
         return str(error)
+
+
+_SQL_PIECES: tuple[str, ...] = (
+    "SELECT * FROM t WHERE ",
+    "@column",
+    "@'column'",
+    "@values",
+    "@'values'",
+    "@limit_rows",
+    "@@column",
+    "@@@window",
+    "@tidy(@column)",
+    "@column (x)",
+    " AND ",
+    "'@column'",
+    "@column\u00e9",
+    "@column\u00a0(",
+    "\n",
+)
+_VALUES: tuple[object, ...] = (
+    "status",
+    "it's",
+    1,
+    1.0,
+    -0.0,
+    True,
+    None,
+    ["placed", 2, None],
+    ("placed",),
+    {"nested": 1},
+    float("nan"),
+    AuditSeverity.WARN,
+    10**20,
+)
+_SEVERITIES: tuple[str | None, ...] = (None, None, None, "warn", "error", AuditSeverity.WARN)
+_RUN_SCOPES: tuple[str | None, ...] = (None, None, None, "final", "delta_and_final")
+_RARE: tuple[tuple[str, object], ...] = (
+    ("sql", "@missing"),
+    ("severity", "fatal"),
+    ("severity", ""),
+    ("run_scope", "delta"),
+    ("column", "amount"),
+    ("column", 1),
+)
+
+
+@dataclass(frozen=True)
+class GeneratedAudit:
+    """One attachment: SQL, arguments and authored policies."""
+
+    sql_body: str
+    evidence_sql: str
+    implicit_arguments: dict[str, object]
+    explicit_arguments: dict[str, object]
+    instance_severity: str | None
+    default_severity: str | None
+    instance_run_scope: str | None
+    default_run_scope: str | None
+
+
+@dataclass(frozen=True)
+class AuditParity:
+    """Python's rendering (or error text) and the native rendering (or None)."""
+
+    audit: GeneratedAudit
+    python: tuple[object, ...] | str
+    native: NativeRenderedAudit | None
+
+
+def generated_audit(*, rng: random.Random) -> GeneratedAudit:
+    """Return one attachment mixing parameter shapes, argument values and policies."""
+
+    rare: dict[str, object] = dict(rng.choices(_RARE, k=int(rng.random() < 0.3)))
+    explicit: dict[str, object] = {
+        "values": rng.choice(_VALUES),
+        "limit_rows": rng.choice(_VALUES),
+    }
+    explicit.update(filter(_is_column_override, rare.items()))
+    return GeneratedAudit(
+        sql_body="".join(rng.choices(_SQL_PIECES, k=rng.randint(1, 8))) + str(rare.get("sql", "")),
+        evidence_sql="SELECT @column FROM t",
+        implicit_arguments={"column": rng.choice(("status", "amount"))},
+        explicit_arguments=explicit,
+        instance_severity=cast(str | None, rare.get("severity", rng.choice(_SEVERITIES))),
+        default_severity=rng.choice(_SEVERITIES),
+        instance_run_scope=cast(str | None, rare.get("run_scope", rng.choice(_RUN_SCOPES))),
+        default_run_scope=rng.choice(_RUN_SCOPES),
+    )
+
+
+def _is_column_override(item: tuple[str, object]) -> bool:
+    return item[0] == "column"
+
+
+def audit_parity(audit: GeneratedAudit) -> AuditParity:
+    """Render one attachment with Python's helpers and natively."""
+
+    return AuditParity(
+        audit=audit,
+        python=_python_rendering(audit),
+        native=render_native_attached_audit(
+            sql_body=audit.sql_body,
+            evidence_sql=audit.evidence_sql,
+            implicit_arguments=audit.implicit_arguments,
+            explicit_arguments=audit.explicit_arguments,
+            policies=NativeAuditPolicies(
+                measurement=False,
+                has_thresholds=False,
+                has_minimum_samples=False,
+                threshold_error=False,
+                instance_severity=audit.instance_severity,
+                default_severity=audit.default_severity,
+                instance_run_scope=audit.instance_run_scope,
+                default_run_scope=audit.default_run_scope,
+            ),
+        ),
+    )
+
+
+def is_native(parity: AuditParity) -> bool:
+    """Whether the native rendering answered instead of deferring to Python."""
+
+    return parity.native is not None
+
+
+def native_outcome(parity: AuditParity) -> tuple[object, ...]:
+    """The native rendering spelled like Python's, with the run scope value it selects."""
+
+    rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
+    run_scope: str | None = {
+        "instance": parity.audit.instance_run_scope,
+        "default": parity.audit.default_run_scope,
+    }.get(rendered.run_scope_source, AuditRunScope.DELTA_AND_FINAL)
+    return (rendered.sql_body, rendered.evidence_sql, AuditSeverity(rendered.severity), run_scope)
+
+
+def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
+    owner: Path = Path("models/orders.sql")
+    try:
+        merged: dict[str, object] = merge_audit_arguments(
+            owner_file=owner,
+            definition_name="floor",
+            implicit_arguments=audit.implicit_arguments,
+            explicit_arguments=audit.explicit_arguments,
+        )
+        rendered: tuple[str, ...] = tuple(
+            render_generic_audit_sql(
+                sql=sql, arguments=merged, owner_file=owner, definition_name="floor"
+            )
+            for sql in (audit.sql_body, audit.evidence_sql)
+        )
+        severity: AuditSeverity = resolve_audit_severity(
+            instance_severity=audit.instance_severity,
+            default_severity=audit.default_severity,
+            audit_label="floor",
+        )
+        run_scope: str = resolve_audit_run_scope(
+            instance_run_scope=audit.instance_run_scope,
+            default_run_scope=audit.default_run_scope,
+        )
+    except CompileInputError as error:
+        return str(error)
+    return (*rendered, severity, run_scope)

@@ -12,3 +12,15 @@ class AuthoredSqlParityTestCase:
     count: int
     expected_minimum_expanded: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class AttachedAuditParityTestCase:
+    """Seeded attached audits rendered natively and by Python's attachment helpers."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_native: int
+    expected_minimum_deferred: int
+    expected_minimum_python_errors: int

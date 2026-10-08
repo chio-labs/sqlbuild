@@ -7,6 +7,11 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 
+from sqlbuild.compiler.attachments.constants import DEFAULT_POLICY, INSTANCE_POLICY
+from sqlbuild.compiler.attachments.main._render_native_attached_audit import (
+    render_native_attached_audit,
+)
+from sqlbuild.compiler.attachments.models import NativeAuditPolicies, NativeRenderedAudit
 from sqlbuild.compiler.auditing.constants import (
     MEASUREMENT_MINIMUM_SAMPLES_HEADER_KEY,
     MEASUREMENT_THRESHOLDS_HEADER_KEY,
@@ -17,7 +22,7 @@ from sqlbuild.compiler.auditing.main._parse_audit_instance import (
     parse_minimum_samples,
 )
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
-from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditRunScope, AuditSeverity
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_ref_names,
     build_known_seed_names,
@@ -73,6 +78,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -668,26 +675,27 @@ def build_attached_audit_input(
             f"{owner_file} audit '{audit_instance.definition_name}': thresholds and "
             "minimum_samples are only valid for measurement audits"
         )
-    merged_arguments: dict[str, object] = merge_audit_arguments(
-        owner_file=owner_file,
-        definition_name=audit_instance.definition_name,
-        implicit_arguments=implicit_arguments,
-        explicit_arguments=audit_instance.arguments,
-    )
-    rendered_sql_body: str = render_generic_audit_sql(
-        sql=definition[1].sql_body,
-        arguments=merged_arguments,
-        owner_file=owner_file,
-        definition_name=audit_instance.definition_name,
-    )
-    rendered_evidence_sql: str | None = None
-    if definition[1].evidence_sql is not None:
-        rendered_evidence_sql = render_generic_audit_sql(
-            sql=definition[1].evidence_sql,
-            arguments=merged_arguments,
-            owner_file=owner_file,
-            definition_name=audit_instance.definition_name,
+    native_rendering: NativeRenderedAudit | None = (
+        render_native_attached_audit(
+            sql_body=definition[1].sql_body,
+            evidence_sql=definition[1].evidence_sql,
+            implicit_arguments=implicit_arguments,
+            explicit_arguments=audit_instance.arguments,
+            policies=_native_audit_policies(audit_instance=audit_instance, context=context),
         )
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else None
+    )
+    rendered_sql_body, rendered_evidence_sql = (
+        (native_rendering.sql_body, native_rendering.evidence_sql)
+        if native_rendering is not None
+        else _rendered_audit_sql(
+            audit_instance=audit_instance,
+            definition=definition[1],
+            owner_file=owner_file,
+            implicit_arguments=implicit_arguments,
+        )
+    )
     scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
         context=context,
         file_path=definition[0].file_path,
@@ -746,18 +754,16 @@ def build_attached_audit_input(
         known_source_names=context.known_source_names,
     )
     audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
-    resolved_severity: AuditSeverity = (
-        measurement_policy_severity(audit_instance.thresholds)
-        if audit_instance.thresholds is not None
-        else resolve_audit_severity(
-            instance_severity=audit_instance.severity,
-            default_severity=context.default_audit_severity,
-            audit_label=audit_label,
+    resolved_severity: AuditSeverity
+    resolved_run_scope: str
+    resolved_severity, resolved_run_scope = (
+        _native_audit_policy_values(
+            rendering=native_rendering, audit_instance=audit_instance, context=context
         )
-    )
-    resolved_run_scope: str = resolve_audit_run_scope(
-        instance_run_scope=audit_instance.run_scope,
-        default_run_scope=context.default_audit_run_scope,
+        if native_rendering is not None
+        else _audit_policy_values(
+            audit_instance=audit_instance, context=context, audit_label=audit_label
+        )
     )
     validate_model_attached_audit_references(
         references=references,
@@ -792,6 +798,93 @@ def build_attached_audit_input(
             + expansion.usages
             + (() if evidence_expansion is None else evidence_expansion.usages)
         ),
+    )
+
+
+def _rendered_audit_sql(
+    *,
+    audit_instance: SchemaAuditInstance,
+    definition: DiscoveredAuditBlock,
+    owner_file: Path,
+    implicit_arguments: dict[str, object],
+) -> tuple[str, str | None]:
+    merged_arguments: dict[str, object] = merge_audit_arguments(
+        owner_file=owner_file,
+        definition_name=audit_instance.definition_name,
+        implicit_arguments=implicit_arguments,
+        explicit_arguments=audit_instance.arguments,
+    )
+    rendered_sql_body: str = render_generic_audit_sql(
+        sql=definition.sql_body,
+        arguments=merged_arguments,
+        owner_file=owner_file,
+        definition_name=audit_instance.definition_name,
+    )
+    rendered_evidence_sql: str | None = (
+        None
+        if definition.evidence_sql is None
+        else render_generic_audit_sql(
+            sql=definition.evidence_sql,
+            arguments=merged_arguments,
+            owner_file=owner_file,
+            definition_name=audit_instance.definition_name,
+        )
+    )
+    return rendered_sql_body, rendered_evidence_sql
+
+
+def _native_audit_policies(
+    *, audit_instance: SchemaAuditInstance, context: _AuditAttachmentContext
+) -> NativeAuditPolicies:
+    thresholds: MeasurementThresholds | None = audit_instance.thresholds
+    return NativeAuditPolicies(
+        measurement=context.generic_audit_definitions[audit_instance.definition_name][
+            1
+        ].evaluation_mode
+        == AuditEvaluationMode.MEASUREMENT,
+        has_thresholds=thresholds is not None,
+        has_minimum_samples=audit_instance.minimum_samples is not None,
+        threshold_error=thresholds is not None and thresholds.error is not None,
+        instance_severity=audit_instance.severity,
+        default_severity=context.default_audit_severity,
+        instance_run_scope=audit_instance.run_scope,
+        default_run_scope=context.default_audit_run_scope,
+    )
+
+
+def _audit_policy_values(
+    *, audit_instance: SchemaAuditInstance, context: _AuditAttachmentContext, audit_label: str
+) -> tuple[AuditSeverity, str]:
+    severity: AuditSeverity = (
+        measurement_policy_severity(audit_instance.thresholds)
+        if audit_instance.thresholds is not None
+        else resolve_audit_severity(
+            instance_severity=audit_instance.severity,
+            default_severity=context.default_audit_severity,
+            audit_label=audit_label,
+        )
+    )
+    return severity, resolve_audit_run_scope(
+        instance_run_scope=audit_instance.run_scope,
+        default_run_scope=context.default_audit_run_scope,
+    )
+
+
+def _native_audit_policy_values(
+    *,
+    rendering: NativeRenderedAudit,
+    audit_instance: SchemaAuditInstance,
+    context: _AuditAttachmentContext,
+) -> tuple[AuditSeverity, str]:
+    run_scope: str | None = (
+        audit_instance.run_scope
+        if rendering.run_scope_source == INSTANCE_POLICY
+        else context.default_audit_run_scope
+        if rendering.run_scope_source == DEFAULT_POLICY
+        else None
+    )
+    return AuditSeverity(rendering.severity), (
+        AuditRunScope.DELTA_AND_FINAL if run_scope is None else run_scope
     )
 
 
