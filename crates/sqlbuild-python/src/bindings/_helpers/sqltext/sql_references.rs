@@ -15,10 +15,10 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 type ReferenceRow = (&'static str, String, Option<String>, Option<usize>);
 /// `(kind, call, start, message, help, corrected_call)` for one rejected call.
 type InvalidCallRow = (&'static str, String, usize, String, String, String);
-/// The references and rejected calls, or Python's error message; `None` defers to Python.
+/// The references and rejected calls, or Python's error and its start; `None` defers.
 type ExtractionRow = Option<(
     Option<(Vec<ReferenceRow>, Vec<InvalidCallRow>)>,
-    Option<String>,
+    Option<(String, usize)>,
 )>;
 
 /// Extracts references under one adapter's lexical rules, read once per syntax.
@@ -36,7 +36,7 @@ impl SqlReferenceScanner {
         }
     }
 
-    /// Return `((references, rejected calls), None)`, `(None, message)`, or `None` to defer.
+    /// Return `((references, rejected calls), None)`, `(None, (message, start))`, or `None`.
     fn extract(&self, sql: &str) -> PyResult<ExtractionRow> {
         compiler_guard(|| {
             Ok(match extract_sql_references(sql, &self.syntax) {
@@ -50,7 +50,9 @@ impl SqlReferenceScanner {
                     )),
                     None,
                 )),
-                ReferenceExtraction::Failed(message) => Some((None, Some(message))),
+                ReferenceExtraction::Failed(failure) => {
+                    Some((None, Some((failure.message, failure.start))))
+                }
                 ReferenceExtraction::Deferred => None,
             })
         })

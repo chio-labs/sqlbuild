@@ -32,13 +32,20 @@ pub struct ReferenceScan {
     pub invalid_calls: Vec<InvalidReferenceCall>,
 }
 
+/// Python's reference scan error and the code-point start of the quote, comment or call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReferenceScanFailure {
+    pub message: String,
+    pub start: usize,
+}
+
 /// The references of one SQL text, Python's error for it, or a deferral to Python.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReferenceExtraction {
     /// Every reference and rejected call in authored order, exactly as Python scans them.
     Extracted(ReferenceScan),
-    /// The message of the `CompileInputError` Python raises for this text.
-    Failed(String),
+    /// The `CompileInputError` Python raises for this text.
+    Failed(ReferenceScanFailure),
     /// A character or syntax rule the scan cannot classify exactly as Python does.
     Deferred,
 }

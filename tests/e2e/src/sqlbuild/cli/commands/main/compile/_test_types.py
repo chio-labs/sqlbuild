@@ -909,6 +909,16 @@ class NativeDeclarationErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ReferenceScanErrorTestCase:
+    """A model whose reference scan error every engine must locate and type the same way."""
+
+    description: str
+    mart_body: str
+    expected_message: str
+    expected_error_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DeclarationErrorLifecycleTestCase:
     """A failing project whose invocation lifecycle every engine must report the same way."""
 

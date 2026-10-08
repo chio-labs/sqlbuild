@@ -44,11 +44,13 @@ class ReferenceEngineTestCase:
 
 @dataclass(frozen=True)
 class NativeReferenceErrorTestCase:
-    """Reference SQL whose native error must stand without a Python re-scan."""
+    """Reference SQL whose native error must stand, located, without a Python re-scan."""
 
     description: str
     sql: str
+    contents: str
     expected_message: str
+    expected_bridge_independent: bool
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,8 @@ import random
 import time
 from collections.abc import Callable
 from itertools import product
+from operator import itemgetter
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,8 +15,9 @@ import pytest
 from sqlbuild.compiler.compile._helpers.refs import references
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlReferenceExtractionError
-from sqlbuild.compiler.compile.models import SqlReferenceScan
+from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import SqlReferenceOrigin, SqlReferenceScan
+from sqlbuild.compiler.compile.types import SqlReferenceScanFailure
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -72,7 +75,7 @@ _WIDE_CALL: str = (
 _NESTED_CALLS: str = '__table_fn("orders_for")(' * 1_000 + "1" + ")" * 1_000
 _OUTCOME_SUMMARIES: dict[type, Callable[[Any], int | str]] = {
     SqlReferenceScan: lambda scan: len(scan.references) + len(scan.invalid_calls),
-    str: str,
+    tuple: itemgetter(0),
     type(None): repr,
 }
 _MANY_REFERENCES: str = "SELECT 1 FROM " + " JOIN ".join(
@@ -271,11 +274,13 @@ def test_given_engine_when_extracting_references_then_only_preview_runs_native_s
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)
     native_calls: list[str] = []
-    native_extract: Callable[..., SqlReferenceScan | str | None] = (
+    native_extract: Callable[..., SqlReferenceScan | SqlReferenceScanFailure | None] = (
         references.extract_native_sql_references
     )
 
-    def counting_extract(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan | str | None:
+    def counting_extract(
+        *, sql: str, syntax: SqlLexicalSyntax
+    ) -> SqlReferenceScan | SqlReferenceScanFailure | None:
         native_calls.append(sql)
         return native_extract(sql=sql, syntax=syntax)
 
@@ -302,36 +307,69 @@ def test_given_engine_when_extracting_references_then_only_preview_runs_native_s
     "test_case",
     [
         NativeReferenceErrorTestCase(
-            description="unclosed_reference_call",
-            sql='SELECT * FROM __ref("orders"',
-            expected_message="SQL reference contains an unclosed parenthesis",
+            description="unclosed_reference_call_points_at_the_call",
+            sql='SELECT *\nFROM __ref("orders"',
+            contents='MODEL (description "Orders");\n\nSELECT *\nFROM __ref("orders"',
+            expected_message=(
+                "models/orders.sql:4:6: SQL reference contains an unclosed parenthesis"
+            ),
+            expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
             description="empty_table_function_argument_after_a_rejected_call",
-            sql='SELECT * FROM __ref(orders) JOIN __table_fn("orders_for")(1,,2)',
-            expected_message="SQL reference contains an empty argument",
+            sql='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
+            contents='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
+            expected_message="models/orders.sql:2:6: SQL reference contains an empty argument",
+            expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
-            description="unclosed_quote_after_references",
-            sql='SELECT * FROM __ref("orders") WHERE note = \'open',
-            expected_message="SQL reference contains an unclosed quoted string",
+            description="unclosed_quote_points_at_the_quote_in_code_points",
+            sql="SELECT 'é', __ref(\"orders\") WHERE note = 'open",
+            contents="-- é\nSELECT 'é', __ref(\"orders\") WHERE note = 'open",
+            expected_message=(
+                "models/orders.sql:2:42: SQL reference contains an unclosed quoted string"
+            ),
+            expected_bridge_independent=True,
+        ),
+        NativeReferenceErrorTestCase(
+            description="error_only_in_expanded_sql_names_the_file",
+            sql='SELECT * FROM __ref("orders") /* expanded',
+            contents='SELECT * FROM __ref("orders") @expand()',
+            expected_message="models/orders.sql: SQL reference contains an unclosed block comment",
+            expected_bridge_independent=False,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_reference_error_when_extracting_then_raised_without_python_rescan(
+def test_given_native_reference_error_when_extracting_then_raised_located_without_python_rescan(
     test_case: NativeReferenceErrorTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
-    monkeypatch.setattr(references, "_scan_sql_references_with_python", python_scan_not_expected)
+    monkeypatch.setattr(references, "python_reference_scan", python_scan_not_expected)
 
-    with pytest.raises(SqlReferenceExtractionError) as raised:
-        _ = extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SYNTAX)
+    with pytest.raises(CompileInputError) as raised:
+        _ = extract_sql_references(
+            sql=test_case.sql,
+            syntax=_GENERIC_SYNTAX,
+            origin=SqlReferenceOrigin(
+                file_path=Path("/project/models/orders.sql"),
+                relative_path=Path("models/orders.sql"),
+                contents=test_case.contents,
+            ),
+        )
 
-    assert (str(raised.value), raised.value.code, raised.value.help) == (
+    assert (
+        type(raised.value),
+        str(raised.value),
+        raised.value.code,
+        raised.value.help,
+        raised.value.bridge_independent,
+    ) == (
+        CompileInputError,
         test_case.expected_message,
         "P001",
         None,
+        test_case.expected_bridge_independent,
     )
 
 
@@ -410,7 +448,7 @@ def test_given_worst_case_reference_sql_when_extracting_natively_then_finishes_q
     test_case: ReferenceScanBoundTestCase,
 ) -> None:
     started: float = time.thread_time()
-    outcome: SqlReferenceScan | str | None = extract_native_sql_references(
+    outcome: SqlReferenceScan | SqlReferenceScanFailure | None = extract_native_sql_references(
         sql=test_case.sql, syntax=_GENERIC_SYNTAX
     )
     elapsed: float = time.thread_time() - started

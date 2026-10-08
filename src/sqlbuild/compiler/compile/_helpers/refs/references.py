@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
     SQL_REFERENCE_NAME_QUOTE_TOKENS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlReferenceExtractionError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     CompileSqlReference,
@@ -24,7 +24,11 @@ from sqlbuild.compiler.compile.models import (
     SqlReferenceOrigin,
     SqlReferenceScan,
 )
-from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
+from sqlbuild.compiler.compile.types import (
+    DiagnosticPhase,
+    DiagnosticSeverity,
+    SqlReferenceScanFailure,
+)
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -66,18 +70,34 @@ def extract_sql_references(
 ) -> tuple[CompileSqlReference, ...]:
     """Return logical SQL refs outside comments and quotes, reporting rejected calls as P012."""
 
-    scan: SqlReferenceScan = scan_sql_reference_calls(sql=sql, syntax=syntax)
+    scan: SqlReferenceScan = scan_sql_reference_calls(sql=sql, syntax=syntax, origin=origin)
     report_invalid_reference_calls(invalid_calls=scan.invalid_calls, origin=origin, syntax=syntax)
     return scan.references
 
 
-def scan_sql_reference_calls(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan:
-    """Return valid references and rejected reference calls without reporting either."""
+def scan_sql_reference_calls(
+    *, sql: str, syntax: SqlLexicalSyntax, origin: SqlReferenceOrigin | None = None
+) -> SqlReferenceScan:
+    """Return valid references and rejected calls; a scan error is located in `origin`."""
 
+    outcome: SqlReferenceScan | SqlReferenceScanFailure = _reference_scan_outcome(
+        sql=sql, syntax=syntax
+    )
+    if isinstance(outcome, SqlReferenceScan):
+        return outcome
+    raise _located_scan_error(message=outcome[0], origin=origin, syntax=syntax)
+
+
+def _reference_scan_outcome(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> SqlReferenceScan | SqlReferenceScanFailure:
     if native_stage_enabled(NativeStage.REFERENCE_EXTRACTION):
-        return _scan_sql_references_natively(sql=sql, syntax=syntax)
+        native: SqlReferenceScan | SqlReferenceScanFailure | None = extract_native_sql_references(
+            sql=sql, syntax=syntax
+        )
+        return native if native is not None else python_reference_scan(sql=sql, syntax=syntax)
     if syntax.reads_differently_from_generic(sql):
-        return _scan_sql_references_with_python(sql=sql, syntax=syntax)
+        return python_reference_scan(sql=sql, syntax=syntax)
     native_references: list[tuple[str, str, str | None, int | None]] | None = (
         _native.extract_static_sql_references(sql)
     )
@@ -93,18 +113,26 @@ def scan_sql_reference_calls(*, sql: str, syntax: SqlLexicalSyntax) -> SqlRefere
                 for kind, name, package, call_argument_count in native_references
             )
         )
-    return _scan_sql_references_with_python(sql=sql, syntax=syntax)
+    return python_reference_scan(sql=sql, syntax=syntax)
 
 
-def _scan_sql_references_natively(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan:
-    """Return the native scan or raise Python's error; Python scans the text native defers."""
+def _located_scan_error(
+    *, message: str, origin: SqlReferenceOrigin | None, syntax: SqlLexicalSyntax
+) -> CompileInputError:
+    """Locate a scan error at the authored quote, comment or call that raises the same error."""
 
-    native: SqlReferenceScan | str | None = extract_native_sql_references(sql=sql, syntax=syntax)
-    if native is None:
-        return _scan_sql_references_with_python(sql=sql, syntax=syntax)
-    if isinstance(native, str):
-        raise SqlReferenceExtractionError(native)
-    return native
+    if origin is None:
+        return CompileInputError(message)
+    authored: SqlReferenceScan | SqlReferenceScanFailure = _reference_scan_outcome(
+        sql=origin.contents, syntax=syntax
+    )
+    path: str = origin.relative_path.as_posix()
+    if isinstance(authored, SqlReferenceScan) or authored[0] != message:
+        return CompileInputError(f"{path}: {message}")
+    start: int = authored[1]
+    line: int = origin.contents.count("\n", 0, start) + 1
+    column: int = start - (origin.contents.rfind("\n", 0, start) + 1) + 1
+    return CompileInputError(f"{path}:{line}:{column}: {message}", bridge_independent=True)
 
 
 def report_invalid_reference_calls(
@@ -176,13 +204,10 @@ def _authored_invalid_call_starts(
 ) -> dict[str, list[int]]:
     if origin is None:
         return {}
-    try:
-        authored: SqlReferenceScan = (
-            _scan_sql_references_natively(sql=origin.contents, syntax=syntax)
-            if native_stage_enabled(NativeStage.REFERENCE_EXTRACTION)
-            else _scan_sql_references_with_python(sql=origin.contents, syntax=syntax)
-        )
-    except CompileInputError:
+    authored: SqlReferenceScan | SqlReferenceScanFailure = _reference_scan_outcome(
+        sql=origin.contents, syntax=syntax
+    )
+    if not isinstance(authored, SqlReferenceScan):
         return {}
     starts: dict[str, list[int]] = {}
     for invalid_call in authored.invalid_calls:
@@ -203,8 +228,10 @@ def reference_call_location(*, path: Path, text: str, start: int, call: str) -> 
     )
 
 
-def _scan_sql_references_with_python(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan:
-    """Return logical SQL refs through the authoritative general scanner."""
+def python_reference_scan(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> SqlReferenceScan | SqlReferenceScanFailure:
+    """Scan with the Python scanner; an error carries the start of its quote, comment or call."""
 
     references: list[CompileSqlReference] = []
     invalid_calls: list[InvalidSqlReferenceCall] = []
@@ -214,16 +241,22 @@ def _scan_sql_references_with_python(*, sql: str, syntax: SqlLexicalSyntax) -> S
         index = _next_reference_scan_position(sql=sql, start=index)
         if index >= length:
             break
-        non_code_end: int | None = dialect_non_code_end(
-            sql=sql, start=index, syntax=syntax, context=_CONTEXT
-        )
+        try:
+            non_code_end: int | None = dialect_non_code_end(
+                sql=sql, start=index, syntax=syntax, context=_CONTEXT
+            )
+        except CompileInputError as error:
+            return (error.message, index)
         if non_code_end is not None:
             index = non_code_end
             continue
 
-        parsed: tuple[CompileSqlReference | InvalidSqlReferenceCall, int] | None = (
-            _parse_reference_at(sql=sql, start=index, syntax=syntax)
-        )
+        try:
+            parsed: tuple[CompileSqlReference | InvalidSqlReferenceCall, int] | None = (
+                _parse_reference_at(sql=sql, start=index, syntax=syntax)
+            )
+        except CompileInputError as error:
+            return (error.message, index)
         if parsed is None:
             index += 1
             continue

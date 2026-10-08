@@ -1,7 +1,7 @@
 //! Lexical syntaxes and expected references for reference extraction tests.
 
 use crate::sql_references::models::{
-    InvalidReferenceCall, ReferenceExtraction, ReferenceScan, SqlReference,
+    InvalidReferenceCall, ReferenceExtraction, ReferenceScan, ReferenceScanFailure, SqlReference,
 };
 use crate::sql_scan::models::LexicalSyntax;
 
@@ -83,6 +83,9 @@ pub(crate) fn invalid_call(
     }
 }
 
-pub(crate) fn failed(message: &str) -> ReferenceExtraction {
-    ReferenceExtraction::Failed(message.to_string())
+pub(crate) fn failed(message: &str, start: usize) -> ReferenceExtraction {
+    ReferenceExtraction::Failed(ReferenceScanFailure {
+        message: message.to_string(),
+        start,
+    })
 }

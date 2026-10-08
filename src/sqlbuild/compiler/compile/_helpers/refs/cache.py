@@ -120,7 +120,9 @@ class _SqlReferenceCache:
                 self._disable()
                 connection = None
 
-        scan: SqlReferenceScan = scan_sql_reference_calls(sql=sql, syntax=self._syntax)
+        scan: SqlReferenceScan = scan_sql_reference_calls(
+            sql=sql, syntax=self._syntax, origin=origin
+        )
         report_invalid_reference_calls(
             invalid_calls=scan.invalid_calls, origin=origin, syntax=self._syntax
         )

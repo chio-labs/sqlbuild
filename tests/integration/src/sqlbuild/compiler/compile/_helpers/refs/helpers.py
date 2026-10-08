@@ -20,8 +20,8 @@ from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapt
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import collect_compile_diagnostics
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.refs.references import (
-    _scan_sql_references_with_python,
     extract_sql_references,
+    python_reference_scan,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -30,7 +30,7 @@ from sqlbuild.compiler.compile.models import (
     SqlReferenceOrigin,
     SqlReferenceScan,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceScanFailure
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -200,22 +200,23 @@ def _generated_reference_call(*, rng: random.Random) -> str:
     )
 
 
-def python_outcome(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan | str:
-    """Return the oracle's references and rejected calls, or its error message."""
+def python_outcome(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> SqlReferenceScan | SqlReferenceScanFailure:
+    """Return the oracle's references and rejected calls, or its error and where it points."""
 
-    try:
-        return _scan_sql_references_with_python(sql=sql, syntax=syntax)
-    except CompileInputError as error:
-        return str(error)
+    return python_reference_scan(sql=sql, syntax=syntax)
 
 
 def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceParity:
     """Compare native extraction, rejected calls and errors with Python wherever native scans."""
 
-    native: list[SqlReferenceScan | str | None] = [
+    native: list[SqlReferenceScan | SqlReferenceScanFailure | None] = [
         extract_native_sql_references(sql=sql, syntax=syntax) for sql in sqls
     ]
-    python: list[SqlReferenceScan | str] = [python_outcome(sql=sql, syntax=syntax) for sql in sqls]
+    python: list[SqlReferenceScan | SqlReferenceScanFailure] = [
+        python_outcome(sql=sql, syntax=syntax) for sql in sqls
+    ]
     scanned: list[bool] = [outcome is not None for outcome in native]
     extracted: list[SqlReferenceScan] = cast(
         list[SqlReferenceScan],
@@ -228,7 +229,7 @@ def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceP
             actual=list(compress(native, scanned)),
         ),
         extracted=sum(not scan.invalid_calls for scan in extracted),
-        failed=sum(isinstance(outcome, str) for outcome in native),
+        failed=sum(isinstance(outcome, tuple) for outcome in native),
         deferred=native.count(None),
         rejected=sum(len(scan.invalid_calls) for scan in extracted),
         table_functions=sum(
@@ -301,7 +302,7 @@ def located_diagnostic_count(*, outcomes: list[object]) -> int:
     return sum(diagnostic.location is not None for diagnostic in chain.from_iterable(diagnostics))
 
 
-def python_scan_not_expected(**_: object) -> SqlReferenceScan:
+def python_scan_not_expected(**_: object) -> SqlReferenceScan | SqlReferenceScanFailure:
     """A replacement for the Python scanner that fails the test when it is called."""
 
     raise AssertionError("the Python reference scanner ran")

@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models import (
     InvalidSqlReferenceCall,
     SqlReferenceScan,
 )
+from sqlbuild.compiler.compile.types import SqlReferenceScanFailure
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
@@ -21,15 +22,15 @@ type _NativeExtraction = (
         ],
         None,
     ]
-    | tuple[None, str]
+    | tuple[None, tuple[str, int]]
     | None
 )
 
 
 def extract_native_sql_references(
     *, sql: str, syntax: SqlLexicalSyntax
-) -> SqlReferenceScan | str | None:
-    """Return the references and rejected calls, Python's error message, or None for Python."""
+) -> SqlReferenceScan | SqlReferenceScanFailure | None:
+    """Return the references and rejected calls, Python's located error, or None for Python."""
 
     try:
         extraction: _NativeExtraction = _scanner(syntax).extract(sql)
@@ -37,9 +38,9 @@ def extract_native_sql_references(
         return None
     if extraction is None:
         return None
-    scanned, message = extraction
+    scanned, failure = extraction
     if scanned is None:
-        return message
+        return failure
     references, invalid_calls = scanned
     return SqlReferenceScan(
         references=tuple(

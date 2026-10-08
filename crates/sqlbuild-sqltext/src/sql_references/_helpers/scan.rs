@@ -23,6 +23,14 @@ pub(crate) enum Stop {
 
 type Scan<T> = Result<T, Stop>;
 
+/// Why the scan of one text stopped, with the byte offset Python's error points at.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Stopped {
+    /// Python raises this message for the quote or comment, or the call, starting at the offset.
+    Failed(String, usize),
+    Deferred,
+}
+
 const NON_CODE_START: [bool; 256] = byte_table(NON_CODE_START_BYTES, false);
 const REFERENCE_SCAN_START: [bool; 256] = byte_table(NON_CODE_START_BYTES, true);
 
@@ -45,12 +53,17 @@ enum Parsed {
 }
 
 /// Return every reference and rejected call in `sql` in authored order.
-pub(crate) fn scan_references(sql: &[u8], syntax: &LexicalSyntax) -> Scan<ReferenceScan> {
+pub(crate) fn scan_references(
+    sql: &[u8],
+    syntax: &LexicalSyntax,
+) -> Result<ReferenceScan, Stopped> {
     let mut scan: ReferenceScan = ReferenceScan::default();
     let mut offsets: CharOffsets = CharOffsets::default();
     let mut index = 0;
     while index < sql.len() {
-        if let Some(end) = non_code_end(sql, index, syntax, REFERENCE_CONTEXT)? {
+        if let Some(end) = non_code_end(sql, index, syntax, REFERENCE_CONTEXT)
+            .map_err(|stop| stopped_at(stop, index))?
+        {
             index = end;
             continue;
         }
@@ -68,11 +81,14 @@ pub(crate) fn scan_references(sql: &[u8], syntax: &LexicalSyntax) -> Scan<Refere
             index += 1;
             continue;
         };
-        let (parsed, next) = parse_reference(sql, index, call, syntax)?;
+        let (parsed, next) =
+            parse_reference(sql, index, call, syntax).map_err(|stop| stopped_at(stop, index))?;
         match parsed {
             Parsed::Reference(reference) => scan.references.push(reference),
             Parsed::Invalid(invalid_call) => scan.invalid_calls.push(InvalidReferenceCall {
-                start: offsets.advance(sql, index)?,
+                start: offsets
+                    .advance(sql, index)
+                    .map_err(|stop| stopped_at(stop, index))?,
                 ..invalid_call
             }),
         }
@@ -443,5 +459,13 @@ impl CharOffsets {
             .count();
         self.byte = byte;
         Ok(self.char)
+    }
+}
+
+/// Point a stop at `start`: the top-level quote or comment, or the call being parsed.
+fn stopped_at(stop: Stop, start: usize) -> Stopped {
+    match stop {
+        Stop::Failed(message) => Stopped::Failed(message, start),
+        Stop::Deferred => Stopped::Deferred,
     }
 }

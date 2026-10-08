@@ -214,7 +214,7 @@ class SqlReferenceScanner:
             ],
             None,
         ]
-        | tuple[None, str]
+        | tuple[None, tuple[str, int]]
         | None
     ): ...
 

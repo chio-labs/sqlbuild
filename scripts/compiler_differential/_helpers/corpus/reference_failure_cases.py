@@ -5,8 +5,10 @@ from scripts.compiler_differential._helpers.corpus.case_builder import (
     mart_body_files,
     staging_files,
 )
+from scripts.compiler_differential.constants import FAILURE_MART_PATH
 from scripts.compiler_differential.models import FailureCase
 
+_MART: str = FAILURE_MART_PATH
 _SELECT: str = "SELECT order_id AS customer_id, 1 AS total_amount\n"
 _STAGING_HEADER: str = 'MODEL (\n  description "Staged orders",\n);\n\n'
 _HIDDEN_CALLS: str = (
@@ -59,7 +61,7 @@ def reference_failure_cases() -> tuple[FailureCase, ...]:
             name="reference-unclosed-call",
             from_clause='__ref("stg_orders"',
             expected_code="P001",
-            expected_message="SQL reference contains an unclosed parenthesis",
+            expected_message=f"{_MART}:6:6: SQL reference contains an unclosed parenthesis",
         ),
         _mart_from(
             name="table-function-without-arguments",
@@ -77,13 +79,15 @@ def reference_failure_cases() -> tuple[FailureCase, ...]:
             name="table-function-empty-call-argument",
             from_clause='__table_fn("table_fn__orders_for")(1, , 2)',
             expected_code="P001",
-            expected_message="SQL reference contains an empty argument",
+            expected_message=f"{_MART}:6:6: SQL reference contains an empty argument",
         ),
         _mart_from(
             name="table-function-unclosed-call",
             from_clause='__table_fn("table_fn__orders_for")(1 -- )',
             expected_code="P001",
-            expected_message="SQL table function call contains an unclosed parenthesis",
+            expected_message=(
+                f"{_MART}:6:6: SQL table function call contains an unclosed parenthesis"
+            ),
         ),
         failure_case(
             name="reference-several-rejected-calls-in-one-file",
@@ -117,7 +121,7 @@ def reference_failure_cases() -> tuple[FailureCase, ...]:
         failure_case(
             name="reference-error-after-rejected-calls",
             expected_code="P001",
-            expected_message="SQL reference contains an unclosed quoted string",
+            expected_message=f"{_MART}:7:39: SQL reference contains an unclosed quoted string",
             files=mart_body_files(
                 f"{_SELECT}FROM __ref(stg_orders)\nWHERE __ref(other) IS NULL AND note = 'open\n"
             ),
