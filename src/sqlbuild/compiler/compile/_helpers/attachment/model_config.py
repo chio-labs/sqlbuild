@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
+from sqlbuild.compiler.compile._helpers.attachment.references import validate_model_references
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     merge_validated_model_audits,
     parse_model_header_audit_factories,
@@ -17,7 +20,19 @@ from sqlbuild.compiler.compile._helpers.config.dynamic_columns import (
 )
 from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_column_migration_config,
+    validate_contract_config,
+    validate_custom_materialization_config,
+    validate_incremental_config,
+    validate_microbatch_project_capability,
+    validate_model_migration_config,
+    validate_non_incremental_config,
+    validate_placeholder_config,
+    validate_snapshot_config,
+    validate_storage_policies,
 )
+from sqlbuild.compiler.compile._helpers.config.retention import resolve_time_travel_retention
+from sqlbuild.compiler.compile._helpers.config.table_type import resolve_table_type
+from sqlbuild.compiler.compile._helpers.render.context_templates import record_template_reads
 from sqlbuild.compiler.compile._helpers.render.templating import (
     contains_template_data,
 )
@@ -34,6 +49,11 @@ from sqlbuild.compiler.compile.models import (
     IdentityPresenceCache,
     ModelConfigScanCache,
     ModelHeaderColumnCache,
+    ModelResourceNames,
+    ModelValidationRequest,
+    ModelValidatorContext,
+    NativeModelConfigInputs,
+    NativeModelConfigSession,
 )
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
@@ -41,6 +61,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSqlModelFile,
     ModelSchemaDeclaration,
+    NamedSqlHookEntry,
+    PythonHookEntry,
+    SqlHookEntry,
 )
 from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
@@ -51,17 +74,39 @@ from sqlbuild.compiler.model_config.main._native_config_contains_template import
 )
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
+    MaterializationDefaultsConfig,
+    ProjectConfig,
+    ResolvedTableType,
+    ResolvedTimeTravelRetention,
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SettingsConfig,
     SourceLocation,
+    TargetConfig,
 )
+from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TimeTravelRetentionSource
 
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
+_TABLE_BACKED_MATERIALIZATIONS: tuple[str, ...] = (
+    MaterializationType.TABLE,
+    MaterializationType.INCREMENTAL,
+    MaterializationType.SNAPSHOT,
+)
+_MATERIALIZED_CONFIG_KEY: str = "materialized"
+type _BuiltNamespace = tuple[str | None, bool, str | None]
+type _StorageOverrides = tuple[tuple[int | None, bool] | None, str | None]
+type _BuiltConfig = tuple[
+    dict[str, object],
+    tuple[str, ...],
+    _BuiltNamespace,
+    _StorageOverrides,
+    list[tuple[str, str]],
+]
 _MODEL_DESCRIPTION_KEY: str = "description"
 _MODEL_SCHEMA_KEY: str = "model_schema"
 
@@ -810,4 +855,196 @@ def _model_sql_validation_gate(
             project_setting=effective_settings.sql_analysis,
             model_config=model_config,
         )
+    )
+
+
+def native_model_config_session(
+    *, inputs: NativeModelConfigInputs, names: ModelResourceNames
+) -> NativeModelConfigSession:
+    """Capture the project inputs every model's native config build and validation read."""
+
+    project_config: ProjectConfig = inputs.project_config
+    target: TargetConfig | None = inputs.target_config
+    materialization_defaults: MaterializationDefaultsConfig = (
+        project_config.materialization_defaults or MaterializationDefaultsConfig()
+    )
+    return NativeModelConfigSession(
+        path_defaults=project_config.path_defaults,
+        builder=_native.NativeModelConfigBuilder(
+            (
+                project_defaults_to_mapping(project_config.defaults),
+                project_config.path_defaults,
+                (SqlHookEntry, NamedSqlHookEntry, PythonHookEntry),
+            ),
+            (inputs.effective_vars, os.environ),
+            (inputs.effective_target_name, inputs.run_id),
+            None if target is None else (target.database, target.schema),
+        ),
+        validator=_native.NativeModelValidator(
+            (names.models, names.seeds, names.sources, names.functions, names.table_functions),
+            set(names.custom_materializations),
+            inputs.microbatch_concurrency,
+        ),
+        inherited_storage={
+            materialized: (
+                resolve_time_travel_retention(
+                    materialized=materialized,
+                    model_value=None,
+                    materialization_defaults=materialization_defaults,
+                    target_config=target,
+                    model_name="",
+                ),
+                resolve_table_type(
+                    materialized=materialized,
+                    model_value=None,
+                    materialization_defaults=materialization_defaults,
+                    target_config=target,
+                    model_name="",
+                ),
+            )
+            for materialized in (None, *_TABLE_BACKED_MATERIALIZATIONS)
+        },
+    )
+
+
+def native_path_default(
+    *, session: NativeModelConfigSession, model_file: DiscoveredSqlModelFile
+) -> str | None:
+    """Select a model's path default natively; Python reports equally specific matches."""
+
+    selected, key = session.builder.path_default(str(model_file.relative_path))
+    if selected:
+        return key
+    return find_matching_path_default(model_file=model_file, path_defaults=session.path_defaults)
+
+
+def build_native_model_config(
+    *,
+    session: NativeModelConfigSession,
+    model_file: DiscoveredSqlModelFile,
+    matched_path_default: str | None,
+) -> CompileModelConfig | None:
+    """Build a model's effective config natively, or return None where Python must build it."""
+
+    built: _BuiltConfig | None = session.builder.build(
+        model_file.header_values, matched_path_default, model_file.file_path.stem
+    )
+    if built is None:
+        return None
+    values, header_keys, namespace, overrides, reads = built
+    logical_schema, layer_schema_configured, logical_database = namespace
+    retention_override, table_type_override = overrides
+    record_template_reads(tuple(reads))
+    materialized: object | None = values.get(_MATERIALIZED_CONFIG_KEY)
+    inherited_retention, inherited_table_type = session.inherited_storage[
+        materialized
+        if isinstance(materialized, str) and materialized in _TABLE_BACKED_MATERIALIZATIONS
+        else None
+    ]
+    return CompileModelConfig(
+        values=values,
+        model_header_keys=header_keys,
+        matched_path_default=matched_path_default,
+        logical_schema=logical_schema,
+        layer_schema=logical_schema if layer_schema_configured else None,
+        logical_database=logical_database,
+        time_travel_retention=(
+            inherited_retention
+            if retention_override is None
+            else ResolvedTimeTravelRetention(
+                desired_days=retention_override[0],
+                unmanaged=retention_override[1],
+                source=TimeTravelRetentionSource.MODEL,
+            )
+        ),
+        table_type=(
+            inherited_table_type
+            if table_type_override is None
+            else ResolvedTableType(
+                value=TableType(table_type_override),
+                source=TableTypeSource.MODEL,
+                declared=True,
+            )
+        ),
+    )
+
+
+def native_model_validators_accept(
+    *, session: NativeModelConfigSession, request: ModelValidationRequest
+) -> bool:
+    """Return whether every Python model validator accepts the model; False runs them."""
+
+    config: CompileModelConfig = request.config
+    return session.validator.accepts(
+        config.values,
+        (request.model_file.file_path.stem, request.query_sql),
+        (
+            request.references,
+            (
+                None
+                if request.declared_columns is None
+                else [column.name for column in request.declared_columns]
+            ),
+            config.time_travel_retention.unmanaged,
+            config.table_type.declared,
+        ),
+    )
+
+
+def validate_model_config(
+    *, context: ModelValidatorContext, request: ModelValidationRequest
+) -> None:
+    """Validate one model; a native acceptance skips Python, any rejection runs it."""
+
+    if context.native_config is not None and native_model_validators_accept(
+        session=context.native_config, request=request
+    ):
+        return
+    run_python_model_validators(context=context, request=request)
+
+
+def run_python_model_validators(
+    *, context: ModelValidatorContext, request: ModelValidationRequest
+) -> None:
+    """Run every Python model validator in order, raising the first error."""
+
+    names: ModelResourceNames = context.names
+    model_name: str = request.model_file.file_path.stem
+    validate_model_references(
+        references=request.references,
+        model_file=request.model_file,
+        known_model_names=names.models,
+        known_seed_names=names.seeds,
+        known_source_names=names.sources,
+        known_function_names=names.functions,
+        known_table_function_names=names.table_functions,
+        external_sql_reference_resolver=context.external_sql_reference_resolver,
+    )
+    validate_incremental_config(
+        config=request.config,
+        model_name=model_name,
+        ref_count=len(request.references),
+        known_input_names=frozenset(reference.ref_name for reference in request.references),
+        declared_columns=request.declared_columns,
+    )
+    validate_microbatch_project_capability(
+        config=request.config, settings=context.settings, model_name=model_name
+    )
+    validate_contract_config(config=request.config, model_name=model_name)
+    validate_non_incremental_config(config=request.config, model_name=model_name)
+    validate_snapshot_config(
+        config=request.config, model_name=model_name, declared_columns=request.declared_columns
+    )
+    validate_custom_materialization_config(
+        config=request.config,
+        model_name=model_name,
+        custom_materialization_names=names.custom_materializations,
+    )
+    validate_storage_policies(config=request.config, model_name=model_name)
+    validate_model_migration_config(config=request.config, model_name=model_name)
+    validate_placeholder_config(
+        config=request.config,
+        model_name=model_name,
+        query_sql=request.query_sql,
+        custom_materialization_names=names.custom_materializations,
     )

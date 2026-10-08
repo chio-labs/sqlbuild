@@ -19,12 +19,16 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     _validate_model_header_tags,
     build_layered_model_values,
     build_model_header_schema_entry,
+    build_native_model_config,
     contains_config_macro_calls,
     contains_config_templates,
     find_matching_path_default,
     find_schema_model_match,
+    native_model_config_session,
+    native_path_default,
     strip_model_header_metadata_from_config,
     validate_declared_schema_models_are_attached,
+    validate_model_config,
     validate_no_macros_in_config_value,
 )
 from sqlbuild.compiler.compile._helpers.attachment.references import (
@@ -34,17 +38,6 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_source_names,
     build_known_table_function_names,
     validate_model_references,
-)
-from sqlbuild.compiler.compile._helpers.config.model_validation import (
-    validate_contract_config,
-    validate_custom_materialization_config,
-    validate_incremental_config,
-    validate_microbatch_project_capability,
-    validate_model_migration_config,
-    validate_non_incremental_config,
-    validate_placeholder_config,
-    validate_snapshot_config,
-    validate_storage_policies,
 )
 from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
@@ -124,6 +117,11 @@ from sqlbuild.compiler.compile.models import (
     ModelConfigScanCache,
     ModelHeaderColumnCache,
     ModelInputBuildContext,
+    ModelResourceNames,
+    ModelValidationRequest,
+    ModelValidatorContext,
+    NativeModelConfigInputs,
+    NativeModelConfigSession,
     SqlAnalysisOptOutRequest,
     SqlReferenceOrigin,
     SqlReferenceScan,
@@ -270,6 +268,7 @@ class _ModelValidationContext:
     known_function_names: set[str]
     known_table_function_names: set[str]
     custom_materialization_names: frozenset[str]
+    validators: ModelValidatorContext
 
 
 @dataclass(frozen=True)
@@ -492,6 +491,15 @@ def _build_model_inputs(
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
+    native_model_config: bool = native_stage_enabled(NativeStage.MODEL_CONFIG)
+    names: ModelResourceNames = ModelResourceNames(
+        models=known_model_names,
+        seeds=known_seed_names,
+        sources=known_source_names,
+        functions=known_function_names,
+        table_functions=known_table_function_names,
+        custom_materializations=custom_materialization_names,
+    )
     validation_context: _ModelValidationContext = _ModelValidationContext(
         effective_settings=effective_settings,
         no_sql_validation=no_sql_validation,
@@ -505,6 +513,26 @@ def _build_model_inputs(
         known_function_names=known_function_names,
         known_table_function_names=known_table_function_names,
         custom_materialization_names=custom_materialization_names,
+        validators=ModelValidatorContext(
+            names=names,
+            settings=effective_settings,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            native_config=(
+                native_model_config_session(
+                    inputs=NativeModelConfigInputs(
+                        project_config=discovered_inputs.project_config,
+                        target_config=context.target_config,
+                        effective_vars=effective_vars,
+                        effective_target_name=context.effective_target_name,
+                        run_id=context.run_id,
+                        microbatch_concurrency=effective_settings.microbatch_concurrency,
+                    ),
+                    names=names,
+                )
+                if native_model_config
+                else None
+            ),
+        ),
     )
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = _index_sql_hook_definitions(
         discovered_inputs.sql_hook_files
@@ -524,7 +552,6 @@ def _build_model_inputs(
             strict=True,
         )
     )
-    native_model_config: bool = native_stage_enabled(NativeStage.MODEL_CONFIG)
     prepared_files: tuple[DiscoveredSqlModelFile, ...] = (
         tuple(
             model_file
@@ -619,14 +646,31 @@ def _build_model_input(
     declarations: _VisibleModelDeclarations = declaration_cache.for_model(
         model_file=model_file, consumer=model_identity
     )
-    matched_path_default: str | None = find_matching_path_default(
-        model_file=model_file,
-        path_defaults=discovered_inputs.project_config.path_defaults,
+    native_config: NativeModelConfigSession | None = validation_context.validators.native_config
+    matched_path_default: str | None = (
+        find_matching_path_default(
+            model_file=model_file,
+            path_defaults=discovered_inputs.project_config.path_defaults,
+        )
+        if native_config is None
+        else native_path_default(session=native_config, model_file=model_file)
     )
     effective_config: CompileModelConfig | None = reusable_config_cache.get(
         matched_path_default=matched_path_default,
         model_header_values=model_file.header_values,
     )
+    if effective_config is None and native_config is not None:
+        effective_config = build_native_model_config(
+            session=native_config,
+            model_file=model_file,
+            matched_path_default=matched_path_default,
+        )
+        if effective_config is not None:
+            reusable_config_cache.remember(
+                matched_path_default=matched_path_default,
+                model_header_values=model_file.header_values,
+                config=effective_config,
+            )
     if effective_config is None:
         effective_config = build_model_config(
             request=ModelConfigBuildRequest(
@@ -986,47 +1030,15 @@ def _validate_model_input(
         references=reference_scan.references,
         argument_references=argument_references,
     )
-    validate_model_references(
-        references=references,
-        model_file=model_file,
-        known_model_names=context.known_model_names,
-        known_seed_names=context.known_seed_names,
-        known_source_names=context.known_source_names,
-        known_function_names=context.known_function_names,
-        known_table_function_names=context.known_table_function_names,
-        external_sql_reference_resolver=context.external_sql_reference_resolver,
-    )
-    validate_incremental_config(
-        config=config,
-        model_name=model_name,
-        ref_count=len(references),
-        known_input_names=frozenset(reference.ref_name for reference in references),
-        declared_columns=model_schema_columns,
-    )
-    validate_microbatch_project_capability(
-        config=config,
-        settings=context.effective_settings,
-        model_name=model_name,
-    )
-    validate_contract_config(config=config, model_name=model_name)
-    validate_non_incremental_config(config=config, model_name=model_name)
-    validate_snapshot_config(
-        config=config,
-        model_name=model_name,
-        declared_columns=model_schema_columns,
-    )
-    validate_custom_materialization_config(
-        config=config,
-        model_name=model_name,
-        custom_materialization_names=context.custom_materialization_names,
-    )
-    validate_storage_policies(config=config, model_name=model_name)
-    validate_model_migration_config(config=config, model_name=model_name)
-    validate_placeholder_config(
-        config=config,
-        model_name=model_name,
-        query_sql=expanded_query_sql,
-        custom_materialization_names=context.custom_materialization_names,
+    validate_model_config(
+        context=context.validators,
+        request=ModelValidationRequest(
+            model_file=model_file,
+            config=config,
+            references=references,
+            declared_columns=model_schema_columns,
+            query_sql=expanded_query_sql,
+        ),
     )
     return (
         sql_validation_enabled and not reference_scan.invalid_calls,

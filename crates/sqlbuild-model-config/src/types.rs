@@ -21,6 +21,8 @@ pub enum NodeKind {
 pub trait AuthoredNode: Clone {
     /// Return this value's kind.
     fn kind(&self) -> NodeKind;
+    /// Return an integer that is not a boolean and fits in `i64`, or `None`.
+    fn integer(&self) -> Option<i64>;
     /// Return the text of a string value, or `None` when it is not readable UTF-8 text.
     fn text(&self) -> Option<String>;
     /// Return whether this is a string value equal to `text`.

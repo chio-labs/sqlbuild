@@ -177,9 +177,9 @@ def test_given_generated_templates_when_expanding_then_native_matches_python_or_
             engine="native-preview",
             expected_native_calls={
                 "parse_model_header_metadata": 1,
-                "expand_config_templates": 7,
-                "config_contains_template": 2,
-                "config_contains_macro_call": 2,
+                "expand_config_templates": 1,
+                "config_contains_template": 0,
+                "config_contains_macro_call": 0,
             },
         ),
     ],

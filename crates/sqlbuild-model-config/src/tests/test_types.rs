@@ -29,6 +29,13 @@ impl AuthoredNode for Value {
         }
     }
 
+    fn integer(&self) -> Option<i64> {
+        match self {
+            Self::Int(value) => Some(*value),
+            _ => None,
+        }
+    }
+
     fn text(&self) -> Option<String> {
         match self {
             Self::Str(text) => Some((*text).to_owned()),

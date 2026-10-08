@@ -166,6 +166,42 @@ def expand_config_templates(
     flags: tuple[bool, bool, bool],
 ) -> tuple[object, list[tuple[str, str]]] | str: ...
 
+class NativeModelConfigBuilder:
+    def __init__(
+        self,
+        layers: tuple[dict[str, object], dict[str, dict[str, object]], tuple[type, ...]],
+        sources: tuple[dict[str, object], object],
+        run: tuple[str | None, str],
+        target_namespace: tuple[str | None, str | None] | None,
+    ) -> None: ...
+    def path_default(self, model_path: str) -> tuple[bool, str | None]: ...
+    def build(
+        self, header: dict[str, object], matched_path_default: str | None, model_name: str
+    ) -> (
+        tuple[
+            dict[str, object],
+            tuple[str, ...],
+            tuple[str | None, bool, str | None],
+            tuple[tuple[int | None, bool] | None, str | None],
+            list[tuple[str, str]],
+        ]
+        | None
+    ): ...
+
+class NativeModelValidator:
+    def __init__(
+        self,
+        names: tuple[set[str], set[str], set[str], set[str], set[str]],
+        custom_materializations: set[str],
+        microbatch_concurrency: bool,
+    ) -> None: ...
+    def accepts(
+        self,
+        values: dict[str, object],
+        model: tuple[str, str],
+        facts: tuple[tuple[object, ...], list[str] | None, bool, bool],
+    ) -> bool: ...
+
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...
     def extract(

@@ -35,6 +35,17 @@ impl AuthoredNode for PyNode<'_> {
         }
     }
 
+    fn integer(&self) -> Option<i64> {
+        if !self.0.is_instance_of::<PyBool>()
+            && self.0.is_instance_of::<PyInt>()
+            && let Ok(number) = self.0.extract::<i64>()
+        {
+            Some(number)
+        } else {
+            None
+        }
+    }
+
     fn text(&self) -> Option<String> {
         self.with_text(str::to_owned)
     }

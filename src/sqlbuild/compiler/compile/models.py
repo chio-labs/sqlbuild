@@ -1641,6 +1641,61 @@ class ModelConfigScanCache:
 
 
 @dataclass(frozen=True)
+class NativeModelConfigSession:
+    """The native config builder, validator, and inherited storage policies for one compile."""
+
+    path_defaults: dict[str, dict[str, object]]
+    builder: _native.NativeModelConfigBuilder
+    validator: _native.NativeModelValidator
+    inherited_storage: dict[str | None, tuple[ResolvedTimeTravelRetention, ResolvedTableType]]
+
+
+@dataclass(frozen=True)
+class NativeModelConfigInputs:
+    """The project and run inputs every model's native config build reads."""
+
+    project_config: ProjectConfig
+    target_config: TargetConfig | None
+    effective_vars: dict[str, object]
+    effective_target_name: str | None
+    run_id: str
+    microbatch_concurrency: bool
+
+
+@dataclass(frozen=True)
+class ModelResourceNames:
+    """Discovered resource names the native reference check reads."""
+
+    models: set[str]
+    seeds: set[str]
+    sources: set[str]
+    functions: set[str]
+    table_functions: set[str]
+    custom_materializations: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ModelValidationRequest:
+    """One model's effective config and the facts its validators read."""
+
+    model_file: DiscoveredSqlModelFile
+    config: CompileModelConfig
+    references: tuple[CompileSqlReference, ...]
+    declared_columns: tuple[SchemaColumn, ...] | None
+    query_sql: str
+
+
+@dataclass(frozen=True)
+class ModelValidatorContext:
+    """The project facts the model validators read, and the native session in preview."""
+
+    names: ModelResourceNames
+    settings: SettingsConfig
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None
+    native_config: NativeModelConfigSession | None
+
+
+@dataclass(frozen=True)
 class ModelConfigBuildRequest:
     """Cohesive inputs for one effective model-configuration build."""
 
