@@ -27,7 +27,18 @@ _BRIDGED_CONSUMERS: frozenset[str] = frozenset(
     }
 )
 _PREVIEW_ONLY_ENTRIES: frozenset[str] = (
-    frozenset({"pair_seed_files", "render_attached_generic_audit", "expand_config_templates"})
+    frozenset(
+        {
+            "pair_seed_files",
+            "render_attached_generic_audit",
+            "expand_config_templates",
+            "scan_test_parameter_references",
+            "omitted_ceremonial_select",
+            "extract_sql_scenario_json",
+            "unknown_sql_test_target",
+            "scenario_source_error",
+        }
+    )
     | _BRIDGED_CONSUMERS
 )
 _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
@@ -37,8 +48,16 @@ _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
         "expand_config_templates",
         "substitute_static_project_vars",
         "scan_sql_declaration_references",
+        "scan_test_parameter_references",
+        "omitted_ceremonial_select",
+        "extract_sql_scenario_json",
+        "unknown_sql_test_target",
+        "scenario_source_error",
     }
 )
+_SCENARIO: str = "tests/scenarios/orders_scenario.sql"
+_SCENARIO_HEADER: str = 'SCENARIO (\n  description "Orders join their channel"\n);\n\n'
+_UNIT_TEST: str = "tests/unit/test_orders.sql"
 
 
 @pytest.mark.parametrize(
@@ -46,7 +65,41 @@ _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
     [
         AttachmentProjectTestCase(
             description="macros in every attachment kind, seeds, templates and generic audits",
+            overrides={},
             expected_preview_entries=_ATTACHMENT_ENTRIES | _BRIDGED_CONSUMERS,
+            expected_outcome_prefix="((CompileSeedInput(",
+        ),
+        AttachmentProjectTestCase(
+            description="a scenario check CTE reading a project source",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+                + '__expected__orders AS (SELECT id, 1.5 AS amount, label FROM __source("order_events"))\n'
+            },
+            expected_preview_entries=frozenset({"scenario_source_error"}),
+            expected_outcome_prefix="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE",
+        ),
+        AttachmentProjectTestCase(
+            description="a scenario helper reading an unknown source",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + 'WITH\nhelper AS (SELECT * FROM __source("missing_events")),\n'
+                + "__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+                + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
+            },
+            expected_preview_entries=frozenset({"scenario_source_error"}),
+            expected_outcome_prefix="error: SQL scenario file tests/scenarios/orders_scenario.sql "
+            "references unknown source 'missing_events'",
+        ),
+        AttachmentProjectTestCase(
+            description="a model test expecting an unknown model",
+            overrides={
+                _UNIT_TEST: "TEST();\n\nWITH\n__seed__channel_codes AS (SELECT 1 AS id),\n"
+                "__expected__returns AS (SELECT 1 AS id)\n"
+            },
+            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_outcome_prefix="error: SQL test file tests/unit/test_orders.sql expects "
+            "unknown model 'returns'",
         ),
     ],
     ids=lambda case: case.description,
@@ -58,6 +111,7 @@ def test_given_attachment_project_when_building_inputs_then_preview_matches_pyth
         engine: attachment_engine_outcome(
             project_dir=tmp_path / engine.value,
             engine=engine,
+            overrides=test_case.overrides,
             monkeypatch=monkeypatch,
         )
         for engine in CompilerEngine
@@ -69,9 +123,10 @@ def test_given_attachment_project_when_building_inputs_then_preview_matches_pyth
     assert (
         preview_outcome.replace(CompilerEngine.NATIVE_PREVIEW.value, "python"),
         native_outcome.replace(CompilerEngine.NATIVE.value, "python"),
+        python_outcome.startswith(test_case.expected_outcome_prefix),
         preview_called >= test_case.expected_preview_entries,
         (python_called | native_called) & _PREVIEW_ONLY_ENTRIES,
-    ) == (python_outcome, python_outcome, True, frozenset()), test_case.description
+    ) == (python_outcome, python_outcome, True, True, frozenset()), test_case.description
 
 
 if __name__ == "__main__":

@@ -36,7 +36,9 @@ class AttachmentProjectTestCase:
     """One project variant compiled to compile inputs by each engine."""
 
     description: str
+    overrides: dict[str, str]
     expected_preview_entries: frozenset[str]
+    expected_outcome_prefix: str
 
 
 @dataclass(frozen=True)
@@ -93,4 +95,15 @@ class ScenarioParityTestCase:
     syntax: SqlLexicalSyntax
     expected_minimum_extracted: int
     expected_minimum_native: int
+    expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class TargetParityTestCase:
+    """Seeded model test targets validated by each engine against known resources."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_valid: int
     expected_minimum_python_errors: int

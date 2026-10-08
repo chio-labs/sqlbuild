@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
     build_known_ref_names,
@@ -74,6 +75,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
@@ -717,6 +720,20 @@ def _validate_scenario_source_references(
     known_source_names: set[str],
     syntax: SqlLexicalSyntax,
 ) -> None:
+    native_sources: list[tuple[str, bool, list[str]]] | None = (
+        _native_scenario_cte_sources(
+            scenario_ctes=scenario_ctes, scenario_file=scenario_file, syntax=syntax
+        )
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else None
+    )
+    if native_sources is not None:
+        error: str | None = _native.scenario_source_error(
+            str(scenario_file.relative_path), native_sources, [*known_source_names]
+        )
+        if error is not None:
+            raise CompileInputError(error)
+        return
     cte: CompileSqlScenarioCte
     for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
         references: tuple[CompileSqlReference, ...] = extract_sql_references(
@@ -748,6 +765,40 @@ def _validate_scenario_source_references(
             )
 
 
+def _native_scenario_cte_sources(
+    *,
+    scenario_ctes: CompileSqlScenarioCtes,
+    scenario_file: DiscoveredSqlScenarioFile,
+    syntax: SqlLexicalSyntax,
+) -> list[tuple[str, bool, list[str]]] | None:
+    """Every CTE's source references, or None where extraction raises so Python orders errors."""
+
+    checks: tuple[CompileSqlScenarioCte, ...] = (
+        *scenario_ctes.expected_ctes,
+        *scenario_ctes.assertion_ctes,
+    )
+    cte_sources: list[tuple[str, bool, list[str]]] = []
+    try:
+        for position, cte in enumerate((*checks, *scenario_ctes.authored_ctes)):
+            references: tuple[CompileSqlReference, ...] = extract_sql_references(
+                sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
+            )
+            cte_sources.append(
+                (
+                    cte.name,
+                    position < len(checks),
+                    [
+                        reference.ref_name
+                        for reference in references
+                        if reference.ref_kind == SqlReferenceKind.SOURCE
+                    ],
+                )
+            )
+    except CompileInputError:
+        return None
+    return cte_sources
+
+
 def validate_test_ctes(
     *,
     test_ctes: CompileSqlTestCtes,
@@ -765,6 +816,34 @@ def validate_test_ctes(
         return
 
     model_payload: CompileModelSqlTestCtes = test_ctes.payload
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        error: str | None = _native.unknown_sql_test_target(
+            str(test_file.relative_path),
+            [
+                ("mocks unknown model", [*model_payload.mock_model_names], [*known_model_names]),
+                ("mocks unknown source", [*model_payload.mock_source_names], [*known_source_names]),
+                ("mocks unknown seed", [*model_payload.mock_seed_names], [*known_seed_names]),
+                (
+                    "mocks unknown table function",
+                    [*model_payload.mock_table_function_names],
+                    [*known_table_function_names],
+                ),
+                ("mocks unknown macro", [*model_payload.macro_mocks], [*loaded_macros]),
+                (
+                    "expects unknown model",
+                    [*model_payload.expected_model_names],
+                    [*known_model_names],
+                ),
+                (
+                    "assertion references unknown model",
+                    [*assertion_target_model_names],
+                    [*known_model_names],
+                ),
+            ],
+        )
+        if error is not None:
+            raise CompileInputError(error)
+        return
 
     mock_model_name: str
     for mock_model_name in model_payload.mock_model_names:

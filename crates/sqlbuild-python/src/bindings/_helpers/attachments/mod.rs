@@ -5,3 +5,4 @@ pub(crate) mod cursor_intrinsics;
 pub(crate) mod registration;
 pub(crate) mod seed_pairing;
 pub(crate) mod test_parameters;
+pub(crate) mod test_targets;

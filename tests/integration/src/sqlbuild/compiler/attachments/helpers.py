@@ -24,6 +24,7 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
     resolve_audit_run_scope,
     resolve_audit_severity,
 )
+from sqlbuild.compiler.compile._helpers.attachment.sql_tests import validate_test_ctes
 from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
@@ -36,12 +37,15 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileAdapterContext,
+    CompileModelSqlTestCtes,
     CompileProjectInputs,
+    CompileSqlTestCtes,
+    LoadedMacro,
     MacroContext,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
@@ -320,6 +324,11 @@ def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
 
 
 NATIVE_ATTACHMENT_ENTRIES: tuple[str, ...] = (
+    "scan_test_parameter_references",
+    "omitted_ceremonial_select",
+    "extract_sql_scenario_json",
+    "unknown_sql_test_target",
+    "scenario_source_error",
     "pair_seed_files",
     "render_attached_generic_audit",
     "expand_config_templates",
@@ -382,6 +391,20 @@ ATTACHMENT_PROJECT: dict[str, str] = {
         "__expected__orders AS (\n  SELECT 1 AS id, 1.5 AS amount, 'web' AS label\n)\n"
         "SELECT 1\n"
     ),
+    "tests/unit/test_orders_cases.sql": (
+        'TEST (\n  name "orders_keep_region",\n  parameters (\n    region_value string,\n  ),\n'
+        '  cases (\n    north (region_value "north"),\n'
+        '    quoted (region_value "it\'s"),\n  ),\n);\n\n'
+        "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+        '__source__order_events AS (SELECT 1 AS id, @param("region_value") AS region),\n'
+        "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label);\n"
+    ),
+    "tests/unit/test_tidy_label.sql": (
+        'TEST (mode macro, name "tidies_labels");\n\n'
+        "WITH\ninput_values AS (SELECT ' Web ' AS label),\n"
+        '__macro_actual__ AS (SELECT @tidy_label("label") AS label FROM input_values),\n'
+        "__macro_expected__ AS (SELECT 'web' AS label)\nSELECT 1\n"
+    ),
     "tests/scenarios/orders_scenario.sql": (
         'SCENARIO (\n  description "Orders join their channel"\n);\n\n'
         "WITH\n__seed__channel_codes AS (\n  SELECT 1 AS id, @tidy_label(\"'Web'\") AS label\n),\n"
@@ -396,11 +419,12 @@ def attachment_engine_outcome(
     *,
     project_dir: Path,
     engine: CompilerEngine,
+    overrides: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[frozenset[str], str]:
     """Build compile inputs under `engine`; return the native entries called and the outcome."""
 
-    for relative_path, contents in ATTACHMENT_PROJECT.items():
+    for relative_path, contents in {**ATTACHMENT_PROJECT, **overrides}.items():
         path: Path = project_dir / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
@@ -410,10 +434,13 @@ def attachment_engine_outcome(
     bridged: list[Path] = []
     monkeypatch.setattr(macros, "_bridged_sql_macros", _recorded_bridge(bridged=bridged))
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    inputs: CompileProjectInputs = compile_frontier(
-        until=CompilerStage.COMPILE_PROJECT_INPUTS,
-        python_stage=partial(_compile_inputs, project_dir=project_dir),
-    )
+    try:
+        inputs: CompileProjectInputs = compile_frontier(
+            until=CompilerStage.COMPILE_PROJECT_INPUTS,
+            python_stage=partial(_compile_inputs, project_dir=project_dir),
+        )
+    except CompileInputError as error:
+        return frozenset(called), f"error: {error}".replace(str(project_dir), "<project>")
     called.update(f"bridged:{str(path).replace(str(project_dir), '<project>')}" for path in bridged)
     return frozenset(called), repr(
         (
@@ -745,3 +772,60 @@ def native_scenario_answered(sql: str) -> bool:
     """Whether the native extraction answers instead of deferring to Python."""
 
     return _native.extract_sql_scenario_json(sql, "tests/scenarios/orders.sql") is not None
+
+
+_TARGET_NAMES: tuple[str, ...] = ("orders", "customers", "channel_codes", "returns", "order_rows")
+_KNOWN_NAMES: frozenset[str] = frozenset({"orders", "customers", "channel_codes", "order_rows"})
+
+
+def generated_test_targets(
+    *, rng: random.Random
+) -> tuple[CompileModelSqlTestCtes, tuple[str, ...]]:
+    """Return one model test payload and assertion targets mixing known and unknown names."""
+
+    def names() -> tuple[str, ...]:
+        return tuple(rng.sample(_TARGET_NAMES, k=rng.choice((0, 0, 1, 1, 2))))
+
+    return (
+        CompileModelSqlTestCtes(
+            macro_mocks=dict.fromkeys(names(), "'x'"),
+            mock_model_names=names(),
+            mock_source_names=names(),
+            mock_seed_names=names(),
+            mock_table_function_names=names(),
+            expected_model_names=names(),
+        ),
+        names(),
+    )
+
+
+def target_validation_outcome(
+    *,
+    payload: CompileModelSqlTestCtes,
+    assertion_targets: tuple[str, ...],
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str | None:
+    """Validate one payload's targets under `engine`, returning Python's error text."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    known: set[str] = set(_KNOWN_NAMES)
+    try:
+        validate_test_ctes(
+            test_ctes=CompileSqlTestCtes(mode=SqlTestMode.MODEL, payload=payload),
+            test_file=DiscoveredSqlTestFile(
+                file_path=Path("/project/tests/unit/test_orders.sql"),
+                relative_path=Path("tests/unit/test_orders.sql"),
+                contents="",
+                blocks=(),
+            ),
+            known_model_names=known,
+            known_seed_names=known,
+            known_source_names=known,
+            known_table_function_names=known,
+            loaded_macros=dict.fromkeys(known, cast(LoadedMacro, None)),
+            assertion_target_model_names=assertion_targets,
+        )
+    except CompileInputError as error:
+        return str(error)
+    return None
