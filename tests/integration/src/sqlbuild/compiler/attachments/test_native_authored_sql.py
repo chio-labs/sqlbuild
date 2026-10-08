@@ -12,6 +12,7 @@ from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
     AuthoredSqlParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
+    ExactErrorText,
     authored_outcome,
     generated_authored_sql,
     generated_dollar_authored_sql,
@@ -29,6 +30,7 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
             generate=lambda rng: generated_authored_sql(rng=rng),
             expected_minimum_expanded=600,
             expected_minimum_python_errors=300,
+            expected_minimum_exact_errors=300,
         ),
         AuthoredSqlParityTestCase(
             description="dollar quotes around variables, enum and constant references",
@@ -37,6 +39,7 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
             generate=lambda rng: generated_dollar_authored_sql(rng=rng),
             expected_minimum_expanded=300,
             expected_minimum_python_errors=300,
+            expected_minimum_exact_errors=600,
         ),
     ],
     ids=lambda case: case.description,
@@ -61,7 +64,9 @@ def test_given_generated_authored_sql_when_expanding_with_preview_then_python_ou
         sum(isinstance(item, AuthoredSqlExpansionResult) for item in python)
         >= test_case.expected_minimum_expanded,
         sum(isinstance(item, str) for item in python) >= test_case.expected_minimum_python_errors,
-    ) == ([], True, True), test_case.description
+        sum(isinstance(item, ExactErrorText) for item in preview)
+        >= test_case.expected_minimum_exact_errors,
+    ) == ([], True, True, True), test_case.description
 
 
 if __name__ == "__main__":

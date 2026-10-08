@@ -6,21 +6,23 @@ use sqlbuild_attachments::test_parameters::main::parameter_references::parameter
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-/// `(start, end, name)` code-point spans of every reference, or `None` where Python must scan.
+/// `(start, end, name)` by code points.
+type Span = (usize, usize, String);
+
+/// The references Python renders and the error it then raises for `owner`, the test case.
 #[pyfunction]
 fn scan_test_parameter_references(
     sql: &str,
     declared: Vec<String>,
-) -> PyResult<Option<Vec<(usize, usize, String)>>> {
+    owner: &str,
+) -> PyResult<(Vec<Span>, Option<String>)> {
     compiler_guard(|| {
-        let Some(references) = parameter_references(sql, &declared) else {
-            return Ok(None);
-        };
-        let mut spans: Vec<(usize, usize, String)> = Vec::with_capacity(references.len());
-        for reference in references {
+        let scan = parameter_references(sql, &declared, owner);
+        let mut spans: Vec<Span> = Vec::with_capacity(scan.references.len());
+        for reference in scan.references {
             spans.push((reference.start, reference.end, reference.name));
         }
-        Ok(Some(spans))
+        Ok((spans, scan.error))
     })
 }
 

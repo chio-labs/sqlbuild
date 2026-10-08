@@ -1,5 +1,7 @@
 //! Template expressions, scalar values and outcomes.
 
+use crate::templates::errors::TemplateError;
+
 /// A parsed `${...}` expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expression {
@@ -29,13 +31,13 @@ pub enum ContextValue<V> {
     Value(V),
 }
 
-/// Why native expansion stops; Python then expands the value itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Why native expansion stops.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TemplateFailure {
     /// A missing variable, environment variable or context value, which `coalesce` skips.
-    Missing,
-    /// Python raises another error for this template.
-    Invalid,
+    Missing(TemplateError),
+    /// Python raises this error for the template.
+    Invalid(TemplateError),
     /// Python expands this template with rules the native expansion does not reproduce.
     Unsupported,
 }

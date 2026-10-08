@@ -1,9 +1,10 @@
 use crate::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use crate::cursor_intrinsics::models::IntrinsicCheck;
+use crate::cursor_intrinsics::tests::helpers::rejected;
 use crate::cursor_intrinsics::tests::test_types::IntrinsicCheckTestCase;
 
 #[test]
-fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_is_returned() {
+fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_or_error_is_returned() {
     let test_cases = [
         IntrinsicCheckTestCase {
             description: "SQL without intrinsic names is free",
@@ -17,13 +18,50 @@ fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_is_returned(
             expected_check: IntrinsicCheck::Free,
         },
         IntrinsicCheckTestCase {
-            description: "an intrinsic call defers so Python raises",
-            sql: "WHERE ts >= __cursor_start()",
-            expected_check: IntrinsicCheck::Deferred,
+            description: "a well-formed call is rejected once the whole SQL is scanned",
+            sql: "WHERE ts >= __cursor_start( ) AND ts < __cursor_end\t()",
+            expected_check: rejected(
+                "Audit 'fresh' uses cursor intrinsics, which are only supported in cursor-based \
+                 incremental model query SQL",
+            ),
         },
         IntrinsicCheckTestCase {
-            description: "an unclosed quote after an intrinsic name defers",
+            description: "a later malformed call is raised before the use itself",
+            sql: "WHERE ts >= __cursor_start() AND ts < __cursor_end",
+            expected_check: rejected("Audit 'fresh' intrinsic __cursor_end must be called with ()"),
+        },
+        IntrinsicCheckTestCase {
+            description: "call arguments are rejected",
+            sql: "WHERE ts >= __cursor_end(1 - 2)",
+            expected_check: rejected(
+                "Audit 'fresh' intrinsic __cursor_end does not accept arguments",
+            ),
+        },
+        IntrinsicCheckTestCase {
+            description: "an unclosed call names the cursor intrinsic context",
+            sql: "WHERE ts >= __cursor_start(",
+            expected_check: rejected(
+                "Audit 'fresh' cursor intrinsic contains an unclosed parenthesis",
+            ),
+        },
+        IntrinsicCheckTestCase {
+            description: "an unclosed quote after an intrinsic name is Python's quote error",
             sql: "SELECT x__cursor_start, 'open",
+            expected_check: rejected("Audit 'fresh' contains an unclosed quoted string"),
+        },
+        IntrinsicCheckTestCase {
+            description: "an unclosed block comment before a call is Python's comment error",
+            sql: "SELECT __cursor_end() /* open",
+            expected_check: rejected("Audit 'fresh' contains an unclosed block comment"),
+        },
+        IntrinsicCheckTestCase {
+            description: "a reserved marker is rejected first",
+            sql: "SELECT __reserved_marker__, __cursor_start(",
+            expected_check: rejected("Audit 'fresh' contains a reserved internal cursor marker"),
+        },
+        IntrinsicCheckTestCase {
+            description: "quotes inside a call defer to Python's parenthesis matching",
+            sql: "WHERE ts >= __cursor_start(')')",
             expected_check: IntrinsicCheck::Deferred,
         },
         IntrinsicCheckTestCase {
@@ -31,16 +69,15 @@ fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_is_returned(
             sql: "SELECT é__cursor_end",
             expected_check: IntrinsicCheck::Deferred,
         },
-        IntrinsicCheckTestCase {
-            description: "a reserved marker defers",
-            sql: "SELECT __reserved_marker__",
-            expected_check: IntrinsicCheck::Deferred,
-        },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            intrinsic_free(test_case.sql, &["__reserved_marker__".to_owned()]),
+            intrinsic_free(
+                test_case.sql,
+                &["__reserved_marker__".to_owned()],
+                "Audit 'fresh'"
+            ),
             test_case.expected_check,
             "{}",
             test_case.description
