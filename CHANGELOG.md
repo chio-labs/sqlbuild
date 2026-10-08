@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.144.0](https://github.com/chio-labs/sqlbuild/compare/v0.143.1...v0.144.0) (2026-10-08)
+
+
+### Features
+
+* **native:** build model config and validate models natively behind the preview engine ([#1034](https://github.com/chio-labs/sqlbuild/issues/1034)) ([24e47aa](https://github.com/chio-labs/sqlbuild/commit/24e47aa5399b702a92e2fbc13aac70cf39f8d15a))
+* **native:** report attachment errors natively ([#1038](https://github.com/chio-labs/sqlbuild/issues/1038)) ([ee19894](https://github.com/chio-labs/sqlbuild/commit/ee19894bb5328fcb3310e21eff3962934189fb48))
+* **native:** report declaration and scope errors natively ([#1033](https://github.com/chio-labs/sqlbuild/issues/1033)) ([241fb56](https://github.com/chio-labs/sqlbuild/commit/241fb56ef8454c7e9c5739cbb3169d4b5e2a0fd1))
+
 ## [0.143.1](https://github.com/chio-labs/sqlbuild/compare/v0.143.0...v0.143.1) (2026-10-08)
 
 
