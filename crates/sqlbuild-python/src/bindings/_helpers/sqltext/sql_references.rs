@@ -3,7 +3,9 @@
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::{pyclass, pymethods};
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
-use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
+use sqlbuild_sqltext::sql_references::models::{
+    InvalidReferenceCall, ReferenceExtraction, SqlReference,
+};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -11,8 +13,13 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 /// `(kind, name, package, call_argument_count)` for one reference.
 type ReferenceRow = (&'static str, String, Option<String>, Option<usize>);
-/// The references, or Python's error message; `None` defers the text to Python.
-type ExtractionRow = Option<(Option<Vec<ReferenceRow>>, Option<String>)>;
+/// `(kind, call, start, message, help, corrected_call)` for one rejected call.
+type InvalidCallRow = (&'static str, String, usize, String, String, String);
+/// The references and rejected calls, or Python's error message; `None` defers to Python.
+type ExtractionRow = Option<(
+    Option<(Vec<ReferenceRow>, Vec<InvalidCallRow>)>,
+    Option<String>,
+)>;
 
 /// Extracts references under one adapter's lexical rules, read once per syntax.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -29,12 +36,18 @@ impl SqlReferenceScanner {
         }
     }
 
-    /// Return `(references, None)`, `(None, message)` when Python raises, or `None` to defer.
+    /// Return `((references, rejected calls), None)`, `(None, message)`, or `None` to defer.
     fn extract(&self, sql: &str) -> PyResult<ExtractionRow> {
         compiler_guard(|| {
             Ok(match extract_sql_references(sql, &self.syntax) {
-                ReferenceExtraction::Extracted(references) => Some((
-                    Some(references.into_iter().map(reference_row).collect()),
+                ReferenceExtraction::Extracted(scan) => Some((
+                    Some((
+                        scan.references.into_iter().map(reference_row).collect(),
+                        scan.invalid_calls
+                            .into_iter()
+                            .map(invalid_call_row)
+                            .collect(),
+                    )),
                     None,
                 )),
                 ReferenceExtraction::Failed(message) => Some((None, Some(message))),
@@ -50,6 +63,17 @@ fn reference_row(reference: SqlReference) -> ReferenceRow {
         reference.name,
         reference.package,
         reference.call_argument_count,
+    )
+}
+
+fn invalid_call_row(call: InvalidReferenceCall) -> InvalidCallRow {
+    (
+        call.kind,
+        call.call,
+        call.start,
+        call.message,
+        call.help,
+        call.corrected_call,
     )
 }
 

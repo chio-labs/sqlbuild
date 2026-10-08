@@ -5,7 +5,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from itertools import chain, compress
+from operator import attrgetter, itemgetter
+from pathlib import Path
 from typing import cast
+
+import pytest
 
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
@@ -13,12 +17,22 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import collect_compile_diagnostics
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.refs.references import (
     _scan_sql_references_with_python,
+    extract_sql_references,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlReference, SqlReferenceScan
+from sqlbuild.compiler.compile.models import (
+    CompilerDiagnostic,
+    CompileSqlReference,
+    SqlReferenceOrigin,
+    SqlReferenceScan,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
@@ -152,7 +166,7 @@ def _pick(*, rng: random.Random, usual: tuple[str, ...], rare: tuple[str, ...]) 
 
 @dataclass(frozen=True)
 class ReferenceParity:
-    """How native extraction compared with Python over one corpus."""
+    """How native extraction compared with Python over one corpus; counts are native's."""
 
     mismatches: list[tuple[object, object, object]]
     extracted: int
@@ -186,34 +200,26 @@ def _generated_reference_call(*, rng: random.Random) -> str:
     )
 
 
-def python_outcome(
-    *, sql: str, syntax: SqlLexicalSyntax
-) -> tuple[CompileSqlReference, ...] | str | None:
-    """Return the oracle's references, its error message, or None when it rejects a call."""
+def python_outcome(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan | str:
+    """Return the oracle's references and rejected calls, or its error message."""
 
     try:
-        scan: SqlReferenceScan = _scan_sql_references_with_python(sql=sql, syntax=syntax)
+        return _scan_sql_references_with_python(sql=sql, syntax=syntax)
     except CompileInputError as error:
         return str(error)
-    return (scan.references, None)[bool(scan.invalid_calls)]
 
 
 def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceParity:
-    """Compare native extraction with Python; native must defer every SQL Python rejects."""
+    """Compare native extraction, rejected calls and errors with Python wherever native scans."""
 
-    native: list[tuple[CompileSqlReference, ...] | str | None] = [
+    native: list[SqlReferenceScan | str | None] = [
         extract_native_sql_references(sql=sql, syntax=syntax) for sql in sqls
     ]
-    python: list[tuple[CompileSqlReference, ...] | str | None] = [
-        python_outcome(sql=sql, syntax=syntax) for sql in sqls
-    ]
-    scanned: list[bool] = [
-        native_outcome is not None or python_result is None
-        for native_outcome, python_result in zip(native, python, strict=True)
-    ]
-    extracted: list[tuple[CompileSqlReference, ...]] = cast(
-        list[tuple[CompileSqlReference, ...]],
-        list(compress(native, [isinstance(outcome, tuple) for outcome in native])),
+    python: list[SqlReferenceScan | str] = [python_outcome(sql=sql, syntax=syntax) for sql in sqls]
+    scanned: list[bool] = [outcome is not None for outcome in native]
+    extracted: list[SqlReferenceScan] = cast(
+        list[SqlReferenceScan],
+        list(compress(native, [isinstance(outcome, SqlReferenceScan) for outcome in native])),
     )
     return ReferenceParity(
         mismatches=mismatches(
@@ -221,12 +227,81 @@ def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceP
             expected=list(compress(python, scanned)),
             actual=list(compress(native, scanned)),
         ),
-        extracted=len(extracted),
+        extracted=sum(not scan.invalid_calls for scan in extracted),
         failed=sum(isinstance(outcome, str) for outcome in native),
-        deferred=native.count(None) - python.count(None),
-        rejected=python.count(None),
+        deferred=native.count(None),
+        rejected=sum(len(scan.invalid_calls) for scan in extracted),
         table_functions=sum(
             reference.ref_kind is SqlReferenceKind.TABLE_FUNCTION
-            for reference in chain.from_iterable(extracted)
+            for reference in chain.from_iterable(map(attrgetter("references"), extracted))
         ),
     )
+
+
+_FILE_HEADERS: tuple[str, ...] = (
+    'MODEL (description "Orders");\n\n',
+    'MODEL (\n  description "Orders",\n);\n-- notes\n\n',
+    'MODEL (description "Ordres é");\n/* commentaire */\n',
+)
+
+
+def generated_reference_files(*, rng: random.Random, count: int) -> list[tuple[str, str]]:
+    """Return seeded authored files as `(relative path, SQL body)` pairs."""
+
+    return [
+        (f"models/area_{index % 7}/orders_{index}.sql", body)
+        for index, body in enumerate(generated_reference_sqls(rng=rng, count=count))
+    ]
+
+
+def reported_reference_outcomes(
+    *,
+    files: list[tuple[str, str]],
+    syntax: SqlLexicalSyntax,
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[object]:
+    """Extract each file's body under `engine`, keeping its references, diagnostics and error."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    return [
+        _reported_reference_outcome(
+            origin=SqlReferenceOrigin(
+                file_path=Path("/project") / relative_path,
+                relative_path=Path(relative_path),
+                contents=_FILE_HEADERS[index % len(_FILE_HEADERS)] + body,
+                resource_type=CompiledResourceType.MODEL,
+                resource_name=Path(relative_path).stem,
+            ),
+            sql=body,
+            syntax=syntax,
+        )
+        for index, (relative_path, body) in enumerate(files)
+    ]
+
+
+def _reported_reference_outcome(
+    *, origin: SqlReferenceOrigin, sql: str, syntax: SqlLexicalSyntax
+) -> tuple[tuple[CompileSqlReference, ...], tuple[CompilerDiagnostic, ...], str, str | None]:
+    references: tuple[CompileSqlReference, ...] = ()
+    with collect_compile_diagnostics() as collected:
+        try:
+            references = extract_sql_references(sql=sql, syntax=syntax, origin=origin)
+        except CompileInputError as error:
+            return (references, tuple(collected.diagnostics), str(error), error.code)
+    return (references, tuple(collected.diagnostics), "", None)
+
+
+def located_diagnostic_count(*, outcomes: list[object]) -> int:
+    """Count the reported diagnostics that carry an authored location."""
+
+    diagnostics: list[tuple[CompilerDiagnostic, ...]] = list(
+        map(itemgetter(1), cast(list[tuple[object, tuple[CompilerDiagnostic, ...]]], outcomes))
+    )
+    return sum(diagnostic.location is not None for diagnostic in chain.from_iterable(diagnostics))
+
+
+def python_scan_not_expected(**_: object) -> SqlReferenceScan:
+    """A replacement for the Python scanner that fails the test when it is called."""
+
+    raise AssertionError("the Python reference scanner ran")

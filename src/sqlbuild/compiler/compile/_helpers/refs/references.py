@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
     SQL_REFERENCE_NAME_QUOTE_TOKENS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlReferenceExtractionError
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     CompileSqlReference,
@@ -25,10 +25,8 @@ from sqlbuild.compiler.compile.models import (
     SqlReferenceScan,
 )
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import CompilerEngine, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
@@ -99,38 +97,14 @@ def scan_sql_reference_calls(*, sql: str, syntax: SqlLexicalSyntax) -> SqlRefere
 
 
 def _scan_sql_references_natively(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan:
-    """Return the native refs; a native error stands only when Python raises the same error."""
+    """Return the native scan or raise Python's error; Python scans the text native defers."""
 
-    native_references: tuple[CompileSqlReference, ...] | str | None = extract_native_sql_references(
-        sql=sql, syntax=syntax
-    )
-    if native_references is None:
+    native: SqlReferenceScan | str | None = extract_native_sql_references(sql=sql, syntax=syntax)
+    if native is None:
         return _scan_sql_references_with_python(sql=sql, syntax=syntax)
-    if not isinstance(native_references, str):
-        return SqlReferenceScan(references=native_references)
-    try:
-        python_scan: SqlReferenceScan = _scan_sql_references_with_python(sql=sql, syntax=syntax)
-    except CompileInputError as error:
-        if str(error) == native_references:
-            raise
-        raise _reference_mismatch(
-            native_message=native_references, python_outcome=f"raised {str(error)!r}"
-        ) from error
-    raise _reference_mismatch(
-        native_message=native_references,
-        python_outcome=(
-            f"found {len(python_scan.references)} reference(s) and "
-            f"{len(python_scan.invalid_calls)} rejected call(s)"
-        ),
-    )
-
-
-def _reference_mismatch(*, native_message: str, python_outcome: str) -> NativeStageMismatchError:
-    return NativeStageMismatchError(
-        f"native {NativeStage.REFERENCE_EXTRACTION} raised {native_message!r} but the Python "
-        f"compiler {python_outcome}; rerun with {COMPILER_ENGINE_ENV_VAR}="
-        f"{CompilerEngine.PYTHON} and report this mismatch"
-    )
+    if isinstance(native, str):
+        raise SqlReferenceExtractionError(native)
+    return native
 
 
 def report_invalid_reference_calls(
@@ -203,8 +177,10 @@ def _authored_invalid_call_starts(
     if origin is None:
         return {}
     try:
-        authored: SqlReferenceScan = _scan_sql_references_with_python(
-            sql=origin.contents, syntax=syntax
+        authored: SqlReferenceScan = (
+            _scan_sql_references_natively(sql=origin.contents, syntax=syntax)
+            if native_stage_enabled(NativeStage.REFERENCE_EXTRACTION)
+            else _scan_sql_references_with_python(sql=origin.contents, syntax=syntax)
         )
     except CompileInputError:
         return {}

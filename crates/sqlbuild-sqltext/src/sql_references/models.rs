@@ -11,11 +11,32 @@ pub struct SqlReference {
     pub call_argument_count: Option<usize>,
 }
 
+/// One reference call compile cannot replace, with Python's P012 message and help.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InvalidReferenceCall {
+    /// Python `SqlReferenceKind` value of the call.
+    pub kind: &'static str,
+    /// The call text from its prefix through its closing parenthesis.
+    pub call: String,
+    /// The code-point offset of the call in the scanned text.
+    pub start: usize,
+    pub message: String,
+    pub help: String,
+    pub corrected_call: String,
+}
+
+/// The valid references and rejected calls of one SQL text, each in authored order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReferenceScan {
+    pub references: Vec<SqlReference>,
+    pub invalid_calls: Vec<InvalidReferenceCall>,
+}
+
 /// The references of one SQL text, Python's error for it, or a deferral to Python.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReferenceExtraction {
-    /// Every reference in authored order, exactly as Python extracts them.
-    Extracted(Vec<SqlReference>),
+    /// Every reference and rejected call in authored order, exactly as Python scans them.
+    Extracted(ReferenceScan),
     /// The message of the `CompileInputError` Python raises for this text.
     Failed(String),
     /// A character or syntax rule the scan cannot classify exactly as Python does.

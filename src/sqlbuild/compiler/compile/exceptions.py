@@ -67,5 +67,9 @@ class CompactAnalysisInputError(CompileInputError):
     """Raised when compact SQL-analysis batch inputs are inconsistent."""
 
 
+class SqlReferenceExtractionError(CompileInputError):
+    """Raised when SQL text cannot be scanned for its reference calls."""
+
+
 class AnalysisCacheEntryError(ValueError):
     """Raised when a persisted model analysis cache entry is invalid."""

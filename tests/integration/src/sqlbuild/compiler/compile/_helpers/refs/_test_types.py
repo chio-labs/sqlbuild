@@ -11,7 +11,8 @@ class CraftedReferenceParityTestCase:
 
     description: str
     sql: str
-    expected_deferred: bool = False
+    expected_rejected: int = 0
+    expected_failed: int = 0
 
 
 @dataclass(frozen=True)
@@ -42,13 +43,23 @@ class ReferenceEngineTestCase:
 
 
 @dataclass(frozen=True)
-class ReferenceMismatchTestCase:
-    """A native error that Python does not raise identically."""
+class NativeReferenceErrorTestCase:
+    """Reference SQL whose native error must stand without a Python re-scan."""
 
     description: str
     sql: str
-    native_message: str
-    expected_python_outcome: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class ReferenceDiagnosticParityTestCase:
+    """Generated authored files whose rejected calls both engines must report identically."""
+
+    description: str
+    syntax: str
+    seed: int
+    count: int
+    expected_minimum_located: int
 
 
 @dataclass(frozen=True)

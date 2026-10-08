@@ -206,7 +206,17 @@ class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...
     def extract(
         self, sql: str
-    ) -> tuple[list[tuple[str, str, str | None, int | None]], None] | tuple[None, str] | None: ...
+    ) -> (
+        tuple[
+            tuple[
+                list[tuple[str, str, str | None, int | None]],
+                list[tuple[str, str, int, str, str, str]],
+            ],
+            None,
+        ]
+        | tuple[None, str]
+        | None
+    ): ...
 
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]

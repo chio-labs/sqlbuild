@@ -1,6 +1,8 @@
 //! Lexical syntaxes and expected references for reference extraction tests.
 
-use crate::sql_references::models::{ReferenceExtraction, SqlReference};
+use crate::sql_references::models::{
+    InvalidReferenceCall, ReferenceExtraction, ReferenceScan, SqlReference,
+};
 use crate::sql_scan::models::LexicalSyntax;
 
 pub(crate) fn generic() -> LexicalSyntax {
@@ -50,7 +52,35 @@ pub(crate) fn dbt_reference(package: &str, name: &str) -> SqlReference {
 }
 
 pub(crate) fn extracted(references: Vec<SqlReference>) -> ReferenceExtraction {
-    ReferenceExtraction::Extracted(references)
+    rejected(references, Vec::new())
+}
+
+pub(crate) fn rejected(
+    references: Vec<SqlReference>,
+    invalid_calls: Vec<InvalidReferenceCall>,
+) -> ReferenceExtraction {
+    ReferenceExtraction::Extracted(ReferenceScan {
+        references,
+        invalid_calls,
+    })
+}
+
+pub(crate) fn invalid_call(
+    kind: &'static str,
+    call: &str,
+    start: usize,
+    message: &str,
+    help: &str,
+    corrected_call: &str,
+) -> InvalidReferenceCall {
+    InvalidReferenceCall {
+        kind,
+        call: call.to_string(),
+        start,
+        message: message.to_string(),
+        help: help.to_string(),
+        corrected_call: corrected_call.to_string(),
+    }
 }
 
 pub(crate) fn failed(message: &str) -> ReferenceExtraction {
