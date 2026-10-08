@@ -72,9 +72,9 @@ pub(crate) fn merged_arguments(
     Some(Ok(merged))
 }
 
-/// Python's `left != right`, or None for opaque values and numbers differing only in text.
+/// Python's `left != right`, or None for nested opaque values and numbers differing in text.
 fn python_unequal(left: &ArgumentValue, right: &ArgumentValue) -> Option<bool> {
-    if matches!(left, ArgumentValue::Opaque) || matches!(right, ArgumentValue::Opaque) {
+    if contains_opaque(left) || contains_opaque(right) {
         return None;
     }
     if left == right {
@@ -106,5 +106,14 @@ fn python_unequal(left: &ArgumentValue, right: &ArgumentValue) -> Option<bool> {
             None
         }
         _ => Some(true),
+    }
+}
+
+/// Whether `value` holds an opaque value at any depth, which only Python can compare.
+fn contains_opaque(value: &ArgumentValue) -> bool {
+    match value {
+        ArgumentValue::Opaque => true,
+        ArgumentValue::List(items) => items.iter().any(contains_opaque),
+        _ => false,
     }
 }

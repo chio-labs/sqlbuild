@@ -150,6 +150,11 @@ _DOLLAR_PIECES: tuple[str, ...] = (
     "@@ENV:SQB_ORDERS_REGION",
     '@const("sales_cap")',
     '@enum("order_status").PLACED',
+    "`",
+    "``",
+    "`@@missing``",
+    "`@@regions``",
+    "`@@CTX:run.target``",
 )
 
 

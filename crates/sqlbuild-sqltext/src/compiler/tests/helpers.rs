@@ -336,3 +336,20 @@ pub(crate) fn parse_error_on_ordinary_thread(header: String) -> Option<String> {
 pub(crate) fn nesting_error_at(position: usize) -> String {
     format!("values nest deeper than 256 levels at position {position}")
 }
+
+pub(crate) fn doubled_backticks_close_one_segment_and_open_the_next() -> bool {
+    let sqls = vec![
+        "SELECT `@@zz``".to_owned(),
+        "SELECT `@@region``@@region`, '@@region''s'".to_owned(),
+        "SELECT `a``b` -- @@region".to_owned(),
+    ];
+    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
+        == vec![
+            (UNKNOWN_VARIABLE, Some("zz".to_owned())),
+            (
+                SUBSTITUTED,
+                Some("SELECT `north``north`, 'north''s'".to_owned()),
+            ),
+            (UNCHANGED, None),
+        ]
+}

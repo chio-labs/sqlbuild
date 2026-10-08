@@ -57,6 +57,24 @@ fn given_attached_audits_when_rendering_then_python_rendering_is_returned() {
             expected_rendering: None,
         },
         AttachedAuditTestCase {
+            description: "an override holding a nested opaque value defers to Python's equality",
+            attachment: AuditAttachment {
+                implicit_arguments: vec![(
+                    "values".to_owned(),
+                    ArgumentValue::List(vec![ArgumentValue::Opaque]),
+                )],
+                ..attachment(
+                    vec![(
+                        "values".to_owned(),
+                        ArgumentValue::List(vec![ArgumentValue::Opaque]),
+                    )],
+                    None,
+                    None,
+                )
+            },
+            expected_rendering: None,
+        },
+        AttachedAuditTestCase {
             description: "a missing argument is Python's error before the policies",
             attachment: attachment(Vec::new(), Some("fatal"), None),
             expected_rendering: failed(

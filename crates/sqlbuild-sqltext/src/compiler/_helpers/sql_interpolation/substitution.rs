@@ -58,7 +58,7 @@ fn substitute_one(sql: &str, variables: &HashMap<&str, &str>) -> (u8, Option<Str
     };
     let mut index = 0;
     while index < bytes.len() {
-        let text_end = match non_code_end(bytes, index, QuotePolicy::COMPILER) {
+        let text_end = match python_non_code_end(bytes, index) {
             Ok(Some(end)) => end,
             Ok(None) => index,
             Err(Unclosed::BlockComment) => return (UNCLOSED_BLOCK_COMMENT, None),
@@ -95,6 +95,18 @@ fn substitute_one(sql: &str, variables: &HashMap<&str, &str>) -> (u8, Option<Str
         }
         None => (UNCHANGED, None),
     }
+}
+
+/// Python's comment and quote end at `index`; only `'` and `"` double, so backticks never escape.
+fn python_non_code_end(bytes: &[u8], index: usize) -> Result<Option<usize>, Unclosed> {
+    if bytes[index] != b'`' {
+        return non_code_end(bytes, index, QuotePolicy::COMPILER);
+    }
+    bytes[index + 1..]
+        .iter()
+        .position(|byte| *byte == b'`')
+        .map(|offset| Some(index + 1 + offset + 1))
+        .ok_or(Unclosed::Quote)
 }
 
 /// Python's `_interpolate_sql_segment`: substitute every token inside one quoted literal.

@@ -833,9 +833,10 @@ class StaticProjectVarDifferential:
     native: dict[str, str]
     python: dict[str, str | None]
     substituted_dollar_quotes: int
+    substituted_doubled_backticks: int
 
 
-_LEXICAL_SQL_FRAGMENTS: tuple[str, ...] = (
+LEXICAL_SQL_FRAGMENTS: tuple[str, ...] = (
     "$",
     "$$",
     "$t$",
@@ -860,18 +861,32 @@ _LEXICAL_SQL_FRAGMENTS: tuple[str, ...] = (
     "_",
     "\u00e9",
 )
+BACKTICK_SQL_FRAGMENTS: tuple[str, ...] = (
+    "`",
+    "``",
+    "'",
+    "''",
+    '"',
+    "@@revision",
+    "@@status",
+    "@@",
+    " ",
+    "x",
+    "--",
+    "\n",
+)
 _LEXICAL_SQL_MAX_FRAGMENTS: int = 12
 _DIFFERENTIAL_FILE_PATH: Path = Path("models/generated.sql")
 
 
-def generated_lexical_sqls(*, seed: int, count: int) -> tuple[str, ...]:
+def generated_lexical_sqls(*, seed: int, count: int, fragments: tuple[str, ...]) -> tuple[str, ...]:
     """Generate SQL-like strings mixing quotes, dollar quotes, comments and variable tokens."""
 
     rng: random.Random = random.Random(seed)
     sqls: list[str] = []
     for _ in range(count):
         fragment_count: int = rng.randint(1, _LEXICAL_SQL_MAX_FRAGMENTS)
-        sqls.append("".join(rng.choices(_LEXICAL_SQL_FRAGMENTS, k=fragment_count)))
+        sqls.append("".join(rng.choices(fragments, k=fragment_count)))
     return tuple(sqls)
 
 
@@ -895,6 +910,9 @@ def native_static_project_var_differential(
         python=python,
         substituted_dollar_quotes=sum(
             sql != rendered and "$$" in sql for sql, rendered in native.items()
+        ),
+        substituted_doubled_backticks=sum(
+            sql != rendered and "``" in sql for sql, rendered in native.items()
         ),
     )
 

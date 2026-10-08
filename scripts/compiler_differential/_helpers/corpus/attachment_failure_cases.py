@@ -72,6 +72,16 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="audit-variable-in-doubled-backticks",
+            expected_code="P001",
+            expected_message="unknown project variable '@@floor_amount'",
+            files={
+                **config_files('\n[vars]\nregion = "north"\n'),
+                _FLOOR_AUDIT_PATH: _FLOOR_AUDIT.replace("@minimum", "`@@floor_amount``"),
+                **_staging_audits("floor"),
+            },
+        ),
+        failure_case(
             name="sql-function-missing-returns",
             expected_code="P001",
             expected_message="functions/sql/order_label.sql must declare returns",
