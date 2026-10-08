@@ -61,7 +61,7 @@ pub(crate) fn unresolvable_call(
                 (Some(first), None) => first.as_str().to_string(),
                 _ => continue,
             };
-            let runs = runs_models && chain.iter().any(|model| *model == name);
+            let runs = runs_models && chain.contains(&name);
             if !runs && !mocks.contains_key(&name) {
                 return Some(full.as_str().to_string());
             }
