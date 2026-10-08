@@ -187,6 +187,22 @@ def scan_test_parameter_references(
     sql: str, declared: list[str]
 ) -> list[tuple[int, int, str]] | None: ...
 def sql_free_of_cursor_intrinsics(sql: str, reserved_markers: list[str]) -> bool: ...
+def parse_function_header_values(
+    header_values: dict[str, object], python: bool
+) -> (
+    tuple[
+        list[tuple[str, str, str]],
+        str | None,
+        list[tuple[str, str, str]] | None,
+        list[str],
+        str | None,
+        str | None,
+        str | None,
+        list[str],
+    ]
+    | None
+): ...
+def resolve_function_namespace_values(inputs: dict[str, object]) -> list[str | None]: ...
 def pair_seed_files(
     declarations: list[str], stems: list[str]
 ) -> tuple[list[int], None] | tuple[None, int]: ...

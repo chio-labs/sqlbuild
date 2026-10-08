@@ -107,3 +107,16 @@ class TargetParityTestCase:
     count: int
     expected_minimum_valid: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class FunctionHeaderParityTestCase:
+    """Seeded SQL and Python function headers attached by each engine."""
+
+    description: str
+    seed: int
+    count: int
+    target_schema: str | None
+    inherit_default_namespace: bool
+    expected_minimum_attached: int
+    expected_minimum_python_errors: int
