@@ -502,6 +502,19 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             expected_help_fragment="__source__item_returns AS (SELECT ...)",
         ),
         HelperReferenceErrorE2ETestCase(
+            description="test reading only mocks on the python engine",
+            test_name="assertion_reads_only_mocks",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_only_mocks' reads only mocks (__ref__items), so it "
+                "tests no model and would never run"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment='Call __ref("<model under test>") in an __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
             description="expected rows reading an unknown model on the python engine",
             test_name="expected_reads_unknown_model",
             engine="python",
@@ -529,6 +542,19 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             expected_help_fragment="__source__item_returns AS (SELECT ...)",
         ),
         HelperReferenceErrorE2ETestCase(
+            description="test reading only mocks on the native engine",
+            test_name="assertion_reads_only_mocks",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_only_mocks' reads only mocks (__ref__items), so it "
+                "tests no model and would never run"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment='Call __ref("<model under test>") in an __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
             description="expected rows reading an unknown model on the native engine",
             test_name="expected_reads_unknown_model",
             engine="native",
@@ -554,6 +580,19 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             expected_line=11,
             expected_column=23,
             expected_help_fragment="__source__item_returns AS (SELECT ...)",
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading only mocks on the native-preview engine",
+            test_name="assertion_reads_only_mocks",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_only_mocks' reads only mocks (__ref__items), so it "
+                "tests no model and would never run"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment='Call __ref("<model under test>") in an __assert__ or __expected__ CTE',
         ),
         HelperReferenceErrorE2ETestCase(
             description="expected rows reading an unknown model on the native-preview engine",

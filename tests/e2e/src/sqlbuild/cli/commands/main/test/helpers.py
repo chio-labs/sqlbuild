@@ -1827,6 +1827,12 @@ _HELPER_REFERENCE_TESTS: dict[str, str] = {
         '  SELECT item_id FROM __source("item_returns")\n'
         ")\n"
     ),
+    "assertion_reads_only_mocks": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        "__assert__only_mocked_items AS (\n"
+        '  SELECT item_id FROM __ref("items") WHERE item_id <> 7\n'
+        ")\n"
+    ),
     "expected_reads_unknown_model": (
         "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
         "__expected__item_totals AS (\n"

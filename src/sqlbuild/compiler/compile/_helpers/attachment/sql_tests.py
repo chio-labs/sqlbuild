@@ -39,6 +39,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     reference_target_model_names,
+    report_test_without_target_model,
     report_unresolvable_test_references,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
@@ -350,6 +351,19 @@ def build_test_inputs(
             reference_targets = reference_target_model_names(
                 payload=test_ctes.payload, syntax=sql_lexical_syntax
             )
+            if (
+                test.mode is SqlTestMode.MODEL
+                and not test_ctes.payload.expected_model_names
+                and not assertion_target_model_names
+                and not reference_targets
+            ):
+                report_test_without_target_model(
+                    payload=test_ctes.payload,
+                    test_file=test.test_file,
+                    test_block=test.test_block,
+                    syntax=sql_lexical_syntax,
+                )
+                continue
         test_inputs.append(
             CompileSqlTestInput(
                 test_file=test.test_file,

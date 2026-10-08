@@ -509,10 +509,16 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="filename resemblance and no expected model grant nothing",
             files={
-                "models/domain/orders.sql": "MODEL (description 'Test model orders.');\nSELECT 1 AS value",
+                "models/domain/customers.sql": (
+                    "MODEL (description 'Test model customers.');\nSELECT 1 AS value"
+                ),
+                "models/domain/orders.sql": (
+                    "MODEL (description 'Test model orders.');\n"
+                    'SELECT value FROM __ref("customers")'
+                ),
                 "tests/unit/orders_test.sql": (
-                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
-                    "__assert__valid AS (SELECT 1 WHERE FALSE) SELECT 1"
+                    "TEST ();\nWITH __ref__customers AS (SELECT 1 AS value), __assert__valid AS "
+                    '(SELECT value FROM __ref("orders") WHERE FALSE) SELECT 1'
                 ),
             },
             expected_sql_fragments=("__assert__valid",),

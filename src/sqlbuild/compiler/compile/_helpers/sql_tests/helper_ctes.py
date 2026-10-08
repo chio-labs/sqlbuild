@@ -224,6 +224,55 @@ def report_unresolvable_test_references(
     return reporter.reported
 
 
+def report_test_without_target_model(
+    *,
+    payload: CompileModelSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    test_block: DiscoveredSqlTestBlock,
+    syntax: SqlLexicalSyntax,
+) -> None:
+    """Report a model test whose checks read only mocks, so it would run no model."""
+
+    mocked: dict[SqlReferenceKind, frozenset[str]] = {
+        SqlReferenceKind.REF: frozenset(payload.mock_model_names),
+        SqlReferenceKind.SOURCE: frozenset(payload.mock_source_names),
+        SqlReferenceKind.SEED: frozenset(payload.mock_seed_names),
+        SqlReferenceKind.DBT_REF: frozenset(payload.mock_dbt_ref_names),
+        SqlReferenceKind.TABLE_FUNCTION: frozenset(payload.mock_table_function_names),
+    }
+    graph: SqlTestCteGraph = sql_test_cte_graph(
+        authored_ctes=payload.authored_ctes, reader_ctes=_reader_ctes(payload)
+    )
+    read_mocks: list[str] = [
+        graph.ctes[key].name
+        for key in reachable_cte_keys(graph=graph, roots=graph.reader_reads)
+        if graph.ctes[key].name.startswith(_MOCK_CTE_PREFIXES)
+    ]
+    first_call: str | None = None
+    for cte in _reader_ctes(payload):
+        for reference in _references(sql=cte.sql_body, syntax=syntax):
+            kind: SqlReferenceKind = SqlReferenceKind(reference.ref_kind)
+            if reference.ref_name not in mocked.get(kind, frozenset()):
+                continue
+            read_mocks.append(f"{kind.fixture_cte_prefix}{reference.ref_name}")
+            if first_call is None and kind is not SqlReferenceKind.TABLE_FUNCTION:
+                first_call = _reference_call(reference)
+    mocks: tuple[str, ...] = tuple(dict.fromkeys(read_mocks))
+    reads: str = "reads only mocks (" + ", ".join(mocks) + ")" if mocks else "reads no model"
+    reader: CompileSqlTestCte | None = next(iter(_reader_ctes(payload)), None)
+    test_name: str = test_block.name or test_file.relative_path.stem
+    _HelperDiagnostics(test_file=test_file, test_block=test_block).report(
+        cte_name=reader.name if reader is not None else test_name,
+        call=first_call,
+        message=f"SQL test '{test_name}' {reads}, so it tests no model and would never run",
+        help=(
+            'Call __ref("<model under test>") in an __assert__ or __expected__ CTE, for example '
+            '__expected__<model> AS (SELECT ...) or SELECT ... FROM __ref("<model>"), so the test '
+            "runs that model with its mocks, or remove the test."
+        ),
+    )
+
+
 def report_mocks_reading_referencing_helpers(
     *,
     authored_ctes: tuple[CompileSqlTestCte, ...],
