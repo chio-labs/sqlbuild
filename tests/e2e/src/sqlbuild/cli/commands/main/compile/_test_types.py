@@ -732,6 +732,18 @@ class BrokenEditInvalidationTestCase:
 
 
 @dataclass(frozen=True)
+class StoredMacroModuleEditTestCase:
+    """An outside module behind a stored macro call, edited after a compile that reused the call."""
+
+    description: str
+    engine: str
+    import_name: str
+    module_files: dict[str, str]
+    edited_files: dict[str, str]
+    expected_compiled_value: str
+
+
+@dataclass(frozen=True)
 class ExternalModuleEditTestCase:
     """An outside module a macro imports while rendering, rewritten in place after a compile."""
 

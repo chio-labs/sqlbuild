@@ -4276,6 +4276,53 @@ def add_external_flavor_macro(*, project_dir: Path, extlib: Path, value: str) ->
     return {"PYTHONPATH": str(extlib), "PYTHONDONTWRITEBYTECODE": "1"}
 
 
+STORED_FLAVOR_LOG_ENV_VAR: str = "SQB_FLAVOR_CALL_LOG"
+
+
+def write_external_modules(*, extlib: Path, files: dict[str, str]) -> None:
+    """Write, or rewrite in place, outside modules on the compile's import path."""
+
+    for relative_path, contents in files.items():
+        path: Path = extlib / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
+def add_stored_flavor_macro(
+    *, project_dir: Path, extlib: Path, import_name: str, log_path: Path, engine: str
+) -> dict[str, str]:
+    """Make fact orders call a logged macro that lazily imports `import_name`; return its env."""
+
+    write_project_file(
+        project_dir,
+        "models/marts/_sqlbuild/_macros/flavor.py",
+        '"""Flavor macros backed by an outside module."""\n\n\n'
+        "def flavor() -> str:\n"
+        '    """Return the configured flavor literal and log the call."""\n'
+        "    import os\n\n"
+        f"    import {import_name} as source\n\n"
+        f'    with open(os.environ["{STORED_FLAVOR_LOG_ENV_VAR}"], "a", encoding="utf-8") as log:\n'
+        '        log.write("call\\n")\n'
+        "    return source.VALUE\n",
+    )
+    replace_project_text(
+        project_dir, FACT_ORDERS_MODEL, "  o.quantity,\n", "  o.quantity,\n  @flavor() AS flavor,\n"
+    )
+    log_path.write_text("", encoding="utf-8")
+    return {
+        "PYTHONPATH": str(extlib),
+        "PYTHONDONTWRITEBYTECODE": "1",
+        STORED_FLAVOR_LOG_ENV_VAR: str(log_path),
+        COMPILER_ENGINE_ENV_VAR: engine,
+    }
+
+
+def logged_calls(log_path: Path) -> int:
+    """Return how many times a logged macro ran."""
+
+    return len(log_path.read_text(encoding="utf-8").splitlines())
+
+
 def compiled_text(*, run: CompileReuseRun, suffix: str) -> str:
     """Return the compiled artifact whose path ends with the suffix."""
 
