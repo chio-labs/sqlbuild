@@ -70,3 +70,14 @@ class OmittedSelectParityTestCase:
     count: int
     syntax: SqlLexicalSyntax
     expected_minimum_completed: int
+
+
+@dataclass(frozen=True)
+class RawDirectLogicParityTestCase:
+    """Seeded unexpanded direct-logic test bodies extracted natively and by Python."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_extracted: int
+    expected_minimum_python_errors: int

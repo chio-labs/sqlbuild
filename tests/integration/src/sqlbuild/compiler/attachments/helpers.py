@@ -29,6 +29,7 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_c
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile._helpers.sql_tests.core import complete_omitted_ceremonial_select
+from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -37,6 +38,7 @@ from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
     MacroContext,
 )
+from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -618,3 +620,66 @@ def completed_body(
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
     return complete_omitted_ceremonial_select(sql=sql, syntax=syntax)
+
+
+_DIRECT_MODES: tuple[SqlTestMode, ...] = (SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN)
+_DIRECT_CTE_NAMES: dict[SqlTestMode, tuple[str, str]] = {
+    SqlTestMode.MACRO: ("__macro_actual__", "__macro_expected__"),
+    SqlTestMode.UDF: ("__udf_actual__", "__udf_expected__"),
+    SqlTestMode.TABLE_FN: ("__table_fn_actual__", "__table_fn_expected__"),
+}
+_ACTUAL_BODIES: tuple[str, ...] = (
+    'SELECT @tidy_label("status") AS status FROM input_values',
+    'SELECT __udf("order_label")(status) AS label FROM input_values',
+    'SELECT * FROM __table_fn("order_rows")(@@limit_rows)',
+    "SELECT @@region AS region, '@@ENV:SQB_X' AS env",
+    'SELECT @param("region") AS region',
+    "SELECT 1 /* @tidy_label('x') */",
+    "SELECT 'it''s' AS quoted, `tick` AS ticked",
+)
+_EXPECTED_BODIES: tuple[str, ...] = (
+    "SELECT 'placed' AS status",
+    "SELECT 1 AS id, 'web' AS label UNION ALL SELECT 2 AS id, 'store' AS label",
+    "SELECT *",
+    "SELECT @tidy_label('x') AS status",
+    'SELECT __udf("order_label")(1) AS label',
+    "SELECT 1 AS id, 2",
+)
+_HELPER_CTES: tuple[str, ...] = (
+    "",
+    "input_values AS (SELECT ' Placed ' AS status),\n",
+    "input_values AS (SELECT @@region AS status),\n",
+    "__ref__orders AS (SELECT 1 AS id),\n",
+    "input_values AS (SELECT $$ ) $$ AS status),\n",
+)
+_TAILS: tuple[str, ...] = ("\nSELECT 1\n", "", ";", "\nSELECT 2", " -- end")
+
+
+def generated_direct_logic_test(*, rng: random.Random) -> tuple[str, SqlTestMode]:
+    """Return one unexpanded direct-logic test body and its mode."""
+
+    mode: SqlTestMode = rng.choice(_DIRECT_MODES)
+    actual, expected = _DIRECT_CTE_NAMES[rng.choice((*[mode] * 27, *_DIRECT_MODES))]
+    ctes: list[str] = [
+        f"{actual} AS (\n  {rng.choice(_ACTUAL_BODIES)}\n)",
+        f"{expected} AS (\n  {rng.choice(_EXPECTED_BODIES)}\n)",
+    ]
+    rng.shuffle(ctes)
+    return (
+        "WITH\n" + rng.choice(_HELPER_CTES) + ",\n".join(ctes) + rng.choice(_TAILS),
+        mode,
+    )
+
+
+def raw_extraction_outcome(
+    *, sql: str, mode: SqlTestMode, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+) -> object:
+    """Extract one unexpanded test under `engine`, or return Python's error text."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    try:
+        return extract_unexpanded_sql_test(
+            sql=sql, file_label="tests/unit/test_orders.sql", syntax=SqlLexicalSyntax(), mode=mode
+        )
+    except CompileInputError as error:
+        return str(error)

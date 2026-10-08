@@ -31,7 +31,6 @@ from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenar
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     complete_omitted_ceremonial_select,
     extract_assertion_target_model_names,
-    extract_sql_test_ctes,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     helper_target_model_names,
@@ -39,6 +38,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
     extract_expanded_sql_tests_cached,
+    extract_unexpanded_sql_test,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -452,7 +452,7 @@ def _validate_raw_direct_logic_test_ctes(
     test_mode: SqlTestMode,
     syntax: SqlLexicalSyntax,
 ) -> CompileSqlTestCtes:
-    return extract_sql_test_ctes(
+    return extract_unexpanded_sql_test(
         sql=test_block.sql_body,
         file_label=str(test_file.relative_path),
         syntax=syntax,

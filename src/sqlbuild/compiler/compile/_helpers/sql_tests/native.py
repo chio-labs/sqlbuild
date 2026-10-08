@@ -23,6 +23,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
@@ -138,6 +140,19 @@ def extract_expanded_sql_tests(
         else next(native_results)
         for index, (sql, file_label, mode) in enumerate(tests)
     )
+
+
+def extract_unexpanded_sql_test(
+    *, sql: str, file_label: str, syntax: SqlLexicalSyntax, mode: SqlTestMode
+) -> CompileSqlTestCtes:
+    """Extract a test before expansion, natively in preview; Python decides what native rejects."""
+
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        try:
+            return extract_expanded_sql_tests(tests=((sql, file_label, mode),), syntax=syntax)[0]
+        except CompileInputError:
+            pass
+    return extract_sql_test_ctes(sql=sql, file_label=file_label, syntax=syntax, mode=mode)
 
 
 def _extract_expanded_sql_tests_natively(
