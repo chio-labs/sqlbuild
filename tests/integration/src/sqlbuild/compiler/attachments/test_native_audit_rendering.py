@@ -1,4 +1,4 @@
-"""Natively rendered attached audits match Python's argument merge, SQL and policies."""
+"""Natively rendered attached audits match Python's argument merge, SQL, policies and errors."""
 
 from __future__ import annotations
 
@@ -26,7 +26,8 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
             description="seeded parameters, argument values, overrides and policies",
             seed=20261008,
             count=5000,
-            expected_minimum_native=800,
+            expected_minimum_native=1500,
+            expected_minimum_native_errors=600,
             expected_minimum_deferred=2000,
             expected_minimum_python_errors=1000,
         ),
@@ -50,10 +51,12 @@ def test_given_generated_attachments_when_rendering_natively_then_python_renderi
             actual=list(map(native_outcome, answered)),
         ),
         len(answered) >= test_case.expected_minimum_native,
+        sum(isinstance(native_outcome(parity), str) for parity in answered)
+        >= test_case.expected_minimum_native_errors,
         len(parities) - len(answered) >= test_case.expected_minimum_deferred,
         sum(isinstance(parity.python, str) for parity in parities)
         >= test_case.expected_minimum_python_errors,
-    ) == ([], True, True, True), test_case.description
+    ) == ([], True, True, True, True), test_case.description
 
 
 if __name__ == "__main__":

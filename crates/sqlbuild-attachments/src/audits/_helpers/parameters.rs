@@ -60,13 +60,13 @@ pub(crate) fn parameter_matches(sql: &str) -> Option<Vec<ParameterMatch<'_>>> {
     Some(matches)
 }
 
-/// Python's `render_sql_argument_value` for one value.
-pub(crate) fn render_value(value: &ArgumentValue, quoted: bool) -> String {
-    match value {
+/// Python's `render_sql_argument_value` for one value; `None` where it holds an opaque value.
+pub(crate) fn render_value(value: &ArgumentValue, quoted: bool) -> Option<String> {
+    Some(match value {
         ArgumentValue::List(items) => items
             .iter()
             .map(|item| render_value(item, quoted))
-            .collect::<Vec<String>>()
+            .collect::<Option<Vec<String>>>()?
             .join(", "),
         ArgumentValue::Boolean(true) => "TRUE".to_owned(),
         ArgumentValue::Boolean(false) => "FALSE".to_owned(),
@@ -74,7 +74,8 @@ pub(crate) fn render_value(value: &ArgumentValue, quoted: bool) -> String {
         ArgumentValue::Number(text) => text.clone(),
         ArgumentValue::Text(text) if quoted => format!("'{}'", text.replace('\'', "''")),
         ArgumentValue::Text(text) => text.clone(),
-    }
+        ArgumentValue::Opaque => return None,
+    })
 }
 
 /// The end of `[A-Za-z_][A-Za-z0-9_]*` at `start`.
@@ -110,30 +111,45 @@ fn opens_call(bytes: &[u8], mut index: usize) -> Option<bool> {
     Some(false)
 }
 
-/// Python's `render_parameterized_sql`, or None where Python raises or decides.
+/// Why rendering stops: Python's missing-argument or value error, or input Python must judge.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RenderStop {
+    MissingArgument(String),
+    /// The argument whose value Python cannot render.
+    UnsupportedValue(String),
+    Deferred,
+}
+
+/// Python's `render_parameterized_sql`; unused arguments under `reject_unused` defer.
 pub(crate) fn render_parameterized_sql(
     sql: &str,
     arguments: &[(String, ArgumentValue)],
     reject_unused: bool,
-) -> Option<String> {
-    let matches = parameter_matches(sql)?;
+) -> Result<String, RenderStop> {
+    let matches = parameter_matches(sql).ok_or(RenderStop::Deferred)?;
     if reject_unused {
         for (name, _) in arguments {
             if !matches.iter().any(|item| item.name == name.as_str()) {
-                return None;
+                return Err(RenderStop::Deferred);
             }
         }
     }
     let mut rendered: String = String::with_capacity(sql.len());
     let mut previous_end: usize = 0;
     for item in &matches {
-        let (_, value) = arguments
+        let Some((_, value)) = arguments
             .iter()
-            .find(|(name, _)| name.as_str() == item.name)?;
+            .find(|(name, _)| name.as_str() == item.name)
+        else {
+            return Err(RenderStop::MissingArgument(item.name.to_owned()));
+        };
         rendered.push_str(&sql[previous_end..item.start]);
-        rendered.push_str(&render_value(value, item.quoted));
+        let Some(text) = render_value(value, item.quoted) else {
+            return Err(RenderStop::UnsupportedValue(item.name.to_owned()));
+        };
+        rendered.push_str(&text);
         previous_end = item.end;
     }
     rendered.push_str(&sql[previous_end..]);
-    Some(rendered)
+    Ok(rendered)
 }

@@ -1,5 +1,6 @@
 //! The Python template evaluator: references, `if`, `eq`, `ne` and `coalesce`.
 
+use crate::templates::errors::TemplateError;
 use crate::templates::models::{
     ContextValue, Expression, Scalar, TemplateFailure, TemplateOptions,
 };
@@ -51,15 +52,19 @@ fn evaluate_reference<H: TemplateHost>(
         _ => {}
     }
     let Some((namespace, name)) = reference.split_once(':') else {
-        return host.variable(reference)?.ok_or(TemplateFailure::Missing);
+        return host.variable(reference)?.ok_or_else(|| {
+            TemplateFailure::Missing(TemplateError::UnknownVariable(reference.to_owned()))
+        });
     };
     match namespace {
-        ENVIRONMENT_NAMESPACE => host.environment(name)?.ok_or(TemplateFailure::Missing),
+        ENVIRONMENT_NAMESPACE => host.environment(name)?.ok_or_else(|| {
+            TemplateFailure::Missing(TemplateError::MissingEnvironmentVariable(name.to_owned()))
+        }),
         CONTEXT_NAMESPACE if !options.allow_context => {
             if options.preserve_context_tokens {
                 host.text(&format!("${{{reference}}}"))
             } else {
-                Err(TemplateFailure::Invalid)
+                Err(TemplateFailure::Invalid(TemplateError::ContextNotAllowed))
             }
         }
         CONTEXT_NAMESPACE => match host.context(name)? {
@@ -67,9 +72,16 @@ fn evaluate_reference<H: TemplateHost>(
             ContextValue::Unknown if options.preserve_unknown_context => {
                 host.text(&format!("${{{CONTEXT_NAMESPACE}:{name}}}"))
             }
-            ContextValue::Unknown | ContextValue::Unavailable => Err(TemplateFailure::Missing),
+            ContextValue::Unknown => Err(TemplateFailure::Missing(
+                TemplateError::UnknownContextKey(name.to_owned()),
+            )),
+            ContextValue::Unavailable => Err(TemplateFailure::Missing(
+                TemplateError::UnavailableContextKey(name.to_owned()),
+            )),
         },
-        _ => Err(TemplateFailure::Invalid),
+        _ => Err(TemplateFailure::Invalid(
+            TemplateError::UnsupportedNamespace(namespace.to_owned()),
+        )),
     }
 }
 
@@ -98,14 +110,32 @@ fn evaluate_function<H: TemplateHost>(
             for argument in arguments {
                 match evaluate(host, argument, options) {
                     Ok(value) if truthiness(host, &value)? => return Ok(value),
-                    Ok(_) | Err(TemplateFailure::Missing) => {}
+                    Ok(_) | Err(TemplateFailure::Missing(_)) => {}
                     Err(failure) => return Err(failure),
                 }
             }
             evaluate(host, last, options)
         }
-        _ => Err(TemplateFailure::Invalid),
+        (IF_FUNCTION, _) => Err(argument_count(IF_FUNCTION, 3)),
+        (EQ_FUNCTION | NE_FUNCTION, _) => Err(argument_count(
+            if name == EQ_FUNCTION {
+                EQ_FUNCTION
+            } else {
+                NE_FUNCTION
+            },
+            2,
+        )),
+        (COALESCE_FUNCTION, []) => Err(TemplateFailure::Invalid(
+            TemplateError::CoalesceWithoutArguments,
+        )),
+        _ => Err(TemplateFailure::Invalid(
+            TemplateError::UnsupportedFunction(name.to_owned()),
+        )),
     }
+}
+
+fn argument_count(function: &'static str, count: usize) -> TemplateFailure {
+    TemplateFailure::Invalid(TemplateError::ArgumentCount(function, count))
 }
 
 fn comparison_text<H: TemplateHost>(host: &H, value: &H::Value) -> Result<String, TemplateFailure> {

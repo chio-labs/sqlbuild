@@ -59,7 +59,13 @@ _CONTEXT: str = "SQL interpolation"
 _NATIVE_UNCHANGED: int = 0
 _NATIVE_SUBSTITUTED: int = 1
 _NATIVE_FALLBACK: int = 2
+_NATIVE_UNKNOWN_VARIABLE: int = 3
+_NATIVE_UNCLOSED_QUOTE: int = 4
+_NATIVE_UNCLOSED_BLOCK_COMMENT: int = 5
 _NATIVE_RESULT_LENGTH: int = 2
+_NATIVE_ERROR_STATUSES: frozenset[int] = frozenset(
+    {_NATIVE_UNKNOWN_VARIABLE, _NATIVE_UNCLOSED_QUOTE, _NATIVE_UNCLOSED_BLOCK_COMMENT}
+)
 
 
 def expand_authored_sql_result(  # noqa: PLR0913
@@ -79,7 +85,9 @@ def expand_authored_sql_result(  # noqa: PLR0913
 
     native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
     prepared_sql: str | None = (
-        prepare_static_project_vars_batch(sqls=(sql,), effective_vars=effective_vars)[0]
+        prepare_static_project_vars_batch(
+            sqls=(sql,), effective_vars=effective_vars, error_file_path=file_path
+        )[0]
         if native
         else None
     )
@@ -206,8 +214,9 @@ def prepare_static_project_vars_batch(
     *,
     sqls: tuple[str, ...],
     effective_vars: dict[str, object],
+    error_file_path: Path | None = None,
 ) -> tuple[str | None, ...]:
-    """Prepare safe static substitutions, leaving dynamic fallbacks in authored order."""
+    """Prepare static substitutions in order; with a file path, raise exact errors for it."""
 
     scalar_variables: list[tuple[str, str]] = [
         (name, render_project_var_text(value=value, label=f"SQL variable '@@{name}'"))
@@ -233,9 +242,47 @@ def prepare_static_project_vars_batch(
             results.append(rendered)
         elif status == _NATIVE_FALLBACK and rendered is None:
             results.append(None)
+        elif status in _NATIVE_ERROR_STATUSES:
+            if error_file_path is not None:
+                _raise_native_interpolation_error(
+                    status=status,
+                    name=rendered,
+                    file_path=error_file_path,
+                    effective_vars=effective_vars,
+                )
+            results.append(None)
         else:
             raise CompileInputError("native static SQL interpolation returned an invalid status")
     return tuple(results)
+
+
+def _raise_native_interpolation_error(
+    *, status: int, name: str | None, file_path: Path, effective_vars: dict[str, object]
+) -> None:
+    if status == _NATIVE_UNCLOSED_QUOTE:
+        raise CompileInputError(
+            f"{_CONTEXT} contains an unclosed quoted string", bridge_independent=True
+        )
+    if status == _NATIVE_UNCLOSED_BLOCK_COMMENT:
+        raise CompileInputError(
+            f"{_CONTEXT} contains an unclosed block comment", bridge_independent=True
+        )
+    if name is not None and name not in effective_vars:
+        raise CompileInputError(
+            _unknown_project_variable_message(
+                var_name=name, file_path=file_path, effective_vars=effective_vars
+            ),
+            bridge_independent=True,
+        )
+
+
+def _unknown_project_variable_message(
+    *, var_name: str, file_path: Path, effective_vars: dict[str, object]
+) -> str:
+    return (
+        f"unknown project variable '@@{var_name}' in '{file_path}'. "
+        f"Available vars: {', '.join(sorted(effective_vars)) or 'none'}"
+    )
 
 
 def substitute_sql_vars_with_spans(
@@ -439,8 +486,9 @@ def _render_interpolation_token(
         var_name: str = sql[token_start:name_end]
         if var_name not in effective_vars:
             raise CompileInputError(
-                f"unknown project variable '@@{var_name}' in '{file_path}'. "
-                f"Available vars: {', '.join(sorted(effective_vars)) or 'none'}"
+                _unknown_project_variable_message(
+                    var_name=var_name, file_path=file_path, effective_vars=effective_vars
+                )
             )
         try:
             return render_project_var_text(

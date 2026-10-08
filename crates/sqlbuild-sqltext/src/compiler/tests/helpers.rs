@@ -2,7 +2,8 @@ use crate::compiler::_helpers::model_headers::tokenization::{
     MAX_TOKENIZER_WORKERS, TOKENIZER_WORKER_STACK_BYTES, build_tokenizer_pool, parse_batch,
 };
 use crate::compiler::_helpers::sql_interpolation::substitution::{
-    FALLBACK, SUBSTITUTED, UNCHANGED, substitute_batch,
+    FALLBACK, SUBSTITUTED, UNCHANGED, UNCLOSED_BLOCK_COMMENT, UNCLOSED_QUOTE, UNKNOWN_VARIABLE,
+    substitute_batch,
 };
 use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::compiler::main::declaration_references::scan_declaration_references;
@@ -37,14 +38,22 @@ pub(crate) fn scalar_variables_preserve_lexical_boundaries() -> bool {
 
 pub(crate) fn dynamic_or_malformed_sql_requests_fallback() -> bool {
     let sqls = vec![
-        "SELECT @@ENV:USER".to_owned(),
-        "SELECT @@missing".to_owned(),
+        "SELECT @@ENV:USER, @@missing".to_owned(),
+        "SELECT @@missing, @@ENV:USER".to_owned(),
+        "SELECT '@@missing'".to_owned(),
         "SELECT @@revision, 'unterminated".to_owned(),
         "SELECT @@revision /* unterminated".to_owned(),
         "SELECT @@révision".to_owned(),
     ];
     substitute_batch(&sqls, &[("revision".to_owned(), "7".to_owned())])
-        == vec![(FALLBACK, None); sqls.len()]
+        == vec![
+            (FALLBACK, None),
+            (UNKNOWN_VARIABLE, Some("missing".to_owned())),
+            (UNKNOWN_VARIABLE, Some("missing".to_owned())),
+            (UNCLOSED_QUOTE, None),
+            (UNCLOSED_BLOCK_COMMENT, None),
+            (FALLBACK, None),
+        ]
 }
 
 pub(crate) fn dollar_quoted_text_is_quoted_for_substitution() -> bool {
@@ -71,14 +80,14 @@ pub(crate) fn dollar_quoted_text_is_quoted_for_substitution() -> bool {
         ]
 }
 
-pub(crate) fn unclosed_dollar_quote_requests_fallback() -> bool {
+pub(crate) fn unclosed_dollar_quote_stops_as_unclosed_quote() -> bool {
     let sqls = vec![
         "SELECT $tag$ @@region".to_owned(),
         "SELECT @@region, $$ open".to_owned(),
         "-- @@region\nSELECT $t$ closes with another tag $u$".to_owned(),
     ];
     substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
-        == vec![(FALLBACK, None); sqls.len()]
+        == vec![(UNCLOSED_QUOTE, None); sqls.len()]
 }
 
 pub(crate) fn simple_references_preserve_authored_order() -> bool {
@@ -326,4 +335,21 @@ pub(crate) fn parse_error_on_ordinary_thread(header: String) -> Option<String> {
 /// The error the parser reports for a container past the nesting limit at `position`.
 pub(crate) fn nesting_error_at(position: usize) -> String {
     format!("values nest deeper than 256 levels at position {position}")
+}
+
+pub(crate) fn doubled_backticks_close_one_segment_and_open_the_next() -> bool {
+    let sqls = vec![
+        "SELECT `@@zz``".to_owned(),
+        "SELECT `@@region``@@region`, '@@region''s'".to_owned(),
+        "SELECT `a``b` -- @@region".to_owned(),
+    ];
+    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
+        == vec![
+            (UNKNOWN_VARIABLE, Some("zz".to_owned())),
+            (
+                SUBSTITUTED,
+                Some("SELECT `north``north`, 'north''s'".to_owned()),
+            ),
+            (UNCHANGED, None),
+        ]
 }

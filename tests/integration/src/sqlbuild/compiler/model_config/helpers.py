@@ -314,7 +314,7 @@ def _native_classification(*, value: object, flags: TemplateFlags) -> object:
     return _native.expand_config_templates(
         value,
         (TEMPLATE_VARIABLES, os.environ, TEMPLATE_CONTEXT),
-        (flags.allow_context, flags.preserve_context_tokens, flags.preserve_unknown_context),
+        (flags.allow_context, flags.preserve_context_tokens, flags.preserve_unknown_context, None),
     )
 
 

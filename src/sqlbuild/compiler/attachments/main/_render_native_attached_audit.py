@@ -10,13 +10,14 @@ from sqlbuild.compiler.attachments.models import NativeAuditPolicies, NativeRend
 
 def render_native_attached_audit(
     *,
+    labels: tuple[str, str],
     sql_body: str,
     evidence_sql: str | None,
     implicit_arguments: dict[str, object],
     explicit_arguments: dict[str, object],
     policies: NativeAuditPolicies,
 ) -> NativeRenderedAudit | None:
-    """Return the rendering, or None where Python must render the audit and raise its errors."""
+    """Return the rendering with Python's errors for `(owner, audit)`, or None for Python."""
 
     if not all(
         value is None or isinstance(value, str)
@@ -28,7 +29,12 @@ def render_native_attached_audit(
         )
     ) or not isinstance(explicit_arguments, dict):
         return None
-    rendered: tuple[str, str | None, str, str] | None = _native.render_attached_generic_audit(
-        (sql_body, evidence_sql), (implicit_arguments, explicit_arguments), asdict(policies)
+    rendered: tuple[str | None, str, str | None, str, str, str | None] | None = (
+        _native.render_attached_generic_audit(
+            labels,
+            (sql_body, evidence_sql),
+            (implicit_arguments, explicit_arguments),
+            asdict(policies),
+        )
     )
     return None if rendered is None else NativeRenderedAudit(*rendered)

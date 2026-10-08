@@ -1,4 +1,7 @@
-use crate::functions::models::{FunctionLanguage, HeaderValue, NamedType, NamespaceInputs};
+use crate::functions::models::{
+    FunctionHeader, FunctionLanguage, HeaderFailure, HeaderStage, HeaderValue, NamedType,
+    NamespaceInputs,
+};
 
 pub(super) fn text(value: &str) -> HeaderValue {
     HeaderValue::Text(value.to_owned())
@@ -44,4 +47,25 @@ pub(super) fn named(raw_name: &str, name: &str, type_text: &str) -> NamedType {
         name: name.to_owned(),
         type_text: type_text.to_owned(),
     }
+}
+
+/// A header Python parsed nothing else from.
+pub(super) fn empty_header() -> FunctionHeader {
+    FunctionHeader {
+        arguments: Vec::new(),
+        returns: None,
+        tags: Vec::new(),
+        description: None,
+        runtime_version: None,
+        entry_point: None,
+        packages: Vec::new(),
+        failure: None,
+    }
+}
+
+pub(super) fn failure(stage: HeaderStage, message: &str) -> Option<HeaderFailure> {
+    Some(HeaderFailure {
+        stage,
+        message: message.to_owned(),
+    })
 }

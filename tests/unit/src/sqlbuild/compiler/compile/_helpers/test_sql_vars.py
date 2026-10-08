@@ -18,6 +18,8 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SubstituteSqlVarsTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    BACKTICK_SQL_FRAGMENTS,
+    LEXICAL_SQL_FRAGMENTS,
     StaticProjectVarDifferential,
     generated_lexical_sqls,
     native_static_project_var_differential,
@@ -292,25 +294,40 @@ def test_given_static_model_sql_when_batch_preparing_then_returns_safe_results_a
             seed=550,
             sql_count=4000,
             effective_vars={"revision": 7, "status": "ready"},
+            fragments=LEXICAL_SQL_FRAGMENTS,
             expected_minimum_dollar_quote_substitutions=1,
-        )
+            expected_minimum_doubled_backtick_substitutions=0,
+        ),
+        StaticProjectVarDifferentialTestCase(
+            description="generated doubled backticks beside quotes, comments and tokens",
+            seed=1038,
+            sql_count=4000,
+            effective_vars={"revision": 7, "status": "ready"},
+            fragments=BACKTICK_SQL_FRAGMENTS,
+            expected_minimum_dollar_quote_substitutions=0,
+            expected_minimum_doubled_backtick_substitutions=200,
+        ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_generated_lexical_sql_when_batch_preparing_then_native_matches_python_scanner(
     test_case: StaticProjectVarDifferentialTestCase,
 ) -> None:
-    sqls: tuple[str, ...] = generated_lexical_sqls(seed=test_case.seed, count=test_case.sql_count)
+    sqls: tuple[str, ...] = generated_lexical_sqls(
+        seed=test_case.seed, count=test_case.sql_count, fragments=test_case.fragments
+    )
 
     differential: StaticProjectVarDifferential = native_static_project_var_differential(
         sqls=sqls, effective_vars=test_case.effective_vars
     )
 
-    assert differential.native == differential.python
     assert (
+        differential.native == differential.python,
         differential.substituted_dollar_quotes
-        >= test_case.expected_minimum_dollar_quote_substitutions
-    )
+        >= test_case.expected_minimum_dollar_quote_substitutions,
+        differential.substituted_doubled_backticks
+        >= test_case.expected_minimum_doubled_backtick_substitutions,
+    ) == (True, True, True), test_case.description
 
 
 if __name__ == "__main__":

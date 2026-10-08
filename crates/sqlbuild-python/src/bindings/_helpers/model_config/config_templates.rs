@@ -51,9 +51,9 @@ pub(crate) struct TemplateSources<'py>(
     pub(crate) Bound<'py, PyDict>,
 );
 
-/// `allow_context`, `preserve_context_tokens` and `preserve_unknown_context`.
+/// The three resolution flags, then a label making rejections `("invalid", message, reads)`.
 #[derive(FromPyObject)]
-struct TemplateFlags(bool, bool, bool);
+struct TemplateFlags(bool, bool, bool, Option<String>);
 
 /// A template failure, or a Python error raised while building the expanded containers.
 pub(crate) enum Stop {
@@ -132,7 +132,7 @@ impl<'py> TemplateHost for PythonHost<'py> {
     }
 }
 
-/// Return `(value, ordered reads)` as `expand_template_data` would, `invalid` or `unsupported`.
+/// Return `(value, reads)` as `expand_template_data` would, a rejection, or `unsupported`.
 #[pyfunction]
 fn expand_config_templates<'py>(
     py: Python<'py>,
@@ -140,7 +140,9 @@ fn expand_config_templates<'py>(
     sources: TemplateSources<'py>,
     flags: TemplateFlags,
 ) -> PyResult<Py<PyAny>> {
-    let TemplateFlags(allow_context, preserve_context_tokens, preserve_unknown_context) = flags;
+    let TemplateFlags(allow_context, preserve_context_tokens, preserve_unknown_context, label) =
+        flags;
+    let context_label: Option<&str> = label.as_deref();
     let options = TemplateOptions {
         allow_context,
         preserve_context_tokens,
@@ -152,8 +154,18 @@ fn expand_config_templates<'py>(
             .into_pyobject(py)?
             .into_any()
             .unbind()),
-        Err(Stop::Failure(TemplateFailure::Missing | TemplateFailure::Invalid)) => {
-            Ok(PyString::new(py, INVALID_OUTCOME).into_any().unbind())
+        Err(Stop::Failure(TemplateFailure::Missing(error) | TemplateFailure::Invalid(error))) => {
+            match context_label {
+                Some(label) => Ok((
+                    INVALID_OUTCOME,
+                    error.message(label),
+                    host.reads.into_inner(),
+                )
+                    .into_pyobject(py)?
+                    .into_any()
+                    .unbind()),
+                None => Ok(PyString::new(py, INVALID_OUTCOME).into_any().unbind()),
+            }
         }
         Err(Stop::Failure(TemplateFailure::Unsupported)) => {
             Ok(PyString::new(py, UNSUPPORTED_OUTCOME).into_any().unbind())

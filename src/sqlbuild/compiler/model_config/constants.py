@@ -30,3 +30,4 @@ UNSUPPORTED_OUTCOME: str = "unsupported"
 ENVIRONMENT_READ: str = "env"
 COLUMNS_HEADER_KEY: str = "columns"
 AUDITS_HEADER_KEY: str = "audits"
+NATIVE_TEMPLATE_REJECTION_LENGTH: int = 3

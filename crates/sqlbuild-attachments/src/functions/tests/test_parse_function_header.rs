@@ -1,10 +1,12 @@
 use crate::functions::main::parse_function_header::parse_function_header;
-use crate::functions::models::{FunctionHeader, FunctionLanguage, FunctionReturns, HeaderValue};
-use crate::functions::tests::helpers::{header, map, named, text};
+use crate::functions::models::{
+    FunctionHeader, FunctionLanguage, FunctionReturns, HeaderStage, HeaderValue,
+};
+use crate::functions::tests::helpers::{empty_header, failure, header, map, named, text};
 use crate::functions::tests::test_types::FunctionHeaderTestCase;
 
 #[test]
-fn given_function_headers_when_parsing_then_python_values_or_deferrals_are_returned() {
+fn given_function_headers_when_parsing_then_python_values_and_first_error_are_returned() {
     let test_cases = [
         FunctionHeaderTestCase {
             description: "a SQL table function with stripped arguments, columns and tags",
@@ -18,15 +20,13 @@ fn given_function_headers_when_parsing_then_python_values_or_deferrals_are_retur
                 ("description", text(" Order rows. ")),
             ]),
             language: FunctionLanguage::Sql,
-            expected_header: Some(FunctionHeader {
+            expected_header: FunctionHeader {
                 arguments: vec![named(" raw_status ", "raw_status", "STRING")],
-                returns: FunctionReturns::Table(vec![named("id", "id", "INTEGER")]),
+                returns: Some(FunctionReturns::Table(vec![named("id", "id", "INTEGER")])),
                 tags: vec!["orders".to_owned()],
                 description: Some("Order rows.".to_owned()),
-                runtime_version: None,
-                entry_point: None,
-                packages: Vec::new(),
-            }),
+                ..empty_header()
+            },
         },
         FunctionHeaderTestCase {
             description: "a Python function with its runtime, entry point and packages",
@@ -37,33 +37,97 @@ fn given_function_headers_when_parsing_then_python_values_or_deferrals_are_retur
                 ("packages", HeaderValue::Sequence(vec![text("numpy")])),
             ]),
             language: FunctionLanguage::Python,
-            expected_header: Some(FunctionHeader {
-                arguments: Vec::new(),
-                returns: FunctionReturns::Type("STRING".to_owned()),
-                tags: Vec::new(),
-                description: None,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Type("STRING".to_owned())),
                 runtime_version: Some("3.12".to_owned()),
                 entry_point: Some("label".to_owned()),
                 packages: vec!["numpy".to_owned()],
-            }),
+                ..empty_header()
+            },
         },
         FunctionHeaderTestCase {
-            description: "a missing return type defers so Python raises",
-            header: header(&[("arguments", map(&[]))]),
+            description: "a missing return type is raised before the arguments",
+            header: header(&[("arguments", HeaderValue::Other)]),
             language: FunctionLanguage::Sql,
-            expected_header: None,
+            expected_header: FunctionHeader {
+                failure: failure(
+                    HeaderStage::Start,
+                    "SQL function file functions/f.sql must declare returns",
+                ),
+                ..empty_header()
+            },
         },
         FunctionHeaderTestCase {
-            description: "a blank argument type defers so Python raises",
+            description: "a blank argument type keeps the arguments before it",
             header: header(&[
-                ("returns", text("STRING")),
-                ("arguments", map(&[("value", text("  "))])),
+                ("returns", HeaderValue::Other),
+                (
+                    "arguments",
+                    map(&[("id", text("INTEGER")), (" value ", text("  "))]),
+                ),
             ]),
             language: FunctionLanguage::Sql,
-            expected_header: None,
+            expected_header: FunctionHeader {
+                arguments: vec![named("id", "id", "INTEGER")],
+                failure: failure(
+                    HeaderStage::Arguments,
+                    "SQL function file functions/f.sql argument ' value ' must declare a type",
+                ),
+                ..empty_header()
+            },
         },
         FunctionHeaderTestCase {
-            description: "a Python function returning a table defers so Python raises",
+            description: "a blank SQL return type is a shape error after the arguments",
+            header: header(&[("returns", text(" ")), ("tags", HeaderValue::Other)]),
+            language: FunctionLanguage::Sql,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Table(Vec::new())),
+                failure: failure(
+                    HeaderStage::Returns,
+                    "SQL function file functions/f.sql returns must be a type string or table \
+                     column declaration",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "a return column without a name keeps the columns before it",
+            header: header(&[(
+                "returns",
+                map(&[(
+                    "table",
+                    HeaderValue::Map(vec![
+                        (text("id"), text("INTEGER")),
+                        (HeaderValue::Other, text("TEXT")),
+                    ]),
+                )]),
+            )]),
+            language: FunctionLanguage::Sql,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Table(vec![named("id", "id", "INTEGER")])),
+                failure: failure(
+                    HeaderStage::Returns,
+                    "SQL function file functions/f.sql has an invalid return column name",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "an empty table is Python's column error",
+            header: header(&[("returns", map(&[("table", map(&[]))]))]),
+            language: FunctionLanguage::Sql,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Table(Vec::new())),
+                failure: failure(
+                    HeaderStage::Returns,
+                    "SQL function file functions/f.sql returns table must declare at least one \
+                     column",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "a Python function returning a table must declare returns",
             header: header(&[
                 (
                     "returns",
@@ -73,13 +137,91 @@ fn given_function_headers_when_parsing_then_python_values_or_deferrals_are_retur
                 ("entry_point", text("label")),
             ]),
             language: FunctionLanguage::Python,
-            expected_header: None,
+            expected_header: FunctionHeader {
+                failure: failure(
+                    HeaderStage::Start,
+                    "Python function file functions/f.sql must declare returns",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "a missing entry point is raised after the runtime version",
+            header: header(&[
+                ("returns", text("STRING")),
+                ("runtime_version", text("3.12")),
+                ("packages", HeaderValue::Other),
+            ]),
+            language: FunctionLanguage::Python,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Type("STRING".to_owned())),
+                runtime_version: Some("3.12".to_owned()),
+                failure: failure(
+                    HeaderStage::PythonValues,
+                    "Python function file functions/f.sql must declare entry_point",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "a blank package entry and then the tags",
+            header: header(&[
+                ("returns", text("STRING")),
+                ("runtime_version", text("3.12")),
+                ("entry_point", text("label")),
+                ("packages", HeaderValue::Sequence(vec![text("")])),
+            ]),
+            language: FunctionLanguage::Python,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Type("STRING".to_owned())),
+                runtime_version: Some("3.12".to_owned()),
+                entry_point: Some("label".to_owned()),
+                failure: failure(
+                    HeaderStage::PythonValues,
+                    "Python function file functions/f.sql packages entries must be non-empty \
+                     strings",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "tags that are not a list are raised before the description",
+            header: header(&[
+                ("returns", text("STRING")),
+                ("tags", text("orders")),
+                ("description", HeaderValue::Other),
+            ]),
+            language: FunctionLanguage::Sql,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Type("STRING".to_owned())),
+                failure: failure(
+                    HeaderStage::Metadata,
+                    "SQL function file functions/f.sql tags must be a list",
+                ),
+                ..empty_header()
+            },
+        },
+        FunctionHeaderTestCase {
+            description: "a description that is not a string",
+            header: header(&[
+                ("returns", text("STRING")),
+                ("description", HeaderValue::Other),
+            ]),
+            language: FunctionLanguage::Sql,
+            expected_header: FunctionHeader {
+                returns: Some(FunctionReturns::Type("STRING".to_owned())),
+                failure: failure(
+                    HeaderStage::Metadata,
+                    "SQL function file functions/f.sql description must be a string",
+                ),
+                ..empty_header()
+            },
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            parse_function_header(&test_case.header, test_case.language),
+            parse_function_header(&test_case.header, test_case.language, "functions/f.sql"),
             test_case.expected_header,
             "{}",
             test_case.description
