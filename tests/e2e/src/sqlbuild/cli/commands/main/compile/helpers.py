@@ -27,6 +27,8 @@ from typing import Any, NamedTuple, cast
 import duckdb
 import pytest
 
+import sqlbuild._native as native_module
+import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_render_reuse._helpers.load_notice as render_load_notice
@@ -4802,3 +4804,31 @@ def engine_in_process_compile(
         seams: dict[str, list[object]] = record_analysis_seams(monkeypatch=patch)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     return run, seams
+
+
+def type_system_engine_compile(
+    *,
+    project_dir: Path,
+    engine: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[CompileReuseRun, list[bool]]:
+    """Compile in this process under `engine`; return the run and whether each native type
+    normalization answered."""
+
+    answered: list[bool] = []
+    normalize: Callable[[str, str], object] = native_module.normalize_type
+
+    def recorded(type_sql: str, dialect: str) -> object:
+        result: object = normalize(type_sql, dialect)
+        answered.append(result is not None)
+        return result
+
+    type_normalization.normalize_type.cache_clear()
+    with monkeypatch.context() as patch:
+        patch.setattr(native_module, "normalize_type", recorded)
+        for name, value in {COMPILER_ENGINE_ENV_VAR: engine, REUSE_DISABLE_ENV_VAR: "1"}.items():
+            patch.setenv(name, value)
+        run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    type_normalization.normalize_type.cache_clear()
+    return run, answered

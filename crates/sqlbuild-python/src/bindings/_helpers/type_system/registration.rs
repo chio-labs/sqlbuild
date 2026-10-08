@@ -2,6 +2,9 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-pub(crate) fn register(_module: &Bound<'_, PyModule>) -> PyResult<()> {
+use crate::bindings::_helpers::type_system::normalization;
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    normalization::register(module)?;
     Ok(())
 }

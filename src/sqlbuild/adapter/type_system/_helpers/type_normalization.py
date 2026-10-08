@@ -21,6 +21,11 @@ from sqlbuild.adapter.contract.constants import (
 )
 from sqlbuild.adapter.contract.models import NormalizedType
 from sqlbuild.adapter.contract.types import TypeDialect, TypeFamily
+from sqlbuild.adapter.type_system.constants import (
+    TYPE_NORMALIZATION_LOGGER_NAME,
+    TYPE_PARSE_FALLBACK_MESSAGE,
+)
+from sqlbuild.adapter.type_system.main._native_normalize_type import normalize_native_type
 from sqlbuild.adapters.bigquery.constants import (
     BIGNUMERIC_TYPE_NAME,
     CUSTOM_NORMALIZATION_TYPE_NAMES,
@@ -37,16 +42,24 @@ from sqlbuild.adapters.snowflake.constants import (
     TEXT_TYPE_NAME,
     UNBOUNDED_TEXT_TYPE_NAMES,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
-_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.adapter")
+_DEBUG_LOGGER: logging.Logger = logging.getLogger(TYPE_NORMALIZATION_LOGGER_NAME)
 
 
 @lru_cache(maxsize=1024)
 def normalize_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
     """Normalize one warehouse type string into a semantic comparison shape."""
 
+    if native_stage_enabled(NativeStage.TYPE_SYSTEM):
+        native_normalized: NormalizedType | None = normalize_native_type(
+            type_sql=type_sql, dialect=dialect
+        )
+        if native_normalized is not None:
+            return native_normalized
     polyglot_normalized: NormalizedType | None = _normalize_with_polyglot(
         type_sql=type_sql,
         dialect=dialect,
@@ -83,7 +96,7 @@ def _normalize_with_polyglot(
     except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
-            message="type normalization polyglot parse failed; falling back",
+            message=TYPE_PARSE_FALLBACK_MESSAGE,
             type_sql=type_sql,
             dialect=str(dialect),
             sqlbuild_error=str(error),
