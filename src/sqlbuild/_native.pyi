@@ -175,6 +175,9 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...
+def pair_seed_files(
+    declarations: list[str], stems: list[str]
+) -> tuple[list[int], None] | tuple[None, int]: ...
 def render_attached_generic_audit(
     sql: tuple[str, str | None],
     arguments: tuple[dict[str, object], dict[str, object]],

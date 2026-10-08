@@ -24,3 +24,11 @@ class AttachedAuditParityTestCase:
     expected_minimum_native: int
     expected_minimum_deferred: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class AttachmentProjectTestCase:
+    """One project variant compiled to compile inputs by each engine."""
+
+    description: str
+    expected_preview_entries: frozenset[str]

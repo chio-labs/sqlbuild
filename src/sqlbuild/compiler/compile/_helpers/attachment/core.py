@@ -11,6 +11,7 @@ from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild.compiler.attachments.main._pair_native_seed_files import pair_native_seed_files
 from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     _model_sql_validation_gate,
@@ -1164,6 +1165,10 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
         for seed_entry in schema_file.seed_entries:
             seed_declarations.append((seed_entry, schema_file))
 
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        return _native_seed_inputs(
+            seed_declarations=seed_declarations, seed_files=discovered_inputs.seed_files
+        )
     seed_files_by_name: dict[str, DiscoveredSeedFile] = {
         seed_file.file_path.stem: seed_file for seed_file in discovered_inputs.seed_files
     }
@@ -1188,6 +1193,33 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
         )
 
     return tuple(seed_inputs)
+
+
+def _native_seed_inputs(
+    *,
+    seed_declarations: list[tuple[SchemaSeedEntry, DiscoveredSchemaFile]],
+    seed_files: tuple[DiscoveredSeedFile, ...],
+) -> tuple[CompileSeedInput, ...]:
+    pairs: list[int] | None
+    missing: int | None
+    pairs, missing = pair_native_seed_files(
+        declaration_names=[seed_entry.name for seed_entry, _ in seed_declarations],
+        file_stems=[seed_file.file_path.stem for seed_file in seed_files],
+    )
+    if pairs is None:
+        seed_entry, seed_schema_file = seed_declarations[cast(int, missing)]
+        raise CompileInputError(
+            f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
+            "has no matching CSV file under seeds/"
+        )
+    return tuple(
+        CompileSeedInput(
+            seed_file=seed_files[file_index],
+            schema_entry=seed_entry,
+            schema_file=seed_schema_file,
+        )
+        for (seed_entry, seed_schema_file), file_index in zip(seed_declarations, pairs, strict=True)
+    )
 
 
 def build_effective_connection(

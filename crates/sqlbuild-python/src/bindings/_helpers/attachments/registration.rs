@@ -2,9 +2,10 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-use crate::bindings::_helpers::attachments::audit_rendering;
+use crate::bindings::_helpers::attachments::{audit_rendering, seed_pairing};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     audit_rendering::register(module)?;
+    seed_pairing::register(module)?;
     Ok(())
 }

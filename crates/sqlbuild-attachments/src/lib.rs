@@ -3,3 +3,4 @@
 #![forbid(unsafe_code)]
 
 pub mod audits;
+pub mod seeds;
