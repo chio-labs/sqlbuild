@@ -706,6 +706,168 @@ def test_given_helper_cte_references_when_testing_then_helpers_read_the_tested_m
             expected_column=39,
             expected_help_fragment='__ref("<model>")',
         ),
+        HelperReferenceErrorE2ETestCase(
+            description="a mock a check calls reading a referencing helper through a middle helper on the python engine",
+            test_name="mock_called_reads_referencing_helper",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__source__item_returns' reads helper CTE 'extras', which calls "
+                '__ref("item_extras"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_line=4,
+            expected_column=40,
+            expected_help_fragment='FROM __ref__item_extras rather than FROM __ref("item_extras")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="a mock a check calls reading a referencing helper directly on the python engine",
+            test_name="mock_called_reads_referencing_helper_directly",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__source__item_returns' reads helper CTE 'extras', which calls "
+                '__ref("item_extras"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_line=4,
+            expected_column=40,
+            expected_help_fragment='FROM __ref__item_extras rather than FROM __ref("item_extras")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading a mocked source and a mocked model on the python engine",
+            test_name="assertion_reads_mocked_source_and_model",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_mocked_source_and_model' mocks the model it tests "
+                "(__ref__items), so the test has no model to run against"
+            ),
+            expected_line=10,
+            expected_column=8,
+            expected_help_fragment='and keep __ref("items") in the __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading a mocked model by CTE name on the python engine",
+            test_name="assertion_reads_mock_by_name",
+            engine="python",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_mock_by_name' mocks the model it tests (__ref__items), "
+                "so the test has no model to run against"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment='and call __ref("items") in the __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="a mock a check calls reading a referencing helper through a middle helper on the native engine",
+            test_name="mock_called_reads_referencing_helper",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__source__item_returns' reads helper CTE 'extras', which calls "
+                '__ref("item_extras"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_line=4,
+            expected_column=40,
+            expected_help_fragment='FROM __ref__item_extras rather than FROM __ref("item_extras")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="a mock a check calls reading a referencing helper directly on the native engine",
+            test_name="mock_called_reads_referencing_helper_directly",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__source__item_returns' reads helper CTE 'extras', which calls "
+                '__ref("item_extras"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_line=4,
+            expected_column=40,
+            expected_help_fragment='FROM __ref__item_extras rather than FROM __ref("item_extras")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading a mocked source and a mocked model on the native engine",
+            test_name="assertion_reads_mocked_source_and_model",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_mocked_source_and_model' mocks the model it tests "
+                "(__ref__items), so the test has no model to run against"
+            ),
+            expected_line=10,
+            expected_column=8,
+            expected_help_fragment='and keep __ref("items") in the __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading a mocked model by CTE name on the native engine",
+            test_name="assertion_reads_mock_by_name",
+            engine="native",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_mock_by_name' mocks the model it tests (__ref__items), "
+                "so the test has no model to run against"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment='and call __ref("items") in the __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="a mock a check calls reading a referencing helper through a middle helper on the native-preview engine",
+            test_name="mock_called_reads_referencing_helper",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__source__item_returns' reads helper CTE 'extras', which calls "
+                '__ref("item_extras"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_line=4,
+            expected_column=40,
+            expected_help_fragment='FROM __ref__item_extras rather than FROM __ref("item_extras")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="a mock a check calls reading a referencing helper directly on the native-preview engine",
+            test_name="mock_called_reads_referencing_helper_directly",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__source__item_returns' reads helper CTE 'extras', which calls "
+                '__ref("item_extras"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_line=4,
+            expected_column=40,
+            expected_help_fragment='FROM __ref__item_extras rather than FROM __ref("item_extras")',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading a mocked source and a mocked model on the native-preview engine",
+            test_name="assertion_reads_mocked_source_and_model",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_mocked_source_and_model' mocks the model it tests "
+                "(__ref__items), so the test has no model to run against"
+            ),
+            expected_line=10,
+            expected_column=8,
+            expected_help_fragment='and keep __ref("items") in the __assert__ or __expected__ CTE',
+        ),
+        HelperReferenceErrorE2ETestCase(
+            description="test reading a mocked model by CTE name on the native-preview engine",
+            test_name="assertion_reads_mock_by_name",
+            engine="native-preview",
+            expected_code="P013",
+            expected_message=(
+                "SQL test 'assertion_reads_mock_by_name' mocks the model it tests (__ref__items), "
+                "so the test has no model to run against"
+            ),
+            expected_line=8,
+            expected_column=23,
+            expected_help_fragment='and call __ref("items") in the __assert__ or __expected__ CTE',
+        ),
     ),
     ids=lambda case: case.description,
 )

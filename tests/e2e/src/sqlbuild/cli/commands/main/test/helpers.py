@@ -1849,6 +1849,39 @@ _HELPER_REFERENCE_TESTS: dict[str, str] = {
         '  SELECT item_id, amount_doubled FROM __ref("item_archive")\n'
         ")\n"
     ),
+    "mock_called_reads_referencing_helper": (
+        'extras AS (SELECT item_id, amount FROM __ref("item_extras")),\n'
+        "mid AS (SELECT item_id, amount FROM extras),\n"
+        "__ref__items AS (SELECT 7 AS item_id, 5 AS amount),\n"
+        "__source__item_returns AS (SELECT item_id FROM mid),\n"
+        "__expected__item_totals AS (SELECT 7 AS item_id, 10 AS amount_doubled),\n"
+        "__assert__no_returns AS (\n"
+        '  SELECT item_id FROM __source("item_returns") WHERE item_id <> 7\n'
+        ")\n"
+    ),
+    "mock_called_reads_referencing_helper_directly": (
+        'extras AS (SELECT item_id, amount FROM __ref("item_extras")),\n'
+        "__ref__items AS (SELECT 7 AS item_id, 5 AS amount),\n"
+        "__source__item_returns AS (SELECT item_id FROM extras),\n"
+        "__expected__item_totals AS (SELECT 7 AS item_id, 10 AS amount_doubled),\n"
+        "__assert__no_returns AS (\n"
+        '  SELECT item_id FROM __source("item_returns") WHERE item_id <> 7\n'
+        ")\n"
+    ),
+    "assertion_reads_mocked_source_and_model": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        "__source__item_returns AS (SELECT 7 AS item_id),\n"
+        "__assert__returned_items AS (\n"
+        '  SELECT r.item_id FROM __source("item_returns") AS r\n'
+        '  JOIN __ref("items") AS i USING (item_id) WHERE i.amount <> 5\n'
+        ")\n"
+    ),
+    "assertion_reads_mock_by_name": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        "__assert__only_mocked_items AS (\n"
+        "  SELECT item_id FROM __ref__items WHERE item_id <> 7\n"
+        ")\n"
+    ),
     "mock_reads_referencing_helper": (
         "__ref__items AS (\n  SELECT item_id, 10 AS amount FROM base_rows\n),\n"
         'base_rows AS (SELECT item_id FROM __ref("item_totals")),\n'
