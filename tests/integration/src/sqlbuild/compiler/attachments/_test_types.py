@@ -4,6 +4,8 @@ import random
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+
 
 @dataclass(frozen=True)
 class AuthoredSqlParityTestCase:
@@ -57,3 +59,14 @@ class ParameterParityTestCase:
     count: int
     expected_minimum_expanded: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class OmittedSelectParityTestCase:
+    """Seeded test bodies completed with an omitted `SELECT 1` under one lexical syntax."""
+
+    description: str
+    seed: int
+    count: int
+    syntax: SqlLexicalSyntax
+    expected_minimum_completed: int

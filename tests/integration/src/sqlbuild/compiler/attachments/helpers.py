@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
+from sqlbuild.compiler.compile._helpers.sql_tests.core import complete_omitted_ceremonial_select
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -45,6 +46,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
@@ -567,3 +569,52 @@ def parameter_outcome(
         )
     except CompileInputError as error:
         return str(error)
+
+
+_BODY_PIECES: tuple[str, ...] = (
+    "WITH ",
+    "with ",
+    "WITHIN ",
+    "w\u0131th ",
+    "__seed__orders AS (SELECT 1)",
+    "a AS (SELECT ')' AS x)",
+    "b AS (SELECT (1))",
+    ", ",
+    ")",
+    "(",
+    " SELECT 1",
+    ";",
+    "\n",
+    " -- done",
+    " # done",
+    " /* done */",
+    "/* /* nested */ */",
+    "'",
+    "'it\\'s'",
+    "'''tri)ple'''",
+    "$$)$$",
+    "$1",
+    "\u00e9",
+    "\v",
+)
+
+
+def generated_test_body(*, rng: random.Random) -> str:
+    """Return a test or scenario body around CTEs, terminators, comments and quotes."""
+
+    keyword: str = rng.choice(_BODY_PIECES[:4])
+    ctes: str = ", ".join(rng.choices(_BODY_PIECES[4:7], k=rng.randint(1, 3)))
+    return keyword + ctes + "".join(rng.choices(_BODY_PIECES, k=rng.randint(0, 3)))
+
+
+def completed_body(
+    *,
+    sql: str,
+    syntax: SqlLexicalSyntax,
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
+    """Complete one body's omitted `SELECT 1` under `engine`."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    return complete_omitted_ceremonial_select(sql=sql, syntax=syntax)

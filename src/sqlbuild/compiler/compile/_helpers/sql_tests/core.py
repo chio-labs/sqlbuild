@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
 )
@@ -58,6 +59,8 @@ from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
@@ -262,7 +265,15 @@ def extract_top_level_ctes_with_scanner[CteT](
 def complete_omitted_ceremonial_select(*, sql: str, syntax: SqlLexicalSyntax) -> str:
     """Return test or scenario SQL as one statement, adding an omitted trailing `SELECT 1`."""
 
-    offset: int | None = omitted_ceremonial_select_offset(sql=sql, syntax=syntax)
+    answered: bool
+    offset: int | None
+    answered, offset = (
+        _native.omitted_ceremonial_select(sql, syntax.native_mapping)
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else (False, None)
+    )
+    if not answered:
+        offset = omitted_ceremonial_select_offset(sql=sql, syntax=syntax)
     if offset is None:
         return sql
     return f"{sql[:offset]}{OMITTED_CEREMONIAL_SELECT_SQL}{sql[offset:]}"
