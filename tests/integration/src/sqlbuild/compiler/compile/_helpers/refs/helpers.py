@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from itertools import chain, compress
 from operator import attrgetter, itemgetter
@@ -27,8 +28,10 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     CompileSqlReference,
+    ExpansionSpan,
     SqlReferenceOrigin,
     SqlReferenceScan,
+    SqlReferenceSourceMap,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceScanFailure
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -239,10 +242,12 @@ def reference_parity(*, sqls: list[str], syntax: SqlLexicalSyntax) -> ReferenceP
     )
 
 
+_LOCATED_ERROR_PATTERN: re.Pattern[str] = re.compile(r"[^:]+:\d+:\d+: ")
 _FILE_HEADERS: tuple[str, ...] = (
     'MODEL (description "Orders");\n\n',
     'MODEL (\n  description "Orders",\n);\n-- notes\n\n',
     'MODEL (description "Ordres é");\n/* commentaire */\n',
+    'MODEL (description "Orders over 12\\" boxes, by customer\'s totals");\n\n',
 )
 
 
@@ -273,6 +278,7 @@ def reported_reference_outcomes(
                 contents=_FILE_HEADERS[index % len(_FILE_HEADERS)] + body,
                 resource_type=CompiledResourceType.MODEL,
                 resource_name=Path(relative_path).stem,
+                source_map=source_map_at(body_start=len(_FILE_HEADERS[index % len(_FILE_HEADERS)])),
             ),
             sql=body,
             syntax=syntax,
@@ -293,6 +299,13 @@ def _reported_reference_outcome(
     return (references, tuple(collected.diagnostics), "", None)
 
 
+def located_error_count(*, outcomes: list[object]) -> int:
+    """Count the scan errors that carry an authored line and column."""
+
+    errors: list[str] = list(map(itemgetter(2), cast(list[tuple[object, object, str]], outcomes)))
+    return sum(bool(_LOCATED_ERROR_PATTERN.match(error)) for error in errors)
+
+
 def located_diagnostic_count(*, outcomes: list[object]) -> int:
     """Count the reported diagnostics that carry an authored location."""
 
@@ -306,3 +319,11 @@ def python_scan_not_expected(**_: object) -> SqlReferenceScan | SqlReferenceScan
     """A replacement for the Python scanner that fails the test when it is called."""
 
     raise AssertionError("the Python reference scanner ran")
+
+
+def source_map_at(
+    *, body_start: int, passes: tuple[tuple[ExpansionSpan, ...], ...] = ()
+) -> SqlReferenceSourceMap:
+    """Return a source map whose authored body starts at `body_start` in its file."""
+
+    return SqlReferenceSourceMap(body_start=lambda: body_start, passes=passes)

@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
+from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
 from sqlbuild.compiler.compile.constants import (
     REFERENCE_CALL_SYNTAX_CODE,
     SQL_ARGUMENT_SEPARATOR_TOKEN,
@@ -20,9 +21,12 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     CompileSqlReference,
+    ExpansionSpan,
     InvalidSqlReferenceCall,
+    MappedOffset,
     SqlReferenceOrigin,
     SqlReferenceScan,
+    SqlReferenceSourceMap,
 )
 from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
@@ -85,7 +89,7 @@ def scan_sql_reference_calls(
     )
     if isinstance(outcome, SqlReferenceScan):
         return outcome
-    raise _located_scan_error(message=outcome[0], origin=origin, syntax=syntax)
+    raise _located_scan_error(failure=outcome, sql=sql, origin=origin, syntax=syntax)
 
 
 def _reference_scan_outcome(
@@ -117,22 +121,87 @@ def _reference_scan_outcome(
 
 
 def _located_scan_error(
-    *, message: str, origin: SqlReferenceOrigin | None, syntax: SqlLexicalSyntax
+    *,
+    failure: SqlReferenceScanFailure,
+    sql: str,
+    origin: SqlReferenceOrigin | None,
+    syntax: SqlLexicalSyntax,
 ) -> CompileInputError:
-    """Locate a scan error at the authored quote, comment or call that raises the same error."""
+    """Locate a scan error in authored text; unmapped or expansion-shaped faults stay unlocated."""
 
+    message, start = failure
     if origin is None:
         return CompileInputError(message)
-    authored: SqlReferenceScan | SqlReferenceScanFailure = _reference_scan_outcome(
-        sql=origin.contents, syntax=syntax
+    authored_offset: int | None = _authored_fault_offset(
+        failure=failure, sql=sql, origin=origin, syntax=syntax
     )
     path: str = origin.relative_path.as_posix()
-    if isinstance(authored, SqlReferenceScan) or authored[0] != message:
+    if authored_offset is None:
         return CompileInputError(f"{path}: {message}")
-    start: int = authored[1]
-    line: int = origin.contents.count("\n", 0, start) + 1
-    column: int = start - (origin.contents.rfind("\n", 0, start) + 1) + 1
+    contents: str = origin.contents
+    line: int = contents.count("\n", 0, authored_offset) + 1
+    column: int = authored_offset - (contents.rfind("\n", 0, authored_offset) + 1) + 1
     return CompileInputError(f"{path}:{line}:{column}: {message}", bridge_independent=True)
+
+
+def _authored_fault_offset(
+    *,
+    failure: SqlReferenceScanFailure,
+    sql: str,
+    origin: SqlReferenceOrigin,
+    syntax: SqlLexicalSyntax,
+) -> int | None:
+    """Map the fault to authored text unless expansion output produced or shaped the failure."""
+
+    source_map: SqlReferenceSourceMap | None = origin.source_map
+    start: int = failure[1]
+    body_start: int | None = source_map.body_start() if source_map is not None else None
+    if source_map is None or body_start is None or start >= len(sql):
+        return None
+    mapped: MappedOffset = map_through_passes(offset=start, passes=source_map.passes)
+    authored_offset: int = body_start + mapped.offset
+    if (
+        mapped.generated
+        or authored_offset >= len(origin.contents)
+        or origin.contents[authored_offset] != sql[start]
+    ):
+        return None
+    blanked: list[str] = list(sql)
+    for output_start, output_end in _expansion_output_ranges(source_map.passes):
+        blanked[output_start:output_end] = " " * (output_end - output_start)
+    if _reference_scan_outcome(sql="".join(blanked), syntax=syntax) != failure:
+        return None
+    return authored_offset
+
+
+def _expansion_output_ranges(
+    passes: tuple[tuple[ExpansionSpan, ...], ...],
+) -> list[tuple[int, int]]:
+    """Return every expansion's output range in the coordinates of the final pass's output."""
+
+    ranges: list[tuple[int, int]] = []
+    for index, spans in enumerate(passes):
+        for span in spans:
+            output_start: int = span.output_start
+            output_end: int = span.output_end
+            for later_spans in passes[index + 1 :]:
+                output_start = _later_pass_offset(offset=output_start, spans=later_spans, end=False)
+                output_end = _later_pass_offset(offset=output_end, spans=later_spans, end=True)
+            ranges.append((output_start, output_end))
+    return ranges
+
+
+def _later_pass_offset(*, offset: int, spans: tuple[ExpansionSpan, ...], end: bool) -> int:
+    """Carry a range boundary through one later pass, widening it over a span that covers it."""
+
+    shift: int = 0
+    for span in spans:
+        if offset < span.source_start or (end and offset == span.source_start):
+            break
+        if offset < span.source_end or (end and offset == span.source_end):
+            return span.output_end if end else span.output_start
+        shift += (span.output_end - span.output_start) - (span.source_end - span.source_start)
+    return offset + shift
 
 
 def report_invalid_reference_calls(

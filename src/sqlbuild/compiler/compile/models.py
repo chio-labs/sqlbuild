@@ -556,6 +556,14 @@ class SqlReferenceScan:
 
 
 @dataclass(frozen=True)
+class SqlReferenceSourceMap:
+    """Where the authored body starts in its file and the expansion passes from it to the SQL."""
+
+    body_start: Callable[[], int | None]
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+
+
+@dataclass(frozen=True)
 class SqlReferenceOrigin:
     """The authored file that SQL handed to reference extraction came from."""
 
@@ -564,6 +572,7 @@ class SqlReferenceOrigin:
     contents: str
     resource_type: CompiledResourceType | None = None
     resource_name: str | None = None
+    source_map: SqlReferenceSourceMap | None = None
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.compile.models import SqlReferenceSourceMap
 from sqlbuild.compiler.frontier.types import CompilerEngine
 
 
@@ -44,11 +45,12 @@ class ReferenceEngineTestCase:
 
 @dataclass(frozen=True)
 class NativeReferenceErrorTestCase:
-    """Reference SQL whose native error must stand, located, without a Python re-scan."""
+    """Expanded SQL whose native error is located through its source map without Python."""
 
     description: str
     sql: str
     contents: str
+    source_map: SqlReferenceSourceMap | None
     expected_message: str
     expected_bridge_independent: bool
 
@@ -62,6 +64,7 @@ class ReferenceDiagnosticParityTestCase:
     seed: int
     count: int
     expected_minimum_located: int
+    expected_minimum_located_errors: int
 
 
 @dataclass(frozen=True)

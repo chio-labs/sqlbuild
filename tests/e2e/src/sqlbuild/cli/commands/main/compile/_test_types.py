@@ -910,11 +910,12 @@ class NativeDeclarationErrorTestCase:
 
 @dataclass(frozen=True)
 class ReferenceScanErrorTestCase:
-    """A model whose reference scan error every engine must locate and type the same way."""
+    """A project whose reference scan error every engine must locate and type the same way."""
 
     description: str
-    mart_body: str
+    project_files: dict[str, str]
     expected_message: str
+    expected_macro_calls: tuple[int, int, int]
     expected_error_types: tuple[str, ...]
 
 

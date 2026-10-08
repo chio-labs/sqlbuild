@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile._helpers.refs import references
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import SqlReferenceOrigin, SqlReferenceScan
+from sqlbuild.compiler.compile.models import ExpansionSpan, SqlReferenceOrigin, SqlReferenceScan
 from sqlbuild.compiler.compile.types import SqlReferenceScanFailure
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
@@ -35,9 +35,11 @@ from tests.integration.src.sqlbuild.compiler.compile._helpers.refs.helpers impor
     generated_reference_files,
     generated_reference_sqls,
     located_diagnostic_count,
+    located_error_count,
     python_scan_not_expected,
     reference_parity,
     reported_reference_outcomes,
+    source_map_at,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -307,18 +309,18 @@ def test_given_engine_when_extracting_references_then_only_preview_runs_native_s
     "test_case",
     [
         NativeReferenceErrorTestCase(
-            description="unclosed_reference_call_points_at_the_call",
+            description="unclosed_reference_call_points_at_the_call_after_the_header",
             sql='SELECT *\nFROM __ref("orders"',
             contents='MODEL (description "Orders");\n\nSELECT *\nFROM __ref("orders"',
-            expected_message=(
-                "models/orders.sql:4:6: SQL reference contains an unclosed parenthesis"
-            ),
+            source_map=source_map_at(body_start=31),
+            expected_message="models/orders.sql:4:6: SQL reference contains an unclosed parenthesis",
             expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
             description="empty_table_function_argument_after_a_rejected_call",
             sql='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
             contents='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
+            source_map=source_map_at(body_start=0),
             expected_message="models/orders.sql:2:6: SQL reference contains an empty argument",
             expected_bridge_independent=True,
         ),
@@ -326,16 +328,64 @@ def test_given_engine_when_extracting_references_then_only_preview_runs_native_s
             description="unclosed_quote_points_at_the_quote_in_code_points",
             sql="SELECT 'é', __ref(\"orders\") WHERE note = 'open",
             contents="-- é\nSELECT 'é', __ref(\"orders\") WHERE note = 'open",
-            expected_message=(
-                "models/orders.sql:2:42: SQL reference contains an unclosed quoted string"
-            ),
+            source_map=source_map_at(body_start=5),
+            expected_message="models/orders.sql:2:42: SQL reference contains an unclosed quoted string",
             expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
-            description="error_only_in_expanded_sql_names_the_file",
+            description="fault_after_neutral_expansions_in_two_passes_maps_through_both",
+            sql="SELECT 'open', 1 + 2\nFROM __ref(\"orders\"",
+            contents='SELECT @enum("s").OPEN, @m()\nFROM __ref("orders"',
+            source_map=source_map_at(
+                body_start=0,
+                passes=(
+                    (ExpansionSpan(source_start=7, source_end=22, output_start=7, output_end=13),),
+                    (
+                        ExpansionSpan(
+                            source_start=15, source_end=19, output_start=15, output_end=20
+                        ),
+                    ),
+                ),
+            ),
+            expected_message="models/orders.sql:2:6: SQL reference contains an unclosed parenthesis",
+            expected_bridge_independent=True,
+        ),
+        NativeReferenceErrorTestCase(
+            description="fault_inside_macro_output_is_unlocated",
             sql='SELECT * FROM __ref("orders") /* expanded',
             contents='SELECT * FROM __ref("orders") @expand()',
+            source_map=source_map_at(
+                body_start=0,
+                passes=(
+                    (
+                        ExpansionSpan(
+                            source_start=30, source_end=39, output_start=30, output_end=41
+                        ),
+                    ),
+                ),
+            ),
             expected_message="models/orders.sql: SQL reference contains an unclosed block comment",
+            expected_bridge_independent=False,
+        ),
+        NativeReferenceErrorTestCase(
+            description="authored_fault_shaped_by_an_unclosed_macro_quote_is_unlocated",
+            sql="SELECT 'x || ' || note || 'open",
+            contents="SELECT @q() || ' || note || 'open",
+            source_map=source_map_at(
+                body_start=0,
+                passes=(
+                    (ExpansionSpan(source_start=7, source_end=11, output_start=7, output_end=9),),
+                ),
+            ),
+            expected_message="models/orders.sql: SQL reference contains an unclosed quoted string",
+            expected_bridge_independent=False,
+        ),
+        NativeReferenceErrorTestCase(
+            description="without_a_source_map_the_file_alone_is_named",
+            sql='SELECT *\nFROM __ref("orders"',
+            contents='SELECT *\nFROM __ref("orders"',
+            source_map=None,
+            expected_message="models/orders.sql: SQL reference contains an unclosed parenthesis",
             expected_bridge_independent=False,
         ),
     ],
@@ -355,6 +405,7 @@ def test_given_native_reference_error_when_extracting_then_raised_located_withou
                 file_path=Path("/project/models/orders.sql"),
                 relative_path=Path("models/orders.sql"),
                 contents=test_case.contents,
+                source_map=test_case.source_map,
             ),
         )
 
@@ -381,7 +432,8 @@ def test_given_native_reference_error_when_extracting_then_raised_located_withou
             syntax=syntax,
             seed=20261009 + offset,
             count=400,
-            expected_minimum_located=150,
+            expected_minimum_located=120,
+            expected_minimum_located_errors=90,
         )
         for offset, syntax in enumerate(LEXICAL_SYNTAXES)
     ],
@@ -405,7 +457,8 @@ def test_given_generated_files_when_reporting_rejected_calls_then_engines_report
     assert (
         mismatches(inputs=[body for _, body in files], expected=python, actual=preview),
         located_diagnostic_count(outcomes=python) >= test_case.expected_minimum_located,
-    ) == ([], True)
+        located_error_count(outcomes=python) >= test_case.expected_minimum_located_errors,
+    ) == ([], True, True)
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import re
 from dataclasses import dataclass, field, fields, replace
+from functools import partial
 from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
@@ -122,9 +123,11 @@ from sqlbuild.compiler.compile.models import (
     SqlAnalysisOptOutRequest,
     SqlReferenceOrigin,
     SqlReferenceScan,
+    SqlReferenceSourceMap,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceExtractor
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
+from sqlbuild.compiler.discovery.main._model_query_start import get_model_query_start
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredHookFunction,
@@ -780,10 +783,23 @@ def _build_model_input(
         sql_validation_placeholders=sql_validation_placeholders,
         model_schema_columns=model_schema_columns,
         argument_references=macro_expansion.argument_references,
+        reference_source_map=(
+            SqlReferenceSourceMap(
+                body_start=partial(
+                    get_model_query_start,
+                    contents=model_file.contents,
+                    query_sql=model_file.query_sql,
+                ),
+                passes=(declaration_expansion.spans, macro_expansion.spans),
+            )
+            if var_substituted_sql == model_file.query_sql
+            and expanded_query_sql == macro_expansion.sql
+            else None
+        ),
     )
     hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
         values=effective_config.values,
-        model_file=_model_reference_origin(model_file),
+        model_file=_model_reference_origin(model_file=model_file),
         effective_vars=effective_vars,
         context_values=build_model_context_values(
             values=effective_config.values,
@@ -951,13 +967,16 @@ def _hook_expanded_config(
     )
 
 
-def _model_reference_origin(model_file: DiscoveredSqlModelFile) -> SqlReferenceOrigin:
+def _model_reference_origin(
+    *, model_file: DiscoveredSqlModelFile, source_map: SqlReferenceSourceMap | None = None
+) -> SqlReferenceOrigin:
     return SqlReferenceOrigin(
         file_path=model_file.file_path,
         relative_path=model_file.relative_path,
         contents=model_file.contents,
         resource_type=CompiledResourceType.MODEL,
         resource_name=model_file.file_path.stem,
+        source_map=source_map,
     )
 
 
@@ -970,6 +989,7 @@ def _validate_model_input(
     sql_validation_placeholders: dict[str, str] | None,
     model_schema_columns: tuple[SchemaColumn, ...] | None,
     argument_references: tuple[CompileSqlReference, ...],
+    reference_source_map: SqlReferenceSourceMap | None,
 ) -> tuple[bool, tuple[CompileSqlReference, ...], SourceLocation | None]:
     model_name: str = model_file.file_path.stem
     sql_validation_enabled: bool = _model_sql_validation_gate(
@@ -1006,7 +1026,8 @@ def _validate_model_input(
             placeholders=sql_validation_placeholders,
         )
     reference_scan: SqlReferenceScan = context.extract_references(
-        sql=expanded_query_sql, origin=_model_reference_origin(model_file)
+        sql=expanded_query_sql,
+        origin=_model_reference_origin(model_file=model_file, source_map=reference_source_map),
     )
     references: tuple[CompileSqlReference, ...] = merge_call_site_references(
         references=reference_scan.references,
