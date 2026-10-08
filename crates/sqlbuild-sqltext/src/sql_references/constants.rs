@@ -21,5 +21,16 @@ pub(crate) const SUPPORTED_LINE_COMMENT_PREFIXES: [&str; 3] = ["--", "//", "#"];
 pub(crate) const NON_CODE_START_BYTES: &[u8] = b"-/#'\"`$";
 /// Non-code openers whose text an argument keeps; comments become one space.
 pub(crate) const QUOTE_BYTES: &[u8] = b"'\"`$";
-/// Python `str.isspace()` for ASCII characters.
-pub(crate) const PYTHON_ASCII_WHITESPACE: &[u8] = b" \t\n\x0b\x0c\r\x1c\x1d\x1e\x1f";
+/// The shortest argument whose quotes Python strips: the two quotes.
+pub(crate) const QUOTED_NAME_MINIMUM_BYTES: usize = 2;
+/// Quotes Python strips from an authored reference name.
+pub(crate) const NAME_QUOTE_BYTES: &[u8] = b"'\"";
+/// Python's placeholder names for a rejected call's corrected form, by kind.
+pub(crate) const PLACEHOLDER_NAMES: [(&str, &[&str]); 6] = [
+    ("ref", &["model_name"]),
+    ("source", &["source_name"]),
+    ("seed", &["seed_name"]),
+    ("udf", &["function_name"]),
+    ("table_fn", &["function_name"]),
+    ("dbt_ref", &["package_name", "model_name"]),
+];

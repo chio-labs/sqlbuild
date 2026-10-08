@@ -1,11 +1,13 @@
 //! The general reference scan of Python `extract_sql_references`, reproduced exactly.
 
+use sqlbuild_core::text::main::is_python_space::is_python_space;
+
 use crate::sql_references::constants::{
-    DBT_REFERENCE_KIND, NON_CODE_START_BYTES, PYTHON_ASCII_WHITESPACE, QUOTE_BYTES,
-    REFERENCE_CONTEXT, REFERENCE_PREFIXES, TABLE_FUNCTION_CALL_CONTEXT,
+    DBT_REFERENCE_KIND, NAME_QUOTE_BYTES, NON_CODE_START_BYTES, PLACEHOLDER_NAMES, QUOTE_BYTES,
+    QUOTED_NAME_MINIMUM_BYTES, REFERENCE_CONTEXT, REFERENCE_PREFIXES, TABLE_FUNCTION_CALL_CONTEXT,
     TABLE_FUNCTION_REFERENCE_KIND,
 };
-use crate::sql_references::models::SqlReference;
+use crate::sql_references::models::{InvalidReferenceCall, ReferenceScan, SqlReference};
 use crate::sql_references::types::ReferencePrefix;
 use crate::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use crate::sql_scan::models::{LexicalSyntax, Unclosed};
@@ -15,11 +17,19 @@ use crate::sql_scan::models::{LexicalSyntax, Unclosed};
 pub(crate) enum Stop {
     /// Python raises `CompileInputError` with this message.
     Failed(String),
-    /// A non-ASCII character decides the outcome, which needs Python's `str` classification.
+    /// A character or construct whose classification only Python reproduces.
     Deferred,
 }
 
 type Scan<T> = Result<T, Stop>;
+
+/// Why the scan of one text stopped, with the byte offset Python's error points at.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Stopped {
+    /// Python raises this message for the quote or comment, or the call, starting at the offset.
+    Failed(String, usize),
+    Deferred,
+}
 
 const NON_CODE_START: [bool; 256] = byte_table(NON_CODE_START_BYTES, false);
 const REFERENCE_SCAN_START: [bool; 256] = byte_table(NON_CODE_START_BYTES, true);
@@ -36,12 +46,24 @@ const fn byte_table(bytes: &[u8], underscore: bool) -> [bool; 256] {
     table
 }
 
-/// Return every reference in `sql` in authored order.
-pub(crate) fn scan_references(sql: &[u8], syntax: &LexicalSyntax) -> Scan<Vec<SqlReference>> {
-    let mut references: Vec<SqlReference> = Vec::new();
+/// One parsed call: a reference, or a rejected call without its start.
+enum Parsed {
+    Reference(SqlReference),
+    Invalid(InvalidReferenceCall),
+}
+
+/// Return every reference and rejected call in `sql` in authored order.
+pub(crate) fn scan_references(
+    sql: &[u8],
+    syntax: &LexicalSyntax,
+) -> Result<ReferenceScan, Stopped> {
+    let mut scan: ReferenceScan = ReferenceScan::default();
+    let mut offsets: CharOffsets = CharOffsets::default();
     let mut index = 0;
     while index < sql.len() {
-        if let Some(end) = non_code_end(sql, index, syntax, REFERENCE_CONTEXT)? {
+        if let Some(end) = non_code_end(sql, index, syntax, REFERENCE_CONTEXT)
+            .map_err(|stop| stopped_at(stop, index))?
+        {
             index = end;
             continue;
         }
@@ -59,76 +81,212 @@ pub(crate) fn scan_references(sql: &[u8], syntax: &LexicalSyntax) -> Scan<Vec<Sq
             index += 1;
             continue;
         };
-        let (reference, next) = parse_reference(sql, index, call, syntax)?;
-        references.push(reference);
+        let (parsed, next) =
+            parse_reference(sql, index, call, syntax).map_err(|stop| stopped_at(stop, index))?;
+        match parsed {
+            Parsed::Reference(reference) => scan.references.push(reference),
+            Parsed::Invalid(invalid_call) => scan.invalid_calls.push(InvalidReferenceCall {
+                start: offsets
+                    .advance(sql, index)
+                    .map_err(|stop| stopped_at(stop, index))?,
+                ..invalid_call
+            }),
+        }
         index = next;
     }
-    Ok(references)
+    Ok(scan)
 }
 
-/// Parse a bare double-quoted reference call at `start`; other forms defer so Python reports P012.
+/// Parse the reference call at `start` as Python `_parse_reference_at` does.
 fn parse_reference(
     sql: &[u8],
     start: usize,
     call: &ReferencePrefix,
     syntax: &LexicalSyntax,
-) -> Scan<(SqlReference, usize)> {
+) -> Scan<(Parsed, usize)> {
     let (prefix, kind) = *call;
     let open = start + prefix.len() - 1;
     let close = matching_paren(sql, open, syntax, REFERENCE_CONTEXT)?;
     let arguments = &sql[open + 1..close];
-    let (name, package) = if kind == DBT_REFERENCE_KIND {
+    let call_text = &sql[start..=close];
+    let names = if kind == DBT_REFERENCE_KIND {
         dbt_reference_names(arguments)?
     } else {
-        (bare_name(arguments)?, None)
+        bare_name(arguments)?.map(|name| (name, None))
+    };
+    let Some((name, package)) = names else {
+        let invalid = invalid_arguments(kind, sql, (start, open, close), syntax)?;
+        return Ok((Parsed::Invalid(invalid), close + 1));
     };
     let mut call_argument_count = None;
     if kind == TABLE_FUNCTION_REFERENCE_KIND {
         let suffix = python_whitespace_end(sql, close + 1)?;
         if sql.get(suffix) != Some(&b'(') {
-            return Err(Stop::Deferred);
+            let corrected_call = format!("{}()", example_call(kind, &[name.as_str()]));
+            let invalid = InvalidReferenceCall {
+                kind,
+                call: utf8(call_text)?,
+                start: 0,
+                message: format!(
+                    "{} must be followed by an argument list",
+                    function_name(kind)
+                ),
+                help: format!(
+                    "pass the function arguments in a second set of parentheses, using () for \
+                     no arguments: {corrected_call}"
+                ),
+                corrected_call,
+            };
+            return Ok((Parsed::Invalid(invalid), close + 1));
         }
         let suffix_close = matching_paren(sql, suffix, syntax, TABLE_FUNCTION_CALL_CONTEXT)?;
         call_argument_count = Some(split_arguments(sql, suffix + 1, suffix_close, syntax)?.len());
     }
     Ok((
-        SqlReference {
+        Parsed::Reference(SqlReference {
             kind,
             name,
             package,
             call_argument_count,
-        },
+        }),
         close + 1,
     ))
 }
 
-/// Python `"([^"]+)"` matched against the whole argument text.
-fn bare_name(arguments: &[u8]) -> Scan<String> {
+/// Python `_invalid_reference_arguments`: the P012 message, help and corrected call.
+fn invalid_arguments(
+    kind: &'static str,
+    sql: &[u8],
+    (start, open, close): (usize, usize, usize),
+    syntax: &LexicalSyntax,
+) -> Scan<InvalidReferenceCall> {
+    let allowed: &[usize] = if kind == DBT_REFERENCE_KIND {
+        &[1, 2]
+    } else {
+        &[1]
+    };
+    let authored: Option<Vec<String>> = authored_names(sql, open + 1, close, syntax)?
+        .filter(|names| allowed.contains(&names.len()));
+    let names: Vec<String> = authored.unwrap_or_else(|| {
+        PLACEHOLDER_NAMES
+            .iter()
+            .find(|(candidate, _)| *candidate == kind)
+            .map_or_else(Vec::new, |(_, names)| {
+                names.iter().map(|name| (*name).to_owned()).collect()
+            })
+    });
+    let name_refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut corrected_call = example_call(kind, &name_refs);
+    if kind == TABLE_FUNCTION_REFERENCE_KIND {
+        corrected_call.push_str("(...)");
+    }
+    let accepted = if kind == DBT_REFERENCE_KIND {
+        "one double-quoted model name, or a double-quoted package name and model name separated \
+         by a comma"
+    } else {
+        "exactly one double-quoted name"
+    };
+    let call = utf8(&sql[start..=close])?;
+    let words: Vec<&str> = call
+        .split(is_python_space)
+        .filter(|word| !word.is_empty())
+        .collect();
+    let prefix = function_name(kind);
+    Ok(InvalidReferenceCall {
+        kind,
+        message: format!("{} is not a valid {prefix}() call", words.join(" ")),
+        help: format!(
+            "{prefix}() takes {accepted}, with no comments or extra spaces inside the \
+             parentheses: {corrected_call}"
+        ),
+        corrected_call,
+        call,
+        start: 0,
+    })
+}
+
+/// Python `_authored_reference_names`: each argument as a plain or quoted name, else `None`.
+fn authored_names(
+    sql: &[u8],
+    start: usize,
+    end: usize,
+    syntax: &LexicalSyntax,
+) -> Scan<Option<Vec<String>>> {
+    let split = match split_arguments(sql, start, end, syntax) {
+        Ok(split) => split,
+        Err(Stop::Failed(_)) => return Ok(None),
+        Err(Stop::Deferred) => return Err(Stop::Deferred),
+    };
+    let mut names: Vec<String> = Vec::with_capacity(split.len());
+    for argument in split {
+        let name: &[u8] = match (argument.first(), argument.last()) {
+            (Some(first), Some(last))
+                if argument.len() >= QUOTED_NAME_MINIMUM_BYTES
+                    && first == last
+                    && NAME_QUOTE_BYTES.contains(first) =>
+            {
+                &argument[1..argument.len() - 1]
+            }
+            _ => &argument,
+        };
+        if !is_authored_name(name) {
+            return Ok(None);
+        }
+        names.push(utf8(name)?);
+    }
+    Ok(Some(names))
+}
+
+/// Python `[A-Za-z_][A-Za-z0-9_.]*` matched against the whole name.
+fn is_authored_name(name: &[u8]) -> bool {
+    name.first()
+        .is_some_and(|first| first.is_ascii_alphabetic() || *first == b'_')
+        && name[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.'))
+}
+
+/// Python `SqlReferenceKind.function_name`.
+fn function_name(kind: &str) -> String {
+    format!("__{kind}")
+}
+
+/// Python `SqlReferenceKind.example_call(*names, quote='"')`.
+fn example_call(kind: &str, names: &[&str]) -> String {
+    let quoted: Vec<String> = names
+        .iter()
+        .map(|name| format!("\"{}\"", name.replace('"', "\"\"")))
+        .collect();
+    format!("{}({})", function_name(kind), quoted.join(", "))
+}
+
+/// Python `"([^"]+)"` matched against the whole argument text; `None` when it does not match.
+fn bare_name(arguments: &[u8]) -> Scan<Option<String>> {
     match quoted_name_end(arguments, 0) {
-        Some(end) if end == arguments.len() => utf8(&arguments[1..end - 1]),
-        _ => Err(Stop::Deferred),
+        Some(end) if end == arguments.len() => utf8(&arguments[1..end - 1]).map(Some),
+        _ => Ok(None),
     }
 }
 
-/// Python `"([^"]+)"(?:\s*,\s*"([^"]+)")?` matched against the whole argument text.
-fn dbt_reference_names(arguments: &[u8]) -> Scan<(String, Option<String>)> {
+/// Python `"([^"]+)"(?:\s*,\s*"([^"]+)")?` over the whole text: name and package, or `None`.
+fn dbt_reference_names(arguments: &[u8]) -> Scan<Option<(String, Option<String>)>> {
     let Some(first_end) = quoted_name_end(arguments, 0) else {
-        return Err(Stop::Deferred);
+        return Ok(None);
     };
     if first_end == arguments.len() {
-        return Ok((utf8(&arguments[1..first_end - 1])?, None));
+        return Ok(Some((utf8(&arguments[1..first_end - 1])?, None)));
     }
     let separator = python_whitespace_end(arguments, first_end)?;
     if arguments.get(separator) != Some(&b',') {
-        return Err(Stop::Deferred);
+        return Ok(None);
     }
     let second_start = python_whitespace_end(arguments, separator + 1)?;
     match quoted_name_end(arguments, second_start) {
-        Some(end) if end == arguments.len() => Ok((
+        Some(end) if end == arguments.len() => Ok(Some((
             utf8(&arguments[second_start + 1..end - 1])?,
             Some(utf8(&arguments[1..first_end - 1])?),
-        )),
-        _ => Err(Stop::Deferred),
+        ))),
+        _ => Ok(None),
     }
 }
 
@@ -202,38 +360,34 @@ fn split_arguments(
     Ok(arguments)
 }
 
-/// Python `str.strip()`; a non-ASCII character at either edge may be Unicode whitespace.
+/// Python `str.strip()`, which strips `str.isspace()` characters.
 fn python_strip(value: &[u8]) -> Scan<&[u8]> {
-    let start = value
-        .iter()
-        .position(|byte| !PYTHON_ASCII_WHITESPACE.contains(byte))
-        .unwrap_or(value.len());
-    let end = value
-        .iter()
-        .rposition(|byte| !PYTHON_ASCII_WHITESPACE.contains(byte))
-        .map_or(start, |last| last + 1);
-    let stripped = &value[start..end];
-    if stripped.first().is_some_and(|byte| !byte.is_ascii())
-        || stripped.last().is_some_and(|byte| !byte.is_ascii())
-    {
-        return Err(Stop::Deferred);
-    }
-    Ok(stripped)
+    let text: &str = std::str::from_utf8(value).map_err(|_| Stop::Deferred)?;
+    Ok(text.trim_matches(is_python_space).as_bytes())
 }
 
 /// Python `_skip_whitespace`, which skips `str.isspace()` characters.
 fn python_whitespace_end(sql: &[u8], start: usize) -> Scan<usize> {
     let mut index = start;
-    while let Some(byte) = sql.get(index) {
-        if !byte.is_ascii() {
-            return Err(Stop::Deferred);
-        }
-        if !PYTHON_ASCII_WHITESPACE.contains(byte) {
+    while index < sql.len() {
+        let character: char = char_at(sql, index)?;
+        if !is_python_space(character) {
             break;
         }
-        index += 1;
+        index += character.len_utf8();
     }
     Ok(index)
+}
+
+/// The character starting at byte `index` of UTF-8 text.
+fn char_at(text: &[u8], index: usize) -> Scan<char> {
+    let width: usize = (text[index].leading_ones() as usize).max(1);
+    let encoded: &[u8] = text.get(index..index + width).ok_or(Stop::Deferred)?;
+    std::str::from_utf8(encoded)
+        .map_err(|_| Stop::Deferred)?
+        .chars()
+        .next()
+        .ok_or(Stop::Deferred)
 }
 
 fn non_code_end(
@@ -288,4 +442,30 @@ fn utf8(value: &[u8]) -> Scan<String> {
 
 fn failed(message: String) -> Stop {
     Stop::Failed(message)
+}
+
+/// Converts increasing byte offsets of UTF-8 text into Python code-point offsets.
+#[derive(Default)]
+struct CharOffsets {
+    byte: usize,
+    char: usize,
+}
+
+impl CharOffsets {
+    fn advance(&mut self, text: &[u8], byte: usize) -> Scan<usize> {
+        self.char += std::str::from_utf8(&text[self.byte..byte])
+            .map_err(|_| Stop::Deferred)?
+            .chars()
+            .count();
+        self.byte = byte;
+        Ok(self.char)
+    }
+}
+
+/// Point a stop at `start`: the top-level quote or comment, or the call being parsed.
+fn stopped_at(stop: Stop, start: usize) -> Stopped {
+    match stop {
+        Stop::Failed(message) => Stopped::Failed(message, start),
+        Stop::Deferred => Stopped::Deferred,
+    }
 }

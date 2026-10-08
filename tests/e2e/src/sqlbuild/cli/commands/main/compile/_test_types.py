@@ -933,6 +933,17 @@ class NativeDeclarationErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ReferenceScanErrorTestCase:
+    """A project whose reference scan error every engine must locate and type the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_message: str
+    expected_macro_calls: tuple[int, int, int]
+    expected_error_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class NativeConfigErrorTestCase:
     """A failing project whose model config error both engines must report the same way."""
 
