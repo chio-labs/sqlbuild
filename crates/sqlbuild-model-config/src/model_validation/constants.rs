@@ -205,6 +205,10 @@ pub const MAX_HOUR: i128 = 23;
 pub const MAX_MINUTE: i128 = 59;
 /// The length of a `HH:MM` UTC offset.
 pub const UTC_OFFSET_LENGTH: usize = 5;
+/// The first year Python's `datetime` represents.
+pub const MIN_YEAR: i128 = 1;
+/// The last year Python's `datetime` represents.
+pub const MAX_YEAR: i128 = 9999;
 /// The last month whose civil-day computation shifts the year back.
 pub const LAST_SHIFTED_MONTH: i128 = 2;
 /// The position of days among duration units.

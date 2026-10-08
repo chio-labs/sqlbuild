@@ -62,6 +62,36 @@ fn given_effective_configs_when_validating_natively_then_only_python_valid_confi
             expected_accepted: false,
         },
         AcceptTestCase {
+            description: "a start bound shifted before year 1 in UTC defers",
+            config: incremental(vec![
+                ("cursor_start", Value::Str("0001-01-01T00:00:00+01:00")),
+                ("cursor_end", Value::Str("2024-01-01")),
+            ]),
+            references: &["ref:orders"],
+            query_sql: "select 1",
+            expected_accepted: false,
+        },
+        AcceptTestCase {
+            description: "an end bound shifted past year 9999 in UTC defers",
+            config: incremental(vec![
+                ("cursor_start", Value::Str("2024-01-01")),
+                ("cursor_end", Value::Str("9999-12-31T23:59:00-01:00")),
+            ]),
+            references: &["ref:orders"],
+            query_sql: "select 1",
+            expected_accepted: false,
+        },
+        AcceptTestCase {
+            description: "bounds at the edges of years 1 and 9999 in UTC",
+            config: incremental(vec![
+                ("cursor_start", Value::Str("0001-01-01T01:00:00+01:00")),
+                ("cursor_end", Value::Str("9999-12-31T22:59:00-01:00")),
+            ]),
+            references: &["ref:orders"],
+            query_sql: "select 1",
+            expected_accepted: true,
+        },
+        AcceptTestCase {
             description: "an unusual ISO timestamp defers",
             config: incremental(vec![("cursor_start", Value::Str("2024-W01-1"))]),
             references: &["ref:orders"],

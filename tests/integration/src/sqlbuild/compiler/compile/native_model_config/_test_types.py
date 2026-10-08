@@ -36,3 +36,13 @@ class ModelConfigProjectTestCase:
     description: str
     engine: str
     expected_models: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeRejectionParityTestCase:
+    """A config native validation must reject so Python reports its exact outcome."""
+
+    description: str
+    values: dict[str, object]
+    expected_native_accepted: bool
+    expected_python_error: str

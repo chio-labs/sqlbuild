@@ -85,17 +85,17 @@ pub(crate) fn optional_one_of(text: Option<&str>, vocabulary: &[&str]) -> bool {
     text.is_some_and(|value| one_of(value, vocabulary))
 }
 
-/// Read `_string_sequence`: a string, or the strings of a list or tuple.
-pub(crate) fn string_sequence<N: AuthoredNode>(value: Option<&N>) -> Vec<String> {
+/// Read `_string_sequence`: a string, or the strings of a list or tuple; reject unreadable text.
+pub(crate) fn string_sequence<N: AuthoredNode>(value: Option<&N>) -> Result<Vec<String>, Rejected> {
     match value.map(|node| (node.kind(), node)) {
-        Some((NodeKind::Str, node)) => node.text().into_iter().collect(),
+        Some((NodeKind::Str, node)) => string_value(node).map(|text| vec![text]),
         Some((NodeKind::List | NodeKind::Tuple, node)) => node
             .items()
             .iter()
             .filter(|item| item.kind() == NodeKind::Str)
-            .filter_map(AuthoredNode::text)
+            .map(string_value)
             .collect(),
-        _ => Vec::new(),
+        _ => Ok(Vec::new()),
     }
 }
 

@@ -41,6 +41,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_BATCH_SIZE
 from sqlbuild.cursor_algebra.models import Duration
+from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
 from sqlbuild.spec.contracts.constants import (
     CURSOR_POLICY_DISABLED,
     EFFECTIVE_BATCH_SIZE_TOKEN,
@@ -867,8 +868,12 @@ def _validate_incremental_cursor_rules(
     if (
         cursor_start is not None
         and cursor_end is not None
-        and _cursor_contract_key(value=cursor_start, cursor_type=cursor_type)
-        >= _cursor_contract_key(value=cursor_end, cursor_type=cursor_type)
+        and _cursor_contract_key(
+            value=cursor_start, cursor_type=cursor_type, key="cursor_start", model_name=model_name
+        )
+        >= _cursor_contract_key(
+            value=cursor_end, cursor_type=cursor_type, key="cursor_end", model_name=model_name
+        )
     ):
         raise CompileInputError(
             f"model '{model_name}': cursor_start must be before exclusive cursor_end"
@@ -883,15 +888,26 @@ def _validate_incremental_cursor_rules(
         raise CompileInputError(f"model '{model_name}': append_cursor_inclusive requires cursor")
 
 
-def _cursor_contract_key(*, value: object, cursor_type: str | None) -> Decimal:
+def _cursor_contract_key(
+    *, value: object, cursor_type: str | None, key: str, model_name: str
+) -> Decimal:
     if cursor_type == CursorType.INTEGER:
         return Decimal(str(value))
     parsed: datetime = datetime.fromisoformat(str(value))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    else:
-        parsed = parsed.astimezone(UTC)
-    return Decimal(str(parsed.timestamp()))
+        return Decimal(str(parsed.replace(tzinfo=UTC).timestamp()))
+    try:
+        utc_parsed: datetime = parsed.astimezone(UTC)
+    except OverflowError:
+        raise CompileInputError(
+            f"model '{model_name}': {key} value '{value}' falls outside years 1-9999 once "
+            "converted to UTC",
+            help=model_header_help(
+                purpose=f"keep {key} within years 1-9999 in UTC",
+                entry=f"{key} '{parsed.replace(tzinfo=UTC).isoformat()}'",
+            ),
+        ) from None
+    return Decimal(str(utc_parsed.timestamp()))
 
 
 def _validate_cursor_safety_overrides(

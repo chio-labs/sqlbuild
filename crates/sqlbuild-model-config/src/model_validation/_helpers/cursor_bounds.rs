@@ -3,7 +3,7 @@
 use crate::model_validation::constants::{
     CLOCK_FIELD_LENGTH, CLOCK_PART_COUNTS, CLOCK_PARTS_WITH_SECONDS, INTEGER_CURSOR,
     ISO_DATE_LENGTH, ISO_DATE_SEPARATOR_OFFSETS, LAST_SHIFTED_MONTH, MAX_HOUR, MAX_MINUTE,
-    TIMESTAMP_CURSOR, UTC_OFFSET_LENGTH,
+    MAX_YEAR, MIN_YEAR, TIMESTAMP_CURSOR, UTC_OFFSET_LENGTH,
 };
 use crate::model_validation::models::Rejected;
 use crate::types::AuthoredNode;
@@ -70,7 +70,14 @@ fn timestamp_key(text: &str) -> Result<i128, Rejected> {
         None => (0, 0),
         Some(clock) => clock_micros(clock)?,
     };
-    Ok((days * SECONDS_PER_DAY - offset_seconds) * MICROS_PER_SECOND + micros)
+    let utc_micros = (days * SECONDS_PER_DAY - offset_seconds) * MICROS_PER_SECOND + micros;
+    let day_micros = SECONDS_PER_DAY * MICROS_PER_SECOND;
+    let first_micros = days_from_civil(MIN_YEAR, 1, 1) * day_micros;
+    let end_micros = days_from_civil(MAX_YEAR + 1, 1, 1) * day_micros;
+    if utc_micros < first_micros || utc_micros >= end_micros {
+        return Err(Rejected);
+    }
+    Ok(utc_micros)
 }
 
 fn date_days(date: &str) -> Result<i128, Rejected> {

@@ -91,9 +91,9 @@ pub(crate) fn check_snapshot<N: AuthoredNode>(
     let checked_columns = if check_columns.is_some_and(is_wildcard_only) {
         Vec::new()
     } else {
-        string_sequence(check_columns)
+        string_sequence(check_columns)?
     };
-    let named = string_sequence(unique_key)
+    let named = string_sequence(unique_key)?
         .into_iter()
         .chain(updated_at)
         .chain(observed_at)

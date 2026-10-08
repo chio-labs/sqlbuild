@@ -193,6 +193,7 @@ _VALIDATION_POOLS: dict[str, tuple[object, ...]] = {
         "2024-13-01",
         "20240101",
         "2024-W01-1",
+        "0001-01-01T00:00:00+01:00",
         10,
         "15",
         "1e3",
@@ -201,8 +202,16 @@ _VALIDATION_POOLS: dict[str, tuple[object, ...]] = {
         True,
         _ABSENT,
     ),
-    "cursor_end": ("2024-01-01", "2024-06-01 00:00", 5, 40, "30", "2025-01-01T00:00:00-05:00"),
-    "unique_key": ("order_id", ["order_id", "customer_id"], [], (), 5, _ABSENT),
+    "cursor_end": (
+        "2024-01-01",
+        "2024-06-01 00:00",
+        5,
+        40,
+        "30",
+        "2025-01-01T00:00:00-05:00",
+        "9999-12-31T23:59:00-01:00",
+    ),
+    "unique_key": ("order_id", ["order_id", "customer_id"], ["\udcff"], [], (), 5, _ABSENT),
     "merge_exclude_columns": (["amount"], ["ORDER_ID"], ["a", "A"], [""], "amount", _ABSENT),
     "incremental_mode": ("full", "microbatch", "batch", _ABSENT),
     "microbatch_strategy": ("rolling_window", "watermark", "hourly", _ABSENT),
@@ -247,7 +256,7 @@ _VALIDATION_POOLS: dict[str, tuple[object, ...]] = {
     "initial_valid_from": ("updated_at", "observed_at", "execution_time", "now", _ABSENT),
     "snapshot_full_refresh": ("deny", "allow", "always", _ABSENT),
     "snapshot_schema_change": ("deny", "append_new_columns", "drop", _ABSENT),
-    "check_columns": (["*"], ["*", "status"], ["status"], [], ("*",), _ABSENT),
+    "check_columns": (["*"], ["*", "status"], ["status"], ["\udcff"], [], ("*",), _ABSENT),
     "invalidate_hard_deletes": (True, False, "yes", _ABSENT),
     "valid_from_column": ("valid_from", "VALID_TO", _ABSENT),
     "valid_to_column": ("valid_to", _ABSENT),
@@ -340,6 +349,35 @@ def model_validation_parity(*, requests: list[ModelValidationRequest]) -> ModelV
         python_accepted=sum(python),
         python_rejected=len(python) - sum(python),
     )
+
+
+def validation_outcomes(*, values: dict[str, object]) -> tuple[bool, str]:
+    """Return whether native validation accepts `values` and the Python validators' error."""
+
+    request: ModelValidationRequest = ModelValidationRequest(
+        model_file=_model_file(relative_path="marts/orders_daily.sql", header_values={}),
+        config=CompileModelConfig(values=values),
+        references=(_ORDERS,),
+        declared_columns=None,
+        query_sql="SELECT 1",
+    )
+    session: NativeModelConfigSession = _session(
+        project_config=ProjectConfig(name="orders", adapter="duckdb"),
+        target_config=None,
+        effective_target_name=None,
+    )
+    return (
+        native_model_validators_accept(session=session, request=request),
+        _python_error(request),
+    )
+
+
+def _python_error(request: ModelValidationRequest) -> str:
+    try:
+        run_python_model_validators(context=_VALIDATOR_CONTEXT, request=request)
+    except Exception as error:  # noqa: BLE001 - the exact Python outcome, whatever it is
+        return f"{type(error).__name__}: {error}"
+    return "accepted"
 
 
 def _validation_request(*, rng: random.Random) -> ModelValidationRequest:

@@ -241,7 +241,7 @@ fn check_write_strategy<N: AuthoredNode>(
             return Err(Rejected);
         }
         reject_case_insensitive_duplicates(&excluded)?;
-        let unique_columns = string_sequence(values.unique_key.as_ref())
+        let unique_columns = string_sequence(values.unique_key.as_ref())?
             .iter()
             .map(|column| python_lower(column))
             .collect::<Result<HashSet<_>, _>>()?;
@@ -288,8 +288,8 @@ fn check_contract_columns<N: AuthoredNode>(
         .cursor
         .iter()
         .cloned()
-        .chain(string_sequence(values.unique_key.as_ref()))
-        .chain(string_sequence(values.merge_exclude_columns.as_ref()));
+        .chain(string_sequence(values.unique_key.as_ref())?)
+        .chain(string_sequence(values.merge_exclude_columns.as_ref())?);
     require_declared(named, &declared)
 }
 
