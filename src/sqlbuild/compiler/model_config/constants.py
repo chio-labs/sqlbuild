@@ -25,9 +25,11 @@ SCHEMA_AUDIT_INSTANCE_FIELDS: tuple[str, ...] = (
     "evidence_limit",
     "location",
 )
-INVALID_OUTCOME: str = "invalid"
 UNSUPPORTED_OUTCOME: str = "unsupported"
 ENVIRONMENT_READ: str = "env"
 COLUMNS_HEADER_KEY: str = "columns"
 AUDITS_HEADER_KEY: str = "audits"
-NATIVE_TEMPLATE_REJECTION_LENGTH: int = 3
+CONFIG_VALUE_TYPE_ERROR: str = "config_value_type"
+RESOURCE_IDENTITY_ERROR: str = "resource_identity"
+DISCOVERY_CONFLICT_ERROR: str = "discovery_conflict"
+EXPECTED_STRING: str = "a string"

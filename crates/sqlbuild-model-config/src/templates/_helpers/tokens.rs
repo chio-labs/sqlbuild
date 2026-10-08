@@ -11,7 +11,7 @@ pub(crate) enum TokenKind {
     End,
 }
 
-/// One token and the character position it starts at; tokenized text is ASCII.
+/// One token and its character position in the expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Token {
     pub(crate) kind: TokenKind,
@@ -19,7 +19,7 @@ pub(crate) struct Token {
 }
 
 impl Token {
-    /// Python's `token.value`: the word, the unquoted text, the symbol or nothing at the end.
+    /// Return the token's value as Python's error messages show it.
     pub(crate) fn value(&self) -> String {
         match &self.kind {
             TokenKind::Word(text) | TokenKind::Text(text) => text.clone(),
@@ -32,46 +32,44 @@ impl Token {
 const SYMBOLS: [char; 3] = ['(', ')', ','];
 const ESCAPE: char = '\\';
 
-/// Split one template expression into tokens; positions count characters, as Python's do.
+/// Split one template expression into tokens.
 pub(crate) fn tokenize(expression: &str) -> Result<Vec<Token>, TemplateFailure> {
     let characters: Vec<char> = expression.chars().collect();
     let mut tokens: Vec<Token> = Vec::new();
-    let mut index: usize = 0;
+    let mut index = 0;
     while let Some(&character) = characters.get(index) {
         if !character.is_ascii() {
             return Err(TemplateFailure::Unsupported);
         }
-        let position: usize = index;
         if is_python_space(character) {
             index += 1;
         } else if SYMBOLS.contains(&character) {
             tokens.push(Token {
                 kind: TokenKind::Symbol(character),
-                position,
+                position: index,
             });
             index += 1;
-        } else if let Some(quote_name) = quote_name(character) {
-            let (text, end) = quoted_text(&characters, index, quote_name)?;
+        } else if is_quote(character) {
+            let (text, next) = quoted_text(&characters, index)?;
             tokens.push(Token {
                 kind: TokenKind::Text(text),
-                position,
+                position: index,
             });
-            index = end;
+            index = next;
         } else {
-            let mut word = String::new();
+            let start = index;
             while let Some(&next) = characters.get(index) {
                 if !next.is_ascii() {
                     return Err(TemplateFailure::Unsupported);
                 }
-                if is_python_space(next) || SYMBOLS.contains(&next) || quote_name(next).is_some() {
+                if is_python_space(next) || SYMBOLS.contains(&next) || is_quote(next) {
                     break;
                 }
-                word.push(next);
                 index += 1;
             }
             tokens.push(Token {
-                kind: TokenKind::Word(word),
-                position,
+                kind: TokenKind::Word(characters[start..index].iter().collect()),
+                position: start,
             });
         }
     }
@@ -82,20 +80,17 @@ pub(crate) fn tokenize(expression: &str) -> Result<Vec<Token>, TemplateFailure> 
     Ok(tokens)
 }
 
-/// The text quoted at `start` and the index after its closing quote.
-fn quoted_text(
-    characters: &[char],
-    start: usize,
-    quote_name: &'static str,
-) -> Result<(String, usize), TemplateFailure> {
-    let quote: char = characters[start];
+fn quoted_text(characters: &[char], start: usize) -> Result<(String, usize), TemplateFailure> {
+    let quote = characters[start];
     let mut text = String::new();
-    let mut index: usize = start + 1;
+    let mut index = start + 1;
     while let Some(&character) = characters.get(index) {
         if character == ESCAPE {
-            let escaped: char = *characters.get(index + 1).ok_or(TemplateFailure::Invalid(
-                TemplateError::UnterminatedEscape(index),
-            ))?;
+            let Some(&escaped) = characters.get(index + 1) else {
+                return Err(TemplateFailure::Invalid(
+                    TemplateError::UnterminatedEscape { position: index },
+                ));
+            };
             text.push(escaped);
             index += 2;
         } else if character == quote {
@@ -105,17 +100,17 @@ fn quoted_text(
             index += 1;
         }
     }
-    Err(TemplateFailure::Invalid(TemplateError::UnterminatedString(
-        quote_name, start,
-    )))
+    let quote = if quote == '\'' { "single" } else { "double" };
+    Err(TemplateFailure::Invalid(
+        TemplateError::UnterminatedString {
+            quote,
+            position: start,
+        },
+    ))
 }
 
-fn quote_name(character: char) -> Option<&'static str> {
-    match character {
-        '\'' => Some("single"),
-        '"' => Some("double"),
-        _ => None,
-    }
+fn is_quote(character: char) -> bool {
+    matches!(character, '\'' | '"')
 }
 
 /// ASCII characters Python's `str.isspace` accepts, including the information separators.

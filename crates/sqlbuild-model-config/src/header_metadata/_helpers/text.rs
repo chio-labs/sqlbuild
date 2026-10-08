@@ -1,71 +1,85 @@
-//! Text checks that agree with Python's `str` methods or defer.
+//! Text checks that agree with Python's `str` methods or defer, and the errors they raise.
 
-use crate::header_metadata::models::HeaderMetadataDeferral;
+use crate::errors::ConfigError;
+use crate::header_metadata::models::HeaderMetadataStop;
 use crate::types::{AuthoredNode, NodeKind};
 
-/// Return the text of a string whose `strip()` Python finds non-empty.
-pub(crate) fn non_blank_text<N: AuthoredNode>(node: &N) -> Result<String, HeaderMetadataDeferral> {
-    if node.kind() != NodeKind::Str {
-        return Err(HeaderMetadataDeferral::Invalid);
+/// Where one parse reports its errors: the file path and the label the messages name.
+#[derive(Clone, Copy)]
+pub(crate) struct Site<'a> {
+    pub(crate) path: &'a str,
+    pub(crate) label: &'a str,
+}
+
+impl Site<'_> {
+    /// The `CompileInputError` `<path> <label> <text>`.
+    pub(crate) fn error(&self, text: &str) -> HeaderMetadataStop {
+        HeaderMetadataStop::Error(ConfigError::compile(format!(
+            "{} {} {text}",
+            self.path, self.label
+        )))
     }
-    let text = node.text().ok_or(HeaderMetadataDeferral::Unsupported)?;
+}
+
+/// Return the text of a string whose `strip()` Python finds non-empty, `None` otherwise.
+pub(crate) fn non_blank_text<N: AuthoredNode>(
+    node: &N,
+) -> Result<Option<String>, HeaderMetadataStop> {
+    if node.kind() != NodeKind::Str {
+        return Ok(None);
+    }
+    let text = node.text().ok_or(HeaderMetadataStop::Unsupported)?;
     if text
         .bytes()
         .any(|byte| byte.is_ascii() && !is_python_space(byte))
     {
-        Ok(text)
+        Ok(Some(text))
     } else if text.is_ascii() {
-        Err(HeaderMetadataDeferral::Invalid)
+        Ok(None)
     } else {
-        Err(HeaderMetadataDeferral::Unsupported)
+        Err(HeaderMetadataStop::Unsupported)
     }
 }
 
-/// Return `None` for Python's `None`, or the node of a string `strip()` finds non-empty.
+/// Read `optional_named_string`: `None`, or a string `strip()` finds non-empty.
 pub(crate) fn optional_text<N: AuthoredNode>(
     node: Option<&N>,
-) -> Result<Option<N>, HeaderMetadataDeferral> {
+    site: Site<'_>,
+    key: &str,
+) -> Result<Option<N>, HeaderMetadataStop> {
     match node {
         None => Ok(None),
         Some(value) if value.kind() == NodeKind::Null => Ok(None),
-        Some(value) => non_blank_text(value).map(|_| Some(value.clone())),
+        Some(value) => match non_blank_text(value)? {
+            Some(_) => Ok(Some(value.clone())),
+            None => Err(site.error(&format!("'{key}' must be a non-empty string"))),
+        },
     }
 }
 
-/// Return `None` for Python's `None`, or the node of a boolean.
+/// Read `optional_named_bool`: `None`, or a boolean.
 pub(crate) fn optional_bool<N: AuthoredNode>(
     node: Option<&N>,
-) -> Result<Option<N>, HeaderMetadataDeferral> {
+    site: Site<'_>,
+    key: &str,
+) -> Result<Option<N>, HeaderMetadataStop> {
     match node.map(AuthoredNode::kind) {
         None | Some(NodeKind::Null) => Ok(None),
         Some(NodeKind::Bool(_)) => Ok(node.cloned()),
-        Some(_) => Err(HeaderMetadataDeferral::Invalid),
+        Some(_) => Err(site.error(&format!("'{key}' must be a boolean"))),
     }
 }
 
-/// Return `None` for Python's `None`, or the node of a non-negative non-boolean integer.
+/// Read a non-negative non-boolean integer option, or `None`.
 pub(crate) fn optional_count<N: AuthoredNode>(
     node: Option<&N>,
-) -> Result<Option<N>, HeaderMetadataDeferral> {
+    site: Site<'_>,
+    key: &str,
+) -> Result<Option<N>, HeaderMetadataStop> {
     match node.map(AuthoredNode::kind) {
         None | Some(NodeKind::Null) => Ok(None),
         Some(NodeKind::Int { negative: false }) => Ok(node.cloned()),
-        Some(_) => Err(HeaderMetadataDeferral::Invalid),
-    }
-}
-
-/// Return whether `name` fully matches Python's `^[a-z](?:[a-z0-9_]*[a-z0-9])?$` identity pattern.
-pub(crate) fn is_snake_case(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    match (bytes.first(), bytes.last()) {
-        (Some(first), Some(last)) => {
-            first.is_ascii_lowercase()
-                && (last.is_ascii_lowercase() || last.is_ascii_digit())
-                && bytes
-                    .iter()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_')
-        }
-        _ => false,
+        Some(_) => Err(site.error(&format!("'{key}' must be a non-negative integer"))),
     }
 }
 
@@ -78,6 +92,11 @@ pub(crate) fn entry<'entries, N: AuthoredNode>(
         .iter()
         .find(|(name, _)| name.is_text(key))
         .map(|(_, value)| value)
+}
+
+/// Return Python's `text.strip()` for ASCII text.
+pub(crate) fn ascii_strip(text: &str) -> &str {
+    text.trim_matches(|character: char| character.is_ascii() && is_python_space(character as u8))
 }
 
 /// ASCII characters Python's `str.isspace` accepts, including the information separators.

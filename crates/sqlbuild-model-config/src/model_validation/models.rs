@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use crate::errors::ConfigError;
+
 /// Project-wide facts every model's validation reads.
 #[derive(Clone, Debug, Default)]
 pub struct ProjectValidationFacts {
@@ -32,6 +34,8 @@ pub struct ModelReference {
 #[derive(Clone, Debug)]
 pub struct ModelValidationFacts<'a> {
     pub model_name: &'a str,
+    /// The model file's project-relative path, as reference errors name it.
+    pub relative_path: &'a str,
     /// Merged references in extraction order.
     pub references: &'a [ModelReference],
     /// Column names of the model's declared schema, when one applies.
@@ -44,9 +48,24 @@ pub struct ModelValidationFacts<'a> {
     pub table_type_declared: bool,
 }
 
-/// Why native validation cannot accept a config: Python must run and decide.
+/// Why native validation cannot decide a value: Python must run and decide.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rejected;
+
+/// Why native validation stops: Python must decide, or the exact error the validators raise.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ValidationStop {
+    /// The config holds a value only Python can judge; the Python validators run.
+    Defer,
+    /// The first error the Python validators raise.
+    Error(ConfigError),
+}
+
+impl From<Rejected> for ValidationStop {
+    fn from(_: Rejected) -> Self {
+        Self::Defer
+    }
+}
 
 /// The header's `time_travel_retention`, applied over the inherited policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

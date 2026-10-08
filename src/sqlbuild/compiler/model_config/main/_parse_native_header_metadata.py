@@ -12,12 +12,12 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.compiler.model_config.constants import (
     AUDITS_HEADER_KEY,
     COLUMNS_HEADER_KEY,
-    INVALID_OUTCOME,
     SCHEMA_AUDIT_INSTANCE_FIELDS,
     SCHEMA_COLUMN_FIELDS,
     UNSUPPORTED_OUTCOME,
 )
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
+from sqlbuild.compiler.model_config.types import NativeHeaderMetadataRow
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn
 
 
@@ -29,23 +29,22 @@ def parse_native_header_metadata(
     if not model_files or not _contract_shapes_match():
         return {}
     try:
-        parsed: list[tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...]] | str] = (
-            _native.parse_model_header_metadata(
-                [
-                    (
-                        model_file.header_values.get(COLUMNS_HEADER_KEY),
-                        model_file.header_values.get(AUDITS_HEADER_KEY),
-                        model_file.header_column_locations,
-                    )
-                    for model_file in model_files
-                ],
-                {
-                    "schema_column": SchemaColumn,
-                    "schema_audit_instance": SchemaAuditInstance,
-                    "severities": {severity.value: severity for severity in AuditSeverity},
-                    "allocate": object.__new__,
-                },
-            )
+        parsed: list[NativeHeaderMetadataRow | str] = _native.parse_model_header_metadata(
+            [
+                (
+                    model_file.header_values.get(COLUMNS_HEADER_KEY),
+                    model_file.header_values.get(AUDITS_HEADER_KEY),
+                    model_file.header_column_locations,
+                    str(model_file.relative_path),
+                )
+                for model_file in model_files
+            ],
+            {
+                "schema_column": SchemaColumn,
+                "schema_audit_instance": SchemaAuditInstance,
+                "severities": {severity.value: severity for severity in AuditSeverity},
+                "allocate": object.__new__,
+            },
         )
     except (TypeError, ValueError):
         return {}
@@ -57,18 +56,17 @@ def parse_native_header_metadata(
 
 
 def _native_metadata(
-    *,
-    model_file: DiscoveredSqlModelFile,
-    metadata: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...]] | str,
+    *, model_file: DiscoveredSqlModelFile, metadata: NativeHeaderMetadataRow | str
 ) -> NativeHeaderMetadata:
     columns, audits = ((), ()) if isinstance(metadata, str) else metadata
     return NativeHeaderMetadata(
         raw_columns=model_file.header_values.get(COLUMNS_HEADER_KEY),
         raw_audits=model_file.header_values.get(AUDITS_HEADER_KEY),
         column_locations=model_file.header_column_locations,
-        columns=columns,
-        audits=audits,
-        invalid=metadata == INVALID_OUTCOME,
+        columns=() if isinstance(columns, _native.NativeConfigError) else columns,
+        audits=() if audits is None or isinstance(audits, _native.NativeConfigError) else audits,
+        columns_error=columns if isinstance(columns, _native.NativeConfigError) else None,
+        audits_error=audits if isinstance(audits, _native.NativeConfigError) else None,
     )
 
 

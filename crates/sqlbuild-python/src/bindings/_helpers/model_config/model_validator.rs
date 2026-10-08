@@ -1,17 +1,18 @@
-//! The Python model validators' happy path, decided natively.
+//! The Python model validators, run natively up to the first error they raise.
 
 use std::collections::HashSet;
 
-use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{pyclass, pymethods};
-use sqlbuild_model_config::model_validation::main::accept_model_config::accept_model_config;
+use sqlbuild_model_config::model_validation::main::validate_model_config::validate_model_config;
 use sqlbuild_model_config::model_validation::models::{
-    ModelReference, ModelValidationFacts, ProjectValidationFacts, Rejected,
+    ModelReference, ModelValidationFacts, ProjectValidationFacts, ValidationStop,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 
 /// Model, seed, source, function and table function names.
 type ResourceNames = (
@@ -53,15 +54,16 @@ impl NativeModelValidator {
         }
     }
 
-    /// Return whether every Python model validator accepts this model; `False` runs them.
-    fn accepts(
+    /// Return `True` when the validators accept, the first error, or `False` to run Python's.
+    fn validate(
         &self,
+        py: Python<'_>,
         values: Bound<'_, PyDict>,
-        model: (String, String),
+        model: (String, String, String),
         facts: ModelFacts<'_>,
-    ) -> PyResult<bool> {
+    ) -> PyResult<Py<PyAny>> {
         compiler_guard(|| {
-            let (model_name, query_sql) = model;
+            let (model_name, query_sql, relative_path) = model;
             let (references, declared_columns, retention_unmanaged, table_type_declared) = facts;
             let references = references
                 .iter()
@@ -78,16 +80,22 @@ impl NativeModelValidator {
                 .collect();
             let facts = ModelValidationFacts {
                 model_name: &model_name,
+                relative_path: &relative_path,
                 references: &references,
                 declared_columns: declared_columns.as_deref(),
                 query_sql: &query_sql,
                 retention_unmanaged,
                 table_type_declared,
             };
-            Ok(match accept_model_config(entries, &self.project, &facts) {
-                Ok(()) => true,
-                Err(Rejected) => false,
-            })
+            Ok(
+                match validate_model_config(entries, &self.project, &facts) {
+                    Ok(()) => PyBool::new(py, true).to_owned().into_any().unbind(),
+                    Err(ValidationStop::Defer) => {
+                        PyBool::new(py, false).to_owned().into_any().unbind()
+                    }
+                    Err(ValidationStop::Error(error)) => native_config_error(py, error)?.into_any(),
+                },
+            )
         })
     }
 }

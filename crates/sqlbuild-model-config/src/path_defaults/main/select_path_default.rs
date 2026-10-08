@@ -1,7 +1,7 @@
 //! `select_path_default`: the nearest path-default key for a model path.
 
 use crate::path_defaults::_helpers::matching::{
-    is_wildcard, matches_prefix, segment_count, specificity,
+    is_wildcard, matches_prefix, segment_count, wildcard_choice,
 };
 use crate::path_defaults::constants::MODELS_PREFIX;
 use crate::path_defaults::models::PathDefaultChoice;
@@ -31,12 +31,5 @@ pub fn select_path_default(model_path: &str, keys: &[String]) -> PathDefaultChoi
         }
         return PathDefaultChoice::Selected(best.cloned());
     }
-    let Some(best_score) = matched.iter().map(|key| specificity(key)).max() else {
-        return PathDefaultChoice::Selected(None);
-    };
-    let mut best = matched.iter().filter(|key| specificity(key) == best_score);
-    match (best.next(), best.next()) {
-        (Some(key), None) => PathDefaultChoice::Selected(Some((*key).clone())),
-        _ => PathDefaultChoice::Conflict,
-    }
+    wildcard_choice(normalized, &matched)
 }
