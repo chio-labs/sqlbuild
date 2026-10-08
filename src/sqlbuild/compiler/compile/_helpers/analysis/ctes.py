@@ -46,6 +46,8 @@ def extract_top_level_ctes_with_sql_analysis(
 ) -> tuple[tuple[str, str], ...] | None:
     """Extract top-level CTE aliases and rendered bodies with Polyglot when available."""
 
+    if _CEREMONIAL_SELECT_PATTERN.search(sql) is None:
+        return None
     polyglot_module: Any = import_polyglot_sql()
     try:
         analysis: Any = polyglot_module.analyze_query(sql, {"dialect": "generic"})
@@ -58,8 +60,6 @@ def extract_top_level_ctes_with_sql_analysis(
         )
         return None
     if not isinstance(analysis, dict):
-        return None
-    if _CEREMONIAL_SELECT_PATTERN.search(sql) is None:
         return None
     if not _is_ceremonial_select_analysis(analysis):
         return None

@@ -95,6 +95,77 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
             "references unknown source 'missing_events'",
         ),
         AttachmentProjectTestCase(
+            description="a check CTE reading a source before a later malformed reference call",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+                + '__expected__orders AS (SELECT id, 1.5 AS amount, label FROM __source("order_events")),\n'
+                + "__assert__no_rows AS (SELECT 1 FROM __source(order_events))\n"
+            },
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE "
+            "'__expected__orders' must not reference project source",
+        ),
+        AttachmentProjectTestCase(
+            description="a malformed call in a check CTE leaves the unknown helper source first",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + 'WITH\nhelper AS (SELECT * FROM __source("missing_events")),\n'
+                + "__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+                + "__expected__orders AS (SELECT 1 AS id FROM __source(order_events))\n"
+            },
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
+            "references unknown source 'missing_events'",
+        ),
+        AttachmentProjectTestCase(
+            description="an unknown helper source before a later malformed fixture call",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + 'WITH\nhelper AS (SELECT * FROM __source("missing_events")),\n'
+                + "__seed__channel_codes AS (SELECT 1 AS id FROM __source(order_events)),\n"
+                + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
+            },
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
+            "references unknown source 'missing_events'",
+        ),
+        AttachmentProjectTestCase(
+            description="a scenario fixture without a target name",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + "WITH\n__seed__ AS (SELECT 1 AS id, 'web' AS label),\n"
+                + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
+            },
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_outcome_fragment="error: SQL scenario 'tests/scenarios/orders_scenario.sql' "
+            "must use __seed__<seed> to identify a target",
+        ),
+        AttachmentProjectTestCase(
+            description="a scenario macro mock",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+                + "__macro__tidy AS (SELECT 'x'),\n"
+                + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
+            },
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_outcome_fragment="does not support macro mock CTE '__macro__tidy'",
+        ),
+        AttachmentProjectTestCase(
+            description="a scenario whose expected result depends on an assertion",
+            overrides={
+                _SCENARIO: _SCENARIO_HEADER
+                + "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+                + "__assert__no_rows AS (SELECT 1 FROM __seed__channel_codes WHERE id IS NULL),\n"
+                + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label "
+                + "FROM __assert__no_rows)\n"
+            },
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_outcome_fragment="check CTE '__expected__orders' must not depend on "
+            "'__assert__no_rows'",
+        ),
+        AttachmentProjectTestCase(
             description="a helper CTE reading a model through __ref and read by an assertion",
             overrides={
                 _UNIT_TEST: _HELPER_TEST_MOCKS

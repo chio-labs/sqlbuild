@@ -29,6 +29,9 @@ _BROKEN_TEST: str = (
     "__expected__ AS (\n  SELECT 1\n)\nSELECT 1\n"
 )
 
+_SCENARIO_HEADER: str = 'SCENARIO (\n  description "Flow"\n);\n\n'
+_MACRO_TEST_HEADER: str = 'TEST (mode macro, name "eu_label");\n\n'
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -50,6 +53,48 @@ _BROKEN_TEST: str = (
             description="a malformed expected-model CTE fails with Python's relationship fault",
             files={**SCOPED_PROJECT, "tests/unit/test_broken.sql": _BROKEN_TEST},
             expected_error="__expected__",
+        ),
+        ScopeEngineParityTestCase(
+            description="a scenario's bare expected prefix fails with Python's scenario fault",
+            files={
+                **SCOPED_PROJECT,
+                "tests/scenarios/flow.sql": _SCENARIO_HEADER
+                + "WITH\n__source__raw_orders AS (SELECT 1),\n__expected__ AS (SELECT 1)\n",
+            },
+            expected_error=(
+                "SQL scenario 'tests/scenarios/flow.sql' must use __expected__<model> to "
+                "identify a target"
+            ),
+        ),
+        ScopeEngineParityTestCase(
+            description="the first of several broken tests and scenarios is reported",
+            files={
+                **SCOPED_PROJECT,
+                "tests/unit/test_a_missing_as.sql": 'TEST (name "a");\n\nWITH\n'
+                "__source__raw_orders (SELECT 1),\n__expected__orders AS (SELECT 1)\n",
+                "tests/unit/test_b_broken.sql": _BROKEN_TEST,
+                "tests/scenarios/flow.sql": _SCENARIO_HEADER
+                + "WITH\n__source__raw_orders AS (SELECT 1\n",
+            },
+            expected_error="SQL test 'tests/unit/test_a_missing_as.sql' expected keyword AS",
+        ),
+        ScopeEngineParityTestCase(
+            description="a macro test whose CTE scan fails reports Python's scanner error",
+            files={
+                **SCOPED_PROJECT,
+                "tests/unit/test_eu_label.sql": _MACRO_TEST_HEADER
+                + "WITH\n__macro_actual__ AS SELECT @eu_label('1') AS label\n",
+            },
+            expected_error="SQL test 'tests/unit/test_eu_label.sql' CTE '__macro_actual__' must",
+        ),
+        ScopeEngineParityTestCase(
+            description="a macro test only Polyglot reads keeps Python's fallback",
+            files={
+                **SCOPED_PROJECT,
+                "tests/unit/test_eu_label.sql": _MACRO_TEST_HEADER
+                + "WITH\n__macro_actual__ AS MATERIALIZED (\n  SELECT @cents('1') AS label\n),\n"
+                "__macro_expected__ AS (\n  SELECT 100 AS label\n)\nSELECT 1\n",
+            },
         ),
         ScopeEngineParityTestCase(
             description="non-ASCII folders keep Python's repr order of path keys",

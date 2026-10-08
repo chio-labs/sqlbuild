@@ -79,7 +79,9 @@ def located_extraction_error(
         else None
     )
     if offset is None:
-        return CompileInputError(error.message, code=error.code, help=error.help)
+        return CompileInputError(
+            error.message, code=error.code, help=error.help, bridge_independent=True
+        )
     contents: str = test_file.contents
     line: int = contents.count(_LINE_BREAK, 0, offset) + 1
     column: int = offset - (contents.rfind(_LINE_BREAK, 0, offset) + 1) + 1
@@ -87,6 +89,7 @@ def located_extraction_error(
         f"{error.message}\n  --> {test_file.relative_path.as_posix()}:{line}:{column}",
         code=error.code,
         help=error.help,
+        bridge_independent=True,
     )
 
 

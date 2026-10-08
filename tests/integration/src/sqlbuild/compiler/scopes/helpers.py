@@ -15,9 +15,17 @@ from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_expected_model_names
+from sqlbuild.compiler.compile._helpers.scenarios.core import (
+    extract_sql_scenario_expected_model_names,
+)
+from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    extract_sql_test_expected_model_names,
+    extract_top_level_ctes_with_scanner,
+)
+from sqlbuild.compiler.compile._helpers.sql_tests.native import native_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    CompileSqlTestCte,
     DeclarationResolutionContext,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
@@ -120,6 +128,11 @@ class ScopeOutcome:
     error: str = ""
 
 
+_BROKEN_SCENARIO_CTES: tuple[str, ...] = (
+    "__expected__ AS (\n  SELECT 1\n)",
+    "__expected__orders AS (\n  SELECT (1\n)",
+    "__expected__orders (SELECT 1)",
+)
 _FOLDERS: tuple[str, ...] = (
     "models/sales",
     "models/sales/eu",
@@ -187,7 +200,14 @@ def generated_scope_files(*, rng: random.Random) -> dict[str, str]:
             "  SELECT 1 AS order_id\n)\nSELECT 1\n"
         )
     }
-    files.update(rng.choice((scenario, scenario, {}, {}, {})))
+    broken_scenario: dict[str, str] = {
+        "tests/scenarios/flow.sql": (
+            'SCENARIO (\n  description "Flow"\n);\n\nWITH\n'
+            "__source__raw_orders AS (\n  SELECT 1 AS order_id\n),\n"
+            f"{rng.choice(_BROKEN_SCENARIO_CTES)}\n"
+        )
+    }
+    files.update(rng.choice((scenario, scenario, broken_scenario, {}, {}, {})))
     return files
 
 
@@ -238,6 +258,14 @@ def _broken_test(*, index: int, calls: str, expected: list[str]) -> str:
     )
 
 
+def _broken_macro_test(*, index: int, calls: str, expected: list[str]) -> str:
+    del expected
+    return (
+        f'TEST (mode macro, name "broken_macro_{index}");\n\nWITH\n'
+        f"__macro_actual__ AS SELECT 1 AS id{calls}\n"
+    )
+
+
 def _expected_model_test(*, index: int, calls: str, expected: list[str]) -> str:
     blocks: str = ",\n".join(
         f"__expected__{model} AS (\n  SELECT 1 AS order_id{calls}\n)" for model in expected
@@ -248,11 +276,12 @@ def _expected_model_test(*, index: int, calls: str, expected: list[str]) -> str:
     )
 
 
-_TEST_KINDS: tuple[str, ...] = ("macro", "broken", "expected_model")
-_TEST_WEIGHTS: tuple[int, ...] = (3, 1, 6)
+_TEST_KINDS: tuple[str, ...] = ("macro", "broken", "broken_macro", "expected_model")
+_TEST_WEIGHTS: tuple[int, ...] = (3, 1, 1, 6)
 _TEST_WRITERS: dict[str, Callable[..., str]] = {
     "macro": _macro_test,
     "broken": _broken_test,
+    "broken_macro": _broken_macro_test,
     "expected_model": _expected_model_test,
 }
 
@@ -368,6 +397,8 @@ def _lookup_shape(lookup: ScopeLookup) -> tuple[object, ...]:
     )
 
 
+_TEST_LABEL: str = "tests/unit/test.sql"
+_SCENARIO_LABEL: str = "tests/scenarios/orders.sql"
 _LEADING: tuple[str, ...] = (
     "",
     "-- header\n",
@@ -442,12 +473,13 @@ LEXICAL_SYNTAXES: dict[str, SqlLexicalSyntax] = {
 
 @dataclass(frozen=True)
 class ExpectedNameScanParity:
-    """How the native expected-model scan compared with Python over one corpus."""
+    """How the native relationship scans compared with Python over one corpus."""
 
     mismatches: list[tuple[object, object, object]]
     scanned: int
     deferred: int
     python_errors: int
+    native_errors: int
 
 
 def generated_expected_model_sqls(*, rng: random.Random, count: int) -> list[str]:
@@ -467,34 +499,65 @@ def _generated_expected_model_sql(*, rng: random.Random) -> str:
 def expected_name_scan_parity(
     *, sqls: list[str], syntax: SqlLexicalSyntax
 ) -> ExpectedNameScanParity:
-    """Compare the native scan with Python wherever the native scan does not defer."""
+    """Compare each native scan, test and scenario names and test CTEs, with Python's result."""
 
-    native: list[tuple[str, ...] | None] = native_expected_model_names(sqls=sqls, syntax=syntax)
-    python: list[tuple[str, ...] | str] = [
-        _python_expected_names(sql=sql, syntax=syntax) for sql in sqls
+    test_texts: list[tuple[str, str]] = [(sql, _TEST_LABEL) for sql in sqls]
+    scenario_texts: list[tuple[str, str]] = [(sql, _SCENARIO_LABEL) for sql in sqls]
+    native: list[object] = [
+        *native_expected_model_names(texts=test_texts, scenario=False, syntax=syntax),
+        *native_expected_model_names(texts=scenario_texts, scenario=True, syntax=syntax),
+        *native_sql_test_ctes(texts=test_texts, syntax=syntax),
     ]
-    scanned: list[tuple[str, tuple[str, ...] | str, tuple[str, ...] | None]] = list(
-        compress(zip(sqls, python, native, strict=True), [names is not None for names in native])
-    )
+    python: list[object] = [
+        *(_python_expected_names(sql=sql, syntax=syntax) for sql in sqls),
+        *(_python_scenario_names(sql=sql, syntax=syntax) for sql in sqls),
+        *(_python_test_ctes(sql=sql, syntax=syntax) for sql in sqls),
+    ]
+    answered: list[bool] = [outcome is not None for outcome in native]
     return ExpectedNameScanParity(
         mismatches=mismatches(
-            inputs=[sql for sql, _, _ in scanned],
-            expected=[expected for _, expected, _ in scanned],
-            actual=[names for _, _, names in scanned],
+            inputs=list(compress([*sqls, *sqls, *sqls], answered)),
+            expected=list(compress(python, answered)),
+            actual=list(compress(native, answered)),
         ),
-        scanned=sum(names is not None for names in native),
-        deferred=sum(names is None for names in native),
-        python_errors=sum(isinstance(expected, str) for expected in python),
+        scanned=sum(isinstance(outcome, tuple) for outcome in native),
+        deferred=answered.count(False),
+        python_errors=sum(isinstance(outcome, str) for outcome in python),
+        native_errors=sum(isinstance(outcome, str) for outcome in native),
     )
 
 
 def _python_expected_names(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[str, ...] | str:
     try:
         return extract_sql_test_expected_model_names(
-            sql=sql, file_label="tests/unit/test.sql", syntax=syntax, mode=SqlTestMode.MODEL
+            sql=sql, file_label=_TEST_LABEL, syntax=syntax, mode=SqlTestMode.MODEL
         )
     except CompileInputError as error:
         return str(error)
+
+
+def _python_scenario_names(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[str, ...] | str:
+    try:
+        return extract_sql_scenario_expected_model_names(
+            sql=sql, file_label=_SCENARIO_LABEL, syntax=syntax
+        )
+    except CompileInputError as error:
+        return str(error)
+
+
+def _python_test_ctes(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[tuple[str, str], ...] | str:
+    try:
+        ctes: tuple[CompileSqlTestCte, ...] = extract_top_level_ctes_with_scanner(
+            sql=sql,
+            file_label=_TEST_LABEL,
+            context_label="SQL test",
+            with_requirement="mock CTEs and one __expected__<model> CTE",
+            cte_type=CompileSqlTestCte,
+            syntax=syntax,
+        )
+    except CompileInputError as error:
+        return str(error)
+    return tuple((cte.name, cte.sql_body) for cte in ctes)
 
 
 @dataclass(frozen=True)

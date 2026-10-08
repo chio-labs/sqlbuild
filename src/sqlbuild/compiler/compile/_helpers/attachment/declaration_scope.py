@@ -133,7 +133,7 @@ def _build_native_declaration_scope(
             scan_cache=scan_cache,
         )
         if fault is not None:
-            raise CompileInputError(fault)
+            raise CompileInputError(fault, bridge_independent=True)
         if not native.grant(facts):
             return None
     index: ScopeIndex = native.index_with_relationships()

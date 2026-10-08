@@ -1,17 +1,21 @@
-//! Python's `extract_sql_scenario_ctes` for scenarios its top-level scanner reads exactly.
+//! Python's `extract_sql_scenario_ctes`: the exact top-level scan, then classification and errors.
+
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
+use sqlbuild_scopes::relationship_names::main::top_level_ctes::scan_top_level_ctes;
+use sqlbuild_scopes::relationship_names::models::{RelationshipSource, TopLevelCtes};
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::compiler::_helpers::sql_tests::extraction::{
-    Cte, NameRule, extract_ctes_with_quoting, generic_syntax, validate_independence,
-};
+type Cte = (String, String);
 
-/// Characters whose Python case mapping reaches ASCII, which Python's keyword match would accept.
-const CASE_MAPPED_TO_ASCII: [char; 20] = [
-    '\u{df}', '\u{130}', '\u{131}', '\u{149}', '\u{17f}', '\u{1f0}', '\u{1e96}', '\u{1e97}',
-    '\u{1e98}', '\u{1e99}', '\u{1e9a}', '\u{1e9e}', '\u{212a}', '\u{fb00}', '\u{fb01}', '\u{fb02}',
-    '\u{fb03}', '\u{fb04}', '\u{fb05}', '\u{fb06}',
-];
+const SOURCE_PREFIX: &str = "__source__";
+const REF_PREFIX: &str = "__ref__";
+const SEED_PREFIX: &str = "__seed__";
+const DBT_REF_PREFIX: &str = "__dbt_ref__";
+const EXPECTED_PREFIX: &str = "__expected__";
+const ASSERT_PREFIX: &str = "__assert__";
+const MACRO_PREFIX: &str = "__macro__";
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,77 +31,169 @@ struct ClassifiedScenario {
     assertion_names: Vec<String>,
 }
 
-pub(crate) fn extract_scenario_json(sql: &str, file: &str) -> Result<Option<String>, String> {
-    if sql.chars().any(|character| {
-        matches!(character, '\u{1c}'..='\u{1f}') || CASE_MAPPED_TO_ASCII.contains(&character)
-    }) {
-        return Ok(None);
-    }
-    let syntax = generic_syntax();
-    let Ok((ctes, quoted)) = extract_ctes_with_quoting(sql, file, &syntax, NameRule::Lenient)
-    else {
-        return Ok(None);
-    };
-    if quoted || !ctes.iter().all(|cte| is_plain_identifier(&cte.0)) {
-        return Ok(None);
-    }
-    if validate_independence(&ctes, file, &syntax).is_err() {
-        return Ok(None);
-    }
-    let Some(scenario) = classify(ctes) else {
-        return Ok(None);
-    };
-    serde_json::to_string(&scenario)
+/// One scenario's scanner error, or its classification after any Polyglot independence check.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScenarioOutcome {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scan_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    independence: Option<Vec<Cte>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scenario: Option<ClassifiedScenario>,
+}
+
+pub(crate) fn extract_scenario_json(
+    sql: &str,
+    file: &str,
+    syntax: &LexicalSyntax,
+) -> Result<Option<String>, String> {
+    let outcome: ScenarioOutcome =
+        match scan_top_level_ctes(sql, file, RelationshipSource::Scenario, syntax) {
+            TopLevelCtes::Deferred => return Ok(None),
+            TopLevelCtes::Failed(message) => ScenarioOutcome {
+                scan_error: Some(message),
+                ..ScenarioOutcome::default()
+            },
+            TopLevelCtes::Scanned(ctes) => {
+                let independence: Option<Vec<Cte>> =
+                    python_checks_independence(&ctes).then(|| ctes.clone());
+                match classify(ctes, file) {
+                    Ok(scenario) => ScenarioOutcome {
+                        independence,
+                        scenario: Some(scenario),
+                        ..ScenarioOutcome::default()
+                    },
+                    Err(message) => ScenarioOutcome {
+                        independence,
+                        error: Some(message),
+                        ..ScenarioOutcome::default()
+                    },
+                }
+            }
+        };
+    serde_json::to_string(&outcome)
         .map(Some)
         .map_err(|error| error.to_string())
 }
 
-/// Python's `_read_identifier` reads only `[A-Za-z_][A-Za-z0-9_]*` the same way.
-fn is_plain_identifier(name: &str) -> bool {
-    let mut bytes = name.bytes();
-    bytes
-        .next()
-        .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
-        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+/// Whether Python's independence check parses a body; when it does not, the check passes.
+fn python_checks_independence(ctes: &[Cte]) -> bool {
+    let mut names_by_key: HashMap<String, &str> = HashMap::new();
+    for (name, _) in ctes {
+        names_by_key.insert(name.to_ascii_lowercase(), name);
+    }
+    let keys_with_prefix = |prefix: &str| -> HashSet<&String> {
+        names_by_key
+            .iter()
+            .filter(|(_, name)| name.starts_with(prefix))
+            .map(|(key, _)| key)
+            .collect()
+    };
+    let expected: HashSet<&String> = keys_with_prefix(EXPECTED_PREFIX);
+    let assertions: HashSet<&String> = keys_with_prefix(ASSERT_PREFIX);
+    for (name, body) in ctes {
+        let key: String = name.to_ascii_lowercase();
+        let prohibited: &str = if expected.contains(&key) {
+            ASSERT_PREFIX
+        } else if assertions.contains(&key) {
+            EXPECTED_PREFIX
+        } else {
+            continue;
+        };
+        if folded_body_may_contain(body, prohibited) {
+            return true;
+        }
+    }
+    if expected.is_empty() || assertions.is_empty() {
+        return false;
+    }
+    for (_, body) in ctes {
+        for key in names_by_key.keys() {
+            if folded_body_may_contain(body, key) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
-fn classify(ctes: Vec<Cte>) -> Option<ClassifiedScenario> {
+/// Whether the body's Python `casefold` may contain the text; non-ASCII may fold onto ASCII.
+fn folded_body_may_contain(body: &str, lower_ascii: &str) -> bool {
+    !body.is_ascii() || body.to_ascii_lowercase().contains(lower_ascii)
+}
+
+fn classify(ctes: Vec<Cte>, file: &str) -> Result<ClassifiedScenario, String> {
     let mut scenario: ClassifiedScenario = ClassifiedScenario::default();
     for cte in ctes {
-        let name: String = cte.0.clone();
-        if let Some(value) = name.strip_prefix("__source__") {
-            scenario.source_fixtures.push(required(value)?);
+        let name: &str = &cte.0;
+        if let Some(value) = name.strip_prefix(SOURCE_PREFIX) {
+            scenario
+                .source_fixtures
+                .push(required(value, "__source__<source>", file)?);
             scenario.authored.push(cte);
-        } else if let Some(value) = name.strip_prefix("__ref__") {
-            scenario.ref_fixtures.push(required(value)?);
+        } else if let Some(value) = name.strip_prefix(REF_PREFIX) {
+            scenario
+                .ref_fixtures
+                .push(required(value, "__ref__<model>", file)?);
             scenario.authored.push(cte);
-        } else if let Some(value) = name.strip_prefix("__seed__") {
-            scenario.seed_fixtures.push(required(value)?);
+        } else if let Some(value) = name.strip_prefix(SEED_PREFIX) {
+            scenario
+                .seed_fixtures
+                .push(required(value, "__seed__<seed>", file)?);
             scenario.authored.push(cte);
-        } else if let Some(value) = name.strip_prefix("__dbt_ref__") {
-            scenario.dbt_ref_fixtures.push(required(value)?);
+        } else if let Some(value) = name.strip_prefix(DBT_REF_PREFIX) {
+            scenario.dbt_ref_fixtures.push(required(
+                value,
+                "__dbt_ref__<model> or __dbt_ref__<package>__<model>",
+                file,
+            )?);
             scenario.authored.push(cte);
-        } else if let Some(value) = name.strip_prefix("__expected__") {
-            scenario.expected_models.push(required(value)?);
+        } else if let Some(value) = name.strip_prefix(EXPECTED_PREFIX) {
+            scenario
+                .expected_models
+                .push(required(value, "__expected__<model>", file)?);
             scenario.expected.push(cte);
-        } else if let Some(value) = name.strip_prefix("__assert__") {
-            scenario.assertion_names.push(required(value)?);
+        } else if let Some(value) = name.strip_prefix(ASSERT_PREFIX) {
+            scenario
+                .assertion_names
+                .push(required(value, "__assert__<assertion>", file)?);
             scenario.assertions.push(cte);
-        } else if name.starts_with("__macro__") {
-            return None;
+        } else if name.starts_with(MACRO_PREFIX) {
+            return Err(format!(
+                "SQL scenario '{file}' does not support macro mock CTE '{name}'. Scenarios run \
+                 real project macros; use SQL unit tests for macro mocks."
+            ));
         } else {
             scenario.authored.push(cte);
         }
     }
-    let has_fixture: bool = !(scenario.source_fixtures.is_empty()
+    if scenario.source_fixtures.is_empty()
         && scenario.ref_fixtures.is_empty()
         && scenario.seed_fixtures.is_empty()
-        && scenario.dbt_ref_fixtures.is_empty());
-    let has_check: bool =
-        !(scenario.expected_models.is_empty() && scenario.assertion_names.is_empty());
-    (has_fixture && has_check).then_some(scenario)
+        && scenario.dbt_ref_fixtures.is_empty()
+    {
+        return Err(format!(
+            "SQL scenario '{file}' must define at least one __source__*, __ref__*, __seed__*, or \
+             __dbt_ref__* fixture CTE"
+        ));
+    }
+    if scenario.expected_models.is_empty() && scenario.assertion_names.is_empty() {
+        return Err(format!(
+            "SQL scenario '{file}' must define at least one __expected__<model> or \
+             __assert__<assertion> CTE"
+        ));
+    }
+    Ok(scenario)
 }
 
-fn required(value: &str) -> Option<String> {
-    (!value.is_empty()).then(|| value.to_owned())
+fn required(value: &str, label: &str, file: &str) -> Result<String, String> {
+    if value.is_empty() {
+        return Err(format!(
+            "SQL scenario '{file}' must use {label} to identify a target"
+        ));
+    }
+    Ok(value.to_owned())
 }

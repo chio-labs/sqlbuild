@@ -1,43 +1,90 @@
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
+
 use crate::compiler::main::sql_scenario_extraction::extract_scenario_json;
 use crate::compiler::tests::test_types::ScenarioExtractionTestCase;
 
 #[test]
-fn given_scenarios_when_extracting_natively_then_python_payloads_or_deferrals_are_returned() {
+fn given_scenarios_when_extracting_natively_then_python_outcomes_or_deferrals_are_returned() {
+    let syntax = LexicalSyntax {
+        line_comment_prefixes: vec!["--".to_owned()],
+        ..LexicalSyntax::default()
+    };
     let test_cases = [
         ScenarioExtractionTestCase {
-            description: "fixtures, helpers, expected results and assertions are classified",
-            sql: "WITH helper AS (SELECT 1 AS id), __source__raw_orders AS (SELECT id FROM helper), \
-                  __expected__orders AS (SELECT 1 AS id), __assert__positive AS (SELECT 1) SELECT 1",
+            description: "fixtures, helpers and expected results without cross references",
+            sql: "WITH helper AS (SELECT 1 AS id), __source__raw_orders AS (SELECT 2 AS id), \
+                  __expected__orders AS (SELECT 1 AS id) SELECT 1",
             expected_json: Some(
-                r#"{"authored":[["helper","SELECT 1 AS id"],["__source__raw_orders","SELECT id FROM helper"]],"expected":[["__expected__orders","SELECT 1 AS id"]],"assertions":[["__assert__positive","SELECT 1"]],"sourceFixtures":["raw_orders"],"refFixtures":[],"seedFixtures":[],"dbtRefFixtures":[],"expectedModels":["orders"],"assertionNames":["positive"]}"#,
+                r#"{"scenario":{"authored":[["helper","SELECT 1 AS id"],["__source__raw_orders","SELECT 2 AS id"]],"expected":[["__expected__orders","SELECT 1 AS id"]],"assertions":[],"sourceFixtures":["raw_orders"],"refFixtures":[],"seedFixtures":[],"dbtRefFixtures":[],"expectedModels":["orders"],"assertionNames":[]}}"#,
             ),
         },
         ScenarioExtractionTestCase {
-            description: "a macro mock defers so Python raises",
-            sql: "WITH __source__raw AS (SELECT 1), __macro__tidy AS (SELECT 'x'), \
-                  __expected__orders AS (SELECT 1 AS id) SELECT 1",
-            expected_json: None,
+            description: "expected results and assertions reading a CTE leave independence to Python",
+            sql: "WITH helper AS (SELECT 1 AS id), __source__raw AS (SELECT id FROM helper), \
+                  __expected__orders AS (SELECT 1 AS id), __assert__positive AS (SELECT 1) SELECT 1",
+            expected_json: Some(
+                r#"{"independence":[["helper","SELECT 1 AS id"],["__source__raw","SELECT id FROM helper"],["__expected__orders","SELECT 1 AS id"],["__assert__positive","SELECT 1"]],"scenario":{"authored":[["helper","SELECT 1 AS id"],["__source__raw","SELECT id FROM helper"]],"expected":[["__expected__orders","SELECT 1 AS id"]],"assertions":[["__assert__positive","SELECT 1"]],"sourceFixtures":["raw"],"refFixtures":[],"seedFixtures":[],"dbtRefFixtures":[],"expectedModels":["orders"],"assertionNames":["positive"]}}"#,
+            ),
         },
         ScenarioExtractionTestCase {
-            description: "a quoted CTE name defers to Python's scanner fallback",
+            description: "an expected result naming the assertion prefix leaves independence to Python",
+            sql: "WITH __source__raw AS (SELECT 1), __expected__orders AS (SELECT '__ASSERT__' AS x) \
+                  SELECT 1",
+            expected_json: Some(
+                r#"{"independence":[["__source__raw","SELECT 1"],["__expected__orders","SELECT '__ASSERT__' AS x"]],"scenario":{"authored":[["__source__raw","SELECT 1"]],"expected":[["__expected__orders","SELECT '__ASSERT__' AS x"]],"assertions":[],"sourceFixtures":["raw"],"refFixtures":[],"seedFixtures":[],"dbtRefFixtures":[],"expectedModels":["orders"],"assertionNames":[]}}"#,
+            ),
+        },
+        ScenarioExtractionTestCase {
+            description: "a macro mock raises Python's error",
+            sql: "WITH __source__raw AS (SELECT 1), __macro__tidy AS (SELECT 'x'), \
+                  __expected__orders AS (SELECT 1 AS id) SELECT 1",
+            expected_json: Some(
+                r#"{"error":"SQL scenario 'tests/scenarios/orders.sql' does not support macro mock CTE '__macro__tidy'. Scenarios run real project macros; use SQL unit tests for macro mocks."}"#,
+            ),
+        },
+        ScenarioExtractionTestCase {
+            description: "a bare fixture prefix raises Python's error before later CTEs",
+            sql: "WITH __seed__ AS (SELECT 1), __macro__tidy AS (SELECT 'x') SELECT 1",
+            expected_json: Some(
+                r#"{"error":"SQL scenario 'tests/scenarios/orders.sql' must use __seed__<seed> to identify a target"}"#,
+            ),
+        },
+        ScenarioExtractionTestCase {
+            description: "a scenario without fixtures raises Python's error",
+            sql: "WITH __expected__orders AS (SELECT 1 AS id) SELECT 1",
+            expected_json: Some(
+                r#"{"error":"SQL scenario 'tests/scenarios/orders.sql' must define at least one __source__*, __ref__*, __seed__*, or __dbt_ref__* fixture CTE"}"#,
+            ),
+        },
+        ScenarioExtractionTestCase {
+            description: "a scenario without checks raises Python's error",
+            sql: "WITH __dbt_ref__shop__orders AS (SELECT 1 AS id)",
+            expected_json: Some(
+                r#"{"error":"SQL scenario 'tests/scenarios/orders.sql' must define at least one __expected__<model> or __assert__<assertion> CTE"}"#,
+            ),
+        },
+        ScenarioExtractionTestCase {
+            description: "a quoted CTE name is a scanner error Python may still accept with Polyglot",
             sql: "WITH \"__source__raw\" AS (SELECT 1), __expected__orders AS (SELECT 1 AS id)",
-            expected_json: None,
+            expected_json: Some(
+                r#"{"scanError":"SQL scenario 'tests/scenarios/orders.sql' expected a CTE name"}"#,
+            ),
+        },
+        ScenarioExtractionTestCase {
+            description: "an unclosed body is a scanner error naming the scenario context",
+            sql: "WITH __source__raw AS (SELECT 1",
+            expected_json: Some(r#"{"scanError":"SQL scenario contains an unclosed parenthesis"}"#),
         },
         ScenarioExtractionTestCase {
             description: "a keyword Python would match by case mapping defers",
             sql: "w\u{131}th __source__raw AS (SELECT 1), __expected__orders AS (SELECT 1 AS id)",
             expected_json: None,
         },
-        ScenarioExtractionTestCase {
-            description: "a scenario without fixtures defers so Python raises",
-            sql: "WITH __expected__orders AS (SELECT 1 AS id) SELECT 1",
-            expected_json: None,
-        },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            extract_scenario_json(test_case.sql, "tests/scenarios/orders.sql"),
+            extract_scenario_json(test_case.sql, "tests/scenarios/orders.sql", &syntax),
             Ok(test_case.expected_json.map(str::to_owned)),
             "{}",
             test_case.description
