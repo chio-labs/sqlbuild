@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
+from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
 from sqlbuild.compiler.compile._helpers.sql_tests.core import complete_omitted_ceremonial_select
 from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -683,3 +684,64 @@ def raw_extraction_outcome(
         )
     except CompileInputError as error:
         return str(error)
+
+
+_SCENARIO_CTES: tuple[str, ...] = (
+    "__source__raw_orders AS (SELECT 1 AS id, 'placed' AS status)",
+    "__ref__customers AS (SELECT 1 AS id)",
+    "__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label)",
+    "__dbt_ref__legacy__orders AS (SELECT 1 AS id)",
+    "__table_fn__order_rows AS (SELECT 1 AS id)",
+    "helper AS (SELECT id FROM __source__raw_orders)",
+    "__expected__orders AS (SELECT 1 AS id)",
+    "__expected__orders_view AS (SELECT id FROM helper)",
+    "__assert__positive AS (SELECT id FROM helper WHERE id < 0)",
+    "__assert__matches AS (SELECT * FROM __expected__orders)",
+    "__expected__nested AS (WITH __assert__inner AS (SELECT 1) SELECT 1 AS id)",
+    "__macro__tidy AS (SELECT 'x')",
+    '"__source__quoted" AS (SELECT 1)',
+    "__expected__ AS (SELECT 1)",
+    "__source__raw_orders AS (SELECT 2 AS id)",
+    "notes AS (SELECT 'caf\u00e9 -- )' AS note /* ) */)",
+    "dollar AS (SELECT $$ ) $$ AS note)",
+    "hashed AS (SELECT 1 # )\n)",
+)
+_SCENARIO_TAILS: tuple[str, ...] = ("\nSELECT 1\n", "", ";", "\nSELECT 2", " -- end", ";\n")
+_SCENARIO_KEYWORDS: tuple[str, ...] = (
+    "WITH\n",
+    "with ",
+    "WITH RECURSIVE ",
+    "w\u0131th ",
+    "SELECT ",
+)
+
+
+def generated_scenario(*, rng: random.Random) -> str:
+    """Return one scenario body mixing fixtures, checks, helpers and invalid CTEs."""
+
+    ctes: list[str] = rng.sample(_SCENARIO_CTES, k=rng.randint(1, 5))
+    return rng.choice(_SCENARIO_KEYWORDS) + ",\n".join(ctes) + rng.choice(_SCENARIO_TAILS)
+
+
+def scenario_outcome(
+    *,
+    sql: str,
+    syntax: SqlLexicalSyntax,
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> object:
+    """Extract one scenario under `engine`, or return Python's error text."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    try:
+        return extract_sql_scenario_ctes(
+            sql=sql, file_label="tests/scenarios/orders.sql", syntax=syntax
+        )
+    except CompileInputError as error:
+        return str(error)
+
+
+def native_scenario_answered(sql: str) -> bool:
+    """Whether the native extraction answers instead of deferring to Python."""
+
+    return _native.extract_sql_scenario_json(sql, "tests/scenarios/orders.sql") is not None

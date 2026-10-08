@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import orjson
+
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
 )
@@ -27,6 +32,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL scenario"
@@ -40,6 +47,14 @@ def extract_sql_scenario_ctes(
 ) -> CompileSqlScenarioCtes:
     """Extract top-level SQL-native scenario fixture, expected, and assertion CTEs."""
 
+    native_ctes: CompileSqlScenarioCtes | None = (
+        _native_scenario_ctes(sql=sql, file_label=file_label)
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        and not syntax.reads_differently_from_generic(sql)
+        else None
+    )
+    if native_ctes is not None:
+        return native_ctes
     try:
         ctes: tuple[CompileSqlScenarioCte, ...] = extract_top_level_ctes_with_scanner(
             sql=sql,
@@ -59,6 +74,28 @@ def extract_sql_scenario_ctes(
             raise scanner_error from None
         ctes = tuple(CompileSqlScenarioCte(name=name, sql_body=body) for name, body in cte_values)
     return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label, syntax=syntax)
+
+
+def _native_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenarioCtes | None:
+    response: str | None = _native.extract_sql_scenario_json(sql, file_label)
+    if response is None:
+        return None
+    payload: dict[str, list[Any]] = orjson.loads(response)
+    return CompileSqlScenarioCtes(
+        authored_ctes=_scenario_ctes(payload["authored"]),
+        expected_ctes=_scenario_ctes(payload["expected"]),
+        assertion_ctes=_scenario_ctes(payload["assertions"]),
+        source_fixture_names=tuple(payload["sourceFixtures"]),
+        ref_fixture_names=tuple(payload["refFixtures"]),
+        seed_fixture_names=tuple(payload["seedFixtures"]),
+        dbt_ref_fixture_names=tuple(payload["dbtRefFixtures"]),
+        expected_model_names=tuple(payload["expectedModels"]),
+        assertion_names=tuple(payload["assertionNames"]),
+    )
+
+
+def _scenario_ctes(values: list[list[str]]) -> tuple[CompileSqlScenarioCte, ...]:
+    return tuple(CompileSqlScenarioCte(name=name, sql_body=body) for name, body in values)
 
 
 def extract_sql_scenario_expected_model_names(

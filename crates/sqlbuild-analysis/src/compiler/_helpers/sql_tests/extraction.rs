@@ -58,7 +58,7 @@ struct TestRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-struct Cte(String, String);
+pub(crate) struct Cte(pub(crate) String, pub(crate) String);
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -105,6 +105,12 @@ pub(crate) fn extract_batch_json(request_json: &str) -> Result<String, String> {
 }
 
 fn extract_ctes(sql: &str, file: &str) -> Result<Vec<Cte>, String> {
+    extract_ctes_with_quoting(sql, file).map(|(ctes, _)| ctes)
+}
+
+/// The top-level CTEs and whether any CTE name was a quoted identifier.
+pub(crate) fn extract_ctes_with_quoting(sql: &str, file: &str) -> Result<(Vec<Cte>, bool), String> {
+    let mut quoted = false;
     let mut index = skip_ignorable(sql, 0)?;
     index = consume_keyword(sql, index, "WITH").ok_or_else(|| {
         format!("SQL test '{file}' must declare mock CTEs and one __expected__<model> CTE in a top-level WITH clause")
@@ -116,6 +122,7 @@ fn extract_ctes(sql: &str, file: &str) -> Result<Vec<Cte>, String> {
     let mut ctes: Vec<Cte> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     loop {
+        quoted |= matches!(byte_at(sql, index), Some(b'"' | b'`'));
         let (name, end) = read_identifier(sql, index)
             .ok_or_else(|| format!("SQL test '{file}' expected a CTE name"))?;
         if !seen.insert(name.clone()) {
@@ -145,7 +152,7 @@ fn extract_ctes(sql: &str, file: &str) -> Result<Vec<Cte>, String> {
             "SQL test '{file}' must end after its CTEs; only an optional ceremonial top-level `SELECT 1` may follow them"
         ));
     }
-    Ok(ctes)
+    Ok((ctes, quoted))
 }
 
 fn classify(ctes: Vec<Cte>, file: &str, mode: &str) -> Result<Classified, String> {
@@ -568,7 +575,7 @@ fn implicit_projection_alias(expression: &str) -> Option<String> {
     (end == expression.len()).then_some(alias)
 }
 
-fn validate_independence(ctes: &[Cte], file: &str) -> Result<(), String> {
+pub(crate) fn validate_independence(ctes: &[Cte], file: &str) -> Result<(), String> {
     let names: HashMap<String, String> = ctes
         .iter()
         .map(|cte| (cte.0.to_lowercase(), cte.0.clone()))

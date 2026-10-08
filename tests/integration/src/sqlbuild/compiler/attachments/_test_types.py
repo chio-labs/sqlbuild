@@ -81,3 +81,16 @@ class RawDirectLogicParityTestCase:
     count: int
     expected_minimum_extracted: int
     expected_minimum_python_errors: int
+
+
+@dataclass(frozen=True)
+class ScenarioParityTestCase:
+    """Seeded scenario bodies extracted by each engine under one lexical syntax."""
+
+    description: str
+    seed: int
+    count: int
+    syntax: SqlLexicalSyntax
+    expected_minimum_extracted: int
+    expected_minimum_native: int
+    expected_minimum_python_errors: int

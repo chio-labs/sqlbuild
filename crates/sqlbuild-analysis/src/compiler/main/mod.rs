@@ -1,3 +1,4 @@
+pub mod sql_scenario_extraction;
 pub mod sql_test_chain_resolution;
 pub mod sql_test_difference_sampling;
 pub mod sql_test_extraction;

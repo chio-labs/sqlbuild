@@ -1,5 +1,7 @@
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_sql_scenario_extraction.rs"]
+mod sql_scenario_extraction;
 #[path = "tests/test_sql_test_cte_rename.rs"]
 mod sql_test_cte_rename;
 #[path = "tests/test_sql_test_cte_slices.rs"]
