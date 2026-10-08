@@ -1,5 +1,6 @@
 //! Python's `_parse_declaration_headers`: split a file into `KIND(...);` headers and parse each.
 
+use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
 use crate::declaration_files::_helpers::checks::python_values::failure;
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::models::FailureKind;
@@ -55,21 +56,21 @@ pub(crate) fn declaration_headers(
             )));
         }
         let header_start: usize = open_index + 1;
-        let (values, column_offsets) = match parse_one(&contents[header_start..close_index]) {
-            (_, _, Some(error)) => {
-                return Err(declaration(syntax_message(
-                    expected_kind,
-                    file_path,
-                    &error,
-                )));
-            }
+        let header = FailedHeader {
+            kind: FailureKind::Declaration,
+            statement_name: expected_kind,
+            file_path,
+            text: &contents[header_start..close_index],
+            line: contents[..header_start].matches('\n').count() + 1,
+        };
+        let syntax_failure = |error: &str| ParseStop::Failed(header_syntax_failure(&header, error));
+        let (values, column_offsets) = match parse_one(header.text) {
+            (_, _, Some(error)) => return Err(syntax_failure(&error)),
             (Some(AuthoredValue::Map(values)), Some(offsets), None) => (values, offsets),
             _ => {
-                return Err(declaration(syntax_message(
-                    expected_kind,
-                    file_path,
+                return Err(syntax_failure(
                     "Native MODEL header parser returned neither values nor an error",
-                )));
+                ));
             }
         };
         headers.push(DeclarationHeader {
@@ -86,10 +87,6 @@ pub(crate) fn declaration_headers(
         )));
     }
     Ok(headers)
-}
-
-fn syntax_message(kind: &str, file_path: &str, error: &str) -> String {
-    format!("{kind}(...) in '{file_path}' contains invalid SQLBuild header syntax: {error}")
 }
 
 /// `(ENUM|CONSTANT|SCHEMA)\s*\(` at `start`: the kind and the byte offset of the parenthesis.

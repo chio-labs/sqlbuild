@@ -41,3 +41,13 @@ pub struct DeclarationReference {
     pub start: usize,
     pub end: usize,
 }
+
+/// A header whose values nest deeper than the parser allows, located in its file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NestingFailure {
+    /// The one-based file line of the container that exceeds the limit.
+    pub line: usize,
+    /// The syntax error, without a position.
+    pub message: String,
+    pub help: String,
+}

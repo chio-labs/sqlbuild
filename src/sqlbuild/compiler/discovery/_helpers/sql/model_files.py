@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from bisect import bisect_right
 from collections import OrderedDict
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -52,6 +53,10 @@ _SQL_UNION_LOWER_KEYWORD: str = _SQL_UNION_KEYWORD.lower()
 _MODEL_HEADER_INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _MODEL_HEADER_FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
 _MODEL_HEADER_TOKEN_CACHE_SIZE: int = 4096
+_PROJECTION_PENDING: object = object()
+_MODEL_HEADER_NESTING_ERROR_PATTERN: re.Pattern[str] = re.compile(
+    r"values nest deeper than (?P<limit>\d+) levels at position (?P<position>\d+)"
+)
 _NATIVE_MODEL_HEADER_END_TOKEN: int = 0
 _NATIVE_MODEL_HEADER_WORD_TOKEN: int = 1
 _NATIVE_MODEL_HEADER_STRING_TOKEN: int = 2
@@ -74,6 +79,15 @@ _MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(
     re.DOTALL,
 )
 _SELECT_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`()sSfFuU]")
+
+
+@dataclass
+class _ProjectionFrame:
+    """One container being projected: its native children, projected so far, and its builder."""
+
+    children: tuple[object, ...]
+    build: Callable[[list[object]], object]
+    projected: list[object] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -556,9 +570,10 @@ def parse_header_values(
     header: str,
     file_path: Path,
     statement_name: str,
+    header_line: int | None,
     error_class: type[DiscoveryError] = ModelSqlParseError,
 ) -> dict[str, object]:
-    """Parse one SQLBuild parenthesized header into nested Python values."""
+    """Parse one header; a nesting error names its file line when `header_line` is known."""
 
     try:
         parsed: _ModelHeaderTokenization = _model_header_parse(header)
@@ -570,9 +585,23 @@ def parse_header_values(
     except ModelSqlParseError:
         raise
     except ModelHeaderSyntaxError as error:
+        nesting: re.Match[str] | None = _MODEL_HEADER_NESTING_ERROR_PATTERN.fullmatch(str(error))
+        nesting_help: str | None = (
+            None
+            if nesting is None
+            else f"flatten the value so it nests at most {nesting.group('limit')} levels deep"
+        )
+        if nesting is None or header_line is None:
+            raise error_class(
+                f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
+                f"{error}",
+                help=nesting_help,
+            ) from error
+        line: int = header_line + header.count("\n", 0, int(nesting.group("position")))
         raise error_class(
-            f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
-            f"{error}"
+            f"{statement_name}(...) in '{file_path}:{line}' contains invalid SQLBuild header "
+            f"syntax: values nest deeper than {nesting.group('limit')} levels",
+            help=nesting_help,
         ) from error
 
 
@@ -640,14 +669,86 @@ def project_native_header_values(values: dict[str, object]) -> dict[str, object]
 
 
 def _project_native_header_map(values: dict[str, object]) -> dict[str, object]:
-    return {key: _project_native_header_value(value) for key, value in values.items()}
+    return cast(dict[str, object], _project_native_header_value(values))
 
 
 def _project_native_header_value(value: object) -> object:
+    """Project one native value depth-first with an explicit stack, never Python recursion."""
+
+    frames: list[_ProjectionFrame] = []
+    node: object = value
+    while True:
+        expansion: _ProjectionFrame | None = _projection_frame(node)
+        if expansion is None:
+            projected: object = _project_native_leaf(node)
+        else:
+            frames.append(expansion)
+            projected = _PROJECTION_PENDING
+        while True:
+            if projected is not _PROJECTION_PENDING:
+                if not frames:
+                    return projected
+                frames[-1].projected.append(projected)
+            frame: _ProjectionFrame = frames[-1]
+            if len(frame.projected) < len(frame.children):
+                node = frame.children[len(frame.projected)]
+                break
+            frames.pop()
+            projected = frame.build(frame.projected)
+
+
+def _projection_frame(value: object) -> _ProjectionFrame | None:
     if isinstance(value, dict):
-        return _project_native_header_map(cast(dict[str, object], value))
+        return _map_frame(values=cast(dict[str, object], value), build=dict)
     if isinstance(value, list):
-        return [_project_native_header_value(item) for item in value]
+        return _ProjectionFrame(children=tuple(value), build=list)
+    if (
+        not isinstance(value, tuple)
+        or len(value) != _NATIVE_MARKER_LENGTH
+        or not isinstance(value[0], str)
+    ):
+        return None
+    kind: str = value[0]
+    payload: object = value[1]
+    if kind == _NATIVE_SET_MARKER and isinstance(payload, list):
+        return _ProjectionFrame(
+            children=tuple(payload), build=lambda items: AuthoredSqlSet(tuple(items))
+        )
+    if kind == _NATIVE_TUPLE_MARKER and isinstance(payload, list):
+        return _ProjectionFrame(children=tuple(payload), build=tuple)
+    if kind == _NATIVE_CONSTANT_MARKER and isinstance(payload, dict):
+        return _map_frame(
+            values=cast(dict[str, object], payload),
+            build=lambda items: AuthoredSqlValueCall(arguments=tuple(items)),
+        )
+    if (
+        kind in {_NATIVE_SQL_MARKER, _NATIVE_PYTHON_MARKER}
+        and isinstance(payload, tuple)
+        and len(payload) == _NATIVE_MARKER_LENGTH
+    ):
+        name, kwargs = payload
+        if isinstance(name, str) and isinstance(kwargs, dict):
+            entry_type: type[NamedSqlHookEntry] | type[PythonHookEntry] = (
+                NamedSqlHookEntry if kind == _NATIVE_SQL_MARKER else PythonHookEntry
+            )
+            return _map_frame(
+                values=cast(dict[str, object], kwargs),
+                build=lambda items: entry_type(name=name, kwargs=dict(items)),
+            )
+    return None
+
+
+def _map_frame(
+    *, values: dict[str, object], build: Callable[[list[tuple[str, object]]], object]
+) -> _ProjectionFrame:
+    keys: tuple[str, ...] = tuple(values)
+    return _ProjectionFrame(
+        children=tuple(values.values()),
+        build=lambda projected: build(list(zip(keys, projected, strict=True))),
+    )
+
+
+def _project_native_leaf(value: object) -> object:
     if (
         not isinstance(value, tuple)
         or len(value) != _NATIVE_MARKER_LENGTH
@@ -658,29 +759,8 @@ def _project_native_header_value(value: object) -> object:
     payload: object = value[1]
     if kind == _MODEL_HEADER_WORD_TOKEN and isinstance(payload, str):
         return _parse_word_value(payload)
-    if kind == _NATIVE_SET_MARKER and isinstance(payload, list):
-        return AuthoredSqlSet(tuple(_project_native_header_value(item) for item in payload))
-    if kind == _NATIVE_TUPLE_MARKER and isinstance(payload, list):
-        return tuple(_project_native_header_value(item) for item in payload)
-    if kind == _NATIVE_CONSTANT_MARKER and isinstance(payload, dict):
-        return AuthoredSqlValueCall(
-            arguments=tuple(_project_native_header_map(cast(dict[str, object], payload)).items())
-        )
     if kind == _NATIVE_INLINE_SQL_MARKER and isinstance(payload, str):
         return SqlHookEntry(statement=payload)
-    if (
-        kind in {_NATIVE_SQL_MARKER, _NATIVE_PYTHON_MARKER}
-        and isinstance(payload, tuple)
-        and len(payload) == _NATIVE_MARKER_LENGTH
-    ):
-        name, kwargs = payload
-        if isinstance(name, str) and isinstance(kwargs, dict):
-            projected_kwargs: dict[str, object] = _project_native_header_map(
-                cast(dict[str, object], kwargs)
-            )
-            if kind == _NATIVE_SQL_MARKER:
-                return NamedSqlHookEntry(name=name, kwargs=projected_kwargs)
-            return PythonHookEntry(name=name, kwargs=projected_kwargs)
     raise ModelHeaderSyntaxError(f"Native MODEL header parser returned invalid '{kind}' marker")
 
 

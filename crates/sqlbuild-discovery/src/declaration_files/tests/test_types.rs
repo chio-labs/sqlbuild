@@ -18,3 +18,15 @@ pub(super) struct SessionReadTestCase {
     /// The layouts walked: one shared by every kind, plus one per isolated kind.
     pub(super) expected_layouts: usize,
 }
+
+/// A declaration file whose header nests one value far too deeply, on header line `line`.
+pub(super) struct DeepDeclarationTestCase {
+    pub(super) description: &'static str,
+    pub(super) kind: CollectionKind,
+    /// The file text before the nested value.
+    pub(super) prefix: &'static str,
+    /// The file text after the nested value.
+    pub(super) suffix: &'static str,
+    /// The statement name and file line the failure reports.
+    pub(super) expected_location: (&'static str, usize),
+}

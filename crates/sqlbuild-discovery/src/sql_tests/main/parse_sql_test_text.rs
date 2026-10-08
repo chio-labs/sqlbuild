@@ -1,14 +1,15 @@
 //! Split SQL unit-test contents that are already in memory.
 
+use crate::_helpers::pool::on_discovery_pool;
 use crate::models::DiscoveryFailure;
 use crate::sql_tests::_helpers::test_blocks::parse_sql_test_file;
 use crate::sql_tests::models::{DiscoveredSqlTestFile, SqlTestFileOptions};
 
-/// The header-parsed blocks of one SQL test file's contents, named `file_path` in messages.
+/// The header-parsed blocks of one SQL test file's contents, named `file_path` in messages, parsed on the discovery pool.
 pub fn parse_sql_test_text(
     file_path: &str,
     contents: String,
     options: &SqlTestFileOptions,
 ) -> Result<DiscoveredSqlTestFile, DiscoveryFailure> {
-    parse_sql_test_file(file_path, contents, options)
+    on_discovery_pool(|| parse_sql_test_file(file_path, contents, options))
 }

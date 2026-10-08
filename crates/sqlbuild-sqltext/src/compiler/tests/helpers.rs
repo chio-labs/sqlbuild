@@ -6,7 +6,10 @@ use crate::compiler::_helpers::sql_interpolation::substitution::{
 };
 use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::compiler::main::declaration_references::scan_declaration_references;
+use crate::compiler::main::model_header_single_parsing::parse_one;
 use crate::compiler::models::{AuthoredValue, DeclarationReference};
+use crate::compiler::tests::test_types::HeaderNestingTestCase;
+use std::thread;
 
 pub(crate) fn scalar_variables_preserve_lexical_boundaries() -> bool {
     let sqls = vec![
@@ -238,4 +241,33 @@ pub(crate) fn scanned_references(sql: &str) -> Option<String> {
             .collect::<Vec<String>>()
             .join(", "),
     )
+}
+
+/// Rust's default spawned-thread stack: bounded nesting must parse on any ordinary thread.
+const ORDINARY_THREAD_STACK_BYTES: usize = 2 * 1024 * 1024;
+
+/// The nesting test case's header.
+pub(crate) fn nested_header(test_case: &HeaderNestingTestCase) -> String {
+    format!(
+        "{}{}1{}{}",
+        test_case.prefix,
+        test_case.open.repeat(test_case.depth),
+        test_case.close.repeat(test_case.depth),
+        test_case.suffix
+    )
+}
+
+/// The parse error of `header`, parsed on a thread with an ordinary stack.
+pub(crate) fn parse_error_on_ordinary_thread(header: String) -> Option<String> {
+    thread::Builder::new()
+        .stack_size(ORDINARY_THREAD_STACK_BYTES)
+        .spawn(move || parse_one(&header).2)
+        .expect("parser thread starts")
+        .join()
+        .expect("parser thread does not overflow its stack")
+}
+
+/// The error the parser reports for a container past the nesting limit at `position`.
+pub(crate) fn nesting_error_at(position: usize) -> String {
+    format!("values nest deeper than 256 levels at position {position}")
 }

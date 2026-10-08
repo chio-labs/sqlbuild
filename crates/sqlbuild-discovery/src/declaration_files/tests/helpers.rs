@@ -82,3 +82,18 @@ pub(super) fn session_reads(
 fn collection_len(collection: &DeclarationCollection) -> usize {
     format!("{collection:?}").matches("ScopedFile {").count()
 }
+
+/// The debug text of the failure a header nested too deeply reports at `(statement, line)`.
+pub(super) fn nesting_failure_debug((statement, line): (&str, usize)) -> String {
+    format!(
+        "Some(Failed(DiscoveryFailure {{ kind: {}, message: \"{statement}(...) in '{FILE_PATH}:{line}' \
+         contains invalid SQLBuild header syntax: values nest deeper than 256 levels\", help: \
+         Some(\"flatten the value so it nests at most 256 levels deep\") }}))",
+        match statement {
+            "CONSTANT" => "Declaration",
+            "HOOK" => "SqlHook",
+            "AUDIT" => "SqlAudit",
+            _ => "ModelSql",
+        }
+    )
+}

@@ -974,3 +974,22 @@ class SecondCompileStoreTestCase:
 
     description: str
     expected_second_matches_first: bool
+
+
+@dataclass(frozen=True)
+class DeepHeaderNestingCompileCase:
+    description: str
+    engine: str
+    path: str
+    prefix: str
+    suffix: str
+    depth: int
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeepCallNestingCompileCase:
+    description: str
+    depth: int
+    engines: tuple[str, ...]
+    expected_fragments: tuple[str, ...]

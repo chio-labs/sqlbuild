@@ -252,3 +252,10 @@ class SelectedProjectFilesTestCase:
     description: str
     selected: str
     expected_present: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LintRemediationTestCase:
+    description: str
+    contents: str
+    expected_remediations: tuple[str, ...]

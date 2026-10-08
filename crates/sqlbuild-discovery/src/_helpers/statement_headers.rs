@@ -1,6 +1,7 @@
 //! Parse a statement header and reject its unsupported keys, as Python's discovery does.
 
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
+use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
 use crate::models::{DiscoveryFailure, FailureKind};
 use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
@@ -25,11 +26,13 @@ pub(crate) fn parse_statement_header(
     header_line: usize,
 ) -> Result<Vec<(String, AuthoredValue)>, DiscoveryFailure> {
     let values: Vec<(String, AuthoredValue)> = match parse_one(header) {
-        (_, _, Some(error)) => return Err(syntax_failure(contract, &error)),
+        (_, _, Some(error)) => return Err(syntax_failure(contract, header, header_line, &error)),
         (Some(AuthoredValue::Map(values)), _, None) => values,
         _ => {
             return Err(syntax_failure(
                 contract,
+                header,
+                header_line,
                 "Native MODEL header parser returned neither values nor an error",
             ));
         }
@@ -54,13 +57,21 @@ pub(crate) fn parse_statement_header(
     }))
 }
 
-fn syntax_failure(contract: &StatementHeader<'_>, error: &str) -> DiscoveryFailure {
-    DiscoveryFailure::new(
-        contract.kind,
-        format!(
-            "{}(...) in '{}' contains invalid SQLBuild header syntax: {error}",
-            contract.statement_name, contract.file_path
-        ),
+fn syntax_failure(
+    contract: &StatementHeader<'_>,
+    header: &str,
+    header_line: usize,
+    error: &str,
+) -> DiscoveryFailure {
+    header_syntax_failure(
+        &FailedHeader {
+            kind: contract.kind,
+            statement_name: contract.statement_name,
+            file_path: contract.file_path,
+            text: header,
+            line: header_line,
+        },
+        error,
     )
 }
 

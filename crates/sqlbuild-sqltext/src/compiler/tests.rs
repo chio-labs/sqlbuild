@@ -4,6 +4,8 @@ mod declaration_references;
 mod helpers;
 #[path = "tests/test_model_header_matching.rs"]
 mod model_header_matching;
+#[path = "tests/test_model_header_nesting.rs"]
+mod model_header_nesting;
 #[path = "tests/test_model_header_tokenization.rs"]
 mod model_header_tokenization;
 #[path = "tests/test_sql_interpolation.rs"]

@@ -1,4 +1,5 @@
 pub(crate) mod header_keys;
+pub(crate) mod header_syntax;
 pub(crate) mod locations;
 pub(crate) mod pool;
 pub(crate) mod reading;

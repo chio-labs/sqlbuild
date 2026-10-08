@@ -21,13 +21,16 @@ from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeclarationFilesParityTestCase,
     DeclarationMismatchTestCase,
     DeclarationReuseTestCase,
+    DeepDeclarationHeaderTestCase,
     GeneratedDeclarationFileTestCase,
     NativeSessionTestCase,
     TolerantDeclarationFilesTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
     accept_any_declarations,
+    declaration_files_outcome,
     generated_declaration_outcomes,
+    native_declaration_tag,
     reject_any_contents,
     stage_outcome,
     tolerant_declaration_outcome,
@@ -36,6 +39,7 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
 )
 
 _PREVIEW: str = "native-preview"
+_NESTING_SUFFIX: str = "contains invalid SQLBuild header syntax: values nest deeper than 256 levels"
 _MODEL: bytes = b'MODEL (description "Orders");\nSELECT 1 AS order_id'
 _MACRO: bytes = b"def cents(value):\n    return f'{value} * 100'\n"
 _ENUMS: bytes = (
@@ -287,6 +291,76 @@ def test_given_declaration_files_when_discovering_through_the_engine_switch_then
     assert native == python
     assert native[1] == test_case.expected_failure_type
     assert test_case.expected_message_fragment in str(native[2])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeepDeclarationHeaderTestCase(
+            description="a constant value nested 1k levels",
+            kind="constant",
+            relative_path="constants/limits.sql",
+            prefix="CONSTANT (name cap, value 3);\nCONSTANT (\n  name regions,\n  value ",
+            suffix=",\n);\n",
+            depth=1_000,
+            expected_failure_type="DeclarationParseError",
+            expected_message_suffix=f"limits.sql:4' {_NESTING_SUFFIX}",
+        ),
+        DeepDeclarationHeaderTestCase(
+            description="a hook description nested 20k levels",
+            kind="sql_hook",
+            relative_path="hooks/sql/refresh.sql",
+            prefix="HOOK (\n  description ",
+            suffix=",\n);\n\nSELECT 1\n",
+            depth=20_000,
+            expected_failure_type="SqlHookParseError",
+            expected_message_suffix=f"refresh.sql:2' {_NESTING_SUFFIX}",
+        ),
+        DeepDeclarationHeaderTestCase(
+            description="a function return type nested 100k levels",
+            kind="sql_function",
+            relative_path="functions/sql/doubled.sql",
+            prefix='FUNCTION (\n  description "Doubles",\n  returns ',
+            suffix=",\n);\nSELECT 2\n",
+            depth=100_000,
+            expected_failure_type="ModelSqlParseError",
+            expected_message_suffix=f"doubled.sql:3' {_NESTING_SUFFIX}",
+        ),
+        DeepDeclarationHeaderTestCase(
+            description="a later audit block's value nested 100k levels",
+            kind="audit",
+            relative_path="audits/generic/is_true.sql",
+            prefix="AUDIT (name first);\nSELECT 1\nAUDIT (\n  name second,\n  value ",
+            suffix=",\n);\nSELECT 2\n",
+            depth=100_000,
+            expected_failure_type="SqlAuditParseError",
+            expected_message_suffix=f"is_true.sql:5' {_NESTING_SUFFIX}",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deeply_nested_declaration_header_when_discovering_then_engines_report_its_line(
+    test_case: DeepDeclarationHeaderTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nested: str = "[" * test_case.depth + "1" + "]" * test_case.depth
+    contents: str = test_case.prefix + nested + test_case.suffix
+    write_project(project_dir=tmp_path, files=((test_case.relative_path, contents.encode()),))
+    python: tuple[object, ...] = declaration_files_outcome(
+        project_dir=tmp_path, kind=test_case.kind, engine="python", monkeypatch=monkeypatch
+    )
+
+    native: tuple[object, ...] = declaration_files_outcome(
+        project_dir=tmp_path, kind=test_case.kind, engine=_PREVIEW, monkeypatch=monkeypatch
+    )
+
+    assert native == python
+    assert native[0] == test_case.expected_failure_type
+    assert str(native[1]).endswith(test_case.expected_message_suffix), native[1]
+    assert native[2] == test_case.expected_help
+    assert (
+        native_declaration_tag(file_path=tmp_path / test_case.relative_path, kind=test_case.kind)
+        == "error"
+    )
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="needs file names that are not UTF-8")
