@@ -1,11 +1,11 @@
 //! Logical SQL references under one adapter's lexical rules, or a deferral to Python.
 
-use crate::sql_references::_helpers::scan::{Stop, scan_references};
+use crate::sql_references::_helpers::scan::{Stopped, scan_references};
 use crate::sql_references::constants::SUPPORTED_LINE_COMMENT_PREFIXES;
-use crate::sql_references::models::ReferenceExtraction;
+use crate::sql_references::models::{ReferenceExtraction, ReferenceScanFailure};
 use crate::sql_scan::models::LexicalSyntax;
 
-/// Return the references Python `extract_sql_references` finds in `sql`, or its error message.
+/// Return the references and rejected calls Python finds in `sql`, or its error message.
 pub fn extract_sql_references(sql: &str, syntax: &LexicalSyntax) -> ReferenceExtraction {
     if !syntax
         .line_comment_prefixes
@@ -15,8 +15,16 @@ pub fn extract_sql_references(sql: &str, syntax: &LexicalSyntax) -> ReferenceExt
         return ReferenceExtraction::Deferred;
     }
     match scan_references(sql.as_bytes(), syntax) {
-        Ok(references) => ReferenceExtraction::Extracted(references),
-        Err(Stop::Failed(message)) => ReferenceExtraction::Failed(message),
-        Err(Stop::Deferred) => ReferenceExtraction::Deferred,
+        Ok(scan) => ReferenceExtraction::Extracted(scan),
+        Err(Stopped::Failed(message, start)) => {
+            sql.get(..start)
+                .map_or(ReferenceExtraction::Deferred, |prefix| {
+                    ReferenceExtraction::Failed(ReferenceScanFailure {
+                        message,
+                        start: prefix.chars().count(),
+                    })
+                })
+        }
+        Err(Stopped::Deferred) => ReferenceExtraction::Deferred,
     }
 }

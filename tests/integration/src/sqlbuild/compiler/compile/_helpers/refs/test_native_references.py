@@ -1,4 +1,4 @@
-"""Native reference extraction returns Python's references or error exactly, or defers to Python."""
+"""Native reference extraction returns Python's references, rejected calls and errors exactly."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import random
 import time
 from collections.abc import Callable
 from itertools import product
+from operator import itemgetter
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,24 +16,32 @@ from sqlbuild.compiler.compile._helpers.refs import references
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models import ExpansionSpan, SqlReferenceOrigin, SqlReferenceScan
+from sqlbuild.compiler.compile.types import SqlReferenceScanFailure
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.compile._helpers.refs._test_types import (
     CraftedReferenceParityTestCase,
     GeneratedReferenceParityTestCase,
+    NativeReferenceErrorTestCase,
+    ReferenceDiagnosticParityTestCase,
     ReferenceEngineTestCase,
-    ReferenceMismatchTestCase,
     ReferenceScanBoundTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compile._helpers.refs.helpers import (
     LEXICAL_SYNTAXES,
     ReferenceParity,
+    generated_reference_files,
     generated_reference_sqls,
+    located_diagnostic_count,
+    located_error_count,
+    python_scan_not_expected,
     reference_parity,
+    reported_reference_outcomes,
+    source_map_at,
 )
+from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _GENERIC_SYNTAX: SqlLexicalSyntax = LEXICAL_SYNTAXES["generic"]
 _ENGINE_SQLS: tuple[
@@ -66,8 +76,8 @@ _WIDE_CALL: str = (
 )
 _NESTED_CALLS: str = '__table_fn("orders_for")(' * 1_000 + "1" + ")" * 1_000
 _OUTCOME_SUMMARIES: dict[type, Callable[[Any], int | str]] = {
-    tuple: len,
-    str: str,
+    SqlReferenceScan: lambda scan: len(scan.references) + len(scan.invalid_calls),
+    tuple: itemgetter(0),
     type(None): repr,
 }
 _MANY_REFERENCES: str = "SELECT 1 FROM " + " JOIN ".join(
@@ -112,12 +122,12 @@ _REJECTED_AFTER_MANY: str = _MANY_REFERENCES + " JOIN __ref(orders, customers)"
                 "SELECT 'it\\'s __ref(a)', E'x\\'__ref(b)', r'C:\\' AS p, '''__ref(c)''', "
                 '/* x /* y */ __ref(d) */ 1 # __ref(e)\n// __ref(f)\nFROM __ref("g")'
             ),
-            expected_deferred=True,
+            expected_rejected=4,
         ),
         CraftedReferenceParityTestCase(
             description="comments_inside_calls_are_rejected",
             sql='SELECT * FROM __ref("a" /* note */ "b") JOIN __ref(-- c\n"orders")',
-            expected_deferred=True,
+            expected_rejected=2,
         ),
         CraftedReferenceParityTestCase(
             description="non_ascii_quoted_names_and_text",
@@ -126,69 +136,71 @@ _REJECTED_AFTER_MANY: str = _MANY_REFERENCES + " JOIN __ref(orders, customers)"
         CraftedReferenceParityTestCase(
             description="wrong_reference_argument_count_is_rejected",
             sql="SELECT * FROM __ref(orders, customers)",
-            expected_deferred=True,
+            expected_rejected=1,
         ),
         CraftedReferenceParityTestCase(
             description="unquoted_and_single_quoted_names_are_rejected",
             sql="SELECT * FROM __ref(orders) JOIN __source('raw_orders')",
-            expected_deferred=True,
+            expected_rejected=2,
         ),
         CraftedReferenceParityTestCase(
             description="spaces_inside_calls_are_rejected",
             sql='SELECT * FROM __seed( "regions" ) JOIN __dbt_ref("shop", "orders" )',
-            expected_deferred=True,
+            expected_rejected=2,
         ),
         CraftedReferenceParityTestCase(
-            description="unclosed_text_after_a_rejected_call_is_rejected",
+            description="unclosed_text_after_a_rejected_call_fails",
             sql="SELECT * FROM __ref(orders) WHERE note = 'unclosed",
-            expected_deferred=True,
+            expected_failed=1,
         ),
         CraftedReferenceParityTestCase(
             description="unclosed_text_before_a_rejected_call_fails",
             sql='SELECT * FROM __ref("orders" WHERE __ref(customers)',
+            expected_failed=1,
         ),
         CraftedReferenceParityTestCase(
             description="wrong_dbt_reference_argument_count_is_rejected",
             sql="SELECT * FROM __dbt_ref(shop, orders, extra)",
-            expected_deferred=True,
+            expected_rejected=1,
         ),
         CraftedReferenceParityTestCase(
             description="empty_table_function_call_argument",
             sql='SELECT * FROM __table_fn("orders_for")(1,,2)',
+            expected_failed=1,
         ),
         CraftedReferenceParityTestCase(
             description="table_function_without_call_is_rejected",
             sql='SELECT * FROM __table_fn("orders_for") /* gap */ (1)',
-            expected_deferred=True,
+            expected_rejected=1,
         ),
         CraftedReferenceParityTestCase(
             description="unquoted_table_function_name_is_rejected",
             sql="SELECT * FROM __table_fn(orders_for)(1)",
-            expected_deferred=True,
+            expected_rejected=1,
         ),
         CraftedReferenceParityTestCase(
             description="unclosed_table_function_call",
             sql='SELECT * FROM __table_fn("orders_for")(1',
+            expected_failed=1,
         ),
         CraftedReferenceParityTestCase(
             description="nested_reference_as_name_is_rejected",
             sql="SELECT * FROM __ref(__ref(orders))",
-            expected_deferred=True,
+            expected_rejected=1,
         ),
         CraftedReferenceParityTestCase(
-            description="non_ascii_identifier_defers",
+            description="non_ascii_identifier_is_rejected",
             sql="SELECT * FROM __ref(commandés)",
-            expected_deferred=True,
+            expected_rejected=1,
         ),
         CraftedReferenceParityTestCase(
-            description="unicode_whitespace_before_call_defers",
+            description="unicode_whitespace_before_call_is_skipped",
             sql='SELECT * FROM __table_fn("orders_for")\u00a0(1)',
-            expected_deferred=True,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_crafted_reference_sql_when_extracting_natively_then_matches_python_or_defers(
+def test_given_crafted_reference_sql_when_extracting_natively_then_matches_python(
     test_case: CraftedReferenceParityTestCase,
 ) -> None:
     parity: ReferenceParity = reference_parity(sqls=[test_case.sql], syntax=_GENERIC_SYNTAX)
@@ -197,8 +209,12 @@ def test_given_crafted_reference_sql_when_extracting_natively_then_matches_pytho
         for syntax in LEXICAL_SYNTAXES.values()
     ]
 
-    assert dialect_mismatches == [[]] * len(LEXICAL_SYNTAXES)
-    assert parity.deferred + parity.rejected == int(test_case.expected_deferred)
+    assert (dialect_mismatches, parity.deferred, parity.rejected, parity.failed) == (
+        [[]] * len(LEXICAL_SYNTAXES),
+        0,
+        test_case.expected_rejected,
+        test_case.expected_failed,
+    )
 
 
 @pytest.mark.parametrize(
@@ -212,14 +228,14 @@ def test_given_crafted_reference_sql_when_extracting_natively_then_matches_pytho
             expected_minimum_extracted=700,
             expected_minimum_failed=500,
             expected_minimum_table_functions=300,
-            expected_minimum_rejected=1000,
-            expected_maximum_deferred=400,
+            expected_minimum_rejected=1400,
+            expected_maximum_deferred=0,
         )
         for offset, syntax in enumerate(LEXICAL_SYNTAXES)
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_reference_sql_when_extracting_natively_then_matches_python_or_defers(
+def test_given_generated_reference_sql_when_extracting_natively_then_matches_python(
     test_case: GeneratedReferenceParityTestCase,
 ) -> None:
     sqls: list[str] = generated_reference_sqls(
@@ -260,13 +276,13 @@ def test_given_engine_when_extracting_references_then_only_preview_runs_native_s
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)
     native_calls: list[str] = []
-    native_extract: Callable[..., tuple[CompileSqlReference, ...] | str | None] = (
+    native_extract: Callable[..., SqlReferenceScan | SqlReferenceScanFailure | None] = (
         references.extract_native_sql_references
     )
 
     def counting_extract(
         *, sql: str, syntax: SqlLexicalSyntax
-    ) -> tuple[CompileSqlReference, ...] | str | None:
+    ) -> SqlReferenceScan | SqlReferenceScanFailure | None:
         native_calls.append(sql)
         return native_extract(sql=sql, syntax=syntax)
 
@@ -292,43 +308,157 @@ def test_given_engine_when_extracting_references_then_only_preview_runs_native_s
 @pytest.mark.parametrize(
     "test_case",
     [
-        ReferenceMismatchTestCase(
-            description="python_extracts_references",
-            sql='SELECT * FROM __ref("orders")',
-            native_message="SQL reference contains an empty argument",
-            expected_python_outcome="found 1 reference(s) and 0 rejected call(s)",
+        NativeReferenceErrorTestCase(
+            description="unclosed_reference_call_points_at_the_call_after_the_header",
+            sql='SELECT *\nFROM __ref("orders"',
+            contents='MODEL (description "Orders");\n\nSELECT *\nFROM __ref("orders"',
+            source_map=source_map_at(body_start=31),
+            expected_message="models/orders.sql:4:6: SQL reference contains an unclosed parenthesis",
+            expected_bridge_independent=True,
         ),
-        ReferenceMismatchTestCase(
-            description="python_rejects_a_call",
-            sql="SELECT * FROM __ref(orders)",
-            native_message="SQL reference contains an empty argument",
-            expected_python_outcome="found 0 reference(s) and 1 rejected call(s)",
+        NativeReferenceErrorTestCase(
+            description="empty_table_function_argument_after_a_rejected_call",
+            sql='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
+            contents='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
+            source_map=source_map_at(body_start=0),
+            expected_message="models/orders.sql:2:6: SQL reference contains an empty argument",
+            expected_bridge_independent=True,
         ),
-        ReferenceMismatchTestCase(
-            description="python_raises_a_different_error",
-            sql='SELECT * FROM __ref("orders"',
-            native_message="SQL reference contains an empty argument",
-            expected_python_outcome="raised 'SQL reference contains an unclosed parenthesis'",
+        NativeReferenceErrorTestCase(
+            description="unclosed_quote_points_at_the_quote_in_code_points",
+            sql="SELECT 'é', __ref(\"orders\") WHERE note = 'open",
+            contents="-- é\nSELECT 'é', __ref(\"orders\") WHERE note = 'open",
+            source_map=source_map_at(body_start=5),
+            expected_message="models/orders.sql:2:42: SQL reference contains an unclosed quoted string",
+            expected_bridge_independent=True,
+        ),
+        NativeReferenceErrorTestCase(
+            description="fault_after_neutral_expansions_in_two_passes_maps_through_both",
+            sql="SELECT 'open', 1 + 2\nFROM __ref(\"orders\"",
+            contents='SELECT @enum("s").OPEN, @m()\nFROM __ref("orders"',
+            source_map=source_map_at(
+                body_start=0,
+                passes=(
+                    (ExpansionSpan(source_start=7, source_end=22, output_start=7, output_end=13),),
+                    (
+                        ExpansionSpan(
+                            source_start=15, source_end=19, output_start=15, output_end=20
+                        ),
+                    ),
+                ),
+            ),
+            expected_message="models/orders.sql:2:6: SQL reference contains an unclosed parenthesis",
+            expected_bridge_independent=True,
+        ),
+        NativeReferenceErrorTestCase(
+            description="fault_inside_macro_output_is_unlocated",
+            sql='SELECT * FROM __ref("orders") /* expanded',
+            contents='SELECT * FROM __ref("orders") @expand()',
+            source_map=source_map_at(
+                body_start=0,
+                passes=(
+                    (
+                        ExpansionSpan(
+                            source_start=30, source_end=39, output_start=30, output_end=41
+                        ),
+                    ),
+                ),
+            ),
+            expected_message="models/orders.sql: SQL reference contains an unclosed block comment",
+            expected_bridge_independent=False,
+        ),
+        NativeReferenceErrorTestCase(
+            description="authored_fault_shaped_by_an_unclosed_macro_quote_is_unlocated",
+            sql="SELECT 'x || ' || note || 'open",
+            contents="SELECT @q() || ' || note || 'open",
+            source_map=source_map_at(
+                body_start=0,
+                passes=(
+                    (ExpansionSpan(source_start=7, source_end=11, output_start=7, output_end=9),),
+                ),
+            ),
+            expected_message="models/orders.sql: SQL reference contains an unclosed quoted string",
+            expected_bridge_independent=False,
+        ),
+        NativeReferenceErrorTestCase(
+            description="without_a_source_map_the_file_alone_is_named",
+            sql='SELECT *\nFROM __ref("orders"',
+            contents='SELECT *\nFROM __ref("orders"',
+            source_map=None,
+            expected_message="models/orders.sql: SQL reference contains an unclosed parenthesis",
+            expected_bridge_independent=False,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_error_python_disagrees_with_when_extracting_then_raises_mismatch(
-    test_case: ReferenceMismatchTestCase, monkeypatch: pytest.MonkeyPatch
+def test_given_native_reference_error_when_extracting_then_raised_located_without_python_rescan(
+    test_case: NativeReferenceErrorTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
+    monkeypatch.setattr(references, "python_reference_scan", python_scan_not_expected)
 
-    def failing_extract(*, sql: str, syntax: SqlLexicalSyntax) -> str:
-        del sql, syntax
-        return test_case.native_message
+    with pytest.raises(CompileInputError) as raised:
+        _ = extract_sql_references(
+            sql=test_case.sql,
+            syntax=_GENERIC_SYNTAX,
+            origin=SqlReferenceOrigin(
+                file_path=Path("/project/models/orders.sql"),
+                relative_path=Path("models/orders.sql"),
+                contents=test_case.contents,
+                source_map=test_case.source_map,
+            ),
+        )
 
-    monkeypatch.setattr(references, "extract_native_sql_references", failing_extract)
+    assert (
+        type(raised.value),
+        str(raised.value),
+        raised.value.code,
+        raised.value.help,
+        raised.value.bridge_independent,
+    ) == (
+        CompileInputError,
+        test_case.expected_message,
+        "P001",
+        None,
+        test_case.expected_bridge_independent,
+    )
 
-    with pytest.raises(NativeStageMismatchError) as raised:
-        _ = extract_sql_references(sql=test_case.sql, syntax=_GENERIC_SYNTAX)
 
-    assert test_case.expected_python_outcome in str(raised.value)
-    assert repr(test_case.native_message) in str(raised.value)
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReferenceDiagnosticParityTestCase(
+            description=f"{syntax}_syntax",
+            syntax=syntax,
+            seed=20261009 + offset,
+            count=400,
+            expected_minimum_located=120,
+            expected_minimum_located_errors=90,
+        )
+        for offset, syntax in enumerate(LEXICAL_SYNTAXES)
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_generated_files_when_reporting_rejected_calls_then_engines_report_identically(
+    test_case: ReferenceDiagnosticParityTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    files: list[tuple[str, str]] = generated_reference_files(
+        rng=random.Random(test_case.seed), count=test_case.count
+    )
+    syntax: SqlLexicalSyntax = LEXICAL_SYNTAXES[test_case.syntax]
+
+    python: list[object] = reported_reference_outcomes(
+        files=files, syntax=syntax, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch
+    )
+    preview: list[object] = reported_reference_outcomes(
+        files=files, syntax=syntax, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
+    )
+
+    assert (
+        mismatches(inputs=[body for _, body in files], expected=python, actual=preview),
+        located_diagnostic_count(outcomes=python) >= test_case.expected_minimum_located,
+        located_error_count(outcomes=python) >= test_case.expected_minimum_located_errors,
+    ) == ([], True, True)
 
 
 @pytest.mark.parametrize(
@@ -361,7 +491,7 @@ def test_given_native_error_python_disagrees_with_when_extracting_then_raises_mi
         ReferenceScanBoundTestCase(
             description="rejected_call_after_fifty_thousand_references",
             sql=_REJECTED_AFTER_MANY,
-            expected_outcome="None",
+            expected_outcome=50_001,
             expected_maximum_seconds=0.5,
         ),
     ],
@@ -371,7 +501,7 @@ def test_given_worst_case_reference_sql_when_extracting_natively_then_finishes_q
     test_case: ReferenceScanBoundTestCase,
 ) -> None:
     started: float = time.thread_time()
-    outcome: tuple[CompileSqlReference, ...] | str | None = extract_native_sql_references(
+    outcome: SqlReferenceScan | SqlReferenceScanFailure | None = extract_native_sql_references(
         sql=test_case.sql, syntax=_GENERIC_SYNTAX
     )
     elapsed: float = time.thread_time() - started

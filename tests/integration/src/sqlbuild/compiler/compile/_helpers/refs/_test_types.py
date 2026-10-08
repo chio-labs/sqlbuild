@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.compile.models import SqlReferenceSourceMap
 from sqlbuild.compiler.frontier.types import CompilerEngine
 
 
@@ -11,7 +12,8 @@ class CraftedReferenceParityTestCase:
 
     description: str
     sql: str
-    expected_deferred: bool = False
+    expected_rejected: int = 0
+    expected_failed: int = 0
 
 
 @dataclass(frozen=True)
@@ -42,13 +44,27 @@ class ReferenceEngineTestCase:
 
 
 @dataclass(frozen=True)
-class ReferenceMismatchTestCase:
-    """A native error that Python does not raise identically."""
+class NativeReferenceErrorTestCase:
+    """Expanded SQL whose native error is located through its source map without Python."""
 
     description: str
     sql: str
-    native_message: str
-    expected_python_outcome: str
+    contents: str
+    source_map: SqlReferenceSourceMap | None
+    expected_message: str
+    expected_bridge_independent: bool
+
+
+@dataclass(frozen=True)
+class ReferenceDiagnosticParityTestCase:
+    """Generated authored files whose rejected calls both engines must report identically."""
+
+    description: str
+    syntax: str
+    seed: int
+    count: int
+    expected_minimum_located: int
+    expected_minimum_located_errors: int
 
 
 @dataclass(frozen=True)

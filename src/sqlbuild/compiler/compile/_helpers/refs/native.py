@@ -5,35 +5,64 @@ from __future__ import annotations
 from functools import cache
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models import (
+    CompileSqlReference,
+    InvalidSqlReferenceCall,
+    SqlReferenceScan,
+)
+from sqlbuild.compiler.compile.types import SqlReferenceScanFailure
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+
+type _NativeExtraction = (
+    tuple[
+        tuple[
+            list[tuple[str, str, str | None, int | None]],
+            list[tuple[str, str, int, str, str, str]],
+        ],
+        None,
+    ]
+    | tuple[None, tuple[str, int]]
+    | None
+)
 
 
 def extract_native_sql_references(
     *, sql: str, syntax: SqlLexicalSyntax
-) -> tuple[CompileSqlReference, ...] | str | None:
-    """Return the references, the message Python raises, or None where Python must extract."""
+) -> SqlReferenceScan | SqlReferenceScanFailure | None:
+    """Return the references and rejected calls, Python's located error, or None for Python."""
 
     try:
-        extraction: (
-            tuple[list[tuple[str, str, str | None, int | None]], None] | tuple[None, str] | None
-        ) = _scanner(syntax).extract(sql)
+        extraction: _NativeExtraction = _scanner(syntax).extract(sql)
     except UnicodeError:
         return None
     if extraction is None:
         return None
-    references, message = extraction
-    if references is None:
-        return message
-    return tuple(
-        CompileSqlReference(
-            ref_kind=SqlReferenceKind(kind),
-            ref_name=name,
-            ref_package=package,
-            call_argument_count=call_argument_count,
-        )
-        for kind, name, package, call_argument_count in references
+    scanned, failure = extraction
+    if scanned is None:
+        return failure
+    references, invalid_calls = scanned
+    return SqlReferenceScan(
+        references=tuple(
+            CompileSqlReference(
+                ref_kind=SqlReferenceKind(kind),
+                ref_name=name,
+                ref_package=package,
+                call_argument_count=call_argument_count,
+            )
+            for kind, name, package, call_argument_count in references
+        ),
+        invalid_calls=tuple(
+            InvalidSqlReferenceCall(
+                ref_kind=SqlReferenceKind(kind),
+                call=call,
+                start=start,
+                message=call_message,
+                help=help_text,
+                corrected_call=corrected_call,
+            )
+            for kind, call, start, call_message, help_text, corrected_call in invalid_calls
+        ),
     )
 
 

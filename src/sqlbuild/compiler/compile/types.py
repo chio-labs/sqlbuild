@@ -123,3 +123,6 @@ class SqlTestMode(StrEnum):
     MACRO = "macro"
     UDF = "udf"
     TABLE_FN = "table_fn"
+
+
+type SqlReferenceScanFailure = tuple[str, int]
