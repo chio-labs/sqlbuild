@@ -93,6 +93,9 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
+from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
+    report_mocks_reading_referencing_helpers,
+)
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
 from sqlbuild.compiler.compile.classes.stored_model_analyses import StoredModelAnalyses
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
@@ -1746,8 +1749,22 @@ def _assemble_compiled_sql_test(
         model_payload: CompileModelSqlTestInputPayload = test_input.payload
         target_model_names = tuple(
             dict.fromkeys(
-                (*model_payload.expected_model_names, *model_payload.assertion_target_model_names)
+                (
+                    *model_payload.expected_model_names,
+                    *model_payload.assertion_target_model_names,
+                    *model_payload.helper_target_model_names,
+                )
             )
+        )
+        report_mocks_reading_referencing_helpers(
+            authored_ctes=model_payload.authored_ctes,
+            reader_ctes=(*model_payload.expected_ctes, *model_payload.assertion_ctes),
+            model_inputs=model_inputs,
+            target_model_names=target_model_names,
+            mock_model_names=model_payload.mock_model_names,
+            test_file=test_input.test_file,
+            test_block=test_input.test_block,
+            syntax=inputs.sql_lexical_syntax,
         )
         scope_deps = sql_test_scope_deps(expected_model_names=target_model_names)
         compiled_payload = CompiledModelSqlTestPayload(
@@ -1821,6 +1838,11 @@ def _assemble_compiled_sql_test(
         ),
         assertion_target_model_names=(
             test_input.payload.assertion_target_model_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        helper_target_model_names=(
+            test_input.payload.helper_target_model_names
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
             else ()
         ),

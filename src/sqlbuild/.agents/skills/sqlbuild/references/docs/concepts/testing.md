@@ -165,6 +165,36 @@ __assert__no_unexpected_order_ids AS (
 SQLBuild emits each helper and mock a query needs once, in dependency order, including mocks that
 a helper reaches through another mock.
 
+Helpers can also call the references an `__assert__` CTE can, such as `__ref()`, `__source()` and
+`__seed()`, and they resolve exactly as there: a mocked relation reads its mock, and an unmocked
+`__ref("<model>")` reads the model's real SQL, so the test runs that model and
+`sqb test --select <model>` selects the test even when only a helper reads it. SQLBuild emits a
+helper after the mocks and models it reads:
+
+```sql
+TEST();
+
+WITH
+__ref__stg_orders AS (
+  SELECT 1 AS order_id, 3 AS quantity
+),
+order_totals AS (
+  SELECT order_id, quantity FROM __ref("orders")
+),
+__assert__quantities_are_positive AS (
+  SELECT order_id FROM order_totals WHERE quantity <= 0
+)
+```
+
+Only helpers the test reads count: those its `__expected__` and `__assert__` CTEs reach, directly
+or through other helpers and mocks. A helper nothing reads is left out of the test query, and its
+references are neither checked nor run. Compile rejects references the test query cannot resolve
+with `P013`, at the helper or call that causes it: a `__ref()` to a model that does not exist,
+helpers or mocks that read each other in a cycle, and a mock or `__table_fn__` fixture the test
+uses that reads a helper calling a reference. Mocks are defined before the models a test runs, so
+a mock reads other mocks by CTE name, such as `FROM __ref__stg_orders`, rather than through
+`__ref("stg_orders")`.
+
 ## Multi-model tests
 
 Tests can span multiple models in a single file. Mock your sources, define an expected output for the model you care about, and SQLBuild automatically resolves every intermediate model using its real SQL.

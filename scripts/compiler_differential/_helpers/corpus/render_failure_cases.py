@@ -246,6 +246,23 @@ def _reference_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="test-helper-reads-unknown-model",
+            expected_code="P013",
+            expected_message="SQL test helper CTE 'archived_orders' references unknown model",
+            files={
+                "tests/unit/test_stg_orders.sql": (
+                    "TEST();\n\nWITH\n__source__raw_orders AS (\n"
+                    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,"
+                    " 'placed' AS status\n),\n"
+                    'archived_orders AS (\n  SELECT order_id FROM __ref("archived_orders")\n),\n'
+                    "__assert__no_archived_orders AS (\n"
+                    '  SELECT order_id FROM __ref("stg_orders")\n'
+                    "  JOIN archived_orders USING (order_id)\n"
+                    ")\nSELECT 1\n"
+                )
+            },
+        ),
+        failure_case(
             name="dbt-reference-without-manifest",
             expected_code="C214",
             files={

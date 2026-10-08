@@ -1245,6 +1245,17 @@ class CompileModelSqlTestInputPayload:
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    helper_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SqlTestCteGraph:
+    """Which authored helper and mock CTEs one SQL test reads, keyed by case-folded name."""
+
+    ctes: dict[str, CompileSqlTestCte]
+    reads: dict[str, tuple[str, ...]]
+    parsed_reads: dict[str, tuple[str, ...]]
+    reader_reads: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1383,6 +1394,7 @@ class CompiledSqlTest:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    helper_target_model_names: tuple[str, ...] = field(default_factory=tuple)
     target_model_names: tuple[str, ...] = field(default_factory=tuple)
     tested_resources: tuple[CompiledSqlTestResource, ...] = field(default_factory=tuple)
 
