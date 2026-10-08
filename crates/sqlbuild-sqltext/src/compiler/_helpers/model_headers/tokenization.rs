@@ -3,9 +3,10 @@
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 
-use crate::compiler::models::AuthoredValue;
+use crate::compiler::models::{AuthoredValue, NestingFailure};
 use crate::constants::{
-    COLUMNS_KEY, CONSTANT_CALL, INLINE_SQL_HOOK, OUTSIDE_KEY, SQL_HOOK, THRESHOLDS_KEY, TYPE_KEY,
+    COLUMNS_KEY, CONSTANT_CALL, INLINE_SQL_HOOK, MAX_HEADER_NESTING_DEPTH, OUTSIDE_KEY, SQL_HOOK,
+    THRESHOLDS_KEY, TYPE_KEY,
 };
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN};
 
@@ -53,6 +54,8 @@ struct HeaderParser {
     tokens: Vec<HeaderToken>,
     index: usize,
     column_offsets: Vec<HeaderColumnOffset>,
+    /// The open containers, at most `MAX_HEADER_NESTING_DEPTH`, which bounds the recursion.
+    depth: usize,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -80,6 +83,7 @@ impl HeaderParser {
             tokens,
             index: 0,
             column_offsets: Vec::new(),
+            depth: 0,
         };
         let value = if parser.peek().0 == END_TOKEN {
             AuthoredValue::Map(Vec::new())
@@ -197,49 +201,79 @@ impl HeaderParser {
             self.advance();
             if self.peek().0 == SYMBOL_TOKEN && self.peek().1 == OPEN_PAREN {
                 self.advance();
-                if matches!(token.1.as_str(), "__ref" | "__seed" | "__source") {
-                    return self.parse_relation(&token.1);
-                }
-                if matches!(token.1.as_str(), "inline_sql" | "sql" | "python") {
-                    return self.parse_hook(&token.1);
-                }
-                if token.1 == CONSTANT_CALL {
-                    return Ok(AuthoredValue::TypedConstant(self.parse_map(
-                        ParseMapOptions {
-                            end: Some(")"),
-                            ..ParseMapOptions::default()
-                        },
-                    )?));
-                }
-                return Ok(AuthoredValue::Map(vec![(
-                    token.1,
-                    AuthoredValue::Map(self.parse_map(ParseMapOptions {
-                        end: Some(")"),
-                        threshold_policy: options.threshold_policy,
-                        allow_outside: options.allow_outside,
-                        ..ParseMapOptions::default()
-                    })?),
-                )]));
+                return self.nested(token.2, |parser| parser.parse_call(token.1, options));
             }
             return Ok(parse_word(token.1));
         }
         if self.match_symbol("[") {
-            return Ok(AuthoredValue::List(self.parse_sequence("]")?));
+            return self.nested(token.2, |parser| {
+                Ok(AuthoredValue::List(parser.parse_sequence("]")?))
+            });
         }
         if self.match_symbol("{") {
-            return Ok(AuthoredValue::Set(self.parse_sequence("}")?));
+            return self.nested(token.2, |parser| {
+                Ok(AuthoredValue::Set(parser.parse_sequence("}")?))
+            });
         }
         if self.match_symbol("(") {
-            return Ok(AuthoredValue::Map(self.parse_map(ParseMapOptions {
+            return self.nested(token.2, |parser| {
+                Ok(AuthoredValue::Map(parser.parse_map(ParseMapOptions {
+                    end: Some(")"),
+                    threshold_policy: options.threshold_policy,
+                    allow_outside: options.allow_outside,
+                    column_entries: options.nested_columns,
+                    column_metadata: options.nested_metadata,
+                    record_column_entries: options.record_nested_columns,
+                })?))
+            });
+        }
+        Err(format!("expected value at position {}", token.2))
+    }
+
+    /// The value after `name(`, which has been consumed.
+    fn parse_call(
+        &mut self,
+        name: String,
+        options: ParseValueOptions,
+    ) -> Result<AuthoredValue, String> {
+        if matches!(name.as_str(), "__ref" | "__seed" | "__source") {
+            return self.parse_relation(&name);
+        }
+        if matches!(name.as_str(), "inline_sql" | "sql" | "python") {
+            return self.parse_hook(&name);
+        }
+        if name == CONSTANT_CALL {
+            return Ok(AuthoredValue::TypedConstant(self.parse_map(
+                ParseMapOptions {
+                    end: Some(")"),
+                    ..ParseMapOptions::default()
+                },
+            )?));
+        }
+        Ok(AuthoredValue::Map(vec![(
+            name,
+            AuthoredValue::Map(self.parse_map(ParseMapOptions {
                 end: Some(")"),
                 threshold_policy: options.threshold_policy,
                 allow_outside: options.allow_outside,
-                column_entries: options.nested_columns,
-                column_metadata: options.nested_metadata,
-                record_column_entries: options.record_nested_columns,
-            })?));
+                ..ParseMapOptions::default()
+            })?),
+        )]))
+    }
+
+    /// Parse one container opened at `position`, refusing to nest deeper than the limit.
+    fn nested(
+        &mut self,
+        position: usize,
+        parse: impl FnOnce(&mut Self) -> Result<AuthoredValue, String>,
+    ) -> Result<AuthoredValue, String> {
+        if self.depth >= MAX_HEADER_NESTING_DEPTH {
+            return Err(nesting_error(position));
         }
-        Err(format!("expected value at position {}", token.2))
+        self.depth += 1;
+        let value = parse(self);
+        self.depth -= 1;
+        value
     }
 
     fn parse_sequence(&mut self, end: &str) -> Result<Vec<AuthoredValue>, String> {
@@ -256,12 +290,16 @@ impl HeaderParser {
     }
 
     fn parse_hook_field(&mut self, field: &str) -> Result<AuthoredValue, String> {
+        let position: usize = self.peek().2;
         if !self.match_symbol("[") {
             return Err(format!(
-                "{field} must be a list of typed inline_sql(...), sql(...), or python(...) hook entries at position {}",
-                self.peek().2
+                "{field} must be a list of typed inline_sql(...), sql(...), or python(...) hook entries at position {position}"
             ));
         }
+        self.nested(position, |parser| parser.parse_hook_entries(field))
+    }
+
+    fn parse_hook_entries(&mut self, field: &str) -> Result<AuthoredValue, String> {
         let mut values: Vec<AuthoredValue> = Vec::new();
         while !self.at_end_symbol(Some("]")) {
             if self.match_symbol(",") {
@@ -296,7 +334,7 @@ impl HeaderParser {
         if !matches!(token.1.as_str(), "inline_sql" | "sql" | "python") {
             return Err(error());
         }
-        self.parse_hook(&token.1)
+        self.nested(token.2, |parser| parser.parse_hook(&token.1))
     }
 
     fn parse_relation(&mut self, name: &str) -> Result<AuthoredValue, String> {
@@ -414,6 +452,48 @@ impl HeaderParser {
         self.index += 1;
         token
     }
+}
+
+fn nesting_error(position: usize) -> String {
+    format!("{}{position}", nesting_error_prefix())
+}
+
+fn nesting_error_prefix() -> String {
+    format!("values nest deeper than {MAX_HEADER_NESTING_DEPTH} levels at position ")
+}
+
+/// The located nesting failure for `error` of `header` starting on `header_line`, if it is one.
+pub(crate) fn nesting_failure(
+    error: &str,
+    header: &str,
+    header_line: usize,
+) -> Option<NestingFailure> {
+    let digits: &str = error.strip_prefix(nesting_error_prefix().as_str())?;
+    if digits.is_empty() {
+        return None;
+    }
+    let position: usize = digits.bytes().try_fold(0_usize, |position, digit| {
+        digit
+            .is_ascii_digit()
+            .then(|| {
+                position
+                    .checked_mul(10)?
+                    .checked_add(usize::from(digit - b'0'))
+            })
+            .flatten()
+    })?;
+    Some(NestingFailure {
+        line: header_line
+            + header
+                .chars()
+                .take(position)
+                .filter(|character| *character == '\n')
+                .count(),
+        message: format!("values nest deeper than {MAX_HEADER_NESTING_DEPTH} levels"),
+        help: format!(
+            "flatten the value so it nests at most {MAX_HEADER_NESTING_DEPTH} levels deep"
+        ),
+    })
 }
 
 fn parse_word(value: String) -> AuthoredValue {

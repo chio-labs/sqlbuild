@@ -1,5 +1,6 @@
 pub mod declaration_references;
 pub mod model_header_byte_matching;
+pub mod model_header_errors;
 pub mod model_header_matching;
 pub mod model_header_parsing;
 pub mod model_header_single_parsing;

@@ -52,6 +52,9 @@ _SQL_UNION_LOWER_KEYWORD: str = _SQL_UNION_KEYWORD.lower()
 _MODEL_HEADER_INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _MODEL_HEADER_FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
 _MODEL_HEADER_TOKEN_CACHE_SIZE: int = 4096
+_MODEL_HEADER_NESTING_ERROR_PATTERN: re.Pattern[str] = re.compile(
+    r"values nest deeper than (?P<limit>\d+) levels at position (?P<position>\d+)"
+)
 _NATIVE_MODEL_HEADER_END_TOKEN: int = 0
 _NATIVE_MODEL_HEADER_WORD_TOKEN: int = 1
 _NATIVE_MODEL_HEADER_STRING_TOKEN: int = 2
@@ -556,9 +559,10 @@ def parse_header_values(
     header: str,
     file_path: Path,
     statement_name: str,
+    header_line: int | None,
     error_class: type[DiscoveryError] = ModelSqlParseError,
 ) -> dict[str, object]:
-    """Parse one SQLBuild parenthesized header into nested Python values."""
+    """Parse one header; a nesting error names its file line when `header_line` is known."""
 
     try:
         parsed: _ModelHeaderTokenization = _model_header_parse(header)
@@ -570,9 +574,18 @@ def parse_header_values(
     except ModelSqlParseError:
         raise
     except ModelHeaderSyntaxError as error:
+        nesting: re.Match[str] | None = _MODEL_HEADER_NESTING_ERROR_PATTERN.fullmatch(str(error))
+        if nesting is None or header_line is None:
+            raise error_class(
+                f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
+                f"{error}"
+            ) from error
+        limit: str = nesting.group("limit")
+        line: int = header_line + header.count("\n", 0, int(nesting.group("position")))
         raise error_class(
-            f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
-            f"{error}"
+            f"{statement_name}(...) in '{file_path}:{line}' contains invalid SQLBuild header "
+            f"syntax: values nest deeper than {limit} levels",
+            help=f"flatten the value so it nests at most {limit} levels deep",
         ) from error
 
 

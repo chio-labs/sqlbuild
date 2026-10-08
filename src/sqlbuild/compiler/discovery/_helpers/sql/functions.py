@@ -29,17 +29,19 @@ def parse_function_sql(*, contents: str, file_path: Path) -> tuple[dict[str, obj
             "non-whitespace content"
         )
 
+    header_line: int = contents.count("\n", 0, header_match.start("header")) + 1
     header_values: dict[str, object] = parse_header_values(
         header=header_match.group("header"),
         file_path=file_path,
         statement_name="FUNCTION",
+        header_line=header_line,
     )
     reject_unsupported_header_keys(
         header_values=header_values,
         supported_keys=SQL_FUNCTION_HEADER_KEYS,
         statement="FUNCTION()",
         header=header_match.group("header"),
-        header_line=contents.count("\n", 0, header_match.start("header")) + 1,
+        header_line=header_line,
         file_path=file_path,
         error_class=ModelSqlParseError,
     )

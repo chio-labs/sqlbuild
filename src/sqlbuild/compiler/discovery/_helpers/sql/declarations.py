@@ -260,13 +260,14 @@ def _parse_declaration_headers(
                         header=header,
                         file_path=file_path,
                         statement_name=expected_kind,
+                        header_line=contents.count("\n", 0, open_index + 1) + 1,
                     ),
                     header=header,
                     header_start=open_index + 1,
                 )
             )
         except ModelSqlParseError as error:
-            raise DeclarationParseError(str(error)) from error
+            raise DeclarationParseError(str(error), help=error.help) from error
         cursor += 1
     if not headers:
         raise DeclarationParseError(f"{file_path} contains no {expected_kind}(...) declarations")

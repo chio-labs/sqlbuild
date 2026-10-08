@@ -248,3 +248,18 @@ class TolerantFailureTextTestCase:
     description: str
     files: tuple[tuple[str, bytes], ...]
     expected_fault_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeepDeclarationHeaderTestCase:
+    """A declaration file whose header nests one value `depth` levels deep."""
+
+    description: str
+    kind: str
+    relative_path: str
+    prefix: str
+    suffix: str
+    depth: int
+    expected_failure_type: str
+    expected_message_suffix: str
+    expected_help: str = "flatten the value so it nests at most 256 levels deep"

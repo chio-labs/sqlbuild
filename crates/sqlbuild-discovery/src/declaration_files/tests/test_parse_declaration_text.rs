@@ -1,6 +1,8 @@
 use crate::declaration_files::models::CollectionKind;
-use crate::declaration_files::tests::helpers::parsed_debug;
-use crate::declaration_files::tests::test_types::DeclarationTextTestCase;
+use crate::declaration_files::tests::helpers::{nesting_failure_debug, parsed_debug};
+use crate::declaration_files::tests::test_types::{
+    DeclarationTextTestCase, DeepDeclarationTestCase,
+};
 
 #[test]
 fn given_declaration_files_when_parsing_then_values_and_failures_match_python() {
@@ -209,6 +211,59 @@ fn given_declaration_files_when_parsing_then_values_and_failures_match_python() 
         assert_eq!(
             found, test_case.expected_fragments,
             "{}: {debug}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_deeply_nested_declaration_headers_when_parsing_then_each_reports_its_file_line() {
+    let test_cases = [
+        DeepDeclarationTestCase {
+            description: "a constant value",
+            kind: CollectionKind::Constants,
+            prefix: "CONSTANT (\n  name limits,\n  value ",
+            suffix: ",\n);\n",
+            expected_location: ("CONSTANT", 3),
+        },
+        DeepDeclarationTestCase {
+            description: "a hook description",
+            kind: CollectionKind::SqlHooks,
+            prefix: "HOOK (\n  description ",
+            suffix: ",\n);\n\nSELECT 1\n",
+            expected_location: ("HOOK", 2),
+        },
+        DeepDeclarationTestCase {
+            description: "a function return type",
+            kind: CollectionKind::SqlFunctions,
+            prefix: "FUNCTION (\n  description \"Whether placed\",\n  returns ",
+            suffix: ",\n);\n\norder_status = 'placed'\n",
+            expected_location: ("FUNCTION", 3),
+        },
+        DeepDeclarationTestCase {
+            description: "an audit value on a later block",
+            kind: CollectionKind::Audits,
+            prefix: "AUDIT (name a);\nSELECT 1\nAUDIT (\n  name b,\n  value ",
+            suffix: ",\n);\nSELECT 2\n",
+            expected_location: ("AUDIT", 5),
+        },
+    ];
+
+    for test_case in test_cases {
+        let contents: String = format!(
+            "{}{}1{}{}",
+            test_case.prefix,
+            "[".repeat(20_000),
+            "]".repeat(20_000),
+            test_case.suffix
+        );
+
+        let debug: String = parsed_debug(test_case.kind, &contents);
+
+        assert_eq!(
+            debug,
+            nesting_failure_debug(test_case.expected_location),
+            "{}",
             test_case.description
         );
     }

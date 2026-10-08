@@ -1,6 +1,7 @@
 //! Parse one model file: header checks, model-local declaration checks and their messages.
 
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
+use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
 use crate::_helpers::locations::header_column_locations;
 use crate::model_files::_helpers::output_columns::output_column_locations;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
@@ -28,12 +29,20 @@ pub(crate) fn parse_model_file(
         )));
     };
     let header = &contents[header_start..header_end];
+    let header_line: usize = contents[..header_start].matches('\n').count() + 1;
+    let failed_header = FailedHeader {
+        kind: FailureKind::ModelSql,
+        statement_name: "MODEL",
+        file_path,
+        text: header,
+        line: header_line,
+    };
     let (header_values, column_offsets) = match parse_one(header) {
-        (_, _, Some(error)) => return Err(syntax_failure(file_path, &error)),
+        (_, _, Some(error)) => return Err(header_syntax_failure(&failed_header, &error)),
         (Some(AuthoredValue::Map(values)), Some(offsets), None) => (values, offsets),
         _ => {
-            return Err(syntax_failure(
-                file_path,
+            return Err(header_syntax_failure(
+                &failed_header,
                 "Native MODEL header parser returned neither values nor an error",
             ));
         }
@@ -58,7 +67,7 @@ pub(crate) fn parse_model_file(
             statement: MODEL_STATEMENT,
             file_path,
             header,
-            header_line: contents[..header_start].matches('\n').count() + 1,
+            header_line,
             keys: &unsupported,
             supported_keys: &options.supported_keys,
             python: options.python,
@@ -89,12 +98,6 @@ pub(crate) fn parse_model_file(
         output_column_locations,
         query_sql,
     })
-}
-
-fn syntax_failure(file_path: &str, error: &str) -> DiscoveryFailure {
-    failure(format!(
-        "MODEL(...) in '{file_path}' contains invalid SQLBuild header syntax: {error}"
-    ))
 }
 
 fn header_keys(values: &[(String, AuthoredValue)]) -> impl Iterator<Item = &str> {

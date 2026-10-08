@@ -107,6 +107,7 @@ def _parse_hook_header(*, header: str, header_line: int, file_path: Path) -> dic
         header=header,
         file_path=file_path,
         statement_name="HOOK",
+        header_line=header_line,
         error_class=SqlHookParseError,
     )
     reject_unsupported_header_keys(

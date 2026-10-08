@@ -32,6 +32,9 @@ _HOOK_MODULE: str = (
     "    return None\n"
 )
 _MACRO_MODULE: str = "def cents(value):\n    return f'{value} * 100'\n"
+_DEEP_HEADER_DEPTH: int = 20_000
+_DEEP_HEADER_VALUE: str = "[" * _DEEP_HEADER_DEPTH + '"placed"' + "]" * _DEEP_HEADER_DEPTH
+_DEEP_HEADER_MESSAGE: str = "contains invalid SQLBuild header syntax: values nest deeper than 256"
 _SEED_DECLARATION: str = (
     "seeds:\n  - name: order_channels\n    description: Order channels.\n"
     "    columns:\n      - name: id\n        type: INTEGER\n"
@@ -104,6 +107,16 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="model-header-nested-too-deep",
+            expected_code="D002",
+            files={
+                FAILURE_STAGING_PATH: FAILURE_BASE_STAGING.replace(
+                    '"Staged orders",', f'"Staged orders",\n  tags {_DEEP_HEADER_VALUE},'
+                )
+            },
+            expected_message=_DEEP_HEADER_MESSAGE,
+        ),
+        failure_case(
             name="model-path-not-utf8",
             expected_code="D016",
             files={os.fsdecode(b"models/staging/caf\xe9.sql"): FAILURE_BASE_STAGING},
@@ -146,6 +159,16 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
                     'CONSTANT (name kept_statuses, value ["placed", 3]);\n'
                 )
             },
+        ),
+        failure_case(
+            name="constant-header-nested-too-deep",
+            expected_code="D013",
+            files={
+                "models/staging/_sqlbuild/_constants/statuses.sql": (
+                    f"CONSTANT (name kept_statuses, value {_DEEP_HEADER_VALUE});\n"
+                )
+            },
+            expected_message=_DEEP_HEADER_MESSAGE,
         ),
         failure_case(
             name="enum-duplicate-member",

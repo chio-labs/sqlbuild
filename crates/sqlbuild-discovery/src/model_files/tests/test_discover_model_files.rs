@@ -1,5 +1,5 @@
 use crate::model_files::tests::helpers::{failed, parsed, parsed_summary};
-use crate::model_files::tests::test_types::ModelFileTestCase;
+use crate::model_files::tests::test_types::{DeepModelHeaderTestCase, ModelFileTestCase};
 
 const SUPPORTED_KEYS_HELP: &str = "supported keys: audits, columns, constants, description, enums, materialized, tags, unique_key";
 
@@ -111,6 +111,49 @@ fn given_model_files_when_parsing_then_values_locations_and_failures_match_pytho
     for test_case in test_cases {
         assert_eq!(
             parsed_summary(test_case.contents),
+            test_case.expected_summary,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_deeply_nested_model_header_when_parsing_then_fails_with_its_file_line_and_help() {
+    let expected_summary = || {
+        failed(
+            "MODEL(...) in '/project/models/orders.sql:3' contains invalid SQLBuild header \
+             syntax: values nest deeper than 256 levels",
+            Some("flatten the value so it nests at most 256 levels deep"),
+        )
+    };
+    let test_cases = [
+        DeepModelHeaderTestCase {
+            description: "1k nested lists",
+            depth: 1_000,
+            expected_summary: expected_summary(),
+        },
+        DeepModelHeaderTestCase {
+            description: "20k nested lists",
+            depth: 20_000,
+            expected_summary: expected_summary(),
+        },
+        DeepModelHeaderTestCase {
+            description: "100k nested lists",
+            depth: 100_000,
+            expected_summary: expected_summary(),
+        },
+    ];
+
+    for test_case in test_cases {
+        let contents: String = format!(
+            "MODEL (\n  description \"Orders\",\n  tags {}1{},\n);\nSELECT 1",
+            "[".repeat(test_case.depth),
+            "]".repeat(test_case.depth)
+        );
+
+        assert_eq!(
+            parsed_summary(&contents),
             test_case.expected_summary,
             "{}",
             test_case.description

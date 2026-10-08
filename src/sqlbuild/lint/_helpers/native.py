@@ -310,6 +310,7 @@ def _parse_header_values(*, kind: str, header_text: str) -> dict[str, object]:
         header=inner,
         file_path=Path(_DESCRIPTION_SENTINEL_PATH),
         statement_name=kind,
+        header_line=None,
     )
 
 

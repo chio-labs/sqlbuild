@@ -1,4 +1,4 @@
-//! The worker pool native discovery runs on; header parsing recurses, so stacks are large.
+//! The worker pool native discovery runs on; parsing recurses, so stacks are large.
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::OnceLock;
@@ -17,4 +17,12 @@ pub(crate) fn discovery_pool() -> Result<&'static ThreadPool, String> {
     })
     .as_ref()
     .map_err(Clone::clone)
+}
+
+/// Run `work` on the discovery pool, or on the calling thread (safe: nesting is bounded).
+pub(crate) fn on_discovery_pool<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+    match discovery_pool() {
+        Ok(pool) => pool.install(work),
+        Err(_) => work(),
+    }
 }

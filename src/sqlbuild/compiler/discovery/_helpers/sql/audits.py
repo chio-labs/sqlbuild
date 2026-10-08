@@ -126,6 +126,7 @@ def _parse_audit_header(*, header: str, header_line: int, file_path: Path) -> di
         header=header,
         file_path=file_path,
         statement_name="AUDIT",
+        header_line=header_line,
         error_class=SqlAuditParseError,
     )
     reject_unsupported_header_keys(

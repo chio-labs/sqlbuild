@@ -81,3 +81,15 @@ pub(super) fn expected_rows(
         expected_failure.map(str::to_owned),
     )
 }
+
+/// The failure that stops `contents` as a test file and as a scenario file, with their help.
+pub(super) fn statement_failures(contents: &str) -> [Option<(String, Option<String>)>; 2] {
+    let failure = |failure: DiscoveryFailure| (failure.message, failure.help);
+    [
+        parse_sql_test_text(FILE_PATH, contents.to_owned(), &options())
+            .map_or_else(|stop| Some(failure(stop)), |file| file.failure.map(failure)),
+        parse_scenario_text(FILE_PATH, contents.replace("TEST", "SCENARIO"), &options())
+            .err()
+            .map(failure),
+    ]
+}
