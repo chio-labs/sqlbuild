@@ -17,6 +17,7 @@ class AuthoredSqlParityTestCase:
     generate: Callable[[random.Random], str]
     expected_minimum_expanded: int
     expected_minimum_python_errors: int
+    expected_minimum_exact_errors: int
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class AttachedAuditParityTestCase:
     seed: int
     count: int
     expected_minimum_native: int
+    expected_minimum_native_errors: int
     expected_minimum_deferred: int
     expected_minimum_python_errors: int
 
@@ -43,12 +45,13 @@ class AttachmentProjectTestCase:
 
 @dataclass(frozen=True)
 class CursorIntrinsicParityTestCase:
-    """Seeded SQL checked for cursor intrinsics natively and by Python."""
+    """Seeded SQL checked for cursor intrinsics natively and by Python, with the native errors."""
 
     description: str
     seed: int
     count: int
     expected_minimum_free: int
+    expected_minimum_native_errors: int
     expected_minimum_python_errors: int
 
 
@@ -61,6 +64,7 @@ class ParameterParityTestCase:
     count: int
     expected_minimum_expanded: int
     expected_minimum_python_errors: int
+    expected_minimum_exact_errors: int
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,7 @@ class FunctionHeaderParityTestCase:
     inherit_default_namespace: bool
     expected_minimum_attached: int
     expected_minimum_python_errors: int
+    expected_minimum_exact_errors: int
 
 
 @dataclass(frozen=True)

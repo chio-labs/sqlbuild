@@ -62,10 +62,14 @@ def get_validated_model_cursor_intrinsics(
 def reject_cursor_intrinsics(*, sql: str, context: str) -> None:
     """Reject cursor intrinsics in SQL that does not own an execution interval."""
 
-    if native_stage_enabled(NativeStage.ATTACHMENTS) and _native.sql_free_of_cursor_intrinsics(
-        sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL]
-    ):
-        return
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        free, error = _native.sql_free_of_cursor_intrinsics(
+            sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL], context
+        )
+        if free:
+            return
+        if error is not None:
+            raise CompileInputError(error)
     _assert_no_reserved_cursor_markers(sql=sql, context=context)
     _, found = _transform_cursor_intrinsics(
         sql=sql,

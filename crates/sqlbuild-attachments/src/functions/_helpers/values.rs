@@ -2,6 +2,7 @@
 
 use sqlbuild_core::text::main::python_strip::python_strip;
 
+use crate::functions::errors::NamedTypeError;
 use crate::functions::models::{HeaderValue, NamedType};
 
 /// Python's `TABLE_FUNCTION_RETURN_KEYS`.
@@ -17,38 +18,43 @@ pub(crate) fn stripped_text(value: Option<&HeaderValue>) -> Option<String> {
     }
 }
 
-/// Named types of a map of non-blank strings; None where Python raises.
-pub(crate) fn named_types(entries: &[(HeaderValue, HeaderValue)]) -> Option<Vec<NamedType>> {
+/// Named types of a map of non-blank strings, and Python's error after the ones before it.
+pub(crate) fn named_types(
+    entries: &[(HeaderValue, HeaderValue)],
+) -> (Vec<NamedType>, Option<NamedTypeError>) {
     let mut named: Vec<NamedType> = Vec::with_capacity(entries.len());
     for (key, value) in entries {
-        let HeaderValue::Text(raw_name) = key else {
-            return None;
+        let (HeaderValue::Text(raw_name), Some(name)) = (key, stripped_text(Some(key))) else {
+            return (named, Some(NamedTypeError::InvalidName));
+        };
+        let Some(type_text) = stripped_text(Some(value)) else {
+            return (named, Some(NamedTypeError::MissingType(raw_name.clone())));
         };
         named.push(NamedType {
             raw_name: raw_name.clone(),
-            name: stripped_text(Some(key))?,
-            type_text: stripped_text(Some(value))?,
+            name,
+            type_text,
         });
     }
-    Some(named)
+    (named, None)
 }
 
-/// Stripped entries of an optional list or tuple of non-blank strings.
-pub(crate) fn stripped_list(value: Option<&HeaderValue>) -> Option<Vec<String>> {
+/// Stripped list entries; `Err(true)` for a non-sequence, `Err(false)` for a blank entry.
+pub(crate) fn stripped_list(value: Option<&HeaderValue>) -> Result<Vec<String>, bool> {
     match value {
-        None => Some(Vec::new()),
+        None => Ok(Vec::new()),
         Some(HeaderValue::Sequence(items)) => {
             let mut entries: Vec<String> = Vec::with_capacity(items.len());
             for item in items {
-                entries.push(stripped_text(Some(item))?);
+                entries.push(stripped_text(Some(item)).ok_or(false)?);
             }
-            Some(entries)
+            Ok(entries)
         }
-        Some(_) => None,
+        Some(_) => Err(true),
     }
 }
 
-/// An optional string description, stripped.
+/// An optional string description, stripped; None when it is not a string.
 pub(crate) fn description(value: Option<&HeaderValue>) -> Option<Option<String>> {
     match value {
         None => Some(None),

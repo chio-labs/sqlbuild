@@ -164,6 +164,19 @@ def generated_dollar_authored_sql(*, rng: random.Random) -> str:
     return "".join(parts)
 
 
+class ExactErrorText(str):
+    """The text of an error marked bridge-independent, equal to Python's text."""
+
+    __slots__ = ()
+
+
+def error_text(error: CompileInputError) -> str:
+    """The error's text, marked when the error is bridge-independent."""
+
+    marker: type[str] = {True: ExactErrorText, False: str}[error.bridge_independent]
+    return marker(error)
+
+
 def authored_outcome(
     *, sql: str, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> AuthoredSqlExpansionResult | str:
@@ -183,7 +196,7 @@ def authored_outcome(
             declarations=DECLARATIONS,
         )
     except CompileInputError as error:
-        return str(error)
+        return error_text(error)
 
 
 _SQL_PIECES: tuple[str, ...] = (
@@ -285,6 +298,7 @@ def audit_parity(audit: GeneratedAudit) -> AuditParity:
         audit=audit,
         python=_python_rendering(audit),
         native=render_native_attached_audit(
+            labels=("models/orders.sql", "floor"),
             sql_body=audit.sql_body,
             evidence_sql=audit.evidence_sql,
             implicit_arguments=audit.implicit_arguments,
@@ -309,9 +323,14 @@ def is_native(parity: AuditParity) -> bool:
     return parity.native is not None
 
 
-def native_outcome(parity: AuditParity) -> tuple[object, ...]:
-    """The native rendering spelled like Python's, with the run scope value it selects."""
+def native_outcome(parity: AuditParity) -> tuple[object, ...] | str:
+    """The native rendering or error spelled like Python's, with the run scope it selects."""
 
+    rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
+    return rendered.render_error or rendered.policy_error or _native_rendering(parity)
+
+
+def _native_rendering(parity: AuditParity) -> tuple[object, ...]:
     rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
     run_scope: str | None = {
         "instance": parity.audit.instance_run_scope,
@@ -338,7 +357,7 @@ def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
         severity: AuditSeverity = resolve_audit_severity(
             instance_severity=audit.instance_severity,
             default_severity=audit.default_severity,
-            audit_label="floor",
+            audit_label=f"{owner} audit 'floor'",
         )
         run_scope: str = resolve_audit_run_scope(
             instance_run_scope=audit.instance_run_scope,
@@ -566,12 +585,13 @@ def python_intrinsic_outcome(sql: str) -> str | None:
     return None
 
 
-def native_intrinsic_free(sql: str) -> bool:
-    """Whether the native check accepts the SQL without Python."""
+def native_intrinsic_outcome(sql: str) -> tuple[bool, str | None]:
+    """Whether the native check answers without Python, and its rejection message if any."""
 
-    return _native.sql_free_of_cursor_intrinsics(
-        sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL]
+    free, error = _native.sql_free_of_cursor_intrinsics(
+        sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL], "Source expression 'orders'"
     )
+    return free or error is not None, error
 
 
 _PARAMETER_PIECES: tuple[str, ...] = (
@@ -624,7 +644,7 @@ def parameter_outcome(
             case_name="north",
         )
     except CompileInputError as error:
-        return str(error)
+        return error_text(error)
 
 
 _BODY_PIECES: tuple[str, ...] = (
@@ -924,6 +944,12 @@ _TYPES: tuple[object, ...] = (
     "  ",
     "${coalesce(ENV:SQB_ATTACHMENTS_UNSET, 'DOUBLE')}",
     "${missing}",
+    "DECIMAL(${if(precision)})",
+    "${'open}",
+    "${eq(a, b, c)}",
+    "${upper(x)}",
+    "${coalesce()}",
+    "${CTX:model.name}",
     2,
 )
 _NAMES: tuple[object, ...] = ("raw_status", " amount ", "", "  ", 1)
@@ -931,6 +957,9 @@ _TEXTS: tuple[object, ...] = ("orders", " Orders. ", "", "  ", 3, None)
 _SCHEMAS: tuple[object, ...] = (
     "udfs",
     "${coalesce(ENV:SQB_ATTACHMENTS_UNSET, 'udfs')}",
+    "${ENV:SQB_ATTACHMENTS_UNSET}",
+    "${VAR:udfs}",
+    "udfs_${x y}",
     1,
     None,
 )
@@ -978,8 +1007,8 @@ def function_outcome(
     test_case: FunctionHeaderParityTestCase,
     engine: CompilerEngine,
     monkeypatch: pytest.MonkeyPatch,
-) -> str:
-    """Attach one function under `engine`, returning its input or Python's error text."""
+) -> tuple[str, bool]:
+    """Attach one function under `engine`: its input or error, and whether that is bridge-free."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
     sql_file: DiscoveredSqlFunctionFile = DiscoveredSqlFunctionFile(
@@ -1027,9 +1056,9 @@ def function_outcome(
                 no_sql_validation=True,
                 python_functions_inherit_default_namespace=test_case.inherit_default_namespace,
             )
-        )
+        ), False
     except CompileInputError as error:
-        return f"error: {error}"
+        return f"error: {error}", error.bridge_independent
 
 
 _MACRO_PIECES: tuple[str, ...] = (

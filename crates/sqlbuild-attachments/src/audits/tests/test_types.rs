@@ -1,15 +1,16 @@
-use crate::audits::models::AuditAttachment;
+use crate::audits::_helpers::parameters::RenderStop;
+use crate::audits::models::{AuditAttachment, AuditRendering};
 
 pub(super) struct ParameterizedSqlTestCase {
     pub(super) description: &'static str,
     pub(super) sql: &'static str,
     pub(super) reject_unused: bool,
-    pub(super) expected_sql: Option<&'static str>,
+    pub(super) expected_sql: Result<&'static str, RenderStop>,
 }
 
 pub(super) struct AttachedAuditTestCase {
     pub(super) description: &'static str,
     pub(super) attachment: AuditAttachment,
-    /// `(sql body, evidence, severity, run scope source)` spelled as text, or None to defer.
-    pub(super) expected_rendering: Option<&'static str>,
+    /// None where Python must decide.
+    pub(super) expected_rendering: Option<AuditRendering>,
 }

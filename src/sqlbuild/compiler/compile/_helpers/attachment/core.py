@@ -1221,7 +1221,8 @@ def _native_seed_inputs(
         seed_entry, seed_schema_file = seed_declarations[cast(int, missing)]
         raise CompileInputError(
             f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
-            "has no matching CSV file under seeds/"
+            "has no matching CSV file under seeds/",
+            bridge_independent=True,
         )
     return tuple(
         CompileSeedInput(

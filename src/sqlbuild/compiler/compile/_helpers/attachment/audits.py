@@ -677,6 +677,7 @@ def build_attached_audit_input(
         )
     native_rendering: NativeRenderedAudit | None = (
         render_native_attached_audit(
+            labels=(str(owner_file), audit_instance.definition_name),
             sql_body=definition[1].sql_body,
             evidence_sql=definition[1].evidence_sql,
             implicit_arguments=implicit_arguments,
@@ -686,6 +687,8 @@ def build_attached_audit_input(
         if native_stage_enabled(NativeStage.ATTACHMENTS)
         else None
     )
+    if native_rendering is not None and native_rendering.render_error is not None:
+        raise CompileInputError(native_rendering.render_error, bridge_independent=True)
     rendered_sql_body, rendered_evidence_sql = (
         (native_rendering.sql_body, native_rendering.evidence_sql)
         if native_rendering is not None
@@ -883,6 +886,8 @@ def _native_audit_policy_values(
         if rendering.run_scope_source == DEFAULT_POLICY
         else None
     )
+    if rendering.policy_error is not None:
+        raise CompileInputError(rendering.policy_error, bridge_independent=True)
     return AuditSeverity(rendering.severity), (
         AuditRunScope.DELTA_AND_FINAL if run_scope is None else run_scope
     )

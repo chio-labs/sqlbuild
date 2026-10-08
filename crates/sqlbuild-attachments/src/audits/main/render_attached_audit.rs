@@ -1,12 +1,11 @@
 //! Python's attached generic audit rendering: argument merge, SQL, severity and run scope.
 
-use crate::audits::_helpers::parameters::render_parameterized_sql;
-use crate::audits::_helpers::policies::{resolve_run_scope, resolve_severity};
-use crate::audits::models::{ArgumentValue, AuditAttachment, PolicySource, RenderedAudit};
+use crate::audits::_helpers::rendering::{merged_arguments, policies, rendered};
+use crate::audits::models::{ArgumentValue, AuditAttachment, AuditRendering, RenderedAudit};
 
-/// Render one attachment as Python does, or None where Python raises or decides.
+/// Render one attachment as Python does, with its errors, or None where Python must decide.
 #[must_use]
-pub fn render_attached_audit(attachment: &AuditAttachment) -> Option<RenderedAudit> {
+pub fn render_attached_audit(attachment: &AuditAttachment) -> Option<AuditRendering> {
     if attachment.measurement {
         if attachment.instance_severity.is_some() || !attachment.has_thresholds {
             return None;
@@ -14,45 +13,24 @@ pub fn render_attached_audit(attachment: &AuditAttachment) -> Option<RenderedAud
     } else if attachment.has_thresholds || attachment.has_minimum_samples {
         return None;
     }
-    let arguments: Vec<(String, ArgumentValue)> = merged_arguments(attachment)?;
-    let sql_body: String = render_parameterized_sql(&attachment.sql_body, &arguments, false)?;
+    let arguments: Vec<(String, ArgumentValue)> = match merged_arguments(attachment)? {
+        Ok(arguments) => arguments,
+        Err(message) => return Some(AuditRendering::Failed(message)),
+    };
+    let sql_body: String = match rendered(attachment, &attachment.sql_body, &arguments)? {
+        Ok(sql) => sql,
+        Err(message) => return Some(AuditRendering::Failed(message)),
+    };
     let evidence_sql: Option<String> = match &attachment.evidence_sql {
-        Some(evidence) => Some(render_parameterized_sql(evidence, &arguments, false)?),
+        Some(evidence) => match rendered(attachment, evidence, &arguments)? {
+            Ok(sql) => Some(sql),
+            Err(message) => return Some(AuditRendering::Failed(message)),
+        },
         None => None,
     };
-    let severity: &'static str = if attachment.has_thresholds {
-        if attachment.threshold_error {
-            "error"
-        } else {
-            "warn"
-        }
-    } else {
-        resolve_severity(
-            attachment.instance_severity.as_deref(),
-            attachment.default_severity.as_deref(),
-        )?
-    };
-    let run_scope_source: PolicySource = resolve_run_scope(
-        attachment.instance_run_scope.as_deref(),
-        attachment.default_run_scope.as_deref(),
-    )?;
-    Some(RenderedAudit {
+    Some(AuditRendering::Rendered(RenderedAudit {
         sql_body,
         evidence_sql,
-        severity,
-        run_scope_source,
-    })
-}
-
-/// Python's `merge_audit_arguments`; values that differ only as Python objects defer.
-fn merged_arguments(attachment: &AuditAttachment) -> Option<Vec<(String, ArgumentValue)>> {
-    let mut merged: Vec<(String, ArgumentValue)> = attachment.implicit_arguments.clone();
-    for (name, value) in &attachment.explicit_arguments {
-        match merged.iter_mut().find(|(existing, _)| existing == name) {
-            Some((_, existing)) if existing == value => {}
-            Some(_) => return None,
-            None => merged.push((name.clone(), value.clone())),
-        }
-    }
-    Some(merged)
+        policies: policies(attachment),
+    }))
 }

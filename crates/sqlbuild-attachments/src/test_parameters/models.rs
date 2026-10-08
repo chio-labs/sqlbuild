@@ -7,3 +7,10 @@ pub struct ParameterReference {
     pub end: usize,
     pub name: String,
 }
+
+/// The references Python renders before it stops, and the error it then raises.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParameterScan {
+    pub references: Vec<ParameterReference>,
+    pub error: Option<String>,
+}

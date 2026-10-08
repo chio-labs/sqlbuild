@@ -7,10 +7,20 @@ use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-/// Return whether Python accepts `sql` as free of cursor intrinsics; `False` defers to Python.
+/// `(True, None)` if Python accepts `sql`, `(False, error)` if it rejects it, else `(False, None)`.
 #[pyfunction]
-fn sql_free_of_cursor_intrinsics(sql: &str, reserved_markers: Vec<String>) -> PyResult<bool> {
-    compiler_guard(|| Ok(intrinsic_free(sql, &reserved_markers) == IntrinsicCheck::Free))
+fn sql_free_of_cursor_intrinsics(
+    sql: &str,
+    reserved_markers: Vec<String>,
+    context: &str,
+) -> PyResult<(bool, Option<String>)> {
+    compiler_guard(|| {
+        Ok(match intrinsic_free(sql, &reserved_markers, context) {
+            IntrinsicCheck::Free => (true, None),
+            IntrinsicCheck::Rejected(message) => (false, Some(message)),
+            IntrinsicCheck::Deferred => (false, None),
+        })
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

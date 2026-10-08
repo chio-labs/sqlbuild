@@ -36,13 +36,11 @@ def expand_test_parameters(
     """Render active parameter references while leaving comments and quoted text unchanged."""
 
     value_lookup: dict[str, SqlValue] = dict(values)
-    references: list[tuple[int, int, str]] | None = (
-        _native.scan_test_parameter_references(sql, list(value_lookup))
-        if native_stage_enabled(NativeStage.ATTACHMENTS)
-        else None
-    )
-    if references is not None:
-        return _splice_parameter_references(
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        references, error = _native.scan_test_parameter_references(
+            sql, list(value_lookup), f"SQL test '{test_name}' case '{case_name}' in '{file_path}'"
+        )
+        expanded: tuple[str, frozenset[str]] = _splice_parameter_references(
             sql=sql,
             references=references,
             value_lookup=value_lookup,
@@ -50,6 +48,9 @@ def expand_test_parameters(
             test_name=test_name,
             case_name=case_name,
         )
+        if error is not None:
+            raise CompileInputError(error, bridge_independent=True)
+        return expanded
     used_names: set[str] = set()
     parts: list[str] = []
     cursor: int = 0

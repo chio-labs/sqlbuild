@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild.compiler.attachments.constants import (
+    HEADER_ARGUMENTS_STAGE,
+    HEADER_METADATA_STAGE,
+    HEADER_PYTHON_VALUES_STAGE,
+    HEADER_RETURNS_STAGE,
+    HEADER_START_STAGE,
+)
 from sqlbuild.compiler.attachments.main._parse_native_function_header import (
     parse_native_function_header,
 )
@@ -254,6 +261,8 @@ def build_sql_function_inputs(
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
         )
+        if native_header is not None:
+            _raise_header_failure(header=native_header, stage=HEADER_METADATA_STAGE)
         function_inputs.append(
             CompileSqlFunctionInput(
                 function_file=function_file,
@@ -322,23 +331,27 @@ def _sql_function_header(
 ]:
     header_values: dict[str, object] = function_file.header_values
     native_header: NativeFunctionHeader | None = (
-        parse_native_function_header(header_values=header_values, python=False) if native else None
+        parse_native_function_header(
+            header_values=header_values, python=False, relative_path=function_file.relative_path
+        )
+        if native
+        else None
     )
     if native_header is not None:
+        _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
         arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
             header=native_header,
             label=f"SQL function {function_file.relative_path}",
             effective_vars=effective_vars,
         )
-        return (
-            native_header,
-            arguments,
-            *_expanded_native_sql_returns(
-                header=native_header,
-                relative_path=function_file.relative_path,
-                effective_vars=effective_vars,
-            ),
+        _raise_header_failure(header=native_header, stage=HEADER_ARGUMENTS_STAGE)
+        native_returns: tuple[str, tuple[FunctionReturnColumn, ...]] = _expanded_native_sql_returns(
+            header=native_header,
+            relative_path=function_file.relative_path,
+            effective_vars=effective_vars,
         )
+        _raise_header_failure(header=native_header, stage=HEADER_RETURNS_STAGE)
+        return (native_header, arguments, *native_returns)
     raw_returns: object | None = header_values.get("returns")
     if raw_returns is None:
         raise CompileInputError(
@@ -386,6 +399,11 @@ def _sql_function_namespace(
         )
     )
     return namespace.database, namespace.schema
+
+
+def _raise_header_failure(*, header: NativeFunctionHeader, stage: str) -> None:
+    if header.failure is not None and header.failure[0] == stage:
+        raise CompileInputError(header.failure[1], bridge_independent=True)
 
 
 def _expanded_native_arguments(
@@ -459,7 +477,13 @@ def _build_python_function_input(
     header_values: dict[str, object] = python_function_file.header_values
     native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
     native_header: NativeFunctionHeader | None = (
-        parse_native_function_header(header_values=header_values, python=True) if native else None
+        parse_native_function_header(
+            header_values=header_values,
+            python=True,
+            relative_path=python_function_file.relative_path,
+        )
+        if native
+        else None
     )
     arguments: tuple[FunctionArgument, ...]
     returns: str
@@ -467,16 +491,19 @@ def _build_python_function_input(
     entry_point: str
     packages: tuple[str, ...]
     if native_header is not None:
+        _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
         arguments = _expanded_native_arguments(
             header=native_header,
             label=f"Python function {python_function_file.relative_path}",
             effective_vars=effective_vars,
         )
+        _raise_header_failure(header=native_header, stage=HEADER_ARGUMENTS_STAGE)
         returns = _expand_function_header_value(
             raw_value=cast(str, native_header.returns),
             effective_vars=effective_vars,
             context_label=f"Python function {python_function_file.relative_path} returns",
         )
+        _raise_header_failure(header=native_header, stage=HEADER_PYTHON_VALUES_STAGE)
         runtime_version = cast(str, native_header.runtime_version)
         entry_point = cast(str, native_header.entry_point)
         packages = native_header.packages
@@ -551,6 +578,8 @@ def _build_python_function_input(
             adapter_name=context.adapter_name,
             context=f"Python function {python_function_file.relative_path} return type",
         )
+    if native_header is not None:
+        _raise_header_failure(header=native_header, stage=HEADER_METADATA_STAGE)
     return CompileSqlFunctionInput(
         function_file=python_function_file,
         name=function_name,
@@ -850,6 +879,7 @@ def _expand_function_header_value(
             preserve_context_tokens=True,
             preserve_unknown_context=False,
             native=native_stage_enabled(NativeStage.ATTACHMENTS),
+            exact_errors=True,
         )
     )
 
@@ -949,5 +979,6 @@ def _expand_function_environment_value(
             preserve_context_tokens=True,
             preserve_unknown_context=False,
             native=native_stage_enabled(NativeStage.ATTACHMENTS),
+            exact_errors=True,
         )
     )

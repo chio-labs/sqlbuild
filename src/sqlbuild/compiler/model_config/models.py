@@ -43,6 +43,14 @@ class NativeTemplateExpansion:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeTemplateRejection:
+    """Python's exact template error for a config value and the names read before it, in order."""
+
+    message: str
+    reads: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class TemplateResolutionFlags:
     """How one template expansion treats `CTX:` references."""
 

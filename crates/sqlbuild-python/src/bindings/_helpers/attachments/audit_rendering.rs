@@ -4,13 +4,20 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::PyDict;
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::audits::main::render_attached_audit::render_attached_audit;
-use sqlbuild_attachments::audits::models::{AuditAttachment, PolicySource, RenderedAudit};
+use sqlbuild_attachments::audits::models::{AuditAttachment, AuditRendering, PolicySource};
 
 use crate::bindings::_helpers::attachments::argument_values::argument_pairs;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-/// `(sql body, evidence sql, severity, run scope source)`.
-type RenderedRow = (String, Option<String>, &'static str, &'static str);
+/// `(render error, sql body, evidence sql, severity, run scope source, policy error)`.
+type RenderedRow = (
+    Option<String>,
+    String,
+    Option<String>,
+    &'static str,
+    &'static str,
+    Option<String>,
+);
 
 /// Authored policies of one attachment: mode and threshold flags, severities and run scopes.
 #[derive(FromPyObject)]
@@ -26,9 +33,10 @@ struct AuditPolicies {
     default_run_scope: Option<String>,
 }
 
-/// Render `(sql body, evidence)` with `(implicit, explicit)` arguments, or `None` for Python.
+/// Render one `(owner, audit)` attachment with Python's errors, or `None` for Python.
 #[pyfunction]
 fn render_attached_generic_audit(
+    labels: (String, String),
     sql: (String, Option<String>),
     arguments: (Bound<'_, PyDict>, Bound<'_, PyDict>),
     policies: AuditPolicies,
@@ -40,6 +48,8 @@ fn render_attached_generic_audit(
             return Ok(None);
         };
         let attachment: AuditAttachment = AuditAttachment {
+            owner_label: labels.0,
+            definition_name: labels.1,
             sql_body: sql.0,
             evidence_sql: sql.1,
             implicit_arguments: implicit,
@@ -57,18 +67,34 @@ fn render_attached_generic_audit(
     })
 }
 
-fn rendered_row(rendered: RenderedAudit) -> RenderedRow {
-    let source: &'static str = match rendered.run_scope_source {
+fn rendered_row(rendering: AuditRendering) -> RenderedRow {
+    let rendered = match rendering {
+        AuditRendering::Failed(message) => {
+            return (Some(message), String::new(), None, "", "", None);
+        }
+        AuditRendering::Rendered(rendered) => rendered,
+    };
+    let (severity, source, policy_error): (&'static str, &'static str, Option<String>) =
+        match rendered.policies {
+            Ok((severity, source)) => (severity, source_name(source), None),
+            Err(message) => ("", "", Some(message)),
+        };
+    (
+        None,
+        rendered.sql_body,
+        rendered.evidence_sql,
+        severity,
+        source,
+        policy_error,
+    )
+}
+
+fn source_name(source: PolicySource) -> &'static str {
+    match source {
         PolicySource::Instance => "instance",
         PolicySource::Default => "default",
         PolicySource::Fallback => "fallback",
-    };
-    (
-        rendered.sql_body,
-        rendered.evidence_sql,
-        rendered.severity,
-        source,
-    )
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
