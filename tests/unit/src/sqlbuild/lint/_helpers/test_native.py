@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     FormatDescriptionTestCase,
     FormatNativeTestCase,
     LintNativeTestCase,
+    LintRemediationTestCase,
 )
 
 FILE_PATH: Path = Path("models/example.sql")
@@ -113,6 +114,37 @@ def test_given_contents_when_linting_then_codes_match_expected(
         config=DEFAULT_CONFIG,
     )
     assert tuple(violation.code for violation in violations) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintRemediationTestCase(
+            description="header nested past the limit suggests flattening it",
+            contents="MODEL (\n  tags " + "[" * 20_000 + "1" + "]" * 20_000 + "\n);\nSELECT 1\n",
+            expected_remediations=("flatten the value so it nests at most 256 levels deep",),
+        ),
+        LintRemediationTestCase(
+            description="other header syntax errors suggest correcting the header",
+            contents="MODEL (\n  materialized table,\n  description\n);\nSELECT 1\n",
+            expected_remediations=("Correct the MODEL() header syntax.",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unparseable_header_when_linting_then_remediation_matches_the_error(
+    test_case: LintRemediationTestCase,
+) -> None:
+    violations: tuple = lint_native_headers(
+        contents=test_case.contents,
+        file_path=FILE_PATH,
+        headers=scan_headers(contents=test_case.contents),
+        config=DEFAULT_CONFIG,
+    )
+
+    assert tuple(violation.remediation for violation in violations) == (
+        test_case.expected_remediations
+    )
 
 
 @pytest.mark.parametrize(

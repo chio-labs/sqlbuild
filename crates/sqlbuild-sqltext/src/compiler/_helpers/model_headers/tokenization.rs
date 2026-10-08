@@ -201,7 +201,7 @@ impl HeaderParser {
             self.advance();
             if self.peek().0 == SYMBOL_TOKEN && self.peek().1 == OPEN_PAREN {
                 self.advance();
-                return self.nested(token.2, |parser| parser.parse_call(token.1, options));
+                return self.nested(token.2, |parser| parser.parse_call(token, options));
             }
             return Ok(parse_word(token.1));
         }
@@ -230,17 +230,17 @@ impl HeaderParser {
         Err(format!("expected value at position {}", token.2))
     }
 
-    /// The value after `name(`, which has been consumed.
+    /// The value after a consumed `name(`; a plain call nests a map in a map, two levels.
     fn parse_call(
         &mut self,
-        name: String,
+        (_, name, position): HeaderToken,
         options: ParseValueOptions,
     ) -> Result<AuthoredValue, String> {
         if matches!(name.as_str(), "__ref" | "__seed" | "__source") {
             return self.parse_relation(&name);
         }
         if matches!(name.as_str(), "inline_sql" | "sql" | "python") {
-            return self.parse_hook(&name);
+            return self.parse_hook(&name, position);
         }
         if name == CONSTANT_CALL {
             return Ok(AuthoredValue::TypedConstant(self.parse_map(
@@ -250,23 +250,26 @@ impl HeaderParser {
                 },
             )?));
         }
-        Ok(AuthoredValue::Map(vec![(
-            name,
-            AuthoredValue::Map(self.parse_map(ParseMapOptions {
+        let arguments: Vec<(String, AuthoredValue)> = self.nested(position, |parser| {
+            parser.parse_map(ParseMapOptions {
                 end: Some(")"),
                 threshold_policy: options.threshold_policy,
                 allow_outside: options.allow_outside,
                 ..ParseMapOptions::default()
-            })?),
+            })
+        })?;
+        Ok(AuthoredValue::Map(vec![(
+            name,
+            AuthoredValue::Map(arguments),
         )]))
     }
 
     /// Parse one container opened at `position`, refusing to nest deeper than the limit.
-    fn nested(
+    fn nested<T>(
         &mut self,
         position: usize,
-        parse: impl FnOnce(&mut Self) -> Result<AuthoredValue, String>,
-    ) -> Result<AuthoredValue, String> {
+        parse: impl FnOnce(&mut Self) -> Result<T, String>,
+    ) -> Result<T, String> {
         if self.depth >= MAX_HEADER_NESTING_DEPTH {
             return Err(nesting_error(position));
         }
@@ -334,7 +337,7 @@ impl HeaderParser {
         if !matches!(token.1.as_str(), "inline_sql" | "sql" | "python") {
             return Err(error());
         }
-        self.nested(token.2, |parser| parser.parse_hook(&token.1))
+        self.nested(token.2, |parser| parser.parse_hook(&token.1, token.2))
     }
 
     fn parse_relation(&mut self, name: &str) -> Result<AuthoredValue, String> {
@@ -352,7 +355,8 @@ impl HeaderParser {
         )))
     }
 
-    fn parse_hook(&mut self, name: &str) -> Result<AuthoredValue, String> {
+    /// The hook after `name(` at `position`; its keyword arguments are one more level.
+    fn parse_hook(&mut self, name: &str, position: usize) -> Result<AuthoredValue, String> {
         if name == INLINE_SQL_HOOK {
             let token = self.peek().clone();
             if token.0 != STRING_TOKEN {
@@ -373,7 +377,7 @@ impl HeaderParser {
         if token.1.chars().all(is_python_whitespace) {
             return Err(format!("{name}(...) requires a non-empty hook name"));
         }
-        let kwargs = self.parse_hook_kwargs()?;
+        let kwargs = self.nested(position, Self::parse_hook_kwargs)?;
         if name == SQL_HOOK {
             Ok(AuthoredValue::NamedSqlHook(token.1, kwargs))
         } else {

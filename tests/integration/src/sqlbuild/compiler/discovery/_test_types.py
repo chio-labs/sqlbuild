@@ -263,3 +263,14 @@ class DeepDeclarationHeaderTestCase:
     expected_failure_type: str
     expected_message_suffix: str
     expected_help: str = "flatten the value so it nests at most 256 levels deep"
+
+
+@dataclass(frozen=True)
+class DeepHeaderValuesTestCase:
+    """A model header whose values reach the nesting limit, discovered on a deep Python stack."""
+
+    description: str
+    header: str
+    stack_frames: int
+    expected_engines: tuple[str, ...]
+    expected_max_depth: int

@@ -34,6 +34,7 @@ _HOOK_MODULE: str = (
 _MACRO_MODULE: str = "def cents(value):\n    return f'{value} * 100'\n"
 _DEEP_HEADER_DEPTH: int = 20_000
 _DEEP_HEADER_VALUE: str = "[" * _DEEP_HEADER_DEPTH + '"placed"' + "]" * _DEEP_HEADER_DEPTH
+_DEEP_HEADER_CALLS: str = "limit(level " * _DEEP_HEADER_DEPTH + "1" + ")" * _DEEP_HEADER_DEPTH
 _DEEP_HEADER_MESSAGE: str = "contains invalid SQLBuild header syntax: values nest deeper than 256"
 _SEED_DECLARATION: str = (
     "seeds:\n  - name: order_channels\n    description: Order channels.\n"
@@ -165,7 +166,7 @@ def _sql_file_cases() -> tuple[FailureCase, ...]:
             expected_code="D013",
             files={
                 "models/staging/_sqlbuild/_constants/statuses.sql": (
-                    f"CONSTANT (name kept_statuses, value {_DEEP_HEADER_VALUE});\n"
+                    f"CONSTANT (name kept_statuses, value {_DEEP_HEADER_CALLS});\n"
                 )
             },
             expected_message=_DEEP_HEADER_MESSAGE,

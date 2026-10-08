@@ -16,7 +16,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     source_line_starts,
     source_position,
 )
-from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
+from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ModelSqlParseError
 from sqlbuild.lint.constants import (
     CARRIAGE_RETURN_LINE_FEED,
     CLOSING_PAREN_CHARACTER,
@@ -245,7 +245,7 @@ def _lint_header_values(
                 message=f"{header.kind}() header could not be parsed: {error}",
                 severity=VIOLATION_SEVERITY_FAULT,
                 engine=LINT_ENGINE_SQLBUILD,
-                remediation=f"Correct the {header.kind}() header syntax.",
+                remediation=_header_parse_remediation(kind=header.kind, error=error),
             ),
         )
 
@@ -302,6 +302,11 @@ def _lint_header_values(
                 )
             )
     return tuple(violations)
+
+
+def _header_parse_remediation(*, kind: str, error: Exception) -> str:
+    help_text: str | None = error.help if isinstance(error, DiscoveryError) else None
+    return f"Correct the {kind}() header syntax." if help_text is None else help_text
 
 
 def _parse_header_values(*, kind: str, header_text: str) -> dict[str, object]:

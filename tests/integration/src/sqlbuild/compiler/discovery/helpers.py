@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
+import functools
+import itertools
 import json
 import math
 import os
@@ -53,11 +56,15 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredEnumFile,
     DiscoveredProjectInputs,
     DiscoveryFileFault,
+    NamedSqlHookEntry,
+    PythonHookEntry,
+    SqlHookEntry,
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
 )
@@ -1284,3 +1291,56 @@ def write_undecodable_hook(*, project_dir: Path, contents: bytes) -> None:
     hooks: Path = project_dir / "hooks" / "sql"
     hooks.mkdir(parents=True)
     _ = Path(os.fsdecode(bytes(hooks) + b"/refresh_\xff.sql")).write_bytes(contents)
+
+
+def on_deep_stack(*, frames: int, call: Callable[[], object]) -> object:
+    """Return `call()` invoked beneath `frames` extra Python frames."""
+
+    nested: Callable[[], object] = functools.reduce(
+        lambda inner, _: lambda: inner(), range(frames), call
+    )
+    return nested()
+
+
+def _dataclass_children(node: object) -> list[object]:
+    return [getattr(node, field.name) for field in dataclasses.fields(cast(Any, node))]
+
+
+_SHAPE_CHILDREN: dict[type, Callable[[Any], list[object]]] = {
+    dict: lambda node: list(itertools.chain.from_iterable(node.items())),
+    list: list,
+    tuple: list,
+    AuthoredSqlSet: _dataclass_children,
+    AuthoredSqlValueCall: _dataclass_children,
+    NamedSqlHookEntry: _dataclass_children,
+    PythonHookEntry: _dataclass_children,
+    SqlHookEntry: _dataclass_children,
+}
+_SHAPE_LABELS: dict[type, Callable[[Any], str]] = dict.fromkeys(_SHAPE_CHILDREN, lambda _: "")
+
+
+def value_shape(value: object) -> tuple[tuple[int, str], ...]:
+    """Each node of `value` as its depth and type or scalar text, walked without recursion."""
+
+    shape: list[tuple[int, str]] = []
+    pending: list[tuple[int, object]] = [(0, value)]
+    while pending:
+        depth, node = pending.pop()
+        children: list[object] = _SHAPE_CHILDREN.get(type(node), lambda _: [])(node)
+        label: str = _SHAPE_LABELS.get(type(node), repr)(node)
+        shape.append((depth, f"{type(node).__name__}:{label}"))
+        pending.extend((depth + 1, child) for child in reversed(children))
+    return tuple(shape)
+
+
+def deep_model_header_values(
+    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch, frames: int
+) -> dict[str, object]:
+    """Discover the project's only model under `engine` beneath `frames` extra Python frames."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+    inputs: DiscoveredProjectInputs = cast(
+        DiscoveredProjectInputs,
+        on_deep_stack(frames=frames, call=lambda: discover_project_inputs(project_dir=project_dir)),
+    )
+    return inputs.model_files[0].header_values

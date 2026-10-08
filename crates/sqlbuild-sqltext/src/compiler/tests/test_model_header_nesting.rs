@@ -85,13 +85,31 @@ fn given_nested_header_values_when_parsing_on_an_ordinary_thread_then_depth_is_c
             expected_error_position: Some(1_285),
         },
         HeaderNestingTestCase {
+            description: "calls count their map and arguments, so 128 reach the limit",
+            prefix: "meta ",
+            open: "call(key ",
+            close: ")",
+            suffix: "",
+            depth: 128,
+            expected_error_position: None,
+        },
+        HeaderNestingTestCase {
+            description: "calls one past the limit fail at the outermost extra call",
+            prefix: "meta ",
+            open: "call(key ",
+            close: ")",
+            suffix: "",
+            depth: 129,
+            expected_error_position: Some(1_157),
+        },
+        HeaderNestingTestCase {
             description: "calls 20k deep",
             prefix: "meta ",
             open: "call(key ",
             close: ")",
             suffix: "",
             depth: 20_000,
-            expected_error_position: Some(2_309),
+            expected_error_position: Some(1_157),
         },
         HeaderNestingTestCase {
             description: "typed constants 1k deep",
@@ -103,13 +121,13 @@ fn given_nested_header_values_when_parsing_on_an_ordinary_thread_then_depth_is_c
             expected_error_position: Some(3_845),
         },
         HeaderNestingTestCase {
-            description: "hook arguments 100k deep count the hook list and each hook",
+            description: "hook arguments 100k deep count the hook list, each hook and its arguments",
             prefix: "post_hooks [",
             open: "sql(\"refresh\", nested: ",
             close: ")",
             suffix: "]",
             depth: 100_000,
-            expected_error_position: Some(5_877),
+            expected_error_position: Some(2_933),
         },
     ];
 
