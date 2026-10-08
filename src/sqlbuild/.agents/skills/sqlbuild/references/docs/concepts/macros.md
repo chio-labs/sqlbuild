@@ -222,7 +222,7 @@ files or environment variables that the call does not receive.
 
 SQLBuild relies on this contract to reuse macro results:
 
-- [Compile reuse](../cli/compile.md) replays stored renders without running macros again.
+- [Compile reuse](../cli/compile.md) replays an unchanged compile without running macros again.
 - A compile may run each distinct macro call once and reuse its result for identical calls
   elsewhere in the project.
 - Macro call results may be kept between compiles under `target/cache/`. They are recomputed when

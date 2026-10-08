@@ -222,17 +222,6 @@ class TolerantDeclarationFilesTestCase:
 
 
 @dataclass(frozen=True)
-class DeclarationReuseTestCase:
-    """A preview compile followed by an edit that only touches one model file."""
-
-    description: str
-    files: tuple[tuple[str, bytes], ...]
-    edited_path: str
-    edited_contents: bytes
-    expected_reused_session: object = None
-
-
-@dataclass(frozen=True)
 class FailureTextTestCase:
     """A project whose discovery failure message must keep its authored text unchanged."""
 

@@ -10,7 +10,6 @@ import pytest
 
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
     carried_forward_digests,
-    changed_project_paths,
     compare_project_files,
     restamped_paths,
     snapshot_project_files,
@@ -18,7 +17,6 @@ from sqlbuild.cli.compile_reuse._helpers.project_files import (
 from sqlbuild.cli.compile_reuse.models import ProjectFilesComparison, StoredProjectFile
 from sqlbuild.cli.compile_reuse.types import FileStamp
 from tests.unit.src.sqlbuild.cli.compile_reuse._helpers._test_types import (
-    ChangedPathsTestCase,
     DigestCarryForwardTestCase,
     LinkCycleTestCase,
     ProjectFingerprintTestCase,
@@ -149,68 +147,13 @@ def test_given_stored_fingerprint_when_project_changes_then_change_is_detected_e
     )
 
     test_case.change(project_dir)
-    current: dict[str, FileStamp] = snapshot_project_files(project_dir=str(project_dir))
     comparison: ProjectFilesComparison = compare_project_files(
-        project_dir=str(project_dir), stored=stored, current=current
-    )
-    changed, _ = changed_project_paths(
-        project_dir=str(project_dir), stored=stored, current=current, verified={}
-    )
-
-    assert comparison.unchanged is test_case.expected_unchanged
-    assert (not changed) is test_case.expected_unchanged
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ChangedPathsTestCase(
-            description="touched_without_change",
-            change=touch_without_change,
-            expected_paths=(),
-        ),
-        ChangedPathsTestCase(
-            description="model_edited",
-            change=lambda root: write_file(root / "models/orders.sql", "SELECT 10 AS order_id\n"),
-            expected_paths=("models/orders.sql",),
-        ),
-        ChangedPathsTestCase(
-            description="same_size_and_mtime_new_content",
-            change=rewrite_same_size_keeping_mtime,
-            expected_paths=("models/orders.sql",),
-        ),
-        ChangedPathsTestCase(
-            description="file_added_and_removed",
-            change=lambda root: (
-                write_file(root / "models/returns.sql", "SELECT 1\n"),
-                (root / "macros/currency.py").unlink(),
-            ),
-            expected_paths=("macros/currency.py", "models/returns.sql"),
-        ),
-        ChangedPathsTestCase(
-            description="touched_without_stored_digest",
-            change=touch_without_change,
-            expected_paths=("models/orders.sql",),
-            store=lambda root: stat_only_project_files(project_dir=root),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_stored_fingerprint_when_listing_changes_then_returns_every_changed_path(
-    test_case: ChangedPathsTestCase, tmp_path: Path
-) -> None:
-    project_dir: Path = write_fingerprint_project(tmp_path)
-    stored: dict[str, StoredProjectFile] = test_case.store(project_dir)
-
-    test_case.change(project_dir)
-    changed, _ = changed_project_paths(
         project_dir=str(project_dir),
         stored=stored,
         current=snapshot_project_files(project_dir=str(project_dir)),
-        verified={},
     )
 
-    assert changed == frozenset(test_case.expected_paths)
+    assert comparison.unchanged is test_case.expected_unchanged
 
 
 @pytest.mark.parametrize(

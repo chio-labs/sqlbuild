@@ -8,8 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-from sqlbuild.cli.compile_render_reuse.main._render_state_layer import stored_render_layer
-from sqlbuild.cli.compile_render_reuse.models import CompileRenderReuse
 from sqlbuild.cli.compile_reuse._helpers.entry_file import remove_entry, write_entry
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
     pending_digest_bytes,
@@ -23,7 +21,6 @@ from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
     loaded_module_stamps,
     settings_inputs_digest,
     tracked_environment_names,
-    with_carried_module_stamps,
 )
 from sqlbuild.cli.compile_reuse._helpers.target_files import verified_target_files
 from sqlbuild.cli.compile_reuse._helpers.timings import compile_timings_span
@@ -35,7 +32,6 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_STORE_DONE_MESSAGE,
     REUSE_STORE_NOTICE_BYTES,
     REUSE_STORE_NOTICE_PATHS,
-    REUSE_STORE_NOTICE_RENDERS,
     REUSE_STORE_SKIPPED_MESSAGE,
     REUSE_STORE_START_MESSAGE,
 )
@@ -62,7 +58,6 @@ def write_compile_entry(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
-    render_reuse: CompileRenderReuse | None = None,
 ) -> None:
     """Store a reusable compile, or drop the stored one when this compile cannot be reused."""
 
@@ -71,6 +66,7 @@ def write_compile_entry(
     try:
         _write_compile_entry(
             attempt=attempt,
+            entry_path=attempt.entry_path,
             output=output,
             exit_code=exit_code,
             input_reads=input_reads,
@@ -79,7 +75,6 @@ def write_compile_entry(
             artifacts_written=artifacts_written,
             dag_artifact_path=dag_artifact_path,
             json_output=json_output,
-            render_reuse=render_reuse,
         )
     except Exception:
         _LOGGER.debug("Compile reuse did not store this compile", exc_info=True)
@@ -89,6 +84,7 @@ def write_compile_entry(
 def _write_compile_entry(
     *,
     attempt: CompileReuseAttempt,
+    entry_path: Path,
     output: RecordedCompileOutput,
     exit_code: int,
     input_reads: CompileInputReads,
@@ -97,11 +93,7 @@ def _write_compile_entry(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
-    render_reuse: CompileRenderReuse | None,
 ) -> None:
-    if attempt.entry_path is None:
-        return
-    entry_path: Path = attempt.entry_path
     stdout: str | None = output.stdout
     settings: SettingsInputsResult = provider_settings_inputs(
         settings_classes=input_reads.settings_classes
@@ -117,10 +109,7 @@ def _write_compile_entry(
         remove_entry(path=entry_path)
         return
     project_dir: str = str(attempt.project_dir)
-    notice_started: float | None = _start_notice(
-        attempt=attempt,
-        pending_renders=0 if render_reuse is None else render_reuse.session.pending_renders(),
-    )
+    notice_started: float | None = _start_notice(attempt=attempt)
     digests: dict[str, str] = with_missing_digests(
         project_dir=project_dir,
         snapshot=attempt.snapshot,
@@ -154,8 +143,10 @@ def _write_compile_entry(
             environment_names=environment_names,
             environment_digest=environment_digest(names=environment_names),
             search_path=attempt.search_path,
-            modules=_module_stamps(
-                attempt=attempt, project_dir=project_dir, render_reuse=render_reuse
+            modules=loaded_module_stamps(
+                covered_paths=frozenset(
+                    os.path.join(project_dir, relative_path) for relative_path in attempt.snapshot
+                )
             ),
             project_files=stored_project_files(
                 snapshot=attempt.snapshot, digests=digests, snapshot_ns=attempt.snapshot_ns
@@ -164,11 +155,6 @@ def _write_compile_entry(
             target_tree=artifacts_written,
             settings_inputs=settings.inputs,
             settings_digest=settings_inputs_digest(inputs=settings.inputs),
-            target_digests={
-                path: artifact.digest
-                for path, artifact in artifact_writes.artifacts.items()
-                if artifact.digest is not None and path in target_files
-            },
         ),
         output=StoredCompileOutput(
             stderr_lines=output.stderr_lines,
@@ -179,40 +165,21 @@ def _write_compile_entry(
             stdout_file="",
         ),
         stdout=stdout,
-        render_state=stored_render_layer(render_reuse=render_reuse),
     )
     _finish_notice(started=notice_started, message=REUSE_STORE_DONE_MESSAGE)
 
 
-def _module_stamps(
-    *, attempt: CompileReuseAttempt, project_dir: str, render_reuse: CompileRenderReuse | None
-) -> tuple[tuple[str, int, int], ...]:
-    covered_paths: frozenset[str] = frozenset(
-        os.path.join(project_dir, relative_path) for relative_path in attempt.snapshot
-    )
-    current: tuple[tuple[str, int, int], ...] = loaded_module_stamps(covered_paths=covered_paths)
-    if render_reuse is None or not render_reuse.session.reused_any():
-        return current
-    return with_carried_module_stamps(
-        current=current, carried=attempt.prior_modules, covered_paths=covered_paths
-    )
-
-
-def _start_notice(*, attempt: CompileReuseAttempt, pending_renders: int) -> float | None:
+def _start_notice(*, attempt: CompileReuseAttempt) -> float | None:
     pending_bytes: int = pending_digest_bytes(
         snapshot=attempt.snapshot, digests=attempt.digests, paths=attempt.restamped
     )
-    if (
-        pending_bytes < REUSE_STORE_NOTICE_BYTES
-        and len(attempt.snapshot) < REUSE_STORE_NOTICE_PATHS
-        and pending_renders < REUSE_STORE_NOTICE_RENDERS
+    if pending_bytes < REUSE_STORE_NOTICE_BYTES and len(attempt.snapshot) < (
+        REUSE_STORE_NOTICE_PATHS
     ):
         return None
     print(
         REUSE_STORE_START_MESSAGE.format(
-            paths=len(attempt.snapshot),
-            mebibytes=pending_bytes / BYTES_PER_MEBIBYTE,
-            renders=pending_renders,
+            paths=len(attempt.snapshot), mebibytes=pending_bytes / BYTES_PER_MEBIBYTE
         ),
         file=sys.stderr,
     )

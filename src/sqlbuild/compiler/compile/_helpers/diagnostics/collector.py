@@ -21,23 +21,6 @@ from sqlbuild.compiler.compile.models import (
 _ACTIVE_COLLECTOR: ContextVar[CollectedCompileDiagnostics | None] = ContextVar(
     "sqlbuild_collected_compile_diagnostics", default=None
 )
-_ACTIVE_TAPS: ContextVar[tuple[list[tuple[tuple[str, ...], CompilerDiagnostic]], ...]] = ContextVar(
-    "sqlbuild_tapped_compile_diagnostics", default=()
-)
-
-
-@contextmanager
-def tapped_compile_diagnostics() -> Iterator[list[tuple[tuple[str, ...], CompilerDiagnostic]]]:
-    """Also note every diagnostic reported inside the block, in report order, for replay."""
-
-    tap: list[tuple[tuple[str, ...], CompilerDiagnostic]] = []
-    token: Token[tuple[list[tuple[tuple[str, ...], CompilerDiagnostic]], ...]] = _ACTIVE_TAPS.set(
-        (*_ACTIVE_TAPS.get(), tap)
-    )
-    try:
-        yield tap
-    finally:
-        _ACTIVE_TAPS.reset(token)
 
 
 @contextmanager
@@ -71,8 +54,6 @@ def with_collected_compile_diagnostics[**P, R: (CompileProjectInputs, CompiledPr
 def report_compile_diagnostic(*, key: tuple[str, ...], diagnostic: CompilerDiagnostic) -> None:
     """Record a diagnostic in the active collector, or raise it when none is active."""
 
-    for tap in _ACTIVE_TAPS.get():
-        tap.append((key, diagnostic))
     collector: CollectedCompileDiagnostics | None = _ACTIVE_COLLECTOR.get()
     if collector is not None:
         collector.add(key=key, diagnostic=diagnostic)

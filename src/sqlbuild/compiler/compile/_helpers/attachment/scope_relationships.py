@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import cast
 
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
@@ -17,11 +16,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_sql_test_expected_model_names,
     extract_unclassified_sql_test_ctes,
 )
-from sqlbuild.compiler.compile.constants import (
-    MACRO_ACTUAL_TEST_CTE_NAME,
-    SQL_TEST_EXPECTED_MODELS_FACT_ALGORITHM,
-    SQL_TEST_FACT_CACHE_NAMESPACE,
-)
+from sqlbuild.compiler.compile.constants import MACRO_ACTUAL_TEST_CTE_NAME
 from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
     ScopeRelationshipBuild,
@@ -29,7 +24,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
-from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.scopes.main._native_expected_model_names import (
     native_expected_model_names,
 )
@@ -62,24 +56,17 @@ def build_scope_relationship_grants(
     discovered_inputs: DiscoveredProjectInputs,
     index: ScopeIndex,
     sql_lexical_syntax: SqlLexicalSyntax,
-    compile_cache_dir: Path | None = None,
 ) -> ScopeRelationshipBuild:
     """Return expected-model grants while retaining independent extraction faults."""
 
     lookup: ScopeLookup = build_scope_lookup(index=index)
     shared_declarations: _SharedDeclarations = _shared_declarations_by_directory(lookup=lookup)
-    with FactCacheStore(
-        root=compile_cache_dir,
-        namespace=SQL_TEST_FACT_CACHE_NAMESPACE,
-        algorithm=SQL_TEST_EXPECTED_MODELS_FACT_ALGORITHM,
-    ) as fact_cache:
-        test_grants, test_faults = _test_relationship_grants(
-            discovered_inputs=discovered_inputs,
-            lookup=lookup,
-            shared_declarations=shared_declarations,
-            fact_cache=fact_cache,
-            syntax=sql_lexical_syntax,
-        )
+    test_grants, test_faults = _test_relationship_grants(
+        discovered_inputs=discovered_inputs,
+        lookup=lookup,
+        shared_declarations=shared_declarations,
+        syntax=sql_lexical_syntax,
+    )
     scenario_grants, scenario_faults = _scenario_relationship_grants(
         discovered_inputs=discovered_inputs,
         lookup=lookup,
@@ -96,98 +83,49 @@ def extract_scope_relationship_facts(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     sql_lexical_syntax: SqlLexicalSyntax,
-    compile_cache_dir: Path | None = None,
 ) -> tuple[tuple[RelationshipFact, ...], str | None]:
     """Return the relationship names grants are resolved from, and the first extraction fault."""
 
     facts: list[RelationshipFact] = []
     faults: list[ScopeRelationshipFault] = []
-    with FactCacheStore(
-        root=compile_cache_dir,
-        namespace=SQL_TEST_FACT_CACHE_NAMESPACE,
-        algorithm=SQL_TEST_EXPECTED_MODELS_FACT_ALGORITHM,
-    ) as fact_cache:
-        cache_keys: dict[int, str] = (
-            {
-                file_index: _expected_models_fact_key(
-                    test_file=test_file, fact_cache=fact_cache, syntax=sql_lexical_syntax
-                )
-                for file_index, test_file in enumerate(discovered_inputs.test_files)
-            }
-            if fact_cache.enabled
-            else {}
-        )
-        cached_names: dict[str, object] = fact_cache.read_many(
-            tuple(
-                (_expected_models_fact_slot(discovered_inputs.test_files[file_index]), cache_key)
-                for file_index, cache_key in cache_keys.items()
-            )
-        )
-        cached_by_file: list[tuple[tuple[str, ...], ...] | None] = [
-            _cached_expected_names(
-                value=cached_names.get(cache_keys[file_index])
-                if file_index in cache_keys
-                else None,
-                block_count=len(test_file.blocks),
-            )
-            for file_index, test_file in enumerate(discovered_inputs.test_files)
-        ]
-        scanned_names: dict[tuple[int, int], tuple[str, ...]] = _scanned_expected_names(
-            test_files=discovered_inputs.test_files,
-            cached_by_file=cached_by_file,
-            syntax=sql_lexical_syntax,
-        )
-        for file_index, test_file in enumerate(discovered_inputs.test_files):
-            cache_key: str | None = cache_keys.get(file_index)
-            cached_file_names: tuple[tuple[str, ...], ...] | None = cached_by_file[file_index]
-            extracted_names: list[tuple[str, ...]] = []
-            for block_index, block in enumerate(test_file.blocks):
-                scanned: tuple[str, ...] | None = scanned_names.get((file_index, block_index))
-                try:
-                    expected_names: tuple[str, ...] = (
-                        cached_file_names[block_index]
-                        if cached_file_names is not None
-                        else scanned
-                        if scanned is not None
-                        else extract_sql_test_expected_model_names(
-                            sql=block.sql_body,
-                            file_label=str(test_file.relative_path),
-                            syntax=sql_lexical_syntax,
-                            mode=block.mode,
-                        )
+    scanned_names: dict[tuple[int, int], tuple[str, ...]] = _scanned_expected_names(
+        test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
+    )
+    for file_index, test_file in enumerate(discovered_inputs.test_files):
+        for block_index, block in enumerate(test_file.blocks):
+            scanned: tuple[str, ...] | None = scanned_names.get((file_index, block_index))
+            try:
+                expected_names: tuple[str, ...] = (
+                    scanned
+                    if scanned is not None
+                    else extract_sql_test_expected_model_names(
+                        sql=block.sql_body,
+                        file_label=str(test_file.relative_path),
+                        syntax=sql_lexical_syntax,
+                        mode=block.mode,
                     )
-                    extracted_names.append(expected_names)
-                    called_macros: tuple[str, ...] = find_nested_macro_call_names(block.sql_body)
-                    facts.append(
-                        RelationshipFact(
-                            resource=ResourceIdentity(
-                                ResourceKind.TEST, block.name or test_file.relative_path.stem
-                            ),
-                            expected_models=expected_names,
-                            called_macros=called_macros,
-                            tested_macros=(
-                                _tested_macro_names(
-                                    sql=block.sql_body,
-                                    file_label=str(test_file.relative_path),
-                                    syntax=sql_lexical_syntax,
-                                )
-                                if block.mode is SqlTestMode.MACRO
-                                else ()
-                            ),
-                        )
-                    )
-                except Exception as error:
-                    faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
-            if (
-                cache_key is not None
-                and cached_file_names is None
-                and len(extracted_names) == len(test_file.blocks)
-            ):
-                fact_cache.stage(
-                    key=cache_key,
-                    slot=_expected_models_fact_slot(test_file),
-                    value=tuple(extracted_names),
                 )
+                called_macros: tuple[str, ...] = find_nested_macro_call_names(block.sql_body)
+                facts.append(
+                    RelationshipFact(
+                        resource=ResourceIdentity(
+                            ResourceKind.TEST, block.name or test_file.relative_path.stem
+                        ),
+                        expected_models=expected_names,
+                        called_macros=called_macros,
+                        tested_macros=(
+                            _tested_macro_names(
+                                sql=block.sql_body,
+                                file_label=str(test_file.relative_path),
+                                syntax=sql_lexical_syntax,
+                            )
+                            if block.mode is SqlTestMode.MACRO
+                            else ()
+                        ),
+                    )
+                )
+            except Exception as error:
+                faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
     scenario_names: list[tuple[str, ...] | None] = native_expected_model_names(
         sqls=[scenario.sql_body for scenario in discovered_inputs.scenario_files],
         syntax=sql_lexical_syntax,
@@ -214,15 +152,12 @@ def extract_scope_relationship_facts(
 def _scanned_expected_names(
     *,
     test_files: Sequence[DiscoveredSqlTestFile],
-    cached_by_file: Sequence[tuple[tuple[str, ...], ...] | None],
     syntax: SqlLexicalSyntax,
 ) -> dict[tuple[int, int], tuple[str, ...]]:
-    """Scan uncached model-mode blocks natively, keeping only the names the scan reproduces."""
+    """Scan model-mode blocks natively, keeping only the names the scan reproduces."""
 
     pending: list[tuple[int, int]] = []
     for file_index, test_file in enumerate(test_files):
-        if cached_by_file[file_index] is not None:
-            continue
         pending.extend(
             (file_index, block_index)
             for block_index, block in enumerate(test_file.blocks)
@@ -257,47 +192,19 @@ def _test_relationship_grants(
     discovered_inputs: DiscoveredProjectInputs,
     lookup: ScopeLookup,
     shared_declarations: _SharedDeclarations,
-    fact_cache: FactCacheStore,
     syntax: SqlLexicalSyntax,
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
-    cache_keys: dict[int, str] = (
-        {
-            file_index: _expected_models_fact_key(
-                test_file=test_file, fact_cache=fact_cache, syntax=syntax
-            )
-            for file_index, test_file in enumerate(discovered_inputs.test_files)
-        }
-        if fact_cache.enabled
-        else {}
-    )
-    cached_names: dict[str, object] = fact_cache.read_many(
-        tuple(
-            (_expected_models_fact_slot(discovered_inputs.test_files[file_index]), cache_key)
-            for file_index, cache_key in cache_keys.items()
-        )
-    )
-    for file_index, test_file in enumerate(discovered_inputs.test_files):
-        cache_key: str | None = cache_keys.get(file_index)
-        cached_file_names: tuple[tuple[str, ...], ...] | None = _cached_expected_names(
-            value=None if cache_key is None else cached_names.get(cache_key),
-            block_count=len(test_file.blocks),
-        )
-        extracted_names: list[tuple[str, ...]] = []
-        for block_index, block in enumerate(test_file.blocks):
+    for test_file in discovered_inputs.test_files:
+        for block in test_file.blocks:
             try:
-                expected_names: tuple[str, ...] = (
-                    cached_file_names[block_index]
-                    if cached_file_names is not None
-                    else extract_sql_test_expected_model_names(
-                        sql=block.sql_body,
-                        file_label=str(test_file.relative_path),
-                        syntax=syntax,
-                        mode=block.mode,
-                    )
+                expected_names: tuple[str, ...] = extract_sql_test_expected_model_names(
+                    sql=block.sql_body,
+                    file_label=str(test_file.relative_path),
+                    syntax=syntax,
+                    mode=block.mode,
                 )
-                extracted_names.append(expected_names)
                 grants.extend(
                     _expected_model_grants(
                         lookup=lookup,
@@ -323,41 +230,7 @@ def _test_relationship_grants(
                     )
             except Exception as error:
                 faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
-        if (
-            cache_key is not None
-            and cached_file_names is None
-            and len(extracted_names) == len(test_file.blocks)
-        ):
-            fact_cache.stage(
-                key=cache_key,
-                slot=_expected_models_fact_slot(test_file),
-                value=tuple(extracted_names),
-            )
     return tuple(grants), tuple(faults)
-
-
-def _expected_models_fact_key(
-    *, test_file: DiscoveredSqlTestFile, fact_cache: FactCacheStore, syntax: SqlLexicalSyntax
-) -> str:
-    parts: list[str] = [str(test_file.relative_path), syntax.cache_key]
-    for block in test_file.blocks:
-        parts.extend((block.sql_body, block.mode.value))
-    return fact_cache.key(*parts)
-
-
-def _cached_expected_names(
-    *, value: object, block_count: int
-) -> tuple[tuple[str, ...], ...] | None:
-    if not isinstance(value, tuple) or len(value) != block_count:
-        return None
-    for names in value:
-        if not isinstance(names, tuple) or not all(isinstance(name, str) for name in names):
-            return None
-    return cast(tuple[tuple[str, ...], ...], value)
-
-
-def _expected_models_fact_slot(test_file: DiscoveredSqlTestFile) -> str:
-    return f"expected:{test_file.relative_path}"
 
 
 def _scenario_relationship_grants(

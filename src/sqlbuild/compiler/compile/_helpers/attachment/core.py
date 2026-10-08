@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
-from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
-from functools import partial
 from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
@@ -91,7 +89,6 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_effective_vars,
     expand_template_data,
 )
-from sqlbuild.compiler.compile.classes.render_reuse_session import CompileRenderReuseSession
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
     MODEL_FULL_REFRESH_CONFIG_KEY,
@@ -446,7 +443,6 @@ def build_model_inputs(
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     reference_cache_dir: Path | None = None,
-    render_reuse: CompileRenderReuseSession | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -464,7 +460,6 @@ def build_model_inputs(
             external_sql_reference_resolver=external_sql_reference_resolver,
             extract_references=extract_references,
             legacy_schema_files=legacy_schema_files,
-            render_reuse=render_reuse,
         )
 
 
@@ -477,7 +472,6 @@ def _build_model_inputs(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     extract_references: SqlReferenceExtractor,
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
-    render_reuse: CompileRenderReuseSession | None,
 ) -> tuple[CompileModelInput, ...]:
     effective_vars: dict[str, object] = context.effective_vars
     effective_settings: SettingsConfig = context.effective_settings
@@ -537,11 +531,7 @@ def _build_model_inputs(
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = _index_sql_hook_definitions(
         discovered_inputs.sql_hook_files
     )
-    render_files: tuple[DiscoveredSqlModelFile, ...] = tuple(
-        model_file
-        for model_file in discovered_inputs.model_files
-        if render_reuse is None or not render_reuse.has_reusable_model(model_file=model_file)
-    )
+    render_files: tuple[DiscoveredSqlModelFile, ...] = discovered_inputs.model_files
     prepared_var_substituted_sqls: dict[Path, str | None] = dict(
         zip(
             (model_file.file_path for model_file in render_files),
@@ -594,22 +584,14 @@ def _build_model_inputs(
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
-        reused: CompileModelInput | None = (
-            None if render_reuse is None else render_reuse.reused_model(model_file=model_file)
-        )
-        if reused is not None:
-            model_inputs.append(reused)
-            continue
-        render: Callable[[], CompileModelInput] = partial(
-            _build_model_input,
-            loop=loop,
-            model_file=model_file,
-            prepared_var_substituted_sql=prepared_var_substituted_sqls.get(model_file.file_path),
-        )
         model_inputs.append(
-            render()
-            if render_reuse is None
-            else render_reuse.rendered_model(model_file=model_file, render=render)
+            _build_model_input(
+                loop=loop,
+                model_file=model_file,
+                prepared_var_substituted_sql=prepared_var_substituted_sqls.get(
+                    model_file.file_path
+                ),
+            )
         )
 
     validate_declared_schema_models_are_attached(

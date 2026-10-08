@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Protocol, cast
 
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.constants import (
-    SQL_TEST_FACT_CACHE_ALGORITHM,
-    SQL_TEST_FACT_CACHE_NAMESPACE,
-)
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
     NativeSqlTestResponseError,
@@ -24,7 +19,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.fact_cache.classes.fact_cache_store import FactCacheStore
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
@@ -44,88 +38,6 @@ _SYNTAX_FIELDS: dict[str, str] = {
 _MODEL_KIND: str = "model"
 _PAIR_LENGTH: int = 2
 _AUTHORED_CTE_LENGTH: int = 3
-
-
-def extract_expanded_sql_tests_cached(
-    *,
-    tests: tuple[tuple[str, str, SqlTestMode], ...],
-    cache_root: Path | None,
-    syntax: SqlLexicalSyntax,
-) -> tuple[CompileSqlTestCtes, ...]:
-    """Reuse exact per-file extraction facts and extract only tests of changed files natively."""
-
-    with FactCacheStore(
-        root=cache_root,
-        namespace=SQL_TEST_FACT_CACHE_NAMESPACE,
-        algorithm=SQL_TEST_FACT_CACHE_ALGORITHM,
-    ) as fact_cache:
-        if not fact_cache.enabled:
-            return extract_expanded_sql_tests(tests=tests, syntax=syntax)
-        indexes_by_file: dict[str, list[int]] = {}
-        for index, (_sql, file_label, _mode) in enumerate(tests):
-            indexes_by_file.setdefault(file_label, []).append(index)
-        keys_by_file: dict[str, str] = {
-            file_label: fact_cache.key(
-                file_label,
-                syntax.cache_key,
-                *_file_test_key_parts(tests=tests, indexes=indexes),
-            )
-            for file_label, indexes in indexes_by_file.items()
-        }
-        cached: dict[str, object] = fact_cache.read_many(tuple(keys_by_file.items()))
-        results: list[CompileSqlTestCtes | None] = [None] * len(tests)
-        missing_files: list[str] = []
-        for file_label, indexes in indexes_by_file.items():
-            file_results: tuple[CompileSqlTestCtes, ...] | None = _cached_file_tests(
-                value=cached.get(keys_by_file[file_label]),
-                modes=tuple(tests[index][2] for index in indexes),
-            )
-            if file_results is None:
-                missing_files.append(file_label)
-                continue
-            for index, test_ctes in zip(indexes, file_results, strict=True):
-                results[index] = test_ctes
-        missing_indexes: list[int] = []
-        for file_label in missing_files:
-            missing_indexes.extend(indexes_by_file[file_label])
-        if missing_indexes:
-            try:
-                extracted: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
-                    tests=tuple(tests[index] for index in missing_indexes), syntax=syntax
-                )
-            except SqlTestExtractionError as error:
-                error.test_index = missing_indexes[error.test_index]
-                raise
-            for index, test_ctes in zip(missing_indexes, extracted, strict=True):
-                results[index] = test_ctes
-            for file_label in missing_files:
-                fact_cache.stage(
-                    key=keys_by_file[file_label],
-                    slot=file_label,
-                    value=tuple(results[index] for index in indexes_by_file[file_label]),
-                )
-        return tuple(result for result in results if result is not None)
-
-
-def _file_test_key_parts(
-    *, tests: tuple[tuple[str, str, SqlTestMode], ...], indexes: list[int]
-) -> list[str]:
-    parts: list[str] = []
-    for index in indexes:
-        sql, _file_label, mode = tests[index]
-        parts.extend((sql, mode.value))
-    return parts
-
-
-def _cached_file_tests(
-    *, value: object, modes: tuple[SqlTestMode, ...]
-) -> tuple[CompileSqlTestCtes, ...] | None:
-    if not isinstance(value, tuple) or len(value) != len(modes):
-        return None
-    for test_ctes, mode in zip(value, modes, strict=True):
-        if not isinstance(test_ctes, CompileSqlTestCtes) or test_ctes.mode is not mode:
-            return None
-    return cast(tuple[CompileSqlTestCtes, ...], value)
 
 
 def extract_expanded_sql_tests(

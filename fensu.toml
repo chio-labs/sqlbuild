@@ -178,12 +178,6 @@ symbols = ["command_output_sink"]
 reason = "Bare command-output sink decorators are evaluated as decorator(function), requiring positional function calling."
 
 [[targets.python.rule_exceptions]]
-rule = "FFS120"
-path = "src/sqlbuild/compiler/fact_cache/_helpers/restricted_pickle.py"
-symbols = ["_RestrictedUnpickler.find_class"]
-reason = "This override preserves pickle.Unpickler's positional find_class(module, name) protocol."
-
-[[targets.python.rule_exceptions]]
 rule = "FFR402"
 path = "src/sqlbuild/integrations/dagster/__init__.py"
 reason = "These imports preserve Dagster's documented external package-root APIs."

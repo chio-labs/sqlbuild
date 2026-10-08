@@ -390,3 +390,15 @@ def referenced_model_names(
             }
         )
     )
+
+
+def upstream_signatures(
+    *, model_input: CompileModelInput, signatures: dict[str, str], available_names: frozenset[str]
+) -> dict[str, str]:
+    """Return the output signatures of the analyzed models this model references."""
+
+    return {
+        name: signatures[name]
+        for name in referenced_model_names(model_input=model_input, available_names=available_names)
+        if name in signatures
+    }

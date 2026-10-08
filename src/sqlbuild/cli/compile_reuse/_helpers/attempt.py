@@ -9,14 +9,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.cli.compile_reuse._helpers.entry_file import (
-    entry_render_state_path,
     read_entry_header,
     read_entry_stdout,
     rewrite_entry_inputs,
 )
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
     carried_forward_digests,
-    changed_project_paths,
     compare_project_files,
     needs_refresh,
     restamped_paths,
@@ -106,16 +104,7 @@ def attempt_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt:
             )
         attempt = replace(
             attempt,
-            prior_entry=True,
-            prior_modules=header.inputs.modules,
-            prior_target_files=header.inputs.target_files,
-            prior_target_digests=header.inputs.target_digests,
             restamped=restamped_paths(stored=header.inputs.project_files, current=attempt.snapshot),
-            render_state_path=(
-                None
-                if attempt.changed_paths is None or attempt.entry_path is None
-                else entry_render_state_path(path=attempt.entry_path, header=header)
-            ),
         )
     return replace(
         attempt,
@@ -168,22 +157,12 @@ def _checked_attempt(
     unchanged: bool = comparison.unchanged and target_files_unchanged(
         stored=inputs.target_files, project_dir=project_dir, tree=inputs.target_tree
     )
-    changed_paths: frozenset[str] | None = None
-    verified: dict[str, str] = comparison.verified
-    if identity_unchanged and not unchanged:
-        changed_paths, verified = changed_project_paths(
-            project_dir=project_dir,
-            stored=inputs.project_files,
-            current=attempt.snapshot,
-            verified=comparison.verified,
-        )
     return replace(
         attempt,
         outcome=CompileReuseOutcome.HIT if unchanged else CompileReuseOutcome.MISS,
         digests=carried_forward_digests(
-            stored=inputs.project_files, current=attempt.snapshot, verified=verified
+            stored=inputs.project_files, current=attempt.snapshot, verified=comparison.verified
         ),
-        changed_paths=changed_paths,
     )
 
 

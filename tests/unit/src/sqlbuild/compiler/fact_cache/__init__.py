@@ -1,1 +1,0 @@
-"""Fact cache tests."""

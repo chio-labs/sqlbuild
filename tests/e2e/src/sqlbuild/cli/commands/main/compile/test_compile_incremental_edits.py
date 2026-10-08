@@ -1,4 +1,4 @@
-"""Incremental edit compiles must match an uncached compile of the same edited project."""
+"""Compiles after an edit must match an uncached compile of the same edited project."""
 
 from __future__ import annotations
 
@@ -7,53 +7,65 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
-    BrokenChangeDetectionTestCase,
+    BrokenEditInvalidationTestCase,
     ExternalModuleEditTestCase,
     IncrementalEditSequenceTestCase,
     RandomEditChainTestCase,
-    RenderLoadNoticeTestCase,
-    RenderSavePolicyTestCase,
-    RenderStoreNoticeTestCase,
+    SharedCacheKeyTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     IncrementalEditComparison,
     RandomEditChain,
     add_external_flavor_macro,
+    analyze_in_one_batch,
+    analyze_one_model_at_a_time,
+    build_between,
     compare_incremental_compile,
+    compile_edit_without_reuse,
     compile_in_process,
-    compile_in_process_output,
+    compile_without_reuse_between,
+    compiled_artifact_tampered,
     compiled_text,
     completed_order_udf_signature_change,
-    disable_change_detection,
-    edit_and_compile,
+    edit_step,
     enable_compile_reuse,
     fact_audit_added,
     fact_comment,
     fact_error_fixed,
     fact_error_introduced,
-    full_edit_step,
+    fact_quantity_type_declared,
+    fact_quantity_type_removed,
+    ignore_project_changes,
+    ignore_query_in_analysis_key,
     in_process_reuse_run,
-    is_model_only_edit,
-    json_report_keys,
-    model_edit_step,
+    keep_invalidation,
     move_project_file,
     order_status_nullability_change,
+    other_target_build_between,
     payment_expression_type_change,
-    prime_render_store,
-    prime_render_store_in_process,
+    payments_comment,
+    plan_between,
     random_edit_plan,
-    render_store_files,
     replace_project_text,
     run_reuse_compile,
-    set_render_load_notice_bytes,
-    set_store_notice_renders,
+    staging_column_removed,
+    staging_column_renamed,
+    staging_column_restored,
     staging_comment,
     staging_contract_change,
+    staging_extra_flag,
     staging_header_change,
     staging_new_column,
+    staging_quantity_restored,
+    staging_quantity_text,
+    staging_rename_reverted,
     staging_type_change,
     star_chain_added,
+    star_chain_steps,
+    star_chain_with_twin_added,
+    stg_orders_test_edit,
+    twin_header_changed,
     write_external_flavor,
     write_generated_edit_models,
     write_project_file,
@@ -66,20 +78,20 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
         IncrementalEditSequenceTestCase(
             description="model_edits",
             steps=(
-                model_edit_step("comment_without_shape_change", staging_comment),
-                model_edit_step("type_change_propagates_downstream", staging_type_change),
-                model_edit_step("new_output_column", staging_new_column),
-                model_edit_step("header_config_change", staging_header_change),
-                model_edit_step("column_contract_change", staging_contract_change),
-                model_edit_step("attached_audit_added", fact_audit_added),
-                model_edit_step("error_introduced", fact_error_introduced),
-                model_edit_step("error_fixed", fact_error_fixed),
+                edit_step("comment_without_shape_change", staging_comment),
+                edit_step("type_change_propagates_downstream", staging_type_change),
+                edit_step("new_output_column", staging_new_column),
+                edit_step("header_config_change", staging_header_change),
+                edit_step("column_contract_change", staging_contract_change),
+                edit_step("attached_audit_added", fact_audit_added),
+                edit_step("error_introduced", fact_error_introduced),
+                edit_step("error_fixed", fact_error_fixed),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="model_set_changes",
             steps=(
-                full_edit_step(
+                edit_step(
                     "model_added",
                     lambda root: write_project_file(
                         root,
@@ -88,8 +100,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         'SELECT order_id, quantity FROM __ref("stg_orders")\n',
                     ),
                 ),
-                model_edit_step("edit_after_add", staging_comment),
-                full_edit_step(
+                edit_step("edit_after_add", staging_comment),
+                edit_step(
                     "model_renamed",
                     lambda root: move_project_file(
                         root,
@@ -97,17 +109,17 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         "models/marts/order_quantity_totals.sql",
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "model_removed",
                     lambda root: (root / "models/marts/order_quantity_totals.sql").unlink(),
                 ),
-                model_edit_step("edit_after_remove", fact_comment),
+                edit_step("edit_after_remove", fact_comment),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="declaration_edits",
             steps=(
-                full_edit_step(
+                edit_step(
                     "macro_edit",
                     lambda root: replace_project_text(
                         root,
@@ -116,14 +128,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         "{quantity} * {price_cents}",
                     ),
                 ),
-                model_edit_step("edit_after_macro", fact_comment),
-                full_edit_step(
+                edit_step("edit_after_macro", fact_comment),
+                edit_step(
                     "module_imported_by_macro_edit",
                     lambda root: replace_project_text(
                         root, "macros/_rounding.py", "_SCALE: int = 2", "_SCALE: int = 3"
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "scoped_macro_edit",
                     lambda root: replace_project_text(
                         root,
@@ -132,7 +144,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         "/ 100.0, 3)",
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "path_defaults_edit",
                     lambda root: replace_project_text(
                         root,
@@ -141,7 +153,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         '[path_defaults.staging]\nmaterialized = "table"',
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "enum_edit",
                     lambda root: replace_project_text(
                         root,
@@ -150,7 +162,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         'WEB "online"',
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "constant_edit",
                     lambda root: replace_project_text(
                         root,
@@ -159,7 +171,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         "value 2)",
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "new_scope_folder",
                     lambda root: write_project_file(
                         root,
@@ -169,19 +181,19 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         '    return f"({price_cents}) * ({quantity})"\n',
                     ),
                 ),
-                model_edit_step("edit_after_declarations", staging_comment),
+                edit_step("edit_after_declarations", staging_comment),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="resource_edits",
             steps=(
-                full_edit_step(
+                edit_step(
                     "seed_edit",
                     lambda root: replace_project_text(
                         root, "seeds/waffle_types.csv", "Classic Belgian", "Classic Brussels"
                     ),
                 ),
-                full_edit_step(
+                edit_step(
                     "source_edit",
                     lambda root: replace_project_text(
                         root,
@@ -190,17 +202,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         "      - name: quantity\n        type: BIGINT",
                     ),
                 ),
-                model_edit_step("edit_after_source", staging_type_change),
-                full_edit_step(
-                    "test_edit",
-                    lambda root: replace_project_text(
-                        root,
-                        "tests/unit/test_stg_orders.sql",
-                        "100 AS customer_id",
-                        "101 AS customer_id",
-                    ),
-                ),
-                full_edit_step(
+                edit_step("edit_after_source", staging_type_change),
+                edit_step("test_edit", stg_orders_test_edit),
+                edit_step(
                     "audit_edit",
                     lambda root: replace_project_text(
                         root,
@@ -209,44 +213,80 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                         "WHERE NOT (@expression) AND 1 = 1",
                     ),
                 ),
-                model_edit_step("edit_after_resources", fact_comment),
+                edit_step("edit_after_resources", fact_comment),
+                edit_step("compiled_artifact_tampered", compiled_artifact_tampered),
             ),
         ),
         IncrementalEditSequenceTestCase(
             description="analysis_input_edits",
             steps=(
-                full_edit_step("star_chain_added", star_chain_added),
-                model_edit_step("upstream_type_flips_downstream_shapes", staging_type_change),
-                model_edit_step("contract_type_edit", staging_contract_change),
-                full_edit_step("source_expression_edit", payment_expression_type_change),
-                full_edit_step("udf_signature_edit", completed_order_udf_signature_change),
-                full_edit_step("schema_entry_nullability_edit", order_status_nullability_change),
-                model_edit_step("edit_after_analysis_inputs", fact_comment),
+                edit_step("star_chain_added", star_chain_added),
+                edit_step("upstream_type_flips_downstream_shapes", staging_type_change),
+                edit_step("contract_type_edit", staging_contract_change),
+                edit_step("source_expression_edit", payment_expression_type_change),
+                edit_step("udf_signature_edit", completed_order_udf_signature_change),
+                edit_step("schema_entry_nullability_edit", order_status_nullability_change),
+                edit_step("edit_after_analysis_inputs", fact_comment),
             ),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="upstream_shape_changes",
+            steps=(
+                edit_step("upstream_column_removed", staging_column_removed),
+                edit_step("edit_while_downstream_broken", payments_comment),
+                edit_step("upstream_column_restored", staging_column_restored),
+                edit_step("upstream_column_renamed", staging_column_renamed),
+                edit_step("upstream_rename_reverted", staging_rename_reverted),
+            ),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="contract_changes",
+            steps=(
+                edit_step("downstream_type_declared", fact_quantity_type_declared),
+                edit_step("upstream_type_breaks_contract", staging_quantity_text),
+                edit_step("edit_after_contract_error", fact_comment),
+                edit_step("upstream_type_restored", staging_quantity_restored),
+                edit_step("downstream_type_removed", fact_quantity_type_removed),
+            ),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="star_chain_after_plan",
+            steps=star_chain_steps(between=plan_between),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="star_chain_after_build",
+            steps=star_chain_steps(between=build_between),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="star_chain_after_uncached_compile",
+            steps=star_chain_steps(between=compile_without_reuse_between),
+        ),
+        IncrementalEditSequenceTestCase(
+            description="star_chain_after_other_target_build",
+            steps=star_chain_steps(between=other_target_build_between),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_edit_sequence_when_compiling_incrementally_then_each_step_matches_uncached_compile(
+def test_given_edit_sequence_when_compiling_with_caches_then_each_step_matches_uncached_compile(
     compile_reuse_project: Path, test_case: IncrementalEditSequenceTestCase
 ) -> None:
     project_dir: Path = compile_reuse_project
     cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
-    primed: CompileReuseRun = prime_render_store(project_dir)
-    assert (cold.returncode, primed.returncode) == (0, 0), primed.stderr
+    warm: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
+    assert (cold.returncode, warm.returncode, warm.reused) == (0, 0, True), warm.stderr
 
     for step in test_case.steps:
         step.edit(project_dir)
         step.between(project_dir)
         comparison: IncrementalEditComparison = compare_incremental_compile(project_dir=project_dir)
 
-        assert comparison.incremental.reused is False, step.description
+        assert comparison.incremental.reused is step.expected_replayed, step.description
         assert comparison.matches is test_case.expected_matches_uncached, (
             step.description,
             comparison.mismatched_artifacts,
             comparison.incremental.stderr,
         )
-        assert (comparison.reused_renders > 0) is step.expected_render_reuse, step.description
 
 
 @pytest.mark.parametrize(
@@ -257,7 +297,7 @@ def test_given_edit_sequence_when_compiling_incrementally_then_each_step_matches
     ],
     ids=lambda case: case.description,
 )
-def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_matches_uncached_compile(
+def test_given_random_edit_chain_when_compiling_with_caches_then_each_step_matches_uncached_compile(
     compile_reuse_project: Path, test_case: RandomEditChainTestCase
 ) -> None:
     project_dir: Path = compile_reuse_project
@@ -265,8 +305,7 @@ def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_mat
         project_dir=project_dir, model_count=test_case.model_count, seed=test_case.seed
     )
     cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
-    primed: CompileReuseRun = prime_render_store(project_dir)
-    assert (cold.returncode, primed.returncode) == (0, 0), primed.stderr
+    assert cold.returncode == 0, cold.stderr
     chain: RandomEditChain = RandomEditChain(project_dir=project_dir, seed=test_case.seed)
 
     for step, kind in enumerate(
@@ -282,34 +321,49 @@ def test_given_random_edit_chain_when_compiling_incrementally_then_each_step_mat
             comparison.mismatched_artifacts,
             comparison.incremental.stderr,
         )
-        assert (comparison.reused_renders > 0) is is_model_only_edit(kind), (step, kind)
-        assert (comparison.incremental.timings.get("analysis_reuse_hits", 0) > 0) is (
-            is_model_only_edit(kind)
-        ), (step, kind)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        BrokenChangeDetectionTestCase(
-            description="new_output_column",
+        BrokenEditInvalidationTestCase(
+            description="intact_invalidation_after_new_output_column",
             edit=staging_new_column,
+            sabotage=keep_invalidation,
+            expected_matches_uncached=True,
+        ),
+        BrokenEditInvalidationTestCase(
+            description="compile_replayed_despite_model_edit",
+            edit=staging_new_column,
+            sabotage=ignore_project_changes,
+            expected_matches_uncached=False,
+        ),
+        BrokenEditInvalidationTestCase(
+            description="intact_invalidation_after_error_introduced",
+            edit=fact_error_introduced,
+            sabotage=keep_invalidation,
+            expected_matches_uncached=True,
+        ),
+        BrokenEditInvalidationTestCase(
+            description="stale_analysis_despite_query_edit",
+            edit=fact_error_introduced,
+            sabotage=ignore_query_in_analysis_key,
             expected_matches_uncached=False,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_broken_change_detection_when_compiling_an_edit_then_the_oracle_reports_a_mismatch(
+def test_given_broken_cache_invalidation_when_compiling_an_edit_then_the_oracle_reports_a_mismatch(
     compile_reuse_project: Path,
-    test_case: BrokenChangeDetectionTestCase,
+    test_case: BrokenEditInvalidationTestCase,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = compile_reuse_project
     enable_compile_reuse(monkeypatch)
-    assert prime_render_store_in_process(project_dir) == 0
+    test_case.sabotage(monkeypatch)
+    assert compile_in_process(project_dir=project_dir) == 0
     test_case.edit(project_dir)
-    disable_change_detection(monkeypatch)
 
     broken: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     reference: CompileReuseRun = run_reuse_compile(project_dir=project_dir, args=("--no-cache",))
@@ -317,78 +371,54 @@ def test_given_broken_change_detection_when_compiling_an_edit_then_the_oracle_re
         incremental=broken, reference=reference
     )
 
-    assert comparison.reused_renders > 0
-    assert comparison.matches is test_case.expected_matches_uncached
+    assert comparison.matches is test_case.expected_matches_uncached, (
+        comparison.mismatched_artifacts
+    )
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        RenderStoreNoticeTestCase(
-            description="few_renders_store_quietly", notice_renders=100_000, expected_notice=False
+        SharedCacheKeyTestCase(
+            description="dataflow_one_model_at_a_time", schedule=analyze_one_model_at_a_time
         ),
-        RenderStoreNoticeTestCase(
-            description="many_renders_announce_recording", notice_renders=1, expected_notice=True
-        ),
+        SharedCacheKeyTestCase(description="one_batch", schedule=analyze_in_one_batch),
     ],
     ids=lambda case: case.description,
 )
-def test_given_new_renders_when_storing_after_an_edit_then_slow_recording_is_announced(
+def test_given_models_sharing_an_analysis_cache_key_when_upstream_changes_then_it_matches_uncached(
     compile_reuse_project: Path,
-    test_case: RenderStoreNoticeTestCase,
+    test_case: SharedCacheKeyTestCase,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    project_dir: Path = compile_reuse_project
     enable_compile_reuse(monkeypatch)
-    set_store_notice_renders(monkeypatch, test_case.notice_renders)
-    assert compile_in_process(project_dir=compile_reuse_project) == 0
-    fact_comment(compile_reuse_project)
+    test_case.schedule(monkeypatch)
+    star_chain_with_twin_added(project_dir)
+    assert compile_in_process(project_dir=project_dir) == 0
+    staging_extra_flag(project_dir)
+    twin_header_changed(project_dir)
+    compile_edit_without_reuse(project_dir, monkeypatch)
 
-    code, _, err = compile_in_process_output(project_dir=compile_reuse_project, capsys=capsys)
+    incremental: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    reference: CompileReuseRun = in_process_reuse_run(
+        project_dir=project_dir, capsys=capsys, args=("--no-cache",)
+    )
+    comparison: IncrementalEditComparison = IncrementalEditComparison(
+        incremental=incremental, reference=reference
+    )
 
-    assert code == 0
-    assert ("renders)..." in err) is test_case.expected_notice
-    assert ("Recorded compile for reuse" in err) is test_case.expected_notice
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RenderSavePolicyTestCase(
-            description="cold_then_two_model_edits",
-            edits=(fact_comment, staging_comment),
-            expected_cold_render_files=0,
-            expected_render_files=(1, 2),
-            expected_reused=(False, True),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_cold_compile_when_editing_then_renders_are_stored_only_once_a_compile_exists(
-    compile_reuse_project: Path, test_case: RenderSavePolicyTestCase
-) -> None:
-    cold: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project)
-    cold_render_files: int = render_store_files(compile_reuse_project)
-    render_files: list[int] = []
-    reused: list[bool] = []
-
-    for edit in test_case.edits:
-        run: CompileReuseRun = edit_and_compile(project_dir=compile_reuse_project, edit=edit)
-        assert run.returncode == 0, run.stderr
-        render_files.append(render_store_files(compile_reuse_project))
-        reused.append(run.timings.get("render_reuse_hits", 0) > 0)
-
-    assert cold.returncode == 0, cold.stderr
-    assert cold_render_files == test_case.expected_cold_render_files
-    assert tuple(render_files) == test_case.expected_render_files
-    assert tuple(reused) == test_case.expected_reused
+    assert comparison.matches is test_case.expected_matches_uncached, (
+        comparison.mismatched_artifacts
+    )
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         ExternalModuleEditTestCase(
-            description="module_rewritten_in_place_after_reuse",
+            description="module_rewritten_in_place_after_a_compile",
             initial_value="'vanilla'",
             edited_value="'choco'",
             expected_matches_uncached=True,
@@ -397,7 +427,7 @@ def test_given_cold_compile_when_editing_then_renders_are_stored_only_once_a_com
     ],
     ids=lambda case: case.description,
 )
-def test_given_module_imported_only_while_rendering_when_it_changes_after_reuse_then_output_is_fresh(
+def test_given_module_imported_while_rendering_when_it_changes_after_a_compile_then_output_is_fresh(
     compile_reuse_project: Path, tmp_path: Path, test_case: ExternalModuleEditTestCase
 ) -> None:
     extlib: Path = tmp_path / "extlib"
@@ -406,9 +436,7 @@ def test_given_module_imported_only_while_rendering_when_it_changes_after_reuse_
     )
     cold: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
     staging_comment(compile_reuse_project)
-    recorded: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
-    staging_comment(compile_reuse_project)
-    reused: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
+    edited: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
 
     write_external_flavor(extlib, test_case.edited_value)
     comparison: IncrementalEditComparison = IncrementalEditComparison(
@@ -418,8 +446,8 @@ def test_given_module_imported_only_while_rendering_when_it_changes_after_reuse_
         ),
     )
 
-    assert (cold.returncode, recorded.returncode, reused.returncode) == (0, 0, 0), reused.stderr
-    assert reused.timings.get("render_reuse_hits", 0) > 0
+    assert (cold.returncode, edited.returncode) == (0, 0), edited.stderr
+    assert comparison.incremental.reused is False
     assert comparison.matches is test_case.expected_matches_uncached, (
         comparison.mismatched_artifacts
     )
@@ -428,32 +456,5 @@ def test_given_module_imported_only_while_rendering_when_it_changes_after_reuse_
     )
 
 
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RenderLoadNoticeTestCase(
-            description="small_store_loads_quietly", notice_bytes=1 << 40, expected_notice=False
-        ),
-        RenderLoadNoticeTestCase(
-            description="large_store_announces_loading", notice_bytes=1, expected_notice=True
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_stored_renders_when_loading_them_then_large_loads_are_announced_on_stderr(
-    compile_reuse_project: Path,
-    test_case: RenderLoadNoticeTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    enable_compile_reuse(monkeypatch)
-    set_render_load_notice_bytes(monkeypatch, test_case.notice_bytes)
-    assert prime_render_store_in_process(compile_reuse_project) == 0
-    staging_comment(compile_reuse_project)
-
-    code, out, err = compile_in_process_output(project_dir=compile_reuse_project, capsys=capsys)
-
-    assert code == 0
-    assert "compile_timings" in json_report_keys(out)
-    assert ("Loading stored renders" in err) is test_case.expected_notice
-    assert ("Loaded stored renders" in err) is test_case.expected_notice
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-n", "auto", "--dist", "loadfile"]))

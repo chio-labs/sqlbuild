@@ -14,7 +14,6 @@ from typing import Any
 import orjson
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.fact_cache.main.code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
@@ -27,6 +26,7 @@ from sqlbuild.rule_engine._helpers.host.custom_host_pool import (
     run_custom_hosts,
 )
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
+from sqlbuild.rule_engine._helpers.run.code_identity import compiled_code_identity
 from sqlbuild.rule_engine.classes.fact_digests import FactDigests
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
 from sqlbuild.rule_engine.constants import (

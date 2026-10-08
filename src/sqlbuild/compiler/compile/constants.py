@@ -7,7 +7,6 @@ import re
 from sqlbuild.compiler.compile.classes.compile_input_read_registry import (
     CompileInputReadRegistry,
 )
-from sqlbuild.compiler.compile.classes.render_reuse_registry import CompileRenderReuseRegistry
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
@@ -177,18 +176,6 @@ RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
 COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
 COMPILE_CACHE_DISABLE_VALUE: str = "1"
 COMPILE_INPUT_READS: CompileInputReadRegistry = CompileInputReadRegistry()
-COMPILE_RENDER_REUSE: CompileRenderReuseRegistry = CompileRenderReuseRegistry()
-RENDER_REUSE_SOURCES_GROUP: str = "sources"
-RENDER_REUSE_TESTS_GROUP: str = "tests"
-RENDER_REUSE_SCENARIOS_GROUP: str = "scenarios"
-RENDER_REUSE_SINGULAR_AUDITS_GROUP: str = "singular_audits"
-RENDER_REUSE_ATTACHED_AUDITS_GROUP: str = "source_and_seed_audits"
-RENDER_REUSE_MODEL_AUDITS_PREFIX: str = "model_audits:"
-RENDER_REUSE_DECLARATIONS_PREFIX: str = "declarations:"
-RENDER_REUSE_ANALYSIS_PREFIX: str = "analysis:"
-SQL_TEST_FACT_CACHE_NAMESPACE: str = "sql-tests"
-SQL_TEST_FACT_CACHE_ALGORITHM: str = "expanded-sql-test-ctes-v3"
-SQL_TEST_EXPECTED_MODELS_FACT_ALGORITHM: str = "sql-test-expected-models-v2"
 COMPACT_ANALYSIS_RESPONSE_LENGTH: int = 2
 COMPACT_RELATION_STUB_PREFIX: str = "__sqlbuild_project_input_"
 COMPACT_REFERENCE_MARKER_PATTERN: re.Pattern[str] = re.compile(

@@ -46,7 +46,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     sql_test_reads,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
-    extract_expanded_sql_tests_cached,
+    extract_expanded_sql_tests,
     extract_unexpanded_sql_test,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestExtractionError
@@ -118,7 +118,6 @@ def build_test_inputs_with_cache(
     declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
-    compile_cache_dir: Path | None,
     sql_lexical_syntax: SqlLexicalSyntax,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build SQL test inputs inside the compile timing boundary."""
@@ -132,7 +131,6 @@ def build_test_inputs_with_cache(
             declaration_expansion=declaration_expansion,
             external_sql_reference_resolver=external_sql_reference_resolver,
             sql_function_inputs=sql_function_inputs,
-            compile_cache_dir=compile_cache_dir,
             sql_lexical_syntax=sql_lexical_syntax,
         )
 
@@ -147,7 +145,6 @@ def build_test_inputs(
     sql_lexical_syntax: SqlLexicalSyntax,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
-    compile_cache_dir: Path | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
@@ -308,12 +305,11 @@ def build_test_inputs(
                     )
                 )
     try:
-        test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests_cached(
+        test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
             tests=tuple(
                 (test.sql_body, str(test.test_file.relative_path), test.mode)
                 for test in expanded_tests
             ),
-            cache_root=compile_cache_dir,
             syntax=sql_lexical_syntax,
         )
     except SqlTestExtractionError as error:

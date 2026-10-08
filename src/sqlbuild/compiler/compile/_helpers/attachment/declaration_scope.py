@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import replace
-from pathlib import Path
 from types import CodeType
 
 from sqlbuild.compiler.compile._helpers.attachment.scope_relationships import (
@@ -42,7 +41,6 @@ def build_declaration_scope(
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: dict[str, LoadedMacro],
     sql_lexical_syntax: SqlLexicalSyntax,
-    compile_cache_dir: Path | None = None,
 ) -> DeclarationScopeBuild:
     """Build one canonical index and validate it before SQL expansion."""
 
@@ -54,7 +52,6 @@ def build_declaration_scope(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,
             sql_lexical_syntax=sql_lexical_syntax,
-            compile_cache_dir=compile_cache_dir,
         )
         if native_scope is not None:
             return native_scope
@@ -76,7 +73,6 @@ def build_declaration_scope(
             discovered_inputs=discovered_inputs,
             index=index,
             sql_lexical_syntax=sql_lexical_syntax,
-            compile_cache_dir=compile_cache_dir,
         )
         if has_scoped_relationship_declarations
         and (discovered_inputs.test_files or discovered_inputs.scenario_files)
@@ -105,7 +101,6 @@ def _build_native_declaration_scope(
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: dict[str, LoadedMacro],
     sql_lexical_syntax: SqlLexicalSyntax,
-    compile_cache_dir: Path | None,
 ) -> DeclarationScopeBuild | None:
     """Build the scope natively with Python's errors and order, or None for the Python stage."""
 
@@ -126,7 +121,6 @@ def _build_native_declaration_scope(
         facts, fault = extract_scope_relationship_facts(
             discovered_inputs=discovered_inputs,
             sql_lexical_syntax=sql_lexical_syntax,
-            compile_cache_dir=compile_cache_dir,
         )
         if fault is not None:
             raise CompileInputError(fault)

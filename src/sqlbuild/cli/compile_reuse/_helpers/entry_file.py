@@ -20,15 +20,12 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_ENTRY_SUFFIX,
     REUSE_FORMAT_VERSION,
     REUSE_MAX_ENTRY_BYTES,
-    REUSE_MAX_RENDER_STATES,
     REUSE_MAX_STORED_ENTRIES,
-    REUSE_RENDER_STATE_SUFFIX,
     REUSE_STDOUT_SEPARATOR,
     REUSE_STDOUT_SUFFIX,
 )
 from sqlbuild.cli.compile_reuse.exceptions import CompileReuseEntryError
 from sqlbuild.cli.compile_reuse.models import (
-    RenderStateLayer,
     SettingsEnvironmentInputs,
     StoredCompileHeader,
     StoredCompileInputs,
@@ -51,7 +48,7 @@ def read_entry_header(*, path: Path) -> StoredCompileHeader | None:
         with open(path, "rb") as handle:
             if handle.read(len(REUSE_ENTRY_MAGIC)) != REUSE_ENTRY_MAGIC:
                 return None
-            metadata: bytes = read_framed_section(handle=handle)
+            metadata: bytes = _read_section(handle=handle)
             if handle.read(1):
                 return None
         payload: object = json.loads(metadata)
@@ -83,24 +80,13 @@ def write_entry(
     inputs: StoredCompileInputs,
     output: StoredCompileOutput,
     stdout: str,
-    render_state: RenderStateLayer | None = None,
 ) -> None:
-    """Publish one entry, its stdout, and its renders atomically, naming them in the entry."""
+    """Publish one entry and its stdout atomically, filling in the stdout file and checksum."""
 
     encoded_stdout: bytes = stdout.encode("utf-8", "surrogateescape")
-    stamp: str = f"{path.stem}{REUSE_STDOUT_SEPARATOR}{uuid.uuid4().hex}"
-    stdout_file: str = f"{stamp}{REUSE_STDOUT_SUFFIX}"
-    render_state_file: str | None = (
-        None
-        if render_state is None
-        or sum(len(chunk) for chunk in render_state.chunks) > REUSE_MAX_ENTRY_BYTES
-        else f"{stamp}{REUSE_RENDER_STATE_SUFFIX}"
-    )
+    stdout_file: str = f"{path.stem}{REUSE_STDOUT_SEPARATOR}{uuid.uuid4().hex}{REUSE_STDOUT_SUFFIX}"
     stored_output: StoredCompileOutput = replace(
-        output,
-        stdout_file=stdout_file,
-        stdout_checksum=zlib.crc32(encoded_stdout),
-        render_state_file=render_state_file,
+        output, stdout_file=stdout_file, stdout_checksum=zlib.crc32(encoded_stdout)
     )
     metadata: bytes = _metadata(inputs=inputs, output=stored_output)
     if len(metadata) + len(encoded_stdout) > REUSE_MAX_ENTRY_BYTES:
@@ -108,29 +94,12 @@ def write_entry(
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        _publish_file(path=path.parent / stdout_file, contents=(encoded_stdout,))
-        if render_state is not None and render_state_file is not None:
-            _publish_file(path=path.parent / render_state_file, contents=render_state.chunks)
-        _publish_file(path=path, contents=(_framed_metadata(metadata=metadata),))
-        _remove_stdout_files(entry_path=path, keep=(stdout_file,))
-        _remove_render_files(
-            entry_path=path,
-            keep=(
-                ()
-                if render_state is None or render_state_file is None
-                else (render_state_file, render_state.base_file)
-            ),
-        )
+        _publish_file(path=path.parent / stdout_file, contents=encoded_stdout)
+        _publish_file(path=path, contents=_framed_metadata(metadata=metadata))
+        _remove_side_files(entry_path=path, keep=stdout_file)
         _prune_entries(directory=path.parent, keep=path)
     except OSError:
         remove_entry(path=path)
-
-
-def entry_render_state_path(*, path: Path, header: StoredCompileHeader) -> Path | None:
-    """Return where the entry's renders are stored, when it stored any."""
-
-    name: str | None = header.output.render_state_file
-    return None if name is None else path.parent / name
 
 
 def rewrite_entry_inputs(
@@ -140,7 +109,7 @@ def rewrite_entry_inputs(
 
     metadata: bytes = _metadata(inputs=inputs, output=header.output)
     with contextlib.suppress(OSError):
-        _publish_file(path=path, contents=(_framed_metadata(metadata=metadata),))
+        _publish_file(path=path, contents=_framed_metadata(metadata=metadata))
 
 
 def remove_entry(*, path: Path) -> None:
@@ -148,18 +117,16 @@ def remove_entry(*, path: Path) -> None:
 
     with contextlib.suppress(OSError):
         path.unlink(missing_ok=True)
-    _remove_stdout_files(entry_path=path, keep=())
-    _remove_render_files(entry_path=path, keep=())
+    _remove_side_files(entry_path=path, keep=None)
 
 
-def _publish_file(*, path: Path, contents: tuple[bytes | memoryview, ...]) -> None:
+def _publish_file(*, path: Path, contents: bytes) -> None:
     descriptor, temporary_path = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
     )
     try:
         with os.fdopen(descriptor, "wb") as handle:
-            for chunk in contents:
-                _ = handle.write(chunk)
+            _ = handle.write(contents)
         os.replace(temporary_path, path)
     except BaseException:
         with contextlib.suppress(OSError):
@@ -174,48 +141,31 @@ def _metadata(*, inputs: StoredCompileInputs, output: StoredCompileOutput) -> by
 
 
 def _framed_metadata(*, metadata: bytes) -> bytes:
-    return REUSE_ENTRY_MAGIC + framed_section(data=metadata)
-
-
-def framed_section(*, data: bytes) -> bytes:
-    """Prefix one section with its length and checksum so a reader can verify it."""
-
     return b"".join(
         (
-            len(data).to_bytes(REUSE_ENTRY_LENGTH_BYTES, REUSE_ENTRY_BYTE_ORDER),
-            zlib.crc32(data).to_bytes(REUSE_ENTRY_CHECKSUM_BYTES, REUSE_ENTRY_BYTE_ORDER),
-            data,
+            REUSE_ENTRY_MAGIC,
+            len(metadata).to_bytes(REUSE_ENTRY_LENGTH_BYTES, REUSE_ENTRY_BYTE_ORDER),
+            zlib.crc32(metadata).to_bytes(REUSE_ENTRY_CHECKSUM_BYTES, REUSE_ENTRY_BYTE_ORDER),
+            metadata,
         )
     )
 
 
-def _remove_stdout_files(*, entry_path: Path, keep: tuple[str | None, ...]) -> None:
-    _remove_entry_files(entry_path=entry_path, suffix=REUSE_STDOUT_SUFFIX, keep=keep)
+def _remove_side_files(*, entry_path: Path, keep: str | None) -> None:
+    """Remove every file stored beside an entry except keep, including older releases' files."""
 
-
-def _remove_render_files(*, entry_path: Path, keep: tuple[str | None, ...]) -> None:
-    _remove_entry_files(entry_path=entry_path, suffix=REUSE_RENDER_STATE_SUFFIX, keep=keep)
-
-
-def _remove_entry_files(*, entry_path: Path, suffix: str, keep: tuple[str | None, ...]) -> None:
     prefix: str = f"{entry_path.stem}{REUSE_STDOUT_SEPARATOR}"
     try:
         candidates: list[Path] = list(entry_path.parent.iterdir())
     except OSError:
         return
     for candidate in candidates:
-        if (
-            candidate.name.startswith(prefix)
-            and candidate.suffix == suffix
-            and candidate.name not in keep
-        ):
+        if candidate.name.startswith(prefix) and candidate.name != keep:
             with contextlib.suppress(OSError):
                 candidate.unlink()
 
 
-def read_framed_section(*, handle: BinaryIO) -> bytes:
-    """Read one length- and checksum-framed section, raising when it is damaged."""
-
+def _read_section(*, handle: BinaryIO) -> bytes:
     length: int = int.from_bytes(handle.read(REUSE_ENTRY_LENGTH_BYTES), REUSE_ENTRY_BYTE_ORDER)
     checksum: int = int.from_bytes(handle.read(REUSE_ENTRY_CHECKSUM_BYTES), REUSE_ENTRY_BYTE_ORDER)
     if length > REUSE_MAX_ENTRY_BYTES:
@@ -236,8 +186,6 @@ def _prune_entries(*, directory: Path, keep: Path) -> None:
     entries.sort(reverse=True)
     for _, stale in entries[REUSE_MAX_STORED_ENTRIES - 1 :]:
         remove_entry(path=stale)
-    for _, older in entries[REUSE_MAX_RENDER_STATES - 1 : REUSE_MAX_STORED_ENTRIES - 1]:
-        _remove_render_files(entry_path=older, keep=())
 
 
 def _payload(*, inputs: StoredCompileInputs, output: StoredCompileOutput) -> dict[str, object]:
@@ -254,14 +202,12 @@ def _payload(*, inputs: StoredCompileInputs, output: StoredCompileOutput) -> dic
             for path, item in inputs.project_files.items()
         },
         "target_files": {path: list(stamp) for path, stamp in inputs.target_files.items()},
-        "target_digests": inputs.target_digests,
         "stderr_lines": list(output.stderr_lines),
         "exit_code": output.exit_code,
         "timings_span": None if output.timings_span is None else list(output.timings_span),
         "stdout_length": output.stdout_length,
         "stdout_checksum": output.stdout_checksum,
         "stdout_file": output.stdout_file,
-        "render_state_file": output.render_state_file,
         "target_tree": inputs.target_tree,
         "settings_inputs": [
             {
@@ -310,10 +256,6 @@ def _header(*, payload: object) -> StoredCompileHeader:
                 _settings_inputs(item) for item in _list(fields["settings_inputs"])
             ),
             settings_digest=_string(fields["settings_digest"]),
-            target_digests={
-                _string(path): _string(digest)
-                for path, digest in _mapping(fields.get("target_digests", {})).items()
-            },
         ),
         output=StoredCompileOutput(
             stderr_lines=tuple(_string(line) for line in _list(fields["stderr_lines"])),
@@ -322,7 +264,6 @@ def _header(*, payload: object) -> StoredCompileHeader:
             stdout_length=_integer(fields["stdout_length"]),
             stdout_checksum=_integer(fields["stdout_checksum"]),
             stdout_file=_stdout_file(fields["stdout_file"]),
-            render_state_file=_render_state_file(fields.get("render_state_file")),
         ),
     )
 
@@ -342,15 +283,6 @@ def _stdout_file(value: object) -> str:
     name: str = _string(value)
     if os.path.basename(name) != name or not name.endswith(REUSE_STDOUT_SUFFIX):
         raise CompileReuseEntryError("invalid stored stdout file name")
-    return name
-
-
-def _render_state_file(value: object) -> str | None:
-    if value is None:
-        return None
-    name: str = _string(value)
-    if os.path.basename(name) != name or not name.endswith(REUSE_RENDER_STATE_SUFFIX):
-        raise CompileReuseEntryError("invalid stored render file name")
     return name
 
 
