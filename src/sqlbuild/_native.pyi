@@ -261,6 +261,20 @@ def content_digest(parts: list[str]) -> str: ...
 def fingerprint_project_files(root: str, excluded_files: list[str]) -> str: ...
 def digest_files(paths: list[str]) -> list[str | None]: ...
 
+# Native analysis: type system.
+
+# Native analysis: model analysis session.
+
+# Native analysis: semantic completion.
+
+# Native analysis: contracts.
+
+# Native analysis: column lineage facts.
+
+# Native analysis: SQL test planning glue.
+
+# Native analysis: compiled project assembly.
+
 # Internal oracle hooks for tests that compare native foundations with Python; not an API.
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(

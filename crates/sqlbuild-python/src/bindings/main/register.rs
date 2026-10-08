@@ -4,7 +4,9 @@ use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
-    analysis, attachments, boundary, cache, discovery, model_config, render, rules, scopes, sqltext,
+    analysis, analysis_session, attachments, boundary, cache, contracts, discovery, lineage,
+    model_config, project_assembly, render, rules, scopes, semantic_checks, sql_test_glue, sqltext,
+    type_system,
 };
 use crate::bindings::models;
 
@@ -32,7 +34,19 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     render::macro_calls::register(module)?;
     cache::native_store::register(module)?;
     attachments::registration::register(module)?;
+    register_analysis_stages(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
+    Ok(())
+}
+
+fn register_analysis_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    type_system::registration::register(module)?;
+    analysis_session::registration::register(module)?;
+    semantic_checks::registration::register(module)?;
+    contracts::registration::register(module)?;
+    lineage::registration::register(module)?;
+    sql_test_glue::registration::register(module)?;
+    project_assembly::registration::register(module)?;
     Ok(())
 }

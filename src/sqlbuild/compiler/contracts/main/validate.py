@@ -5,7 +5,12 @@ from __future__ import annotations
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.contracts._helpers.columns import collect_model_column_contract_diagnostics
+from sqlbuild.compiler.contracts.main._evaluate_native_model_contracts import (
+    evaluate_native_model_contracts,
+)
 from sqlbuild.compiler.contracts.models import ContractValidationResult
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.spec.contracts.types import ColumnContractMode
 
@@ -17,6 +22,12 @@ def evaluate_model_contracts(
 ) -> ContractValidationResult:
     """Evaluate model header column contracts against inferred output columns."""
 
+    if native_stage_enabled(NativeStage.CONTRACTS):
+        native_result: ContractValidationResult | None = evaluate_native_model_contracts(
+            project=project, dialect=dialect
+        )
+        if native_result is not None:
+            return native_result
     if not any(
         _requires_contract_evaluation(model=model, mode=project.settings.column_contract_mode)
         for model in project.models

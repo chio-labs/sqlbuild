@@ -813,6 +813,14 @@ class CompilerEngineParityTestCase:
 
 
 @dataclass(frozen=True)
+class NativeAnalysisSeamTestCase:
+    """Every engine compiling a copy of one project while the analysis stage seams are recorded."""
+
+    description: str
+    expected_preview_returns: dict[str, list[object]]
+
+
+@dataclass(frozen=True)
 class CompilerEngineMacroParityTestCase:
     """Two engines compiling separate copies of one macro-heavy project."""
 

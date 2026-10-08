@@ -1184,6 +1184,7 @@ class CompiledProject:
     sql_expansions: dict[Path, CompiledSqlExpansion] = field(
         default_factory=dict, compare=False, repr=False
     )
+    native_session: Any | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

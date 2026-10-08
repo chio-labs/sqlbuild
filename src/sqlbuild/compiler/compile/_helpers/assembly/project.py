@@ -21,10 +21,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     read_compact_analysis_cache_candidate,
     record_analysis_cache_metrics,
 )
-from sqlbuild.compiler.compile._helpers.analysis.columns import (
-    substitute_placeholder_defaults,
-    table_function_analysis_name,
-)
+from sqlbuild.compiler.compile._helpers.analysis.columns import substitute_placeholder_defaults
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     NativeCompactAnalysis,
     analyze_columns_and_lineage_with_polyglot,
@@ -54,6 +51,7 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_required_names,
     binding_schema_for_model,
+    build_column_nullability_by_table,
     build_complete_binding_schemas,
     get_expression_source_shapes,
     published_model_shape,
@@ -79,6 +77,10 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
+from sqlbuild.compiler.compile._helpers.native_stages.assembly import (
+    analyze_model_sql_by_engine,
+    assemble_project_by_engine,
+)
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
 )
@@ -98,7 +100,6 @@ from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
 from sqlbuild.compiler.compile.classes.stored_model_analyses import StoredModelAnalyses
-from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
@@ -182,10 +183,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
 )
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
-    SchemaAuditInstance,
-    SchemaColumn,
     SchemaDynamicColumnFamily,
-    SourceColumnEntry,
     SourceEntry,
     SourceLocation,
     TargetConfig,
@@ -213,6 +211,16 @@ def assemble_compiled_project(
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
+    native_project: CompiledProject | None = assemble_project_by_engine(
+        inputs=inputs,
+        inference_profile=inference_profile,
+        skip_column_inference=skip_column_inference,
+        column_lineage_mode=column_lineage_mode,
+        analysis_cache_dir=analysis_cache_dir,
+        analysis_model_names=analysis_model_names,
+    )
+    if native_project is not None:
+        return native_project
     sql_analysis_enabled: bool = (
         inputs.effective_settings.sql_analysis and not skip_column_inference
     )
@@ -220,7 +228,7 @@ def assemble_compiled_project(
         seed_input.schema_entry.name for seed_input in inputs.seed_inputs
     )
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
-        _build_column_nullability_by_table(inputs)
+        build_column_nullability_by_table(inputs)
     )
     column_types_by_table: dict[str, dict[str, str]] = _build_column_types_by_table(inputs)
     dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]] = (
@@ -321,7 +329,8 @@ def assemble_compiled_project(
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
     if sql_analysis_enabled:
         with record_compile_timing("model_analysis_ms"):
-            model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
+            python_analysis: partial[dict[str, _ModelSqlAnalysis]] = partial(
+                _analyze_model_sql_in_parallel,
                 known_functions=known_function_names(inputs.sql_function_inputs),
                 known_types=known_declared_types(
                     functions=inputs.sql_function_inputs, column_types=column_types_by_table
@@ -349,6 +358,9 @@ def assemble_compiled_project(
                     )
                 ),
                 complete_binding_schemas=complete_binding_schemas,
+            )
+            model_sql_analysis_by_name = analyze_model_sql_by_engine(
+                python_analysis=python_analysis
             )
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
     report_scope_index_errors(index=scope_index)
@@ -1369,33 +1381,6 @@ def _model_name(model_input: CompileModelInput) -> str:
     return model_input.model_file.file_path.stem
 
 
-def _build_column_nullability_by_table(
-    inputs: CompileProjectInputs,
-) -> dict[str, dict[str, InferredNullability]]:
-    facts: dict[str, dict[str, InferredNullability]] = {}
-    for model_input in inputs.model_inputs:
-        if model_input.schema_entry is None:
-            continue
-        facts[model_input.schema_entry.name] = _schema_column_nullability(
-            model_input.schema_entry.columns
-        )
-    for seed_input in inputs.seed_inputs:
-        facts[seed_input.schema_entry.name] = _schema_column_nullability(
-            seed_input.schema_entry.columns
-        )
-    for source_input in inputs.source_inputs:
-        facts[source_input.source_entry.name] = _source_column_nullability(
-            source_input.source_entry.columns
-        )
-    for function_input in inputs.sql_function_inputs:
-        if not function_input.return_columns:
-            continue
-        facts[table_function_analysis_name(function_input.name)] = {
-            column.name: InferredNullability.UNKNOWN for column in function_input.return_columns
-        }
-    return facts
-
-
 def _build_dynamic_families_by_table(
     inputs: CompileProjectInputs,
 ) -> dict[str, tuple[SchemaDynamicColumnFamily, ...]]:
@@ -1499,36 +1484,6 @@ def _binding_compiler_diagnostics(
             )
         )
     return tuple(result)
-
-
-def _schema_column_nullability(
-    columns: tuple[SchemaColumn, ...],
-) -> dict[str, InferredNullability]:
-    return {
-        column.name: _declared_column_nullability(nullable=column.nullable, audits=column.audits)
-        for column in columns
-    }
-
-
-def _source_column_nullability(
-    columns: tuple[SourceColumnEntry, ...],
-) -> dict[str, InferredNullability]:
-    return {
-        column.name: _declared_column_nullability(nullable=column.nullable, audits=column.audits)
-        for column in columns
-    }
-
-
-def _declared_column_nullability(
-    *,
-    nullable: bool | None,
-    audits: tuple[SchemaAuditInstance, ...],
-) -> InferredNullability:
-    if nullable is False:
-        return InferredNullability.NON_NULL
-    if any(audit.definition_name == NOT_NULL_AUDIT_NAME for audit in audits):
-        return InferredNullability.NON_NULL
-    return InferredNullability.UNKNOWN
 
 
 def _assemble_compiled_source(

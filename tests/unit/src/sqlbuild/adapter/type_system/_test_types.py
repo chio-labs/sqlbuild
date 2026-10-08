@@ -26,3 +26,11 @@ class NumericFamilyTestCase:
     dialect: str | None
     raw_type: str
     expected_family: str | None
+
+
+@dataclass(frozen=True)
+class NativeTypeNormalizationTestCase:
+    description: str
+    dialect: str | None
+    raw_type: str
+    expected_type: NormalizedType | None

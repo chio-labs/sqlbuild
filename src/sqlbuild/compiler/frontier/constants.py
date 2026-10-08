@@ -25,6 +25,13 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.MACRO_CALLS: NativeStageTier.PREVIEW,
     NativeStage.MACRO_CALL_STORE: NativeStageTier.PREVIEW,
     NativeStage.ATTACHMENTS: NativeStageTier.PREVIEW,
+    NativeStage.TYPE_SYSTEM: NativeStageTier.PREVIEW,
+    NativeStage.MODEL_ANALYSIS: NativeStageTier.PREVIEW,
+    NativeStage.SEMANTIC_CHECKS: NativeStageTier.PREVIEW,
+    NativeStage.CONTRACTS: NativeStageTier.PREVIEW,
+    NativeStage.LINEAGE_FACTS: NativeStageTier.PREVIEW,
+    NativeStage.SQL_TEST_GLUE: NativeStageTier.PREVIEW,
+    NativeStage.PROJECT_ASSEMBLY: NativeStageTier.PREVIEW,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.PYTHON: frozenset(),
