@@ -69,15 +69,19 @@ def run_checkout_generator(
     entry: str,
     arguments: tuple[str, ...],
     environment: dict[str, str],
+    library_paths: tuple[Path, ...],
 ) -> subprocess.CompletedProcess[str]:
-    """Run generator code from another checkout's source tree with this `python`."""
+    """Run another checkout's generator with `python`, importing `library_paths` before its own."""
 
     return subprocess.run(
         [str(python), "-c", entry, *arguments],
         cwd=checkout,
         capture_output=True,
         text=True,
-        env={**environment, PYTHONPATH_KEY: str(checkout)},
+        env={
+            **environment,
+            PYTHONPATH_KEY: os.pathsep.join(str(path) for path in (checkout, *library_paths)),
+        },
         check=False,
     )
 
@@ -93,6 +97,7 @@ def write_base_benchmark_project(
         entry=BASE_GENERATOR_ENTRY,
         arguments=(kind, str(project_dir), str(models)),
         environment=_compile_environment(),
+        library_paths=(),
     )
     if completed.returncode != 0:
         raise CompileComparisonError(

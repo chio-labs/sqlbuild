@@ -22,6 +22,7 @@ class InstalledVersion:
     label: str
     version: str
     sqb: Path
+    python: Path
 
 
 @dataclass(frozen=True)

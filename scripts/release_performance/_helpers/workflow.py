@@ -138,12 +138,16 @@ def _compare(*, options: ComparisonOptions, root: Path) -> ReleaseComparison:
     )
     pristine[BASELINE_LABEL] = write_baseline_pristine_projects(
         source=baseline_source,
+        python=baseline.python,
         root=root / BASELINE_GENERATED_DIRECTORY,
         inspection_models=options.inspection_models,
         build_models=options.build_models,
     )
     write_baseline_dense_project(
-        source=baseline_source, pristine=pristine[BASELINE_LABEL], models=options.dense_models
+        source=baseline_source,
+        python=baseline.python,
+        pristine=pristine[BASELINE_LABEL],
+        models=options.dense_models,
     )
     versions: tuple[InstalledVersion, InstalledVersion] = (baseline, candidate)
     projects: dict[str, dict[str, Path]] = {}
@@ -196,7 +200,9 @@ def _install(
         sqb = install_published(
             version=spec, venv_dir=venv_dir, python=python, wait_seconds=wait_seconds
         )
-    return InstalledVersion(label=label, version=installed_version(sqb=sqb), sqb=sqb)
+    return InstalledVersion(
+        label=label, version=installed_version(sqb=sqb), sqb=sqb, python=sqb.with_name("python")
+    )
 
 
 def _write_evidence(*, path: Path, comparison: ReleaseComparison) -> None:
