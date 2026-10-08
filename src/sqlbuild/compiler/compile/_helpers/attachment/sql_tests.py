@@ -49,6 +49,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.native import (
     extract_expanded_sql_tests,
     extract_unexpanded_sql_test,
 )
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestExtractionError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -119,11 +120,12 @@ def build_test_inputs_with_cache(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
     sql_lexical_syntax: SqlLexicalSyntax,
+    scan_cache: SqlTestScanCache,
 ) -> tuple[CompileSqlTestInput, ...]:
-    """Build SQL test inputs inside the compile timing boundary."""
+    """Build SQL test inputs inside the compile timing boundary, then save the scan store."""
 
     with record_compile_timing("test_input_compile_ms"):
-        return build_test_inputs(
+        test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
             discovered_inputs=discovered_inputs,
             effective_vars=effective_vars,
             macro_context=macro_context,
@@ -132,7 +134,10 @@ def build_test_inputs_with_cache(
             external_sql_reference_resolver=external_sql_reference_resolver,
             sql_function_inputs=sql_function_inputs,
             sql_lexical_syntax=sql_lexical_syntax,
+            scan_cache=scan_cache,
         )
+        scan_cache.save()
+    return test_inputs
 
 
 def build_test_inputs(
@@ -145,6 +150,7 @@ def build_test_inputs(
     sql_lexical_syntax: SqlLexicalSyntax,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
+    scan_cache: SqlTestScanCache | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
@@ -310,6 +316,7 @@ def build_test_inputs(
                 (test.sql_body, str(test.test_file.relative_path), test.mode)
                 for test in expanded_tests
             ),
+            scan_cache=scan_cache,
             syntax=sql_lexical_syntax,
         )
     except SqlTestExtractionError as error:

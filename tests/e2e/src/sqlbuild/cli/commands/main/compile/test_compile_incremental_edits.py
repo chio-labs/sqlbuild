@@ -12,15 +12,18 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     IncrementalEditSequenceTestCase,
     RandomEditChainTestCase,
     SharedCacheKeyTestCase,
+    SqlTestScanStoreTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     IncrementalEditComparison,
     RandomEditChain,
+    adapter_switched,
     add_external_flavor_macro,
     analyze_in_one_batch,
     analyze_one_model_at_a_time,
     build_between,
+    change_adapter_lexical_rules,
     compare_incremental_compile,
     compile_edit_without_reuse,
     compile_in_process,
@@ -28,7 +31,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     compiled_artifact_tampered,
     compiled_text,
     completed_order_udf_signature_change,
+    corrupt_sql_test_scan_store,
+    disable_project_reuse,
+    edit_sql_test_scan_input,
     edit_step,
+    edit_unrelated_model,
     enable_compile_reuse,
     fact_audit_added,
     fact_comment,
@@ -38,6 +45,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     fact_quantity_type_removed,
     ignore_project_changes,
     ignore_query_in_analysis_key,
+    ignore_test_text_in_scan_key,
     in_process_reuse_run,
     keep_invalidation,
     move_project_file,
@@ -48,7 +56,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     plan_between,
     random_edit_plan,
     replace_project_text,
+    restore_sql_test_scan_writes,
     run_reuse_compile,
+    sql_test_scan_counts,
     staging_column_removed,
     staging_column_renamed,
     staging_column_restored,
@@ -65,7 +75,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     star_chain_steps,
     star_chain_with_twin_added,
     stg_orders_test_edit,
+    stg_orders_test_edited_again,
+    store_misshapen_scans,
+    store_undecodable_scans,
     twin_header_changed,
+    upgrade_native_build,
     write_external_flavor,
     write_generated_edit_models,
     write_project_file,
@@ -250,6 +264,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             ),
         ),
         IncrementalEditSequenceTestCase(
+            description="sql_test_scan_inputs",
+            steps=(
+                edit_step("test_edited", stg_orders_test_edit),
+                edit_step("unrelated_model_edited", fact_comment),
+                edit_step("adapter_switched", adapter_switched(before="duckdb", after="postgres")),
+                edit_step("test_edited_on_other_adapter", stg_orders_test_edited_again),
+                edit_step("adapter_restored", adapter_switched(before="postgres", after="duckdb")),
+            ),
+        ),
+        IncrementalEditSequenceTestCase(
             description="star_chain_after_plan",
             steps=star_chain_steps(between=plan_between),
         ),
@@ -350,6 +374,18 @@ def test_given_random_edit_chain_when_compiling_with_caches_then_each_step_match
             sabotage=ignore_query_in_analysis_key,
             expected_matches_uncached=False,
         ),
+        BrokenEditInvalidationTestCase(
+            description="intact_invalidation_after_test_edit",
+            edit=stg_orders_test_edit,
+            sabotage=keep_invalidation,
+            expected_matches_uncached=True,
+        ),
+        BrokenEditInvalidationTestCase(
+            description="stale_sql_test_scan_despite_test_edit",
+            edit=stg_orders_test_edit,
+            sabotage=ignore_test_text_in_scan_key,
+            expected_matches_uncached=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -409,6 +445,82 @@ def test_given_models_sharing_an_analysis_cache_key_when_upstream_changes_then_i
         incremental=incremental, reference=reference
     )
 
+    assert comparison.matches is test_case.expected_matches_uncached, (
+        comparison.mismatched_artifacts
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestScanStoreTestCase(
+            description="test_file_edited",
+            change=edit_sql_test_scan_input,
+            expected_rescans=2,
+        ),
+        SqlTestScanStoreTestCase(
+            description="unrelated_model_edited",
+            change=edit_unrelated_model,
+            expected_rescans=0,
+        ),
+        SqlTestScanStoreTestCase(
+            description="adapter_lexical_rules_changed",
+            change=change_adapter_lexical_rules,
+            expected_rescans=12,
+        ),
+        SqlTestScanStoreTestCase(
+            description="native_build_upgraded",
+            change=upgrade_native_build,
+            expected_rescans=12,
+        ),
+        SqlTestScanStoreTestCase(
+            description="store_file_corrupted",
+            change=corrupt_sql_test_scan_store,
+            expected_rescans=12,
+        ),
+        SqlTestScanStoreTestCase(
+            description="stored_entries_undecodable",
+            arrange=store_undecodable_scans,
+            change=restore_sql_test_scan_writes,
+            expected_rescans=12,
+        ),
+        SqlTestScanStoreTestCase(
+            description="stored_entries_misshapen",
+            arrange=store_misshapen_scans,
+            change=restore_sql_test_scan_writes,
+            expected_rescans=12,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stored_sql_test_scans_when_inputs_change_then_only_changed_files_rescan(
+    compile_reuse_project: Path,
+    test_case: SqlTestScanStoreTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = compile_reuse_project
+    disable_project_reuse(monkeypatch)
+    test_case.arrange(monkeypatch)
+    cold: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    test_case.change(project_dir, monkeypatch)
+
+    incremental: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    reference: CompileReuseRun = in_process_reuse_run(
+        project_dir=project_dir, capsys=capsys, args=("--no-cache",)
+    )
+    comparison: IncrementalEditComparison = IncrementalEditComparison(
+        incremental=incremental, reference=reference
+    )
+    stored: int = sum(sql_test_scan_counts(cold))
+
+    assert cold.returncode == 0, cold.stderr
+    assert sql_test_scan_counts(cold) == (0, stored)
+    assert sql_test_scan_counts(incremental) == (
+        stored - test_case.expected_rescans,
+        test_case.expected_rescans,
+    )
+    assert sql_test_scan_counts(reference) == (0, 0)
     assert comparison.matches is test_case.expected_matches_uncached, (
         comparison.mismatched_artifacts
     )

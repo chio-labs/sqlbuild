@@ -131,6 +131,7 @@ def build_compile_inputs(
         discovered_inputs=discovered_inputs,
         loaded_macros=loaded_macros,
         sql_lexical_syntax=adapter_context.sql_lexical_syntax,
+        compile_cache_dir=compile_cache_dir,
     )
     model_context: ModelInputBuildContext = ModelInputBuildContext(
         effective_vars=effective_vars,
@@ -183,6 +184,7 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_function_inputs=sql_function_inputs,
         sql_lexical_syntax=model_context.sql_lexical_syntax,
+        scan_cache=declaration_scope.sql_test_scans,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs=discovered_inputs,

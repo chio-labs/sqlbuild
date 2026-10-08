@@ -16,7 +16,7 @@ import sys
 import time
 import zipfile
 from bisect import bisect_left
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from io import StringIO
@@ -47,6 +47,7 @@ from scripts.cold_compile_performance.main.read_compile_measurement import read_
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
+from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse._helpers.entry_file import (
     read_entry_header,
@@ -62,9 +63,12 @@ from sqlbuild.cli.compile_reuse.models import (
     StoredCompileHeader,
     StoredCompileInputs,
 )
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
+from sqlbuild.compiler.compile.constants import SQL_TEST_SCAN_STORE_FILE_NAME
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -4053,6 +4057,126 @@ def stg_orders_test_edit(root: Path) -> None:
     replace_project_text(
         root, "tests/unit/test_stg_orders.sql", "100 AS customer_id", "101 AS customer_id"
     )
+
+
+def stg_orders_test_edited_again(root: Path) -> None:
+    """Change the staging orders SQL test's edited expected value once more."""
+
+    replace_project_text(
+        root, "tests/unit/test_stg_orders.sql", "101 AS customer_id", "102 AS customer_id"
+    )
+
+
+def adapter_switched(*, before: str, after: str) -> Callable[[Path], None]:
+    """Return an edit that switches the project adapter."""
+
+    def switch(root: Path) -> None:
+        replace_project_text(
+            root, "sqlbuild_project.toml", f'adapter = "{before}"', f'adapter = "{after}"'
+        )
+
+    return switch
+
+
+def disable_project_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set the fixture environment but compile every time, so the finer caches are exercised."""
+
+    enable_compile_reuse(monkeypatch)
+    monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, "1")
+
+
+def sql_test_scan_counts(run: CompileReuseRun) -> tuple[int, int]:
+    """Return the SQL-test scan store hits and misses of one compile."""
+
+    return run.timings["sql_test_scan_cache_hits"], run.timings["sql_test_scan_cache_misses"]
+
+
+def edit_sql_test_scan_input(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Edit one SQL test file between compiles."""
+
+    stg_orders_test_edit(root)
+
+
+def edit_unrelated_model(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Edit a model no SQL test text contains."""
+
+    fact_comment(root)
+
+
+def change_adapter_lexical_rules(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give the project adapter different lexical rules that leave this project's SQL unchanged."""
+
+    monkeypatch.setattr(
+        DuckDbBackedAdapter,
+        "sql_lexical_syntax",
+        replace(DuckDbBackedAdapter.sql_lexical_syntax, triple_quoted_strings=True),
+    )
+
+
+def upgrade_native_build(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend the native extension was rebuilt from different source."""
+
+    monkeypatch.setattr(native_module, "BUILD_IDENTITY", f"{native_module.BUILD_IDENTITY}-rebuilt")
+
+
+def corrupt_sql_test_scan_store(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overwrite the stored SQL-test scans with bytes that are not a store file."""
+
+    path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
+    assert path.is_file()
+    _ = path.write_bytes(b"not a native store")
+
+
+_ORIGINAL_SCAN_WRITE: Callable[..., None] = SqlTestScanCache.write
+
+
+def _stored_scans_replaced(replacement: bytes) -> Callable[[pytest.MonkeyPatch], None]:
+    def arrange(monkeypatch: pytest.MonkeyPatch) -> None:
+        def write(
+            self: SqlTestScanCache,
+            *,
+            algorithm: str,
+            syntax: SqlLexicalSyntax,
+            parts: Sequence[str],
+            value: bytes,
+        ) -> None:
+            del value
+            _ORIGINAL_SCAN_WRITE(
+                self, algorithm=algorithm, syntax=syntax, parts=parts, value=replacement
+            )
+
+        monkeypatch.setattr(SqlTestScanCache, "write", write)
+
+    return arrange
+
+
+store_undecodable_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(b"{]")
+store_misshapen_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(
+    b'[{"mode": "model"}]'
+)
+
+
+def ignore_test_text_in_scan_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Key stored SQL-test scans by file path only, so an edited test reads a stale scan."""
+
+    read: Callable[..., object] = SqlTestScanCache.read
+    write: Callable[..., None] = SqlTestScanCache.write
+
+    def path_only(kwargs: dict[str, Any]) -> dict[str, Any]:
+        return {**kwargs, "parts": kwargs["parts"][:1]}
+
+    monkeypatch.setattr(
+        SqlTestScanCache, "read", lambda self, **kwargs: read(self, **path_only(kwargs))
+    )
+    monkeypatch.setattr(
+        SqlTestScanCache, "write", lambda self, **kwargs: write(self, **path_only(kwargs))
+    )
+
+
+def restore_sql_test_scan_writes(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Store real scan results again after an arrangement replaced them."""
+
+    monkeypatch.setattr(SqlTestScanCache, "write", _ORIGINAL_SCAN_WRITE)
 
 
 def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:

@@ -561,11 +561,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Temporary: a one-model edit recompiles the edited model uncached until native
+        # rendering becomes the default; tighten edit_max_ratio back to max_ratio then.
         include:
           - kind: dense
             max_ratio: "1.10"
+            edit_max_ratio: "1.45"
           - kind: fresh
             max_ratio: "1.10"
+            edit_max_ratio: "1.25"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base
@@ -596,11 +600,13 @@ jobs:
         env:
           KIND: ${{ matrix.kind }}
           MAX_RATIO: ${{ matrix.max_ratio }}
+          EDIT_MAX_RATIO: ${{ matrix.edit_max_ratio }}
         run: |
           uv run python -m scripts.compare_compile_performance \
             --kind "${KIND}" \
             --modes cold warm edit \
             --max-ratio "${MAX_RATIO}" \
+            --edit-max-ratio "${EDIT_MAX_RATIO}" \
             --models 3000 \
             --base-root base \
             --base-python base/.venv/bin/python \

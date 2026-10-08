@@ -743,6 +743,17 @@ class ExternalModuleEditTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestScanStoreTestCase:
+    """A change between two compiles, and how many stored SQL-test scans it must invalidate."""
+
+    description: str
+    change: Callable[[Path, pytest.MonkeyPatch], None]
+    expected_rescans: int
+    arrange: Callable[[pytest.MonkeyPatch], None] = lambda _monkeypatch: None
+    expected_matches_uncached: bool = True
+
+
+@dataclass(frozen=True)
 class DenseBatchedPreparationTestCase:
     description: str
     model_count: int

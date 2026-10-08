@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 
 from scripts.compile_performance_ratio.models import CompileComparison
 
@@ -13,6 +14,7 @@ def ratio_failures(
     modes: tuple[str, ...],
     max_ratio: float,
     noise_floor_seconds: float,
+    mode_max_ratios: Mapping[str, float] | None = None,
 ) -> tuple[str, ...]:
     """Describe every requested mode that is unmeasured or slower than ratio plus floor allow."""
 
@@ -26,6 +28,7 @@ def ratio_failures(
             failures.append(f"{mode}: no measurement")
             continue
         prefix: str = f"{comparison.kind} {comparison.models} {mode}"
+        limit: float = (mode_max_ratios or {}).get(mode, max_ratio)
         for metric, base, head, ratio in (
             (
                 "wall",
@@ -39,8 +42,8 @@ def ratio_failures(
                 failures.append(
                     f"{prefix}: {metric} measurement missing (base {base:.2f} s, head {head:.2f} s)"
                 )
-            elif head > base * max_ratio + noise_floor_seconds:
-                failures.append(f"{prefix}: {metric} ratio {ratio:.3f} exceeds {max_ratio:.2f}")
+            elif head > base * limit + noise_floor_seconds:
+                failures.append(f"{prefix}: {metric} ratio {ratio:.3f} exceeds {limit:.2f}")
     return tuple(failures)
 
 

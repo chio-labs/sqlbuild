@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+from collections.abc import Mapping
 from pathlib import Path
 
 from scripts.compile_performance_ratio.constants import MODE_TITLES, REPORTED_PHASES
@@ -16,6 +17,7 @@ def comparison_markdown(
     max_ratio: float,
     per_side_projects: bool,
     failures: tuple[str, ...],
+    mode_max_ratios: Mapping[str, float] | None = None,
 ) -> str:
     """Summarize medians, ratios and per-phase timings of every mode as Markdown tables."""
 
@@ -31,7 +33,8 @@ def comparison_markdown(
                 f"### {comparison.kind} {comparison.models} models, "
                 f"{MODE_TITLES[comparison.mode]}: head vs base (same runner)",
                 "",
-                f"Runner CPU: {cpu_model()}; {runs} alternating runs each; limit {max_ratio:.2f}x.",
+                f"Runner CPU: {cpu_model()}; {runs} alternating runs each; "
+                f"limit {(mode_max_ratios or {}).get(comparison.mode, max_ratio):.2f}x.",
                 "",
                 generation,
                 "",

@@ -1,15 +1,14 @@
 //! The macro call memo class: one compile's recorded calls and its optional native store.
 
-use pyo3::exceptions::{PyOSError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::Python;
 use pyo3::{PyResult, pyclass, pymethods};
-use sqlbuild_cache::store::main::open_native_store::open_native_store;
 use sqlbuild_cache::store::models::NativeStore;
 use sqlbuild_render::macro_calls::models::MacroCallEntry;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use crate::bindings::types::CompilerDetach;
+use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
 
 use crate::bindings::_helpers::render::macro_call_rows::{EntryRow, event_from_row, event_row};
 
@@ -80,10 +79,7 @@ impl MacroCallMemo {
         path: PathBuf,
         environment: &str,
     ) -> PyResult<(Vec<u8>, usize)> {
-        let store: NativeStore = py
-            .compiler_detach(|| Ok(open_native_store(&path, MACRO_CALL_STORE_KIND, environment)))
-            .map_err(PyRuntimeError::new_err)?
-            .map_err(|error| PyOSError::new_err(error.to_string()))?;
+        let store: NativeStore = open_store(py, &path, MACRO_CALL_STORE_KIND, environment)?;
         let opened = (store.metadata().to_vec(), store.loaded_entries());
         self.inner.lock().map_err(poisoned)?.attach_store(store);
         Ok(opened)
@@ -119,13 +115,9 @@ impl MacroCallMemo {
         metadata: &[u8],
     ) -> PyResult<Option<usize>> {
         let mut memo = self.inner.lock().map_err(poisoned)?;
-        let Some(store) = memo.store_mut().filter(|store| store.needs_save()) else {
+        let Some(store) = memo.store_mut() else {
             return Ok(None);
         };
-        let store: &NativeStore = store;
-        py.compiler_detach(|| Ok(store.save(&path, metadata)))
-            .map_err(PyRuntimeError::new_err)?
-            .map(Some)
-            .map_err(|error| PyOSError::new_err(error.to_string()))
+        save_store(py, store, &path, metadata)
     }
 }

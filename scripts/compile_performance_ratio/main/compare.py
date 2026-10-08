@@ -19,6 +19,7 @@ from scripts.compile_performance_ratio.constants import (
     COMPILE_MODES,
     DEFAULT_MAX_RATIO,
     DEFAULT_RUNS,
+    EDIT_MODE,
     NOISE_FLOOR_SECONDS,
     PROJECT_KINDS,
 )
@@ -59,11 +60,15 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             runs=args.runs,
             modes=modes,
         )
+    mode_max_ratios: dict[str, float] = (
+        {} if args.edit_max_ratio is None else {EDIT_MODE: args.edit_max_ratio}
+    )
     failures: tuple[str, ...] = ratio_failures(
         comparisons=comparisons,
         modes=modes,
         max_ratio=args.max_ratio,
         noise_floor_seconds=args.noise_floor_seconds,
+        mode_max_ratios=mode_max_ratios,
     )
     markdown: str = comparison_markdown(
         comparisons=comparisons,
@@ -71,6 +76,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         max_ratio=args.max_ratio,
         per_side_projects=per_side_projects,
         failures=failures,
+        mode_max_ratios=mode_max_ratios,
     )
     print(markdown)
     _ = append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
@@ -104,6 +110,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS)
     parser.add_argument("--max-ratio", type=float, default=DEFAULT_MAX_RATIO)
+    parser.add_argument(
+        "--edit-max-ratio",
+        type=float,
+        default=None,
+        help="Ratio limit of the one-model edit mode only; defaults to --max-ratio.",
+    )
     parser.add_argument(
         "--noise-floor-seconds",
         type=float,

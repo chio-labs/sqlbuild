@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol, cast
 
 import orjson
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
+from sqlbuild.compiler.compile.constants import SQL_TEST_CTE_SCAN_ALGORITHM
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
     NativeSqlTestResponseError,
@@ -44,18 +47,89 @@ def extract_expanded_sql_tests(
     *,
     tests: tuple[tuple[str, str, SqlTestMode], ...],
     syntax: SqlLexicalSyntax,
+    scan_cache: SqlTestScanCache | None = None,
 ) -> tuple[CompileSqlTestCtes, ...]:
-    """Extract and classify expanded tests natively under the adapter's lexical rules."""
+    """Extract expanded tests natively, reusing whole stored results of unchanged files."""
 
-    if not tests:
-        return ()
-    expanded: tuple[tuple[str, str, SqlTestMode, bool], ...] = tuple(
-        (sql, file_label, mode, False) for sql, file_label, mode in tests
-    )
-    extracted: tuple[tuple[CompileSqlTestCtes, bool], ...] = _extract_natively(
-        tests=expanded, syntax=syntax
-    )
-    return tuple(test_ctes for test_ctes, _invalid_calls in extracted)
+    store: SqlTestScanCache = scan_cache or SqlTestScanCache(cache_dir=None)
+    indexes_by_file: dict[str, list[int]] = {}
+    for index, (_sql, file_label, _mode) in enumerate(tests):
+        indexes_by_file.setdefault(file_label, []).append(index)
+    results: list[CompileSqlTestCtes | None] = [None] * len(tests)
+    parts_by_file: dict[str, list[str]] = {}
+    for file_label, indexes in indexes_by_file.items():
+        parts: list[str] = [file_label]
+        for index in indexes:
+            parts.extend((tests[index][0], tests[index][2].value))
+        modes: tuple[SqlTestMode, ...] = tuple(tests[index][2] for index in indexes)
+        stored: tuple[CompileSqlTestCtes, ...] | None = store.read(
+            algorithm=SQL_TEST_CTE_SCAN_ALGORITHM,
+            syntax=syntax,
+            parts=parts,
+            decode=_stored_file_tests(modes=modes),
+        )
+        if stored is None:
+            parts_by_file[file_label] = parts
+            continue
+        for index, test_ctes in zip(indexes, stored, strict=True):
+            results[index] = test_ctes
+    missing: list[int] = []
+    for file_label in parts_by_file:
+        missing.extend(indexes_by_file[file_label])
+    missing.sort()
+    if missing:
+        try:
+            items: list[object] = _native_batch(
+                tests=[
+                    {
+                        "sql": tests[index][0],
+                        "fileLabel": tests[index][1],
+                        "mode": tests[index][2].value,
+                        "raw": False,
+                    }
+                    for index in missing
+                ],
+                syntax=syntax,
+            )
+        except SqlTestExtractionError as error:
+            error.test_index = missing[error.test_index]
+            raise
+        items_by_index: dict[int, object] = dict(zip(missing, items, strict=True))
+        for file_label, parts in parts_by_file.items():
+            file_items: list[object] = [
+                items_by_index[index] for index in indexes_by_file[file_label]
+            ]
+            for index, item in zip(indexes_by_file[file_label], file_items, strict=True):
+                results[index] = _test_ctes_from_native(item)
+            store.write(
+                algorithm=SQL_TEST_CTE_SCAN_ALGORITHM,
+                syntax=syntax,
+                parts=parts,
+                value=orjson.dumps(file_items),
+            )
+    return tuple(result for result in results if result is not None)
+
+
+def _stored_file_tests(
+    *, modes: tuple[SqlTestMode, ...]
+) -> Callable[[bytes], tuple[CompileSqlTestCtes, ...] | None]:
+    """Decode one file's stored tests, rejecting anything that is not their exact shape."""
+
+    def decode(value: bytes) -> tuple[CompileSqlTestCtes, ...] | None:
+        try:
+            items: object = orjson.loads(value)
+            if not isinstance(items, list) or len(cast(list[object], items)) != len(modes):
+                return None
+            decoded: tuple[CompileSqlTestCtes, ...] = tuple(
+                _test_ctes_from_native(item) for item in cast(list[object], items)
+            )
+        except (orjson.JSONDecodeError, CompileInputError):
+            return None
+        if any(test_ctes.mode is not mode for test_ctes, mode in zip(decoded, modes, strict=True)):
+            return None
+        return decoded
+
+    return decode
 
 
 def extract_unexpanded_sql_test(

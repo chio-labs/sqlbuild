@@ -120,12 +120,20 @@ prints `Recording compile for reuse...` and a completion line to stderr before t
 
 Any change runs the whole compile again: every model, test, and audit is rendered again, and
 contracts and semantic validation run for the whole project. No render is carried over from the
-previous compile. A few caches under `target/cache/` still apply: an unchanged model takes its
-column analysis from the analysis cache when its query and the analyses of its upstream models are
-unchanged, rule results are reused for unchanged inputs, and macro call results may be reused as
-described in [Macros must be deterministic](/docs/concepts/macros#macros-must-be-deterministic).
-Until the native compiler ships, editing one model therefore costs close to a full compile. The
-output is byte-identical to `sqb compile --no-cache`.
+previous compile, so until the native compiler ships, an edited model is recompiled without any
+cache. A few caches under `target/cache/` shorten the rest:
+
+- An unchanged model takes its column analysis from the analysis cache when its query and the
+  analyses of its upstream models are unchanged.
+- An unchanged SQL test file reuses its stored test scan, the CTEs and expected models read from
+  it, from `sql-test-scans.bin`. Entries are keyed by the file's expanded text, the adapter's SQL
+  lexical rules, and the SQLBuild build; a damaged or unreadable entry is scanned again.
+- Rule results are reused for unchanged inputs.
+- Macro call results may be reused as described in
+  [Macros must be deterministic](/docs/concepts/macros#macros-must-be-deterministic).
+
+An edit therefore costs a full render of the project plus the analysis, test scans, and rules of
+what changed. The output is byte-identical to `sqb compile --no-cache`.
 
 Known limits:
 
@@ -146,7 +154,8 @@ Known limits:
 A replayed JSON report is byte-identical to the previous one except for `compile_timings`, which
 holds `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses`,
 `project_reuse_check_ms`, and `total_ms`. Full compiles report the same reuse counters alongside
-the phase timings. In text mode, a replayed compile does not print the per-phase progress lines.
+the phase timings and cache counters such as `sql_test_scan_cache_hits` and
+`sql_test_scan_cache_misses`. In text mode, a replayed compile does not print the per-phase progress lines.
 Lifecycle sinks receive only the invocation events for a replayed compile; per-phase `operation`
 events are not emitted because no compile phase runs.
 </Note>

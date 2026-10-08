@@ -32,7 +32,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     scopes::registration::register(module)?;
     model_config::registration::register(module)?;
     render::macro_calls::register(module)?;
-    cache::native_store::register(module)?;
+    cache::registration::register(module)?;
     attachments::registration::register(module)?;
     register_analysis_stages(module)?;
     module.add("API_VERSION", API_VERSION)?;

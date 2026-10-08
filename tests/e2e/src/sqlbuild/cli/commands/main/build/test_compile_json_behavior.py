@@ -88,6 +88,8 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         "analysis_entry_cache_hits",
         "analysis_cache_misses",
         "analysis_cache_bypasses",
+        "sql_test_scan_cache_hits",
+        "sql_test_scan_cache_misses",
         "project_reuse_hits",
         "project_reuse_misses",
         "project_reuse_bypasses",

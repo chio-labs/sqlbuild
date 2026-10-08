@@ -1,6 +1,6 @@
 """Test-case models for the same-runner compile performance ratio guard."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from scripts.compile_performance_ratio.models import CompileComparison
 
@@ -12,6 +12,7 @@ class RatioFailuresTestCase:
     modes: tuple[str, ...]
     max_ratio: float
     expected_failures: tuple[str, ...]
+    mode_max_ratios: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import cast
+
+import orjson
 
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
@@ -16,7 +19,11 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_sql_test_expected_model_names,
     extract_unclassified_sql_test_ctes,
 )
-from sqlbuild.compiler.compile.constants import MACRO_ACTUAL_TEST_CTE_NAME
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
+from sqlbuild.compiler.compile.constants import (
+    MACRO_ACTUAL_TEST_CTE_NAME,
+    SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM,
+)
 from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
     ScopeRelationshipBuild,
@@ -49,6 +56,7 @@ from sqlbuild.compiler.scopes.types import DeclarationKind, GrantKind, ResourceK
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 type _SharedDeclarations = dict[tuple[str, str], tuple[DeclarationRecord, ...]]
+type _BlockNames = tuple[str, ...] | Exception
 
 
 def build_scope_relationship_grants(
@@ -56,6 +64,7 @@ def build_scope_relationship_grants(
     discovered_inputs: DiscoveredProjectInputs,
     index: ScopeIndex,
     sql_lexical_syntax: SqlLexicalSyntax,
+    scan_cache: SqlTestScanCache | None = None,
 ) -> ScopeRelationshipBuild:
     """Return expected-model grants while retaining independent extraction faults."""
 
@@ -65,6 +74,7 @@ def build_scope_relationship_grants(
         discovered_inputs=discovered_inputs,
         lookup=lookup,
         shared_declarations=shared_declarations,
+        scan_cache=scan_cache or SqlTestScanCache(cache_dir=None),
         syntax=sql_lexical_syntax,
     )
     scenario_grants, scenario_faults = _scenario_relationship_grants(
@@ -83,28 +93,22 @@ def extract_scope_relationship_facts(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     sql_lexical_syntax: SqlLexicalSyntax,
+    scan_cache: SqlTestScanCache | None = None,
 ) -> tuple[tuple[RelationshipFact, ...], str | None]:
     """Return the relationship names grants are resolved from, and the first extraction fault."""
 
     facts: list[RelationshipFact] = []
     faults: list[ScopeRelationshipFault] = []
-    scanned_names: dict[tuple[int, int], tuple[str, ...]] = _scanned_expected_names(
-        test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
+    names_by_file: list[list[_BlockNames]] = _expected_names_by_file(
+        test_files=discovered_inputs.test_files,
+        scan_cache=scan_cache or SqlTestScanCache(cache_dir=None),
+        syntax=sql_lexical_syntax,
+        scan_natively=True,
     )
-    for file_index, test_file in enumerate(discovered_inputs.test_files):
-        for block_index, block in enumerate(test_file.blocks):
-            scanned: tuple[str, ...] | None = scanned_names.get((file_index, block_index))
+    for test_file, file_names in zip(discovered_inputs.test_files, names_by_file, strict=True):
+        for block, block_names in zip(test_file.blocks, file_names, strict=True):
             try:
-                expected_names: tuple[str, ...] = (
-                    scanned
-                    if scanned is not None
-                    else extract_sql_test_expected_model_names(
-                        sql=block.sql_body,
-                        file_label=str(test_file.relative_path),
-                        syntax=sql_lexical_syntax,
-                        mode=block.mode,
-                    )
-                )
+                expected_names: tuple[str, ...] = _names_or_raise(block_names)
                 called_macros: tuple[str, ...] = find_nested_macro_call_names(block.sql_body)
                 facts.append(
                     RelationshipFact(
@@ -149,15 +153,112 @@ def extract_scope_relationship_facts(
     return tuple(facts), faults[0].message if faults else None
 
 
+def _expected_names_by_file(
+    *,
+    test_files: Sequence[DiscoveredSqlTestFile],
+    scan_cache: SqlTestScanCache,
+    syntax: SqlLexicalSyntax,
+    scan_natively: bool,
+) -> list[list[_BlockNames]]:
+    """Return each block's expected-model names or extraction error, reusing whole stored files."""
+
+    stored: list[tuple[tuple[str, ...], ...] | None] = [
+        scan_cache.read(
+            algorithm=SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM,
+            syntax=syntax,
+            parts=_expected_names_parts(test_file),
+            decode=_stored_expected_names(block_count=len(test_file.blocks)),
+        )
+        for test_file in test_files
+    ]
+    scanned: dict[tuple[int, int], tuple[str, ...]] = (
+        _scanned_expected_names(test_files=test_files, stored=stored, syntax=syntax)
+        if scan_natively
+        else {}
+    )
+    names_by_file: list[list[_BlockNames]] = []
+    for file_index, test_file in enumerate(test_files):
+        stored_names: tuple[tuple[str, ...], ...] | None = stored[file_index]
+        if stored_names is not None:
+            names_by_file.append(list(stored_names))
+            continue
+        file_names: list[_BlockNames] = []
+        for block_index, block in enumerate(test_file.blocks):
+            native_names: tuple[str, ...] | None = scanned.get((file_index, block_index))
+            if native_names is not None:
+                file_names.append(native_names)
+                continue
+            try:
+                file_names.append(
+                    extract_sql_test_expected_model_names(
+                        sql=block.sql_body,
+                        file_label=str(test_file.relative_path),
+                        syntax=syntax,
+                        mode=block.mode,
+                    )
+                )
+            except Exception as error:
+                file_names.append(error)
+        if not any(isinstance(names, Exception) for names in file_names):
+            scan_cache.write(
+                algorithm=SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM,
+                syntax=syntax,
+                parts=_expected_names_parts(test_file),
+                value=orjson.dumps(file_names),
+            )
+        names_by_file.append(file_names)
+    return names_by_file
+
+
+def _expected_names_parts(test_file: DiscoveredSqlTestFile) -> list[str]:
+    parts: list[str] = [str(test_file.relative_path)]
+    for block in test_file.blocks:
+        parts.extend((block.sql_body, block.mode.value))
+    return parts
+
+
+def _stored_expected_names(
+    *, block_count: int
+) -> Callable[[bytes], tuple[tuple[str, ...], ...] | None]:
+    """Decode one file's stored names, rejecting anything that is not their exact shape."""
+
+    def decode(value: bytes) -> tuple[tuple[str, ...], ...] | None:
+        try:
+            decoded: object = orjson.loads(value)
+        except orjson.JSONDecodeError:
+            return None
+        if not isinstance(decoded, list) or len(cast(list[object], decoded)) != block_count:
+            return None
+        blocks: list[tuple[str, ...]] = []
+        for names in cast(list[object], decoded):
+            if not isinstance(names, list) or not all(
+                isinstance(name, str) for name in cast(list[object], names)
+            ):
+                return None
+            blocks.append(tuple(cast(list[str], names)))
+        return tuple(blocks)
+
+    return decode
+
+
+def _names_or_raise(names: _BlockNames) -> tuple[str, ...]:
+    if isinstance(names, Exception):
+        raise names
+    return names
+
+
 def _scanned_expected_names(
     *,
     test_files: Sequence[DiscoveredSqlTestFile],
+    stored: Sequence[tuple[tuple[str, ...], ...] | None],
     syntax: SqlLexicalSyntax,
 ) -> dict[tuple[int, int], tuple[str, ...]]:
-    """Scan model-mode blocks natively, keeping only the names the scan reproduces."""
+    """Scan model-mode blocks of unstored files natively, keeping only names the scan reproduces."""
 
     pending: list[tuple[int, int]] = []
     for file_index, test_file in enumerate(test_files):
+        if stored[file_index] is not None:
+            continue
         pending.extend(
             (file_index, block_index)
             for block_index, block in enumerate(test_file.blocks)
@@ -192,19 +293,21 @@ def _test_relationship_grants(
     discovered_inputs: DiscoveredProjectInputs,
     lookup: ScopeLookup,
     shared_declarations: _SharedDeclarations,
+    scan_cache: SqlTestScanCache,
     syntax: SqlLexicalSyntax,
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
-    for test_file in discovered_inputs.test_files:
-        for block in test_file.blocks:
+    names_by_file: list[list[_BlockNames]] = _expected_names_by_file(
+        test_files=discovered_inputs.test_files,
+        scan_cache=scan_cache,
+        syntax=syntax,
+        scan_natively=False,
+    )
+    for test_file, file_names in zip(discovered_inputs.test_files, names_by_file, strict=True):
+        for block, block_names in zip(test_file.blocks, file_names, strict=True):
             try:
-                expected_names: tuple[str, ...] = extract_sql_test_expected_model_names(
-                    sql=block.sql_body,
-                    file_label=str(test_file.relative_path),
-                    syntax=syntax,
-                    mode=block.mode,
-                )
+                expected_names: tuple[str, ...] = _names_or_raise(block_names)
                 grants.extend(
                     _expected_model_grants(
                         lookup=lookup,

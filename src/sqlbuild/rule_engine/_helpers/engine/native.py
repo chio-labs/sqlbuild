@@ -35,6 +35,7 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
 )
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
+from sqlbuild.rule_engine._helpers.run.code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.run.native_memo import (
     native_payload_digests,
     native_request_identity,
@@ -244,13 +245,15 @@ def start_custom_rules(
     dialect: str,
     verify_determinism: bool = False,
 ) -> Future[CustomRulesOutcome] | None:
-    """Submit selected custom rules, reusing the implementation fingerprints of their payloads."""
+    """Submit selected custom rules after digesting installed code here, clear of GIL contention."""
 
     custom_rules: tuple[Rule, ...] = _selected_custom_rules(
         config=config, catalogue=catalogue, custom_payloads=custom_payloads
     )
     if not custom_rules:
         return None
+    if config.cache.enabled:
+        _ = compiled_code_identity()
     return executor.submit(
         evaluate_custom_rules_cached,
         project=project,

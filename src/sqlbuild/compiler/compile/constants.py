@@ -187,3 +187,7 @@ COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH: int = 3
 COMPACT_ANALYSIS_FACT_LENGTH: int = 6
 COMPACT_ANALYSIS_SOURCE_LENGTH: int = 3
 MODEL_SCHEMA_CONFIG_KEY: str = "schema"
+SQL_TEST_SCAN_STORE_FILE_NAME: str = "sql-test-scans.bin"
+SQL_TEST_SCAN_STORE_VERSION: str = "sql-test-scan-store-v1"
+SQL_TEST_CTE_SCAN_ALGORITHM: str = "expanded-sql-test-ctes-v1"
+SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM: str = "sql-test-expected-models-v1"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import replace
+from pathlib import Path
 from types import CodeType
 
 from sqlbuild.compiler.compile._helpers.attachment.scope_relationships import (
@@ -17,6 +18,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
 from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
     validate_authored_test_cte_names,
 )
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationScopeBuild,
@@ -41,8 +43,11 @@ def build_declaration_scope(
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: dict[str, LoadedMacro],
     sql_lexical_syntax: SqlLexicalSyntax,
+    compile_cache_dir: Path | None = None,
 ) -> DeclarationScopeBuild:
     """Build one canonical index and validate it before SQL expansion."""
+
+    scan_cache: SqlTestScanCache = SqlTestScanCache(cache_dir=compile_cache_dir)
 
     validate_authored_test_cte_names(
         test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
@@ -52,6 +57,7 @@ def build_declaration_scope(
             discovered_inputs=discovered_inputs,
             loaded_macros=loaded_macros,
             sql_lexical_syntax=sql_lexical_syntax,
+            scan_cache=scan_cache,
         )
         if native_scope is not None:
             return native_scope
@@ -73,6 +79,7 @@ def build_declaration_scope(
             discovered_inputs=discovered_inputs,
             index=index,
             sql_lexical_syntax=sql_lexical_syntax,
+            scan_cache=scan_cache,
         )
         if has_scoped_relationship_declarations
         and (discovered_inputs.test_files or discovered_inputs.scenario_files)
@@ -93,6 +100,7 @@ def build_declaration_scope(
             scope_index=index,
             loaded_macros=loaded_macros,
         ),
+        sql_test_scans=scan_cache,
     )
 
 
@@ -101,6 +109,7 @@ def _build_native_declaration_scope(
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: dict[str, LoadedMacro],
     sql_lexical_syntax: SqlLexicalSyntax,
+    scan_cache: SqlTestScanCache,
 ) -> DeclarationScopeBuild | None:
     """Build the scope natively with Python's errors and order, or None for the Python stage."""
 
@@ -121,6 +130,7 @@ def _build_native_declaration_scope(
         facts, fault = extract_scope_relationship_facts(
             discovered_inputs=discovered_inputs,
             sql_lexical_syntax=sql_lexical_syntax,
+            scan_cache=scan_cache,
         )
         if fault is not None:
             raise CompileInputError(fault)
@@ -139,6 +149,7 @@ def _build_native_declaration_scope(
             loaded_macros=loaded_macros,
             lookup=lookup,
         ),
+        sql_test_scans=scan_cache,
     )
 
 
@@ -160,6 +171,7 @@ def rebind_declaration_scope(
             scope_index=scope.index,
             loaded_macros=loaded_macros,
         ),
+        sql_test_scans=scope.sql_test_scans,
     )
 
 
