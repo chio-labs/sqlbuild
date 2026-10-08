@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.140.1](https://github.com/chio-labs/sqlbuild/compare/v0.140.0...v0.140.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **test:** resolve mocked and expected-row references consistently in SQL tests ([#1023](https://github.com/chio-labs/sqlbuild/issues/1023)) ([7e908ac](https://github.com/chio-labs/sqlbuild/commit/7e908ac10ffa5f051670b68d1cebc457bca3512a))
+
 ## [0.140.0](https://github.com/chio-labs/sqlbuild/compare/v0.139.0...v0.140.0) (2026-10-08)
 
 
