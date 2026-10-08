@@ -468,6 +468,7 @@ def attachment_engine_outcome(
             inputs.audit_inputs,
             inputs.test_inputs,
             inputs.scenario_inputs,
+            inputs.diagnostics,
         )
     ).replace(str(project_dir), "<project>")
 

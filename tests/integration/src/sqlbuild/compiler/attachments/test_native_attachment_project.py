@@ -58,6 +58,11 @@ _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
 _SCENARIO: str = "tests/scenarios/orders_scenario.sql"
 _SCENARIO_HEADER: str = 'SCENARIO (\n  description "Orders join their channel"\n);\n\n'
 _UNIT_TEST: str = "tests/unit/test_orders.sql"
+_HELPER_TEST_MOCKS: str = (
+    "TEST();\n\nWITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
+    "__source__order_events AS (SELECT 1 AS id, 'north' AS region),\n"
+)
+_HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)"
 
 
 @pytest.mark.parametrize(
@@ -67,7 +72,7 @@ _UNIT_TEST: str = "tests/unit/test_orders.sql"
             description="macros in every attachment kind, seeds, templates and generic audits",
             overrides={},
             expected_preview_entries=_ATTACHMENT_ENTRIES | _BRIDGED_CONSUMERS,
-            expected_outcome_prefix="((CompileSeedInput(",
+            expected_outcome_fragment="((CompileSeedInput(",
         ),
         AttachmentProjectTestCase(
             description="a scenario check CTE reading a project source",
@@ -77,7 +82,7 @@ _UNIT_TEST: str = "tests/unit/test_orders.sql"
                 + '__expected__orders AS (SELECT id, 1.5 AS amount, label FROM __source("order_events"))\n'
             },
             expected_preview_entries=frozenset({"scenario_source_error"}),
-            expected_outcome_prefix="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE",
+            expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE",
         ),
         AttachmentProjectTestCase(
             description="a scenario helper reading an unknown source",
@@ -88,8 +93,53 @@ _UNIT_TEST: str = "tests/unit/test_orders.sql"
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
             },
             expected_preview_entries=frozenset({"scenario_source_error"}),
-            expected_outcome_prefix="error: SQL scenario file tests/scenarios/orders_scenario.sql "
+            expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
             "references unknown source 'missing_events'",
+        ),
+        AttachmentProjectTestCase(
+            description="a helper CTE reading a model through __ref and read by an assertion",
+            overrides={
+                _UNIT_TEST: _HELPER_TEST_MOCKS
+                + 'built_orders AS (SELECT id FROM __ref("orders")),\n'
+                + _HELPER_TEST_EXPECTED
+                + ",\n__assert__has_rows AS (SELECT 1 FROM built_orders WHERE id IS NULL)\n"
+            },
+            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_outcome_fragment="helper_target_model_names=('orders',)",
+        ),
+        AttachmentProjectTestCase(
+            description="a helper chain where one helper reads another",
+            overrides={
+                _UNIT_TEST: _HELPER_TEST_MOCKS
+                + 'built_orders AS (SELECT id FROM __ref("orders")),\n'
+                + "built_ids AS (SELECT id FROM built_orders),\n"
+                + _HELPER_TEST_EXPECTED
+                + ",\n__assert__has_ids AS (SELECT 1 FROM built_ids WHERE id IS NULL)\n"
+            },
+            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_outcome_fragment="helper_target_model_names=('orders',)",
+        ),
+        AttachmentProjectTestCase(
+            description="an unread helper referencing an unknown model",
+            overrides={
+                _UNIT_TEST: _HELPER_TEST_MOCKS
+                + 'unused_returns AS (SELECT id FROM __ref("returns")),\n'
+                + _HELPER_TEST_EXPECTED
+                + "\n"
+            },
+            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_outcome_fragment="helper_target_model_names=()",
+        ),
+        AttachmentProjectTestCase(
+            description="a read helper referencing an unknown model reports P013",
+            overrides={
+                _UNIT_TEST: _HELPER_TEST_MOCKS
+                + 'built_returns AS (SELECT id FROM __ref("returns")),\n'
+                + _HELPER_TEST_EXPECTED
+                + ",\n__assert__no_returns AS (SELECT 1 FROM built_returns)\n"
+            },
+            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_outcome_fragment="P013",
         ),
         AttachmentProjectTestCase(
             description="a model test expecting an unknown model",
@@ -98,7 +148,7 @@ _UNIT_TEST: str = "tests/unit/test_orders.sql"
                 "__expected__returns AS (SELECT 1 AS id)\n"
             },
             expected_preview_entries=frozenset({"unknown_sql_test_target"}),
-            expected_outcome_prefix="error: SQL test file tests/unit/test_orders.sql expects "
+            expected_outcome_fragment="error: SQL test file tests/unit/test_orders.sql expects "
             "unknown model 'returns'",
         ),
     ],
@@ -123,7 +173,7 @@ def test_given_attachment_project_when_building_inputs_then_preview_matches_pyth
     assert (
         preview_outcome.replace(CompilerEngine.NATIVE_PREVIEW.value, "python"),
         native_outcome.replace(CompilerEngine.NATIVE.value, "python"),
-        python_outcome.startswith(test_case.expected_outcome_prefix),
+        test_case.expected_outcome_fragment in python_outcome,
         preview_called >= test_case.expected_preview_entries,
         (python_called | native_called) & _PREVIEW_ONLY_ENTRIES,
     ) == (python_outcome, python_outcome, True, True, frozenset()), test_case.description
