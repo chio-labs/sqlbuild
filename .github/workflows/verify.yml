@@ -406,7 +406,13 @@ jobs:
           uv run --no-sync sqb --project-dir "${project}" --no-color compile
           SQLBUILD_COMPILER_ENGINE=python uv run --no-sync sqb --project-dir "${oracle}" --no-color compile
           diff -r "${oracle}/target/compiled" "${project}/target/compiled"
-          test -f "${project}/target/cache/compiler-native-v1/macro-calls.bin"
+          if ! test -f "${project}/target/cache/compiler-native-v1/macro-calls.bin"; then
+            echo "The default compile did not write the macro-call store; macro bridge debug log:"
+            rm -rf "${oracle}/target"
+            uv run --no-sync sqb --project-dir "${oracle}" --no-color --debug compile 2>&1 \
+              | grep "macro_bridge" || true
+            exit 1
+          fi
           uv run --no-sync sqb --project-dir "${project}" --no-color build
           nodes="${RUNNER_TEMP}/python-nodes"
           uv run --no-sync sqb playground --template python_nodes "${nodes}"
