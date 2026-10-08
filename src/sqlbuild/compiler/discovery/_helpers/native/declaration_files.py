@@ -49,9 +49,6 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.discovery.types import NativeFileScope, NativeLocation, NativeScopeFields
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-from sqlbuild.compiler.frontier.types import CompilerEngine, NativeStage
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 type _NativeDeclarationFile = tuple[str, NativeFileScope | None, tuple[object, ...]]
@@ -62,7 +59,6 @@ type _ConstantPayload = tuple[str, dict[str, object], str | None, str | None]
 type _SchemaPayload = tuple[str, str | None, str | None, dict[str, object], list[NativeLocation]]
 
 _SESSION_MEMO_KEY: str = "native_discovery_session"
-_FILE_ERRORS: tuple[type[Exception], ...] = (OSError, UnicodeError, ValueError, SyntaxError)
 
 
 def native_enum_files(
@@ -273,68 +269,19 @@ def _record[RecordT](
     build: _Build[RecordT],
     parse_with_python: _PythonParse[RecordT],
 ) -> RecordT:
-    """Build a parsed file; any other outcome is Python's to raise, and must match native."""
+    """Build a parsed file or raise Python's error for it; Python parses the files native defers."""
 
     scope, payload = item
     tag: object = payload[0]
     if tag == NATIVE_DEFERRED_TAG:
         return parse_with_python(relative_path=relative_path, scope=scope)
-    expected: Exception
     if tag == NATIVE_PARSED_TAG:
-        try:
-            return build(
-                project_dir=project_dir, relative_path=relative_path, scope=scope, payload=payload
-            )
-        except _FILE_ERRORS as error:
-            expected = error
-    elif tag == NATIVE_FAILED_TAG:
-        expected = native_failure(payload)
-    else:
-        expected = native_read_error(payload=payload, file_path=project_dir / relative_path)
-    return _python_failure(
-        relative_path=relative_path,
-        scope=scope,
-        expected=expected,
-        parse_with_python=parse_with_python,
-    )
-
-
-def _python_failure[RecordT](
-    *,
-    relative_path: Path,
-    scope: NativeFileScope | None,
-    expected: Exception,
-    parse_with_python: _PythonParse[RecordT],
-) -> RecordT:
-    """Raise Python's error for a file native discovery failed, or a mismatch if they differ."""
-
-    try:
-        _ = parse_with_python(relative_path=relative_path, scope=scope)
-    except _FILE_ERRORS as error:
-        if _same_error(error=error, expected=expected):
-            raise
-        raise _mismatch(
-            relative_path=relative_path, expected=expected, python_outcome=f"raised {error!r}"
-        ) from error
-    raise _mismatch(relative_path=relative_path, expected=expected, python_outcome="parsed it")
-
-
-def _same_error(*, error: Exception, expected: Exception) -> bool:
-    return (
-        type(error) is type(expected)
-        and str(error) == str(expected)
-        and getattr(error, "help", None) == getattr(expected, "help", None)
-    )
-
-
-def _mismatch(
-    *, relative_path: Path, expected: Exception, python_outcome: str
-) -> NativeStageMismatchError:
-    return NativeStageMismatchError(
-        f"native {NativeStage.DECLARATION_FILES} raised {expected!r} for {relative_path} but the "
-        f"Python compiler {python_outcome}; rerun with {COMPILER_ENGINE_ENV_VAR}="
-        f"{CompilerEngine.PYTHON} and report this mismatch"
-    )
+        return build(
+            project_dir=project_dir, relative_path=relative_path, scope=scope, payload=payload
+        )
+    if tag == NATIVE_FAILED_TAG:
+        raise native_failure(payload)
+    raise native_read_error(payload=payload, file_path=project_dir / relative_path)
 
 
 def _raise_partial_failure(failure: object) -> None:

@@ -42,6 +42,24 @@ pub struct DeclarationReference {
     pub end: usize,
 }
 
+/// The error at which Python's `@enum`/`@const` expansion of a string stops.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeclarationReferenceStop {
+    /// Quoted or dollar-quoted text before a later reference is never closed.
+    UnclosedQuote,
+    /// A block comment before a later reference is never closed.
+    UnclosedBlockComment,
+    /// `@enum` or `@const` starts a reference its full pattern does not match.
+    Malformed(DeclarationReferenceKind),
+}
+
+/// The references Python resolves in a string, in order, and the error that ends its walk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeclarationReferenceScan {
+    pub references: Vec<DeclarationReference>,
+    pub stop: Option<DeclarationReferenceStop>,
+}
+
 /// A header whose values nest deeper than the parser allows, located in its file.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NestingFailure {

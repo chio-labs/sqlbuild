@@ -10,11 +10,19 @@ class CompileInputError(ValueError):
 
     code: str = "P001"
 
-    def __init__(self, message: str, *, code: str | None = None, help: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        help: str | None = None,
+        bridge_independent: bool = False,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
+        self.bridge_independent: bool = bridge_independent
 
 
 class SqlTestReferenceError(CompileInputError):

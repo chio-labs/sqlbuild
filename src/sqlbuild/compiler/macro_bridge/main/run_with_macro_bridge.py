@@ -1,4 +1,4 @@
-"""Run one render stage through the native macro bridge, re-running Python on any failure."""
+"""Run one render stage through the native macro bridge, re-running Python on its failures."""
 
 from __future__ import annotations
 
@@ -9,13 +9,14 @@ from collections.abc import Callable
 from contextvars import Token
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
 
 
 def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
-    """Run `stage` with the bridge, storing calls on success; a failure re-runs Python."""
+    """Run `stage` with the bridge, storing calls on success; failures it could shape re-run."""
 
     python_version: tuple[int, int] = (sys.version_info[0], sys.version_info[1])
     if not _native.native_text_supported(python_version, unicodedata.unidata_version):
@@ -28,6 +29,10 @@ def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
     try:
         result: T = stage()
     except Exception as error:
+        if not bridge.scanned or (
+            isinstance(error, CompileInputError) and error.bridge_independent
+        ):
+            raise
         native_error = error
     else:
         bridge.save_store()

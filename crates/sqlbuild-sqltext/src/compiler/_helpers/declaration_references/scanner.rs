@@ -3,21 +3,43 @@
 use crate::compiler::_helpers::declaration_references::reference_syntax::{
     ReferenceSyntax, match_reference,
 };
-use crate::compiler::models::DeclarationReference;
+use crate::compiler::models::{
+    DeclarationReference, DeclarationReferenceScan, DeclarationReferenceStop,
+};
 
 const SPECIAL_BYTES: &[u8] = b"'\"`$@/-";
 
-/// Every `@enum`/`@const` reference in `sql` with code-point offsets, or None when Python decides.
-pub(crate) fn scan_references(sql: &str) -> Option<Vec<DeclarationReference>> {
+/// Where the walk for the next reference start ended.
+enum NextStart {
+    Reference(usize),
+    End,
+    Stop(DeclarationReferenceStop),
+    Deferred,
+}
+
+/// Python's references in `sql` (code points) and its stopping error; None defers to Python.
+pub(crate) fn scan_references(sql: &str) -> Option<DeclarationReferenceScan> {
     let mut references: Vec<DeclarationReference> = Vec::new();
     let mut offsets: CharOffsets = CharOffsets::default();
     let mut cursor: usize = 0;
+    let mut stop: Option<DeclarationReferenceStop> = None;
     while cursor < sql.len() {
-        let Some(start) = next_reference_start(sql, cursor)? else {
-            break;
+        let start: usize = match next_reference_start(sql, cursor) {
+            NextStart::Reference(start) => start,
+            NextStart::End => break,
+            NextStart::Stop(found) => {
+                stop = Some(found);
+                break;
+            }
+            NextStart::Deferred => return None,
         };
-        let ReferenceSyntax::Matched(matched) = match_reference(sql, start) else {
-            return None;
+        let matched = match match_reference(sql, start) {
+            ReferenceSyntax::Matched(matched) => matched,
+            ReferenceSyntax::Malformed(kind) => {
+                stop = Some(DeclarationReferenceStop::Malformed(kind));
+                break;
+            }
+            ReferenceSyntax::NotReference | ReferenceSyntax::Deferred => return None,
         };
         let start_char: usize = offsets.advance(sql, start);
         let end_char: usize = offsets.advance(sql, matched.end);
@@ -30,14 +52,14 @@ pub(crate) fn scan_references(sql: &str) -> Option<Vec<DeclarationReference>> {
         });
         cursor = matched.end;
     }
-    Some(references)
+    Some(DeclarationReferenceScan { references, stop })
 }
 
-/// The next reference start at or after `start`; the outer None means Python decides.
-fn next_reference_start(sql: &str, start: usize) -> Option<Option<usize>> {
+/// The next reference start at or after `start`, as Python's walk finds it.
+fn next_reference_start(sql: &str, start: usize) -> NextStart {
     let rest: &str = &sql[start..];
     if !rest.contains("@enum") && !rest.contains("@const") {
-        return Some(None);
+        return NextStart::End;
     }
     let bytes: &[u8] = sql.as_bytes();
     let mut index: usize = start;
@@ -46,27 +68,35 @@ fn next_reference_start(sql: &str, start: usize) -> Option<Option<usize>> {
         .position(|byte| SPECIAL_BYTES.contains(byte))
     {
         index += offset;
-        index = match bytes[index] {
-            b'\'' | b'"' => quoted_end(bytes, index, true)?,
-            b'`' => quoted_end(bytes, index, false)?,
-            b'$' => dollar_end(bytes, index)?.unwrap_or(index + 1),
-            b'-' if bytes.get(index + 1) == Some(&b'-') => bytes[index..]
-                .iter()
-                .position(|byte| *byte == b'\n')
-                .map_or(bytes.len(), |newline| index + newline + 1),
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index + 2 + find(&bytes[index + 2..], b"*/")? + 2
-            }
-            b'@' => match match_reference(sql, index) {
-                ReferenceSyntax::NotReference => index + 1,
-                ReferenceSyntax::Matched(_) | ReferenceSyntax::Deferred => {
-                    return Some(Some(index));
-                }
+        let next: Option<usize> = match bytes[index] {
+            b'\'' | b'"' => quoted_end(bytes, index, true),
+            b'`' => quoted_end(bytes, index, false),
+            b'$' => dollar_end(bytes, index).map(|end| end.unwrap_or(index + 1)),
+            b'-' if bytes.get(index + 1) == Some(&b'-') => Some(
+                bytes[index..]
+                    .iter()
+                    .position(|byte| *byte == b'\n')
+                    .map_or(bytes.len(), |newline| index + newline + 1),
+            ),
+            b'/' if bytes.get(index + 1) == Some(&b'*') => match find(&bytes[index + 2..], b"*/") {
+                Some(close) => Some(index + 2 + close + 2),
+                None => return NextStart::Stop(DeclarationReferenceStop::UnclosedBlockComment),
             },
-            _ => index + 1,
+            b'@' => match match_reference(sql, index) {
+                ReferenceSyntax::NotReference => Some(index + 1),
+                ReferenceSyntax::Matched(_) | ReferenceSyntax::Malformed(_) => {
+                    return NextStart::Reference(index);
+                }
+                ReferenceSyntax::Deferred => return NextStart::Deferred,
+            },
+            _ => Some(index + 1),
         };
+        match next {
+            Some(next) => index = next,
+            None => return NextStart::Stop(DeclarationReferenceStop::UnclosedQuote),
+        }
     }
-    Some(None)
+    NextStart::End
 }
 
 /// Python's `quoted_text_end_impl` for `'`, `"` (doubled quotes escape) and backticks.

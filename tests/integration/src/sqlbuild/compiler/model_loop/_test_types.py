@@ -11,5 +11,5 @@ class DeclarationReferenceParityTestCase:
     seed: int
     count: int
     expected_minimum_native_references: int
-    expected_minimum_deferred: int
-    expected_minimum_python_errors: int
+    expected_maximum_deferred: int
+    expected_minimum_native_errors: int

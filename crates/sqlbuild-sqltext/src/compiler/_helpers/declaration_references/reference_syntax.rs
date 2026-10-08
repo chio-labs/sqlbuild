@@ -1,5 +1,7 @@
 //! Python's `@enum("name").MEMBER` and `@const("name")` patterns at one reference start.
 
+use sqlbuild_core::text::main::is_python_space::is_python_space;
+
 use crate::compiler::models::DeclarationReferenceKind;
 
 /// One matched reference: kind, name, member and the byte offset after it.
@@ -10,12 +12,14 @@ pub(crate) struct MatchedReference<'sql> {
     pub(crate) end: usize,
 }
 
-/// Why a reference start cannot be matched natively.
+/// What Python's patterns find at one `@`.
 pub(crate) enum ReferenceSyntax<'sql> {
     /// `@enum`/`@const` followed by a word character: not a reference, keep scanning.
     NotReference,
     Matched(MatchedReference<'sql>),
-    /// Malformed or Unicode-dependent text: Python raises or decides.
+    /// A reference start whose full pattern does not match: Python raises an invalid reference.
+    Malformed(DeclarationReferenceKind),
+    /// A non-ASCII character after the keyword, whose word boundary only Python decides.
     Deferred,
 }
 
@@ -30,14 +34,20 @@ pub(crate) fn match_reference(sql: &str, start: usize) -> ReferenceSyntax<'_> {
         return ReferenceSyntax::NotReference;
     };
     match bytes.get(keyword_end) {
-        Some(byte) if !byte.is_ascii() => return ReferenceSyntax::Deferred,
+        Some(byte)
+            if !byte.is_ascii()
+                && !sql[keyword_end..]
+                    .chars()
+                    .next()
+                    .is_some_and(is_python_space) =>
+        {
+            return ReferenceSyntax::Deferred;
+        }
         Some(byte) if is_word(*byte) => return ReferenceSyntax::NotReference,
         _ => {}
     }
-    let Some(matched) = match_arguments(sql, kind, keyword_end) else {
-        return ReferenceSyntax::Deferred;
-    };
-    ReferenceSyntax::Matched(matched)
+    match_arguments(sql, kind, keyword_end)
+        .map_or(ReferenceSyntax::Malformed(kind), ReferenceSyntax::Matched)
 }
 
 fn match_arguments(
@@ -46,19 +56,19 @@ fn match_arguments(
     keyword_end: usize,
 ) -> Option<MatchedReference<'_>> {
     let bytes: &[u8] = sql.as_bytes();
-    let mut index: usize = consume(bytes, skip_whitespace(bytes, keyword_end)?, b'(')?;
-    index = skip_whitespace(bytes, index)?;
+    let mut index: usize = consume(bytes, skip_whitespace(sql, keyword_end), b'(')?;
+    index = skip_whitespace(sql, index);
     let quote: u8 = *bytes
         .get(index)
         .filter(|byte| matches!(byte, b'\'' | b'"'))?;
     let name_start: usize = index + 1;
     let name_end: usize = identifier_end(bytes, name_start)?;
     index = consume(bytes, name_end, quote)?;
-    index = consume(bytes, skip_whitespace(bytes, index)?, b')')?;
+    index = consume(bytes, skip_whitespace(sql, index), b')')?;
     let mut member: Option<&str> = None;
     if matches!(kind, DeclarationReferenceKind::Enum) {
-        index = consume(bytes, skip_whitespace(bytes, index)?, b'.')?;
-        let member_start: usize = skip_whitespace(bytes, index)?;
+        index = consume(bytes, skip_whitespace(sql, index), b'.')?;
+        let member_start: usize = skip_whitespace(sql, index);
         index = identifier_end(bytes, member_start)?;
         member = Some(&sql[member_start..index]);
     }
@@ -70,21 +80,15 @@ fn match_arguments(
     })
 }
 
-/// Python's `\s*` over ASCII; a non-ASCII byte may be Unicode whitespace, so it defers.
-fn skip_whitespace(bytes: &[u8], mut index: usize) -> Option<usize> {
-    while let Some(byte) = bytes.get(index) {
-        if !byte.is_ascii() {
-            return None;
-        }
-        if !matches!(
-            byte,
-            b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c | 0x1c..=0x1f
-        ) {
+/// Python's `\s*`: every character `str.isspace()` accepts.
+fn skip_whitespace(sql: &str, mut index: usize) -> usize {
+    while let Some(character) = sql[index..].chars().next() {
+        if !is_python_space(character) {
             break;
         }
-        index += 1;
+        index += character.len_utf8();
     }
-    Some(index)
+    index
 }
 
 fn consume(bytes: &[u8], index: usize, expected: u8) -> Option<usize> {

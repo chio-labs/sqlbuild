@@ -14,7 +14,9 @@ from tests.unit.src.sqlbuild.compiler.macro_bridge.main._test_types import (
     MacroBridgeSuccessTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.macro_bridge.main.helpers import (
+    declaration_failed_after_scan,
     failed,
+    failed_after_scan,
     recording_stage,
     rendered,
 )
@@ -49,23 +51,37 @@ def test_given_succeeding_stage_when_running_with_macro_bridge_then_runs_once_br
     "test_case",
     [
         MacroBridgeFailureTestCase(
-            description="failure re-runs Python and raises its error",
-            stage_with_bridge=failed,
+            description="failure after a scan re-runs Python and raises its error",
+            stage_with_bridge=failed_after_scan,
             stage_without_bridge=failed,
             expected_error=CompileInputError,
             expected_bridged_runs=[True, False],
         ),
         MacroBridgeFailureTestCase(
-            description="native-only failure is reported as a divergence",
-            stage_with_bridge=failed,
+            description="native-only failure after a scan is reported as a divergence",
+            stage_with_bridge=failed_after_scan,
             stage_without_bridge=rendered,
             expected_error=NativeStageMismatchError,
             expected_bridged_runs=[True, False],
         ),
+        MacroBridgeFailureTestCase(
+            description="failure before the bridge scans anything is raised without a re-run",
+            stage_with_bridge=failed,
+            stage_without_bridge=rendered,
+            expected_error=CompileInputError,
+            expected_bridged_runs=[True],
+        ),
+        MacroBridgeFailureTestCase(
+            description="declaration reference failure after a scan is raised without a re-run",
+            stage_with_bridge=declaration_failed_after_scan,
+            stage_without_bridge=rendered,
+            expected_error=CompileInputError,
+            expected_bridged_runs=[True],
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_stage_when_running_with_macro_bridge_then_python_reruns(
+def test_given_failing_stage_when_running_with_macro_bridge_then_only_bridge_failures_rerun(
     test_case: MacroBridgeFailureTestCase,
 ) -> None:
     runs: list[bool] = []
@@ -86,7 +102,7 @@ def test_given_failing_stage_when_running_with_macro_bridge_then_python_reruns(
     [
         MacroBridgeErrorContextTestCase(
             description="python error after a bridge failure",
-            stage=failed,
+            stage=recording_stage(runs=[], stages={True: failed_after_scan, False: failed}),
             expected_context=None,
         ),
     ],

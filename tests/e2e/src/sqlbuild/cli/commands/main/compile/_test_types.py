@@ -919,6 +919,25 @@ class NativeModelLoopParityTestCase:
 
 
 @dataclass(frozen=True)
+class NativeDeclarationErrorTestCase:
+    """A failing project whose declaration error both engines must report the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_report_text: str
+    expected_macro_calls: int
+
+
+@dataclass(frozen=True)
+class DeclarationErrorLifecycleTestCase:
+    """A failing project whose invocation lifecycle every engine must report the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_error_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MacroReferenceCallStoreTestCase:
     """Repeated compiles of models sharing a macro that returns a rejected reference call."""
 

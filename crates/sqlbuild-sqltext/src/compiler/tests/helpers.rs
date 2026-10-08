@@ -7,7 +7,9 @@ use crate::compiler::_helpers::sql_interpolation::substitution::{
 use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::compiler::main::declaration_references::scan_declaration_references;
 use crate::compiler::main::model_header_single_parsing::parse_one;
-use crate::compiler::models::{AuthoredValue, DeclarationReference};
+use crate::compiler::models::{
+    AuthoredValue, DeclarationReferenceKind, DeclarationReferenceScan, DeclarationReferenceStop,
+};
 use crate::compiler::tests::test_types::HeaderNestingTestCase;
 use std::thread;
 
@@ -251,31 +253,51 @@ pub(crate) fn batch_sizes_bound_workers_by_contract() -> bool {
     true
 }
 
-/// Scan one SQL string and spell its references as `kind:name[.member]@start..end, ...`.
+/// Spell a scan as `kind:name[.member]@start..end, ...` plus ` | stop:<error>` when it stops.
 pub(crate) fn scanned_references(sql: &str) -> Option<String> {
-    let references: Vec<DeclarationReference> = scan_declaration_references(&[sql.to_owned()])
+    let scan: DeclarationReferenceScan = scan_declaration_references(&[sql.to_owned()])
         .pop()
         .flatten()?;
-    Some(
-        references
+    let references: String = scan
+        .references
+        .iter()
+        .map(|reference| {
+            let member: String = reference
+                .member
+                .as_ref()
+                .map_or_else(String::new, |member| format!(".{member}"));
+            format!(
+                "{}:{}{member}@{}..{}",
+                reference.kind.keyword(),
+                reference.name,
+                reference.start,
+                reference.end
+            )
+        })
+        .collect::<Vec<String>>()
+        .join(", ");
+    let stop: String = scan.stop.map_or_else(String::new, |stop| {
+        STOP_NAMES
             .iter()
-            .map(|reference| {
-                let member: String = reference
-                    .member
-                    .as_ref()
-                    .map_or_else(String::new, |member| format!(".{member}"));
-                format!(
-                    "{}:{}{member}@{}..{}",
-                    reference.kind.keyword(),
-                    reference.name,
-                    reference.start,
-                    reference.end
-                )
-            })
-            .collect::<Vec<String>>()
-            .join(", "),
-    )
+            .find(|(candidate, _)| *candidate == stop)
+            .map(|(_, name)| format!(" | stop:{name}"))
+            .expect("every stop has a name")
+    });
+    Some(format!("{references}{stop}"))
 }
+
+const STOP_NAMES: [(DeclarationReferenceStop, &str); 4] = [
+    (DeclarationReferenceStop::UnclosedQuote, "quote"),
+    (DeclarationReferenceStop::UnclosedBlockComment, "comment"),
+    (
+        DeclarationReferenceStop::Malformed(DeclarationReferenceKind::Enum),
+        "invalid enum",
+    ),
+    (
+        DeclarationReferenceStop::Malformed(DeclarationReferenceKind::Constant),
+        "invalid const",
+    ),
+];
 
 /// Rust's default spawned-thread stack: bounded nesting must parse on any ordinary thread.
 const ORDINARY_THREAD_STACK_BYTES: usize = 2 * 1024 * 1024;
