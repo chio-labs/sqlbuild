@@ -10,13 +10,15 @@ from operator import itemgetter
 from pathlib import Path
 from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.attachment.core import build_model_config
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     build_native_model_config,
     find_matching_path_default,
     native_model_config_session,
-    native_model_validators_accept,
+    native_model_validation,
     native_path_default,
+    native_validation_error,
     run_python_model_validators,
 )
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
@@ -51,7 +53,7 @@ from sqlbuild.spec.contracts.models import (
 from sqlbuild.spec.contracts.types import TableType, TableTypeSource
 
 _ABSENT: object = object()
-_RAISES: str = "Python raises"
+_ACCEPTED: str = "accepted"
 _DEFERRED: str = "native defers"
 _HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _RUN_ID: str = "20261008T000000Z_orders"
@@ -294,8 +296,9 @@ _QUERIES: tuple[str, ...] = (
 class ModelValidationParity:
     """How native validation compared with the Python validators over one corpus."""
 
-    mismatches: list[dict[str, object]]
+    mismatches: list[tuple[object, object, object]]
     native_accepted: int
+    native_errors: int
     python_accepted: int
     python_rejected: int
 
@@ -316,6 +319,7 @@ class ModelConfigBuildParity:
 
     mismatches: list[tuple[object, object, object]]
     built: int
+    native_errors: int
     deferred: int
     python_raised: int
 
@@ -329,30 +333,36 @@ def generated_validation_requests(
 
 
 def model_validation_parity(*, requests: list[ModelValidationRequest]) -> ModelValidationParity:
-    """Validate natively and in Python; native may reject valid configs but never accept invalid."""
+    """Validate natively and in Python; native may defer but never differ from Python."""
 
     session: NativeModelConfigSession = _session(
         project_config=ProjectConfig(name="orders", adapter="duckdb"),
         target_config=None,
         effective_target_name=None,
     )
-    native: list[bool] = [
-        native_model_validators_accept(session=session, request=request) for request in requests
-    ]
-    python: list[bool] = [_python_accepts(request) for request in requests]
-    wrongly_accepted: list[bool] = [
-        accepted and not valid for accepted, valid in zip(native, python, strict=True)
+    outcomes: list[tuple[object, object, object]] = [
+        (
+            request.config.values,
+            _python_validation(request),
+            _native_validation(session=session, request=request),
+        )
+        for request in requests
     ]
     return ModelValidationParity(
-        mismatches=[request.config.values for request in compress(requests, wrongly_accepted)],
-        native_accepted=sum(native),
-        python_accepted=sum(python),
-        python_rejected=len(python) - sum(python),
+        mismatches=list(
+            compress(
+                outcomes, [native not in (_DEFERRED, python) for _, python, native in outcomes]
+            )
+        ),
+        native_accepted=sum(native == _ACCEPTED for _, _, native in outcomes),
+        native_errors=sum(native not in (_ACCEPTED, _DEFERRED) for _, _, native in outcomes),
+        python_accepted=sum(python == _ACCEPTED for _, python, _ in outcomes),
+        python_rejected=sum(python != _ACCEPTED for _, python, _ in outcomes),
     )
 
 
-def validation_outcomes(*, values: dict[str, object]) -> tuple[bool, str]:
-    """Return whether native validation accepts `values` and the Python validators' error."""
+def validation_outcomes(*, values: dict[str, object]) -> tuple[object, object]:
+    """Return native validation's outcome for `values` and the Python validators' outcome."""
 
     request: ModelValidationRequest = ModelValidationRequest(
         model_file=_model_file(relative_path="marts/orders_daily.sql", header_values={}),
@@ -366,24 +376,68 @@ def validation_outcomes(*, values: dict[str, object]) -> tuple[bool, str]:
         target_config=None,
         effective_target_name=None,
     )
+    return (_native_validation(session=session, request=request), _python_validation(request))
+
+
+def header_help(*, purpose: str, entry: str) -> str:
+    """Return the help that shows the exact MODEL header entry to add."""
+
+    indent: str = " " * 12
     return (
-        native_model_validators_accept(session=session, request=request),
-        _python_error(request),
+        f"{purpose}, add this to the MODEL header:\n{indent}MODEL (\n"
+        f"{indent}  {entry},\n{indent}  ...\n{indent});"
     )
 
 
-def _python_error(request: ModelValidationRequest) -> str:
+def raised_error_shape(error: Exception) -> tuple[object, ...]:
+    """Return the type, message, code and help of an error, and whether it skips the bridge."""
+
+    bridge_independent: object = getattr(error, "bridge_independent", None)
+    return (
+        type(error).__name__,
+        str(error),
+        getattr(error, "code", None),
+        getattr(error, "help", None),
+        bridge_independent,
+    )
+
+
+def _python_error_shape(error: Exception) -> tuple[object, ...]:
+    shape: tuple[object, ...] = raised_error_shape(error)
+    return (*shape[:4], shape[4] is not None or None)
+
+
+def _python_validation(request: ModelValidationRequest) -> object:
     try:
         run_python_model_validators(context=_VALIDATOR_CONTEXT, request=request)
     except Exception as error:  # noqa: BLE001 - the exact Python outcome, whatever it is
-        return f"{type(error).__name__}: {error}"
-    return "accepted"
+        return raised_error_shape(error)
+    return _ACCEPTED
+
+
+def _native_validation(
+    *, session: NativeModelConfigSession, request: ModelValidationRequest
+) -> object:
+    outcome: bool | _native.NativeConfigError = native_model_validation(
+        session=session, request=request
+    )
+    errors: list[object] = [
+        raised_error_shape(
+            native_validation_error(
+                error=cast(_native.NativeConfigError, error), values=request.config.values
+            )
+        )
+        for error in compress([outcome], [isinstance(outcome, _native.NativeConfigError)])
+    ]
+    return (*errors, {True: _ACCEPTED, False: _DEFERRED}[outcome is True])[0]
 
 
 def _validation_request(*, rng: random.Random) -> ModelValidationRequest:
     profile, references = rng.choice(_PROFILES)
     values: dict[str, object] = dict(profile)
-    mutated: list[str] = rng.sample(sorted(_VALIDATION_POOLS), k=rng.choice((0, 0, 1, 1, 2, 3)))
+    mutated: list[str] = rng.sample(
+        sorted(_VALIDATION_POOLS), k=rng.choice((0, 0, 1, 1, 2, 3, 5, 8))
+    )
     values.update((key, rng.choice(_VALIDATION_POOLS[key])) for key in mutated)
     return ModelValidationRequest(
         model_file=_model_file(relative_path="marts/orders_daily.sql", header_values={}),
@@ -400,14 +454,6 @@ def _validation_request(*, rng: random.Random) -> ModelValidationRequest:
         declared_columns=rng.choice(_DECLARED_COLUMNS),
         query_sql=rng.choice(_QUERIES),
     )
-
-
-def _python_accepts(request: ModelValidationRequest) -> bool:
-    try:
-        run_python_model_validators(context=_VALIDATOR_CONTEXT, request=request)
-    except Exception:  # noqa: BLE001 - any Python failure means native must not accept
-        return False
-    return True
 
 
 _DEFAULTS: tuple[DefaultsConfig, ...] = (
@@ -515,9 +561,10 @@ def model_config_build_parity(*, cases: list[ConfigBuildCase]) -> ModelConfigBui
                 [native not in (_DEFERRED, python) for _, python, native in outcomes],
             )
         ),
-        built=sum(native not in (_DEFERRED, _RAISES) for _, _, native in outcomes),
+        built=sum(isinstance(native, list) for _, _, native in outcomes),
+        native_errors=sum(isinstance(native, tuple) for _, _, native in outcomes),
         deferred=sum(native == _DEFERRED for _, _, native in outcomes),
-        python_raised=sum(python == _RAISES for _, python, _ in outcomes),
+        python_raised=sum(isinstance(python, tuple) for _, python, _ in outcomes),
     )
 
 
@@ -560,9 +607,9 @@ def _python_build(case: ConfigBuildCase) -> object:
                     materialization_defaults=case.project_config.materialization_defaults,
                 )
             )
-        except Exception:  # noqa: BLE001 - every Python failure must stop the native build too
-            return _RAISES
-    return (_config_shape(config), reads.environment_names, reads.read_run_id)
+        except Exception as error:  # noqa: BLE001 - the exact Python outcome, whatever it is
+            return _python_error_shape(error)
+    return [_config_shape(config), reads.environment_names, reads.read_run_id]
 
 
 def _native_build(case: ConfigBuildCase) -> object:
@@ -574,13 +621,13 @@ def _native_build(case: ConfigBuildCase) -> object:
     with COMPILE_INPUT_READS.recording() as reads:
         try:
             matched: str | None = native_path_default(session=session, model_file=case.model_file)
-        except Exception:  # noqa: BLE001 - path conflicts are reported by Python
-            return _RAISES
-        config: CompileModelConfig | None = build_native_model_config(
-            session=session, model_file=case.model_file, matched_path_default=matched
-        )
+            config: CompileModelConfig | None = build_native_model_config(
+                session=session, model_file=case.model_file, matched_path_default=matched
+            )
+        except Exception as error:  # noqa: BLE001 - the exact native outcome, whatever it is
+            return raised_error_shape(error)
     shapes: list[object] = [
-        (_config_shape(built), reads.environment_names, reads.read_run_id)
+        [_config_shape(built), reads.environment_names, reads.read_run_id]
         for built in cast(list[CompileModelConfig], list(compress([config], [config is not None])))
     ]
     return (*shapes, _DEFERRED)[0]

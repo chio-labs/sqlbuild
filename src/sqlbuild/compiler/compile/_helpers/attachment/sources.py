@@ -329,5 +329,4 @@ def _expand_source_template_object(
         preserve_context_tokens=False,
         preserve_unknown_context=False,
         native=native_stage_enabled(NativeStage.ATTACHMENTS),
-        exact_errors=True,
     )

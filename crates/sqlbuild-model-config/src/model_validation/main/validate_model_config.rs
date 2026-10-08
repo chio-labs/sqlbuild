@@ -1,28 +1,30 @@
-//! Accept a model's effective config when every Python model validator would.
+//! Validate a model's effective config, raising the first error the Python validators raise.
 
 use crate::model_validation::_helpers::config::ConfigView;
 use crate::model_validation::_helpers::incremental::check_incremental;
 use crate::model_validation::_helpers::materialization::{
-    check_contract_and_incremental_keys, check_custom_materialization, check_migration,
+    check_contract, check_custom_materialization, check_migration, check_non_incremental,
     check_placeholders, check_project_capability, check_storage_policies,
 };
 use crate::model_validation::_helpers::references::check_references;
 use crate::model_validation::_helpers::snapshot::check_snapshot;
-use crate::model_validation::models::{ModelValidationFacts, ProjectValidationFacts};
-use crate::model_validation::types::Check;
+use crate::model_validation::models::{
+    ModelValidationFacts, ProjectValidationFacts, ValidationStop,
+};
 use crate::types::AuthoredNode;
 
-/// Accept only what every Python validator accepts; a rejection means Python must decide.
-pub fn accept_model_config<N: AuthoredNode>(
+/// Run the Python validators' rules in their order; defer where only Python can decide.
+pub fn validate_model_config<N: AuthoredNode>(
     entries: Vec<(N, N)>,
     project: &ProjectValidationFacts,
     facts: &ModelValidationFacts<'_>,
-) -> Check {
-    let config = ConfigView::new(entries);
-    check_references(facts.references, project)?;
+) -> Result<(), ValidationStop> {
+    let config = ConfigView::new(entries, facts.model_name);
+    check_references(facts, project)?;
     check_incremental(&config, facts)?;
     check_project_capability(&config, project)?;
-    check_contract_and_incremental_keys(&config)?;
+    check_contract(&config)?;
+    check_non_incremental(&config)?;
     check_snapshot(&config, facts)?;
     check_custom_materialization(&config, project)?;
     check_storage_policies(&config, facts)?;

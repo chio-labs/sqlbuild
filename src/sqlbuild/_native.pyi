@@ -155,16 +155,28 @@ def build_native_scope_index(
         ]
     ],
 ) -> NativeScopeIndex | None: ...
+
+class NativeConfigError:
+    class_name: str
+    message: str
+    code: str | None
+    help: str | None
+    key: str | None
+
 def parse_model_header_metadata(
-    requests: list[tuple[object, object, dict[str, Any]]], classes: dict[str, object]
-) -> list[tuple[tuple[Any, ...], tuple[Any, ...]] | str]: ...
+    requests: list[tuple[object, object, dict[str, Any], str]], classes: dict[str, object]
+) -> list[
+    tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None] | str
+]: ...
 def config_contains_template(value: object) -> bool | None: ...
 def config_contains_macro_call(value: object) -> bool | None: ...
 def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],
-    flags: tuple[bool, bool, bool, str | None],
-) -> tuple[object, list[tuple[str, str]]] | tuple[str, str, list[tuple[str, str]]] | str: ...
+    flags: tuple[bool, bool, bool, str],
+) -> (
+    tuple[object, list[tuple[str, str]]] | tuple[NativeConfigError, list[tuple[str, str]]] | str
+): ...
 
 class NativeModelConfigBuilder:
     def __init__(
@@ -174,7 +186,7 @@ class NativeModelConfigBuilder:
         run: tuple[str | None, str],
         target_namespace: tuple[str | None, str | None] | None,
     ) -> None: ...
-    def path_default(self, model_path: str) -> tuple[bool, str | None]: ...
+    def path_default(self, model_path: str) -> str | NativeConfigError | None: ...
     def build(
         self, header: dict[str, object], matched_path_default: str | None, model_name: str
     ) -> (
@@ -185,6 +197,7 @@ class NativeModelConfigBuilder:
             tuple[tuple[int | None, bool] | None, str | None],
             list[tuple[str, str]],
         ]
+        | NativeConfigError
         | None
     ): ...
 
@@ -195,12 +208,12 @@ class NativeModelValidator:
         custom_materializations: set[str],
         microbatch_concurrency: bool,
     ) -> None: ...
-    def accepts(
+    def validate(
         self,
         values: dict[str, object],
-        model: tuple[str, str],
+        model: tuple[str, str, str],
         facts: tuple[tuple[object, ...], list[str] | None, bool, bool],
-    ) -> bool: ...
+    ) -> bool | NativeConfigError: ...
 
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...

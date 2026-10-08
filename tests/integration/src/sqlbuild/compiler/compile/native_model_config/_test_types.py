@@ -15,6 +15,7 @@ class ModelValidationParityTestCase:
     expected_minimum_native_accepted: int
     expected_minimum_python_rejected: int
     expected_minimum_acceptance_percent: int
+    expected_minimum_error_percent: int
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class ModelConfigBuildParityTestCase:
     expected_minimum_built: int
     expected_minimum_python_raised: int
     expected_minimum_build_percent: int
+    expected_minimum_error_percent: int
 
 
 @dataclass(frozen=True)
@@ -39,10 +41,10 @@ class ModelConfigProjectTestCase:
 
 
 @dataclass(frozen=True)
-class NativeRejectionParityTestCase:
-    """A config native validation must reject so Python reports its exact outcome."""
+class NativeErrorParityTestCase:
+    """An invalid config whose native outcome must be Python's exact error or a deferral."""
 
     description: str
     values: dict[str, object]
-    expected_native_accepted: bool
-    expected_python_error: str
+    expected_native_outcome: object
+    expected_python_outcome: object

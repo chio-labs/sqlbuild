@@ -1,10 +1,9 @@
-use crate::header_metadata::models::HeaderMetadataDeferral;
 use crate::header_metadata::tests::helpers::{map, summary};
 use crate::header_metadata::tests::test_types::HeaderMetadataTestCase;
 use crate::tests::test_types::Value;
 
 #[test]
-fn given_header_metadata_when_parsing_then_happy_paths_parse_and_python_errors_defer() {
+fn given_header_metadata_when_parsing_then_python_parses_and_errors_result() {
     let column = |metadata: &[(&'static str, Value)]| map(&[("order_id", map(metadata))]);
     let test_cases = [
         HeaderMetadataTestCase {
@@ -56,58 +55,70 @@ fn given_header_metadata_when_parsing_then_happy_paths_parse_and_python_errors_d
             expected_summary: Ok(&[]),
         },
         HeaderMetadataTestCase {
-            description: "case-insensitive duplicate columns defer",
+            description: "case-insensitive duplicate columns fail",
             columns: map(&[("id", map(&[])), ("ID", map(&[]))]),
             audits: Value::Null,
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model has duplicate column 'ID' (column names are case-insensitive)",
+            ),
         },
         HeaderMetadataTestCase {
-            description: "unknown column keys defer",
+            description: "unknown column keys fail",
             columns: column(&[("format", Value::Str("x"))]),
             audits: Value::Null,
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model column 'order_id' has unknown metadata keys: format",
+            ),
         },
         HeaderMetadataTestCase {
-            description: "nullable true with not_null defers",
+            description: "nullable true with not_null fails",
             columns: column(&[
                 ("nullable", Value::Bool(true)),
                 ("audits", Value::List(vec![Value::Str("not_null")])),
             ]),
             audits: Value::Null,
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql column 'order_id' cannot set nullable = true and audit not_null",
+            ),
         },
         HeaderMetadataTestCase {
-            description: "blank or non-string text defers",
+            description: "blank or non-string text fails",
             columns: column(&[("type", Value::Str("  "))]),
             audits: Value::Null,
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model column 'order_id' 'type' must be a non-empty string",
+            ),
         },
         HeaderMetadataTestCase {
             description: "non-ASCII column names defer to Python's lower()",
             columns: map(&[("caf\u{e9}", map(&[]))]),
             audits: Value::Null,
-            expected_summary: Err(HeaderMetadataDeferral::Unsupported),
+            expected_summary: Err("unsupported"),
         },
         HeaderMetadataTestCase {
-            description: "an audit name that is not snake_case defers",
+            description: "an audit name that is not snake_case fails",
             columns: Value::Null,
             audits: Value::List(vec![Value::Str("NotNull")]),
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "Invalid model audit definition identity 'NotNull' in /project/models/orders.sql; use snake_case 'not_null'",
+            ),
         },
         HeaderMetadataTestCase {
-            description: "unknown severities, thresholds and negative counts defer",
+            description: "unknown severities, thresholds and negative counts fail",
             columns: Value::Null,
             audits: Value::List(vec![
                 map(&[("a", map(&[("severity", Value::Str("fatal"))]))]),
                 map(&[("b", map(&[("thresholds", map(&[]))]))]),
             ]),
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'a' 'severity' must be one of: warn, error",
+            ),
         },
         HeaderMetadataTestCase {
             description: "thresholds are left to Python's parser",
             columns: Value::Null,
             audits: Value::List(vec![map(&[("b", map(&[("thresholds", map(&[]))]))])]),
-            expected_summary: Err(HeaderMetadataDeferral::Unsupported),
+            expected_summary: Err("unsupported"),
         },
         HeaderMetadataTestCase {
             description: "ASCII control characters are text to Python's strip",
@@ -116,44 +127,53 @@ fn given_header_metadata_when_parsing_then_happy_paths_parse_and_python_errors_d
             expected_summary: Ok(&["order_id - - "]),
         },
         HeaderMetadataTestCase {
-            description: "a negative evidence limit defers",
+            description: "a negative evidence limit fails",
             columns: Value::Null,
             audits: Value::List(vec![map(&[(
                 "a",
                 map(&[("evidence_limit", Value::Int(-1))]),
             )])]),
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'a' 'evidence_limit' must be a non-negative integer",
+            ),
         },
         HeaderMetadataTestCase {
-            description: "a boolean count defers",
+            description: "a boolean count fails",
             columns: Value::Null,
             audits: Value::List(vec![map(&[(
                 "a",
                 map(&[("minimum_samples", Value::Bool(true))]),
             )])]),
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'a' 'minimum_samples' must be a non-negative integer",
+            ),
         },
         HeaderMetadataTestCase {
-            description: "an audit list that is not a list defers",
+            description: "an audit list that is not a list fails",
             columns: Value::Null,
             audits: Value::Float,
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err("/project/models/orders.sql model audits must be a list"),
         },
         HeaderMetadataTestCase {
-            description: "a multi-key audit mapping defers",
+            description: "a multi-key audit mapping fails",
             columns: Value::Null,
             audits: Value::List(vec![map(&[("a", Value::Null), ("b", Value::Null)])]),
-            expected_summary: Err(HeaderMetadataDeferral::Invalid),
+            expected_summary: Err(
+                "/project/models/orders.sql model audits must be strings or single-key mappings",
+            ),
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
             summary(&test_case.columns, &test_case.audits),
-            test_case.expected_summary.map(|lines| lines
-                .iter()
-                .map(|line| (*line).to_owned())
-                .collect::<Vec<_>>()),
+            test_case
+                .expected_summary
+                .map(|lines| lines
+                    .iter()
+                    .map(|line| (*line).to_owned())
+                    .collect::<Vec<_>>())
+                .map_err(str::to_owned),
             "{}",
             test_case.description
         );

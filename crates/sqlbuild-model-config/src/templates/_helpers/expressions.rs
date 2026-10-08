@@ -9,11 +9,10 @@ pub(crate) fn parse_expression(body: &str) -> Result<Expression, TemplateFailure
     let tokens: Vec<Token> = tokenize(body)?;
     let mut parser = Parser { tokens, index: 0 };
     let expression = parser.expression()?;
-    let token: &Token = parser.peek();
-    if token.kind == TokenKind::End {
+    if parser.peek().kind == TokenKind::End {
         Ok(expression)
     } else {
-        Err(unexpected(token))
+        Err(parser.unexpected())
     }
 }
 
@@ -22,16 +21,17 @@ struct Parser {
     index: usize,
 }
 
-fn unexpected(token: &Token) -> TemplateFailure {
-    TemplateFailure::Invalid(TemplateError::UnexpectedToken(
-        token.value(),
-        token.position,
-    ))
-}
-
 impl Parser {
     fn peek(&self) -> &Token {
         &self.tokens[self.index]
+    }
+
+    fn unexpected(&self) -> TemplateFailure {
+        let token = self.peek();
+        TemplateFailure::Invalid(TemplateError::UnexpectedToken {
+            token: token.value(),
+            position: token.position,
+        })
     }
 
     fn match_symbol(&mut self, symbol: char) -> bool {
@@ -44,8 +44,7 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expression, TemplateFailure> {
-        let token: Token = self.peek().clone();
-        match token.kind {
+        match self.peek().kind.clone() {
             TokenKind::Text(text) => {
                 self.index += 1;
                 Ok(Expression::Text(text))
@@ -58,7 +57,7 @@ impl Parser {
                     Ok(Expression::Reference(word))
                 }
             }
-            TokenKind::Symbol(_) | TokenKind::End => Err(unexpected(&token)),
+            TokenKind::Symbol(_) | TokenKind::End => Err(self.unexpected()),
         }
     }
 
@@ -73,10 +72,10 @@ impl Parser {
         if self.match_symbol(')') {
             Ok(Expression::Function { name, arguments })
         } else {
-            Err(TemplateFailure::Invalid(TemplateError::ExpectedSymbol(
-                ')',
-                self.peek().position,
-            )))
+            Err(TemplateFailure::Invalid(TemplateError::ExpectedSymbol {
+                symbol: ')',
+                position: self.peek().position,
+            }))
         }
     }
 }

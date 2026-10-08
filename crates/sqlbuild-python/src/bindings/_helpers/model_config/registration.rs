@@ -3,10 +3,12 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::model_config::{
-    config_presence, config_templates, header_metadata, model_config_builder, model_validator,
+    config_errors, config_presence, config_templates, header_metadata, model_config_builder,
+    model_validator,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    config_errors::register(module)?;
     header_metadata::register(module)?;
     config_presence::register(module)?;
     config_templates::register(module)?;

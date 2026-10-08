@@ -8,16 +8,19 @@ use pyo3::types::{
     PyStringMethods, PyTuple, PyTupleMethods,
 };
 use pyo3::{FromPyObject, IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
+use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::templates::main::expand_template_string::expand_template_string;
+use sqlbuild_model_config::templates::main::template_error_message::template_error_message;
 use sqlbuild_model_config::templates::models::{
     ContextValue, Scalar, StringExpansion, TemplateFailure, TemplateOptions,
 };
 use sqlbuild_model_config::templates::types::TemplateHost;
 
+use crate::bindings::_helpers::model_config::config_errors::native_config_error;
+
 const TEMPLATE_OPEN_TOKEN: &str = "${";
 const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
-const INVALID_OUTCOME: &str = "invalid";
 const UNSUPPORTED_OUTCOME: &str = "unsupported";
 
 /// Variables, the process environment and context values, all read through Python.
@@ -51,9 +54,9 @@ pub(crate) struct TemplateSources<'py>(
     pub(crate) Bound<'py, PyDict>,
 );
 
-/// The three resolution flags, then a label making rejections `("invalid", message, reads)`.
+/// `allow_context`, `preserve_context_tokens`, `preserve_unknown_context` and the context label.
 #[derive(FromPyObject)]
-struct TemplateFlags(bool, bool, bool, Option<String>);
+struct TemplateFlags(bool, bool, bool, String);
 
 /// A template failure, or a Python error raised while building the expanded containers.
 pub(crate) enum Stop {
@@ -64,6 +67,16 @@ pub(crate) enum Stop {
 impl From<TemplateFailure> for Stop {
     fn from(failure: TemplateFailure) -> Self {
         Self::Failure(failure)
+    }
+}
+
+/// The `CompileInputError` Python raises for a failed template in the context `label`.
+pub(crate) fn template_error(failure: &TemplateFailure, label: &str) -> Option<ConfigError> {
+    match failure {
+        TemplateFailure::Missing(error) | TemplateFailure::Invalid(error) => {
+            Some(ConfigError::compile(template_error_message(error, label)))
+        }
+        TemplateFailure::Unsupported => None,
     }
 }
 
@@ -132,7 +145,7 @@ impl<'py> TemplateHost for PythonHost<'py> {
     }
 }
 
-/// Return `(value, reads)` as `expand_template_data` would, a rejection, or `unsupported`.
+/// Return `(value, reads)` as `expand_template_data` would, `(error, reads)` or `unsupported`.
 #[pyfunction]
 fn expand_config_templates<'py>(
     py: Python<'py>,
@@ -142,7 +155,6 @@ fn expand_config_templates<'py>(
 ) -> PyResult<Py<PyAny>> {
     let TemplateFlags(allow_context, preserve_context_tokens, preserve_unknown_context, label) =
         flags;
-    let context_label: Option<&str> = label.as_deref();
     let options = TemplateOptions {
         allow_context,
         preserve_context_tokens,
@@ -154,22 +166,13 @@ fn expand_config_templates<'py>(
             .into_pyobject(py)?
             .into_any()
             .unbind()),
-        Err(Stop::Failure(TemplateFailure::Missing(error) | TemplateFailure::Invalid(error))) => {
-            match context_label {
-                Some(label) => Ok((
-                    INVALID_OUTCOME,
-                    error.message(label),
-                    host.reads.into_inner(),
-                )
-                    .into_pyobject(py)?
-                    .into_any()
-                    .unbind()),
-                None => Ok(PyString::new(py, INVALID_OUTCOME).into_any().unbind()),
-            }
-        }
-        Err(Stop::Failure(TemplateFailure::Unsupported)) => {
-            Ok(PyString::new(py, UNSUPPORTED_OUTCOME).into_any().unbind())
-        }
+        Err(Stop::Failure(failure)) => match template_error(&failure, &label) {
+            Some(error) => Ok((native_config_error(py, error)?, host.into_reads())
+                .into_pyobject(py)?
+                .into_any()
+                .unbind()),
+            None => Ok(PyString::new(py, UNSUPPORTED_OUTCOME).into_any().unbind()),
+        },
         Err(Stop::Python(error)) => Err(error),
     }
 }

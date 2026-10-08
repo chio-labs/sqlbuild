@@ -14,13 +14,12 @@ from sqlbuild.compiler.compile.constants import (
     MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
     PRESERVE_TARGET_VALUE,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompileContextKey
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ, INVALID_OUTCOME
+from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
     expand_native_config_templates,
 )
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.models import (
     NativeTemplateExpansion,
     NativeTemplateRejection,
@@ -259,9 +258,8 @@ def expand_config_templates(
     preserve_context_tokens: bool,
     preserve_unknown_context: bool,
     native: bool,
-    exact_errors: bool = False,
 ) -> object:
-    """Expand like `expand_template_data`, natively when set; rejections re-run or raise exactly."""
+    """Expand like `expand_template_data`, natively when set; unsupported values run Python."""
 
     outcome: NativeTemplateExpansion | NativeTemplateRejection | str | None = (
         expand_native_config_templates(
@@ -273,11 +271,7 @@ def expand_config_templates(
                 preserve_context_tokens=preserve_context_tokens,
                 preserve_unknown_context=preserve_unknown_context,
             ),
-            context_label=(
-                context_label
-                if exact_errors and not _names_missing_template_value(context_label)
-                else None
-            ),
+            context_label=context_label,
         )
         if native
         else None
@@ -285,10 +279,12 @@ def expand_config_templates(
     if isinstance(outcome, NativeTemplateExpansion):
         record_template_reads(outcome.reads)
         return outcome.value
-    if isinstance(outcome, NativeTemplateRejection):
+    if isinstance(outcome, NativeTemplateRejection) and not _names_missing_template_value(
+        context_label
+    ):
         record_template_reads(outcome.reads)
-        raise CompileInputError(outcome.message, bridge_independent=True)
-    expanded: object = expand_template_data(
+        raise native_config_error(error=outcome.error, bridge_independent=True)
+    return expand_template_data(
         value=value,
         variables=variables,
         context_values=context_values,
@@ -297,12 +293,6 @@ def expand_config_templates(
         preserve_context_tokens=preserve_context_tokens,
         preserve_unknown_context=preserve_unknown_context,
     )
-    if outcome == INVALID_OUTCOME:
-        raise NativeStageMismatchError(
-            f"Native template expansion rejected {context_label} templates that Python "
-            "expands; run with SQLBUILD_COMPILER_ENGINE=python"
-        )
-    return expanded
 
 
 def _names_missing_template_value(context_label: str) -> bool:

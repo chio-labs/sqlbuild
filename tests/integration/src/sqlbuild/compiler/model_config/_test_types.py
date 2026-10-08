@@ -50,12 +50,3 @@ class ConfigTemplateParityTestCase:
     expected_minimum_expanded: int
     expected_minimum_rejected: int
     expected_minimum_unsupported: int
-
-
-@dataclass(frozen=True)
-class NativeRejectionTestCase:
-    """A native entry that rejects valid config, which the Python re-run must expose."""
-
-    description: str
-    native_entry: str
-    expected_message: str

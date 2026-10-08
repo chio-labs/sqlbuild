@@ -95,6 +95,22 @@ pub const SNAPSHOT_SCHEMA_CHANGE_POLICIES: [&str; 3] =
     ["deny", "require_confirmation", "append_new_columns"];
 /// The snapshot schema-change policy that conflicts with an enforced contract.
 pub const APPEND_NEW_COLUMNS_POLICY: &str = "append_new_columns";
+/// The `on_schema_change` value the change-policy help shows.
+pub const ON_SCHEMA_CHANGE_EXAMPLE: &str = "append_new_columns";
+/// The `replay_on_change` value the change-policy help shows.
+pub const REPLAY_ON_CHANGE_EXAMPLE: &str = "bounded-14d";
+/// The `replay_on_change` values the change-policy message lists, in its order.
+pub const REPLAY_ON_CHANGE_VALID_VALUES: [&str; 3] = ["forward", "full", "bounded-<duration>"];
+/// The code of the snapshot schema-change conflict with an enforced contract.
+pub const CONTRACT_SCHEMA_CHANGE_CODE: &str = "K012";
+/// The note naming the project setting that keeps microbatches sequential.
+pub const MICROBATCH_CONCURRENCY_NOTE: &str = "the current value is [settings] \
+microbatch_concurrency = false (from sqlbuild_project.toml or its default)";
+/// The help showing the project setting that allows concurrent microbatches.
+pub const MICROBATCH_CONCURRENCY_HELP: &str = "to run microbatches concurrently, set this in \
+sqlbuild_project.toml:\n            [settings]\n            microbatch_concurrency = true";
+/// The indent of the setting snippet lines in help text.
+pub const SETTING_SNIPPET_INDENT: &str = "            ";
 /// The duration-disabled cursor policy value.
 pub const CURSOR_POLICY_DISABLED: &str = "disabled";
 /// The zero-day cursor duration.
@@ -209,6 +225,8 @@ pub const UTC_OFFSET_LENGTH: usize = 5;
 pub const MIN_YEAR: i128 = 1;
 /// The last year Python's `datetime` represents.
 pub const MAX_YEAR: i128 = 9999;
+/// Prefixes of the special values `Decimal` parses, after any sign.
+pub const DECIMAL_SPECIAL_PREFIXES: [&str; 3] = ["inf", "nan", "snan"];
 /// The last month whose civil-day computation shifts the year back.
 pub const LAST_SHIFTED_MONTH: i128 = 2;
 /// The position of days among duration units.
