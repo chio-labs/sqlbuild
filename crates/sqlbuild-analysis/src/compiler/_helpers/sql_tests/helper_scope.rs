@@ -6,7 +6,7 @@ use polyglot_sql::Dialect;
 
 use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
 use crate::compiler::_helpers::sql_tests::cte_slices::SliceDialect;
-use crate::compiler::_helpers::sql_tests::cte_sql::with_leading_ctes;
+use crate::compiler::_helpers::sql_tests::cte_sql::{with_leading_ctes, with_unique_ctes};
 use crate::compiler::_helpers::sql_tests::helper_names::{
     helper_cte_name, rename_helper_references,
 };
@@ -41,6 +41,16 @@ struct ScopeHelper {
     cte_name: String,
     sql: String,
     tokens: Vec<String>,
+    resolved: Option<ResolvedHelper>,
+}
+
+/// A helper whose relation references were resolved like an assertion's, after the model chain.
+pub(crate) struct ResolvedHelper {
+    /// The helper body with every reference replaced by the CTE that stands in for it.
+    pub(crate) sql: String,
+    /// The mock and model CTEs the resolved body reads, dependencies first.
+    pub(crate) lifted_ctes: Vec<(String, String)>,
+    pub(crate) reached_mocks: HashSet<String>,
 }
 
 /// One test CTE another test CTE reads: a mock, or a helper when `mock_name` is `None`.
@@ -161,6 +171,7 @@ impl ScopeGraph {
                 cte_name: cte.name.clone(),
                 sql: cte.sql_body.clone(),
                 tokens: identifier_tokens(&cte.sql_body, patterns),
+                resolved: None,
             });
         }
         let readers = test_readers(fixtures);
@@ -281,6 +292,40 @@ impl ScopeGraph {
         order.ordered
     }
 
+    /// Helpers whose SQL, as placed in the test query, calls a reference such as `__ref()`.
+    pub(crate) fn referencing_helpers(&self, patterns: &SqlTestPatterns) -> Vec<(usize, String)> {
+        self.helpers
+            .iter()
+            .enumerate()
+            .filter(|(_, helper)| helper.resolved.is_none())
+            .filter_map(|(index, _)| {
+                let sql = self.placed_helper_sql(index);
+                (patterns.test_reference.is_match(sql) || patterns.udf.is_match(sql))
+                    .then(|| (index, sql.to_string()))
+            })
+            .collect()
+    }
+
+    /// Replace a helper's references with the CTEs a reader must define ahead of it.
+    pub(crate) fn resolve_helper(&mut self, index: usize, resolved: ResolvedHelper) {
+        let placement = self.placement;
+        let Some(helper) = self.helpers.get_mut(index) else {
+            return;
+        };
+        match placement {
+            HelperPlacement::TopLevel => helper.sql.clone_from(&resolved.sql),
+            HelperPlacement::Inline => helper.original.clone_from(&resolved.sql),
+        }
+        helper.resolved = Some(resolved);
+    }
+
+    fn placed_helper_sql(&self, index: usize) -> &str {
+        match self.placement {
+            HelperPlacement::TopLevel => &self.helpers[index].sql,
+            HelperPlacement::Inline => &self.helpers[index].original,
+        }
+    }
+
     /// Whether a CTE name is a test helper placed at the top level of the test query.
     pub(crate) fn is_top_level_helper(&self, name: &str) -> bool {
         self.placement == HelperPlacement::TopLevel
@@ -350,11 +395,25 @@ impl ScopeGraph {
                     .reached_mocks
                     .insert(self.mocks[index].mock_name.clone());
             }
+            if let ScopeNode::Helper(index) = node
+                && let Some(resolved) = &self.helpers[index].resolved
+            {
+                scope
+                    .reached_mocks
+                    .extend(resolved.reached_mocks.iter().cloned());
+                scope.ctes = with_unique_ctes(
+                    std::mem::take(&mut scope.ctes),
+                    resolved.lifted_ctes.iter().cloned(),
+                );
+            }
             if let Some(dependency) = self.dependency(node, None) {
-                scope.ctes.push((
-                    dependency.generated_name.to_string(),
-                    dependency.sql.to_string(),
-                ));
+                scope.ctes = with_unique_ctes(
+                    std::mem::take(&mut scope.ctes),
+                    [(
+                        dependency.generated_name.to_string(),
+                        dependency.sql.to_string(),
+                    )],
+                );
             }
         }
         scope

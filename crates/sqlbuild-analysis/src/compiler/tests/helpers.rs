@@ -9,7 +9,9 @@ use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
 use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, split_top_level_with};
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::main::sql_test_extraction::extract_batch_json;
-use crate::compiler::tests::test_types::{PlanShape, RenderedShapeTestCase, SharedNameTestCase};
+use crate::compiler::tests::test_types::{
+    HelperReferenceTestCase, PlanShape, RenderedShapeTestCase, SharedNameTestCase,
+};
 
 pub(crate) fn mixed_expanded_tests_preserve_order_and_payloads() -> bool {
     let response = extract_batch_json(r#"{"tests":[{"sql":"WITH helper AS (SELECT 1 AS id), __source__raw_orders AS (SELECT id FROM helper), __expected__orders AS (SELECT id FROM helper), __assert__positive AS (SELECT id FROM helper WHERE id < 0) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"},{"sql":"WITH input AS (SELECT 1 AS value), __udf_actual__ AS (SELECT __udf(\"increment\")(value) AS value FROM input), __udf_expected__ AS (SELECT 2 AS value) SELECT 1","fileLabel":"tests/increment.sql","mode":"udf"}]}"#).expect("batch succeeds");
@@ -1800,4 +1802,95 @@ fn assert_names_isolated(sql: &str, dialect: &str, helper_name: &str, label: &st
             cte.header
         );
     }
+}
+
+fn helper_reference_test(case: &HelperReferenceTestCase) -> Value {
+    let named = |ctes: &[(&str, &str)]| -> Vec<Value> {
+        ctes.iter()
+            .map(|(name, sql)| json!({"name": name, "sqlBody": sql}))
+            .collect()
+    };
+    let mut authored = named(&[
+        (
+            "__source__raw_orders",
+            "SELECT 1 AS order_id, 10 AS amount, 7 AS region_id",
+        ),
+        (
+            "__seed__regions",
+            "SELECT 7 AS region_id, 'north' AS region_name",
+        ),
+    ]);
+    authored.extend(named(case.helpers));
+    json!({
+        "name": "orders_case",
+        "fileLabel": "tests/orders.sql",
+        "payload": {
+            "kind": "model",
+            "authoredCtes": authored,
+            "expectedCtes": named(case.expected),
+            "expectedModelNames": case
+                .expected
+                .iter()
+                .map(|(name, _)| name.trim_start_matches("__expected__"))
+                .collect::<Vec<_>>(),
+            "assertionCtes": named(case.assertions)
+        }
+    })
+}
+
+fn helper_reference_models() -> Value {
+    json!([
+        {
+            "name": "stg_orders",
+            "querySql": "SELECT order_id, amount, region_id FROM __source(\"raw_orders\")",
+            "modelDependencies": []
+        },
+        {
+            "name": "orders",
+            "querySql": "SELECT order_id, amount * 2 AS amount_doubled FROM __ref(\"stg_orders\")",
+            "modelDependencies": ["stg_orders"]
+        }
+    ])
+}
+
+/// Plan and render one helper-reference case, returning its SQL, chain and warnings.
+pub(crate) fn plan_helper_reference_case(case: &HelperReferenceTestCase) -> Value {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
+                "models": helper_reference_models(),
+                "tests": [helper_reference_test(case)],
+                "sqlAnalysisEnabled": case.sql_analysis_enabled,
+                "sqlAnalysisDialect": "duckdb",
+                "setDifferenceOperator": "EXCEPT"
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    response["artifacts"][0].clone()
+}
+
+/// Resolve one helper-reference case's model chain without planning SQL.
+pub(crate) fn chain_helper_reference_case(case: &HelperReferenceTestCase) -> Value {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+            &json!({
+                "lexicalSyntax": generic_lexical_syntax(),
+                "models": helper_reference_models(),
+                "tests": [helper_reference_test(case)]
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    response["chains"][0].clone()
+}
+
+/// Whether `first` is defined before `second` at the top level of a rendered test query.
+pub(crate) fn defined_before(sql: &str, first: &str, second: &str) -> bool {
+    top_level_cte_position(sql, first) < top_level_cte_position(sql, second)
 }

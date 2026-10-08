@@ -1725,3 +1725,92 @@ def prepare_optional_ceremony_project(*, tmp_path: Path, test_files: dict[str, s
         sql="CREATE TABLE raw_orders AS SELECT 1 AS order_id, 'paid' AS status",
     )
     return project_dir
+
+
+_HELPER_REFERENCE_TESTS: dict[str, str] = {
+    "helper_and_assertion_read_model": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "doubled AS (\n"
+        '  SELECT item_id, amount_doubled FROM __ref("item_totals")\n'
+        "),\n"
+        "__assert__doubles_amount AS (\n"
+        "  SELECT item_id FROM doubled WHERE amount_doubled <> 20\n"
+        "),\n"
+        "__assert__has_one_row AS (\n"
+        '  SELECT COUNT(*) AS row_count FROM __ref("item_totals") HAVING COUNT(*) <> 1\n'
+        ")\n"
+    ),
+    "only_helper_reads_model": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "doubled AS (\n"
+        '  SELECT item_id, amount_doubled FROM __ref("item_totals")\n'
+        "),\n"
+        "__assert__doubles_amount AS (\n"
+        "  SELECT item_id FROM doubled WHERE amount_doubled <> 20\n"
+        ")\n"
+    ),
+    "helper_reads_helper_and_mock": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "joined AS (\n"
+        "  SELECT d.item_id, d.amount_doubled, i.amount FROM doubled AS d\n"
+        '  JOIN __ref("items") AS i USING (item_id)\n'
+        "),\n"
+        "doubled AS (\n"
+        '  SELECT item_id, amount_doubled FROM __ref("item_totals")\n'
+        "),\n"
+        "__expected__item_totals AS (\n"
+        "  SELECT item_id, amount_doubled FROM joined\n"
+        "),\n"
+        "__assert__doubles_mocked_amount AS (\n"
+        "  SELECT item_id FROM joined WHERE amount_doubled <> amount * 2\n"
+        ")\n"
+    ),
+    "helper_cycle": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        "first_rows AS (SELECT item_id FROM second_rows),\n"
+        "second_rows AS (SELECT item_id FROM first_rows),\n"
+        "__assert__no_rows AS (\n"
+        '  SELECT item_id FROM __ref("item_totals") JOIN first_rows USING (item_id)\n'
+        ")\n"
+    ),
+    "helper_reads_unknown_model": (
+        "__ref__items AS (\n  SELECT 1 AS item_id, 10 AS amount\n),\n"
+        'missing_rows AS (SELECT item_id FROM __ref("item_archive")),\n'
+        "__assert__no_rows AS (\n"
+        '  SELECT item_id FROM __ref("item_totals") JOIN missing_rows USING (item_id)\n'
+        ")\n"
+    ),
+    "mock_reads_referencing_helper": (
+        "__ref__items AS (\n  SELECT item_id, 10 AS amount FROM base_rows\n),\n"
+        'base_rows AS (SELECT item_id FROM __ref("item_totals")),\n'
+        "__assert__no_rows AS (\n"
+        '  SELECT item_id FROM __ref("item_totals") WHERE item_id IS NULL\n'
+        ")\n"
+    ),
+}
+
+
+def build_helper_reference_project_files(*, tests: tuple[str, ...]) -> dict[str, str]:
+    """Build an items project whose SQL tests read models through helper CTEs."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "helper_reference_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "helper_reference_demo.duckdb"\n'
+        ),
+        "models/items.sql": (
+            "MODEL (description 'Base items', materialized table);\n\n"
+            "SELECT 1 AS item_id, 10 AS amount\n"
+        ),
+        "models/item_totals.sql": (
+            "MODEL (description 'Doubled item amounts', materialized table);\n\n"
+            'SELECT item_id, amount * 2 AS amount_doubled FROM __ref("items")\n'
+        ),
+    }
+    for test_name in tests:
+        files[f"tests/unit/test_{test_name}.sql"] = (
+            f'TEST (name "{test_name}");\n\nWITH\n{_HELPER_REFERENCE_TESTS[test_name]}\nSELECT 1\n'
+        )
+    return files

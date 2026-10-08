@@ -321,3 +321,27 @@ class SelectTestByNameE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     unexpected_output_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class HelperReferenceE2ETestCase:
+    """Test case for relation references inside SQL-test helper CTEs."""
+
+    description: str
+    tests: tuple[str, ...]
+    command: tuple[str, ...]
+    engine: str
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class HelperReferenceErrorE2ETestCase:
+    """Test case for helper CTE references compile cannot resolve."""
+
+    description: str
+    test_name: str
+    engine: str
+    expected_message: str
+    expected_line: int
+    expected_column: int
+    expected_help_fragment: str

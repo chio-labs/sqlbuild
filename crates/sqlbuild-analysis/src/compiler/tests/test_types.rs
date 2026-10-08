@@ -118,3 +118,14 @@ pub(crate) struct PlanShape<'a> {
     pub(crate) helper_name: &'a str,
     pub(crate) expected_sql: &'a str,
 }
+
+pub(crate) struct HelperReferenceTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql_analysis_enabled: bool,
+    pub(crate) helpers: &'static [(&'static str, &'static str)],
+    pub(crate) expected: &'static [(&'static str, &'static str)],
+    pub(crate) assertions: &'static [(&'static str, &'static str)],
+    pub(crate) expected_chain: &'static [&'static str],
+    pub(crate) expected_order: &'static [(&'static str, &'static str)],
+    pub(crate) expected_fragments: &'static [&'static str],
+}

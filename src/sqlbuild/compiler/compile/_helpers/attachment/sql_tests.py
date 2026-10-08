@@ -33,6 +33,11 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
     extract_sql_test_ctes,
 )
+from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
+    extract_helper_target_model_names,
+    report_unresolvable_helper_ctes,
+    sql_test_helper_ctes,
+)
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
     extract_expanded_sql_tests_cached,
 )
@@ -317,6 +322,27 @@ def build_test_inputs(
             loaded_macros=loaded_macros,
             assertion_target_model_names=assertion_target_model_names,
         )
+        if isinstance(test_ctes.payload, CompileModelSqlTestCtes):
+            if report_unresolvable_helper_ctes(
+                model_payload=test_ctes.payload,
+                test_file=test.test_file,
+                test_block=test.test_block,
+                known_model_names=known_model_names,
+                syntax=sql_lexical_syntax,
+            ):
+                continue
+            assertion_target_model_names = tuple(
+                dict.fromkeys(
+                    (
+                        *assertion_target_model_names,
+                        *extract_helper_target_model_names(
+                            helper_ctes=sql_test_helper_ctes(test_ctes.payload.authored_ctes),
+                            mock_model_names=test_ctes.payload.mock_model_names,
+                            syntax=sql_lexical_syntax,
+                        ),
+                    )
+                )
+            )
         test_inputs.append(
             CompileSqlTestInput(
                 test_file=test.test_file,
