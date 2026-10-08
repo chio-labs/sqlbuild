@@ -1,6 +1,7 @@
 """Builders for release performance comparison test data."""
 
 import subprocess
+import sys
 from pathlib import Path
 
 from scripts.release_performance.models import CommandComparison, CommandSample
@@ -15,6 +16,18 @@ def write_pristine_projects(*, root: Path, inspection_models: int, build_models:
         (root / "pristine" / name / "BASELINE_MARKER").write_text(str(models))
     return root / "pristine"
 """
+BASELINE_ONLY_SYMBOL: str = "BASELINE_ONLY_RELEASE_SYMBOL"
+BASELINE_SQLBUILD_GENERATOR: str = f"""from pathlib import Path
+
+from sqlbuild import {BASELINE_ONLY_SYMBOL}
+
+
+def write_pristine_projects(*, root: Path, inspection_models: int, build_models: int) -> Path:
+    for name in ("inspection", "build"):
+        (root / "pristine" / name).mkdir(parents=True)
+        (root / "pristine" / name / "BASELINE_MARKER").write_text({BASELINE_ONLY_SYMBOL})
+    return root / "pristine"
+"""
 FAILING_GENERATOR: str = """def write_pristine_projects(*, root, inspection_models, build_models):
     raise RuntimeError("baseline generator exploded")
 """
@@ -24,6 +37,15 @@ MARKER_DENSE_GENERATOR: str = """from pathlib import Path
 def write_dense_compile_project(*, project_dir: Path, model_count: int) -> None:
     project_dir.mkdir(parents=True)
     (project_dir / "BASELINE_MARKER").write_text(str(model_count))
+"""
+BASELINE_SQLBUILD_DENSE_GENERATOR: str = f"""from pathlib import Path
+
+from sqlbuild import {BASELINE_ONLY_SYMBOL}
+
+
+def write_dense_compile_project(*, project_dir: Path, model_count: int) -> None:
+    project_dir.mkdir(parents=True)
+    (project_dir / "BASELINE_MARKER").write_text({BASELINE_ONLY_SYMBOL})
 """
 FAILING_DENSE_GENERATOR: str = """def write_dense_compile_project(*, project_dir, model_count):
     raise RuntimeError("baseline dense generator exploded")
@@ -78,6 +100,27 @@ def write_baseline_dense_source(*, root: Path, generator: str) -> Path:
         _ = (package / "__init__.py").write_text("", encoding="utf-8")
     _ = (helpers / "dense_project.py").write_text(generator, encoding="utf-8")
     return root
+
+
+def write_baseline_environment(*, root: Path) -> Path:
+    """Create a virtual environment whose sqlbuild defines a symbol this checkout lacks."""
+
+    _ = subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(root)], check=True, capture_output=True
+    )
+    python: Path = root / "bin" / "python"
+    purelib: str = subprocess.run(
+        [str(python), "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    package: Path = Path(purelib) / "sqlbuild"
+    package.mkdir(parents=True)
+    _ = (package / "__init__.py").write_text(
+        f"{BASELINE_ONLY_SYMBOL} = {BASELINE_ONLY_SYMBOL!r}\n", encoding="utf-8"
+    )
+    return python
 
 
 def tagged_repository(*, root: Path, tag: str) -> Path:

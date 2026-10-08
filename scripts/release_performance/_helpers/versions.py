@@ -36,6 +36,10 @@ _RELEASE_VERSION: re.Pattern[str] = re.compile(r"\d+\.\d+\.\d+")
 _DISTRIBUTION_VERSION: re.Pattern[str] = re.compile(
     rf"^{PACKAGE_NAME}-(\d+\.\d+\.\d+)(?:-.+\.whl|\.tar\.gz)$"
 )
+_LIBRARY_PATHS_PROBE: str = (
+    "import json, sys, sysconfig; print(json.dumps({'version': list(sys.version_info[:2]), "
+    "'paths': [sysconfig.get_path('purelib'), sysconfig.get_path('platlib')]}))"
+)
 
 
 def release_versions(*, index: dict[str, object]) -> tuple[str, ...]:
@@ -209,6 +213,27 @@ def installed_version(*, sqb: Path) -> str:
     if completed.returncode != 0 or match is None:
         raise ReleasePerformanceError(f"{sqb} --version failed: {_tail(completed.stderr)}")
     return match.group(0)
+
+
+def library_paths(*, python: Path) -> tuple[Path, ...]:
+    """Return the package directories of `python`'s environment, which must match this Python."""
+
+    completed: subprocess.CompletedProcess[str] = subprocess.run(
+        [str(python), "-c", _LIBRARY_PATHS_PROBE], capture_output=True, text=True, check=False
+    )
+    if completed.returncode != 0:
+        raise ReleasePerformanceError(
+            f"Reading the package directories of {python} failed: {_tail(completed.stderr)}"
+        )
+    probe: dict[str, list[object]] = cast(dict[str, list[object]], json.loads(completed.stdout))
+    version: tuple[object, ...] = tuple(probe["version"])
+    if version != tuple(sys.version_info[:2]):
+        raise ReleasePerformanceError(
+            f"{python} runs Python {'.'.join(map(str, version))}, but its packages are imported "
+            f"by Python {sys.version_info.major}.{sys.version_info.minor}; pass --python "
+            f"{sys.version_info.major}.{sys.version_info.minor}"
+        )
+    return tuple(dict.fromkeys(Path(str(path)) for path in probe["paths"]))
 
 
 def existing_sqb(*, venv_dir: Path) -> Path:

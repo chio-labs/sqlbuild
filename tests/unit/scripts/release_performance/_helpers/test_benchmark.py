@@ -18,12 +18,16 @@ from tests.unit.scripts.release_performance._helpers._test_types import (
     ReleaseSourceTestCase,
 )
 from tests.unit.scripts.release_performance._helpers.helpers import (
+    BASELINE_ONLY_SYMBOL,
+    BASELINE_SQLBUILD_DENSE_GENERATOR,
+    BASELINE_SQLBUILD_GENERATOR,
     FAILING_DENSE_GENERATOR,
     FAILING_GENERATOR,
     MARKER_DENSE_GENERATOR,
     MARKER_GENERATOR,
     tagged_repository,
     write_baseline_dense_source,
+    write_baseline_environment,
     write_baseline_source,
 )
 
@@ -34,6 +38,12 @@ from tests.unit.scripts.release_performance._helpers.helpers import (
         BaselineGeneratorTestCase(
             description="the baseline source's own generator writes the baseline projects",
             generator=MARKER_GENERATOR,
+            expected_projects=("build", "inspection"),
+            expected_error_fragments=(),
+        ),
+        BaselineGeneratorTestCase(
+            description="the generator imports the baseline environment's sqlbuild, not this one",
+            generator=BASELINE_SQLBUILD_GENERATOR,
             expected_projects=("build", "inspection"),
             expected_error_fragments=(),
         ),
@@ -58,7 +68,11 @@ def test_given_baseline_source_when_generating_then_uses_its_own_generator(
 
     try:
         _ = write_baseline_pristine_projects(
-            source=source, root=root, inspection_models=30, build_models=10
+            source=source,
+            python=write_baseline_environment(root=tmp_path / "venv"),
+            root=root,
+            inspection_models=30,
+            build_models=10,
         )
     except ReleasePerformanceError as raised:
         error = str(raised)
@@ -77,6 +91,12 @@ def test_given_baseline_source_when_generating_then_uses_its_own_generator(
             description="the baseline source's own dense generator writes the dense project",
             generator=MARKER_DENSE_GENERATOR,
             expected_markers=("40",),
+            expected_error_fragments=(),
+        ),
+        BaselineDenseGeneratorTestCase(
+            description="the dense generator imports the baseline environment's sqlbuild",
+            generator=BASELINE_SQLBUILD_DENSE_GENERATOR,
+            expected_markers=(BASELINE_ONLY_SYMBOL,),
             expected_error_fragments=(),
         ),
         BaselineDenseGeneratorTestCase(
@@ -101,7 +121,12 @@ def test_given_baseline_source_when_generating_dense_project_then_uses_its_own_g
     error: str = ""
 
     try:
-        write_baseline_dense_project(source=source, pristine=pristine, models=40)
+        write_baseline_dense_project(
+            source=source,
+            python=write_baseline_environment(root=tmp_path / "venv"),
+            pristine=pristine,
+            models=40,
+        )
     except ReleasePerformanceError as raised:
         error = str(raised)
 

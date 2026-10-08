@@ -14,6 +14,7 @@ from typing import cast
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.compile_performance_ratio._helpers.edit import apply_one_model_edit
 from scripts.compile_performance_ratio._helpers.measure import run_checkout_generator
+from scripts.release_performance._helpers.versions import library_paths
 from scripts.release_performance.constants import (
     BASELINE_GENERATOR_ENTRY,
     BUILD_PROJECT,
@@ -60,12 +61,13 @@ def write_pristine_projects(*, root: Path, inspection_models: int, build_models:
 
 
 def write_baseline_pristine_projects(
-    *, source: Path, root: Path, inspection_models: int, build_models: int
+    *, source: Path, python: Path, root: Path, inspection_models: int, build_models: int
 ) -> Path:
-    """Generate the baseline's benchmarks with the baseline source's own generator."""
+    """Generate the baseline's benchmarks with its own generator and installed `sqlbuild`."""
 
     _run_baseline_generator(
         source=source,
+        python=python,
         entry=BASELINE_GENERATOR_ENTRY,
         arguments=(str(root), str(inspection_models), str(build_models)),
         description="benchmark",
@@ -79,11 +81,14 @@ def write_dense_project(*, pristine: Path, models: int) -> None:
     write_dense_compile_project(project_dir=pristine / DENSE_PROJECT, model_count=models)
 
 
-def write_baseline_dense_project(*, source: Path, pristine: Path, models: int) -> None:
-    """Generate the baseline's dense benchmark with the baseline source's own generator."""
+def write_baseline_dense_project(
+    *, source: Path, python: Path, pristine: Path, models: int
+) -> None:
+    """Generate the baseline's dense benchmark with its own generator and installed `sqlbuild`."""
 
     _run_baseline_generator(
         source=source,
+        python=python,
         entry=DENSE_GENERATOR_ENTRY,
         arguments=(str(pristine / DENSE_PROJECT), str(models)),
         description="dense benchmark",
@@ -166,7 +171,7 @@ def compare_command(
 
 
 def _run_baseline_generator(
-    *, source: Path, entry: str, arguments: tuple[str, ...], description: str
+    *, source: Path, python: Path, entry: str, arguments: tuple[str, ...], description: str
 ) -> None:
     completed: subprocess.CompletedProcess[str] = run_checkout_generator(
         checkout=source,
@@ -174,6 +179,7 @@ def _run_baseline_generator(
         entry=entry,
         arguments=arguments,
         environment=_environment(),
+        library_paths=library_paths(python=python),
     )
     if completed.returncode != 0:
         raise ReleasePerformanceError(
