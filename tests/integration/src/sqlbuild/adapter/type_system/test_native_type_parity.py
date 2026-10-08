@@ -6,7 +6,9 @@ import random
 
 import pytest
 
+from sqlbuild.adapter.type_system.main._native_normalize_type import normalize_native_type
 from tests.integration.src.sqlbuild.adapter.type_system._test_types import (
+    DeepTypeTestCase,
     GeneratedTypeParityTestCase,
     TypeParityTestCase,
 )
@@ -113,6 +115,16 @@ def test_given_generated_types_when_normalizing_natively_then_python_normalizati
             expected_native_dialects=frozenset(),
         ),
         TypeParityTestCase(
+            description="array suffixes at the bracket cap",
+            type_sql="INT" + "[]" * 32,
+            expected_native_dialects=_NATIVE_DIALECTS,
+        ),
+        TypeParityTestCase(
+            description="array suffixes past the bracket cap defer",
+            type_sql="INT" + "[]" * 33,
+            expected_native_dialects=frozenset(),
+        ),
+        TypeParityTestCase(
             description="non-ASCII text defers",
             type_sql="caf\u00e9",
             expected_native_dialects=frozenset(),
@@ -136,6 +148,25 @@ def test_given_type_when_normalizing_under_each_dialect_then_native_answers_matc
         ),
         frozenset(parity.dialect for parity in answered),
     ) == ([], test_case.expected_native_dialects), test_case.description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeepTypeTestCase(
+            description="100,000 array suffixes, past where the wheel itself overflows",
+            type_sql="INT" + "[]" * 100_000,
+            expected_native=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_type_past_the_wheel_depth_when_normalizing_natively_then_it_defers(
+    test_case: DeepTypeTestCase,
+) -> None:
+    assert normalize_native_type(type_sql=test_case.type_sql, dialect="generic") is (
+        test_case.expected_native
+    )
 
 
 if __name__ == "__main__":

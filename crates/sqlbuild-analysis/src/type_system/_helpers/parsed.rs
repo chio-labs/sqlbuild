@@ -35,11 +35,11 @@ pub(crate) fn parse_type(type_sql: &str, dialect: &Dialect) -> Result<DataType, 
 
 /// Python's `_normalized_from_parsed_type`, or None where Python raises or holds an object.
 pub(crate) fn normalize_parsed(
-    parsed: &DataType,
+    parsed: DataType,
     polyglot: &Dialect,
     dialect: Option<TypeDialect>,
 ) -> Option<NormalizedType> {
-    let expression: Expression = Expression::DataType(parsed.clone());
+    let expression: Expression = Expression::DataType(parsed);
     let Ok(generated) = polyglot.generate(&expression) else {
         return None;
     };

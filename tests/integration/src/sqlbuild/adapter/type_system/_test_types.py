@@ -24,3 +24,12 @@ class TypeParityTestCase:
     description: str
     type_sql: str
     expected_native_dialects: frozenset[str | None]
+
+
+@dataclass(frozen=True)
+class DeepTypeTestCase:
+    """A type deeper than the wheel can parse, which only native sees."""
+
+    description: str
+    type_sql: str
+    expected_native: None

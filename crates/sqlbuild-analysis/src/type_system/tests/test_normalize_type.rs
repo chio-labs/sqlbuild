@@ -1,6 +1,6 @@
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::tests::helpers::normalization_text;
-use crate::type_system::tests::test_types::NormalizeTypeTestCase;
+use crate::type_system::tests::test_types::{BracketDepthTestCase, NormalizeTypeTestCase};
 
 #[test]
 fn given_type_strings_when_normalizing_then_python_normalization_is_returned() {
@@ -100,6 +100,42 @@ fn given_type_strings_when_normalizing_then_python_normalization_is_returned() {
                 .map(normalization_text)
                 .as_deref(),
             test_case.expected_normalization,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_array_suffixes_when_normalizing_on_a_small_stack_then_deep_types_defer() {
+    let test_cases = [
+        BracketDepthTestCase {
+            description: "at the bracket cap, parsed on a 1 MiB debug-build stack",
+            depth: 32,
+            expected_native: true,
+        },
+        BracketDepthTestCase {
+            description: "one past the bracket cap",
+            depth: 33,
+            expected_native: false,
+        },
+        BracketDepthTestCase {
+            description: "far past the bracket cap",
+            depth: 100_000,
+            expected_native: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        let type_sql: String = format!("INT{}", "[]".repeat(test_case.depth));
+        let answered: bool = std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(move || normalize_type(&type_sql, "generic").is_some())
+            .expect("the test thread starts")
+            .join()
+            .expect("normalization does not overflow the stack");
+        assert_eq!(
+            answered, test_case.expected_native,
             "{}",
             test_case.description
         );

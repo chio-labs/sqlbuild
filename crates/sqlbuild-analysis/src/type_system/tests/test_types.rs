@@ -19,3 +19,9 @@ pub(super) struct SplitTypeTestCase {
     pub(super) type_sql: &'static str,
     pub(super) expected_split: Option<(&'static str, Vec<i64>)>,
 }
+
+pub(super) struct BracketDepthTestCase {
+    pub(super) description: &'static str,
+    pub(super) depth: usize,
+    pub(super) expected_native: bool,
+}
