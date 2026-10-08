@@ -125,6 +125,8 @@ pub(crate) struct HelperReferenceTestCase {
     pub(crate) helpers: &'static [(&'static str, &'static str)],
     pub(crate) expected: &'static [(&'static str, &'static str)],
     pub(crate) assertions: &'static [(&'static str, &'static str)],
+    pub(crate) read_helpers: &'static [&'static str],
+    pub(crate) reference_targets: &'static [&'static str],
     pub(crate) expected_chain: &'static [&'static str],
     pub(crate) expected_order: &'static [(&'static str, &'static str)],
     pub(crate) expected_fragments: &'static [&'static str],
@@ -143,5 +145,8 @@ pub(crate) struct UnresolvedReaderReferenceTestCase {
     pub(crate) helpers: &'static [(&'static str, &'static str)],
     pub(crate) expected: &'static [(&'static str, &'static str)],
     pub(crate) assertions: &'static [(&'static str, &'static str)],
+    pub(crate) read_helpers: &'static [&'static str],
+    pub(crate) reference_targets: &'static [&'static str],
+    pub(crate) sends_compiler_reads: bool,
     pub(crate) expected_error_fragments: &'static [&'static str],
 }

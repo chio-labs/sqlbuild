@@ -1841,6 +1841,16 @@ def _assemble_compiled_sql_test(
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
             else ()
         ),
+        read_helper_names=(
+            test_input.payload.read_helper_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        reference_target_model_names=(
+            test_input.payload.reference_target_model_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
         target_model_names=target_model_names,
         tested_resources=tested_resources,
     )

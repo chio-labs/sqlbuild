@@ -431,9 +431,10 @@ __assert__order_ids_are_not_null AS (
 
 An assertion must read a model the test runs. A mocked name always means the mock, so a test whose
 `__expected__` and `__assert__` CTEs read only mocks, such as `__ref("stg_orders")` in a test that
-also defines `__ref__stg_orders`, tests no model. Compile rejects it with `P013` instead of
-skipping it; call `__ref()` on the model under test, or remove the test. Earlier SQLBuild versions
-ran the model's real SQL for an assertion calling `__ref()` on a mocked model.
+also defines `__ref__stg_orders`, has no model to run against. Compile rejects it with `P013`
+instead of skipping it. Mock the model's inputs instead, such as `__source__raw__orders` above, and
+keep `__ref("stg_orders")` in the assertion, or remove the test. Earlier SQLBuild versions ran the
+model's real SQL for an assertion calling `__ref()` on a mocked model, so such tests used to run.
 
 Assertions can be mixed with `__expected__` CTEs in the same test, or used on their own. They are useful when the natural check is "no rows should violate this rule" rather than "the output should exactly equal these rows" - for example, duplicate checks, negative-value constraints, or conditional business rules.
 

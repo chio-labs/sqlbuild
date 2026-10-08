@@ -8,7 +8,7 @@ import pytest
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
@@ -1574,3 +1574,47 @@ def test_given_unflattened_with_when_building_assertion_ctes_then_raises_clear_e
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
         plan_single_test(test=compiled_test, project=project, adapter=SqlServerAdapter())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="assertion calling an unmocked source fails planning with located P013",
+            model_queries={"orders": 'SELECT id FROM __source("raw")'},
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id"},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_error_fragments=(
+                "tests/unit/test_chain.sql:1:1: SQL test CTE '__assert__no_returns' calls "
+                '__source("returns"), which the test query cannot resolve',
+                "__source__returns AS (SELECT ...)",
+            ),
+            expected_cte_bodies={"orders": "SELECT 1 AS id"},
+            assertion_ctes={"no_returns": 'SELECT id FROM __source("returns")'},
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reference_the_compiler_missed_when_planning_then_it_fails_with_located_p013(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    with pytest.raises(SqlTestReferenceError) as raised:
+        plan_and_render_sql_test_artifacts(
+            project=project,
+            tests=(compiled_test,),
+            adapter=DuckDbAdapter(),
+            sql_analysis_enabled=True,
+        )
+
+    assert raised.value.code == "P013"
+    assert raised.value.location.path == Path("tests/unit/test_chain.sql")
+    assert raised.value.message == test_case.expected_error_fragments[0]
+    assert raised.value.help is not None
+    assert test_case.expected_error_fragments[1] in raised.value.help

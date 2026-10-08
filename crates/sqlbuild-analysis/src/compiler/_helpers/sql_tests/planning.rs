@@ -24,7 +24,8 @@ use crate::compiler::_helpers::sql_tests::markers::{
     replace_dbt_ref_markers, replace_named_markers,
 };
 use crate::compiler::_helpers::sql_tests::reader_references::{
-    calls_reference, mock_cte_example, reader_ref_targets, unresolved_relation_call,
+    CompilerReads, assertion_ref_targets, calls_reference, unresolvable_call,
+    unresolved_reference_error,
 };
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::_helpers::sql_tests::rendering::{
@@ -157,6 +158,10 @@ enum TestPayload {
         expected_model_names: Vec<String>,
         #[serde(default)]
         assertion_ctes: Vec<CteInput>,
+        #[serde(default)]
+        read_helper_names: Option<Vec<String>>,
+        #[serde(default)]
+        reference_target_model_names: Option<Vec<String>>,
     },
     Direct {
         mode: String,
@@ -303,6 +308,7 @@ struct ModelTestPlan {
     expected_ctes: Vec<CteInput>,
     expected_model_names: Vec<String>,
     assertion_ctes: Vec<CteInput>,
+    reads: CompilerReads,
 }
 
 struct TextualChainRequest<'a> {
@@ -576,36 +582,46 @@ pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> 
         .tests
         .into_iter()
         .map(|test| match test.payload {
-            TestPayload::Direct { .. } => Vec::new(),
+            TestPayload::Direct { .. } => Ok(Vec::new()),
             TestPayload::Model {
                 authored_ctes,
                 model_query_overrides,
                 expected_ctes,
                 expected_model_names,
                 assertion_ctes,
+                read_helper_names,
+                reference_target_model_names,
             } => {
+                let reads = CompilerReads::required(
+                    &test.file_label,
+                    read_helper_names,
+                    reference_target_model_names,
+                )?;
                 let fixtures = classify_fixtures(authored_ctes, expected_ctes, assertion_ctes);
-                let expected_names = chain_root_names(expected_model_names, &fixtures, &patterns);
-                topo_sort_model_chain(TopoSortRequest {
+                let expected_names =
+                    chain_root_names(expected_model_names, &reads, &fixtures, &patterns);
+                Ok(topo_sort_model_chain(TopoSortRequest {
                     expected_names: &expected_names,
                     models: &models,
                     overrides: &model_query_overrides,
                     mock_refs: &fixtures.mock_refs,
                     patterns: &patterns,
-                })
+                }))
             }
         })
-        .collect();
+        .collect::<Result<_, String>>()?;
     serde_json::to_string(&ChainBatchResponse { chains }).map_err(|error| error.to_string())
 }
 
-/// Models the test runs: expected models and the unmocked models its test CTEs call `__ref()` on.
+/// Models the test runs: expected models, assertion targets and the compiler's reference targets.
 fn chain_root_names(
     mut expected_names: Vec<String>,
+    reads: &CompilerReads,
     fixtures: &TestFixtures,
     patterns: &SqlTestPatterns,
 ) -> Vec<String> {
-    expected_names.extend(reader_ref_targets(fixtures, patterns));
+    expected_names.extend(assertion_ref_targets(fixtures, patterns));
+    expected_names.extend(reads.reference_target_model_names.iter().cloned());
     dedupe(expected_names)
 }
 
@@ -739,18 +755,28 @@ fn plan_test(test: TestInput, context: &ProjectContext) -> Result<PlannedRespons
             expected_ctes,
             expected_model_names,
             assertion_ctes,
-        } => plan_model_test(
-            ModelTestPlan {
-                test_name: test.name,
-                file_label: test.file_label,
-                authored_ctes,
-                model_query_overrides,
-                expected_ctes,
-                expected_model_names,
-                assertion_ctes,
-            },
-            context,
-        ),
+            read_helper_names,
+            reference_target_model_names,
+        } => {
+            let reads = CompilerReads::required(
+                &test.file_label,
+                read_helper_names,
+                reference_target_model_names,
+            )?;
+            plan_model_test(
+                ModelTestPlan {
+                    test_name: test.name,
+                    file_label: test.file_label,
+                    authored_ctes,
+                    model_query_overrides,
+                    expected_ctes,
+                    expected_model_names,
+                    assertion_ctes,
+                    reads,
+                },
+                context,
+            )
+        }
     }
 }
 
@@ -826,8 +852,14 @@ fn plan_model_test(
             .then_some(context.render_dialect.as_ref()),
         flat_dialect: context.rejects_nested_with,
         slice_dialect: SliceDialect::new(Some(&context.dialect)),
+        read_helper_names: &plan.reads.read_helper_names,
     })?;
-    let expected_names = chain_root_names(plan.expected_model_names, &fixtures, &context.patterns);
+    let expected_names = chain_root_names(
+        plan.expected_model_names,
+        &plan.reads,
+        &fixtures,
+        &context.patterns,
+    );
     let ordered_names = topo_sort_model_chain(TopoSortRequest {
         expected_names: &expected_names,
         models: &context.models,
@@ -938,6 +970,7 @@ fn plan_model_test(
         context,
         ordered_names: &ordered_names,
         overrides: &plan.model_query_overrides,
+        test_name: &plan.test_name,
         file_label: &plan.file_label,
         analysis_resolved: &analysis_resolved,
         textual_chain: None,
@@ -945,6 +978,7 @@ fn plan_model_test(
     resolve_referencing_helpers(HelperResolution {
         readers: &mut readers,
         fixtures: &mut fixtures,
+        read_helper_names: &plan.reads.read_helper_names,
         chain: &mut chain,
         reachable_mocks: &mut reachable_mocks,
     })?;
@@ -955,7 +989,10 @@ fn plan_model_test(
         let resolved = readers.resolve(
             &placed_sql,
             &fixtures,
-            &format!("{ASSERT_PREFIX}{assertion_name}"),
+            &AuthoredReader {
+                cte_name: &format!("{ASSERT_PREFIX}{assertion_name}"),
+                sql: assertion_sql,
+            },
         )?;
         reachable_mocks.extend(resolved.chain_reached);
         reachable_mocks.extend(resolved.reached);
@@ -1009,6 +1046,7 @@ fn plan_model_test(
 struct HelperResolution<'r, 'a> {
     readers: &'r mut ReaderContext<'a>,
     fixtures: &'r mut TestFixtures,
+    read_helper_names: &'r [String],
     chain: &'r mut [ChainStep],
     reachable_mocks: &'r mut HashSet<String>,
 }
@@ -1018,23 +1056,20 @@ fn resolve_referencing_helpers(request: HelperResolution<'_, '_>) -> Result<(), 
     let HelperResolution {
         readers,
         fixtures,
+        read_helper_names,
         chain,
         reachable_mocks,
     } = request;
     let patterns = &readers.context.patterns;
-    let read_sql: Vec<&str> = fixtures
-        .expected
-        .values()
-        .chain(fixtures.assertions.iter().map(|(_, sql)| sql))
-        .map(String::as_str)
-        .collect();
-    let read_helpers = fixtures
-        .scope
-        .read_helpers(&read_sql, reachable_mocks, patterns);
+    let read_helpers = fixtures.scope.read_helper_indexes(read_helper_names);
     let mut resolved_helpers: Vec<(usize, ResolvedHelper)> = Vec::new();
     for (index, helper_sql) in fixtures.scope.referencing_helpers(&read_helpers, patterns) {
         let label = fixtures.scope.helper_name(index).to_string();
-        let resolved = readers.resolve(&helper_sql, fixtures, &label)?;
+        let authored = AuthoredReader {
+            cte_name: &label,
+            sql: &helper_sql,
+        };
+        let resolved = readers.resolve(&helper_sql, fixtures, &authored)?;
         reachable_mocks.extend(resolved.chain_reached);
         resolved_helpers.push((
             index,
@@ -1054,7 +1089,7 @@ fn resolve_referencing_helpers(request: HelperResolution<'_, '_>) -> Result<(), 
             continue;
         };
         let placed_sql = fixtures.scope.reader_sql(sql, patterns);
-        let references = calls_reference(&placed_sql, patterns);
+        let references = calls_reference(sql, patterns);
         if !helpers_resolved && !references {
             continue;
         }
@@ -1062,7 +1097,11 @@ fn resolve_referencing_helpers(request: HelperResolution<'_, '_>) -> Result<(), 
         reachable_mocks.extend(scope.reached_mocks.iter().cloned());
         if references {
             let label = format!("{EXPECTED_PREFIX}{}", step.model_name);
-            let resolved = readers.resolve(&placed_sql, fixtures, &label)?;
+            let authored = AuthoredReader {
+                cte_name: &label,
+                sql,
+            };
+            let resolved = readers.resolve(&placed_sql, fixtures, &authored)?;
             reachable_mocks.extend(resolved.chain_reached);
             reachable_mocks.extend(resolved.reached);
             step.expected_lifted_ctes =
@@ -1081,9 +1120,16 @@ struct ReaderContext<'a> {
     context: &'a ProjectContext,
     ordered_names: &'a [String],
     overrides: &'a BTreeMap<String, String>,
+    test_name: &'a str,
     file_label: &'a str,
     analysis_resolved: &'a HashMap<String, AnalysisResolvedSql>,
     textual_chain: Option<TextualChain>,
+}
+
+/// One test CTE as authored, whose own reference calls must all resolve.
+struct AuthoredReader<'s> {
+    cte_name: &'s str,
+    sql: &'s str,
 }
 
 /// One assertion or helper query with its references resolved to the CTEs standing in for them.
@@ -1097,24 +1143,27 @@ struct ResolvedReader {
 }
 
 impl ReaderContext<'_> {
-    /// Resolve a test-authored query, failing rather than leaving a relation reference raw.
+    /// Resolve a test-authored query, failing if its own CTE calls a reference nothing resolves.
     fn resolve(
         &mut self,
         sql: &str,
         fixtures: &TestFixtures,
-        label: &str,
+        authored: &AuthoredReader<'_>,
     ) -> Result<ResolvedReader, String> {
-        let resolved = self.resolve_references(sql, fixtures)?;
-        if let Some(call) = unresolved_relation_call(&resolved.body_sql, &self.context.patterns) {
-            return Err(compile_error(&format!(
-                "SQL test '{}' CTE '{label}' calls {call}, which the test query cannot resolve; \
-                 mock the relation with a CTE such as {} AS (SELECT ...), or read a model the \
-                 test runs with __ref(\"<model>\")",
+        if let Some(call) = unresolvable_call(
+            authored.sql,
+            fixtures,
+            self.ordered_names,
+            &self.context.patterns,
+        ) {
+            return Err(unresolved_reference_error(
+                self.test_name,
                 self.file_label,
-                mock_cte_example(&call)
-            )));
+                authored.cte_name,
+                &call,
+            ));
         }
-        Ok(resolved)
+        self.resolve_references(sql, fixtures)
     }
 
     fn resolve_references(
@@ -1942,6 +1991,6 @@ pub(crate) fn compile_error(message: &str) -> String {
     format!("compile_input:{message}")
 }
 
-fn planner_error(message: &str) -> String {
+pub(crate) fn planner_error(message: &str) -> String {
     format!("planner_input:{message}")
 }

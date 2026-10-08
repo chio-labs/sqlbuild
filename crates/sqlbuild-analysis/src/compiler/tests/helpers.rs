@@ -201,7 +201,7 @@ pub(crate) fn concurrent_requests_initialize_shared_template_once() -> bool {
 
 pub(crate) fn model_test_batch_returns_ordered_artifact() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": [
@@ -264,7 +264,7 @@ pub(crate) fn model_test_batch_returns_ordered_artifact() -> bool {
 
 pub(crate) fn unicode_cte_after_leading_with_preserves_identifier() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": [{
@@ -309,7 +309,7 @@ pub(crate) fn unicode_cte_after_leading_with_preserves_identifier() -> bool {
 
 pub(crate) fn unresolved_reference_fast_rejection_preserves_warning() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": [{
@@ -399,7 +399,7 @@ pub(crate) fn shared_textual_chain_renders_each_model_once() -> bool {
     }
     let top: String = format!("orders_{LAYERS:02}_left");
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": models,
@@ -482,7 +482,7 @@ fn plan_deep_diamond_with_missing_mock(sql_analysis_enabled: bool) -> Value {
     const LAYERS: usize = 12;
     let top: String = format!("orders_{LAYERS:02}_left");
     serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": deep_diamond_models(LAYERS),
@@ -531,7 +531,7 @@ pub(crate) fn deep_shared_graph_reports_missing_mock_once() -> bool {
 
 pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": [
@@ -614,7 +614,7 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
 
 pub(crate) fn textual_assertion_with_clause_merges_lifted_ctes() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": [
@@ -698,11 +698,9 @@ pub(crate) fn upstream_fallback_resolves() -> bool {
         }],
         "sqlAnalysisEnabled": true, "sqlAnalysisDialect": "duckdb"
     });
-    let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(&request.to_string())
-            .expect("planning succeeds"),
-    )
-    .expect("valid JSON");
+    let response: Value =
+        serde_json::from_str(&plan_json(&request.to_string()).expect("planning succeeds"))
+            .expect("valid JSON");
     let artifact = &response["artifacts"][0];
     assert_eq!(artifact["warnings"], json!([]));
     let sql = artifact["sql"].as_str().expect("rendered SQL");
@@ -712,10 +710,7 @@ pub(crate) fn upstream_fallback_resolves() -> bool {
     let mut artifact_request = request;
     artifact_request["includePlan"] = json!(false);
     let compact: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
-            &artifact_request.to_string(),
-        )
-        .expect("artifact planning succeeds"),
+        &plan_json(&artifact_request.to_string()).expect("artifact planning succeeds"),
     )
     .expect("valid artifact JSON");
     assert_eq!(compact["artifacts"][0]["sql"], artifact["sql"]);
@@ -731,7 +726,7 @@ pub(crate) fn upstream_fallback_resolves() -> bool {
 
 pub(crate) fn chain_resolution_orders_unmocked_models() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+        &chain_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": deep_diamond_models(2),
@@ -856,7 +851,7 @@ pub(crate) fn long_chain_plan_output_stays_linear() -> bool {
     let tip: String = format!("orders_{:03}", MODELS - 1);
     for sql_analysis_enabled in [true, false] {
         let response: Value = serde_json::from_str(
-            &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &plan_json(
                 &json!({
                     "lexicalSyntax": generic_lexical_syntax(),
                     "models": models,
@@ -1016,7 +1011,7 @@ pub(crate) fn sqlserver_difference_sample_projects_bracketed_columns() -> bool {
 
 pub(crate) fn snowflake_plan_keeps_quoted_expected_columns() -> bool {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &plan_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": [{
@@ -1064,7 +1059,7 @@ fn plan_helper_scope_request(
     sql_analysis_enabled: bool,
     helper_name: &str,
 ) -> Result<String, String> {
-    crate::compiler::main::sql_test_planning::plan_and_render_json(
+    plan_json(
         &json!({
             "lexicalSyntax": generic_lexical_syntax(),
             "models": [
@@ -1288,7 +1283,7 @@ pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope()
     ];
     for shape in shapes {
         let response: Value = serde_json::from_str(
-            &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &plan_json(
                 &json!({
                     "lexicalSyntax": generic_lexical_syntax(),
                     "models": [
@@ -1760,7 +1755,7 @@ pub(crate) fn plan_shape_refusal(shape: &PlanShape<'_>) -> String {
 }
 
 fn plan_shape(shape: &PlanShape<'_>) -> Result<Value, String> {
-    let response = crate::compiler::main::sql_test_planning::plan_and_render_json(
+    let response = plan_json(
         &json!({
             "lexicalSyntax": generic_lexical_syntax(),
             "models": [{"name": "orders", "querySql": shape.model_sql, "modelDependencies": []}],
@@ -1804,7 +1799,7 @@ fn assert_names_isolated(sql: &str, dialect: &str, helper_name: &str, label: &st
     }
 }
 
-fn helper_reference_test(case: &HelperReferenceTestCase) -> Value {
+fn helper_reference_test(case: &HelperReferenceTestCase, sends_compiler_reads: bool) -> Value {
     let named = |ctes: &[(&str, &str)]| -> Vec<Value> {
         ctes.iter()
             .map(|(name, sql)| json!({"name": name, "sqlBody": sql}))
@@ -1821,7 +1816,7 @@ fn helper_reference_test(case: &HelperReferenceTestCase) -> Value {
         ),
     ]);
     authored.extend(named(case.helpers));
-    json!({
+    let mut test = json!({
         "name": "orders_case",
         "fileLabel": "tests/orders.sql",
         "payload": {
@@ -1835,7 +1830,15 @@ fn helper_reference_test(case: &HelperReferenceTestCase) -> Value {
                 .collect::<Vec<_>>(),
             "assertionCtes": named(case.assertions)
         }
-    })
+    });
+    let reads = [
+        ("readHelperNames", json!(case.read_helpers)),
+        ("referenceTargetModelNames", json!(case.reference_targets)),
+    ];
+    for (key, value) in reads.into_iter().filter(|_| sends_compiler_reads) {
+        test["payload"][key] = value;
+    }
+    test
 }
 
 fn helper_reference_models() -> Value {
@@ -1856,12 +1859,13 @@ fn helper_reference_models() -> Value {
 /// Plan and render one helper-reference case through the native planner's JSON entry point.
 pub(crate) fn plan_helper_reference_response(
     case: &HelperReferenceTestCase,
+    sends_compiler_reads: bool,
 ) -> Result<String, String> {
     crate::compiler::main::sql_test_planning::plan_and_render_json(
         &json!({
             "lexicalSyntax": generic_lexical_syntax(),
             "models": helper_reference_models(),
-            "tests": [helper_reference_test(case)],
+            "tests": [helper_reference_test(case, sends_compiler_reads)],
             "sqlAnalysisEnabled": case.sql_analysis_enabled,
             "sqlAnalysisDialect": "duckdb",
             "setDifferenceOperator": "EXCEPT"
@@ -1873,7 +1877,7 @@ pub(crate) fn plan_helper_reference_response(
 /// Plan and render one helper-reference case, returning its SQL, chain and warnings.
 pub(crate) fn plan_helper_reference_case(case: &HelperReferenceTestCase) -> Value {
     let response: Value = serde_json::from_str(
-        &plan_helper_reference_response(case).expect("test assumption must hold"),
+        &plan_helper_reference_response(case, true).expect("test assumption must hold"),
     )
     .expect("test assumption must hold");
     response["artifacts"][0].clone()
@@ -1886,7 +1890,7 @@ pub(crate) fn chain_helper_reference_case(case: &HelperReferenceTestCase) -> Val
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": helper_reference_models(),
-                "tests": [helper_reference_test(case)]
+                "tests": [helper_reference_test(case, true)]
             })
             .to_string(),
         )
@@ -1899,4 +1903,35 @@ pub(crate) fn chain_helper_reference_case(case: &HelperReferenceTestCase) -> Val
 /// Whether `first` is defined before `second` at the top level of a rendered test query.
 pub(crate) fn defined_before(sql: &str, first: &str, second: &str) -> bool {
     top_level_cte_position(sql, first) < top_level_cte_position(sql, second)
+}
+
+/// Plan a request whose model tests predate the compiler's reads, sending empty reads for them.
+pub(crate) fn plan_json(request_json: &str) -> Result<String, String> {
+    crate::compiler::main::sql_test_planning::plan_and_render_json(&with_empty_compiler_reads(
+        request_json,
+    ))
+}
+
+/// Resolve chains for a request whose model tests predate the compiler's reads.
+pub(crate) fn chain_json(request_json: &str) -> Result<String, String> {
+    crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+        &with_empty_compiler_reads(request_json),
+    )
+}
+
+fn with_empty_compiler_reads(request_json: &str) -> String {
+    let mut request: Value = serde_json::from_str(request_json).expect("test assumption must hold");
+    let model_payloads = request["tests"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .map(|test| &mut test["payload"])
+        .filter(|payload| payload["kind"] == json!("model"))
+        .filter_map(Value::as_object_mut);
+    for payload in model_payloads {
+        for key in ["readHelperNames", "referenceTargetModelNames"] {
+            payload.entry(key).or_insert_with(|| json!([]));
+        }
+    }
+    request.to_string()
 }

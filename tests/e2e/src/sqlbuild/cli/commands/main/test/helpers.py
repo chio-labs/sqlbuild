@@ -1827,6 +1827,16 @@ _HELPER_REFERENCE_TESTS: dict[str, str] = {
         '  SELECT item_id FROM __source("item_returns")\n'
         ")\n"
     ),
+    "helper_named_like_column_reads_unknown_model": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        'amount_doubled AS (SELECT item_id FROM __ref("item_archive")),\n'
+        "__expected__item_totals AS (\n  SELECT 7 AS item_id, 10 AS amount_doubled\n)\n"
+    ),
+    "helper_named_like_column_reads_model": (
+        "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
+        'amount_doubled AS (SELECT item_id FROM __ref("item_extras")),\n'
+        "__expected__item_totals AS (\n  SELECT 7 AS item_id, 10 AS amount_doubled\n)\n"
+    ),
     "assertion_reads_only_mocks": (
         "__ref__items AS (\n  SELECT 7 AS item_id, 5 AS amount\n),\n"
         "__assert__only_mocked_items AS (\n"

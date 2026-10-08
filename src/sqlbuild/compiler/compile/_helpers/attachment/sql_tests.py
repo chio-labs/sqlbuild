@@ -38,9 +38,9 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_sql_test_ctes,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
-    reference_target_model_names,
     report_test_without_target_model,
     report_unresolvable_test_references,
+    sql_test_reads,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
     extract_expanded_sql_tests_cached,
@@ -65,6 +65,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
     SqlReferenceOrigin,
+    SqlTestReads,
 )
 from sqlbuild.compiler.compile.types import (
     SqlTestMode,
@@ -338,7 +339,7 @@ def build_test_inputs(
             assertion_target_model_names=assertion_target_model_names,
             target_catalog=target_catalog,
         )
-        reference_targets: tuple[str, ...] = ()
+        reads: SqlTestReads = SqlTestReads(read_helper_names=(), reference_target_model_names=())
         if isinstance(test_ctes.payload, CompileModelSqlTestCtes):
             if report_unresolvable_test_references(
                 payload=test_ctes.payload,
@@ -348,14 +349,12 @@ def build_test_inputs(
                 syntax=sql_lexical_syntax,
             ):
                 continue
-            reference_targets = reference_target_model_names(
-                payload=test_ctes.payload, syntax=sql_lexical_syntax
-            )
+            reads = sql_test_reads(payload=test_ctes.payload, syntax=sql_lexical_syntax)
             if (
                 test.mode is SqlTestMode.MODEL
                 and not test_ctes.payload.expected_model_names
                 and not assertion_target_model_names
-                and not reference_targets
+                and not reads.reference_target_model_names
             ):
                 report_test_without_target_model(
                     payload=test_ctes.payload,
@@ -374,7 +373,7 @@ def build_test_inputs(
                     test_ctes=test_ctes,
                     tested_resource_names=test.tested_resource_names,
                     assertion_target_model_names=assertion_target_model_names,
-                    reference_target_model_names=reference_targets,
+                    reads=reads,
                 ),
                 declaration_usages=test.declaration_usages,
                 parent_name=test.parent_name,
@@ -449,7 +448,7 @@ def _build_test_input_payload(
     test_ctes: CompileSqlTestCtes,
     tested_resource_names: tuple[str, ...],
     assertion_target_model_names: tuple[str, ...],
-    reference_target_model_names: tuple[str, ...],
+    reads: SqlTestReads,
 ) -> CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload:
     match test_ctes.payload:
         case CompileModelSqlTestCtes() as model_payload:
@@ -466,7 +465,8 @@ def _build_test_input_payload(
                 assertion_ctes=model_payload.assertion_ctes,
                 assertion_names=model_payload.assertion_names,
                 assertion_target_model_names=assertion_target_model_names,
-                reference_target_model_names=reference_target_model_names,
+                read_helper_names=reads.read_helper_names,
+                reference_target_model_names=reads.reference_target_model_names,
             )
         case CompileDirectLogicSqlTestCtes() as direct_logic_payload:
             return CompileDirectLogicSqlTestInputPayload(

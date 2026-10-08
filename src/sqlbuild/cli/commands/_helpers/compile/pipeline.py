@@ -35,7 +35,7 @@ from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
 from sqlbuild.compiler.compile.constants import COMPILE_RENDER_REUSE
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
@@ -362,6 +362,8 @@ def compile_sql_test_planning_diagnostics(
                 severity=DiagnosticSeverity.ERROR,
                 code=error.code,
                 message=str(error),
+                help=error.help,
+                location=error.location if isinstance(error, SqlTestReferenceError) else None,
             ),
         )
 

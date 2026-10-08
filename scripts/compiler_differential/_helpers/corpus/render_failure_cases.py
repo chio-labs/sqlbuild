@@ -295,8 +295,8 @@ def _reference_cases() -> tuple[FailureCase, ...]:
             name="test-reads-only-mocks",
             expected_code="P013",
             expected_message=(
-                "SQL test 'test_stg_orders' reads only mocks (__ref__stg_orders), so it tests "
-                "no model"
+                "SQL test 'test_stg_orders' mocks the model it tests (__ref__stg_orders), so "
+                "the test has no model to run against"
             ),
             files={
                 "tests/unit/test_stg_orders.sql": (

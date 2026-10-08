@@ -12,7 +12,7 @@ from sqlbuild.cli.commands.models import RefactorCompile
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.entry.models import CompileProfileFlags
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -68,6 +68,8 @@ def compile_for_refactor(*, project_dir: Path, no_cache: bool = False) -> Refact
                     severity=DiagnosticSeverity.ERROR,
                     code=error.code,
                     message=str(error),
+                    help=error.help,
+                    location=error.location if isinstance(error, SqlTestReferenceError) else None,
                 )
             )
     return RefactorCompile(

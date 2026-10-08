@@ -1245,7 +1245,16 @@ class CompileModelSqlTestInputPayload:
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    read_helper_names: tuple[str, ...] = field(default_factory=tuple)
     reference_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SqlTestReads:
+    """Helpers one SQL test reads and the unmocked models they and its expected rows reference."""
+
+    read_helper_names: tuple[str, ...]
+    reference_target_model_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1394,6 +1403,8 @@ class CompiledSqlTest:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    read_helper_names: tuple[str, ...] = field(default_factory=tuple)
+    reference_target_model_names: tuple[str, ...] = field(default_factory=tuple)
     target_model_names: tuple[str, ...] = field(default_factory=tuple)
     tested_resources: tuple[CompiledSqlTestResource, ...] = field(default_factory=tuple)
 
