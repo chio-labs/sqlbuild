@@ -58,7 +58,7 @@ _CASES: dict[str, FailureCase] = {case.name: case for case in attachment_failure
         NativeAttachmentErrorTestCase(
             description="a cursor intrinsic in a generic audit re-runs as it reads expanded SQL",
             case_name="generic-audit-cursor-intrinsic",
-            expected_macro_calls=(1, 1, 2),
+            expected_macro_calls=(1, 2, 2),
             expected_error_types=_ERROR_TYPES,
         ),
         NativeAttachmentErrorTestCase(
