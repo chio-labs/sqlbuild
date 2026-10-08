@@ -34,3 +34,13 @@ class RefactorTargetErrorTestCase:
     cascade: bool
     expected_message: str
     expected_help: str | None
+
+
+@dataclass(frozen=True)
+class LayerMoveSuggestionTestCase:
+    description: str
+    old_path: str
+    new_name: str
+    codes: tuple[str, ...]
+    expected_command: str | None
+    expected_folder: str | None

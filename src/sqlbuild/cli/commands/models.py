@@ -1101,6 +1101,16 @@ class RefactorCommandRequest:
 
 
 @dataclass(frozen=True)
+class LayerMoveSuggestion:
+    """The one-step `sqb mv` for a rename refused only by the layer-folder rules."""
+
+    new_name: str
+    folder: str | None
+    layer_folder: str
+    command: str
+
+
+@dataclass(frozen=True)
 class RefactorCompile:
     """One offline compile for a refactoring: its facts, or the errors that stopped it."""
 

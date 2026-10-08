@@ -177,3 +177,26 @@ COMMAND_WAREHOUSE_GROUPS: MappingProxyType[CliCommand, WarehouseGroup | None] = 
         CliCommand.SKILLS: None,
     }
 )
+LAYER_FOLDER_RULE_CODES: frozenset[str] = frozenset({"SQBRPROJECT102", "SQBRPROJECT105"})
+MODEL_NAME_LAYER_SEPARATOR: str = "__"
+MODEL_NAME_LAYER_INDEX: int = 1
+LAYER_FOLDERS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "stg": ("staging",),
+        "stg_v": ("staging",),
+        "int_clean": ("intermediate", "clean"),
+        "int_enriched": ("intermediate", "enriched"),
+        "int_v": ("intermediate", "enriched"),
+        "mart": ("mart",),
+        "mart_v": ("mart",),
+    }
+)
+CURRENT_LAYER_FOLDERS: tuple[tuple[str, ...], ...] = (
+    ("intermediate", "clean"),
+    ("intermediate", "enriched"),
+    ("intermediate",),
+    ("staging",),
+    ("mart",),
+)
+FOLDER_PLACEHOLDER: str = "<folder>"
+PROJECT_DIR_OPTION: str = "--project-dir"

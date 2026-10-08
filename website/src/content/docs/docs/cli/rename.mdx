@@ -25,7 +25,20 @@ sqb rename stg_orders.amount revenue --cascade
 
 Targets are written the way [`sqb lineage`](/docs/cli/lineage) reads them: a bare name is a model, and `<model>.<column>` is one of its columns. The `model:` and `column:` prefixes are optional, so `sqb rename model:stg_orders stg_order_lines` and `sqb rename column:stg_orders.amount revenue` still work. A target that names a source, seed, or function is refused, because those are not renamed by these commands.
 
-A model rename keeps the file in its folder and renames it to `<new_name>.sql`. `sqb mv` takes a new file path, which also sets the model name, or a folder ending in `/`, which keeps it.
+## Rename or move
+
+`sqb rename` changes names and never moves files: a model rename keeps the file in its folder and renames it to `<new_name>.sql`. `sqb mv` changes where a model lives and always takes a path: a new `.sql` file path, which also sets the model name, or a folder ending in `/`, which keeps it. Neither command picks a folder for you, because a folder can change the schema, materialization, tags, and declaration visibility the model gets from path defaults.
+
+```bash
+# Name only: the file stays in models/orders/intermediate/clean/
+sqb rename orders__int_clean__order_lines orders__int_clean__order_items
+
+# Name and a specific folder, in one verified step
+sqb mv orders__int_clean__order_lines models/orders/intermediate/enriched/orders__int_enriched__order_lines.sql
+
+# Folder only: the name stays
+sqb mv orders__int_clean__order_lines models/orders/intermediate/clean/web/
+```
 
 ## What changes
 
@@ -74,6 +87,17 @@ The command refuses, and writes nothing, when:
 - a column reaches a model through `SELECT *` in a subquery, a `USING` or `NATURAL` join, or an unqualified name that could belong to several tables;
 - a downstream model's `SELECT *` would silently rename its output, without `--cascade`;
 - Python code or Python node SQL strings name the model or column.
+
+A rename whose new name belongs to another layer's folder, under the layer-folder rules `SQBRPROJECT102` and `SQBRPROJECT105`, fails verification because `sqb rename` keeps the file where it is. When those rules are the only failures, the output says where the model belongs and prints the one-step [`sqb mv`](#rename-or-move) command, with that layer's folder and the current sub-folders filled in:
+
+```text
+orders__int_enriched__order_lines__web belongs under models/orders/intermediate/enriched/
+  Rename and move in one step:
+    sqb mv orders__int_clean__order_lines__web models/orders/intermediate/enriched/web/orders__int_enriched__order_lines__web.sql
+  (change the folder if you want it somewhere else)
+```
+
+When the current path has no layer folder to mirror, the command uses a `<folder>/` placeholder for you to fill in.
 
 Each location is listed with its file, line, and column, with the fix. Edit those locations, or pass the model or column to the macro as an argument, and run the command again. The command never applies part of a rename.
 
