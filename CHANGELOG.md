@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.143.1](https://github.com/chio-labs/sqlbuild/compare/v0.143.0...v0.143.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **test:** reject mocks reached through reference calls that read referencing helpers ([#1035](https://github.com/chio-labs/sqlbuild/issues/1035)) ([4ba74a0](https://github.com/chio-labs/sqlbuild/commit/4ba74a0ddb72549295f3480537bd229d254107b5))
+
 ## [0.143.0](https://github.com/chio-labs/sqlbuild/compare/v0.142.0...v0.143.0) (2026-10-08)
 
 
