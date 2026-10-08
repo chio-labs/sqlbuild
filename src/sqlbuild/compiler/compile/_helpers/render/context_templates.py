@@ -266,7 +266,7 @@ def expand_config_templates(
         else None
     )
     if isinstance(outcome, NativeTemplateExpansion):
-        _record_template_reads(outcome.reads)
+        record_template_reads(outcome.reads)
         return outcome.value
     expanded: object = expand_template_data(
         value=value,
@@ -285,7 +285,9 @@ def expand_config_templates(
     return expanded
 
 
-def _record_template_reads(reads: tuple[tuple[str, str], ...]) -> None:
+def record_template_reads(reads: tuple[tuple[str, str], ...]) -> None:
+    """Record native template environment and context reads for project reuse, in order."""
+
     for kind, name in reads:
         if kind == ENVIRONMENT_READ:
             COMPILE_INPUT_READS.environment_read(name)

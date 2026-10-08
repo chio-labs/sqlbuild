@@ -74,6 +74,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_expression_sources.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_lifecycle_commands.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_manifest_artifact_gating.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_model_config_engines.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_no_tests_no_audits_flags.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_plan_command_surface.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_hooks.py \

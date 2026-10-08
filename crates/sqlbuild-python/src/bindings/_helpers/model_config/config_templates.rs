@@ -21,22 +21,42 @@ const INVALID_OUTCOME: &str = "invalid";
 const UNSUPPORTED_OUTCOME: &str = "unsupported";
 
 /// Variables, the process environment and context values, all read through Python.
-struct PythonHost<'py> {
+pub(crate) struct PythonHost<'py> {
     py: Python<'py>,
     sources: TemplateSources<'py>,
     reads: RefCell<Vec<(&'static str, String)>>,
 }
 
+impl<'py> PythonHost<'py> {
+    /// Read variables, the environment and context values from these Python objects.
+    pub(crate) fn new(py: Python<'py>, sources: TemplateSources<'py>) -> Self {
+        Self {
+            py,
+            sources,
+            reads: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Return the `(kind, name)` reads in order.
+    pub(crate) fn into_reads(self) -> Vec<(&'static str, String)> {
+        self.reads.into_inner()
+    }
+}
+
 /// The variables, the `os.environ` mapping and the context values one expansion reads.
 #[derive(FromPyObject)]
-struct TemplateSources<'py>(Bound<'py, PyDict>, Bound<'py, PyAny>, Bound<'py, PyDict>);
+pub(crate) struct TemplateSources<'py>(
+    pub(crate) Bound<'py, PyDict>,
+    pub(crate) Bound<'py, PyAny>,
+    pub(crate) Bound<'py, PyDict>,
+);
 
 /// `allow_context`, `preserve_context_tokens` and `preserve_unknown_context`.
 #[derive(FromPyObject)]
 struct TemplateFlags(bool, bool, bool);
 
 /// A template failure, or a Python error raised while building the expanded containers.
-enum Stop {
+pub(crate) enum Stop {
     Failure(TemplateFailure),
     Python(PyErr),
 }
@@ -126,13 +146,9 @@ fn expand_config_templates<'py>(
         preserve_context_tokens,
         preserve_unknown_context,
     };
-    let host = PythonHost {
-        py,
-        sources,
-        reads: RefCell::new(Vec::new()),
-    };
+    let host = PythonHost::new(py, sources);
     match expanded(&host, &value, options) {
-        Ok(result) => Ok((result, host.reads.into_inner())
+        Ok(result) => Ok((result, host.into_reads())
             .into_pyobject(py)?
             .into_any()
             .unbind()),
@@ -146,7 +162,7 @@ fn expand_config_templates<'py>(
     }
 }
 
-fn expanded<'py>(
+pub(crate) fn expanded<'py>(
     host: &PythonHost<'py>,
     value: &Bound<'py, PyAny>,
     options: TemplateOptions,

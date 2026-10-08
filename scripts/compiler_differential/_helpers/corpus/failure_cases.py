@@ -8,6 +8,9 @@ from scripts.compiler_differential._helpers.corpus.case_builder import (
     mart_body_files,
     staging_files,
 )
+from scripts.compiler_differential._helpers.corpus.config_failure_cases import (
+    config_failure_cases,
+)
 from scripts.compiler_differential._helpers.corpus.discovery_failure_cases import (
     discovery_failure_cases,
 )
@@ -46,6 +49,7 @@ def all_failure_cases() -> tuple[FailureCase, ...]:
         *_compile_failure_cases(),
         *discovery_failure_cases(),
         *render_failure_cases(),
+        *config_failure_cases(),
         *scope_failure_cases(),
         *reference_failure_cases(),
         *analysis_failure_cases(),
