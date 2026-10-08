@@ -47,7 +47,6 @@ def _execute_scenario_cleanup(
     adapter: BaseAdapter,
     connection: Any,
 ) -> ScenarioCleanupExecutionResult:
-
     statement_recorder: StatementRecorder = StatementRecorder()
     cleanup_targets: tuple[ScenarioCleanupTarget, ...] = collect_scenario_cleanup_targets(
         scenario_plan=scenario_plan,

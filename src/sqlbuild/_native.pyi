@@ -175,6 +175,9 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...
+def scan_test_parameter_references(
+    sql: str, declared: list[str]
+) -> list[tuple[int, int, str]] | None: ...
 def sql_free_of_cursor_intrinsics(sql: str, reserved_markers: list[str]) -> bool: ...
 def pair_seed_files(
     declarations: list[str], stems: list[str]

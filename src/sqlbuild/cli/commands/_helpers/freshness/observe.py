@@ -87,7 +87,6 @@ def _observe_source_freshness_for_command(
     previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None,
     previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None,
 ) -> FreshnessCommandResult:
-
     selected_sources: tuple[SourceEntry, ...] = _selected_sources(
         sources=sources,
         select=select,

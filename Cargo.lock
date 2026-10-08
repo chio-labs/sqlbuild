@@ -710,6 +710,7 @@ dependencies = [
 name = "sqlbuild-attachments"
 version = "0.139.0"
 dependencies = [
+ "sqlbuild-core",
  "sqlbuild-sqltext",
 ]
 

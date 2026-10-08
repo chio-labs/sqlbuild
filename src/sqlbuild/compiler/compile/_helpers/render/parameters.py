@@ -5,9 +5,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
@@ -33,6 +36,20 @@ def expand_test_parameters(
     """Render active parameter references while leaving comments and quoted text unchanged."""
 
     value_lookup: dict[str, SqlValue] = dict(values)
+    references: list[tuple[int, int, str]] | None = (
+        _native.scan_test_parameter_references(sql, list(value_lookup))
+        if native_stage_enabled(NativeStage.ATTACHMENTS)
+        else None
+    )
+    if references is not None:
+        return _splice_parameter_references(
+            sql=sql,
+            references=references,
+            value_lookup=value_lookup,
+            value_renderer=value_renderer,
+            test_name=test_name,
+            case_name=case_name,
+        )
     used_names: set[str] = set()
     parts: list[str] = []
     cursor: int = 0
@@ -68,21 +85,67 @@ def expand_test_parameters(
                     f"SQL test '{test_name}' case '{case_name}' in '{file_path}' references "
                     f"undeclared parameter '{name}'"
                 )
-            try:
-                rendered: str = value_renderer.render_typed_scalar(value=value)
-                validate_rendered_sql_value_size(
-                    rendered_sql=rendered,
-                    context=(f"SQL test '{test_name}' case '{case_name}' parameter '{name}'"),
+            parts.append(
+                _render_parameter(
+                    name=name,
+                    value=value,
+                    value_renderer=value_renderer,
+                    test_name=test_name,
+                    case_name=case_name,
                 )
-            except (SqlValueRenderingError, SqlValueValidationError) as error:
-                raise CompileInputError(
-                    f"SQL test '{test_name}' case '{case_name}' parameter '{name}' could not "
-                    f"be rendered by adapter '{value_renderer.adapter_name}': {error}"
-                ) from error
-            parts.append(rendered)
+            )
             used_names.add(name)
             cursor = match.end()
             continue
         parts.append(character)
         cursor += 1
     return "".join(parts), frozenset(used_names)
+
+
+def _splice_parameter_references(
+    *,
+    sql: str,
+    references: list[tuple[int, int, str]],
+    value_lookup: dict[str, SqlValue],
+    value_renderer: TypedSqlValueRenderer,
+    test_name: str,
+    case_name: str,
+) -> tuple[str, frozenset[str]]:
+    parts: list[str] = []
+    cursor: int = 0
+    for start, end, name in references:
+        parts.append(sql[cursor:start])
+        parts.append(
+            _render_parameter(
+                name=name,
+                value=value_lookup[name],
+                value_renderer=value_renderer,
+                test_name=test_name,
+                case_name=case_name,
+            )
+        )
+        cursor = end
+    parts.append(sql[cursor:])
+    return "".join(parts), frozenset(name for _start, _end, name in references)
+
+
+def _render_parameter(
+    *,
+    name: str,
+    value: SqlValue,
+    value_renderer: TypedSqlValueRenderer,
+    test_name: str,
+    case_name: str,
+) -> str:
+    try:
+        rendered: str = value_renderer.render_typed_scalar(value=value)
+        validate_rendered_sql_value_size(
+            rendered_sql=rendered,
+            context=(f"SQL test '{test_name}' case '{case_name}' parameter '{name}'"),
+        )
+    except (SqlValueRenderingError, SqlValueValidationError) as error:
+        raise CompileInputError(
+            f"SQL test '{test_name}' case '{case_name}' parameter '{name}' could not "
+            f"be rendered by adapter '{value_renderer.adapter_name}': {error}"
+        ) from error
+    return rendered

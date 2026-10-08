@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
 )
 from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -47,6 +48,8 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
+from sqlbuild.sql_values.main.normalize import normalize_sql_value
+from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.model_loop.helpers import (
     DECLARATIONS,
@@ -511,3 +514,56 @@ def native_intrinsic_free(sql: str) -> bool:
     return _native.sql_free_of_cursor_intrinsics(
         sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL]
     )
+
+
+_PARAMETER_PIECES: tuple[str, ...] = (
+    "SELECT ",
+    '@param("region")',
+    '@param ( "limit_rows" )',
+    '@param(\n"region"\n)',
+    '@param(\u00a0"region")',
+    '@param("missing")',
+    "@param(region)",
+    "@params",
+    "@param_x",
+    "'@param(\"region\")'",
+    '"quoted"',
+    "`tick`",
+    '$$ @param("region") $$',
+    "$1",
+    '-- @param("region")\n',
+    '/* @param("region") */',
+    "'",
+    "/*",
+    "\u00e9",
+    ", ",
+)
+PARAMETER_VALUES: tuple[tuple[str, SqlValue], ...] = (
+    ("region", normalize_sql_value(raw_value="north", context="region")),
+    ("limit_rows", normalize_sql_value(raw_value=10, context="limit_rows")),
+)
+
+
+def generated_parameter_sql(*, rng: random.Random) -> str:
+    """Return a test body mixing parameter references with quotes and comments."""
+
+    return "".join(rng.choices(_PARAMETER_PIECES, k=rng.randint(1, 8)))
+
+
+def parameter_outcome(
+    *, sql: str, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, frozenset[str]] | str:
+    """Expand one body's parameters under `engine`, returning Python's error text on failure."""
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    try:
+        return expand_test_parameters(
+            sql=sql,
+            file_path=Path("tests/unit/test_orders.sql"),
+            values=PARAMETER_VALUES,
+            value_renderer=DuckDbAdapter(),
+            test_name="orders",
+            case_name="north",
+        )
+    except CompileInputError as error:
+        return str(error)
