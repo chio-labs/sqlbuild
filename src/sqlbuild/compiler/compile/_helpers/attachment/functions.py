@@ -25,12 +25,10 @@ from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments impo
     merge_call_site_references,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.context_templates import expand_config_templates
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
-from sqlbuild.compiler.compile._helpers.render.templating import (
-    expand_template_data,
-)
 from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
     TABLE_FUNCTION_RETURN_KEYS,
@@ -56,6 +54,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
@@ -644,7 +644,7 @@ def _expand_function_header_value(
     *, raw_value: str, effective_vars: dict[str, object], context_label: str
 ) -> str:
     return str(
-        expand_template_data(
+        expand_config_templates(
             value=raw_value,
             variables=effective_vars,
             context_values={},
@@ -652,6 +652,7 @@ def _expand_function_header_value(
             allow_context=False,
             preserve_context_tokens=True,
             preserve_unknown_context=False,
+            native=native_stage_enabled(NativeStage.ATTACHMENTS),
         )
     )
 
@@ -742,7 +743,7 @@ def _expand_function_environment_value(
     if raw_value == PRESERVE_TARGET_VALUE:
         return None
     return str(
-        expand_template_data(
+        expand_config_templates(
             value=raw_value,
             variables=effective_vars,
             context_values={},
@@ -750,5 +751,6 @@ def _expand_function_environment_value(
             allow_context=False,
             preserve_context_tokens=True,
             preserve_unknown_context=False,
+            native=native_stage_enabled(NativeStage.ATTACHMENTS),
         )
     )

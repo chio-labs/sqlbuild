@@ -1,4 +1,5 @@
 pub(crate) mod analysis;
+pub(crate) mod attachments;
 pub(crate) mod boundary;
 pub(crate) mod cache;
 pub(crate) mod discovery;

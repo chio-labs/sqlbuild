@@ -8,6 +8,7 @@ members = [
     "crates/sqlbuild-scopes",
     "crates/sqlbuild-model-config",
     "crates/sqlbuild-render",
+    "crates/sqlbuild-attachments",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
     "crates/sqlbuild-python",
@@ -27,6 +28,7 @@ order = [
     "sqlbuild-scopes",
     "sqlbuild-model-config",
     "sqlbuild-render",
+    "sqlbuild-attachments",
     "sqlbuild-analysis",
     "sqlbuild-rules",
     "sqlbuild-python",
@@ -75,6 +77,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
+sqlbuild-attachments = { path = "crates/sqlbuild-attachments" }
 sqlbuild-cache = { path = "crates/sqlbuild-cache" }
 sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }

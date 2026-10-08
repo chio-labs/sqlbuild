@@ -12,6 +12,7 @@ from sqlbuild.compiler.authored_values.main._project_var_values import render_pr
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_declaration_references_result,
     expand_declaration_references_with_spans,
+    expand_scanned_declaration_references,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_result,
@@ -20,6 +21,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 from sqlbuild.compiler.compile.constants import (
     COMPILE_INPUT_READS,
     SQL_CONTEXT_NAME_EXTRA_TOKENS,
+    SQL_DOLLAR_QUOTE_TOKEN,
     SQL_IDENTIFIER_EXTRA_TOKEN,
     SQL_INTERPOLATION_TOKEN,
     SQL_QUOTE_TOKENS,
@@ -36,6 +38,11 @@ from sqlbuild.compiler.compile.models import (
     MacroExpansionResult,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
+    scan_native_declaration_references,
+)
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
@@ -71,21 +78,47 @@ def expand_authored_sql_result(  # noqa: PLR0913
 ) -> AuthoredSqlExpansionResult:
     """Apply all expansion passes and retain facts emitted by those passes."""
 
-    interpolated_sql: str = substitute_sql_vars(
-        sql=sql,
-        file_path=file_path,
-        effective_vars=effective_vars,
-        context_values=context_values,
+    native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
+    prepared_sql: str | None = (
+        prepare_static_project_vars_batch(sqls=(sql,), effective_vars=effective_vars)[0]
+        if native and SQL_DOLLAR_QUOTE_TOKEN not in sql
+        else None
+    )
+    interpolated_sql: str = (
+        prepared_sql
+        if prepared_sql is not None
+        else substitute_sql_vars(
+            sql=sql,
+            file_path=file_path,
+            effective_vars=effective_vars,
+            context_values=context_values,
+        )
     )
     declaration_context: DeclarationResolutionContext = (
         declarations or DeclarationResolutionContext()
     )
-    declaration_result: DeclarationExpansionResult = expand_declaration_references_result(
-        sql=interpolated_sql,
-        file_path=file_path,
-        declarations=declaration_context,
-        value_renderer=value_renderer,
-        collection_rendering=collection_rendering,
+    scanned_result: DeclarationExpansionResult | None = (
+        expand_scanned_declaration_references(
+            sql=interpolated_sql,
+            references=scan_native_declaration_references(sqls=(interpolated_sql,))[0],
+            file_path=file_path,
+            declarations=declaration_context,
+            value_renderer=value_renderer,
+            collection_rendering=collection_rendering,
+        )
+        if native
+        else None
+    )
+    declaration_result: DeclarationExpansionResult = (
+        scanned_result
+        if scanned_result is not None
+        else expand_declaration_references_result(
+            sql=interpolated_sql,
+            file_path=file_path,
+            declarations=declaration_context,
+            value_renderer=value_renderer,
+            collection_rendering=collection_rendering,
+        )
     )
     macro_result: MacroExpansionResult = expand_sql_macros_result(
         sql=declaration_result.sql,

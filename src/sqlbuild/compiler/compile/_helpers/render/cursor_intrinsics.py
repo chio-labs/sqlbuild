@@ -5,11 +5,14 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import (
     SQL_OPEN_PAREN_TOKEN,
     SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -59,6 +62,10 @@ def get_validated_model_cursor_intrinsics(
 def reject_cursor_intrinsics(*, sql: str, context: str) -> None:
     """Reject cursor intrinsics in SQL that does not own an execution interval."""
 
+    if native_stage_enabled(NativeStage.ATTACHMENTS) and _native.sql_free_of_cursor_intrinsics(
+        sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL]
+    ):
+        return
     _assert_no_reserved_cursor_markers(sql=sql, context=context)
     _, found = _transform_cursor_intrinsics(
         sql=sql,

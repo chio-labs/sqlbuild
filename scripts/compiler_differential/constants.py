@@ -461,6 +461,8 @@ RENDER_DETAIL_KINDS: tuple[str, ...] = (
     "model_header_template",
     "target_namespace_template",
     "model_column_audit_options",
+    "source_template",
+    "function_header_template",
 )
 RENDER_INDIRECT_KINDS: dict[str, str] = {
     kind: "the used macro's own function source reads it; the capture does not record context reads"

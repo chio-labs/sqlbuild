@@ -279,8 +279,8 @@ def expand_config_templates(
     )
     if outcome == INVALID_OUTCOME:
         raise NativeStageMismatchError(
-            f"Native model config rejected {context_label} templates that the Python model "
-            "config expands; run with SQLBUILD_COMPILER_ENGINE=python"
+            f"Native template expansion rejected {context_label} templates that Python "
+            "expands; run with SQLBUILD_COMPILER_ENGINE=python"
         )
     return expanded
 
