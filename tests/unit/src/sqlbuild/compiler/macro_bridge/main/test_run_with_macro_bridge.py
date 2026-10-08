@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.compiler.compile.exceptions import CompileInputError, DeclarationReferenceError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge import run_with_macro_bridge
@@ -75,7 +75,7 @@ def test_given_succeeding_stage_when_running_with_macro_bridge_then_runs_once_br
             description="declaration reference failure after a scan is raised without a re-run",
             stage_with_bridge=declaration_failed_after_scan,
             stage_without_bridge=rendered,
-            expected_error=DeclarationReferenceError,
+            expected_error=CompileInputError,
             expected_bridged_runs=[True],
         ),
     ],

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import cast
 
-from sqlbuild.compiler.compile.exceptions import CompileInputError, DeclarationReferenceError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 
@@ -33,7 +33,9 @@ def declaration_failed_after_scan() -> str:
     """Fail on an `@enum` reference after the active bridge scanned a macro call."""
 
     _scan_with_active_bridge()
-    raise DeclarationReferenceError("Unknown enum 'order_status' in 'models/orders.sql'")
+    raise CompileInputError(
+        "Unknown enum 'order_status' in 'models/orders.sql'", bridge_independent=True
+    )
 
 
 def _scan_with_active_bridge() -> None:

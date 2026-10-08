@@ -68,6 +68,7 @@ from sqlbuild.cli.compile_reuse.models import StoredCompileHeader, StoredCompile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
     IncrementalEditStep,
@@ -4832,3 +4833,20 @@ def type_system_engine_compile(
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
     return run, answered
+
+
+def lifecycle_error_type(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Compile in this process under `engine`; return the failed invocation's error type."""
+
+    published: list[LifecycleEvent] = []
+    with monkeypatch.context() as patch:
+        patch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+        patch.setenv(REUSE_DISABLE_ENV_VAR, "1")
+        patch.setattr(
+            EventDispatcher,
+            "publish_lifecycle",
+            lambda _dispatcher, event: published.append(event),
+        )
+        with redirect_stdout(StringIO()):
+            _ = main(["--project-dir", str(project_dir), "--no-color", "compile"])
+    return str(published[-1].payload.get("error_type"))

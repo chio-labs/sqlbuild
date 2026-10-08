@@ -9,10 +9,12 @@ import pytest
 
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES, FAILURE_BASE_MART
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    DeclarationErrorLifecycleTestCase,
     NativeDeclarationErrorTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
+    lifecycle_error_type,
     report_without_engine,
     run_reuse_compile,
     stderr_without_durations,
@@ -80,6 +82,15 @@ _STATUS_ENUM: dict[str, str] = {
             expected_macro_calls=1,
         ),
         NativeDeclarationErrorTestCase(
+            description="unclosed_quote_after_a_reference_only_python_scans",
+            project_files={
+                **_STATUS_ENUM,
+                _STAGING_PATH: _STAGING_PREFIX + "status = @enum\u00e9 OR status = 'open\n",
+            },
+            expected_report_text="Enum and constant expansion contains an unclosed quoted string",
+            expected_macro_calls=1,
+        ),
+        NativeDeclarationErrorTestCase(
             description="duplicate_scoped_enum_before_any_macro_runs",
             project_files={
                 **_STATUS_ENUM,
@@ -132,6 +143,49 @@ def test_given_declaration_error_when_compiling_with_preview_then_error_matches_
         runs[1].report,
         runs[1].stderr,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeclarationErrorLifecycleTestCase(
+            description="unknown_enum_after_a_macro_ran",
+            project_files={
+                **_STATUS_ENUM,
+                _STAGING_PATH: _STAGING_PREFIX + 'status = @enum("missing_status").PLACED\n',
+            },
+            expected_error_types=("CompileInputError",) * 3,
+        ),
+        DeclarationErrorLifecycleTestCase(
+            description="unclosed_quote_after_a_reference_only_python_scans",
+            project_files={
+                **_STATUS_ENUM,
+                _STAGING_PATH: _STAGING_PREFIX + "status = @enum\u00e9 OR status = 'open\n",
+            },
+            expected_error_types=("CompileInputError",) * 3,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_declaration_error_when_compiling_with_each_engine_then_lifecycle_error_type_matches(
+    test_case: DeclarationErrorLifecycleTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    error_types: list[str] = []
+    for engine in ("python", "native", "native-preview"):
+        project_dir: Path = tmp_path / engine
+        for relative_path, contents in {
+            **FAILURE_BASE_FILES,
+            "macros/counted.py": _COUNTED_MACRO,
+            "models/marts/customer_totals.sql": _COUNTED_MART,
+            _CALL_LOG: "",
+            **test_case.project_files,
+        }.items():
+            write_project_file(project_dir, relative_path, contents)
+        error_types.append(
+            lifecycle_error_type(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
+        )
+
+    assert tuple(error_types) == test_case.expected_error_types, test_case.description
 
 
 if __name__ == "__main__":

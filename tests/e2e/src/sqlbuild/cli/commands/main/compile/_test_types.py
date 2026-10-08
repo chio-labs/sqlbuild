@@ -929,6 +929,15 @@ class NativeDeclarationErrorTestCase:
 
 
 @dataclass(frozen=True)
+class DeclarationErrorLifecycleTestCase:
+    """A failing project whose invocation lifecycle every engine must report the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_error_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MacroReferenceCallStoreTestCase:
     """Repeated compiles of models sharing a macro that returns a rejected reference call."""
 
