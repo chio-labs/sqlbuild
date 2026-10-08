@@ -176,12 +176,24 @@ def scope_expected_model_names(
     sqls: list[str], syntax: dict[str, object]
 ) -> list[list[str] | None]: ...
 def extract_sql_scenario_json(sql: str, file_label: str) -> str | None: ...
-def unknown_sql_test_target(
-    file_label: str, groups: list[tuple[str, list[str], list[str]]]
-) -> str | None: ...
-def scenario_source_error(
-    file_label: str, ctes: list[tuple[str, bool, list[str]]], known_sources: list[str]
-) -> str | None: ...
+
+class SqlTestTargetCatalog:
+    def __init__(
+        self,
+        models: set[str],
+        sources: set[str],
+        seeds: set[str],
+        resources: tuple[set[str], set[str]],
+    ) -> None: ...
+    def unknown_test_target(
+        self,
+        file_label: str,
+        targets: tuple[list[str], list[str], list[str], list[str], list[str], list[str], list[str]],
+    ) -> str | None: ...
+    def scenario_source_error(
+        self, file_label: str, ctes: list[tuple[str, bool, list[str]]]
+    ) -> str | None: ...
+
 def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> tuple[bool, int | None]: ...
 def scan_test_parameter_references(
     sql: str, declared: list[str]

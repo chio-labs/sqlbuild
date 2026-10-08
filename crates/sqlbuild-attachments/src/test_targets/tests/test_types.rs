@@ -1,8 +1,8 @@
-use crate::test_targets::models::{ScenarioCteSources, TargetGroup};
+use crate::test_targets::models::{ScenarioCteSources, TestTargets};
 
 pub(super) struct UnknownTargetTestCase {
     pub(super) description: &'static str,
-    pub(super) groups: Vec<TargetGroup>,
+    pub(super) targets: TestTargets,
     pub(super) expected_error: Option<&'static str>,
 }
 

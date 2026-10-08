@@ -9,7 +9,7 @@ use crate::test_targets::models::ScenarioCteSources;
 pub fn scenario_source_violation(
     file_label: &str,
     ctes: &[ScenarioCteSources],
-    known_sources: &[String],
+    known_sources: &HashSet<String>,
 ) -> Option<String> {
     for cte in ctes.iter().filter(|cte| cte.check) {
         if let Some(source) = cte.sources.first() {
@@ -21,12 +21,11 @@ pub fn scenario_source_violation(
             ));
         }
     }
-    let known: HashSet<&str> = known_sources.iter().map(String::as_str).collect();
     for cte in ctes.iter().filter(|cte| !cte.check) {
         if let Some(source) = cte
             .sources
             .iter()
-            .find(|source| !known.contains(source.as_str()))
+            .find(|source| !known_sources.contains(source.as_str()))
         {
             return Some(format!(
                 "SQL scenario file {file_label} references unknown source '{source}'"

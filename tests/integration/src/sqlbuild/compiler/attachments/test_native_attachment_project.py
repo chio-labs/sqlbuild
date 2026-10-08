@@ -35,8 +35,7 @@ _PREVIEW_ONLY_ENTRIES: frozenset[str] = (
             "scan_test_parameter_references",
             "omitted_ceremonial_select",
             "extract_sql_scenario_json",
-            "unknown_sql_test_target",
-            "scenario_source_error",
+            "SqlTestTargetCatalog",
         }
     )
     | _BRIDGED_CONSUMERS
@@ -51,8 +50,7 @@ _ATTACHMENT_ENTRIES: frozenset[str] = frozenset(
         "scan_test_parameter_references",
         "omitted_ceremonial_select",
         "extract_sql_scenario_json",
-        "unknown_sql_test_target",
-        "scenario_source_error",
+        "SqlTestTargetCatalog",
     }
 )
 _SCENARIO: str = "tests/scenarios/orders_scenario.sql"
@@ -81,7 +79,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "WITH\n__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
                 + '__expected__orders AS (SELECT id, 1.5 AS amount, label FROM __source("order_events"))\n'
             },
-            expected_preview_entries=frozenset({"scenario_source_error"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE",
         ),
         AttachmentProjectTestCase(
@@ -92,7 +90,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
             },
-            expected_preview_entries=frozenset({"scenario_source_error"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
             "references unknown source 'missing_events'",
         ),
@@ -104,7 +102,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + ",\n__assert__has_rows AS (SELECT 1 FROM built_orders WHERE id IS NULL)\n"
             },
-            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="helper_target_model_names=('orders',)",
         ),
         AttachmentProjectTestCase(
@@ -116,7 +114,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + ",\n__assert__has_ids AS (SELECT 1 FROM built_ids WHERE id IS NULL)\n"
             },
-            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="helper_target_model_names=('orders',)",
         ),
         AttachmentProjectTestCase(
@@ -127,7 +125,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + "\n"
             },
-            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="helper_target_model_names=()",
         ),
         AttachmentProjectTestCase(
@@ -138,7 +136,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + _HELPER_TEST_EXPECTED
                 + ",\n__assert__no_returns AS (SELECT 1 FROM built_returns)\n"
             },
-            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="P013",
         ),
         AttachmentProjectTestCase(
@@ -147,7 +145,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 _UNIT_TEST: "TEST();\n\nWITH\n__seed__channel_codes AS (SELECT 1 AS id),\n"
                 "__expected__returns AS (SELECT 1 AS id)\n"
             },
-            expected_preview_entries=frozenset({"unknown_sql_test_target"}),
+            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL test file tests/unit/test_orders.sql expects "
             "unknown model 'returns'",
         ),

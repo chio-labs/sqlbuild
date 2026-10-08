@@ -1,5 +1,5 @@
 use crate::test_targets::main::scenario_source_violation::scenario_source_violation;
-use crate::test_targets::tests::helpers::cte;
+use crate::test_targets::tests::helpers::{catalog, cte};
 use crate::test_targets::tests::test_types::ScenarioSourceTestCase;
 
 #[test]
@@ -37,7 +37,7 @@ fn given_scenario_sources_when_validating_then_python_first_error_is_returned() 
             scenario_source_violation(
                 "tests/scenarios/orders.sql",
                 &test_case.ctes,
-                &["raw".to_owned()]
+                &catalog().sources
             )
             .as_deref(),
             test_case.expected_error,

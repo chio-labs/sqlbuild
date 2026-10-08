@@ -1,4 +1,8 @@
-"""Unexpanded direct-logic SQL tests extract identically under the preview engine."""
+"""Unexpanded direct-logic SQL tests keep Python's extraction under the preview engine.
+
+The native extractor reads expanded tests and accepts shapes Python rejects before expansion,
+such as quoted CTE names or calls in `__macro_expected__`; the raw pass must stay Python's.
+"""
 
 from __future__ import annotations
 
@@ -6,15 +10,15 @@ import random
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
     RawDirectLogicParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
-    generated_direct_logic_test,
-    raw_extraction_outcome,
+    generated_raw_direct_logic_test,
+    python_raw_extraction_accepts,
+    raw_test_compile_outcome,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -23,41 +27,42 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
     "test_case",
     [
         RawDirectLogicParityTestCase(
-            description="macro, UDF and table-function tests before macro and variable expansion",
+            description="quoted, non-ASCII and $ CTE names, calls in expected CTEs, bad reference calls",
             seed=20261008,
             count=3000,
-            expected_minimum_extracted=600,
+            expected_minimum_extracted=400,
             expected_minimum_python_errors=600,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_unexpanded_direct_logic_tests_when_extracting_natively_then_python_matches(
+def test_given_unexpanded_direct_logic_tests_when_compiling_in_preview_then_python_matches(
     test_case: RawDirectLogicParityTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     tests: list[tuple[str, SqlTestMode]] = [
-        generated_direct_logic_test(rng=rng) for _ in range(test_case.count)
+        generated_raw_direct_logic_test(rng=rng) for _ in range(test_case.count)
     ]
 
-    python: list[object] = [
-        raw_extraction_outcome(
+    python: list[str] = [
+        raw_test_compile_outcome(
             sql=sql, mode=mode, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch
         )
         for sql, mode in tests
     ]
-    native: list[object] = [
-        raw_extraction_outcome(
+    native: list[str] = [
+        raw_test_compile_outcome(
             sql=sql, mode=mode, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
         )
         for sql, mode in tests
     ]
 
     assert (
-        mismatches(inputs=[*tests], expected=python, actual=native),
-        sum(isinstance(item, CompileSqlTestCtes) for item in python)
+        mismatches(inputs=[*tests], expected=[*python], actual=[*native]),
+        sum(python_raw_extraction_accepts(sql=sql, mode=mode) for sql, mode in tests)
         >= test_case.expected_minimum_extracted,
-        sum(isinstance(item, str) for item in python) >= test_case.expected_minimum_python_errors,
+        sum(item.startswith("error: ") for item in python)
+        >= test_case.expected_minimum_python_errors,
     ) == ([], True, True), test_case.description
 
 

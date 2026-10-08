@@ -25,14 +25,19 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
     resolve_audit_severity,
 )
 from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
-from sqlbuild.compiler.compile._helpers.attachment.sql_tests import validate_test_ctes
+from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
+    build_test_inputs,
+    validate_test_ctes,
+)
 from sqlbuild.compiler.compile._helpers.render import macros
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile._helpers.sql_tests.core import complete_omitted_ceremonial_select
-from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
+from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    complete_omitted_ceremonial_select,
+    extract_sql_test_ctes,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -52,6 +57,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
+    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -345,8 +351,7 @@ NATIVE_ATTACHMENT_ENTRIES: tuple[str, ...] = (
     "scan_test_parameter_references",
     "omitted_ceremonial_select",
     "extract_sql_scenario_json",
-    "unknown_sql_test_target",
-    "scenario_source_error",
+    "SqlTestTargetCatalog",
     "pair_seed_files",
     "render_attached_generic_audit",
     "expand_config_templates",
@@ -669,67 +674,128 @@ def completed_body(
     return complete_omitted_ceremonial_select(sql=sql, syntax=syntax)
 
 
-_DIRECT_MODES: tuple[SqlTestMode, ...] = (SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN)
-_DIRECT_CTE_NAMES: dict[SqlTestMode, tuple[str, str]] = {
+_RAW_MODE_CTES: dict[SqlTestMode, tuple[str, str]] = {
     SqlTestMode.MACRO: ("__macro_actual__", "__macro_expected__"),
     SqlTestMode.UDF: ("__udf_actual__", "__udf_expected__"),
     SqlTestMode.TABLE_FN: ("__table_fn_actual__", "__table_fn_expected__"),
 }
-_ACTUAL_BODIES: tuple[str, ...] = (
-    'SELECT @tidy_label("status") AS status FROM input_values',
-    'SELECT __udf("order_label")(status) AS label FROM input_values',
-    'SELECT * FROM __table_fn("order_rows")(@@limit_rows)',
-    "SELECT @@region AS region, '@@ENV:SQB_X' AS env",
-    'SELECT @param("region") AS region',
-    "SELECT 1 /* @tidy_label('x') */",
-    "SELECT 'it''s' AS quoted, `tick` AS ticked",
-)
-_EXPECTED_BODIES: tuple[str, ...] = (
-    "SELECT 'placed' AS status",
-    "SELECT 1 AS id, 'web' AS label UNION ALL SELECT 2 AS id, 'store' AS label",
-    "SELECT *",
-    "SELECT @tidy_label('x') AS status",
-    'SELECT __udf("order_label")(1) AS label',
-    "SELECT 1 AS id, 2",
-)
-_HELPER_CTES: tuple[str, ...] = (
+_RAW_CALLS: tuple[str, ...] = (
     "",
-    "input_values AS (SELECT ' Placed ' AS status),\n",
-    "input_values AS (SELECT @@region AS status),\n",
-    "__ref__orders AS (SELECT 1 AS id),\n",
-    "input_values AS (SELECT $$ ) $$ AS status),\n",
+    "@tidy_label(1)",
+    "@MY_MACRO(1)",
+    '__udf("order_label")',
+    '__udf ("order_label")',
+    "__udf('order_label')",
+    '__udf("order_label", 1)',
+    '__table_fn("order_rows")',
+    "'__udf(\"order_label\")'",
+    '-- __udf("order_label")\n',
+    "/* @tidy_label(1) */",
+    '$$__udf("order_label")$$',
+    "@m()",
+    "@@region",
+    '__ref("orders")',
+    '__source("events", "orders")',
+    '__udf("\u00e9")',
+    '`__udf("order_label")`',
+    '__udf\u00a0("order_label")',
+    '\u00e9__udf("order_label")',
 )
-_TAILS: tuple[str, ...] = ("\nSELECT 1\n", "", ";", "\nSELECT 2", " -- end")
+_RAW_CTE_NAMES: tuple[str, ...] = (
+    "helper",
+    "a\u00e9",
+    '"quoted"',
+    "`ticked`",
+    "a$b",
+    "__ref__orders",
+    "__expected__orders",
+    "__macro__tidy",
+    "__udf_actual__",
+    "__udf_expected__",
+    "__macro_expected__",
+    "__table_fn_expected__",
+    "HELPER",
+    "\u0131",
+    "\u017f",
+)
+_RAW_TAILS: tuple[str, ...] = ("", " FROM helper", " -- c", " UNION ALL SELECT 2", ", 'x' AS b")
 
 
-def generated_direct_logic_test(*, rng: random.Random) -> tuple[str, SqlTestMode]:
-    """Return one unexpanded direct-logic test body and its mode."""
+def _raw_body(rng: random.Random) -> str:
+    call: str = rng.choice(("1", "1", "1", "1", *_RAW_CALLS))
+    projection: str = rng.choice((f"SELECT {call} AS a", f"SELECT {call} AS a", f"SELECT {call}"))
+    return projection + rng.choice(("", "", "", *_RAW_TAILS))
 
-    mode: SqlTestMode = rng.choice(_DIRECT_MODES)
-    actual, expected = _DIRECT_CTE_NAMES[rng.choice((*[mode] * 27, *_DIRECT_MODES))]
-    ctes: list[str] = [
-        f"{actual} AS (\n  {rng.choice(_ACTUAL_BODIES)}\n)",
-        f"{expected} AS (\n  {rng.choice(_EXPECTED_BODIES)}\n)",
+
+def generated_raw_direct_logic_test(*, rng: random.Random) -> tuple[str, SqlTestMode]:
+    """Return one unexpanded direct-logic test with the shapes Python and native read apart."""
+
+    mode: SqlTestMode = rng.choice(tuple(_RAW_MODE_CTES))
+    actual, expected = _RAW_MODE_CTES[mode]
+    ctes: list[tuple[str, str]] = [
+        (actual, _raw_body(rng)),
+        (expected, _raw_body(rng)),
+        *((rng.choice(_RAW_CTE_NAMES), _raw_body(rng)) for _ in range(rng.choice((0, 0, 1, 2)))),
     ]
     rng.shuffle(ctes)
-    return (
-        "WITH\n" + rng.choice(_HELPER_CTES) + ",\n".join(ctes) + rng.choice(_TAILS),
-        mode,
-    )
+    body: str = ", ".join(f"{name} AS ({sql})" for name, sql in ctes)
+    return f"WITH {body}" + rng.choice(("", "", " SELECT 1", ";")), mode
 
 
-def raw_extraction_outcome(
+def python_raw_extraction_accepts(*, sql: str, mode: SqlTestMode) -> bool:
+    """Whether Python's raw direct-logic pass accepts `sql` before expansion."""
+
+    try:
+        extract_sql_test_ctes(
+            sql=sql,
+            file_label="tests/unit/test_logic.sql",
+            syntax=DuckDbAdapter().sql_lexical_syntax,
+            mode=mode,
+        )
+    except CompileInputError:
+        return False
+    return True
+
+
+def raw_test_compile_outcome(
     *, sql: str, mode: SqlTestMode, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
-) -> object:
-    """Extract one unexpanded test under `engine`, or return Python's error text."""
+) -> str:
+    """Build one unexpanded direct-logic test's input under `engine`, or Python's error text."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    adapter: DuckDbAdapter = DuckDbAdapter()
     try:
-        return extract_unexpanded_sql_test(
-            sql=sql, file_label="tests/unit/test_orders.sql", syntax=SqlLexicalSyntax(), mode=mode
+        return repr(
+            build_test_inputs(
+                discovered_inputs=DiscoveredProjectInputs(
+                    project_config=ProjectConfig(name="orders", adapter="duckdb"),
+                    local_config=LocalConfig(),
+                    test_files=(
+                        DiscoveredSqlTestFile(
+                            file_path=Path("/project/tests/unit/test_logic.sql"),
+                            relative_path=Path("tests/unit/test_logic.sql"),
+                            contents=sql,
+                            blocks=(
+                                DiscoveredSqlTestBlock(
+                                    test_index=0, header_values={}, sql_body=sql, mode=mode
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                effective_vars={"region": "north"},
+                macro_context=_MACRO_CONTEXT,
+                loaded_macros={},
+                declaration_expansion=DeclarationExpansionContext(
+                    declarations=DeclarationResolutionContext(),
+                    value_renderer=adapter,
+                    collection_rendering=CollectionRendering.VALUE_LIST,
+                ),
+                sql_lexical_syntax=adapter.sql_lexical_syntax,
+            )
         )
     except CompileInputError as error:
-        return str(error)
+        return f"error: {error}"
 
 
 _SCENARIO_CTES: tuple[str, ...] = (
