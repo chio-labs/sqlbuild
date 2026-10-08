@@ -13,8 +13,14 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     StaticProjectVarBatchTestCase,
+    StaticProjectVarDifferentialTestCase,
     SubstituteSqlVarsErrorTestCase,
     SubstituteSqlVarsTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    StaticProjectVarDifferential,
+    generated_lexical_sqls,
+    native_static_project_var_differential,
 )
 
 _FILE_PATH: Path = Path("models/test_model.sql")
@@ -239,6 +245,26 @@ def test_given_missing_var_when_substituting_then_raises(
             ),
         ),
         StaticProjectVarBatchTestCase(
+            description="dollar-quoted text is quoted text, not comments",
+            sqls=(
+                "SELECT $$--@@revision$$ AS x",
+                "SELECT $$ /* $$ AS a, '@@status' AS b -- */",
+                "SELECT $tag$ it's $$ -- @@status $tag$, price$1$, $1, @@revision",
+            ),
+            effective_vars={"revision": 7, "status": "ready"},
+            expected_sqls=(
+                "SELECT $$--7$$ AS x",
+                "SELECT $$ /* $$ AS a, 'ready' AS b -- */",
+                "SELECT $tag$ it's $$ -- ready $tag$, price$1$, $1, 7",
+            ),
+        ),
+        StaticProjectVarBatchTestCase(
+            description="unclosed dollar quotes fall back to the Python scanner",
+            sqls=("SELECT $tag$ @@revision", "-- @@revision\nSELECT $$ open"),
+            effective_vars={"revision": 7},
+            expected_sqls=(None, None),
+        ),
+        StaticProjectVarBatchTestCase(
             description="structured project variables fall back",
             sqls=("SELECT @@grants",),
             effective_vars={"grants": {"role": "analyst"}},
@@ -256,3 +282,36 @@ def test_given_static_model_sql_when_batch_preparing_then_returns_safe_results_a
     )
 
     assert result == test_case.expected_sqls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaticProjectVarDifferentialTestCase(
+            description="generated quotes, dollar quotes, comments and tokens",
+            seed=550,
+            sql_count=4000,
+            effective_vars={"revision": 7, "status": "ready"},
+            expected_minimum_dollar_quote_substitutions=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_generated_lexical_sql_when_batch_preparing_then_native_matches_python_scanner(
+    test_case: StaticProjectVarDifferentialTestCase,
+) -> None:
+    sqls: tuple[str, ...] = generated_lexical_sqls(seed=test_case.seed, count=test_case.sql_count)
+
+    differential: StaticProjectVarDifferential = native_static_project_var_differential(
+        sqls=sqls, effective_vars=test_case.effective_vars
+    )
+
+    assert differential.native == differential.python
+    assert (
+        differential.substituted_dollar_quotes
+        >= test_case.expected_minimum_dollar_quote_substitutions
+    )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

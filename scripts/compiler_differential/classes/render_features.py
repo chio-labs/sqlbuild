@@ -208,6 +208,7 @@ class RenderFeatureWriter:
             body=(
                 "SELECT id,\n"
                 "  '@@site_label' AS site,\n"
+                "  $$--@@site_label /* $$ AS site_note,\n"
                 f"  '@@ENV:{GENERATOR_CHANNEL_ENV_VAR}' AS channel,\n"
                 "  amount * @@discount_rate AS discounted\n"
                 f'FROM __ref("{base.name}")\n'

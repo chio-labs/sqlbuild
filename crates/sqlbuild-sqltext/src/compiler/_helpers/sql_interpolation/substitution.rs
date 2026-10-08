@@ -1,6 +1,9 @@
 //! Conservative native fast path for compile-wide scalar SQL variables.
 
+use crate::sql_scan::main::non_code_end::non_code_end;
+use crate::sql_scan::models::QuotePolicy;
 use std::collections::HashMap;
+use std::ops::Range;
 
 pub(crate) const UNCHANGED: u8 = 0;
 pub(crate) const SUBSTITUTED: u8 = 1;
@@ -35,48 +38,23 @@ fn substitute_one(sql: &str, variables: &HashMap<&str, &str>) -> (u8, Option<Str
         copy_start: 0,
     };
     let mut index = 0;
-    let mut quote: Option<u8> = None;
     while index < bytes.len() {
-        if let Some(quote_byte) = quote {
-            if bytes[index] == quote_byte {
-                if matches!(quote_byte, b'\'' | b'"')
-                    && bytes.get(index + 1).copied() == Some(quote_byte)
-                {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-                index += 1;
-                continue;
-            }
-            if bytes[index..].starts_with(b"@@") {
-                let Some((end, next_state)) = substitute_token(sql, index, variables, state) else {
+        let text_end = match non_code_end(bytes, index, QuotePolicy::COMPILER) {
+            Ok(Some(end)) => end,
+            Ok(None) => index,
+            Err(_) => return (FALLBACK, None),
+        };
+        if text_end > index {
+            let comment = bytes[index..].starts_with(b"--") || bytes[index..].starts_with(b"/*");
+            if !comment {
+                let Some(next_state) =
+                    substitute_quoted_text(sql, index..text_end, variables, state)
+                else {
                     return (FALLBACK, None);
                 };
                 state = next_state;
-                index = end;
-                continue;
             }
-            index += 1;
-            continue;
-        }
-
-        if bytes[index..].starts_with(b"--") {
-            index = sql[index + 2..]
-                .find('\n')
-                .map_or(bytes.len(), |offset| index + 3 + offset);
-            continue;
-        }
-        if bytes[index..].starts_with(b"/*") {
-            let Some(offset) = sql[index + 2..].find("*/") else {
-                return (FALLBACK, None);
-            };
-            index += offset + 4;
-            continue;
-        }
-        if matches!(bytes[index], b'\'' | b'"' | b'`') {
-            quote = Some(bytes[index]);
-            index += 1;
+            index = text_end;
             continue;
         }
         if bytes[index..].starts_with(b"@@") {
@@ -89,9 +67,6 @@ fn substitute_one(sql: &str, variables: &HashMap<&str, &str>) -> (u8, Option<Str
         }
         index += 1;
     }
-    if quote.is_some() {
-        return (FALLBACK, None);
-    }
     match state.output {
         Some(mut rendered) => {
             rendered.push_str(&sql[state.copy_start..]);
@@ -99,6 +74,25 @@ fn substitute_one(sql: &str, variables: &HashMap<&str, &str>) -> (u8, Option<Str
         }
         None => (UNCHANGED, None),
     }
+}
+
+/// Python's `_interpolate_sql_segment`: substitute every token inside one quoted literal.
+fn substitute_quoted_text(
+    sql: &str,
+    text: Range<usize>,
+    variables: &HashMap<&str, &str>,
+    mut state: SubstitutionState,
+) -> Option<SubstitutionState> {
+    let mut index = text.start;
+    while let Some(offset) = sql[index..text.end].find("@@") {
+        let (token_end, next_state) = substitute_token(sql, index + offset, variables, state)?;
+        if token_end > text.end {
+            return None;
+        }
+        state = next_state;
+        index = token_end;
+    }
+    Some(state)
 }
 
 fn substitute_token(

@@ -45,6 +45,40 @@ pub(crate) fn dynamic_or_malformed_sql_requests_fallback() -> bool {
         == vec![(FALLBACK, None); sqls.len()]
 }
 
+pub(crate) fn dollar_quoted_text_is_quoted_for_substitution() -> bool {
+    let sqls = vec![
+        "SELECT $$--@@region$$ AS x".to_owned(),
+        "SELECT $$ /* $$ AS a, '@@region' AS b -- */".to_owned(),
+        "SELECT $tag$ it's $$ -- @@region $tag$, @@region".to_owned(),
+        "SELECT price$1$ -- @@region\n, $1 /* @@region */".to_owned(),
+        "SELECT a$$b$$ -- @@region".to_owned(),
+    ];
+    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
+        == vec![
+            (SUBSTITUTED, Some("SELECT $$--north$$ AS x".to_owned())),
+            (
+                SUBSTITUTED,
+                Some("SELECT $$ /* $$ AS a, 'north' AS b -- */".to_owned()),
+            ),
+            (
+                SUBSTITUTED,
+                Some("SELECT $tag$ it's $$ -- north $tag$, north".to_owned()),
+            ),
+            (UNCHANGED, None),
+            (UNCHANGED, None),
+        ]
+}
+
+pub(crate) fn unclosed_dollar_quote_requests_fallback() -> bool {
+    let sqls = vec![
+        "SELECT $tag$ @@region".to_owned(),
+        "SELECT @@region, $$ open".to_owned(),
+        "-- @@region\nSELECT $t$ closes with another tag $u$".to_owned(),
+    ];
+    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
+        == vec![(FALLBACK, None); sqls.len()]
+}
+
 pub(crate) fn simple_references_preserve_authored_order() -> bool {
     extract(
         "SELECT * FROM __source(\"orders\") UNION ALL SELECT * FROM __dbt_ref(\"shop\" , \"customers\")",

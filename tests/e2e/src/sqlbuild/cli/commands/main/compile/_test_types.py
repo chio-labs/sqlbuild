@@ -993,3 +993,11 @@ class DeepCallNestingCompileCase:
     depth: int
     engines: tuple[str, ...]
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DollarQuotedProjectVarCompileCase:
+    description: str
+    engine: str
+    model_sql: str
+    expected_fragment: str
