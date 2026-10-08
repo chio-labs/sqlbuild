@@ -32,3 +32,14 @@ class AttachmentProjectTestCase:
 
     description: str
     expected_preview_entries: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CursorIntrinsicParityTestCase:
+    """Seeded SQL checked for cursor intrinsics natively and by Python."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_free: int
+    expected_minimum_python_errors: int

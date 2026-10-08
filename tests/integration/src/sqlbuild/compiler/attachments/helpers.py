@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
     resolve_audit_run_scope,
     resolve_audit_severity,
 )
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -36,6 +37,10 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.planner.constants import (
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
+)
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
@@ -380,3 +385,54 @@ def _recorded(*, called: set[str], name: str) -> Callable[..., object]:
         return entry(*args)
 
     return recorded
+
+
+_INTRINSIC_PIECES: tuple[str, ...] = (
+    "SELECT ",
+    "__cursor_start",
+    "__cursor_end",
+    "()",
+    "( )",
+    "(1)",
+    "x",
+    "_",
+    "\u00e9",
+    "'",
+    '"',
+    "`",
+    "``",
+    "''",
+    "$$",
+    "$tag$",
+    "$1",
+    "--",
+    "\n",
+    "/*",
+    "*/",
+    " ",
+    MICROBATCH_START_SENTINEL,
+)
+
+
+def generated_intrinsic_sql(*, rng: random.Random) -> str:
+    """Return SQL mixing intrinsic names with quotes, comments and identifier neighbours."""
+
+    return "".join(rng.choices(_INTRINSIC_PIECES, k=rng.randint(1, 10)))
+
+
+def python_intrinsic_outcome(sql: str) -> str | None:
+    """Python's rejection message, or None where Python accepts the SQL."""
+
+    try:
+        reject_cursor_intrinsics(sql=sql, context="Source expression 'orders'")
+    except CompileInputError as error:
+        return str(error)
+    return None
+
+
+def native_intrinsic_free(sql: str) -> bool:
+    """Whether the native check accepts the SQL without Python."""
+
+    return _native.sql_free_of_cursor_intrinsics(
+        sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL]
+    )

@@ -709,6 +709,9 @@ dependencies = [
 [[package]]
 name = "sqlbuild-attachments"
 version = "0.139.0"
+dependencies = [
+ "sqlbuild-sqltext",
+]
 
 [[package]]
 name = "sqlbuild-cache"

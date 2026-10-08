@@ -3,4 +3,5 @@
 #![forbid(unsafe_code)]
 
 pub mod audits;
+pub mod cursor_intrinsics;
 pub mod seeds;
