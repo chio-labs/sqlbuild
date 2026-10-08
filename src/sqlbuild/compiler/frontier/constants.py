@@ -62,7 +62,7 @@ STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
 }
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(
-        {"shared_analyses"}
+        {"shared_analyses", "schemas", "analysis_shapes"}
     ),
     "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs": frozenset({"native_session"}),
     "sqlbuild.compiler.compile.models:DeclarationScopeResolver": frozenset({"native_contexts"}),

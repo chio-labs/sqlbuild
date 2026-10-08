@@ -402,13 +402,13 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
     "test_case",
     [
         WheelSiteReportTestCase(
-            description="python_and_preview_wheel_calls_without_deferrals",
+            description="python_and_preview_wheel_calls_with_input_enrichment_deferrals",
             perturbation="",
             expected_lines=(
                 "Polyglot wheel calls (python):",
                 "Polyglot wheel calls (native-preview):",
                 "Analysis deferrals (python): none recorded",
-                "Analysis deferrals (native-preview): none recorded",
+                " input_enrichment analysis_session (project ",
                 "Compiler differential passed: 1 projects identical",
             ),
             expected_sites=frozenset(
@@ -417,7 +417,7 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
                     "_validate_sql_syntax_with_message parse_one",
                 }
             ),
-            expected_deferrals=frozenset(),
+            expected_deferrals=frozenset({"input_enrichment analysis_session"}),
         ),
         WheelSiteReportTestCase(
             description="preview_deferrals_are_counted_per_kind_and_site",
@@ -428,7 +428,9 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
                 " legacy_fallback orders.sql (project ",
             ),
             expected_sites=frozenset(),
-            expected_deferrals=frozenset({"legacy_fallback orders.sql"}),
+            expected_deferrals=frozenset(
+                {"legacy_fallback orders.sql", "input_enrichment analysis_session"}
+            ),
         ),
     ],
     ids=lambda case: case.description,

@@ -194,12 +194,12 @@ def test_given_frontier_value_when_rendering_capture_then_json_is_canonical(
             expected_identical=True,
         ),
         StageCaptureOrderTestCase(
-            description="binding_catalog_relations_stay_visible",
+            description="binding_catalog_relations_are_analysis_cache_state",
             first=lambda: orders_binding_catalog(
                 shared_analyses=(), relations=("orders", "customers")
             ),
             second=lambda: orders_binding_catalog(shared_analyses=(), relations=("orders",)),
-            expected_identical=False,
+            expected_identical=True,
         ),
     ],
     ids=lambda case: case.description,

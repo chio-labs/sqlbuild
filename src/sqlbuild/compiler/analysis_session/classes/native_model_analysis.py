@@ -1,0 +1,199 @@
+"""One compile's native model analysis, with Python answering the session's deferrals."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Sequence
+from typing import Any
+
+import sqlbuild._native as _native
+from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_analysis_deferral
+from sqlbuild.compiler.analysis_session._helpers.session_rows import (
+    binding_diagnostics,
+    compact_lineage,
+    deferred_row,
+    inferred_columns,
+)
+from sqlbuild.compiler.analysis_session.constants import (
+    DEFERRAL_ANALYSIS,
+    DEFERRAL_ENRICHMENT,
+    DEFERRAL_LEGACY_ANALYSIS,
+    DEFERRAL_SESSION,
+    LINEAGE_NATIVE,
+    NATIVE_ANALYSIS_FAILURE_MESSAGE,
+    NATIVE_SESSION_FAILURE_MESSAGE,
+)
+from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
+from sqlbuild.compiler.analysis_session.types import (
+    DeferralRow,
+    DeferredRow,
+    FinishRow,
+    OutcomeRow,
+    ShapeRows,
+    StepRow,
+)
+from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
+from sqlbuild.compiler.compile.models import (
+    CompiledLineageColumnFact,
+    ModelSqlAnalysis,
+    ModelSqlAnalysisRequest,
+    PolyglotAnalysisResult,
+)
+from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
+
+
+class NativeModelAnalysis:
+    """Drive one native session, answering deferrals with today's Python analysis."""
+
+    def __init__(
+        self,
+        *,
+        request: NativeModelAnalysisRequest,
+        python: PythonModelAnalysis,
+        catalog: Any,
+    ) -> None:
+        self._python: PythonModelAnalysis = python
+        self._catalog: Any = catalog
+        self._types: dict[str, dict[str, str]] = dict(request.column_types_by_table)
+        self._nullability: dict[str, dict[str, InferredNullability]] = dict(
+            request.column_nullability_by_table
+        )
+        self._kept: dict[tuple[int, str], PolyglotAnalysisResult] = {}
+
+    def analyses(
+        self, session: _native.NativeModelAnalysisSession
+    ) -> dict[str, ModelSqlAnalysis] | None:
+        """Every model's analysis by name, or None when Python must analyse them all."""
+
+        finished: FinishRow | None = self._finished(session)
+        if finished is None:
+            record_analysis_deferral(kind=DEFERRAL_SESSION)
+            log_debug_event(
+                logger=_DEBUG_LOGGER,
+                message=NATIVE_SESSION_FAILURE_MESSAGE,
+                sqlbuild_error=session.failure,
+            )
+            return None
+        outcomes, schema_additions, analysis_names = finished
+        self._record_catalog_changes(
+            schema_additions=schema_additions, analysis_names=analysis_names
+        )
+        self._python.record_uncached()
+        return {
+            request.model_input.model_file.file_path.stem: self._model_analysis(
+                index=index, request=request, outcome=outcome
+            )
+            for index, (request, outcome) in enumerate(
+                zip(self._python.requests, outcomes, strict=True)
+            )
+        }
+
+    def _finished(self, session: _native.NativeModelAnalysisSession) -> FinishRow | None:
+        step: StepRow | None = session.run()
+        while step is not None:
+            publications, deferrals, failures = step
+            for failure in failures:
+                log_debug_event(
+                    logger=_DEBUG_LOGGER,
+                    message=NATIVE_ANALYSIS_FAILURE_MESSAGE,
+                    sqlbuild_error=failure,
+                )
+            self._publish(publications)
+            if not deferrals:
+                return session.finish()
+            answers: list[DeferredRow] = [self._answer(deferral) for deferral in deferrals]
+            if not session.provide(answers):
+                return None
+            step = session.run()
+        return None
+
+    def _publish(self, publications: ShapeRows) -> None:
+        for name, shape in publications:
+            published: dict[str, str] = dict(shape)
+            self._types.setdefault(name, published)
+            self._nullability.setdefault(
+                name, dict.fromkeys(published, InferredNullability.UNKNOWN)
+            )
+
+    def _answer(self, deferral: DeferralRow) -> DeferredRow:
+        kind, model, cleaned_sql, schemas, diagnostics, lineage = deferral
+        shapes: dict[str, dict[str, str]] = {name: dict(shape) for name, shape in schemas}
+        analysis: PolyglotAnalysisResult
+        if kind == DEFERRAL_ANALYSIS:
+            record_analysis_deferral(kind=DEFERRAL_LEGACY_ANALYSIS)
+            analysis = self._python.analyze_deferred(
+                model=model,
+                precomputed=PythonModelAnalysis.legacy_precomputed(
+                    cleaned_sql=cleaned_sql or "",
+                    binding_diagnostics=binding_diagnostics(diagnostics),
+                    lineage=lineage,
+                ),
+                binding_schema=shapes,
+                column_types_by_table=self._types,
+                column_nullability_by_table=self._nullability,
+            )
+        else:
+            record_analysis_deferral(kind=DEFERRAL_ENRICHMENT)
+            analysis = self._python.enrich(model=model, input_schemas=shapes)
+        self._kept[(model, kind)] = analysis
+        return deferred_row(model=model, analysis=analysis)
+
+    def _record_catalog_changes(
+        self, *, schema_additions: ShapeRows, analysis_names: list[str]
+    ) -> None:
+        """Leave Python's binding catalog as its own analysis would have."""
+
+        additions: dict[str, dict[str, str]] = {
+            name: dict(shape)
+            for name, shape in schema_additions
+            if name not in self._catalog.schemas
+        }
+        self._catalog.schemas.update(additions)
+        if additions:
+            self._catalog.native.update_relations(additions)
+        self._catalog.prepare_analysis(
+            types={name: self._types[name] for name in analysis_names if name in self._types},
+            nullability={
+                name: self._nullability[name]
+                for name in analysis_names
+                if name in self._nullability
+            },
+        )
+
+    def _model_analysis(
+        self, *, index: int, request: ModelSqlAnalysisRequest, outcome: OutcomeRow
+    ) -> ModelSqlAnalysis:
+        (
+            succeeded,
+            columns,
+            lineage_source,
+            lineage_rows,
+            has_star,
+            star_resolved,
+            diagnostics,
+            validated,
+            cleaned_sql,
+        ) = outcome
+        lineage: Sequence[CompiledLineageColumnFact] = (
+            (compact_lineage(lineage_rows) if succeeded else ())
+            if lineage_source == LINEAGE_NATIVE
+            else self._kept[(index, lineage_source)].lineage_columns
+        )
+        return ModelSqlAnalysis(
+            polyglot_analysis=PolyglotAnalysisResult(
+                analysis_succeeded=succeeded,
+                columns=inferred_columns(columns),
+                lineage_columns=lineage,
+                has_star=has_star,
+                star_resolved=star_resolved,
+                binding_diagnostics=binding_diagnostics(diagnostics),
+                binding_validated=validated,
+            ),
+            placeholders=request.placeholders,
+            fused_binding_validated=True,
+            cleaned_sql=cleaned_sql,
+            validated_schema=request.binding_schema,
+        )
