@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.146.0](https://github.com/chio-labs/sqlbuild/compare/v0.145.0...v0.146.0) (2026-10-08)
+
+
+### Features
+
+* **native:** report reference extraction errors natively ([#1037](https://github.com/chio-labs/sqlbuild/issues/1037)) ([8dc2d1e](https://github.com/chio-labs/sqlbuild/commit/8dc2d1e203e3fd3a7cc411d9b4d583435ab911dc))
+
 ## [0.145.0](https://github.com/chio-labs/sqlbuild/compare/v0.144.0...v0.145.0) (2026-10-08)
 
 
