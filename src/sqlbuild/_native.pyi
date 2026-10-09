@@ -397,6 +397,20 @@ class NativeModelAnalysisSession:
             ],
             list[tuple[str, list[tuple[str, str]]]],
             list[str],
+            list[
+                tuple[
+                    str,
+                    tuple[
+                        bool,
+                        list[tuple[str, str | None, str]],
+                        list[tuple[str, str | None]],
+                        list[str],
+                        str | None,
+                        bool,
+                    ]
+                    | None,
+                ]
+            ],
         ]
         | None
     ): ...
@@ -406,6 +420,29 @@ class NativeModelAnalysisSession:
 def start_model_analysis_session(
     catalog: object, request: tuple[object, ...], /
 ) -> NativeModelAnalysisSession | None: ...
+def prove_dynamic_column_contract(
+    request: tuple[
+        str,
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
+        str,
+        list[tuple[str, str, str, str, str, str | None]],
+    ],
+    /,
+) -> tuple[
+    str,
+    tuple[
+        bool,
+        list[tuple[str, str | None, str]],
+        list[tuple[str, str | None]],
+        list[str],
+        str | None,
+        bool,
+    ]
+    | None,
+]: ...
 def infer_expression_source_shapes(
     catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
 ) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...

@@ -6,7 +6,10 @@ import re
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_cache_metrics
-from sqlbuild.compiler.compile._helpers.analysis.columns import table_function_analysis_name
+from sqlbuild.compiler.compile._helpers.analysis.columns import (
+    substitute_placeholder_defaults,
+    table_function_analysis_name,
+)
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
 )
@@ -33,6 +36,7 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 _SET_OPERATION_PATTERN: re.Pattern[str] = re.compile(
     r"\b(?:UNION|INTERSECT|EXCEPT)\b", re.IGNORECASE
@@ -117,6 +121,19 @@ class PythonModelAnalysis:
         )
 
     @staticmethod
+    def family_row(family: SchemaDynamicColumnFamily) -> tuple[str, str, str, str, str, str | None]:
+        """One declared dynamic column family as the native request row."""
+
+        return (
+            family.name,
+            family.pivot_column,
+            family.value_column,
+            family.aggregate,
+            family.type,
+            family.name_pattern,
+        )
+
+    @staticmethod
     def legacy_precomputed(
         *,
         cleaned_sql: str,
@@ -189,6 +206,21 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
             if values.get("materialized") == MaterializationType.SNAPSHOT
             else None
         ),
+        (
+            substitute_placeholder_defaults(
+                query_sql=request.query_sql, placeholders=request.placeholders
+            )
+            if request.placeholders
+            else request.query_sql
+        ),
+        [
+            PythonModelAnalysis.family_row(family)
+            for family in (
+                model_input.schema_entry.dynamic_columns
+                if model_input.schema_entry is not None
+                else ()
+            )
+        ],
     )
 
 

@@ -22,4 +22,9 @@ type OutcomeRow = tuple[
     bool,
     str,
 ]
-type FinishRow = tuple[list[OutcomeRow], ShapeRows, list[str]]
+type FamilyRow = tuple[str, str, str, str, str, str | None]
+type ProofRow = tuple[
+    bool, list[ColumnRow], list[tuple[str, str | None]], list[str], str | None, bool
+]
+type ContractRow = tuple[str, ProofRow | None]
+type FinishRow = tuple[list[OutcomeRow], ShapeRows, list[str], list[ContractRow]]

@@ -4,13 +4,14 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
 use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
+use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contract::prove_dynamic_contract;
 use sqlbuild_analysis::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, Deferral, DeferredAnalysis, ExpressionShape,
+    AnalysisSession, ColumnFact, Deferral, DeferredAnalysis, DynamicFamily, ExpressionShape,
     ExpressionShapeRequest, LineageFacts, LineageRow, ModelOutcome, ModelReference, ModelRequest,
-    SessionOutcome, SessionRequest, SessionStep,
+    PivotOutcome, PivotRequest, SessionOutcome, SessionRequest, SessionStep,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
@@ -25,7 +26,9 @@ use crate::bindings::types::CompilerDetach;
 type ColumnRow = (String, Option<String>, String);
 /// `(output column, transform code, confidence code, [(resource type, resource, column)])`.
 type LineageItem = (String, u8, u8, Vec<(String, String, String)>);
-/// A model's name, SQL, placeholders, references, lineage, required names and flags.
+/// `(name, pivot column, value column, aggregate, type, name pattern)`.
+type FamilyRow = (String, String, String, String, String, Option<String>);
+/// A model's name, SQL, placeholders, references, lineage, required names, flags and pivot.
 type ModelRow = (
     String,
     String,
@@ -36,6 +39,8 @@ type ModelRow = (
     bool,
     bool,
     Option<(String, String)>,
+    String,
+    Vec<FamilyRow>,
 );
 /// The profile settings, relation shapes and models one session analyses.
 type RequestRow = (
@@ -47,6 +52,7 @@ type RequestRow = (
     Shapes,
     Shapes,
     Shapes,
+    Vec<(String, Vec<FamilyRow>)>,
     Vec<ModelRow>,
 );
 /// `(kind, model, cleaned_sql, schemas, binding diagnostics, lineage)`.
@@ -82,8 +88,29 @@ type OutcomeRow = (
     bool,
     String,
 );
-/// `(models, catalog schema additions, analysis-shape names)`.
-type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>);
+/// `(output proven, fixed columns, (family, inferred type), inputs, failure, bare pivot)`.
+type ProofRow = (
+    bool,
+    Vec<ColumnRow>,
+    Vec<(String, Option<String>)>,
+    Vec<String>,
+    Option<String>,
+    bool,
+);
+/// The dialect, relation facts, families by table, SQL and families of one pivot proof.
+type PivotRequestRow = (
+    String,
+    Shapes,
+    Shapes,
+    Shapes,
+    Vec<(String, Vec<FamilyRow>)>,
+    String,
+    Vec<FamilyRow>,
+);
+/// `("absent" | "deferred" | "proof", proof)`.
+type ContractRow = (&'static str, Option<ProofRow>);
+/// `(models, catalog schema additions, analysis-shape names, dynamic pivot proofs)`.
+type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>, Vec<ContractRow>);
 
 /// One compile's native model analysis; any failure hands the whole analysis back to Python.
 #[pyclass(module = "sqlbuild._native")]
@@ -204,6 +231,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
         column_nullability,
         complete_schemas,
         catalog_schemas,
+        dynamic_families_by_table,
         models,
     ) = request;
     SessionRequest {
@@ -215,6 +243,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
         column_nullability,
         complete_schemas,
         catalog_schemas,
+        dynamic_families_by_table: families_by_table(dynamic_families_by_table),
         models: models.into_iter().map(model_request).collect(),
     }
 }
@@ -230,6 +259,8 @@ fn model_request(row: ModelRow) -> ModelRequest {
         recover_cte_facts,
         has_set_operation,
         snapshot_columns,
+        pivot_sql,
+        dynamic_families,
     ) = row;
     ModelRequest {
         name,
@@ -247,6 +278,8 @@ fn model_request(row: ModelRow) -> ModelRequest {
         recover_cte_facts,
         has_set_operation,
         snapshot_columns,
+        pivot_sql,
+        dynamic_families: dynamic_families.into_iter().map(dynamic_family).collect(),
     }
 }
 
@@ -325,7 +358,48 @@ fn finish_row(outcome: SessionOutcome) -> FinishRow {
         outcome.models.into_iter().map(outcome_row).collect(),
         outcome.schema_additions,
         outcome.analysis_names,
+        outcome
+            .dynamic_contracts
+            .into_iter()
+            .map(contract_row)
+            .collect(),
     )
+}
+
+fn families_by_table(rows: Vec<(String, Vec<FamilyRow>)>) -> Vec<(String, Vec<DynamicFamily>)> {
+    rows.into_iter()
+        .map(|(name, families)| (name, families.into_iter().map(dynamic_family).collect()))
+        .collect()
+}
+
+fn dynamic_family(row: FamilyRow) -> DynamicFamily {
+    let (name, pivot_column, value_column, aggregate, data_type, name_pattern) = row;
+    DynamicFamily {
+        name,
+        pivot_column,
+        value_column,
+        aggregate,
+        data_type,
+        name_pattern,
+    }
+}
+
+fn contract_row(outcome: PivotOutcome) -> ContractRow {
+    match outcome {
+        PivotOutcome::Absent => ("absent", None),
+        PivotOutcome::Deferred => ("deferred", None),
+        PivotOutcome::Proof(proof) => (
+            "proof",
+            Some((
+                proof.output_proven,
+                proof.fixed_columns.into_iter().map(column_row).collect(),
+                proof.families,
+                proof.input_relations,
+                proof.failure_reason,
+                proof.bare_dynamic_pivot,
+            )),
+        ),
+    }
 }
 
 fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
@@ -334,6 +408,7 @@ fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
         LineageFacts::Native(rows) => ("native", lineage_items(rows)),
         LineageFacts::PythonAnalysis => ("analysis", Vec::new()),
         LineageFacts::PythonEnrichment => ("enrichment", Vec::new()),
+        LineageFacts::NativeEnrichment(rows) => ("facts", lineage_items(rows)),
     };
     (
         analysis.analysis_succeeded,
@@ -350,9 +425,28 @@ fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
     )
 }
 
+/// One model's dynamic pivot proof, or `("deferred", None)` for Python's proof.
+#[pyfunction]
+fn prove_dynamic_column_contract(py: Python<'_>, request: PivotRequestRow) -> ContractRow {
+    let (dialect, column_types, authoritative_types, column_nullability, by_table, sql, families) =
+        request;
+    let request = PivotRequest {
+        dialect,
+        column_types,
+        authoritative_types,
+        column_nullability,
+        families_by_table: families_by_table(by_table),
+        sql,
+        families: families.into_iter().map(dynamic_family).collect(),
+    };
+    py.compiler_detach(|| prove_dynamic_contract(&request))
+        .map_or(("deferred", None), contract_row)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelAnalysisSession>()?;
     module.add_function(wrap_pyfunction!(start_model_analysis_session, module)?)?;
     module.add_function(wrap_pyfunction!(infer_expression_source_shapes, module)?)?;
+    module.add_function(wrap_pyfunction!(prove_dynamic_column_contract, module)?)?;
     Ok(())
 }

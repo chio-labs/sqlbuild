@@ -12,14 +12,19 @@ from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_
 from sqlbuild.compiler.analysis_session._helpers.session_rows import (
     binding_diagnostics,
     compact_lineage,
+    contract_proof,
     deferred_row,
     inferred_columns,
+    lineage_facts,
 )
 from sqlbuild.compiler.analysis_session.constants import (
+    CONTRACT_DEFERRED,
     DEFERRAL_ANALYSIS,
+    DEFERRAL_DYNAMIC_PIVOT,
     DEFERRAL_ENRICHMENT,
     DEFERRAL_LEGACY_ANALYSIS,
     DEFERRAL_SESSION,
+    LINEAGE_FACTS,
     LINEAGE_NATIVE,
     NATIVE_ANALYSIS_FAILURE_MESSAGE,
     NATIVE_SESSION_FAILURE_MESSAGE,
@@ -30,6 +35,7 @@ from sqlbuild.compiler.analysis_session.types import (
     DeferredRow,
     FinishRow,
     OutcomeRow,
+    ProofRow,
     ShapeRows,
     StepRow,
 )
@@ -79,19 +85,22 @@ class NativeModelAnalysis:
                 sqlbuild_error=session.failure,
             )
             return None
-        outcomes, schema_additions, analysis_names = finished
+        outcomes, schema_additions, analysis_names, contracts = finished
         self._record_catalog_changes(
             schema_additions=schema_additions, analysis_names=analysis_names
+        )
+        self._deferrals[DEFERRAL_DYNAMIC_PIVOT] += sum(
+            kind == CONTRACT_DEFERRED for kind, _ in contracts
         )
         for kind, count in self._deferrals.items():
             record_analysis_deferral(kind=kind, count=count)
         self._python.record_uncached()
         return {
             request.model_input.model_file.file_path.stem: self._model_analysis(
-                index=index, request=request, outcome=outcome
+                index=index, request=request, outcome=outcome, contract=contract
             )
-            for index, (request, outcome) in enumerate(
-                zip(self._python.requests, outcomes, strict=True)
+            for index, (request, outcome, (_, contract)) in enumerate(
+                zip(self._python.requests, outcomes, contracts, strict=True)
             )
         }
 
@@ -168,7 +177,12 @@ class NativeModelAnalysis:
         )
 
     def _model_analysis(
-        self, *, index: int, request: ModelSqlAnalysisRequest, outcome: OutcomeRow
+        self,
+        *,
+        index: int,
+        request: ModelSqlAnalysisRequest,
+        outcome: OutcomeRow,
+        contract: ProofRow | None,
     ) -> ModelSqlAnalysis:
         (
             succeeded,
@@ -184,6 +198,8 @@ class NativeModelAnalysis:
         lineage: Sequence[CompiledLineageColumnFact] = (
             (compact_lineage(lineage_rows) if succeeded else ())
             if lineage_source == LINEAGE_NATIVE
+            else lineage_facts(lineage_rows)
+            if lineage_source == LINEAGE_FACTS
             else self._kept[(index, lineage_source)].lineage_columns
         )
         return ModelSqlAnalysis(
@@ -200,4 +216,5 @@ class NativeModelAnalysis:
             fused_binding_validated=True,
             cleaned_sql=cleaned_sql,
             validated_schema=request.binding_schema,
+            dynamic_column_contract=contract_proof(contract),
         )

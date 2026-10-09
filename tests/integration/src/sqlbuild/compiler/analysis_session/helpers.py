@@ -14,7 +14,9 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
+import sqlbuild.compiler.analysis_session.classes.native_model_analysis as native_model_analysis
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
@@ -22,6 +24,9 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 )
 from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
+)
+from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contract import (
+    prove_native_dynamic_contract,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
@@ -32,7 +37,9 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompileAdapterContext,
+    CompiledLineageColumnFact,
     CompileProjectInputs,
+    DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -60,6 +67,17 @@ _SOURCES: str = """sources:
     description: Customers feed.
     expression: >-
       (SELECT 10 AS customer_id, 'Ada' AS Customer_Name, 'east' AS region)
+  - name: raw_payments
+    description: Typed payments feed.
+    expression: >-
+      (SELECT 10 AS customer_id, 'east' AS region, CAST(5 AS DECIMAL(10, 2)) AS amount)
+    columns:
+      - name: customer_id
+        type: INTEGER
+      - name: region
+        type: VARCHAR
+      - name: amount
+        type: DECIMAL(10, 2)
   - name: raw_events
     description: Untyped events feed.
     columns:
@@ -78,26 +96,80 @@ _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     python_functions_inherit_default_namespace=True,
     sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
 )
-_PIVOT_MODEL: str = """MODEL (
+_PIVOT_HEADER: str = """MODEL (
   description "Order amounts pivoted by status",
   contract enforced,
   materialized table,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
     status_amounts (
-      pivot_column status,
-      value_column amount,
-      aggregate MAX,
+      pivot_column {pivot},
+      value_column {value},
+      aggregate {aggregate},
       type DOUBLE
     )
   ),
 );
 
-PIVOT __source("raw_orders")
-ON status
-USING MAX(amount)
-GROUP BY customer_id
 """
+_PIVOT_BODIES: tuple[str, ...] = (
+    'PIVOT __source("raw_orders")\nON status\nUSING {aggregate}(amount)\nGROUP BY customer_id',
+    'PIVOT __source("raw_orders")\nON status\nUSING {aggregate}(CAST(amount AS DECIMAL(12, 2)))',
+    "WITH base AS (\n  SELECT customer_id, status, CAST(amount AS DOUBLE) AS amount\n"
+    '  FROM __source("raw_orders")\n)\nSELECT * FROM base\n'
+    "PIVOT ({aggregate}(amount) FOR status IN (ANY ORDER BY status))",
+    'WITH base AS (\n  SELECT * FROM __source("raw_orders")\n),\npivoted AS (\n'
+    "  PIVOT base ON status USING {aggregate}(amount) GROUP BY customer_id\n)\n"
+    "SELECT * FROM pivoted",
+    "PIVOT __source(\"raw_orders\")\nON status IN ('placed', 'shipped')\n"
+    "USING {aggregate}(amount)\nGROUP BY customer_id",
+    'PIVOT __source("raw_events")\nON kind\nUSING {aggregate}(order_id)\nGROUP BY event_id',
+    'SELECT * FROM __source("raw_orders") o\nJOIN __source("raw_customers") c USING (customer_id)',
+)
+_PIVOT_AGGREGATES: tuple[str, ...] = ("MAX", "MIN", "ANY_VALUE", "SUM")
+_TYPED_PIVOT: str = (
+    _PIVOT_HEADER.format(pivot="status", value="amount", aggregate="MAX")
+    + _PIVOT_BODIES[0].format(aggregate="MAX")
+    + "\n"
+)
+_TYPED_PIVOT_PASSTHROUGH: str = (
+    _PIVOT_HEADER.format(pivot="status", value="amount", aggregate="MAX")
+    + 'SELECT * FROM __ref("status_amounts")\n'
+)
+_CONTRACT_CTE_MODELS: dict[str, str] = {
+    "models/marts/payments_by_customer.sql": (
+        'MODEL (\n  description "Payments passed through a CTE",\n  contract enforced,\n'
+        "  columns (customer_id (type INTEGER), region (type VARCHAR)),\n);\n\n"
+        'WITH base AS (SELECT customer_id, region FROM __source("raw_payments"))\n'
+        "SELECT customer_id, region FROM base\n"
+    ),
+    "models/marts/payment_totals.sql": (
+        'MODEL (\n  description "Payment totals aggregated in a CTE",\n  contract enforced,\n'
+        "  columns (total_amount (type DECIMAL(38, 2)), region (type VARCHAR)),\n);\n\n"
+        "WITH base AS (\n  SELECT SUM(amount) AS total_amount, region\n"
+        '  FROM __source("raw_payments")\n  GROUP BY region\n)\n'
+        "SELECT total_amount, region FROM base\n"
+    ),
+}
+
+
+def _pivot_models(rng: random.Random) -> dict[str, str]:
+    """A typed pivot every passthrough reads, and seeded pivot shapes proven or refused."""
+
+    files: dict[str, str] = {
+        "models/marts/status_amounts.sql": _TYPED_PIVOT,
+        "models/marts/status_passthrough.sql": _TYPED_PIVOT_PASSTHROUGH,
+    }
+    for index, body in enumerate(rng.sample(_PIVOT_BODIES, k=4)):
+        aggregate: str = rng.choice(_PIVOT_AGGREGATES)
+        header: str = _PIVOT_HEADER.format(
+            pivot=rng.choice(("status", "status", "kind")),
+            value=rng.choice(("amount", "amount", "order_id")),
+            aggregate=aggregate,
+        )
+        files[f"models/marts/pivot_{index}.sql"] = header + body.format(aggregate=aggregate) + "\n"
+    return files
+
 
 type _Relation = tuple[str, tuple[str, ...]]
 type _Template = Callable[[random.Random, list[_Relation]], tuple[str, str, tuple[str, ...]]]
@@ -215,13 +287,55 @@ _TEMPLATES: tuple[_Template, ...] = (
 )
 
 
+def pivot_project_files() -> dict[str, str]:
+    """A typed pivot with its passthrough and one plain model, for selective assembly."""
+
+    return {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": _SOURCES,
+        "models/marts/status_amounts.sql": _TYPED_PIVOT,
+        "models/marts/status_passthrough.sql": _TYPED_PIVOT_PASSTHROUGH,
+        "models/staging/orders_list.sql": (
+            'MODEL (description "Order ids");\n\nSELECT order_id FROM __source("raw_orders")\n'
+        ),
+    }
+
+
+def native_pivot_proofs(
+    *, monkeypatch: pytest.MonkeyPatch
+) -> list[DynamicColumnContractProof | None]:
+    """Record every standalone native pivot proof assembly takes, failing any wheel pivot proof."""
+
+    proofs: list[DynamicColumnContractProof | None] = []
+    native_proof: Callable[..., DynamicColumnContractProof | None] = (
+        native_stage_assembly.prove_native_dynamic_contract
+    )
+
+    def recorded(**keywords: Any) -> DynamicColumnContractProof | None:
+        proofs.append(native_proof(**keywords))
+        return proofs[-1]
+
+    python_proof: Callable[..., DynamicColumnContractProof | None] = (
+        project_assembly.analyze_dynamic_column_contract
+    )
+
+    def wheel_not_expected(**keywords: Any) -> DynamicColumnContractProof | None:
+        assert not keywords["families"], "the Python wheel proved a pivot native should prove"
+        return python_proof(**keywords)
+
+    monkeypatch.setattr(native_stage_assembly, "prove_native_dynamic_contract", recorded)
+    monkeypatch.setattr(project_assembly, "analyze_dynamic_column_contract", wheel_not_expected)
+    return proofs
+
+
 def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[str, str]:
     """Sources (typed, inferred and untyped), a pivot and models drawing on every template."""
 
     files: dict[str, str] = {
         "sqlbuild_project.toml": _PROJECT_TOML,
         "sources/raw.yml": _SOURCES,
-        "models/marts/status_amounts.sql": _PIVOT_MODEL,
+        **_pivot_models(rng),
+        **_CONTRACT_CTE_MODELS,
     }
     relations: list[_Relation] = list(_INITIAL_RELATIONS)
     for index in range(model_count):
@@ -258,6 +372,10 @@ class AnalysisParity:
     native: list[object] = field(default_factory=list)
     analysed_models: int = 0
     expression_shapes: int = 0
+    pivot_proofs: int = 0
+    standalone_proofs: int = 0
+    proven_pivots: int = 0
+    native_enrichments: int = 0
 
 
 def compare_analyses(
@@ -295,6 +413,25 @@ def compare_analyses(
             _catalog_view(profile.binding_catalog),
             _catalog_view(native_catalog),
         )
+        return native or python
+
+    def proofs_by_both(
+        *,
+        sql_analysis: ModelSqlAnalysis | None,
+        python_proof: partial[DynamicColumnContractProof | None],
+    ) -> DynamicColumnContractProof | None:
+        native: DynamicColumnContractProof | None = getattr(
+            sql_analysis, "dynamic_column_contract", None
+        )
+        python: DynamicColumnContractProof | None = python_proof()
+        standalone: DynamicColumnContractProof | None = prove_native_dynamic_contract(
+            **python_proof.keywords
+        )
+        parity.pivot_proofs += native is not None
+        parity.proven_pivots += native is not None and native.output_proven
+        parity.standalone_proofs += standalone is not None
+        _append(parity, "dynamic pivot proof", python, native or python)
+        _append(parity, "standalone dynamic pivot proof", python, standalone or python)
         return python
 
     def shapes_by_both(
@@ -317,9 +454,19 @@ def compare_analyses(
         )
         return python
 
+    native_lineage_facts: Callable[..., tuple[CompiledLineageColumnFact, ...]] = (
+        native_model_analysis.lineage_facts
+    )
+
+    def counted_native_enrichment(rows: list[Any]) -> tuple[CompiledLineageColumnFact, ...]:
+        parity.native_enrichments += 1
+        return native_lineage_facts(rows)
+
     with monkeypatch.context() as patch:
+        patch.setattr(native_model_analysis, "lineage_facts", counted_native_enrichment)
         patch.setattr(project_assembly, "analyze_model_sql_by_engine", models_by_both)
         patch.setattr(project_assembly, "expression_source_shapes_by_engine", shapes_by_both)
+        patch.setattr(project_assembly, "dynamic_column_contract_by_engine", proofs_by_both)
         with suppress(CompileInputError):
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
@@ -387,7 +534,6 @@ def _analysis_views(analyses: dict[str, ModelSqlAnalysis] | None) -> object:
             analysis.polyglot_analysis.binding_validated,
             analysis.cleaned_sql,
             analysis.placeholders,
-            analysis.dynamic_column_contract,
         )
         for name, analysis in analyses.items()
     }
