@@ -48,6 +48,7 @@ class SqlTestPlanInspectionE2ETestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_exit_code: int = 0
     unexpected_stdout_fragments: tuple[str, ...] = ()
+    engine_env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,7 @@ class CursorWindowE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     expected_compiled_fragments: tuple[str, ...] = ()
+    engine_env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
