@@ -26,7 +26,7 @@ def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     """Resolve merged effective vars with recursive `${name}` expansion."""
 
     for name, value in raw_values.items():
-        _reject_lone_surrogates(name=name, value=value, root=value)
+        _reject_lone_surrogates(name=name, value=value, path="its value")
     outcome: tuple[object, list[tuple[str, str]]] = _native.expand_effective_vars(
         raw_values, UnicodeEnvironment()
     )
@@ -37,23 +37,25 @@ def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     return cast(dict[str, object], outcome[0])
 
 
-def _reject_lone_surrogates(*, name: str, value: object, root: object) -> None:
+def _reject_lone_surrogates(*, name: str, value: object, path: str) -> None:
     if isinstance(value, dict):
-        for item in (*value.keys(), *value.values()):
-            _reject_lone_surrogates(name=name, value=item, root=root)
+        for key, item in value.items():
+            _reject_lone_surrogates(name=name, value=key, path=f"{path} key")
+            _reject_lone_surrogates(name=name, value=item, path=f"{path}[{key!a}]")
     elif isinstance(value, list | tuple):
-        for item in value:
-            _reject_lone_surrogates(name=name, value=item, root=root)
+        for index, item in enumerate(value):
+            _reject_lone_surrogates(name=name, value=item, path=f"{path}[{index}]")
     elif isinstance(value, str):
         try:
             _ = value.encode("utf-8")
         except UnicodeEncodeError as error:
+            byte_offset: int = len(value[: error.start].encode("utf-8"))
             raise CompileInputError(
-                f"Variable '{name}' holds the lone surrogate {value[error.start]!r}, which is not "
-                "valid Unicode text",
+                f"Variable '{name}' holds a lone surrogate in {path} at UTF-8 byte "
+                f"{byte_offset}, which is not valid Unicode text",
                 help=(
-                    f"Set '{name}' to valid Unicode text in --vars or the [vars] table; its "
-                    f"current value is {root!r}"
+                    f"Set '{name}' to valid Unicode text in --vars or the [vars] table; the "
+                    "value is not shown because it may be a secret"
                 ),
             ) from None
 

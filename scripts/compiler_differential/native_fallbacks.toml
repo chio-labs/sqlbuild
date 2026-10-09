@@ -74,7 +74,7 @@ engine = "native"
 stage = "declaration_files"
 site = "declaration_files.native"
 kind = "parsed_files"
-counts = { example = 32, failure = 74, fixture = 20, seed = 799 }
+counts = { example = 32, failure = 79, fixture = 20, seed = 799 }
 
 [[entry]]
 engine = "native"
@@ -87,15 +87,8 @@ counts = { example = 8, failure = 3, fixture = 4, seed = 43 }
 engine = "native"
 stage = "declaration_scopes"
 site = "declaration_scopes.native"
-kind = "resolver_lookups"
-counts = { example = 12, failure = 231, fixture = 12, seed = 73 }
-
-[[entry]]
-engine = "native"
-stage = "declaration_scopes"
-site = "declaration_scopes.native"
 kind = "scope_indexes"
-counts = { example = 12, failure = 230, fixture = 12, seed = 44 }
+counts = { example = 12, failure = 234, fixture = 12, seed = 44 }
 
 [[entry]]
 engine = "native"
@@ -109,7 +102,7 @@ engine = "native"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 296, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 301, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native"
@@ -121,16 +114,23 @@ counts = { example = 18, fixture = 15, seed = 192 }
 [[entry]]
 engine = "native"
 stage = "macro_calls"
+site = "macro_calls.mocked_evaluation"
+kind = "test_mock"
+counts = { seed = 29 }
+
+[[entry]]
+engine = "native"
+stage = "macro_calls"
 site = "macro_calls.native"
 kind = "bridged_calls"
-counts = { example = 32, failure = 9, fixture = 28, seed = 748 }
+counts = { example = 32, failure = 9, fixture = 28, seed = 719 }
 
 [[entry]]
 engine = "native"
 stage = "macro_calls"
 site = "macro_calls.native"
 kind = "parsed_arguments"
-counts = { example = 6, failure = 13, fixture = 5, seed = 369 }
+counts = { example = 6, failure = 16, fixture = 5, seed = 369 }
 
 [[entry]]
 engine = "native"
@@ -158,14 +158,14 @@ engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "config_builds"
-counts = { example = 56, failure = 307, fixture = 64, seed = 890 }
+counts = { example = 56, failure = 311, fixture = 64, seed = 890 }
 
 [[entry]]
 engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
-counts = { example = 29, failure = 245, fixture = 15, seed = 121 }
+counts = { example = 29, failure = 249, fixture = 15, seed = 121 }
 
 [[entry]]
 engine = "native"
@@ -207,14 +207,14 @@ engine = "native"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
-counts = { example = 56, failure = 418, fixture = 64, seed = 1103 }
+counts = { example = 56, failure = 422, fixture = 64, seed = 1103 }
 
 [[entry]]
 engine = "native"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "variable_substitutions"
-counts = { example = 56, failure = 465, fixture = 72, seed = 1163 }
+counts = { example = 56, failure = 473, fixture = 72, seed = 1163 }
 
 [[entry]]
 engine = "native"
@@ -305,7 +305,7 @@ engine = "native-preview"
 stage = "declaration_files"
 site = "declaration_files.native"
 kind = "parsed_files"
-counts = { example = 32, failure = 74, fixture = 20, seed = 799 }
+counts = { example = 32, failure = 79, fixture = 20, seed = 799 }
 
 [[entry]]
 engine = "native-preview"
@@ -318,15 +318,8 @@ counts = { example = 8, failure = 3, fixture = 4, seed = 43 }
 engine = "native-preview"
 stage = "declaration_scopes"
 site = "declaration_scopes.native"
-kind = "resolver_lookups"
-counts = { example = 12, failure = 231, fixture = 12, seed = 73 }
-
-[[entry]]
-engine = "native-preview"
-stage = "declaration_scopes"
-site = "declaration_scopes.native"
 kind = "scope_indexes"
-counts = { example = 12, failure = 230, fixture = 12, seed = 44 }
+counts = { example = 12, failure = 234, fixture = 12, seed = 44 }
 
 [[entry]]
 engine = "native-preview"
@@ -340,7 +333,7 @@ engine = "native-preview"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 296, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 301, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native-preview"
@@ -359,16 +352,23 @@ counts = { example = 18, fixture = 15, seed = 192 }
 [[entry]]
 engine = "native-preview"
 stage = "macro_calls"
+site = "macro_calls.mocked_evaluation"
+kind = "test_mock"
+counts = { seed = 29 }
+
+[[entry]]
+engine = "native-preview"
+stage = "macro_calls"
 site = "macro_calls.native"
 kind = "bridged_calls"
-counts = { example = 32, failure = 9, fixture = 28, seed = 748 }
+counts = { example = 32, failure = 9, fixture = 28, seed = 719 }
 
 [[entry]]
 engine = "native-preview"
 stage = "macro_calls"
 site = "macro_calls.native"
 kind = "parsed_arguments"
-counts = { example = 6, failure = 13, fixture = 5, seed = 369 }
+counts = { example = 6, failure = 16, fixture = 5, seed = 369 }
 
 [[entry]]
 engine = "native-preview"
@@ -431,14 +431,14 @@ engine = "native-preview"
 stage = "model_config"
 site = "model_config.native"
 kind = "config_builds"
-counts = { example = 56, failure = 307, fixture = 64, seed = 890 }
+counts = { example = 56, failure = 311, fixture = 64, seed = 890 }
 
 [[entry]]
 engine = "native-preview"
 stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
-counts = { example = 29, failure = 245, fixture = 15, seed = 121 }
+counts = { example = 29, failure = 249, fixture = 15, seed = 121 }
 
 [[entry]]
 engine = "native-preview"
@@ -480,14 +480,14 @@ engine = "native-preview"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
-counts = { example = 56, failure = 418, fixture = 64, seed = 1103 }
+counts = { example = 56, failure = 422, fixture = 64, seed = 1103 }
 
 [[entry]]
 engine = "native-preview"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "variable_substitutions"
-counts = { example = 56, failure = 465, fixture = 72, seed = 1163 }
+counts = { example = 56, failure = 473, fixture = 72, seed = 1163 }
 
 [[entry]]
 engine = "native-preview"
@@ -536,7 +536,7 @@ engine = "python"
 stage = "declaration_files"
 site = "declaration_files.native"
 kind = "parsed_files"
-counts = { example = 32, failure = 74, fixture = 20, seed = 799 }
+counts = { example = 32, failure = 79, fixture = 20, seed = 799 }
 
 [[entry]]
 engine = "python"
@@ -549,15 +549,8 @@ counts = { example = 8, failure = 3, fixture = 4, seed = 43 }
 engine = "python"
 stage = "declaration_scopes"
 site = "declaration_scopes.native"
-kind = "resolver_lookups"
-counts = { example = 12, failure = 231, fixture = 12, seed = 73 }
-
-[[entry]]
-engine = "python"
-stage = "declaration_scopes"
-site = "declaration_scopes.native"
 kind = "scope_indexes"
-counts = { example = 12, failure = 230, fixture = 12, seed = 44 }
+counts = { example = 12, failure = 234, fixture = 12, seed = 44 }
 
 [[entry]]
 engine = "python"
@@ -571,21 +564,21 @@ engine = "python"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 296, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 301, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "python"
 stage = "macro_calls"
 site = "macro_calls.native"
 kind = "parsed_arguments"
-counts = { example = 32, failure = 13, fixture = 28, seed = 840 }
+counts = { example = 32, failure = 16, fixture = 28, seed = 840 }
 
 [[entry]]
 engine = "python"
 stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
-counts = { example = 29, failure = 245, fixture = 15, seed = 121 }
+counts = { example = 29, failure = 249, fixture = 15, seed = 121 }
 
 [[entry]]
 engine = "python"
@@ -599,11 +592,11 @@ engine = "python"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
-counts = { example = 56, failure = 418, fixture = 64, seed = 1103 }
+counts = { example = 56, failure = 422, fixture = 64, seed = 1103 }
 
 [[entry]]
 engine = "python"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "variable_substitutions"
-counts = { example = 56, failure = 465, fixture = 72, seed = 1163 }
+counts = { example = 56, failure = 473, fixture = 72, seed = 1163 }

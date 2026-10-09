@@ -220,7 +220,9 @@ def format_compile_json(
         return json.dumps(result, indent=2)
 
 
-def format_compile_error_json(*, code: str, message: str, help_text: str | None) -> str:
+def format_compile_error_json(
+    *, code: str, message: str, help_text: str | None, location: SourceLocation | None = None
+) -> str:
     """Serialize a compile that stopped on a raised error as one JSON diagnostic report."""
 
     diagnostic: CompilerDiagnostic = CompilerDiagnostic(
@@ -228,6 +230,10 @@ def format_compile_error_json(*, code: str, message: str, help_text: str | None)
         severity=DiagnosticSeverity.ERROR,
         code=code,
         message=message,
+        path=location.path if location is not None else None,
+        line=location.line if location is not None else None,
+        column=location.column if location is not None else None,
+        location=location,
         help=help_text,
     )
     result: dict[str, object] = {

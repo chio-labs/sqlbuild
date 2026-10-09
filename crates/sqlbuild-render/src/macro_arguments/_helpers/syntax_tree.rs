@@ -1,6 +1,8 @@
 //! Parse argument tokens into Python's `ast` node shapes for the literal subset.
 
-use crate::macro_arguments::_helpers::failures::{Failure, keyword_order, syntax, unsupported};
+use crate::macro_arguments::_helpers::failures::{
+    Failure, keyword_order, missing_comma, syntax, unsupported,
+};
 use crate::macro_arguments::_helpers::lexer::{NumberToken, Token, TokenKind};
 
 const PYTHON_KEYWORDS: [&str; 35] = [
@@ -98,6 +100,9 @@ impl Parser<'_> {
     /// The error for the next token where no supported argument can continue.
     fn unexpected(&self) -> Failure {
         let token: &Token = self.peek();
+        if self.missing_comma() {
+            return missing_comma(token.position);
+        }
         match &token.kind {
             TokenKind::End => syntax(
                 "the arguments end where a value is expected",
@@ -109,6 +114,33 @@ impl Parser<'_> {
             ),
             _ => unsupported(token.position),
         }
+    }
+
+    /// Whether the next token starts a value right after one ended, so a comma is missing.
+    fn missing_comma(&self) -> bool {
+        let starts_value: bool = matches!(
+            self.peek().kind,
+            TokenKind::Str(_)
+                | TokenKind::Number(_)
+                | TokenKind::Name(_)
+                | TokenKind::Nested(_)
+                | TokenKind::Operator("{")
+        );
+        let ends_value: bool = self
+            .index
+            .checked_sub(1)
+            .and_then(|previous| self.tokens.get(previous))
+            .is_some_and(|token| {
+                matches!(
+                    token.kind,
+                    TokenKind::Str(_)
+                        | TokenKind::Number(_)
+                        | TokenKind::Name(_)
+                        | TokenKind::Nested(_)
+                        | TokenKind::Operator(")" | "]" | "}")
+                )
+            });
+        starts_value && ends_value
     }
 
     /// Arguments up to a `)` or the end, as Python's call grammar orders them.

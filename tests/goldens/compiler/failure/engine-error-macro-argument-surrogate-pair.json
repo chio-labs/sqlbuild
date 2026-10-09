@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' contain the lone surrogate escape '\\ud83d' at line 5, column 29",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 29,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 29
+     },
+     "help": "Python strings hold code points, not UTF-16 surrogate pairs; write the character as one escape: \\U0001F600 instead of the surrogate pair, or write the character itself"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

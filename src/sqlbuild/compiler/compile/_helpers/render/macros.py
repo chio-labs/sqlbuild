@@ -32,7 +32,11 @@ from sqlbuild.compiler.compile.constants import (
     SQL_OPEN_PAREN_TOKEN,
     SQL_QUOTE_TOKENS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroDeclarationLookupError
+from sqlbuild.compiler.compile.exceptions import (
+    CompileInputError,
+    MacroArgumentError,
+    MacroDeclarationLookupError,
+)
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     DeclarationScopeResolver,
@@ -1466,6 +1470,8 @@ def _evaluate_macro_call(
             declarations=declarations,
             stack=stack,
         )
+    except MacroArgumentError as error:
+        raise error.shifted(opening_paren_index + 1) from None
     finally:
         approved: frozenset[SqlResourceRef] = state.facts.close_call_site()
     try:

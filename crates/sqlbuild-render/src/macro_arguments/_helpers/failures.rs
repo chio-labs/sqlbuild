@@ -14,19 +14,25 @@ const UNPACKING_HELP: &str = "Write each argument or key out explicitly";
 const KEYWORD_HELP: &str = "Pass each keyword argument once, after every positional argument";
 const SURROGATE_HELP: &str = "Lone surrogates are not valid Unicode text and cannot be sent to a \
     warehouse; write the character itself or the escape of a valid code point";
+const MISSING_COMMA_HELP: &str = "Separate arguments, and the items of lists, tuples and dicts, \
+    with commas, for example @cents('amount', 2)";
+const SURROGATE_PAIR_HELP: &str = "Python strings hold code points, not UTF-16 surrogate pairs; \
+    write the character as one escape:";
+const NAMED_SEQUENCE_HELP: &str = "Write each character of the sequence with its own \\N{...} \
+    escape, or write the characters themselves";
 
 /// One argument error at a code point position of the argument text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Failure {
     pub(crate) detail: String,
-    pub(crate) help: &'static str,
+    pub(crate) help: String,
     pub(crate) position: usize,
 }
 
-fn failure(detail: &str, help: &'static str, position: usize) -> Failure {
+fn failure(detail: &str, help: &str, position: usize) -> Failure {
     Failure {
         detail: detail.to_owned(),
-        help,
+        help: help.to_owned(),
         position,
     }
 }
@@ -74,6 +80,14 @@ pub(crate) fn typed_reference(function: &str, position: usize) -> Failure {
     )
 }
 
+pub(crate) fn missing_comma(position: usize) -> Failure {
+    failure(
+        "could not be parsed: a comma is missing between arguments",
+        MISSING_COMMA_HELP,
+        position,
+    )
+}
+
 pub(crate) fn unary(position: usize) -> Failure {
     failure(
         "use unary + or - on a value that is not a number",
@@ -98,10 +112,32 @@ pub(crate) fn keyword_order(detail: &str, position: usize) -> Failure {
     failure(detail, KEYWORD_HELP, position)
 }
 
-pub(crate) fn surrogate(escape: &str, position: usize) -> Failure {
+/// A lone surrogate escape; `pair` is the code point a high and low surrogate pair spell.
+pub(crate) fn surrogate(escape: &str, pair: Option<u32>, position: usize) -> Failure {
+    let help: String = pair.map_or_else(
+        || SURROGATE_HELP.to_owned(),
+        |code| {
+            format!(
+                "{SURROGATE_PAIR_HELP} \\U{code:08X} instead of the surrogate pair, or write \
+                 the character itself"
+            )
+        },
+    );
     failure(
         &format!("contain the lone surrogate escape '{escape}'"),
-        SURROGATE_HELP,
+        &help,
+        position,
+    )
+}
+
+/// A `\N{name}` naming a named sequence of several characters.
+pub(crate) fn named_sequence(name: &str, length: usize, position: usize) -> Failure {
+    failure(
+        &format!(
+            "could not be parsed: \\N{{{name}}} names a sequence of {length} characters, and \
+             \\N escapes name one character"
+        ),
+        NAMED_SEQUENCE_HELP,
         position,
     )
 }

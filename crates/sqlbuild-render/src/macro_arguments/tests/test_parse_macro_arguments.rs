@@ -137,6 +137,24 @@ fn given_argument_text_when_parsing_then_values_match_python_literals() {
             expected_plan: "Err(ArgumentError { detail: \"could not be parsed: keyword argument \'x\' is repeated\", help: \"Pass each keyword argument once, after every positional argument\", line: 1, column: 6 })",
         },
         ParseMacroArgumentsTestCase {
+            description: "a missing comma between numbers",
+            text: "1 2",
+            nested: &[],
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents(\'amount\', 2)\", line: 1, column: 3 })",
+        },
+        ParseMacroArgumentsTestCase {
+            description: "a missing comma between list items",
+            text: "[1 'a']",
+            nested: &[],
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents(\'amount\', 2)\", line: 1, column: 4 })",
+        },
+        ParseMacroArgumentsTestCase {
+            description: "a missing comma between nested calls",
+            text: "@inner(1) @inner(2)",
+            nested: &[(0, 9), (10, 19)],
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents(\'amount\', 2)\", line: 1, column: 11 })",
+        },
+        ParseMacroArgumentsTestCase {
             description: "a doubled comma",
             text: "'amount',,",
             nested: &[],
@@ -159,6 +177,18 @@ fn given_argument_text_when_parsing_then_values_match_python_literals() {
             text: "1,\n  x",
             nested: &[],
             expected_plan: "Err(ArgumentError { detail: \"must use only Python literals, nested macro calls, and __ref(), __source(), or __seed() references\", help: \"Macro arguments are Python literals (strings, numbers, True, False, None, lists, tuples and dicts), nested macro calls, and __ref(), __source() or __seed() references; compute anything else inside the macro\", line: 2, column: 3 })",
+        },
+        ParseMacroArgumentsTestCase {
+            description: "a surrogate pair escape suggests the code point escape",
+            text: "'\\ud83d\\ude00'",
+            nested: &[],
+            expected_plan: "Err(ArgumentError { detail: \"contain the lone surrogate escape \'\\\\ud83d\'\", help: \"Python strings hold code points, not UTF-16 surrogate pairs; write the character as one escape: \\\\U0001F600 instead of the surrogate pair, or write the character itself\", line: 1, column: 2 })",
+        },
+        ParseMacroArgumentsTestCase {
+            description: "a named sequence is not one character",
+            text: "'\\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE}'",
+            nested: &[],
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: \\\\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE} names a sequence of 2 characters, and \\\\N escapes name one character\", help: \"Write each character of the sequence with its own \\\\N{...} escape, or write the characters themselves\", line: 1, column: 2 })",
         },
         ParseMacroArgumentsTestCase {
             description: "a lone surrogate escape",

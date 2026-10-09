@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' could not be parsed: a comma is missing between arguments at line 6, column 19",
+     "path": "models/marts/customer_totals.sql",
+     "line": 6,
+     "column": 19,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 6,
+      "column": 19
+     },
+     "help": "Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents('amount', 2)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

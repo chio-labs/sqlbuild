@@ -1164,3 +1164,13 @@ class AuthoredOffsetTestCase:
     contents: str
     marker: str
     expected_line_column: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class UndecodableSecretTestCase:
+    """An env or var value holding a secret-like prefix and invalid text after it."""
+
+    description: str
+    value: object
+    secret: str
+    expected_message: str

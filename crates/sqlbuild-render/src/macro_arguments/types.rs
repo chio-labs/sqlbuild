@@ -2,8 +2,8 @@
 
 /// Unicode lookups the host Python answers, so names match CPython's own tables.
 pub trait ArgumentHost {
-    /// The character `\N{name}` names, or `None` when Python knows no such name.
-    fn character_named(&self, name: &str) -> Option<char>;
+    /// `unicodedata.lookup(name)`, several characters for a named sequence, or `None`.
+    fn character_named(&self, name: &str) -> Option<String>;
     /// The NFKC form of a non-ASCII identifier, or `None` when Python rejects it as one.
     fn identifier(&self, text: &str) -> Option<String>;
 }

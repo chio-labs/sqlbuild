@@ -8,7 +8,15 @@
      "phase": "compile",
      "severity": "error",
      "code": "P001",
-     "message": "Macro arguments in '<project>/models/marts/customer_totals.sql' could not be parsed: a value is missing here at line 1, column 10 of the '@cents' arguments",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' could not be parsed: a value is missing here at line 5, column 37",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 37,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 37
+     },
      "help": "Macro arguments are Python literals (strings, numbers, True, False, None, lists, tuples and dicts), nested macro calls, and __ref(), __source() or __seed() references; compute anything else inside the macro"
     }
    ]
