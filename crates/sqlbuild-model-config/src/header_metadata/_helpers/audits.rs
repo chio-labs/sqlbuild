@@ -66,6 +66,7 @@ fn configured_audit<N: AuthoredNode>(
     let option_site = Site {
         path: site.path,
         label: &option_label,
+        column: site.column,
     };
     let name = optional_text(entry(options, "name"), option_site, "name")?;
     if let Some(name) = &name {
@@ -88,12 +89,12 @@ fn configured_audit<N: AuthoredNode>(
     let minimum_samples = optional_count(
         entry(options, "minimum_samples"),
         option_site,
-        "minimum_samples",
+        (definition, "minimum_samples"),
     )?;
     let evidence_limit = optional_count(
         entry(options, "evidence_limit"),
         option_site,
-        "evidence_limit",
+        (definition, "evidence_limit"),
     )?;
     let arguments: Vec<(N, N)> = options
         .iter()

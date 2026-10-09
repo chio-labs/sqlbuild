@@ -62,6 +62,11 @@ impl<N: AuthoredNode> IncrementalValues<N> {
         let microbatch_strategy = config.string("microbatch_strategy")?;
         let cursor_watermark_mode = config.string("cursor_watermark_mode")?;
         let cursor_grain = config.string("cursor_grain")?;
+        for (key, text) in [("lookback", &lookback), ("batch_size", &batch_size)] {
+            if let Some(text) = text.as_deref().filter(|text| *text != EFFECTIVE_BATCH_SIZE) {
+                config.duration(key, text)?;
+            }
+        }
         Ok(Self {
             strategy,
             cursor,

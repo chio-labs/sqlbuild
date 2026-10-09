@@ -70,7 +70,9 @@ fn check_integer_bound<N: AuthoredNode>(config: &ConfigView<'_, N>, bound: &N) -
             Err(config.error("cursor_start for cursor_type=integer must be an integer"))
         }
         NodeKind::Int { .. } if bound.integer().is_none() => {
-            Err(config.integer_too_large("cursor_start", bound))
+            Err(config.integer_out_of_range("cursor_start", bound, |limit| {
+                format!("cursor_start {limit}")
+            }))
         }
         NodeKind::Int { .. } => Ok(()),
         NodeKind::Str => {

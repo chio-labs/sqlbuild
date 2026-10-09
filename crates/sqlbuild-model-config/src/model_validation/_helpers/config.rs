@@ -118,16 +118,25 @@ impl<'a, N: AuthoredNode> ConfigView<'a, N> {
         })
     }
 
-    /// The error for an integer `key` beyond a signed 64-bit integer.
-    pub(crate) fn integer_too_large(&self, key: &str, value: &N) -> ValidationStop {
+    /// The error for an integer `key` beyond 64 bits; `entry` writes the header entry for a bound.
+    pub(crate) fn integer_out_of_range(
+        &self,
+        key: &str,
+        value: &N,
+        entry: impl Fn(i64) -> String,
+    ) -> ValidationStop {
+        let (comparison, bound) = match value.kind() {
+            NodeKind::Int { negative: true } => ("smaller", i64::MIN),
+            _ => ("larger", i64::MAX),
+        };
         ValidationStop::Error(
             self.config_error(format!(
-                "{key} {} is larger than a 64-bit integer",
+                "{key} {} is {comparison} than a 64-bit integer",
                 value.python_str()
             ))
             .with_help(model_header_help(
-                &format!("use a {key} that fits in 64 bits"),
-                &format!("{key} {}", i64::MAX),
+                &format!("set {key} to a value that fits in 64 bits"),
+                &entry(bound),
             )),
         )
     }

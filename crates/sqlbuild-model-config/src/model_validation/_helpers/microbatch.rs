@@ -67,7 +67,11 @@ fn check_state_config<N: AuthoredNode>(
         let concurrent = match (concurrency.kind(), concurrency.integer()) {
             (NodeKind::Int { negative: false }, Some(value)) if value > 0 => value > 1,
             (NodeKind::Int { negative: false }, None) => {
-                return Err(config.integer_too_large("batch_concurrency", concurrency));
+                return Err(config.integer_out_of_range(
+                    "batch_concurrency",
+                    concurrency,
+                    |limit| format!("batch_concurrency {limit}"),
+                ));
             }
             _ => return Err(config.error("batch_concurrency must be a positive integer")),
         };
@@ -166,15 +170,19 @@ fn check_cursor_inputs<N: AuthoredNode>(
         );
     }
     if let Some(limit) = &values.max_microbatches {
-        if is_big_integer(limit) {
-            return Err(config.integer_too_large("max_microbatches", limit));
-        }
-        if !is_positive_integer(limit) {
+        if !is_positive_integer(limit) && !is_big_positive_integer(limit) {
             return Err(config.error("max_microbatches must be a positive integer"));
         }
         if !watermark {
             return Err(
                 config.error("max_microbatches is only valid with microbatch_strategy=watermark")
+            );
+        }
+        if is_big_positive_integer(limit) {
+            return Err(
+                config.integer_out_of_range("max_microbatches", limit, |bound| {
+                    format!("max_microbatches {bound}")
+                }),
             );
         }
     }
@@ -193,9 +201,9 @@ fn is_positive_integer<N: AuthoredNode>(value: &N) -> bool {
     )
 }
 
-/// Whether the value is an integer beyond a signed 64-bit integer.
-fn is_big_integer<N: AuthoredNode>(value: &N) -> bool {
-    matches!(value.kind(), NodeKind::Int { .. }) && value.integer().is_none()
+/// Whether the value is a positive integer beyond a signed 64-bit integer.
+fn is_big_positive_integer<N: AuthoredNode>(value: &N) -> bool {
+    value.kind() == (NodeKind::Int { negative: false }) && value.integer().is_none()
 }
 
 fn expected_inputs(input_names: &HashSet<&str>) -> String {
@@ -375,10 +383,7 @@ fn microbatch_limit<N: AuthoredNode>(
     ) else {
         return Err(config.error("microbatch_limit requires exactly max_batches and action"));
     };
-    if is_big_integer(max_batches) {
-        return Err(config.integer_too_large("microbatch_limit max_batches", max_batches));
-    }
-    if !is_positive_integer(max_batches) {
+    if !is_positive_integer(max_batches) && !is_big_positive_integer(max_batches) {
         return Err(config.error("microbatch_limit max_batches must be a positive integer"));
     }
     let Some(action) = MICROBATCH_LIMIT_ACTIONS
@@ -394,6 +399,13 @@ fn microbatch_limit<N: AuthoredNode>(
         return Err(
             config.error("microbatch_limit is only valid with microbatch_strategy=watermark")
         );
+    }
+    if is_big_positive_integer(max_batches) {
+        return Err(config.integer_out_of_range(
+            "microbatch_limit max_batches",
+            max_batches,
+            |bound| format!("microbatch_limit (max_batches {bound}, action {action})"),
+        ));
     }
     Ok(Some(MicrobatchLimit {
         max_batches: max_batches.integer(),

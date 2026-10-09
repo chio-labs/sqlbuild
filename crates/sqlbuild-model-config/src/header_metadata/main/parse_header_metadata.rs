@@ -20,6 +20,7 @@ pub fn parse_header_metadata<N: AuthoredNode>(
             Site {
                 path,
                 label: MODEL_LABEL,
+                column: None,
             },
         ),
     }

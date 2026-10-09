@@ -1,5 +1,6 @@
 //! Text checks that agree with Python's `str` methods, and the errors they raise.
 
+use crate::model_validation::constants::SETTING_SNIPPET_INDENT;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::errors::ConfigError;
@@ -10,6 +11,8 @@ use crate::types::{AuthoredNode, NodeKind};
 pub(crate) struct Site<'a> {
     pub(crate) path: &'a str,
     pub(crate) label: &'a str,
+    /// The column whose metadata is read, or `None` at the model level.
+    pub(crate) column: Option<&'a str>,
 }
 
 impl Site<'_> {
@@ -53,17 +56,41 @@ pub(crate) fn optional_bool<N: AuthoredNode>(
     }
 }
 
-/// Read a non-negative non-boolean integer option, or `None`.
+/// Read a non-negative non-boolean integer option of audit `definition` that fits in 64 bits.
 pub(crate) fn optional_count<N: AuthoredNode>(
     node: Option<&N>,
     site: Site<'_>,
-    key: &str,
+    option: (&str, &str),
 ) -> Result<Option<N>, ConfigError> {
-    match node.map(AuthoredNode::kind) {
-        None | Some(NodeKind::Null) => Ok(None),
-        Some(NodeKind::Int { negative: false }) => Ok(node.cloned()),
-        Some(_) => Err(site.error(&format!("'{key}' must be a non-negative integer"))),
+    let (definition, key) = option;
+    match (
+        node.map(AuthoredNode::kind),
+        node.and_then(AuthoredNode::integer),
+    ) {
+        (None | Some(NodeKind::Null), _) => Ok(None),
+        (Some(NodeKind::Int { negative: false }), Some(_)) => Ok(node.cloned()),
+        (Some(NodeKind::Int { negative: false }), None) => Err(site
+            .error(&format!(
+                "'{key}' {} is larger than a 64-bit integer",
+                node.map(AuthoredNode::python_str).unwrap_or_default()
+            ))
+            .with_help(count_help(site, definition, key))),
+        (Some(_), _) => Err(site.error(&format!("'{key}' must be a non-negative integer"))),
     }
+}
+
+/// The MODEL header help that sets audit option `key` to the largest 64-bit integer.
+fn count_help(site: Site<'_>, definition: &str, key: &str) -> String {
+    let audits: String = format!("audits [{definition} ({key} {})]", i64::MAX);
+    let entry: String = site.column.map_or_else(
+        || audits.clone(),
+        |column| format!("columns ({column} ({audits}))"),
+    );
+    let indent = SETTING_SNIPPET_INDENT;
+    format!(
+        "set {key} to a value that fits in 64 bits, add this to the MODEL header:\n{indent}MODEL (\n\
+         {indent}  {entry},\n{indent}  ...\n{indent});"
+    )
 }
 
 /// Return the mapping entry whose key is the string `key`.

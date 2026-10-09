@@ -21,6 +21,7 @@ pub(crate) fn column_mapping<N: AuthoredNode>(
     let site = Site {
         path,
         label: MODEL_LABEL,
+        column: None,
     };
     match node.kind() {
         NodeKind::Null => return Ok(Vec::new()),
@@ -53,6 +54,7 @@ fn column<N: AuthoredNode>(
     let site = Site {
         path,
         label: &label,
+        column: Some(text),
     };
     if metadata.kind() != NodeKind::Map {
         return Err(site.error("metadata must be a mapping"));
