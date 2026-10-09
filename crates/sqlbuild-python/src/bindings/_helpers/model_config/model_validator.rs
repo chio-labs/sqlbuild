@@ -2,10 +2,13 @@
 
 use std::collections::HashSet;
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple, PyTupleMethods};
-use pyo3::{pyclass, pymethods};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::{IntoPyObject, pyclass, pymethods};
+use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_model_config::model_validation::main::validate_model_config::validate_model_config;
+use sqlbuild_model_config::model_validation::main::validate_model_references::validate_model_references;
 use sqlbuild_model_config::model_validation::models::{
     ModelReference, ModelValidationFacts, ProjectValidationFacts, ValidationStop,
 };
@@ -23,8 +26,9 @@ type ResourceNames = (
     HashSet<String>,
 );
 
-/// References, declared schema columns, unmanaged retention and declared table type.
-type ModelFacts<'py> = (Bound<'py, PyTuple>, Option<Vec<String>>, bool, bool);
+/// References as `(kind, name, externally rejected)`, declared schema columns, unmanaged
+/// retention and declared table type.
+type ModelFacts = (Vec<(String, String, bool)>, Option<Vec<String>>, bool, bool);
 
 /// The project facts every model's validation reads, captured once per compile.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -39,10 +43,19 @@ impl NativeModelValidator {
         names: ResourceNames,
         custom_materializations: HashSet<String>,
         microbatch_concurrency: bool,
-    ) -> Self {
+        python: (u8, u8),
+        unicode_version: &str,
+    ) -> PyResult<Self> {
         let (models, seeds, sources, functions, table_functions) = names;
-        Self {
+        let python = python_text(python, unicode_version).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "no Python string semantics for Python {}.{} with Unicode {unicode_version}",
+                python.0, python.1
+            ))
+        })?;
+        Ok(Self {
             project: ProjectValidationFacts {
+                python,
                 custom_materializations,
                 microbatch_concurrency,
                 models,
@@ -51,29 +64,29 @@ impl NativeModelValidator {
                 functions,
                 table_functions,
             },
-        }
+        })
     }
 
-    /// Return `True` when the validators accept, the first error, or `False` to run Python's.
+    /// Return `None` when the validators accept, the first error, or the index of the first
+    /// reference whose external resolver rejected it.
     fn validate(
         &self,
         py: Python<'_>,
         values: Bound<'_, PyDict>,
         model: (String, String, String),
-        facts: ModelFacts<'_>,
+        facts: ModelFacts,
     ) -> PyResult<Py<PyAny>> {
         compiler_guard(|| {
             let (model_name, query_sql, relative_path) = model;
             let (references, declared_columns, retention_unmanaged, table_type_declared) = facts;
-            let references = references
-                .iter()
-                .map(|reference| {
-                    Ok(ModelReference {
-                        kind: reference.getattr("ref_kind")?.extract()?,
-                        name: reference.getattr("ref_name")?.extract()?,
-                    })
+            let references: Vec<ModelReference> = references
+                .into_iter()
+                .map(|(kind, name, externally_rejected)| ModelReference {
+                    kind,
+                    name,
+                    externally_rejected,
                 })
-                .collect::<PyResult<Vec<_>>>()?;
+                .collect();
             let entries: Vec<(PyNode<'_>, PyNode<'_>)> = values
                 .iter()
                 .map(|(key, value)| (PyNode(key), PyNode(value)))
@@ -87,16 +100,51 @@ impl NativeModelValidator {
                 retention_unmanaged,
                 table_type_declared,
             };
-            Ok(
-                match validate_model_config(entries, &self.project, &facts) {
-                    Ok(()) => PyBool::new(py, true).to_owned().into_any().unbind(),
-                    Err(ValidationStop::Defer) => {
-                        PyBool::new(py, false).to_owned().into_any().unbind()
-                    }
-                    Err(ValidationStop::Error(error)) => native_config_error(py, error)?.into_any(),
-                },
-            )
+            match validate_model_config(entries, &self.project, &facts) {
+                Ok(()) => Ok(py.None()),
+                Err(stop) => stop_object(py, stop),
+            }
         })
+    }
+
+    /// Check references alone: `None`, the first error, or a rejected dbt reference's index.
+    fn references(
+        &self,
+        py: Python<'_>,
+        model: (String, String),
+        references: Vec<(String, String, bool)>,
+    ) -> PyResult<Py<PyAny>> {
+        compiler_guard(|| {
+            let (model_name, relative_path) = model;
+            let references: Vec<ModelReference> = references
+                .into_iter()
+                .map(|(kind, name, externally_rejected)| ModelReference {
+                    kind,
+                    name,
+                    externally_rejected,
+                })
+                .collect();
+            let facts = ModelValidationFacts {
+                model_name: &model_name,
+                relative_path: &relative_path,
+                references: &references,
+                declared_columns: None,
+                query_sql: "",
+                retention_unmanaged: false,
+                table_type_declared: false,
+            };
+            match validate_model_references(&self.project, &facts) {
+                Ok(()) => Ok(py.None()),
+                Err(stop) => stop_object(py, stop),
+            }
+        })
+    }
+}
+
+fn stop_object(py: Python<'_>, stop: ValidationStop) -> PyResult<Py<PyAny>> {
+    match stop {
+        ValidationStop::External(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
+        ValidationStop::Error(error) => Ok(native_config_error(py, error)?.into_any()),
     }
 }
 

@@ -874,4 +874,40 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
                 "ISO timestamp: hour must be in 0..23"
             ),
         ),
+        failure_case(
+            name="engine-error-non-ascii-replay-duration",
+            expected_code="P001",
+            files={
+                FAILURE_MART_PATH: _MART_HEADER_START
+                + "  materialized incremental,\n  incremental_strategy append,\n"
+                + '  replay_on_change "bounded-\u0661d",\n);\n\n'
+                + 'SELECT customer_id\nFROM __ref("stg_orders")\n'
+            },
+            expected_message=(
+                "model 'customer_totals': replay_on_change '\u0661d' uses digits outside ASCII"
+            ),
+            expected_help=(
+                "write replay_on_change with ASCII digits 0-9, add this to the MODEL header:\n"
+                "            MODEL (\n              replay_on_change 'bounded-14d',\n"
+                "              ...\n            );"
+            ),
+        ),
+        failure_case(
+            name="engine-error-oversized-retention",
+            expected_code="P001",
+            files={
+                FAILURE_MART_PATH: _MART_HEADER_START
+                + '  materialized table,\n  time_travel_retention "99999999999999999999d",\n);\n\n'
+                + 'SELECT customer_id\nFROM __ref("stg_orders")\n'
+            },
+            expected_message=(
+                "model 'customer_totals': time_travel_retention '99999999999999999999d' has a "
+                "number larger than a 64-bit integer"
+            ),
+            expected_help=(
+                "use a time_travel_retention whose days fit in 64 bits, add this to the MODEL "
+                "header:\n            MODEL (\n              time_travel_retention '7d',\n"
+                "              ...\n            );"
+            ),
+        ),
     )

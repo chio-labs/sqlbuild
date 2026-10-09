@@ -2,5 +2,5 @@
 
 use crate::model_validation::models::ValidationStop;
 
-/// Native validation's outcome: accepted, the first Python error, or a deferral to Python.
+/// Validation's outcome: accepted, or the first problem.
 pub type Check = Result<(), ValidationStop>;

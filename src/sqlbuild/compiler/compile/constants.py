@@ -60,15 +60,11 @@ HOOK_DIRECTORY_NAME: str = "hooks"
 MODEL_DIRECTORY_NAME: str = "models"
 NOT_NULL_AUDIT_NAME: str = "not_null"
 MODEL_AUDIT_OVERRIDE_KEYS: frozenset[str] = frozenset({"by_type", "by_column"})
-MODEL_FULL_REFRESH_CONFIG_KEY: str = "full_refresh"
 CURSOR_INPUTS_CONFIG_KEY: str = "cursor_inputs"
 MIGRATE_FROM_CONFIG_KEY: str = "migrate_from"
 MIGRATE_FORCE_CONFIG_KEY: str = "migrate_force"
 COLUMN_MIGRATE_FROM_KEY: str = "migrate_from"
 MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
-MICROBATCH_LIMIT_MAX_BATCHES_KEY: str = "max_batches"
-MICROBATCH_LIMIT_ACTION_KEY: str = "action"
-WATERMARK_CURSOR_INPUT_BLOCK_KEYS: frozenset[str] = frozenset({"column", "roles"})
 MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
     {
         "description",
@@ -84,13 +80,11 @@ MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
 
 SQL_WILDCARD_TOKEN: str = "*"
 SQL_OPEN_PAREN_TOKEN: str = "("
-SQL_CLOSE_PAREN_TOKEN: str = ")"
 SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","
 SQL_STATEMENT_TERMINATOR_TOKEN: str = ";"
 SQL_SINGLE_QUOTE_TOKEN: str = "'"
 SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
 SQL_QUALIFIER_SEPARATOR_TOKEN: str = "."
-SQL_REFERENCE_NAME_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"'})
 SQL_WITH_KEYWORD: str = "WITH"
 SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
@@ -165,7 +159,6 @@ MIN_SHARED_BINDING_QUERY_MEMBERS: int = 2
 COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH: int = 3
 COMPACT_ANALYSIS_FACT_LENGTH: int = 6
 COMPACT_ANALYSIS_SOURCE_LENGTH: int = 3
-MODEL_SCHEMA_CONFIG_KEY: str = "schema"
 SQL_TEST_SCAN_STORE_FILE_NAME: str = "sql-test-scans.bin"
 RETIRED_FACT_CACHE_DIRECTORY_NAME: str = "facts-v1"
 SQL_TEST_SCAN_STORE_VERSION: str = "sql-test-scan-store-v1"

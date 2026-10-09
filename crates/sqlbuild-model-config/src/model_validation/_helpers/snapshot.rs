@@ -78,7 +78,7 @@ pub(crate) fn check_snapshot<N: AuthoredNode>(
     check_history(config, &values)?;
     check_policies(config, &values)?;
     if let (Some(valid_from), Some(valid_to)) = (&values.valid_from_column, &values.valid_to_column)
-        && same_lowered(valid_from, valid_to)?
+        && same_lowered(valid_from, valid_to)
     {
         return Err(config.error("valid_from_column and valid_to_column must differ"));
     }
@@ -215,7 +215,7 @@ fn check_contract_columns<N: AuthoredNode>(
     require_declared(
         config,
         "unique_key",
-        &string_sequence(values.unique_key.as_ref())?,
+        &string_sequence(values.unique_key.as_ref()),
         &declared,
     )?;
     if let Some(updated_at) = &values.updated_at {
@@ -240,7 +240,7 @@ fn check_contract_columns<N: AuthoredNode>(
     require_declared(
         config,
         "check_columns",
-        &string_sequence(values.check_columns.as_ref())?,
+        &string_sequence(values.check_columns.as_ref()),
         &declared,
     )
 }

@@ -2,15 +2,16 @@
 
 use std::collections::HashSet;
 
+use sqlbuild_core::text::main::python_strip::python_strip;
+
 use crate::model_validation::_helpers::config::{
     ConfigView, has_config_value, one_of, sorted_values, string_sequence,
 };
+use crate::model_validation::_helpers::config::{model_header_help, python_lower};
 use crate::model_validation::_helpers::cursor_bounds::{
     BoundKey, bound_key, check_bound, keys_ordered,
 };
-use crate::model_validation::_helpers::durations::parse_duration;
 use crate::model_validation::_helpers::microbatch::check_incremental_batching;
-use crate::model_validation::_helpers::text::{model_header_help, python_lower, python_strip};
 use crate::model_validation::constants::{
     APPEND_STRATEGY, BOUNDED_REPLAY_PREFIX, CURSOR_GRAIN_BATCH_SIZES, CURSOR_INPUT_KEYS,
     CURSOR_POLICY_DISABLED, CURSOR_TYPES, DELETE_INSERT_STRATEGY, EFFECTIVE_BATCH_SIZE,
@@ -19,7 +20,7 @@ use crate::model_validation::constants::{
     REPLAY_ON_CHANGE_EXAMPLE, REPLAY_ON_CHANGE_VALID_VALUES, TABLE_MATERIALIZATION,
     TIMESTAMP_CURSOR, VIEW_MATERIALIZATION, ZERO_DAY_DURATION,
 };
-use crate::model_validation::models::{ModelValidationFacts, Rejected, ValidationStop};
+use crate::model_validation::models::{ModelValidationFacts, ValidationStop};
 use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
 
@@ -133,7 +134,7 @@ fn check_core<N: AuthoredNode>(config: &ConfigView<'_, N>, values: &IncrementalV
         (REPLAY_ON_CHANGE_KEY, REPLAY_ON_CHANGE_EXAMPLE),
     ] {
         if let Some(value) = config.get(key)
-            && let Some(problem) = change_policy_problem(key, value)?
+            && let Some(problem) = change_policy_problem(config, key, value)?
         {
             let help =
                 model_header_help(&format!("use a valid {key}"), &format!("{key} {example}"));
@@ -157,9 +158,10 @@ fn check_core<N: AuthoredNode>(config: &ConfigView<'_, N>, values: &IncrementalV
 
 /// Return `change_policy_problem`: why a change-policy value is invalid, or `None`.
 fn change_policy_problem<N: AuthoredNode>(
+    config: &ConfigView<'_, N>,
     key: &str,
     value: &N,
-) -> Result<Option<String>, Rejected> {
+) -> Result<Option<String>, ValidationStop> {
     let valid = if key == ON_SCHEMA_CHANGE_KEY {
         sorted_values(&ON_SCHEMA_CHANGE_POLICIES)
     } else {
@@ -170,7 +172,7 @@ fn change_policy_problem<N: AuthoredNode>(
             "{key} must be a string; valid values: {valid}"
         )));
     }
-    let text = value.text().ok_or(Rejected)?;
+    let text: String = value.text().unwrap_or_default();
     if key == ON_SCHEMA_CHANGE_KEY && one_of(&text, &ON_SCHEMA_CHANGE_POLICIES) {
         return Ok(None);
     }
@@ -179,8 +181,11 @@ fn change_policy_problem<N: AuthoredNode>(
             return Ok(None);
         }
         if let Some(rest) = text.strip_prefix(BOUNDED_REPLAY_PREFIX) {
-            let duration = python_strip(rest)?;
-            if parse_duration(duration)?.is_some() {
+            let duration = python_strip(rest);
+            if config
+                .duration_written_as(key, duration, REPLAY_ON_CHANGE_EXAMPLE)?
+                .is_some()
+            {
                 return Ok(None);
             }
             return Ok(Some(format!(
@@ -256,7 +261,9 @@ fn check_cursor_rules<N: AuthoredNode>(
     {
         let start_key = ordering_key(config, start, cursor_type, "cursor_start")?;
         let end_key = ordering_key(config, end, cursor_type, "cursor_end")?;
-        if !keys_ordered(start_key, end_key, cursor_type)? {
+        if let (Some(start_key), Some(end_key)) = (start_key, end_key)
+            && !keys_ordered(&start_key, &end_key)
+        {
             return Err(config.error("cursor_start must be before exclusive cursor_end"));
         }
     }
@@ -268,11 +275,10 @@ fn ordering_key<N: AuthoredNode>(
     bound: &N,
     cursor_type: &str,
     key: &str,
-) -> Result<i128, ValidationStop> {
-    match bound_key(bound, cursor_type)? {
-        BoundKey::Key(value) => Ok(value),
-        BoundKey::Overflow(utc_value) => {
-            let text = bound.text().ok_or(Rejected)?;
+) -> Result<Option<BoundKey>, ValidationStop> {
+    match bound_key(config, bound, cursor_type) {
+        Some(BoundKey::Overflow(utc_value)) => {
+            let text = bound.python_str();
             let help = model_header_help(
                 &format!("keep {key} within years 1-9999 in UTC"),
                 &format!("{key} '{utc_value}'"),
@@ -285,6 +291,7 @@ fn ordering_key<N: AuthoredNode>(
                     .with_help(help),
             ))
         }
+        bound_key => Ok(bound_key),
     }
 }
 
@@ -319,7 +326,7 @@ fn check_cursor_safety<N: AuthoredNode>(
     }
     for key in CURSOR_SAFETY_DURATION_KEYS {
         if let Some(value) = config.get(key)
-            && !safety_duration_check(value)?
+            && !safety_duration_check(config, key, value)?
         {
             return Err(config.error(format!("{key} must be a duration or 'disabled'")));
         }
@@ -328,28 +335,27 @@ fn check_cursor_safety<N: AuthoredNode>(
         let Some(value) = config.get(key) else {
             continue;
         };
-        let valid = match value.kind() {
-            NodeKind::Str => FUTURE_CURSOR_ACTIONS
-                .iter()
-                .any(|action| value.is_text(action)),
-            NodeKind::Int { .. } | NodeKind::Bool(_) => false,
-            _ => return Err(ValidationStop::Defer),
-        };
-        if !valid {
+        if !FUTURE_CURSOR_ACTIONS
+            .iter()
+            .any(|action| value.is_text(action))
+        {
             return Err(config.error(format!("{key} must be one of: cap, error")));
         }
     }
     Ok(())
 }
 
-fn safety_duration_check<N: AuthoredNode>(value: &N) -> Result<bool, Rejected> {
-    if value.kind() != NodeKind::Str {
+fn safety_duration_check<N: AuthoredNode>(
+    config: &ConfigView<'_, N>,
+    key: &str,
+    value: &N,
+) -> Result<bool, ValidationStop> {
+    let Some(text) = value.text() else {
         return Ok(false);
-    }
-    let text = value.text().ok_or(Rejected)?;
+    };
     Ok(text == CURSOR_POLICY_DISABLED
         || text == ZERO_DAY_DURATION
-        || parse_duration(&text)?.is_some())
+        || config.duration(key, &text)?.is_some())
 }
 
 fn check_write_strategy<N: AuthoredNode>(
@@ -368,22 +374,19 @@ fn check_write_strategy<N: AuthoredNode>(
         if !is_non_empty_string_list(excluded) {
             return Err(config.error("merge_exclude_columns must be a list of non-empty strings"));
         }
-        let excluded = string_sequence(Some(excluded))?;
+        let excluded = string_sequence(Some(excluded));
         if strategy != Some(MERGE_STRATEGY) {
             return Err(config.error("merge_exclude_columns requires incremental_strategy=merge"));
         }
-        let lowered = excluded
-            .iter()
-            .map(|column| python_lower(column))
-            .collect::<Result<Vec<String>, Rejected>>()?;
+        let lowered: Vec<String> = excluded.iter().map(|column| python_lower(column)).collect();
         let distinct: HashSet<&String> = lowered.iter().collect();
         if distinct.len() != lowered.len() {
             return Err(config.error("merge_exclude_columns contains duplicate columns"));
         }
-        let unique_columns = string_sequence(values.unique_key.as_ref())?
+        let unique_columns: HashSet<String> = string_sequence(values.unique_key.as_ref())
             .iter()
             .map(|column| python_lower(column))
-            .collect::<Result<HashSet<String>, Rejected>>()?;
+            .collect();
         let overlap: Vec<&str> = excluded
             .iter()
             .zip(&lowered)
@@ -425,13 +428,13 @@ fn check_contract_columns<N: AuthoredNode>(
     require_declared(
         config,
         "unique_key",
-        &string_sequence(values.unique_key.as_ref())?,
+        &string_sequence(values.unique_key.as_ref()),
         &declared,
     )?;
     require_declared(
         config,
         "merge_exclude_columns",
-        &string_sequence(values.merge_exclude_columns.as_ref())?,
+        &string_sequence(values.merge_exclude_columns.as_ref()),
         &declared,
     )
 }

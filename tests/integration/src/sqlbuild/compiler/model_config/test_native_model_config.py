@@ -8,15 +8,11 @@ from pathlib import Path
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.model_config._test_types import (
-    ConfigPresenceParityTestCase,
     HeaderMetadataParityTestCase,
     ModelConfigTierTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
-    ConfigPresenceParity,
     HeaderMetadataParity,
-    config_presence_parity,
-    generated_config_values,
     generated_header_metadata,
     header_metadata_parity,
     model_config_engine_outcome,
@@ -55,41 +51,12 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_python
 @pytest.mark.parametrize(
     "test_case",
     [
-        ConfigPresenceParityTestCase(
-            description="seeded nested config with templates and macro calls",
-            seed=20261008,
-            count=4000,
-            expected_minimum_present=400,
-            expected_minimum_deferred=20,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_config_when_scanning_presence_then_native_matches_python_or_defers(
-    test_case: ConfigPresenceParityTestCase,
-) -> None:
-    parity: ConfigPresenceParity = config_presence_parity(
-        values=generated_config_values(rng=random.Random(test_case.seed), count=test_case.count)
-    )
-
-    assert (
-        parity.mismatches,
-        parity.present >= test_case.expected_minimum_present,
-        parity.deferred >= test_case.expected_minimum_deferred,
-    ) == ([], True, True), (parity.present, parity.deferred)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         ModelConfigTierTestCase(
             description="python oracle",
             engine="python",
             expected_native_calls={
-                "parse_model_header_metadata": 0,
-                "expand_config_templates": 14,
-                "config_contains_template": 0,
-                "config_contains_macro_call": 0,
+                "parse_model_header_metadata": 1,
+                "expand_config_templates": 1,
             },
         ),
         ModelConfigTierTestCase(
@@ -97,9 +64,7 @@ def test_given_generated_config_when_scanning_presence_then_native_matches_pytho
             engine="native",
             expected_native_calls={
                 "parse_model_header_metadata": 1,
-                "expand_config_templates": 8,
-                "config_contains_template": 0,
-                "config_contains_macro_call": 0,
+                "expand_config_templates": 1,
             },
         ),
         ModelConfigTierTestCase(
@@ -107,15 +72,13 @@ def test_given_generated_config_when_scanning_presence_then_native_matches_pytho
             engine="native-preview",
             expected_native_calls={
                 "parse_model_header_metadata": 1,
-                "expand_config_templates": 8,
-                "config_contains_template": 0,
-                "config_contains_macro_call": 0,
+                "expand_config_templates": 1,
             },
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_tier_when_building_model_inputs_then_native_config_runs_only_in_native_engines(
+def test_given_engine_tier_when_building_model_inputs_then_every_engine_runs_native_config(
     test_case: ModelConfigTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls, config = model_config_engine_outcome(

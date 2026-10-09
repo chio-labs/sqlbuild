@@ -2,11 +2,14 @@
 
 use std::collections::BTreeSet;
 
+use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::models::PythonText;
+
+use crate::model_validation::_helpers::config::python_lower;
 use crate::model_validation::_helpers::config::{
-    ConfigView, one_of, python_repr, python_str, sorted_values, text_if_string,
+    ConfigView, one_of, sorted_values, text_if_string,
 };
-use crate::model_validation::_helpers::durations::parse_duration;
-use crate::model_validation::_helpers::text::{python_lower, python_strip};
 use crate::model_validation::constants::{
     BUILTIN_MATERIALIZATIONS, CONTRACT_POLICIES, CUSTOM_MATERIALIZATION_DISALLOWED_KEYS,
     HISTORY_MATERIALIZATIONS, INCREMENTAL_MATERIALIZATION, INCREMENTAL_ONLY_KEYS,
@@ -14,7 +17,7 @@ use crate::model_validation::constants::{
     TABLE_BACKED_MATERIALIZATIONS, VIEW_MATERIALIZATION,
 };
 use crate::model_validation::models::{
-    ModelValidationFacts, ProjectValidationFacts, Rejected, ValidationStop,
+    ModelValidationFacts, ProjectValidationFacts, ValidationStop,
 };
 use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
@@ -62,7 +65,7 @@ pub(crate) fn check_contract<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Che
     {
         return Ok(());
     }
-    let contract = contract.text().ok_or(Rejected)?;
+    let contract: String = contract.text().unwrap_or_default();
     Err(config.error(format!(
         "unknown contract '{contract}'; valid values: {}",
         sorted_values(&CONTRACT_POLICIES)
@@ -173,14 +176,13 @@ pub(crate) fn check_migration<N: AuthoredNode>(
     let Some(migrate_from) = migrate_from else {
         return Err(config.error("migrate_force requires migrate_from"));
     };
-    let origin = match text_if_string(migrate_from)? {
-        Some(text) => python_strip(&text)?.to_owned(),
-        None => String::new(),
-    };
+    let origin: String = text_if_string(migrate_from)
+        .map(|text| python_strip(&text).to_owned())
+        .unwrap_or_default();
     if origin.is_empty() {
         return Err(config.error("migrate_from must be a model name or a qualified relation"));
     }
-    if python_lower(&origin)? == python_lower(facts.model_name)? {
+    if python_lower(&origin) == python_lower(facts.model_name) {
         return Err(config.error("migrate_from cannot name the model itself"));
     }
     match migrate_force.map(AuthoredNode::kind) {
@@ -196,12 +198,14 @@ fn check_old_name_view<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
     if value.kind() == NodeKind::Bool(false) {
         return Ok(());
     }
-    if let Some(text) = text_if_string(value)?
-        && parse_duration(python_strip(&text)?)?.is_some()
+    if let Some(text) = text_if_string(value)
+        && config
+            .duration(OLD_NAME_VIEW_KEY, python_strip(&text))?
+            .is_some()
     {
         return Ok(());
     }
-    let shown = python_repr(value)?;
+    let shown: String = value.python_repr();
     Err(ValidationStop::Error(
         config
             .config_error(format!(
@@ -221,7 +225,7 @@ pub(crate) fn check_placeholders<N: AuthoredNode>(
     let custom = materialized
         .as_ref()
         .is_some_and(|value| project.custom_materializations.contains(value));
-    let used = placeholder_names(facts.query_sql)?;
+    let used = placeholder_names(project.python, facts.query_sql);
     let declared = config.get("placeholders");
     if !custom && !used.is_empty() {
         return Err(config.error("@@@placeholders are only allowed on custom materializations"));
@@ -236,8 +240,8 @@ pub(crate) fn check_placeholders<N: AuthoredNode>(
         Some(value) if value.kind() == NodeKind::Map => value
             .entries()
             .iter()
-            .map(|(key, _)| python_str(key))
-            .collect::<Result<BTreeSet<String>, Rejected>>()?,
+            .map(|(key, _)| key.python_str())
+            .collect::<BTreeSet<String>>(),
         _ => BTreeSet::new(),
     };
     let missing: Vec<&str> = used
@@ -263,23 +267,16 @@ pub(crate) fn check_placeholders<N: AuthoredNode>(
     Ok(())
 }
 
-/// Return the names `re.findall(r"@@@(\w+)", sql)` finds, rejecting non-ASCII word candidates.
-fn placeholder_names(sql: &str) -> Result<BTreeSet<String>, Rejected> {
+/// Return the names `re.findall(r"@@@(\w+)", sql)` finds; `\w` is Python's word class.
+fn placeholder_names(python: PythonText, sql: &str) -> BTreeSet<String> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     let mut rest = sql;
     while let Some(start) = rest.find(PLACEHOLDER_SIGIL) {
         let after = &rest[start + PLACEHOLDER_SIGIL.len()..];
-        let length = after
-            .bytes()
-            .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-            .count();
-        if after[length..]
-            .chars()
-            .next()
-            .is_some_and(|next| !next.is_ascii())
-        {
-            return Err(Rejected);
-        }
+        let length: usize = after
+            .char_indices()
+            .find(|(_, character)| !is_python_word(python, *character))
+            .map_or(after.len(), |(at, _)| at);
         if length == 0 {
             rest = &rest[start + 1..];
             continue;
@@ -287,5 +284,5 @@ fn placeholder_names(sql: &str) -> Result<BTreeSet<String>, Rejected> {
         names.insert(after[..length].to_owned());
         rest = &after[length..];
     }
-    Ok(names)
+    names
 }

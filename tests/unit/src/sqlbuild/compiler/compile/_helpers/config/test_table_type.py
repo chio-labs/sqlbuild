@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.config.model_validation import validate_table_type
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_table_type
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
@@ -18,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
     TableTypeResolutionTestCase,
     TableTypeValidationErrorTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import validate_natively
 
 
 @pytest.mark.parametrize(
@@ -176,7 +176,11 @@ def test_given_non_table_materialization_when_validating_table_type_then_rejects
     )
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_table_type(config=config, model_name="orders")
+        validate_natively(
+            config=config,
+            model_name="orders",
+            custom_materialization_names=frozenset({test_case.materialized}),
+        )
 
 
 if __name__ == "__main__":

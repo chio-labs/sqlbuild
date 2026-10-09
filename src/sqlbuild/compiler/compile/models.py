@@ -69,9 +69,7 @@ from sqlbuild.compiler.scopes.models import (
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
     LocalConfig,
-    MaterializationDefaultsConfig,
     ProjectConfig,
     ResolvedTableType,
     ResolvedTimeTravelRetention,
@@ -1607,31 +1605,6 @@ class NativeCompactAnalysis:
 
 
 @dataclass(frozen=True)
-class IdentityPresenceCache:
-    """Identity-safe memoization for recursive authored configuration scans."""
-
-    _values: dict[int, tuple[object, bool]] = field(default_factory=dict)
-
-    def get(self, value: object) -> bool | None:
-        cached: tuple[object, bool] | None = self._values.get(id(value))
-        if cached is None or cached[0] is not value:
-            return None
-        return cached[1]
-
-    def put(self, *, value: object, result: bool) -> None:
-        self._values[id(value)] = (value, result)
-
-
-@dataclass(frozen=True)
-class ModelConfigScanCache:
-    """Memoized recursive scans reused while attaching model configuration."""
-
-    template_presence: IdentityPresenceCache = field(default_factory=IdentityPresenceCache)
-    macro_presence: IdentityPresenceCache = field(default_factory=IdentityPresenceCache)
-    native: bool = False
-
-
-@dataclass(frozen=True)
 class NativeModelConfigSession:
     """The native config builder, validator, and inherited storage policies for one compile."""
 
@@ -1678,29 +1651,12 @@ class ModelValidationRequest:
 
 @dataclass(frozen=True)
 class ModelValidatorContext:
-    """The project facts the model validators read, and the native session in preview."""
+    """The project facts the model validators read, and the native config session."""
 
     names: ModelResourceNames
     settings: SettingsConfig
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
-    native_config: NativeModelConfigSession | None
-
-
-@dataclass(frozen=True)
-class ModelConfigBuildRequest:
-    """Cohesive inputs for one effective model-configuration build."""
-
-    defaults: DefaultsConfig
-    path_defaults: dict[str, dict[str, object]]
-    matched_path_default: str | None
-    model_header_values: dict[str, object]
-    effective_vars: dict[str, object]
-    target_config: TargetConfig | None
-    model_name: str
-    effective_target_name: str | None
-    run_id: str
-    materialization_defaults: MaterializationDefaultsConfig | None = None
-    scan_cache: ModelConfigScanCache | None = None
+    native_config: NativeModelConfigSession
 
 
 @dataclass(frozen=True)

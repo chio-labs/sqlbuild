@@ -175,8 +175,6 @@ def parse_model_header_metadata(
 ) -> list[
     tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None] | str
 ]: ...
-def config_contains_template(value: object) -> bool | None: ...
-def config_contains_macro_call(value: object) -> bool | None: ...
 def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],
@@ -193,6 +191,7 @@ class NativeModelConfigBuilder:
         sources: tuple[dict[str, object], object],
         run: tuple[str | None, str],
         target_namespace: tuple[str | None, str | None] | None,
+        python: tuple[tuple[int, int], str],
     ) -> None: ...
     def path_default(self, model_path: str) -> str | NativeConfigError | None: ...
     def build(
@@ -206,7 +205,6 @@ class NativeModelConfigBuilder:
             list[tuple[str, str]],
         ]
         | NativeConfigError
-        | None
     ): ...
 
 class NativeModelValidator:
@@ -215,13 +213,18 @@ class NativeModelValidator:
         names: tuple[set[str], set[str], set[str], set[str], set[str]],
         custom_materializations: set[str],
         microbatch_concurrency: bool,
+        python: tuple[int, int],
+        unicode_version: str,
     ) -> None: ...
     def validate(
         self,
         values: dict[str, object],
         model: tuple[str, str, str],
-        facts: tuple[tuple[object, ...], list[str] | None, bool, bool],
-    ) -> bool | NativeConfigError: ...
+        facts: tuple[list[tuple[str, str, bool]], list[str] | None, bool, bool],
+    ) -> int | NativeConfigError | None: ...
+    def references(
+        self, model: tuple[str, str], references: list[tuple[str, str, bool]]
+    ) -> int | NativeConfigError | None: ...
 
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...

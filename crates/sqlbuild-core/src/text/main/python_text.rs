@@ -27,5 +27,6 @@ pub fn python_text(python_version: (u8, u8), unicode_version: &str) -> Option<Py
         alpha_ranges,
         decimal_ranges,
         cleandoc_margin,
+        minor_version: python_version.1,
     })
 }

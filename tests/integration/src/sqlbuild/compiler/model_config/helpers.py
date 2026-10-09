@@ -14,10 +14,6 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
-from sqlbuild.compiler.compile._helpers.render.templating import (
-    contains_template_data,
-)
-from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
@@ -25,12 +21,6 @@ from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
-    native_config_contains_macro_call,
-)
-from sqlbuild.compiler.model_config.main._native_config_contains_template import (
-    native_config_contains_template,
-)
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
@@ -99,9 +89,10 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
 NATIVE_MODEL_CONFIG_ENTRIES: tuple[str, ...] = (
     "parse_model_header_metadata",
     "expand_config_templates",
-    "config_contains_template",
-    "config_contains_macro_call",
 )
+_NATIVE_ENTRIES: dict[str, Callable[..., object]] = {
+    name: getattr(_native, name) for name in NATIVE_MODEL_CONFIG_ENTRIES
+}
 MODEL_CONFIG_PROJECT: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
@@ -135,25 +126,10 @@ class HeaderMetadataParity:
     unsupported: int
 
 
-@dataclass(frozen=True)
-class ConfigPresenceParity:
-    """How the native presence scans compared with Python's over one corpus."""
-
-    mismatches: list[tuple[object, object, object]]
-    present: int
-    deferred: int
-
-
 def generated_header_metadata(*, rng: random.Random, count: int) -> list[tuple[object, object]]:
     """Return seeded `(columns, audits)` header values mixing valid and invalid shapes."""
 
     return [(_columns(rng=rng), _audit_list(rng=rng)) for _ in range(count)]
-
-
-def generated_config_values(*, rng: random.Random, count: int) -> list[object]:
-    """Return seeded nested config values holding templates, macro calls and plain text."""
-
-    return [_config_value(rng=rng, depth=0) for _ in range(count)]
 
 
 def model_config_engine_outcome(
@@ -207,7 +183,7 @@ def error_shape(error: Exception) -> tuple[object, ...]:
 
 
 def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
-    entry: Callable[..., object] = getattr(_native, name)
+    entry: Callable[..., object] = _NATIVE_ENTRIES[name]
 
     def counted(*args: object) -> object:
         calls[name] += 1
@@ -244,62 +220,6 @@ def header_metadata_parity(*, headers: list[tuple[object, object]]) -> HeaderMet
         rejected=sum(_native_error(metadata) is not None for metadata in native.values()),
         unsupported=len(model_files) - len(compared),
     )
-
-
-def config_presence_parity(*, values: list[object]) -> ConfigPresenceParity:
-    """Compare the native template and macro scans with Python's wherever they answer."""
-
-    native: list[tuple[bool | None, bool | None]] = [
-        (native_config_contains_template(value), native_config_contains_macro_call(value))
-        for value in values
-    ]
-    python: list[tuple[bool, bool]] = [
-        (contains_template_data(value), _python_contains_macro(value)) for value in values
-    ]
-    answered: list[tuple[object, tuple[bool, bool], tuple[bool | None, bool | None]]] = list(
-        compress(
-            zip(values, python, native, strict=True),
-            [None not in answer for answer in native],
-        )
-    )
-    return ConfigPresenceParity(
-        mismatches=mismatches(
-            inputs=[value for value, _, _ in answered],
-            expected=[expected for _, expected, _ in answered],
-            actual=[actual for _, _, actual in answered],
-        ),
-        present=sum(any(expected) for _, expected, _ in answered),
-        deferred=len(values) - len(answered),
-    )
-
-
-def _python_contains_macro(value: object) -> bool:
-    return _MACRO_SCANS.get(type(value), _absent)(value)
-
-
-def _absent(value: object) -> bool:
-    del value
-    return False
-
-
-def _string_contains_macro(value: object) -> bool:
-    return MACRO_CALL_PATTERN.search(str(value)) is not None
-
-
-def _mapping_contains_macro(value: object) -> bool:
-    return any(_python_contains_macro(item) for item in cast(dict[object, object], value).values())
-
-
-def _sequence_contains_macro(value: object) -> bool:
-    return any(_python_contains_macro(item) for item in cast(tuple[object, ...], value))
-
-
-_MACRO_SCANS: dict[type, Callable[[object], bool]] = {
-    str: _string_contains_macro,
-    dict: _mapping_contains_macro,
-    list: _sequence_contains_macro,
-    tuple: _sequence_contains_macro,
-}
 
 
 def _python_metadata(*, model_file: DiscoveredSqlModelFile) -> object:
@@ -481,16 +401,3 @@ def _audit(*, rng: random.Random) -> object:
         ),
         weights=(35, 10, 5, 50),
     )[0]
-
-
-def _config_value(*, rng: random.Random, depth: int) -> object:
-    factories: tuple[Callable[[], object], ...] = (
-        lambda: rng.choice(_TEXTS),
-        lambda: [_config_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 3))],
-        lambda: tuple(_config_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 3))),
-        lambda: {
-            rng.choice(("schema", "${key}", "tags", 1)): _config_value(rng=rng, depth=depth + 1)
-            for _ in range(rng.randint(0, 3))
-        },
-    )
-    return rng.choices(factories, weights=(50 + 1000 * (depth > 2), 20, 10, 20))[0]()

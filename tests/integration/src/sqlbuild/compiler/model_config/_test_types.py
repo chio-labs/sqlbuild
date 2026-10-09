@@ -18,17 +18,6 @@ class HeaderMetadataParityTestCase:
 
 
 @dataclass(frozen=True)
-class ConfigPresenceParityTestCase:
-    """Seeded config values scanned for templates and macro calls natively and in Python."""
-
-    description: str
-    seed: int
-    count: int
-    expected_minimum_present: int
-    expected_minimum_deferred: int
-
-
-@dataclass(frozen=True)
 class ModelConfigTierTestCase:
     """One compiler engine and how often its model loop calls each native model config entry."""
 

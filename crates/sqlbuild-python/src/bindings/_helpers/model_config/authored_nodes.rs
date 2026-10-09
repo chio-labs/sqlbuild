@@ -50,14 +50,12 @@ impl AuthoredNode for PyNode<'_> {
         self.with_text(str::to_owned)
     }
 
+    /// Read a string's text; lone surrogates, rejected where text enters a compile, read as U+FFFD.
     fn with_text<R>(&self, read: impl FnOnce(&str) -> R) -> Option<R> {
-        if let Ok(value) = self.0.downcast::<PyString>()
-            && let Ok(text) = value.to_str()
-        {
-            Some(read(text))
-        } else {
-            None
-        }
+        self.0
+            .downcast::<PyString>()
+            .ok()
+            .map(|value| read(&value.to_string_lossy()))
     }
 
     fn is_text(&self, text: &str) -> bool {
@@ -80,6 +78,28 @@ impl AuthoredNode for PyNode<'_> {
         } else {
             Vec::new()
         }
+    }
+
+    fn python_str(&self) -> String {
+        self.0
+            .str()
+            .map(|text| text.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
+    fn python_repr(&self) -> String {
+        self.0
+            .repr()
+            .map(|text| text.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
+    fn is_date_like(&self) -> bool {
+        let py = self.0.py();
+        py.import("datetime")
+            .and_then(|module| module.getattr("date"))
+            .and_then(|date| self.0.is_instance(&date))
+            .unwrap_or(false)
     }
 }
 

@@ -2,11 +2,15 @@
 
 use std::collections::HashSet;
 
+use sqlbuild_core::text::models::PythonText;
+
 use crate::errors::ConfigError;
 
 /// Project-wide facts every model's validation reads.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ProjectValidationFacts {
+    /// The Python string and library semantics the validators follow.
+    pub python: PythonText,
     /// Discovered custom materialization names.
     pub custom_materializations: HashSet<String>,
     /// Whether the project enables concurrent microbatches.
@@ -28,6 +32,8 @@ pub struct ProjectValidationFacts {
 pub struct ModelReference {
     pub kind: String,
     pub name: String,
+    /// For a dbt reference, whether the external resolver rejects it.
+    pub externally_rejected: bool,
 }
 
 /// One model's facts beyond its config values.
@@ -48,23 +54,13 @@ pub struct ModelValidationFacts<'a> {
     pub table_type_declared: bool,
 }
 
-/// Why native validation cannot decide a value: Python must run and decide.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Rejected;
-
-/// Why native validation stops: Python must decide, or the exact error the validators raise.
+/// Why validation stops at the first problem.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationStop {
-    /// The config holds a value only Python can judge; the Python validators run.
-    Defer,
-    /// The first error the Python validators raise.
+    /// The first config error.
     Error(ConfigError),
-}
-
-impl From<Rejected> for ValidationStop {
-    fn from(_: Rejected) -> Self {
-        Self::Defer
-    }
+    /// The reference at this index names a dbt model the external resolver rejected.
+    External(usize),
 }
 
 /// The header's `time_travel_retention`, applied over the inherited policy.

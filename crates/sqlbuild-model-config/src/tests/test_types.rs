@@ -11,6 +11,10 @@ pub(crate) enum Value {
     Map(Vec<(Value, Value)>),
     Tuple(Vec<Value>),
     Float,
+    /// A `datetime.date` or `datetime.datetime`, by its `str()`.
+    Date(&'static str),
+    /// An integer beyond `i64`, by its decimal digits.
+    BigInt(&'static str),
 }
 
 impl AuthoredNode for Value {
@@ -25,7 +29,10 @@ impl AuthoredNode for Value {
             Self::List(_) => NodeKind::List,
             Self::Map(_) => NodeKind::Map,
             Self::Tuple(_) => NodeKind::Tuple,
-            Self::Float => NodeKind::Other,
+            Self::Float | Self::Date(_) => NodeKind::Other,
+            Self::BigInt(digits) => NodeKind::Int {
+                negative: digits.starts_with('-'),
+            },
         }
     }
 
@@ -67,4 +74,45 @@ impl AuthoredNode for Value {
             _ => Vec::new(),
         }
     }
+
+    fn python_str(&self) -> String {
+        match self {
+            Self::Null => "None".to_owned(),
+            Self::Bool(flag) => if *flag { "True" } else { "False" }.to_owned(),
+            Self::Int(value) => value.to_string(),
+            Self::Str(text) | Self::Date(text) | Self::BigInt(text) => (*text).to_owned(),
+            Self::Float => "0.5".to_owned(),
+            Self::List(_) | Self::Map(_) | Self::Tuple(_) => self.python_repr(),
+        }
+    }
+
+    fn python_repr(&self) -> String {
+        match self {
+            Self::Str(text) => format!("'{text}'"),
+            Self::Date(text) => format!("datetime.date({text})"),
+            Self::List(items) => format!("[{}]", reprs(items)),
+            Self::Tuple(items) => format!("({})", reprs(items)),
+            Self::Map(entries) => format!(
+                "{{{}}}",
+                entries
+                    .iter()
+                    .map(|(key, value)| format!("{}: {}", key.python_repr(), value.python_repr()))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            _ => self.python_str(),
+        }
+    }
+
+    fn is_date_like(&self) -> bool {
+        matches!(self, Self::Date(_))
+    }
+}
+
+fn reprs(items: &[Value]) -> String {
+    items
+        .iter()
+        .map(AuthoredNode::python_repr)
+        .collect::<Vec<String>>()
+        .join(", ")
 }

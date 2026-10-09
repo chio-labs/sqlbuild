@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'customer_totals': replay_on_change '١d' uses digits outside ASCII",
+     "help": "write replay_on_change with ASCII digits 0-9, add this to the MODEL header:\n            MODEL (\n              replay_on_change 'bounded-14d',\n              ...\n            );"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

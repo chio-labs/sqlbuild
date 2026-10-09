@@ -15,20 +15,16 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     _model_sql_validation_gate,
     _resolve_model_schema,
-    _validate_model_header_tags,
     build_layered_model_values,
     build_model_header_schema_entry,
     build_native_model_config,
-    contains_config_macro_calls,
-    contains_config_templates,
-    find_matching_path_default,
     find_schema_model_match,
     native_model_config_session,
     native_path_default,
     strip_model_header_metadata_from_config,
     validate_declared_schema_models_are_attached,
     validate_model_config,
-    validate_no_macros_in_config_value,
+    validate_model_references,
 )
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
@@ -36,12 +32,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_seed_names,
     build_known_source_names,
     build_known_table_function_names,
-    validate_model_references,
 )
-from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
-    validate_preserved_logical_namespace,
-)
-from sqlbuild.compiler.compile._helpers.config.table_type import resolve_storage_policies
 from sqlbuild.compiler.compile._helpers.diagnostics.sql_analysis_opt_outs import (
     rejected_sql_analysis_opt_out,
 )
@@ -59,11 +50,7 @@ from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_e
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
-    apply_environment_database_schema_overrides,
     build_model_context_values,
-    resolve_chained_model_context_templates,
-    resolve_early_model_templates,
-    resolve_target_context_templates,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
@@ -92,8 +79,6 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 )
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
-    MODEL_FULL_REFRESH_CONFIG_KEY,
-    MODEL_SCHEMA_CONFIG_KEY,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
@@ -113,8 +98,6 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
     MacroExpansionResult,
     MappedOffset,
-    ModelConfigBuildRequest,
-    ModelConfigScanCache,
     ModelHeaderColumnCache,
     ModelInputBuildContext,
     ModelResourceNames,
@@ -157,7 +140,6 @@ from sqlbuild.compiler.model_loop.main._scan_native_declaration_references impor
     scan_native_declaration_references,
 )
 from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -178,7 +160,6 @@ from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
-    MaterializationDefaultsConfig,
     ProjectConfig,
     SchemaColumn,
     SchemaModelEntry,
@@ -284,7 +265,6 @@ class _ModelInputLoop:
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...]
     model_header_column_cache: ModelHeaderColumnCache
-    config_scan_cache: ModelConfigScanCache
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
     native_header_metadata: dict[Path, NativeHeaderMetadata]
@@ -493,7 +473,6 @@ def _build_model_inputs(
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
-    native_model_config: bool = native_stage_enabled(NativeStage.MODEL_CONFIG)
     names: ModelResourceNames = ModelResourceNames(
         models=known_model_names,
         seeds=known_seed_names,
@@ -519,20 +498,16 @@ def _build_model_inputs(
             names=names,
             settings=effective_settings,
             external_sql_reference_resolver=external_sql_reference_resolver,
-            native_config=(
-                native_model_config_session(
-                    inputs=NativeModelConfigInputs(
-                        project_config=discovered_inputs.project_config,
-                        target_config=context.target_config,
-                        effective_vars=effective_vars,
-                        effective_target_name=context.effective_target_name,
-                        run_id=context.run_id,
-                        microbatch_concurrency=effective_settings.microbatch_concurrency,
-                    ),
-                    names=names,
-                )
-                if native_model_config
-                else None
+            native_config=native_model_config_session(
+                inputs=NativeModelConfigInputs(
+                    project_config=discovered_inputs.project_config,
+                    target_config=context.target_config,
+                    effective_vars=effective_vars,
+                    effective_target_name=context.effective_target_name,
+                    run_id=context.run_id,
+                    microbatch_concurrency=effective_settings.microbatch_concurrency,
+                ),
+                names=names,
             ),
         ),
     )
@@ -567,16 +542,13 @@ def _build_model_inputs(
         sql_hook_definitions=sql_hook_definitions,
         legacy_schema_files=legacy_schema_files,
         model_header_column_cache=ModelHeaderColumnCache(),
-        config_scan_cache=ModelConfigScanCache(native=native_model_config),
         reusable_config_cache=_ReusableModelConfigCache(
             defaults=discovered_inputs.project_config.defaults,
             path_defaults=discovered_inputs.project_config.path_defaults,
             target_config=context.target_config,
         ),
         declaration_cache=_VisibleModelDeclarationCache.build(context),
-        native_header_metadata=(
-            parse_native_header_metadata(model_files=render_files) if native_model_config else {}
-        ),
+        native_header_metadata=parse_native_header_metadata(model_files=render_files),
         native_declaration_references=dict(
             zip(
                 (model_file.file_path for model_file in prepared_files),
@@ -619,11 +591,9 @@ def _build_model_input(
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = loop.sql_hook_definitions
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = loop.legacy_schema_files
     model_header_column_cache: ModelHeaderColumnCache = loop.model_header_column_cache
-    config_scan_cache: ModelConfigScanCache = loop.config_scan_cache
     reusable_config_cache: _ReusableModelConfigCache = loop.reusable_config_cache
     declaration_cache: _VisibleModelDeclarationCache = loop.declaration_cache
     effective_vars: dict[str, object] = context.effective_vars
-    target_config: TargetConfig | None = context.target_config
     effective_target_name: str | None = context.effective_target_name
     run_id: str = context.run_id
     macro_context: MacroContext = context.macro_context
@@ -634,48 +604,19 @@ def _build_model_input(
     declarations: _VisibleModelDeclarations = declaration_cache.for_model(
         model_file=model_file, consumer=model_identity
     )
-    native_config: NativeModelConfigSession | None = validation_context.validators.native_config
-    matched_path_default: str | None = (
-        find_matching_path_default(
-            model_file=model_file,
-            path_defaults=discovered_inputs.project_config.path_defaults,
-        )
-        if native_config is None
-        else native_path_default(session=native_config, model_file=model_file)
+    native_config: NativeModelConfigSession = validation_context.validators.native_config
+    matched_path_default: str | None = native_path_default(
+        session=native_config, model_file=model_file
     )
     effective_config: CompileModelConfig | None = reusable_config_cache.get(
         matched_path_default=matched_path_default,
         model_header_values=model_file.header_values,
     )
-    if effective_config is None and native_config is not None:
+    if effective_config is None:
         effective_config = build_native_model_config(
             session=native_config,
             model_file=model_file,
             matched_path_default=matched_path_default,
-        )
-        if effective_config is not None:
-            reusable_config_cache.remember(
-                matched_path_default=matched_path_default,
-                model_header_values=model_file.header_values,
-                config=effective_config,
-            )
-    if effective_config is None:
-        effective_config = build_model_config(
-            request=ModelConfigBuildRequest(
-                defaults=discovered_inputs.project_config.defaults,
-                path_defaults=discovered_inputs.project_config.path_defaults,
-                matched_path_default=matched_path_default,
-                model_header_values=model_file.header_values,
-                effective_vars=effective_vars,
-                target_config=target_config,
-                model_name=model_file.file_path.stem,
-                effective_target_name=effective_target_name,
-                run_id=run_id,
-                materialization_defaults=(
-                    discovered_inputs.project_config.materialization_defaults
-                ),
-                scan_cache=config_scan_cache,
-            )
         )
         reusable_config_cache.remember(
             matched_path_default=matched_path_default,
@@ -949,14 +890,9 @@ def _hook_expanded_config(
     validation_context: _ModelValidationContext,
 ) -> CompileModelConfig:
     validate_model_references(
-        references=hook_expansion.references,
+        context=validation_context.validators,
         model_file=model_file,
-        known_model_names=validation_context.known_model_names,
-        known_seed_names=validation_context.known_seed_names,
-        known_source_names=validation_context.known_source_names,
-        known_function_names=validation_context.known_function_names,
-        known_table_function_names=validation_context.known_table_function_names,
-        external_sql_reference_resolver=validation_context.external_sql_reference_resolver,
+        references=hook_expansion.references,
     )
     return CompileModelConfig(
         values=hook_expansion.values,
@@ -1312,123 +1248,6 @@ def build_effective_vars(
     return expand_effective_vars(values)
 
 
-def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfig:
-    """Build the pre-semantic effective model config layers."""
-
-    defaults: DefaultsConfig = request.defaults
-    path_defaults: dict[str, dict[str, object]] = request.path_defaults
-    matched_path_default: str | None = request.matched_path_default
-    model_header_values: dict[str, object] = request.model_header_values
-    effective_vars: dict[str, object] = request.effective_vars
-    target_config: TargetConfig | None = request.target_config
-    model_name: str = request.model_name
-    effective_target_name: str | None = request.effective_target_name
-    run_id: str = request.run_id
-    materialization_defaults: MaterializationDefaultsConfig | None = (
-        request.materialization_defaults
-    )
-    scan_cache: ModelConfigScanCache | None = request.scan_cache
-
-    _validate_model_header_tags(model_header_values=model_header_values, model_name=model_name)
-    layered_values: dict[str, object] = build_layered_model_values(
-        defaults=defaults,
-        path_defaults=path_defaults,
-        matched_path_default=matched_path_default,
-        model_header_values=model_header_values,
-    )
-    validate_model_hook_config(values=layered_values, model_name=model_name)
-    raw_hook_values: dict[str, object] = {
-        hook_key: layered_values[hook_key]
-        for hook_key in _MODEL_HOOK_KEYS
-        if hook_key in layered_values
-    }
-    for hook_key in raw_hook_values:
-        del layered_values[hook_key]
-    has_authored_templates: bool = contains_config_templates(
-        values=layered_values, scan_cache=scan_cache
-    )
-    if has_authored_templates:
-        early_resolved_values: dict[str, object] = resolve_early_model_templates(
-            values=layered_values,
-            effective_vars=effective_vars,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-        )
-        model_resolved_values: dict[str, object] = resolve_chained_model_context_templates(
-            values=early_resolved_values,
-            model_name=model_name,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-        )
-    else:
-        model_resolved_values = layered_values
-    raw_logical_schema: object | None = model_resolved_values.get(MODEL_SCHEMA_CONFIG_KEY)
-    raw_logical_database: object | None = model_resolved_values.get("database")
-    logical_schema: str | None = raw_logical_schema if isinstance(raw_logical_schema, str) else None
-    layer_schema_is_configured: bool = MODEL_SCHEMA_CONFIG_KEY in model_header_values or (
-        matched_path_default is not None
-        and MODEL_SCHEMA_CONFIG_KEY in path_defaults[matched_path_default]
-    )
-    logical_database: str | None = (
-        raw_logical_database if isinstance(raw_logical_database, str) else None
-    )
-    validate_preserved_logical_namespace(
-        resource_label=f"Model '{model_name}'",
-        logical_database=logical_database,
-        logical_schema=logical_schema,
-        target_config=target_config,
-    )
-    model_resolved_values = apply_environment_database_schema_overrides(
-        values=model_resolved_values,
-        effective_vars=effective_vars,
-        target_config=target_config,
-        model_context_values=build_model_context_values(
-            values=model_resolved_values,
-            model_name=model_name,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-            include_target_values=False,
-        ),
-    )
-    target_resolved_values: dict[str, object] = (
-        resolve_target_context_templates(
-            values=model_resolved_values,
-            model_name=model_name,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-        )
-        if has_authored_templates
-        or contains_template_data(model_resolved_values.get("database"))
-        or contains_template_data(model_resolved_values.get("schema"))
-        else model_resolved_values
-    )
-    target_resolved_values.update(raw_hook_values)
-    target_resolved_values, retention, table_type = resolve_storage_policies(
-        resolved_values=target_resolved_values,
-        model_header_values=model_header_values,
-        materialization_defaults=materialization_defaults,
-        target_config=target_config,
-        model_name=model_name,
-    )
-    if (
-        MODEL_FULL_REFRESH_CONFIG_KEY not in model_header_values
-        and target_resolved_values.get("materialized") != MaterializationType.INCREMENTAL
-    ):
-        target_resolved_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
-    if contains_config_macro_calls(values=target_resolved_values, scan_cache=scan_cache):
-        validate_model_config_has_no_macros(values=target_resolved_values)
-    return CompileModelConfig(
-        values=target_resolved_values,
-        model_header_keys=tuple(sorted(model_header_values)),
-        matched_path_default=matched_path_default,
-        logical_schema=logical_schema,
-        layer_schema=logical_schema if layer_schema_is_configured else None,
-        logical_database=logical_database,
-        time_travel_retention=retention,
-        table_type=table_type,
-    )
-
-
 def expand_model_hook_macros_result(
     *,
     values: dict[str, object],
@@ -1474,26 +1293,6 @@ def expand_model_hook_macros_result(
         usages=tuple(dict.fromkeys(facts.usages)),
         references=tuple(dict.fromkeys(facts.references)),
     )
-
-
-def validate_model_hook_config(*, values: dict[str, object], model_name: str) -> None:
-    hook_key: str
-    for hook_key in sorted(_MODEL_HOOK_KEYS):
-        if hook_key not in values:
-            continue
-        raw_value: object = values[hook_key]
-        if not isinstance(raw_value, list | tuple):
-            raise CompileInputError(
-                f"model '{model_name}' {hook_key} must be a list of typed hook entries"
-            )
-        hook_entry: object
-        for hook_entry in raw_value:
-            if isinstance(hook_entry, SqlHookEntry | NamedSqlHookEntry | PythonHookEntry):
-                continue
-            raise CompileInputError(
-                f"model '{model_name}' {hook_key} entries must use typed inline_sql(...), "
-                "sql(...), or python(...) hook syntax"
-            )
 
 
 def validate_python_hook_config(
@@ -1869,12 +1668,6 @@ def _index_sql_hook_definitions(
             )
         definitions[hook_file.name] = hook_file
     return definitions
-
-
-def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:
-    """Reject macro calls in declarative model config while allowing hook SQL strings."""
-
-    validate_no_macros_in_config_value(value=values, path=())
 
 
 def _authored_model_location(

@@ -1,6 +1,5 @@
 pub(crate) mod authored_nodes;
 pub(crate) mod config_errors;
-pub(crate) mod config_presence;
 pub(crate) mod config_templates;
 pub(crate) mod errors;
 pub(crate) mod header_metadata;

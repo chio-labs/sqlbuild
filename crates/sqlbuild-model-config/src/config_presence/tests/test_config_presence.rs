@@ -1,11 +1,10 @@
 use crate::config_presence::main::contains_macro_call::contains_macro_call;
 use crate::config_presence::main::contains_template::contains_template;
-use crate::config_presence::models::Presence;
 use crate::config_presence::tests::test_types::PresenceTestCase;
 use crate::tests::test_types::Value;
 
 #[test]
-fn given_config_values_when_scanning_then_presence_matches_python_or_defers() {
+fn given_config_values_when_scanning_then_presence_matches_python() {
     let test_cases = [
         PresenceTestCase {
             description: "plain scalars contain nothing",
@@ -15,8 +14,8 @@ fn given_config_values_when_scanning_then_presence_matches_python_or_defers() {
                 Value::Null,
                 Value::Float,
             ]),
-            expected_template: Presence::Absent,
-            expected_macro_call: Presence::Absent,
+            expected_template: false,
+            expected_macro_call: false,
         },
         PresenceTestCase {
             description: "nested mapping values are scanned, keys are not",
@@ -27,38 +26,44 @@ fn given_config_values_when_scanning_then_presence_matches_python_or_defers() {
                     Value::Tuple(vec![Value::Str("@cents (amount)")]),
                 ),
             ]),
-            expected_template: Presence::Absent,
-            expected_macro_call: Presence::Present,
+            expected_template: false,
+            expected_macro_call: true,
         },
         PresenceTestCase {
             description: "a template token anywhere in a string",
             value: Value::Str("prefix_${target.schema}"),
-            expected_template: Presence::Present,
-            expected_macro_call: Presence::Absent,
+            expected_template: true,
+            expected_macro_call: false,
         },
         PresenceTestCase {
             description: "an at-name without a call or with an invalid start is no macro",
             value: Value::Str("mail@example.com @1x( @ (x)"),
-            expected_template: Presence::Absent,
-            expected_macro_call: Presence::Absent,
+            expected_template: false,
+            expected_macro_call: false,
         },
         PresenceTestCase {
             description: "Python separators count as whitespace before the call",
             value: Value::Str("@m\u{1f}\t("),
-            expected_template: Presence::Absent,
-            expected_macro_call: Presence::Present,
+            expected_template: false,
+            expected_macro_call: true,
         },
         PresenceTestCase {
-            description: "non-ASCII after a macro name defers to Python's whitespace class",
-            value: Value::Str("@m\u{a0}("),
-            expected_template: Presence::Absent,
-            expected_macro_call: Presence::Deferred,
+            description: "Unicode whitespace after a macro name counts as Python's \\s",
+            value: Value::Str("@m\u{a0}\u{3000}("),
+            expected_template: false,
+            expected_macro_call: true,
         },
         PresenceTestCase {
-            description: "a later call outweighs an earlier deferral",
+            description: "other non-ASCII after a macro name is no call",
+            value: Value::Str("@m\u{e9}( @n\u{200b}("),
+            expected_template: false,
+            expected_macro_call: false,
+        },
+        PresenceTestCase {
+            description: "a later call is found after Unicode whitespace that is no call",
             value: Value::List(vec![Value::Str("@m\u{2003}("), Value::Str("@n(")]),
-            expected_template: Presence::Absent,
-            expected_macro_call: Presence::Present,
+            expected_template: false,
+            expected_macro_call: true,
         },
     ];
 

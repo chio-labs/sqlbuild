@@ -110,6 +110,15 @@ pub struct PythonText {
     /// Inclusive code point ranges where `str.isdecimal()` (regex `\d`) is true, in order.
     pub(crate) decimal_ranges: &'static [(u32, u32)],
     pub(crate) cleandoc_margin: CleandocMargin,
+    /// The CPython minor version, for library behaviour that changed between 3.x releases.
+    pub(crate) minor_version: u8,
+}
+
+impl PythonText {
+    /// The CPython minor version these semantics follow.
+    pub fn minor_version(&self) -> u8 {
+        self.minor_version
+    }
 }
 
 /// The characters `inspect.cleandoc` strips from line starts.

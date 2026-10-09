@@ -195,6 +195,8 @@ pub const SOURCE_KIND: &str = "source";
 pub const UDF_KIND: &str = "udf";
 /// A table function reference.
 pub const TABLE_FUNCTION_KIND: &str = "table_fn";
+/// The `__dbt_ref` reference kind.
+pub const DBT_REF_KIND: &str = "dbt_ref";
 
 /// The `inherit` storage policy value.
 pub const INHERIT_POLICY: &str = "inherit";
@@ -205,29 +207,5 @@ pub const PERMANENT_TABLE_TYPE: &str = "permanent";
 /// The transient table type.
 pub const TRANSIENT_TABLE_TYPE: &str = "transient";
 
-/// The length of an ISO `YYYY-MM-DD` date.
-pub const ISO_DATE_LENGTH: usize = 10;
-/// Byte offsets of the separators in an ISO date.
-pub const ISO_DATE_SEPARATOR_OFFSETS: [usize; 2] = [4, 7];
-/// The length of a two-digit clock field.
-pub const CLOCK_FIELD_LENGTH: usize = 2;
-/// Clock part counts `HH:MM` and `HH:MM:SS`.
-pub const CLOCK_PART_COUNTS: [usize; 2] = [2, 3];
-/// The clock part count that may carry fractional seconds.
-pub const CLOCK_PARTS_WITH_SECONDS: usize = 3;
-/// The latest hour of a day.
-pub const MAX_HOUR: i128 = 23;
-/// The latest minute of an hour, and second of a minute.
-pub const MAX_MINUTE: i128 = 59;
-/// The length of a `HH:MM` UTC offset.
-pub const UTC_OFFSET_LENGTH: usize = 5;
-/// The first year Python's `datetime` represents.
-pub const MIN_YEAR: i128 = 1;
-/// The last year Python's `datetime` represents.
-pub const MAX_YEAR: i128 = 9999;
-/// Prefixes of the special values `Decimal` parses, after any sign.
-pub const DECIMAL_SPECIAL_PREFIXES: [&str; 3] = ["inf", "nan", "snan"];
-/// The last month whose civil-day computation shifts the year back.
-pub const LAST_SHIFTED_MONTH: i128 = 2;
 /// The position of days among duration units.
 pub const DAY_UNIT_INDEX: usize = 2;

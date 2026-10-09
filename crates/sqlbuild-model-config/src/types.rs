@@ -23,12 +23,18 @@ pub trait AuthoredNode: Clone {
     fn kind(&self) -> NodeKind;
     /// Return an integer that is not a boolean and fits in `i64`, or `None`.
     fn integer(&self) -> Option<i64>;
-    /// Return the text of a string value, or `None` when it is not readable UTF-8 text.
+    /// Return the text of a string value, or `None` for another value.
     fn text(&self) -> Option<String>;
     /// Return whether this is a string value equal to `text`.
     fn is_text(&self, text: &str) -> bool;
-    /// Apply `read` to a string value's text, or return `None` when it is not readable UTF-8.
+    /// Apply `read` to a string value's text, or return `None` for another value.
     fn with_text<R>(&self, read: impl FnOnce(&str) -> R) -> Option<R>;
+    /// Return Python's `str(value)`.
+    fn python_str(&self) -> String;
+    /// Return Python's `repr(value)`.
+    fn python_repr(&self) -> String;
+    /// Return whether the value is a `datetime.date` or `datetime.datetime`.
+    fn is_date_like(&self) -> bool;
     /// Return a list's or tuple's items in order.
     fn items(&self) -> Vec<Self>;
     /// Return a mapping's entries in insertion order.

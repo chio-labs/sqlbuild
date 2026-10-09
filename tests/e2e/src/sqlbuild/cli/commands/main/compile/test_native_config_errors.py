@@ -7,7 +7,6 @@ from types import ModuleType
 
 import pytest
 
-import sqlbuild.compiler.compile._helpers.attachment.core as attachment_core
 import sqlbuild.compiler.compile._helpers.attachment.model_config as model_config
 import sqlbuild.compiler.compile._helpers.render.context_templates as context_templates
 from scripts.compiler_differential.constants import FAILURE_BASE_MART
@@ -50,10 +49,8 @@ _INCREMENTAL: str = (
     "  cursor_type integer,\n"
 )
 _FALLBACKS: tuple[tuple[ModuleType, str], ...] = (
-    (model_config, "run_python_model_validators"),
     (model_config, "_parse_model_header_columns"),
     (model_config, "parse_audit_instances"),
-    (attachment_core, "build_model_config"),
     (context_templates, "expand_template_data"),
 )
 _PROJECT_FILES: dict[str, str] = {

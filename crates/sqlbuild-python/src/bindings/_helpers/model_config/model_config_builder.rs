@@ -1,19 +1,21 @@
 //! Effective model config layered and templated natively, as `build_model_config` builds it.
 
+use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
-    PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple, PyTupleMethods,
+    PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods, PyTuple,
+    PyTupleMethods,
 };
 use pyo3::{IntoPyObject, PyErr, pyclass, pymethods};
+use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
 use sqlbuild_model_config::config_presence::main::first_macro_path::first_macro_path;
-use sqlbuild_model_config::config_presence::models::{MacroPath, Presence};
+use sqlbuild_model_config::config_presence::models::MacroPath;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::model_validation::main::retention_override::retention_override;
 use sqlbuild_model_config::model_validation::main::table_type_override::table_type_override;
-use sqlbuild_model_config::model_validation::models::{
-    RetentionOverride, TableTypeOverride, ValidationStop,
-};
+use sqlbuild_model_config::model_validation::models::{RetentionOverride, TableTypeOverride};
 use sqlbuild_model_config::path_defaults::main::select_path_default::select_path_default;
 use sqlbuild_model_config::path_defaults::models::PathDefaultChoice;
 use sqlbuild_model_config::templates::models::TemplateOptions;
@@ -56,9 +58,8 @@ const DESTINATION_SCHEMA_CONTEXT: &str = "destination.schema";
 const DESTINATION_TABLE_CONTEXT: &str = "destination.table";
 const DESTINATION_QUALIFIED_CONTEXT: &str = "destination.qualified";
 
-/// Why the native build stops: a deferral to Python, the exact error, or a Python error.
+/// Why the native build stops: the config error, or a Python error.
 enum Halt {
-    Defer,
     Config(ConfigError),
     Error(PyErr),
 }
@@ -69,12 +70,9 @@ impl From<PyErr> for Halt {
     }
 }
 
-impl From<ValidationStop> for Halt {
-    fn from(stop: ValidationStop) -> Self {
-        match stop {
-            ValidationStop::Defer => Self::Defer,
-            ValidationStop::Error(error) => Self::Config(error),
-        }
+impl From<ConfigError> for Halt {
+    fn from(error: ConfigError) -> Self {
+        Self::Config(error)
     }
 }
 
@@ -97,6 +95,7 @@ pub(crate) struct NativeModelConfigBuilder {
     target_name: Option<Py<PyAny>>,
     run_id: Py<PyAny>,
     target_namespace: Option<(Py<PyAny>, Py<PyAny>)>,
+    python: PythonText,
 }
 
 /// One model's built config before Python wraps it in `CompileModelConfig`.
@@ -119,8 +118,16 @@ impl NativeModelConfigBuilder {
         sources: (Bound<'_, PyDict>, Bound<'_, PyAny>),
         run: (Bound<'_, PyAny>, Bound<'_, PyAny>),
         target_namespace: Option<(Bound<'_, PyAny>, Bound<'_, PyAny>)>,
+        python: ((u8, u8), String),
     ) -> PyResult<Self> {
         let (defaults, path_defaults, hook_entry_types) = layers;
+        let (python_version, unicode_version) = python;
+        let python = python_text(python_version, &unicode_version).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "no Python string semantics for Python {}.{} with Unicode {unicode_version}",
+                python_version.0, python_version.1
+            ))
+        })?;
         let path_keys = path_defaults
             .keys()
             .iter()
@@ -138,6 +145,7 @@ impl NativeModelConfigBuilder {
             run_id: run_id.unbind(),
             target_namespace: target_namespace
                 .map(|(database, schema)| (database.unbind(), schema.unbind())),
+            python,
         })
     }
 
@@ -151,19 +159,18 @@ impl NativeModelConfigBuilder {
         })
     }
 
-    /// Return the built config parts, the first error, or `None` when Python must build it.
+    /// Return the built config parts or the first config error.
     fn build<'py>(
         &self,
         py: Python<'py>,
         header: Bound<'py, PyDict>,
         matched_path_default: Option<&str>,
         model_name: &str,
-    ) -> PyResult<Option<Py<PyAny>>> {
+    ) -> PyResult<Py<PyAny>> {
         compiler_guard(
             || match self.build_config(py, &header, matched_path_default, model_name) {
-                Ok(built) => built_tuple(py, built).map(|built| Some(built.into_any().unbind())),
-                Err(Halt::Defer) => Ok(None),
-                Err(Halt::Config(error)) => Ok(Some(native_config_error(py, error)?.into_any())),
+                Ok(built) => built_tuple(py, built).map(|built| built.into_any().unbind()),
+                Err(Halt::Config(error)) => Ok(native_config_error(py, error)?.into_any()),
                 Err(Halt::Error(error)) => Err(error),
             },
         )
@@ -195,7 +202,7 @@ impl NativeModelConfigBuilder {
                 layered.del_item(key)?;
             }
         }
-        let has_templates = present(contains_template(&PyNode(layered.clone().into_any())))?;
+        let has_templates = contains_template(&PyNode(layered.clone().into_any()));
         let mut expansion = Expansion {
             builder: self,
             py,
@@ -240,8 +247,7 @@ impl NativeModelConfigBuilder {
                 .iter()
                 .map(|key| entry_has_template(&namespaced, key))
                 .collect::<Built<Vec<bool>>>()?
-                .into_iter()
-                .any(|found| found);
+                .contains(&true);
         let resolved = if needs_target_templates {
             let empty = PyDict::new(py);
             expansion.expand(
@@ -258,6 +264,7 @@ impl NativeModelConfigBuilder {
         }
         let values = storage_free_values(py, &resolved, header)?;
         let retention = retention_override(
+            self.python,
             header.get_item(RETENTION_KEY)?.map(PyNode).as_ref(),
             model_name,
         )?;
@@ -283,15 +290,15 @@ impl NativeModelConfigBuilder {
             .path_defaults
             .bind(py)
             .get_item(key)?
-            .ok_or(Halt::Defer)?;
-        values.downcast_into::<PyDict>().map_err(|_| Halt::Defer)
+            .ok_or_else(|| PyKeyError::new_err(key.to_owned()))?;
+        Ok(values.downcast_into::<PyDict>().map_err(PyErr::from)?)
     }
 
     /// Return a fresh `project_defaults_to_mapping` result, with its own `tags` list.
     fn project_defaults<'py>(&self, py: Python<'py>) -> Built<Bound<'py, PyDict>> {
         let defaults = self.defaults.bind(py).copy()?;
         if let Some(tags) = defaults.get_item(TAGS_KEY)? {
-            let tags = tags.downcast_into::<PyList>().map_err(|_| Halt::Defer)?;
+            let tags = tags.downcast_into::<PyList>().map_err(PyErr::from)?;
             defaults.set_item(TAGS_KEY, PyList::new(py, tags.iter())?)?;
         }
         Ok(defaults)
@@ -349,7 +356,7 @@ impl<'py> Expansion<'_, 'py> {
         scope: (bool, &str),
     ) -> Built<Bound<'py, PyDict>> {
         let result = self.expand_value(values.as_any(), variables, context, scope)?;
-        result.downcast_into::<PyDict>().map_err(|_| Halt::Defer)
+        Ok(result.downcast_into::<PyDict>().map_err(PyErr::from)?)
     }
 
     fn expand_value(
@@ -546,14 +553,14 @@ fn merged_strings(base: &Bound<'_, PyAny>, overlay: &Bound<'_, PyAny>) -> Built<
     Ok(merged)
 }
 
-/// Return `_as_string_list(value)` when every item is a string.
+/// Return `_as_string_list(value)`: `str()` of each list or tuple item.
 fn string_items(value: &Bound<'_, PyAny>) -> Built<Vec<String>> {
     let Some(items) = sequence_items(value) else {
         return Ok(Vec::new());
     };
     items
         .iter()
-        .map(|item| PyNode(item.clone()).text().ok_or(Halt::Defer))
+        .map(|item| Ok(item.str()?.to_string_lossy().into_owned()))
         .collect()
 }
 
@@ -609,7 +616,11 @@ fn string_entry<'py>(values: &Bound<'py, PyDict>, key: &str) -> Built<Option<Bou
 }
 
 fn text_of(value: &Bound<'_, PyAny>) -> Built<String> {
-    PyNode(value.clone()).text().ok_or(Halt::Defer)
+    Ok(value
+        .downcast::<PyString>()
+        .map_err(PyErr::from)?
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn sequence_items<'py>(value: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
@@ -622,19 +633,10 @@ fn sequence_items<'py>(value: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny
     }
 }
 
-fn present(presence: Presence) -> Built<bool> {
-    match presence {
-        Presence::Present => Ok(true),
-        Presence::Absent => Ok(false),
-        Presence::Deferred => Err(Halt::Defer),
-    }
-}
-
 fn entry_has_template(values: &Bound<'_, PyDict>, key: &str) -> Built<bool> {
-    match values.get_item(key)? {
-        Some(value) => present(contains_template(&PyNode(value))),
-        None => Ok(false),
-    }
+    Ok(values
+        .get_item(key)?
+        .is_some_and(|value| contains_template(&PyNode(value))))
 }
 
 /// Check header tags as `_validate_model_header_tags` does.
@@ -658,11 +660,6 @@ fn storage_free_values<'py>(
     resolved: &Bound<'py, PyDict>,
     header: &Bound<'py, PyDict>,
 ) -> Built<Bound<'py, PyDict>> {
-    if let Some(materialized) = set_entry(resolved, MATERIALIZED_KEY)?
-        && !materialized.is_instance_of::<PyString>()
-    {
-        return Err(Halt::Defer);
-    }
     let values = PyDict::new(py);
     for (key, value) in resolved.iter() {
         let storage = [RETENTION_KEY, TABLE_TYPE_KEY]
@@ -685,7 +682,6 @@ fn storage_free_values<'py>(
 fn check_no_config_macros(values: &Bound<'_, PyDict>) -> Built<()> {
     match first_macro_path(&PyNode(values.clone().into_any()), &HOOK_KEYS) {
         MacroPath::Absent => Ok(()),
-        MacroPath::Deferred => Err(Halt::Defer),
         MacroPath::Found(path) => Err(Halt::Config(ConfigError::compile(format!(
             "model config field '{}' does not allow macros",
             path.join(".")
@@ -698,11 +694,11 @@ fn sorted_keys(header: &Bound<'_, PyDict>) -> Built<Vec<String>> {
         .keys()
         .iter()
         .map(|key| {
-            if key.is_exact_instance_of::<PyString>() {
-                key.extract::<String>().map_err(Halt::from)
-            } else {
-                Err(Halt::Defer)
-            }
+            Ok(key
+                .downcast::<PyString>()
+                .map_err(PyErr::from)?
+                .to_string_lossy()
+                .into_owned())
         })
         .collect::<Built<Vec<_>>>()?;
     keys.sort();
