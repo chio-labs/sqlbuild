@@ -308,7 +308,8 @@ jobs:
           make compiler-differential
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
           --require-render-coverage --require-analysis-coverage
-          --wheel-site-report ${{ runner.temp }}/compiler-differential-wheel-sites.json"
+          --wheel-site-report ${{ runner.temp }}/compiler-differential-wheel-sites.json
+          --evidence-dir ${{ runner.temp }}/compiler-differential-evidence/preview"
       - name: Upload the Polyglot wheel-site and deferral report
         if: always()
         uses: actions/upload-artifact@v4
@@ -321,7 +322,16 @@ jobs:
         run: >-
           make compiler-differential-shipped
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
-          --require-render-coverage"
+          --require-render-coverage
+          --evidence-dir ${{ runner.temp }}/compiler-differential-evidence/shipped"
+      - name: Upload differing projects' targets, stderr and compiled-test stats
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiler-differential-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/compiler-differential-evidence
+          if-no-files-found: warn
+          retention-days: 30
 
   compiler_differential_python_versions:
     name: Native compiler on Python ${{ matrix.python }}

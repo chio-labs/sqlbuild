@@ -187,6 +187,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="extra environment for one engine's processes",
     )
     parser.add_argument("--work-dir", type=Path, default=None, help="keep run directories here")
+    parser.add_argument(
+        "--evidence-dir",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="copy each differing project's target/, stderr and compiled-test stats to PATH",
+    )
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     args: argparse.Namespace = parser.parse_args(argv)
     for flag, required in (

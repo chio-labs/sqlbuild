@@ -118,6 +118,7 @@ class DifferentialOptions:
     require_render_coverage: bool = False
     require_analysis_coverage: bool = False
     analysis_records: bool = False
+    evidence_dir: Path | None = None
 
 
 @dataclass(frozen=True)

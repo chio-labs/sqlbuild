@@ -75,3 +75,13 @@ class AnalysisRecordsTestCase:
     expected_wheel_sites: dict[tuple[str, str], int]
     expected_deferrals: dict[tuple[str, str], int]
     expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FailureEvidenceTestCase:
+    """Per-engine warm-compile stderr and the evidence files a comparison keeps."""
+
+    description: str
+    stderr_by_engine: dict[str, str]
+    expected_files: tuple[str, ...]
+    expected_evidence_engines: tuple[str, ...]

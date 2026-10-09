@@ -13,6 +13,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
 from scripts.compiler_differential._helpers.coverage.analysis import project_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import project_render_kinds
+from scripts.compiler_differential._helpers.running.evidence import keep_failure_evidence
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
     ERROR_SEVERITY,
@@ -65,6 +66,13 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         *_corpus_differences(project=project, run=left),
         *compare_engine_runs(project=project.name, left=left, right=right),
     ]
+    if differences and options.evidence_dir is not None:
+        _ = keep_failure_evidence(
+            case_dir=case_dir,
+            project_subdirectory=project.project_subdirectory,
+            runs=(left, right),
+            evidence_dir=options.evidence_dir,
+        )
     return ProjectComparison(
         project=project.name,
         differences=tuple(differences),

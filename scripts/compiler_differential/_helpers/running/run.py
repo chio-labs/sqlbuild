@@ -32,6 +32,7 @@ def differential_options(*, args: argparse.Namespace, work_dir: Path) -> Differe
         require_render_coverage=args.require_render_coverage,
         require_analysis_coverage=args.require_analysis_coverage,
         analysis_records=args.wheel_site_report is not None,
+        evidence_dir=args.evidence_dir,
     )
 
 
