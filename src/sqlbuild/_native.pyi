@@ -347,6 +347,74 @@ def normalize_type(
 ) -> tuple[tuple[str, str, int | None, int | None, int | None], str | None] | None: ...
 
 # Native analysis: model analysis session.
+type _AnalysisDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
+
+class NativeModelAnalysisSession:
+    def run(
+        self,
+    ) -> (
+        tuple[
+            list[tuple[str, list[tuple[str, str]]]],
+            list[
+                tuple[
+                    str,
+                    int,
+                    str | None,
+                    list[tuple[str, list[tuple[str, str]]]],
+                    list[_AnalysisDiagnosticRow],
+                    list[tuple[str, int, int, list[tuple[str, str, str]]]] | None,
+                ]
+            ],
+            list[str],
+        ]
+        | None
+    ): ...
+    def provide(
+        self,
+        results: list[
+            tuple[
+                int,
+                bool,
+                list[tuple[str, str | None, str]] | None,
+                bool,
+                bool,
+                list[_AnalysisDiagnosticRow],
+                bool,
+            ]
+        ],
+        /,
+    ) -> bool: ...
+    def finish(
+        self,
+    ) -> (
+        tuple[
+            list[
+                tuple[
+                    bool,
+                    list[tuple[str, str | None, str]] | None,
+                    str,
+                    list[tuple[str, int, int, list[tuple[str, str, str]]]],
+                    bool,
+                    bool,
+                    list[_AnalysisDiagnosticRow],
+                    bool,
+                    str,
+                ]
+            ],
+            list[tuple[str, list[tuple[str, str]]]],
+            list[str],
+        ]
+        | None
+    ): ...
+    @property
+    def failure(self) -> str | None: ...
+
+def start_model_analysis_session(
+    catalog: object, request: tuple[object, ...], /
+) -> NativeModelAnalysisSession | None: ...
+def infer_expression_source_shapes(
+    catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
+) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
 
 # Native analysis: semantic completion.
 

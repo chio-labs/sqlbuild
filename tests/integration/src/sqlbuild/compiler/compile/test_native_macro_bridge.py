@@ -11,6 +11,7 @@ import pytest
 
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from tests.integration.src.sqlbuild.compiler.compile._test_types import (
+    FailingMacroProjectParityTestCase,
     MacroBridgeFailureTestCase,
     MacroBridgeMemoTestCase,
     MacroBridgeParityTestCase,
@@ -19,8 +20,11 @@ from tests.integration.src.sqlbuild.compiler.compile._test_types import (
 from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_BRIDGE_PROJECT_FILES,
     MACRO_CALL_LOG_ENV_VAR,
+    FailingMacroParity,
     comparable_capture,
     expansion_outcome,
+    failing_macro_parity,
+    generated_failing_macro_project,
     random_macro_sql,
     render_compile_inputs,
     render_error,
@@ -222,6 +226,46 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
         test_case.expected_minimum_successes
     )
     assert bridge.stats()[0] > 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FailingMacroProjectParityTestCase(
+            description="seeded projects with raising, mistyped, unparsable and unreachable macros",
+            seed=1043,
+            projects=150,
+            engines=("python", "native", "native-preview"),
+            expected_minimum_failures=100,
+            expected_minimum_successes=10,
+            expected_minimum_errors_after_macro_runs=80,
+            expected_minimum_distinct_errors=10,
+            expected_mismatches=[],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_macro_projects_when_rendering_then_every_engine_raises_python_error_once(
+    test_case: FailingMacroProjectParityTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rng: random.Random = random.Random(test_case.seed)
+
+    parity: FailingMacroParity = failing_macro_parity(
+        projects=[generated_failing_macro_project(rng=rng) for _ in range(test_case.projects)],
+        root=tmp_path,
+        engines=test_case.engines,
+        monkeypatch=monkeypatch,
+    )
+
+    assert parity.mismatches == [test_case.expected_mismatches] * (len(test_case.engines) - 1)
+    assert (
+        parity.failures >= test_case.expected_minimum_failures,
+        parity.successes >= test_case.expected_minimum_successes,
+        parity.failures_after_macro_runs >= test_case.expected_minimum_errors_after_macro_runs,
+        len(parity.distinct_errors) >= test_case.expected_minimum_distinct_errors,
+    ) == (True, True, True, True), parity
 
 
 if __name__ == "__main__":

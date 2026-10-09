@@ -111,6 +111,15 @@ false filter, as in [unit tests](testing.md).
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
 The file ends after its last CTE; a trailing ceremonial `SELECT 1` is accepted but not required.
 
+Scenario CTEs follow the same strict rules as [unit test CTEs](testing.md), on every
+compiler engine, and other forms are compile errors that point at the offending text:
+
+- A CTE name is an unquoted identifier of ASCII letters, digits and underscores that starts with a
+  letter or underscore. Quoted names such as `"__source__raw_orders"` or `` `recent orders` ``, and
+  names with `$` or non-ASCII characters, are errors.
+- A CTE body follows `AS` directly. Materialization hints such as `AS MATERIALIZED (...)` or
+  `AS NOT MATERIALIZED (...)` are not supported in scenario CTEs.
+
 Scenario SQL uses macros, enums, and constants available from the scenario file's directory under
 `tests/scenarios/`. Public enums and constants available to a model are also available when the
 scenario defines `__expected__model_name` output for that model. Model-private values and macros

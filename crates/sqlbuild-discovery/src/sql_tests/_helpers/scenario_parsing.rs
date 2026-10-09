@@ -38,9 +38,15 @@ pub(crate) fn parse_scenario_file(
         contents[..header_start].matches('\n').count() + 1,
     )?;
     let sql_body: String = python_cleandoc(options.python, &contents[sql_start..]);
+    let span_start: usize = contents[..sql_start].chars().count();
+    let body_span: (usize, usize) = (
+        span_start,
+        span_start + contents[sql_start..].chars().count(),
+    );
     Ok(DiscoveredScenarioFile {
         contents,
         header_values,
         sql_body,
+        body_span,
     })
 }

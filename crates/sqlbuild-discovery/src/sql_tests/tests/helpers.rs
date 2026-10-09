@@ -94,3 +94,10 @@ pub(super) fn statement_failures(contents: &str) -> [Option<(String, Option<Stri
             .map(failure),
     ]
 }
+
+/// The code-point span of a parsed scenario's SQL after its header, or `None` if parsing failed.
+pub(super) fn scenario_body_span(contents: &str) -> Option<(usize, usize)> {
+    parse_scenario_text(FILE_PATH, contents.to_owned(), &options())
+        .ok()
+        .map(|file| file.body_span)
+}

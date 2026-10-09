@@ -23,6 +23,10 @@ _CENTS_MACRO: str = (
     'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
     '    return f"({expression} * 100)"\n'
 )
+_EXPLODE_MACRO: str = (
+    '\n\ndef explode(expression: str) -> str:\n    """Fail while rendering."""\n'
+    '    raise ValueError(f"cannot render {expression}")\n'
+)
 _ORDERS_FOR: str = (
     "FUNCTION (\n"
     '  description "Orders for one customer",\n'
@@ -92,6 +96,51 @@ def _macro_cases() -> tuple[FailureCase, ...]:
                     )
                 },
             ),
+        ),
+        failure_case(
+            name="macro-raises-after-a-call",
+            expected_code="P001",
+            expected_message="failed: cannot render status",
+            files=_staging_columns(
+                columns='@cents("amount") AS amount, @explode("status") AS status',
+                files={_STAGING_MACROS: _CENTS_MACRO + _EXPLODE_MACRO},
+            ),
+        ),
+        failure_case(
+            name="macro-arguments-do-not-parse",
+            expected_code="P001",
+            expected_message="could not be parsed",
+            files=_staging_columns(
+                columns='amount, status, @cents("amount",,) AS cents',
+                files={_STAGING_MACROS: _CENTS_MACRO},
+            ),
+        ),
+        failure_case(
+            name="macro-private-helper",
+            expected_code="P001",
+            expected_message="Unknown macro '@_scaled'",
+            files=_staging_columns(
+                columns='amount, status, @_scaled("amount") AS scaled',
+                files={
+                    _STAGING_MACROS: _CENTS_MACRO
+                    + "\n\ndef _scaled(expression: str) -> str:\n    return expression\n"
+                },
+            ),
+        ),
+        failure_case(
+            name="macro-first-of-two-failing-models",
+            expected_code="P001",
+            expected_message="failed: cannot render total",
+            files={
+                **_staging_columns(
+                    columns='amount, @explode("status") AS status',
+                    files={_STAGING_MACROS: _CENTS_MACRO + _EXPLODE_MACRO},
+                ),
+                "macros/explode.py": _EXPLODE_MACRO.replace("def explode", "def blow_up"),
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    "SUM(amount)", 'SUM(@blow_up("total"))'
+                ),
+            },
         ),
         failure_case(
             name="macro-output-calls-macro",

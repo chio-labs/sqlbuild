@@ -73,6 +73,20 @@ def _perturbed(*, until, **stages):
 frontier.native_frontier = _perturbed
 """
 
+CATALOG_PERTURBATION: str = """
+import sqlbuild.compiler.analysis_session.classes.native_model_analysis as native_analysis
+
+_original = native_analysis.NativeModelAnalysis._record_catalog_changes
+
+
+def _perturbed(self, **changes):
+    _original(self, **changes)
+    self._catalog.schemas["perturbed_by_test"] = {"order_id": "INTEGER"}
+
+
+native_analysis.NativeModelAnalysis._record_catalog_changes = _perturbed
+"""
+
 DEFERRAL_PERTURBATION: str = """
 import json
 import os

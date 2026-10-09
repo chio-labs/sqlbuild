@@ -1,4 +1,4 @@
-"""Every engine reports attachment errors identically; bridge-independent ones never re-run."""
+"""Every engine reports attachment errors identically and runs each macro call once."""
 
 from __future__ import annotations
 
@@ -56,9 +56,9 @@ _CASES: dict[str, FailureCase] = {case.name: case for case in attachment_failure
             expected_error_types=_ERROR_TYPES,
         ),
         NativeAttachmentErrorTestCase(
-            description="a cursor intrinsic in a generic audit re-runs as it reads expanded SQL",
+            description="a cursor intrinsic in a generic audit reads expanded SQL",
             case_name="generic-audit-cursor-intrinsic",
-            expected_macro_calls=(1, 2, 2),
+            expected_macro_calls=(1, 1, 1),
             expected_error_types=_ERROR_TYPES,
         ),
         NativeAttachmentErrorTestCase(

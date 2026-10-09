@@ -1,4 +1,4 @@
-"""Every engine reports SQL test, scenario and relationship errors identically, without re-runs."""
+"""Every engine reports SQL test, scenario and relationship errors identically."""
 
 from __future__ import annotations
 
@@ -81,6 +81,24 @@ _CASES: dict[str, FailureCase] = {
             expected_distinct_macro_call_counts=1,
         ),
         NativeSqlTestErrorTestCase(
+            description="a quoted scenario CTE name",
+            case_name="scenario-quoted-cte-name",
+            expected_distinct_macro_call_counts=1,
+            expected_location="--> tests/scenarios/orders.sql:6:1",
+        ),
+        NativeSqlTestErrorTestCase(
+            description="a materialized scenario CTE",
+            case_name="scenario-materialized-cte",
+            expected_distinct_macro_call_counts=1,
+            expected_location="--> tests/scenarios/orders.sql:6:25",
+        ),
+        NativeSqlTestErrorTestCase(
+            description="a quoted macro test CTE name",
+            case_name="macro-test-quoted-cte-name",
+            expected_distinct_macro_call_counts=1,
+            expected_location="--> tests/unit/test_stg_orders.sql:4:1",
+        ),
+        NativeSqlTestErrorTestCase(
             description="a test mocking an unknown source",
             case_name="test-mocks-unknown-source",
             expected_distinct_macro_call_counts=1,
@@ -131,10 +149,14 @@ def test_given_sql_test_error_when_compiling_with_each_engine_then_errors_and_ty
         == {stderr_without_durations(stderr=runs[0].stderr)},
         f"[{case.expected_code}]" in runs[0].report + runs[0].stderr,
         str(case.expected_message) in runs[0].report + runs[0].stderr,
+        (case.expected_help or "") in runs[0].report + runs[0].stderr,
+        test_case.expected_location in runs[0].report + runs[0].stderr,
         len(set(macro_calls)),
         tuple(error_types),
     ) == (
         (1, 1, 1),
+        True,
+        True,
         True,
         True,
         True,

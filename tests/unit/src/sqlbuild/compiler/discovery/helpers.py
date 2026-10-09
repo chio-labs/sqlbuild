@@ -120,6 +120,7 @@ def parse_sql_scenario_file(
         contents=str(payload[1]),
         file_path=file_path,
         relative_path=relative_path,
+        sql_body_span=cast(tuple[int, int], payload[4]),
     )
 
 

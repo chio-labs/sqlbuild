@@ -104,3 +104,31 @@ class PendingOriginJanitorE2ETestCase:
     description: str
     janitor_args: tuple[str, ...]
     expected_order_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class LayerMoveRefusalE2ETestCase:
+    description: str
+    project_files: dict[str, str]
+    old_name: str
+    new_name: str
+    expected_hint: tuple[str, ...]
+    expected_moved_file: str
+
+
+@dataclass(frozen=True)
+class LayerMovePlaceholderE2ETestCase:
+    description: str
+    project_files: dict[str, str]
+    old_name: str
+    new_name: str
+    expected_hint: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OtherRenameRefusalE2ETestCase:
+    description: str
+    project_files: dict[str, str]
+    old_name: str
+    new_name: str
+    expected_codes: tuple[str, ...]

@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.macro_bridge._helpers.splicing import splice_text
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     digest_module_files,
     module_digests_metadata,
@@ -51,7 +52,6 @@ class MacroBridge:
         self._module_digests: dict[str, str] = {}
         self._observed_modules: dict[str, object] = {}
         self._project_inputs: tuple[Path, list[str], str] = (Path(), [], "")
-        self._scanned: bool = False
 
     def attach_store(self, *, cache_dir: Path, project_dir: Path, model_paths: list[str]) -> None:
         """Reuse call results stored by earlier compiles of the same code and project files."""
@@ -134,10 +134,12 @@ class MacroBridge:
     def scan(self, sql: str) -> tuple[MacroCallSite, ...] | None:
         """Return the top-level call sites of `sql`, or None when Python must expand it."""
 
-        self._scanned = True
-        rows: list[tuple[int, int, str, list[str], bool]] | None = _native.scan_macro_call_sites(
-            sql, self._python_version, self._unicode_version
-        )
+        try:
+            rows: list[tuple[int, int, str, list[str], bool]] | None = (
+                _native.scan_macro_call_sites(sql, self._python_version, self._unicode_version)
+            )
+        except UnicodeEncodeError:
+            return None
         if rows is None:
             return None
         return tuple(
@@ -150,12 +152,6 @@ class MacroBridge:
             )
             for start, end, name, tree_names, typed_reference_text in rows
         )
-
-    @property
-    def scanned(self) -> bool:
-        """Whether any authored string has been scanned, so this compile left the Python path."""
-
-        return self._scanned
 
     def call_class(
         self,
@@ -213,15 +209,17 @@ class MacroBridge:
         class_id: int | None = self._class_ids.get(class_key)
         if class_id is None:
             class_id = self._class_ids[class_key] = len(self._class_ids)
-            if self._store_path is not None and call_class.persistent:
-                self._memo.set_persistent_class(
-                    class_id,
-                    call_class_store_text(
-                        macro_tokens=call_class.macro_store_tokens,
-                        context_token=call_class.context_store_token,
-                        prior_relations=prior_relations,
-                    ),
+            class_text: str | None = (
+                call_class_store_text(
+                    macro_tokens=call_class.macro_store_tokens,
+                    context_token=call_class.context_store_token,
+                    prior_relations=prior_relations,
                 )
+                if self._store_path is not None and call_class.persistent
+                else None
+            )
+            if class_text is not None:
+                self._memo.set_persistent_class(class_id, class_text)
         found: tuple[str, list[tuple[str, str]], list[tuple[int, str, str]]] | None = (
             self._memo.lookup(class_id, call_text)
         )
@@ -249,11 +247,18 @@ class MacroBridge:
 
         if self._store_trusted and len(sys.modules) != len(self._observed_modules):
             _ = self._observe_modules()
-        self._memo.record(
-            class_id,
-            call_text,
-            (sql, [(relation.kind.value, relation.name) for relation in relations], list(events)),
-        )
+        try:
+            self._memo.record(
+                class_id,
+                call_text,
+                (
+                    sql,
+                    [(relation.kind.value, relation.name) for relation in relations],
+                    list(events),
+                ),
+            )
+        except UnicodeEncodeError:
+            return
 
     def splice(
         self, *, sql: str, sites: tuple[MacroCallSite, ...], outputs: list[str]
@@ -262,9 +267,11 @@ class MacroBridge:
 
         rendered: str
         spans: list[tuple[int, int, int, int]]
-        rendered, spans = _native.splice_macro_calls(
-            sql, [(site.start, site.end) for site in sites], outputs
-        )
+        bounds: list[tuple[int, int]] = [(site.start, site.end) for site in sites]
+        try:
+            rendered, spans = _native.splice_macro_calls(sql, bounds, outputs)
+        except UnicodeEncodeError:
+            rendered, spans = splice_text(sql=sql, bounds=bounds, outputs=outputs)
         return rendered, tuple(
             ExpansionSpan(
                 source_start=source_start,

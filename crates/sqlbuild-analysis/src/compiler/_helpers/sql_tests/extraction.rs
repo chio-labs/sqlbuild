@@ -35,6 +35,8 @@ const DIRECT_NAMES: [(&str, &str, &str); 3] = [
         "__table_fn_expected__",
     ),
 ];
+const TEST_CONTEXT: &str = "SQL test";
+const SCENARIO_CONTEXT: &str = "SQL scenario";
 const DECLARATION_CALLS: [&str; 4] = ["enum", "const", "var", "param"];
 /// Longest projection the alias help repeats verbatim.
 const ALIAS_HELP_EXPRESSION_LIMIT: usize = 80;
@@ -67,6 +69,9 @@ struct TestRequest {
     /// Read only the CTE names and body offsets of the authored block, before any expansion.
     #[serde(default)]
     authored: bool,
+    /// The authored text is a scenario rather than a SQL test block.
+    #[serde(default)]
+    scenario: bool,
 }
 
 /// One extraction error, with help and the offending text where the author can act on it.
@@ -189,7 +194,7 @@ fn extract_test(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified
     if test.authored {
         return authored_ctes(test, syntax);
     }
-    let ctes: Vec<Cte> = scan_ctes(&test.sql, &test.file_label, syntax)?.ctes;
+    let ctes: Vec<Cte> = scan_ctes(&test.sql, &test.file_label, TEST_CONTEXT, syntax)?.ctes;
     let scope = TestScope {
         file: &test.file_label,
         syntax,
@@ -204,7 +209,12 @@ fn extract_test(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified
 
 /// The authored block's CTEs, or the located error of a CTE name; other errors read as no CTEs.
 fn authored_ctes(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified, Failure> {
-    match scan_ctes(&test.sql, &test.file_label, syntax) {
+    let context: &str = if test.scenario {
+        SCENARIO_CONTEXT
+    } else {
+        TEST_CONTEXT
+    };
+    match scan_ctes(&test.sql, &test.file_label, context, syntax) {
         Ok(scanned) => Ok(Classified::Authored {
             ctes: scanned
                 .ctes
@@ -218,13 +228,30 @@ fn authored_ctes(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classifie
     }
 }
 
+/// Who owns the CTEs being read, which names them in errors, and the adapter's lexical rules.
+struct CteOwner<'a> {
+    file: &'a str,
+    context: &'a str,
+    syntax: &'a LexicalSyntax,
+}
+
 /// The top-level CTEs of one test, with the code-point offset of each stripped body.
 struct ScannedCtes {
     ctes: Vec<Cte>,
     body_starts: Vec<usize>,
 }
 
-fn scan_ctes(sql: &str, file: &str, syntax: &LexicalSyntax) -> Result<ScannedCtes, Failure> {
+fn scan_ctes(
+    sql: &str,
+    file: &str,
+    context: &str,
+    syntax: &LexicalSyntax,
+) -> Result<ScannedCtes, Failure> {
+    let owner = CteOwner {
+        file,
+        context,
+        syntax,
+    };
     let mut body_starts: Vec<usize> = Vec::new();
     let mut index = skip_ignorable(sql, 0, syntax)?;
     index = consume_keyword(sql, index, "WITH").ok_or_else(|| {
@@ -237,7 +264,7 @@ fn scan_ctes(sql: &str, file: &str, syntax: &LexicalSyntax) -> Result<ScannedCte
     let mut ctes: Vec<Cte> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     loop {
-        let (name, end) = read_cte_name(sql, index, file, syntax)?;
+        let (name, end) = read_cte_name(sql, index, &owner)?;
         if !seen.insert(name.clone()) {
             return Err(format!("SQL test '{file}' defines duplicate CTE '{name}'").into());
         }
@@ -252,8 +279,11 @@ fn scan_ctes(sql: &str, file: &str, syntax: &LexicalSyntax) -> Result<ScannedCte
         index = consume_keyword(sql, index, "AS")
             .ok_or_else(|| format!("SQL test '{file}' expected keyword AS"))?;
         index = skip_ignorable(sql, index, syntax)?;
+        if let Some(failure) = materialization_failure(sql, index, &owner, &name)? {
+            return Err(failure);
+        }
         if byte_at(sql, index) != Some(b'(') {
-            return Err(format!("SQL test '{file}' CTE '{name}' must use AS (...)").into());
+            return Err(format!("{context} '{file}' CTE '{name}' must use AS (...)").into());
         }
         let close = matching_paren(sql, index, "SQL test", syntax)?;
         let body = &sql[index + 1..close];
@@ -279,9 +309,9 @@ fn scan_ctes(sql: &str, file: &str, syntax: &LexicalSyntax) -> Result<ScannedCte
 fn read_cte_name(
     sql: &str,
     start: usize,
-    file: &str,
-    syntax: &LexicalSyntax,
+    owner: &CteOwner<'_>,
 ) -> Result<(String, usize), Failure> {
+    let (file, context, syntax) = (owner.file, owner.context, owner.syntax);
     if let Some(quote) = byte_at(sql, start).filter(|byte| matches!(byte, b'"' | b'`' | b'[')) {
         let end = if quote == b'[' {
             sql[start..]
@@ -290,11 +320,10 @@ fn read_cte_name(
         } else {
             skip_non_code(sql, start, syntax)?
         };
-        return Err(cte_name_failure(sql, start, end, file));
+        return Err(cte_name_failure(sql, start, end, owner));
     }
-    let Some(first) = char_at(sql, start).filter(|first| *first == '_' || first.is_alphabetic())
-    else {
-        return Err(format!("SQL test '{file}' expected a CTE name").into());
+    let Some(first) = char_at(sql, start).filter(|first| is_identifier_continue(*first)) else {
+        return Err(format!("{context} '{file}' expected a CTE name").into());
     };
     let mut end = start + first.len_utf8();
     while let Some(character) =
@@ -302,16 +331,48 @@ fn read_cte_name(
     {
         end += character.len_utf8();
     }
-    if sql[start..end]
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    if (first == '_' || first.is_ascii_alphabetic())
+        && sql[start..end]
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
     {
         return Ok((sql[start..end].to_owned(), end));
     }
-    Err(cte_name_failure(sql, start, end, file))
+    Err(cte_name_failure(sql, start, end, owner))
 }
 
-fn cte_name_failure(sql: &str, start: usize, end: usize, file: &str) -> Failure {
+/// Python's error for `AS MATERIALIZED` or `AS NOT MATERIALIZED`, located at the hint.
+fn materialization_failure(
+    sql: &str,
+    start: usize,
+    owner: &CteOwner<'_>,
+    name: &str,
+) -> Result<Option<Failure>, Failure> {
+    let (hint, end) = match consume_keyword(sql, start, "NOT") {
+        Some(not_end) => {
+            let index = skip_ignorable(sql, not_end, owner.syntax)?;
+            match consume_keyword(sql, index, "MATERIALIZED") {
+                Some(end) => ("NOT MATERIALIZED", end),
+                None => return Ok(None),
+            }
+        }
+        None => match consume_keyword(sql, start, "MATERIALIZED") {
+            Some(end) => ("MATERIALIZED", end),
+            None => return Ok(None),
+        },
+    };
+    Ok(Some(Failure {
+        message: format!(
+            "{} '{}' CTE '{name}' must not use AS {hint}; materialization hints are not supported in {} CTEs",
+            owner.context, owner.file, owner.context
+        ),
+        help: Some(format!("remove {hint} and write {name} AS (...)")),
+        token: Some((sql[start..end].to_owned(), sql[..start].chars().count())),
+    }))
+}
+
+fn cte_name_failure(sql: &str, start: usize, end: usize, owner: &CteOwner<'_>) -> Failure {
+    let (file, context) = (owner.file, owner.context);
     let token = &sql[start..end];
     let shown = if matches!(byte_at(sql, start), Some(b'"' | b'`' | b'[')) {
         token.to_owned()
@@ -338,7 +399,7 @@ fn cte_name_failure(sql: &str, start: usize, end: usize, file: &str) -> Failure 
     }
     Failure {
         message: format!(
-            "SQL test '{file}' CTE name {shown} must be an unquoted identifier of ASCII letters, digits and underscores"
+            "{context} '{file}' CTE name {shown} must be an unquoted identifier of ASCII letters, digits and underscores"
         ),
         help: Some(format!(
             "rename the CTE, for example {suggestion}; quoted CTE names and names with $ or non-ASCII characters are not supported"

@@ -88,13 +88,17 @@ _MACRO_TEST_HEADER: str = 'TEST (mode macro, name "eu_label");\n\n'
             expected_error="SQL test 'tests/unit/test_eu_label.sql' CTE '__macro_actual__' must",
         ),
         ScopeEngineParityTestCase(
-            description="a macro test only Polyglot reads keeps Python's fallback",
+            description="a macro test materialization hint fails with the located extraction error",
             files={
                 **SCOPED_PROJECT,
                 "tests/unit/test_eu_label.sql": _MACRO_TEST_HEADER
                 + "WITH\n__macro_actual__ AS MATERIALIZED (\n  SELECT @cents('1') AS label\n),\n"
                 "__macro_expected__ AS (\n  SELECT 100 AS label\n)\nSELECT 1\n",
             },
+            expected_error=(
+                "SQL test 'tests/unit/test_eu_label.sql' CTE '__macro_actual__' must not use "
+                "AS MATERIALIZED; materialization hints are not supported in SQL test CTEs"
+            ),
         ),
         ScopeEngineParityTestCase(
             description="non-ASCII folders keep Python's repr order of path keys",

@@ -376,6 +376,7 @@ class DiscoveredSqlScenarioFile:
     sql_body: str
     name: str
     ownership_root: Path = Path(SQL_SCENARIOS_OWNERSHIP_ROOT)
+    sql_body_span: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
