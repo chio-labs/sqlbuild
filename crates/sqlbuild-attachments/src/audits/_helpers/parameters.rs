@@ -1,5 +1,7 @@
 //! Python's raw and quoted SQL argument patterns and argument value rendering.
 
+use sqlbuild_core::text::main::is_python_space::is_python_space;
+
 use crate::audits::models::ArgumentValue;
 
 /// One `@name` or `@'name'` occurrence, in byte offsets.
@@ -10,8 +12,8 @@ pub(crate) struct ParameterMatch<'sql> {
     pub(crate) quoted: bool,
 }
 
-/// Every parameter in start order, or None where Python's Unicode whitespace could decide.
-pub(crate) fn parameter_matches(sql: &str) -> Option<Vec<ParameterMatch<'_>>> {
+/// Every parameter in start order.
+pub(crate) fn parameter_matches(sql: &str) -> Vec<ParameterMatch<'_>> {
     let bytes: &[u8] = sql.as_bytes();
     let mut matches: Vec<ParameterMatch<'_>> = Vec::new();
     let mut quoted_end: usize = 0;
@@ -47,7 +49,7 @@ pub(crate) fn parameter_matches(sql: &str) -> Option<Vec<ParameterMatch<'_>>> {
         let Some(end) = identifier_end(bytes, index + 1) else {
             continue;
         };
-        if !opens_call(bytes, end)? {
+        if !opens_call(sql, end) {
             matches.push(ParameterMatch {
                 name: &sql[index + 1..end],
                 start: index,
@@ -57,13 +59,13 @@ pub(crate) fn parameter_matches(sql: &str) -> Option<Vec<ParameterMatch<'_>>> {
             raw_end = end;
         }
     }
-    Some(matches)
+    matches
 }
 
 /// Python's `render_sql_argument_value` for one value; `None` where it holds an opaque value.
 pub(crate) fn render_value(value: &ArgumentValue, quoted: bool) -> Option<String> {
     Some(match value {
-        ArgumentValue::List(items) => items
+        ArgumentValue::List(items) | ArgumentValue::Tuple(items) => items
             .iter()
             .map(|item| render_value(item, quoted))
             .collect::<Option<Vec<String>>>()?
@@ -94,46 +96,28 @@ fn identifier_end(bytes: &[u8], start: usize) -> Option<usize> {
     Some(end)
 }
 
-/// Python's `(?!\s*\()` after a name; non-ASCII whitespace candidates defer.
-fn opens_call(bytes: &[u8], mut index: usize) -> Option<bool> {
-    while let Some(byte) = bytes.get(index) {
-        if !byte.is_ascii() {
-            return None;
-        }
-        if !matches!(
-            byte,
-            b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c | 0x1c..=0x1f
-        ) {
-            return Some(*byte == b'(');
-        }
-        index += 1;
-    }
-    Some(false)
+/// Python's `(?=\s*\()` after a name, with `\s` matching what `str.isspace` accepts.
+fn opens_call(sql: &str, end: usize) -> bool {
+    sql[end..]
+        .chars()
+        .find(|character| !is_python_space(*character))
+        == Some('(')
 }
 
-/// Why rendering stops: Python's missing-argument or value error, or input Python must judge.
+/// Why rendering stops: a missing argument or a value that cannot be rendered.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum RenderStop {
     MissingArgument(String),
-    /// The argument whose value Python cannot render.
+    /// The argument whose value cannot be rendered.
     UnsupportedValue(String),
-    Deferred,
 }
 
-/// Python's `render_parameterized_sql`; unused arguments under `reject_unused` defer.
+/// `render_parameterized_sql` without `reject_unused`.
 pub(crate) fn render_parameterized_sql(
     sql: &str,
     arguments: &[(String, ArgumentValue)],
-    reject_unused: bool,
 ) -> Result<String, RenderStop> {
-    let matches = parameter_matches(sql).ok_or(RenderStop::Deferred)?;
-    if reject_unused {
-        for (name, _) in arguments {
-            if !matches.iter().any(|item| item.name == name.as_str()) {
-                return Err(RenderStop::Deferred);
-            }
-        }
-    }
+    let matches = parameter_matches(sql);
     let mut rendered: String = String::with_capacity(sql.len());
     let mut previous_end: usize = 0;
     for item in &matches {

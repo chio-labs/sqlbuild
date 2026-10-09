@@ -13,7 +13,6 @@ from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
     AuditParity,
     audit_parity,
     generated_audit,
-    is_native,
     native_outcome,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
@@ -26,9 +25,8 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
             description="seeded parameters, argument values, overrides and policies",
             seed=20261008,
             count=5000,
-            expected_minimum_native=1500,
+            expected_minimum_native=5000,
             expected_minimum_native_errors=600,
-            expected_minimum_deferred=2000,
             expected_minimum_python_errors=1000,
         ),
     ],
@@ -43,20 +41,18 @@ def test_given_generated_attachments_when_rendering_natively_then_python_renderi
         audit_parity(generated_audit(rng=rng)) for _ in range(test_case.count)
     ]
 
-    answered: list[AuditParity] = list(filter(is_native, parities))
     assert (
         mismatches(
-            inputs=[parity.audit for parity in answered],
-            expected=[parity.python for parity in answered],
-            actual=list(map(native_outcome, answered)),
+            inputs=[parity.audit for parity in parities],
+            expected=[parity.python for parity in parities],
+            actual=list(map(native_outcome, parities)),
         ),
-        len(answered) >= test_case.expected_minimum_native,
-        sum(isinstance(native_outcome(parity), str) for parity in answered)
+        len(parities) >= test_case.expected_minimum_native,
+        sum(isinstance(native_outcome(parity), str) for parity in parities)
         >= test_case.expected_minimum_native_errors,
-        len(parities) - len(answered) >= test_case.expected_minimum_deferred,
         sum(isinstance(parity.python, str) for parity in parities)
         >= test_case.expected_minimum_python_errors,
-    ) == ([], True, True, True, True), test_case.description
+    ) == ([], True, True, True), test_case.description
 
 
 if __name__ == "__main__":

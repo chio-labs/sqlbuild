@@ -8,7 +8,9 @@ pub enum ArgumentValue {
     Number(String),
     Text(String),
     List(Vec<ArgumentValue>),
-    /// A value Python cannot render, such as a mapping; rendering it is Python's error.
+    /// A tuple renders like a list.
+    Tuple(Vec<ArgumentValue>),
+    /// A value that cannot be rendered, such as a mapping; rendering it is an error.
     Opaque,
 }
 
@@ -28,11 +30,10 @@ pub struct AuditAttachment {
     pub definition_name: String,
     pub sql_body: String,
     pub evidence_sql: Option<String>,
-    pub implicit_arguments: Vec<(String, ArgumentValue)>,
+    /// Arguments from the attached resource, such as `model` and `column`; always text.
+    pub implicit_arguments: Vec<(String, String)>,
     pub explicit_arguments: Vec<(String, ArgumentValue)>,
-    pub measurement: bool,
     pub has_thresholds: bool,
-    pub has_minimum_samples: bool,
     pub threshold_error: bool,
     pub instance_severity: Option<String>,
     pub default_severity: Option<String>,

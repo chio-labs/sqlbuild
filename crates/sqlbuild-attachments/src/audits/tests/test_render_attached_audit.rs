@@ -42,37 +42,43 @@ fn given_attached_audits_when_rendering_then_python_rendering_is_returned() {
             ),
         },
         AttachedAuditTestCase {
-            description: "an override Python's equality must judge defers",
-            attachment: AuditAttachment {
-                implicit_arguments: vec![(
-                    "values".to_owned(),
-                    ArgumentValue::Number("1".to_owned()),
-                )],
-                ..attachment(
-                    vec![("values".to_owned(), ArgumentValue::Number("1.0".to_owned()))],
-                    None,
-                    None,
-                )
-            },
-            expected_rendering: None,
+            description: "an explicit argument repeating the implicit text is accepted",
+            attachment: attachment(
+                vec![
+                    (
+                        "column".to_owned(),
+                        ArgumentValue::Text("status".to_owned()),
+                    ),
+                    (
+                        "values".to_owned(),
+                        ArgumentValue::Tuple(vec![
+                            ArgumentValue::Text("a".to_owned()),
+                            ArgumentValue::Number("inf".to_owned()),
+                        ]),
+                    ),
+                ],
+                None,
+                None,
+            ),
+            expected_rendering: rendered(
+                "SELECT * FROM t WHERE status NOT IN ('a', inf)",
+                Ok(("error", PolicySource::Fallback)),
+            ),
         },
         AttachedAuditTestCase {
-            description: "an override holding a nested opaque value defers to Python's equality",
-            attachment: AuditAttachment {
-                implicit_arguments: vec![(
-                    "values".to_owned(),
-                    ArgumentValue::List(vec![ArgumentValue::Opaque]),
+            description: "an explicit argument repeating the implicit name with a list is an override",
+            attachment: attachment(
+                vec![(
+                    "column".to_owned(),
+                    ArgumentValue::List(vec![ArgumentValue::Text("status".to_owned())]),
                 )],
-                ..attachment(
-                    vec![(
-                        "values".to_owned(),
-                        ArgumentValue::List(vec![ArgumentValue::Opaque]),
-                    )],
-                    None,
-                    None,
-                )
-            },
-            expected_rendering: None,
+                None,
+                None,
+            ),
+            expected_rendering: failed(
+                "models/schema.yml audit 'accepted_values' must not override \
+                 implicit column from attached context",
+            ),
         },
         AttachedAuditTestCase {
             description: "a missing argument is Python's error before the policies",

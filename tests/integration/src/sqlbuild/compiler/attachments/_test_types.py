@@ -29,7 +29,6 @@ class AttachedAuditParityTestCase:
     count: int
     expected_minimum_native: int
     expected_minimum_native_errors: int
-    expected_minimum_deferred: int
     expected_minimum_python_errors: int
 
 

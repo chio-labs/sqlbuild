@@ -23,8 +23,8 @@ pub(super) fn order_arguments() -> Vec<(String, ArgumentValue)> {
     ]
 }
 
-pub(super) fn rendered_sql(sql: &str, reject_unused: bool) -> Result<String, RenderStop> {
-    render_parameterized_sql(sql, &order_arguments(), reject_unused)
+pub(super) fn rendered_sql(sql: &str) -> Result<String, RenderStop> {
+    render_parameterized_sql(sql, &order_arguments())
 }
 
 /// A violations audit over `@column` with the given explicit arguments and policies.
@@ -38,14 +38,9 @@ pub(super) fn attachment(
         definition_name: "accepted_values".to_owned(),
         sql_body: "SELECT * FROM t WHERE @column NOT IN (@'values')".to_owned(),
         evidence_sql: Some("SELECT @column FROM t".to_owned()),
-        implicit_arguments: vec![(
-            "column".to_owned(),
-            ArgumentValue::Text("status".to_owned()),
-        )],
+        implicit_arguments: vec![("column".to_owned(), "status".to_owned())],
         explicit_arguments: explicit,
-        measurement: false,
         has_thresholds: false,
-        has_minimum_samples: false,
         threshold_error: false,
         instance_severity: severity.map(str::to_owned),
         default_severity: None,
@@ -58,14 +53,14 @@ pub(super) fn attachment(
 pub(super) fn rendered(
     sql_body: &str,
     policies: Result<(&'static str, PolicySource), &str>,
-) -> Option<AuditRendering> {
-    Some(AuditRendering::Rendered(RenderedAudit {
+) -> AuditRendering {
+    AuditRendering::Rendered(RenderedAudit {
         sql_body: sql_body.to_owned(),
         evidence_sql: Some("SELECT status FROM t".to_owned()),
         policies: policies.map_err(str::to_owned),
-    }))
+    })
 }
 
-pub(super) fn failed(message: &str) -> Option<AuditRendering> {
-    Some(AuditRendering::Failed(message.to_owned()))
+pub(super) fn failed(message: &str) -> AuditRendering {
+    AuditRendering::Failed(message.to_owned())
 }

@@ -36,9 +36,6 @@ from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     named_declaration_usages,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile._helpers.render.arguments import (
-    render_parameterized_sql,
-)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
@@ -72,10 +69,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -547,7 +540,7 @@ def build_seed_attached_audit_inputs(
         identity=ResourceIdentity(ResourceKind.SEED, seed_name),
         path=seed_input.seed_file.relative_path,
     )
-    implicit_arguments: dict[str, object] = {
+    implicit_arguments: dict[str, str] = {
         "seed": seed_name,
         "relation": SqlReferenceKind.SEED.example_call(seed_name, quote='"'),
     }
@@ -610,7 +603,7 @@ def build_attached_audit_input(
     *,
     audit_instance: SchemaAuditInstance,
     owner_file: Path,
-    implicit_arguments: dict[str, object],
+    implicit_arguments: dict[str, str],
     attached_target_kind: str,
     attached_target_name: str,
     attached_column_name: str | None,
@@ -650,34 +643,18 @@ def build_attached_audit_input(
             f"{owner_file} audit '{audit_instance.definition_name}': thresholds and "
             "minimum_samples are only valid for measurement audits"
         )
-    native_rendering: NativeRenderedAudit | None = (
-        render_native_attached_audit(
-            labels=(str(owner_file), audit_instance.definition_name),
-            sql_body=definition[1].sql_body,
-            evidence_sql=definition[1].evidence_sql,
-            implicit_arguments=implicit_arguments,
-            explicit_arguments=audit_instance.arguments,
-            policies=_native_audit_policies(audit_instance=audit_instance, context=context),
-        )
-        if native_stage_enabled(NativeStage.ATTACHMENTS)
-        else None
+    native_rendering: NativeRenderedAudit = render_native_attached_audit(
+        labels=(str(owner_file), audit_instance.definition_name),
+        sql_body=definition[1].sql_body,
+        evidence_sql=definition[1].evidence_sql,
+        implicit_arguments=implicit_arguments,
+        explicit_arguments=audit_instance.arguments,
+        policies=_native_audit_policies(audit_instance=audit_instance, context=context),
     )
-    if native_rendering is None and native_stage_enabled(NativeStage.ATTACHMENTS):
-        report_native_fallback(site=NativeFallbackSite.AUDIT_RENDERING)
-    if native_rendering is not None:
-        report_native_answer(stage=NativeStage.ATTACHMENTS, kind="audit_renderings")
-    if native_rendering is not None and native_rendering.render_error is not None:
+    if native_rendering.render_error is not None:
         raise CompileInputError(native_rendering.render_error, bridge_independent=True)
-    rendered_sql_body, rendered_evidence_sql = (
-        (native_rendering.sql_body, native_rendering.evidence_sql)
-        if native_rendering is not None
-        else _rendered_audit_sql(
-            audit_instance=audit_instance,
-            definition=definition[1],
-            owner_file=owner_file,
-            implicit_arguments=implicit_arguments,
-        )
-    )
+    rendered_sql_body: str = native_rendering.sql_body
+    rendered_evidence_sql: str | None = native_rendering.evidence_sql
     scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
         context=context,
         file_path=definition[0].file_path,
@@ -738,14 +715,8 @@ def build_attached_audit_input(
     audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
     resolved_severity: AuditSeverity
     resolved_run_scope: str
-    resolved_severity, resolved_run_scope = (
-        _native_audit_policy_values(
-            rendering=native_rendering, audit_instance=audit_instance, context=context
-        )
-        if native_rendering is not None
-        else _audit_policy_values(
-            audit_instance=audit_instance, context=context, audit_label=audit_label
-        )
+    resolved_severity, resolved_run_scope = _native_audit_policy_values(
+        rendering=native_rendering, audit_instance=audit_instance, context=context
     )
     validate_model_attached_audit_references(
         references=references,
@@ -783,70 +754,15 @@ def build_attached_audit_input(
     )
 
 
-def _rendered_audit_sql(
-    *,
-    audit_instance: SchemaAuditInstance,
-    definition: DiscoveredAuditBlock,
-    owner_file: Path,
-    implicit_arguments: dict[str, object],
-) -> tuple[str, str | None]:
-    merged_arguments: dict[str, object] = merge_audit_arguments(
-        owner_file=owner_file,
-        definition_name=audit_instance.definition_name,
-        implicit_arguments=implicit_arguments,
-        explicit_arguments=audit_instance.arguments,
-    )
-    rendered_sql_body: str = render_generic_audit_sql(
-        sql=definition.sql_body,
-        arguments=merged_arguments,
-        owner_file=owner_file,
-        definition_name=audit_instance.definition_name,
-    )
-    rendered_evidence_sql: str | None = (
-        None
-        if definition.evidence_sql is None
-        else render_generic_audit_sql(
-            sql=definition.evidence_sql,
-            arguments=merged_arguments,
-            owner_file=owner_file,
-            definition_name=audit_instance.definition_name,
-        )
-    )
-    return rendered_sql_body, rendered_evidence_sql
-
-
 def _native_audit_policies(
     *, audit_instance: SchemaAuditInstance, context: _AuditAttachmentContext
 ) -> NativeAuditPolicies:
     thresholds: MeasurementThresholds | None = audit_instance.thresholds
     return NativeAuditPolicies(
-        measurement=context.generic_audit_definitions[audit_instance.definition_name][
-            1
-        ].evaluation_mode
-        == AuditEvaluationMode.MEASUREMENT,
         has_thresholds=thresholds is not None,
-        has_minimum_samples=audit_instance.minimum_samples is not None,
         threshold_error=thresholds is not None and thresholds.error is not None,
         instance_severity=audit_instance.severity,
         default_severity=context.default_audit_severity,
-        instance_run_scope=audit_instance.run_scope,
-        default_run_scope=context.default_audit_run_scope,
-    )
-
-
-def _audit_policy_values(
-    *, audit_instance: SchemaAuditInstance, context: _AuditAttachmentContext, audit_label: str
-) -> tuple[AuditSeverity, str]:
-    severity: AuditSeverity = (
-        measurement_policy_severity(audit_instance.thresholds)
-        if audit_instance.thresholds is not None
-        else resolve_audit_severity(
-            instance_severity=audit_instance.severity,
-            default_severity=context.default_audit_severity,
-            audit_label=audit_label,
-        )
-    )
-    return severity, resolve_audit_run_scope(
         instance_run_scope=audit_instance.run_scope,
         default_run_scope=context.default_audit_run_scope,
     )
@@ -982,48 +898,6 @@ def _single_resource_problem(
         f"or {SqlReferenceKind.SEED.placeholder_call()}",
         "reference resources through SQLBuild calls instead of hard-coded relation names, or "
         "attach a generic audit to the resource being checked",
-    )
-
-
-def merge_audit_arguments(
-    *,
-    owner_file: Path,
-    definition_name: str,
-    implicit_arguments: dict[str, object],
-    explicit_arguments: dict[str, object],
-) -> dict[str, object]:
-    """Merge implicit attached-audit arguments with explicit authored arguments."""
-
-    merged_arguments: dict[str, object] = dict(implicit_arguments)
-    argument_name: str
-    argument_value: object
-    for argument_name, argument_value in explicit_arguments.items():
-        if (
-            argument_name in implicit_arguments
-            and implicit_arguments[argument_name] != argument_value
-        ):
-            raise CompileInputError(
-                f"{owner_file} audit '{definition_name}' must not override implicit "
-                f"{argument_name} from attached context"
-            )
-        merged_arguments[argument_name] = argument_value
-    return merged_arguments
-
-
-def render_generic_audit_sql(
-    *,
-    sql: str,
-    arguments: dict[str, object],
-    owner_file: Path,
-    definition_name: str,
-) -> str:
-    """Render generic attached-audit parameters into executable SQL text."""
-
-    return render_parameterized_sql(
-        sql=sql,
-        arguments=arguments,
-        owner_label=str(owner_file),
-        definition_label=f"generic audit '{definition_name}'",
     )
 
 

@@ -309,9 +309,9 @@ def pair_seed_files(
 def render_attached_generic_audit(
     labels: tuple[str, str],
     sql: tuple[str, str | None],
-    arguments: tuple[dict[str, object], dict[str, object]],
+    arguments: tuple[list[tuple[str, str]], dict[str, object]],
     policies: dict[str, object],
-) -> tuple[str | None, str, str | None, str, str, str | None] | None: ...
+) -> tuple[str | None, str, str | None, str, str, str | None]: ...
 def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[object, ...]: ...
 def scan_sql_declaration_references(
     sqls: list[str], python_version: tuple[int, int], unicode_version: str

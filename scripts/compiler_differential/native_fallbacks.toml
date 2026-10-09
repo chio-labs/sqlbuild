@@ -9,20 +9,6 @@ seeds = 12
 [[entry]]
 engine = "native"
 stage = "attachments"
-site = "attachments.audit_rendering"
-kind = "deferred"
-counts = { seed = 16 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
-site = "attachments.native"
-kind = "audit_renderings"
-counts = { example = 120, failure = 10, fixture = 112, seed = 354 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
 site = "attachments.native"
 kind = "function_headers"
 counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
@@ -187,20 +173,6 @@ stage = "reference_extraction"
 site = "reference_extraction.native"
 kind = "reference_scans"
 counts = { example = 250, failure = 465, fixture = 249, seed = 1523 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.audit_rendering"
-kind = "deferred"
-counts = { seed = 16 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.native"
-kind = "audit_renderings"
-counts = { example = 120, failure = 10, fixture = 112, seed = 354 }
 
 [[entry]]
 engine = "native-preview"

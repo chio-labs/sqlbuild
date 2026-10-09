@@ -21,8 +21,6 @@ from sqlbuild.compiler.attachments.main._render_native_attached_audit import (
 from sqlbuild.compiler.attachments.models import NativeAuditPolicies, NativeRenderedAudit
 from sqlbuild.compiler.auditing.types import AuditRunScope, AuditSeverity
 from sqlbuild.compiler.compile._helpers.attachment.audits import (
-    merge_audit_arguments,
-    render_generic_audit_sql,
     resolve_audit_run_scope,
     resolve_audit_severity,
 )
@@ -33,6 +31,7 @@ from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
 )
 from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile._helpers.render import macros
+from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
@@ -215,6 +214,8 @@ _SQL_PIECES: tuple[str, ...] = (
     "'@column'",
     "@column\u00e9",
     "@column\u00a0(",
+    "@values\u2003(",
+    "@'values'\u3000",
     "\n",
 )
 _VALUES: tuple[object, ...] = (
@@ -227,6 +228,8 @@ _VALUES: tuple[object, ...] = (
     None,
     ["placed", 2, None],
     ("placed",),
+    ("placed", 3.5, float("inf")),
+    [("placed",), ["shipped"]],
     {"nested": 1},
     float("nan"),
     AuditSeverity.WARN,
@@ -241,6 +244,8 @@ _RARE: tuple[tuple[str, object], ...] = (
     ("run_scope", "delta"),
     ("column", "amount"),
     ("column", 1),
+    ("column", ("status",)),
+    ("column", ["amount"]),
 )
 
 
@@ -250,8 +255,8 @@ class GeneratedAudit:
 
     sql_body: str
     evidence_sql: str
-    implicit_arguments: dict[str, object]
-    explicit_arguments: dict[str, object]
+    implicit_arguments: dict[str, str]
+    explicit_arguments: dict[object, object]
     instance_severity: str | None
     default_severity: str | None
     instance_run_scope: str | None
@@ -260,22 +265,23 @@ class GeneratedAudit:
 
 @dataclass(frozen=True)
 class AuditParity:
-    """Python's rendering (or error text) and the native rendering (or None)."""
+    """Python's rendering (or error text) and the native rendering."""
 
     audit: GeneratedAudit
     python: tuple[object, ...] | str
-    native: NativeRenderedAudit | None
+    native: NativeRenderedAudit
 
 
 def generated_audit(*, rng: random.Random) -> GeneratedAudit:
     """Return one attachment mixing parameter shapes, argument values and policies."""
 
     rare: dict[str, object] = dict(rng.choices(_RARE, k=int(rng.random() < 0.3)))
-    explicit: dict[str, object] = {
+    explicit: dict[object, object] = {
         "values": rng.choice(_VALUES),
         "limit_rows": rng.choice(_VALUES),
     }
     explicit.update(filter(_is_column_override, rare.items()))
+    explicit.update(dict.fromkeys(rng.choices((7,), k=int(rng.random() < 0.1)), "x"))
     return GeneratedAudit(
         sql_body="".join(rng.choices(_SQL_PIECES, k=rng.randint(1, 8))) + str(rare.get("sql", "")),
         evidence_sql="SELECT @column FROM t",
@@ -303,11 +309,9 @@ def audit_parity(audit: GeneratedAudit) -> AuditParity:
             sql_body=audit.sql_body,
             evidence_sql=audit.evidence_sql,
             implicit_arguments=audit.implicit_arguments,
-            explicit_arguments=audit.explicit_arguments,
+            explicit_arguments=cast(dict[str, object], audit.explicit_arguments),
             policies=NativeAuditPolicies(
-                measurement=False,
                 has_thresholds=False,
-                has_minimum_samples=False,
                 threshold_error=False,
                 instance_severity=audit.instance_severity,
                 default_severity=audit.default_severity,
@@ -318,21 +322,15 @@ def audit_parity(audit: GeneratedAudit) -> AuditParity:
     )
 
 
-def is_native(parity: AuditParity) -> bool:
-    """Whether the native rendering answered instead of deferring to Python."""
-
-    return parity.native is not None
-
-
 def native_outcome(parity: AuditParity) -> tuple[object, ...] | str:
     """The native rendering or error spelled like Python's, with the run scope it selects."""
 
-    rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
+    rendered: NativeRenderedAudit = parity.native
     return rendered.render_error or rendered.policy_error or _native_rendering(parity)
 
 
 def _native_rendering(parity: AuditParity) -> tuple[object, ...]:
-    rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
+    rendered: NativeRenderedAudit = parity.native
     run_scope: str | None = {
         "instance": parity.audit.instance_run_scope,
         "default": parity.audit.default_run_scope,
@@ -342,16 +340,26 @@ def _native_rendering(parity: AuditParity) -> tuple[object, ...]:
 
 def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
     owner: Path = Path("models/orders.sql")
+    overrides: list[object] = [
+        name
+        for name, value in audit.explicit_arguments.items()
+        if name in audit.implicit_arguments
+        and cast(dict[object, object], audit.implicit_arguments)[name] != value
+    ]
     try:
-        merged: dict[str, object] = merge_audit_arguments(
-            owner_file=owner,
-            definition_name="floor",
-            implicit_arguments=audit.implicit_arguments,
-            explicit_arguments=audit.explicit_arguments,
+        for name in overrides[:1]:
+            raise CompileInputError(
+                f"{owner} audit 'floor' must not override implicit {name} from attached context"
+            )
+        merged: dict[str, object] = cast(
+            dict[str, object], {**audit.implicit_arguments, **audit.explicit_arguments}
         )
         rendered: tuple[str, ...] = tuple(
-            render_generic_audit_sql(
-                sql=sql, arguments=merged, owner_file=owner, definition_name="floor"
+            render_parameterized_sql(
+                sql=sql,
+                arguments=merged,
+                owner_label=str(owner),
+                definition_label="generic audit 'floor'",
             )
             for sql in (audit.sql_body, audit.evidence_sql)
         )

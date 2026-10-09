@@ -23,9 +23,7 @@ type RenderedRow = (
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
 struct AuditPolicies {
-    measurement: bool,
     has_thresholds: bool,
-    has_minimum_samples: bool,
     threshold_error: bool,
     instance_severity: Option<String>,
     default_severity: Option<String>,
@@ -33,20 +31,16 @@ struct AuditPolicies {
     default_run_scope: Option<String>,
 }
 
-/// Render one `(owner, audit)` attachment with Python's errors, or `None` for Python.
+/// Render one `(owner, audit)` attachment, or the error rendering raises.
 #[pyfunction]
 fn render_attached_generic_audit(
     labels: (String, String),
     sql: (String, Option<String>),
-    arguments: (Bound<'_, PyDict>, Bound<'_, PyDict>),
+    arguments: (Vec<(String, String)>, Bound<'_, PyDict>),
     policies: AuditPolicies,
-) -> PyResult<Option<RenderedRow>> {
+) -> PyResult<RenderedRow> {
     compiler_guard(|| {
-        let (Some(implicit), Some(explicit)) =
-            (argument_pairs(&arguments.0)?, argument_pairs(&arguments.1)?)
-        else {
-            return Ok(None);
-        };
+        let (implicit, explicit) = (arguments.0, argument_pairs(&arguments.1)?);
         let attachment: AuditAttachment = AuditAttachment {
             owner_label: labels.0,
             definition_name: labels.1,
@@ -54,16 +48,14 @@ fn render_attached_generic_audit(
             evidence_sql: sql.1,
             implicit_arguments: implicit,
             explicit_arguments: explicit,
-            measurement: policies.measurement,
             has_thresholds: policies.has_thresholds,
-            has_minimum_samples: policies.has_minimum_samples,
             threshold_error: policies.threshold_error,
             instance_severity: policies.instance_severity,
             default_severity: policies.default_severity,
             instance_run_scope: policies.instance_run_scope,
             default_run_scope: policies.default_run_scope,
         };
-        Ok(render_attached_audit(&attachment).map(rendered_row))
+        Ok(rendered_row(render_attached_audit(&attachment)))
     })
 }
 
