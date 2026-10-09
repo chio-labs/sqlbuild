@@ -155,8 +155,8 @@ def test_given_recorded_allow_list_when_native_defers_more_or_less_then_the_gate
             expected_lines=(
                 "Native fallback allow-list: native-preview sql_test_glue sql_test_glue.assembly "
                 f"deferred (fixture): {_FALLBACK_WITHOUT_ANSWERS}",
-                "Native fallback allow-list: native-preview sql_test_glue sql_test_glue.planning "
-                f"deferred (fixture): {_FALLBACK_WITHOUT_ANSWERS}",
+                "Native fallback allow-list: native-preview sql_test_glue sql_test_glue.native "
+                f"sql_test_plans (fixture): {_ANSWER_VANISHED}",
                 "Native fallback allow-list: 2 problems",
             ),
         ),

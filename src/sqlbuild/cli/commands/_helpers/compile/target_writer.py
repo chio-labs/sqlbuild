@@ -577,7 +577,9 @@ def _plan_static_test_artifacts(
     ) as lifecycle:
         native_planning: bool = native_stage_enabled(NativeStage.SQL_TEST_GLUE)
         plan_artifacts: Callable[..., tuple[NativeSqlTestArtifact, ...]] = (
-            plan_native_sql_test_artifacts if native_planning else plan_and_render_sql_test_artifacts
+            plan_native_sql_test_artifacts
+            if native_planning
+            else plan_and_render_sql_test_artifacts
         )
         native_artifacts: tuple[NativeSqlTestArtifact, ...] = plan_artifacts(
             project=project,
