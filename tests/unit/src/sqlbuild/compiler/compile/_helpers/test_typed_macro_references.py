@@ -279,17 +279,17 @@ def test_given_enforcement_disabled_when_macro_emits_reference_then_expands_unch
         MalformedTypedMacroReferenceTestCase(
             description="non-string name",
             sql="@base(__ref(1))",
-            expected_error_fragment="must contain exactly one quoted resource name",
+            expected_error_fragment="must give __ref() exactly one quoted resource name",
         ),
         MalformedTypedMacroReferenceTestCase(
             description="two names",
             sql='@base(__ref("a", "b"))',
-            expected_error_fragment="must contain exactly one quoted resource name",
+            expected_error_fragment="must give __ref() exactly one quoted resource name",
         ),
         MalformedTypedMacroReferenceTestCase(
             description="keyword name",
             sql='@base(__ref(name="a"))',
-            expected_error_fragment="must contain exactly one quoted resource name",
+            expected_error_fragment="must give __ref() exactly one quoted resource name",
         ),
         MalformedTypedMacroReferenceTestCase(
             description="unsupported reference function",

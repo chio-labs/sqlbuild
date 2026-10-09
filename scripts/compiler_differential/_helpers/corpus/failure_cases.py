@@ -596,6 +596,13 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
     )
 
 
+_ENGINE_ERROR_MACROS: str = "macros/cents.py"
+_ENGINE_ERROR_CENTS: str = (
+    'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
+    '    return f"({expression} * 100)"\n'
+)
+
+
 def engine_error_cases() -> tuple[FailureCase, ...]:
     """User-facing errors every engine must report with the exact text; see the README."""
 
@@ -641,6 +648,78 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             expected_help=(
                 'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
             ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-syntax",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents('amount',, 2) AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
+                "could not be parsed: a value is missing here at line 1, column 10 of the "
+                "'@cents' arguments"
+            ),
+            expected_help=(
+                "Macro arguments are Python literals (strings, numbers, True, False, None, lists, "
+                "tuples and dicts), nested macro calls, and __ref(), __source() or __seed() "
+                "references; compute anything else inside the macro"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-bytes",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents(b'amount') AS cents\\nFROM __ref(\"stg_orders\")\n"
+                ),
+            },
+            expected_message=(
+                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
+                "use a bytes literal at line 1, column 1 of the '@cents' arguments"
+            ),
+            expected_help=(
+                "Pass text as a string without the b prefix, for example 'orders' instead of "
+                "b'orders'"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-complex",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    'SELECT customer_id, @cents(2j) AS cents\\nFROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
+                "use a complex number literal at line 1, column 1 of the '@cents' arguments"
+            ),
+            expected_help=(
+                "Pass int or float numbers; give a complex value's real and imaginary parts as two "
+                "arguments"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-ellipsis",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    'SELECT customer_id, @cents(...) AS cents\\nFROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
+                "use '...' (Ellipsis) at line 1, column 1 of the '@cents' arguments"
+            ),
+            expected_help=("Pass None, or a string the macro understands, instead of '...'"),
         ),
         failure_case(
             name="engine-error-week-date-cursor-start",

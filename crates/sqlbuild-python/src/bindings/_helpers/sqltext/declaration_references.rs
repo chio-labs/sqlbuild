@@ -2,8 +2,8 @@
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
-use sqlbuild_core::text::main::python_text::python_text;
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_sqltext::compiler::main::declaration_references::scan_declaration_references;
 use sqlbuild_sqltext::compiler::models::{
     DeclarationReference, DeclarationReferenceKind, DeclarationReferenceScan,

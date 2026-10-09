@@ -31,6 +31,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     discovery::registration::register(module)?;
     scopes::registration::register(module)?;
     model_config::registration::register(module)?;
+    render::macro_arguments::register(module)?;
     render::macro_calls::register(module)?;
     cache::registration::register(module)?;
     attachments::registration::register(module)?;

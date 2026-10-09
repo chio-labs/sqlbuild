@@ -1,8 +1,8 @@
 //! The Python template tokenizer.
 
 use crate::templates::errors::TemplateError;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use crate::templates::models::TemplateFailure;
+use sqlbuild_core::text::main::is_python_space::is_python_space;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TokenKind {

@@ -18,16 +18,17 @@ from typing import cast
 
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     call_site_sql_references,
-    evaluate_typed_reference,
     reject_macro_generated_references,
     report_macro_reference_call_syntax,
+)
+from sqlbuild.compiler.compile._helpers.render.macro_argument_values import (
+    parse_macro_call_arguments,
 )
 from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
     MACRO_TOKEN,
-    PYTHON_LITERAL_NAMES,
     SQL_OPEN_PAREN_TOKEN,
     SQL_QUOTE_TOKENS,
 )
@@ -40,6 +41,7 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
     MacroExpansionResult,
     MacroExpansionState,
+    ParsedMacroArguments,
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
@@ -1458,6 +1460,7 @@ def _evaluate_macro_call(
     _ = state.facts.open_call_site()
     try:
         args, kwargs = _parse_macro_arguments(
+            macro_name=macro_name,
             args_source=args_source,
             file_path=file_path,
             state=state,
@@ -1772,6 +1775,7 @@ def _call_loaded_macro(
 
 def _parse_macro_arguments(
     *,
+    macro_name: str,
     args_source: str,
     file_path: Path,
     state: MacroExpansionState,
@@ -1780,167 +1784,31 @@ def _parse_macro_arguments(
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
-    if native_stage_enabled(NativeStage.MACRO_CALLS):
-        report_native_fallback(site=NativeFallbackSite.MACRO_ARGUMENTS)
-    rewritten_args_source: str
-    placeholder_values: dict[str, object]
-    rewritten_args_source, placeholder_values = _rewrite_nested_macro_calls(
-        args_source=args_source,
-        file_path=file_path,
-        state=state,
-        declarations=declarations,
-        stack=stack,
-    )
-    try:
-        expression: ast.Expression = ast.parse(f"_macro_call({rewritten_args_source})", mode="eval")
-    except SyntaxError as error:
-        raise CompileInputError(
-            f"Macro arguments in '{file_path}' could not be parsed: {error}"
-        ) from error
-    if not isinstance(expression.body, ast.Call):
-        raise CompileInputError(f"Macro arguments in '{file_path}' could not be parsed")
-    call_expression: ast.Call = expression.body
-    args: tuple[object, ...] = tuple(
-        _evaluate_literal_ast_node(
-            node=argument,
-            placeholder_values=placeholder_values,
-            file_path=file_path,
-        )
-        for argument in call_expression.args
-    )
-    kwargs: dict[str, object] = {}
-    keyword: ast.keyword
-    for keyword in call_expression.keywords:
-        if keyword.arg is None:
-            raise CompileInputError(
-                f"Macro arguments in '{file_path}' must not use **kwargs expansion syntax"
-            )
-        kwargs[keyword.arg] = _evaluate_literal_ast_node(
-            node=keyword.value,
-            placeholder_values=placeholder_values,
-            file_path=file_path,
-        )
-    state.facts.record_call_site_refs(
-        tuple(
-            evaluate_typed_reference(node=node, file_path=file_path)
-            for node in ast.walk(call_expression)
-            if isinstance(node, ast.Call) and node is not call_expression
-        )
-    )
-    return args, kwargs
-
-
-def _rewrite_nested_macro_calls(
-    *,
-    args_source: str,
-    file_path: Path,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-    stack: tuple[DeclarationIdentity, ...],
-) -> tuple[str, dict[str, object]]:
-    rewritten_parts: list[str] = []
-    placeholder_values: dict[str, object] = {}
+    nested: list[tuple[int, int]] = []
+    nested_values: list[object] = []
     cursor: int = 0
-    replacement_index: int = 0
-    while cursor < len(args_source):
-        macro_start_index: int | None = _find_next_macro_start(sql=args_source, start_index=cursor)
-        if macro_start_index is None:
-            rewritten_parts.append(args_source[cursor:])
-            break
-        rewritten_parts.append(args_source[cursor:macro_start_index])
-        nested_result: object
-        next_index: int
-        nested_result, next_index = _evaluate_macro_call(
+    while (start := _find_next_macro_start(sql=args_source, start_index=cursor)) is not None:
+        nested_value: object
+        nested_value, cursor = _evaluate_macro_call(
             sql=args_source,
-            call_start_index=macro_start_index,
+            call_start_index=start,
             file_path=file_path,
             state=state,
             declarations=declarations,
             stack=stack,
             top_level=False,
         )
-        placeholder: str = f"__sqlbuild_macro_arg_{replacement_index}"
-        replacement_index += 1
-        placeholder_values[placeholder] = nested_result
-        rewritten_parts.append(placeholder)
-        cursor = next_index
-    return "".join(rewritten_parts), placeholder_values
-
-
-def _evaluate_literal_ast_node(
-    *,
-    node: ast.AST,
-    placeholder_values: dict[str, object],
-    file_path: Path,
-) -> object:
-    if isinstance(node, ast.Constant):
-        return node.value
-    if isinstance(node, ast.Call):
-        return evaluate_typed_reference(node=node, file_path=file_path)
-    if isinstance(node, ast.Name):
-        if node.id in placeholder_values:
-            return placeholder_values[node.id]
-        if node.id in PYTHON_LITERAL_NAMES:
-            return ast.literal_eval(node)
-    if isinstance(node, ast.List):
-        return [
-            _evaluate_literal_ast_node(
-                node=element,
-                placeholder_values=placeholder_values,
-                file_path=file_path,
-            )
-            for element in node.elts
-        ]
-    if isinstance(node, ast.Tuple):
-        return tuple(
-            _evaluate_literal_ast_node(
-                node=element,
-                placeholder_values=placeholder_values,
-                file_path=file_path,
-            )
-            for element in node.elts
-        )
-    if isinstance(node, ast.Dict):
-        return {
-            _evaluate_dict_key_ast_node(
-                key_node=key,
-                placeholder_values=placeholder_values,
-                file_path=file_path,
-            ): _evaluate_literal_ast_node(
-                node=value,
-                placeholder_values=placeholder_values,
-                file_path=file_path,
-            )
-            for key, value in zip(node.keys, node.values, strict=True)
-        }
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
-        operand: object = _evaluate_literal_ast_node(
-            node=node.operand,
-            placeholder_values=placeholder_values,
-            file_path=file_path,
-        )
-        if not isinstance(operand, int | float):
-            raise CompileInputError(f"Macro arguments in '{file_path}' use unsupported unary value")
-        return -operand if isinstance(node.op, ast.USub) else operand
-    raise CompileInputError(
-        f"Macro arguments in '{file_path}' must use only Python literals, nested macro calls, "
-        "and __ref(), __source(), or __seed() references"
-    )
-
-
-def _evaluate_dict_key_ast_node(
-    *,
-    key_node: ast.AST | None,
-    placeholder_values: dict[str, object],
-    file_path: Path,
-) -> object:
-    if key_node is None:
-        raise CompileInputError(f"Macro arguments in '{file_path}' must not use dict unpacking")
-    return _evaluate_literal_ast_node(
-        node=key_node,
-        placeholder_values=placeholder_values,
+        nested.append((start, cursor))
+        nested_values.append(nested_value)
+    parsed: ParsedMacroArguments = parse_macro_call_arguments(
+        args_source=args_source,
+        nested=tuple(nested),
+        nested_values=nested_values,
+        macro_name=macro_name,
         file_path=file_path,
     )
+    state.facts.record_call_site_refs(parsed.typed_references)
+    return parsed.args, parsed.kwargs
 
 
 def _find_next_macro_start(*, sql: str, start_index: int) -> int | None:

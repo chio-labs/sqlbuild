@@ -1,8 +1,7 @@
 //! Python's `parse_constant_declaration_file` up to value normalisation, which Python performs.
 
 use crate::declaration_files::_helpers::checks::python_values::{
-    WordRules,
-    failure, get, python_str, unknown_keys,
+    WordRules, failure, get, python_str, unknown_keys,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::declaration_headers::declaration_headers;
@@ -82,12 +81,18 @@ fn parse_constant(
             "{file_path} constant '{name}' is missing required value"
         )));
     };
-    let explicit_type: Option<String> =
-        constant_option(explicit_type, file_path, &format!("constant '{name}' type"), python)?;
+    let explicit_type: Option<String> = constant_option(
+        explicit_type,
+        file_path,
+        &format!("constant '{name}' type"),
+        python,
+    )?;
     let render_as: Option<String> = constant_option(
         render_as,
         file_path,
-        &format!("constant '{name}' render_as"), python)?;
+        &format!("constant '{name}' render_as"),
+        python,
+    )?;
     if let Some(rendering) = &render_as
         && !COLLECTION_RENDERINGS.contains(&rendering.as_str())
     {

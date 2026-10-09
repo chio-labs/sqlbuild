@@ -2,8 +2,7 @@
 
 use crate::_helpers::locations::header_column_locations;
 use crate::declaration_files::_helpers::checks::python_values::{
-    WordRules,
-    PythonType, failure, get, is_identifier, non_empty_str, python_type, unknown_keys,
+    PythonType, WordRules, failure, get, is_identifier, non_empty_str, python_type, unknown_keys,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::declaration_headers::declaration_headers;
@@ -71,11 +70,15 @@ fn parse_schema(
     let description: Option<String> = optional_string(
         get(values, "description"),
         file_path,
-        &format!("schema '{name}' description"), python)?;
+        &format!("schema '{name}' description"),
+        python,
+    )?;
     let extends: Option<String> = optional_string(
         get(values, "extends"),
         file_path,
-        &format!("schema '{name}' extends"), python)?;
+        &format!("schema '{name}' extends"),
+        python,
+    )?;
     if let Some(parent) = &extends
         && !is_identifier(parent)
     {

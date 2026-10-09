@@ -1,0 +1,9 @@
+//! What argument parsing asks of the host Python for Unicode text it does not decide itself.
+
+/// Unicode lookups the host Python answers, so names match CPython's own tables.
+pub trait ArgumentHost {
+    /// The character `\N{name}` names, or `None` when Python knows no such name.
+    fn character_named(&self, name: &str) -> Option<char>;
+    /// The NFKC form of a non-ASCII identifier, or `None` when Python rejects it as one.
+    fn identifier(&self, text: &str) -> Option<String>;
+}
