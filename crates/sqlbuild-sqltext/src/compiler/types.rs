@@ -1,5 +1,3 @@
-pub type StaticReference = (String, String, Option<String>, Option<usize>);
-
 /// One substitution in code points: `(source start, source end, output start, output end)`.
 pub type CharSpan = (usize, usize, usize, usize);
 

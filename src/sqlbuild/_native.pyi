@@ -236,7 +236,6 @@ class SqlReferenceScanner:
             None,
         ]
         | tuple[None, tuple[str, int]]
-        | None
     ): ...
 
 def scope_expected_model_names(
@@ -316,9 +315,6 @@ def interpolate_sql_batch(
 ) -> list[
     tuple[str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None]
 ]: ...
-def extract_static_sql_references(
-    sql: str,
-) -> list[tuple[str, str, str | None, int | None]] | None: ...
 def scan_macro_call_sites(
     sql: str, python_version: tuple[int, int], unicode_version: str
 ) -> list[tuple[int, int, str, list[str], bool]] | None: ...

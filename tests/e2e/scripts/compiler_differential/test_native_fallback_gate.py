@@ -9,8 +9,8 @@ import pytest
 from scripts.compiler_differential.main.differential import run_compiler_differential
 from tests.e2e.scripts.compiler_differential._test_types import NativeFallbackGateTestCase
 from tests.e2e.scripts.compiler_differential.helpers import (
+    MACRO_RESOLUTION_SABOTAGE,
     MODEL_ANALYSIS_SABOTAGE,
-    REFERENCE_SCAN_SABOTAGE,
     harness_arguments,
     stage_disable_sabotage,
     write_native_perturbation,
@@ -32,8 +32,8 @@ _FALLBACK_WITHOUT_ANSWERS: str = (
     "fallback disappeared but native answers did not appear; the stage may be switched off"
 )
 _VANISHED_ENTRY: str = (
-    '\n[[entry]]\nengine = "native-preview"\nstage = "reference_extraction"\n'
-    'site = "reference_extraction.scan"\nkind = "deferred"\ncounts = { project = 1 }\n'
+    '\n[[entry]]\nengine = "native-preview"\nstage = "macro_calls"\n'
+    'site = "macro_calls.resolution"\nkind = "deferred"\ncounts = { project = 1 }\n'
 )
 
 
@@ -53,18 +53,18 @@ _VANISHED_ENTRY: str = (
             appended_entries=_VANISHED_ENTRY,
             expected_exit_code=1,
             expected_lines=(
-                "Native fallback allow-list: native-preview reference_extraction "
-                f"reference_extraction.scan deferred (project): {_FALLBACK_WITHOUT_ANSWERS}",
+                "Native fallback allow-list: native-preview macro_calls "
+                f"macro_calls.resolution deferred (project): {_FALLBACK_WITHOUT_ANSWERS}",
             ),
         ),
         NativeFallbackGateTestCase(
-            description="shipped_reference_scan_sabotaged_to_python_fails",
-            perturbation=REFERENCE_SCAN_SABOTAGE,
+            description="shipped_macro_resolution_sabotaged_to_python_fails",
+            perturbation=MACRO_RESOLUTION_SABOTAGE,
             appended_entries="",
             expected_exit_code=1,
             expected_lines=(
-                "Native fallback allow-list: native-preview reference_extraction "
-                "reference_extraction.scan deferred (project): ",
+                "Native fallback allow-list: native-preview macro_calls "
+                "macro_calls.resolution deferred (project): ",
                 "not on the allow-list; port it or list it with a reason",
             ),
         ),

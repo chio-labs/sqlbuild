@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import cache
+from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
@@ -23,21 +24,18 @@ type _NativeExtraction = (
         None,
     ]
     | tuple[None, tuple[str, int]]
-    | None
 )
 
 
 def extract_native_sql_references(
     *, sql: str, syntax: SqlLexicalSyntax
-) -> SqlReferenceScan | SqlReferenceScanFailure | None:
-    """Return the references and rejected calls, Python's located error, or None for Python."""
+) -> SqlReferenceScan | SqlReferenceScanFailure:
+    """Return the references and rejected calls, or the scan error and its start."""
 
     extraction: _NativeExtraction = _scanner(syntax).extract(sql)
-    if extraction is None:
-        return None
     scanned, failure = extraction
     if scanned is None:
-        return failure
+        return cast(SqlReferenceScanFailure, failure)
     references, invalid_calls = scanned
     return SqlReferenceScan(
         references=tuple(

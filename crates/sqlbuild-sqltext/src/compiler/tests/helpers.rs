@@ -1,7 +1,6 @@
 use crate::compiler::_helpers::model_headers::tokenization::{
     MAX_TOKENIZER_WORKERS, TOKENIZER_WORKER_STACK_BYTES, build_tokenizer_pool, parse_batch,
 };
-use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::compiler::main::declaration_references::scan_declaration_references;
 use crate::compiler::main::model_header_single_parsing::parse_one;
 use crate::compiler::main::sql_interpolation::interpolate_sql;
@@ -14,54 +13,6 @@ use crate::compiler::types::CharSpan;
 use sqlbuild_core::text::main::python_text::python_text;
 use std::collections::BTreeMap;
 use std::thread;
-
-pub(crate) fn simple_references_preserve_authored_order() -> bool {
-    extract(
-        "SELECT * FROM __source(\"orders\") UNION ALL SELECT * FROM __dbt_ref(\"shop\" , \"customers\")",
-    ) == Some(vec![
-        ("source".to_owned(), "orders".to_owned(), None, None),
-        (
-            "dbt_ref".to_owned(),
-            "customers".to_owned(),
-            Some("shop".to_owned()),
-            None,
-        ),
-    ])
-}
-
-pub(crate) fn comments_and_quoted_text_hide_references() -> bool {
-    extract("-- __ref(\"ignored\")\nSELECT '__seed(\"also_ignored\")' FROM __ref(\"orders\")")
-        == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
-}
-
-pub(crate) fn dollar_quoted_text_hides_references() -> bool {
-    extract(concat!(
-        "SELECT $$Customer's order -- __ref(\"ignored\") $5$$ AS label, ",
-        "$tag$ $$ __seed(\"also_ignored\") $tag$ AS note, price$1$ ",
-        "FROM __ref(\"orders\")"
-    )) == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
-}
-
-pub(crate) fn complex_or_malformed_sql_requests_fallback() -> bool {
-    [
-        "SELECT * FROM __table_fn(\"orders\")(1)",
-        "SELECT * FROM __ref(concat('ord', 'ers'))",
-        "SELECT * FROM __ref(\"orders\"",
-        "SELECT * FROM __ref(\"orders\") /* unterminated",
-        "SELECT * FROM __ref(\"orders\") WHERE note = 'unterminated",
-        "SELECT * FROM __ref(\"orders\") WHERE note = $$unterminated",
-        "SELECT * FROM __ref(örders)",
-        "SELECT * FROM __ref(orders)",
-        "SELECT * FROM __ref('orders')",
-        "SELECT * FROM __ref( \"orders\" )",
-        "SELECT * FROM __ref(/* upstream */ \"orders\")",
-        "SELECT * FROM __ref(\"\")",
-        "SELECT * FROM __ref(\"ord\"\"ers\")",
-        "SELECT * FROM __dbt_ref(\"shop\", \"customers\" )",
-    ]
-    .into_iter()
-    .all(|sql| extract(sql).is_none())
-}
 
 pub(crate) fn nested_authored_headers_preserve_values_and_offsets() -> bool {
     let headers = vec![

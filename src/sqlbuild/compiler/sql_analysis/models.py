@@ -12,6 +12,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     SQL_ESCAPE_CHARACTER,
     SQL_LINE_COMMENT_PREFIX,
     SQL_TRIPLE_QUOTE_LENGTH,
+    SUPPORTED_SQL_LINE_COMMENT_PREFIXES,
 )
 
 
@@ -58,6 +59,16 @@ class SqlLexicalSyntax:
     triple_quoted_strings: bool = False
     nested_block_comments: bool = False
     line_comment_prefixes: frozenset[str] = frozenset({SQL_LINE_COMMENT_PREFIX})
+
+    def __post_init__(self) -> None:
+        unsupported: frozenset[str] = (
+            self.line_comment_prefixes - SUPPORTED_SQL_LINE_COMMENT_PREFIXES
+        )
+        if unsupported:
+            raise ValueError(
+                f"SQL line comment prefixes {sorted(unsupported)} are not supported; SQLBuild "
+                f"scans only {sorted(SUPPORTED_SQL_LINE_COMMENT_PREFIXES)}"
+            )
 
     @property
     def cache_key(self) -> str:

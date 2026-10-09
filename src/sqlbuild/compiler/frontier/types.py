@@ -60,7 +60,6 @@ class NativeFallbackSite(StrEnum):
     MACRO_UNBRIDGED_EXPANSION = "macro_calls.unbridged_expansion"
     MACRO_BRIDGE_UNAVAILABLE = "macro_calls.bridge_unavailable"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
-    REFERENCE_SCAN = "reference_extraction.scan"
     CONFIG_BUILD = "model_config.build"
     CONFIG_HEADER_METADATA = "model_config.header_metadata"
     CONFIG_PRESENCE_SCAN = "model_config.presence_scan"

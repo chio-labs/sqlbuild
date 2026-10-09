@@ -15,8 +15,6 @@ pub(crate) const DBT_REFERENCE_KIND: &str = "dbt_ref";
 pub(crate) const TABLE_FUNCTION_REFERENCE_KIND: &str = "table_fn";
 pub(crate) const REFERENCE_CONTEXT: &str = "SQL reference";
 pub(crate) const TABLE_FUNCTION_CALL_CONTEXT: &str = "SQL table function call";
-/// Line comment prefixes Python's reference and parenthesis scans both stop at.
-pub(crate) const SUPPORTED_LINE_COMMENT_PREFIXES: [&str; 3] = ["--", "//", "#"];
 /// Characters that may start a comment or quoted text under a supported syntax.
 pub(crate) const NON_CODE_START_BYTES: &[u8] = b"-/#'\"`$";
 /// Non-code openers whose text an argument keeps; comments become one space.

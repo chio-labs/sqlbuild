@@ -11,7 +11,6 @@ use sqlbuild_sqltext::compiler::main::sql_interpolation::interpolate_sql;
 use sqlbuild_sqltext::compiler::models::InterpolationRead;
 use sqlbuild_sqltext::compiler::types::InterpolationHost;
 
-use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
 const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
@@ -189,19 +188,7 @@ fn read_rows(reads: Vec<InterpolationRead>) -> Vec<(&'static str, String)> {
         .collect()
 }
 
-#[pyfunction]
-fn extract_static_sql_references(
-    sql: &str,
-) -> PyResult<Option<Vec<sqlbuild_sqltext::compiler::types::StaticReference>>> {
-    compiler_guard(|| {
-        Ok(sqlbuild_sqltext::compiler::main::sql_references::extract(
-            sql,
-        ))
-    })
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(interpolate_sql_batch, module)?)?;
-    module.add_function(wrap_pyfunction!(extract_static_sql_references, module)?)?;
     Ok(())
 }
