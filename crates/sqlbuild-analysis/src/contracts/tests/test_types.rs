@@ -8,6 +8,13 @@ pub(crate) struct ContractTestCase {
     pub(crate) expected_lines: &'static [&'static str],
 }
 
+pub(crate) struct SharedTypesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: Vec<ContractModel>,
+    /// Every model's lines in order, as each model's own single-model request yields them.
+    pub(crate) expected_lines: &'static [&'static str],
+}
+
 pub(crate) struct PromotionTestCase {
     pub(crate) description: &'static str,
     pub(crate) request: PromotionRequest,

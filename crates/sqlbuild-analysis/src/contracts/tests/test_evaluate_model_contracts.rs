@@ -1,9 +1,9 @@
 use crate::contracts::main::evaluate_model_contracts::evaluate_model_contracts;
-use crate::contracts::models::{ContractOutcome, ContractRequest};
+use crate::contracts::models::{ContractModel, ContractOutcome, ContractRequest};
 use crate::contracts::tests::helpers::{
     declared, dynamic_model, inferred, model, outcome_lines, proof, schema, with_inferred,
 };
-use crate::contracts::tests::test_types::ContractTestCase;
+use crate::contracts::tests::test_types::{ContractTestCase, SharedTypesTestCase};
 
 #[test]
 fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() {
@@ -205,6 +205,63 @@ fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() 
         assert_eq!(
             outcomes.iter().flat_map(outcome_lines).collect::<Vec<_>>(),
             test_case.expected_lines,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_models_sharing_types_when_evaluating_together_then_each_matches_its_own_request() {
+    let enforced = |declared_type: &str, inferred_type: &str| {
+        with_inferred(
+            model(
+                Some("enforced"),
+                Some(schema(
+                    vec![declared("amount", Some(declared_type), false)],
+                    false,
+                )),
+            ),
+            vec![inferred("amount", Some(inferred_type), false)],
+        )
+    };
+    let test_cases = [SharedTypesTestCase {
+        description: "repeated equal, mismatched and unanswerable types",
+        models: vec![
+            enforced("INT", "INTEGER"),
+            enforced("INT", "VARCHAR"),
+            enforced("TÉXT", "VARCHAR"),
+            enforced("INT", "INTEGER"),
+            enforced("INT", "VARCHAR"),
+            enforced("TÉXT", "VARCHAR"),
+        ],
+        expected_lines: &[
+            "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is INT [amount: inferred VARCHAR]",
+            "deferred:type_normalization",
+            "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is INT [amount: inferred VARCHAR]",
+            "deferred:type_normalization",
+        ],
+    }];
+    for test_case in test_cases {
+        let request = |models: Vec<ContractModel>| ContractRequest {
+            dialect: "duckdb".to_owned(),
+            implicit_column_contracts: true,
+            models,
+        };
+        let together: Vec<String> = evaluate_model_contracts(&request(test_case.models.clone()))
+            .iter()
+            .flat_map(outcome_lines)
+            .collect();
+        let alone: Vec<String> = test_case
+            .models
+            .iter()
+            .flat_map(|model| evaluate_model_contracts(&request(vec![model.clone()])))
+            .flat_map(|outcome| outcome_lines(&outcome))
+            .collect();
+
+        assert_eq!(together, alone, "{}", test_case.description);
+        assert_eq!(
+            together, test_case.expected_lines,
             "{}",
             test_case.description
         );

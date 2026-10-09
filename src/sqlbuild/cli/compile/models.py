@@ -42,6 +42,7 @@ class CompileAnalysis:
     graph_ms: int
     lineage_ms: int
     contract_ms: int
+    contract_cpu_ms: int
     built_in_rules_ms: int = 0
     custom_rules_ms: int = 0
     early_lint_wait_ms: int = 0

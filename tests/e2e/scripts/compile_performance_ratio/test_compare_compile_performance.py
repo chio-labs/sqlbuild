@@ -11,6 +11,7 @@ import pytest
 
 from tests.e2e.scripts.compile_performance_ratio._test_types import (
     CompilePerformanceRatioTestCase,
+    EnginePhaseRatioTestCase,
     PerSideCompilePerformanceRatioTestCase,
 )
 from tests.e2e.scripts.compile_performance_ratio.helpers import (
@@ -165,6 +166,79 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
     assert all(fragment in output for fragment in test_case.expected_fragments), output
     assert logged_projects(base_log) == test_case.expected_base_projects
     assert logged_projects(head_log) == test_case.expected_head_projects
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        EnginePhaseRatioTestCase(
+            description="native-preview contracts within a generous limit of python's",
+            max_ratio="1000",
+            phase_noise_floor_ms="1000",
+            expected_return_code=0,
+            expected_fragments=(
+                "Engines: base `python`, head `native-preview`.",
+                "Gated phases: contracts_cpu_ms.",
+                "| contracts_cpu_ms |",
+                "**Result: passed.**",
+            ),
+        ),
+        EnginePhaseRatioTestCase(
+            description="a gated phase over its allowance fails on that phase alone",
+            max_ratio="0",
+            phase_noise_floor_ms="-1",
+            expected_return_code=1,
+            expected_fragments=(
+                "Compile performance regression: dense 20 cold contracts_cpu_ms:",
+                "**Result: failed.**",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_two_engines_when_gating_a_phase_then_enforces_only_that_phase(
+    test_case: EnginePhaseRatioTestCase,
+) -> None:
+    environment: dict[str, str] = dict(os.environ)
+    _ = environment.pop("GITHUB_STEP_SUMMARY", None)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.compare_compile_performance",
+            "--kind",
+            "dense",
+            "--models",
+            "20",
+            "--modes",
+            "cold",
+            "--runs",
+            "1",
+            "--base-python",
+            sys.executable,
+            "--head-python",
+            sys.executable,
+            "--base-engine",
+            "python",
+            "--head-engine",
+            "native-preview",
+            "--gate-phase",
+            "contracts_cpu_ms",
+            "--max-ratio",
+            test_case.max_ratio,
+            "--phase-noise-floor-ms",
+            test_case.phase_noise_floor_ms,
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == test_case.expected_return_code, output
+    assert all(fragment in output for fragment in test_case.expected_fragments), output
 
 
 if __name__ == "__main__":
