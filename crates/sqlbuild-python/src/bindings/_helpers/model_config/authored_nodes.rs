@@ -48,16 +48,18 @@ impl AuthoredNode for PyNode<'_> {
 
     fn number(&self) -> Option<f64> {
         let value = &self.0;
-        if value.is_instance_of::<PyFloat>() {
-            value.extract::<f64>().ok()
-        } else if value.is_instance_of::<PyInt>() && !value.is_instance_of::<PyBool>() {
-            value
-                .extract::<f64>()
-                .ok()
-                .or_else(|| self.python_str().parse::<f64>().ok())
-        } else {
-            None
+        let is_number: bool = value.is_instance_of::<PyFloat>()
+            || (value.is_instance_of::<PyInt>() && !value.is_instance_of::<PyBool>());
+        if !is_number {
+            return None;
         }
+        if let Ok(number) = value.extract::<f64>() {
+            return Some(number);
+        }
+        let Ok(number) = self.python_str().parse::<f64>() else {
+            return None;
+        };
+        Some(number)
     }
 
     fn text(&self) -> Option<String> {
@@ -66,10 +68,10 @@ impl AuthoredNode for PyNode<'_> {
 
     /// Read a string's text; lone surrogates, rejected where text enters a compile, read as U+FFFD.
     fn with_text<R>(&self, read: impl FnOnce(&str) -> R) -> Option<R> {
-        self.0
-            .downcast::<PyString>()
-            .ok()
-            .map(|value| read(&value.to_string_lossy()))
+        match self.0.downcast::<PyString>() {
+            Ok(value) => Some(read(&value.to_string_lossy())),
+            Err(_) => None,
+        }
     }
 
     fn is_text(&self, text: &str) -> bool {

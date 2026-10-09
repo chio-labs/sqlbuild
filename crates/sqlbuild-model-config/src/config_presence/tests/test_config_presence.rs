@@ -1,4 +1,5 @@
-use crate::config_presence::main::contains_macro_call::contains_macro_call;
+use crate::config_presence::_helpers::macro_calls::macro_call;
+use crate::config_presence::_helpers::scan::scan;
 use crate::config_presence::main::contains_template::contains_template;
 use crate::config_presence::tests::test_types::PresenceTestCase;
 use crate::tests::test_types::Value;
@@ -71,7 +72,7 @@ fn given_config_values_when_scanning_then_presence_matches_python() {
         assert_eq!(
             (
                 contains_template(&test_case.value),
-                contains_macro_call(&test_case.value)
+                scan(&test_case.value, &macro_call)
             ),
             (test_case.expected_template, test_case.expected_macro_call),
             "{}",

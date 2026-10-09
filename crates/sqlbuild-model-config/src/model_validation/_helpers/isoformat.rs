@@ -1,6 +1,4 @@
-//! CPython's `datetime.fromisoformat`, following the C parser of each supported release.
-//!
-//! The C parser reads a NUL-terminated buffer; reads past the end of the text see that NUL.
+//! CPython's `datetime.fromisoformat`; reads past the end of the text see the C parser's NUL.
 
 /// One parsed date and time, before CPython's range checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

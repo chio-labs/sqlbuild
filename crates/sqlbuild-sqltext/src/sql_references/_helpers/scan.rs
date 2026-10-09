@@ -285,9 +285,6 @@ fn quoted_name_end(arguments: &[u8], start: usize) -> Option<usize> {
 }
 
 /// Python `_split_top_level_arguments` over `sql[start..end]`: comments read as one space.
-///
-/// The walk matches `matching_paren`'s from the same start, so no quote or comment it skips can
-/// run past `end`.
 fn split_arguments(
     text: &str,
     start: usize,

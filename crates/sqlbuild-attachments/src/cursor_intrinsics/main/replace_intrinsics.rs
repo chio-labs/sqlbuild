@@ -7,12 +7,7 @@ use crate::cursor_intrinsics::_helpers::scan::{
 };
 use crate::sql_lexing::main::unclosed_message::unclosed_message;
 
-/// Return `sql` with each `__cursor_start()`/`__cursor_end()` call replaced, and whether any was.
-///
-/// # Errors
-///
-/// The message for an unclosed quote, comment or call, a name not called with `()`, or a call
-/// with arguments, naming `context`.
+/// `sql` with each cursor intrinsic call replaced and whether any was, or the malformed-call error.
 pub fn replace_intrinsics(
     python: PythonText,
     sql: &str,

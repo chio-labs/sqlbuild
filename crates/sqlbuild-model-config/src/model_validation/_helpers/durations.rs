@@ -44,8 +44,7 @@ impl Duration {
     }
 }
 
-/// Return `Duration.parse(text)`: a duration, `None` when it does not parse, or why SQLBuild
-/// rejects a duration Python would read.
+/// `Duration.parse(text)`, `None` when it does not parse, or why the duration is rejected.
 pub(crate) fn parse_duration(
     python: PythonText,
     text: &str,

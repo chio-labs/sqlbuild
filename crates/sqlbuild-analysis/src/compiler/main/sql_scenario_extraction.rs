@@ -2,11 +2,7 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::compiler::_helpers;
 
-/// The scenario's classification or error as JSON.
-///
-/// # Errors
-///
-/// The JSON encoder's message.
+/// The scenario's classification or error as JSON; `Err` holds the JSON encoder's message.
 pub fn extract_scenario_json(
     sql: &str,
     file_label: &str,

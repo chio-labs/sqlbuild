@@ -1,5 +1,4 @@
-//! `validate_independent_expected_and_assertion_ctes`: expected results and assertions must not
-//! define or read each other, directly or through helper CTEs.
+//! Expected results and assertions must not define or read each other, even through helpers.
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
@@ -8,7 +7,8 @@ use serde_json::Value;
 use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, Unclosed};
 
-use crate::lineage::_helpers::parsed_lineage::proxy_parse_options;
+use crate::compiler::_helpers::polyglot::parse_options::guarded_parse_options;
+use crate::compiler::constants::{ALIAS_FIELD, CTES_FIELD, NAME_FIELD};
 
 const DIRECT_DEPENDENCY_PATH_LENGTH: usize = 2;
 const TABLE_KIND: &str = "table";
@@ -113,10 +113,13 @@ fn casefold(text: &str) -> String {
 
 /// `parse_one(sql, dialect="generic")` under SQLBuild's complexity guard, or `None` on error.
 fn parse_one(sql: &str) -> Option<Expression> {
-    let options = proxy_parse_options().ok()?;
-    let mut statements = Dialect::get(DialectType::Generic)
-        .parse_with_options(sql, &options)
-        .ok()?;
+    let Ok(options) = guarded_parse_options() else {
+        return None;
+    };
+    let Ok(mut statements) = Dialect::get(DialectType::Generic).parse_with_options(sql, &options)
+    else {
+        return None;
+    };
     (statements.len() == 1).then(|| statements.remove(0))
 }
 
@@ -128,36 +131,33 @@ fn defined_cte_names(sql: &str) -> Vec<String> {
     let Ok(value) = serde_json::to_value(&parsed) else {
         return Vec::new();
     };
-    let mut names: Vec<String> = Vec::new();
-    collect_cte_names(&value, &mut names);
-    names
+    collect_cte_names(&value, Vec::new())
 }
 
-fn collect_cte_names(value: &Value, names: &mut Vec<String>) {
+/// `names` followed by each new CTE alias under `value`, depth first.
+fn collect_cte_names(value: &Value, mut names: Vec<String>) -> Vec<String> {
     match value {
         Value::Object(fields) => {
-            if let Some(Value::Array(ctes)) = fields.get("ctes") {
+            if let Some(Value::Array(ctes)) = fields.get(CTES_FIELD) {
                 for cte in ctes {
                     if let Some(Value::String(name)) = cte
-                        .get("alias")
+                        .get(ALIAS_FIELD)
                         .filter(|alias| alias.is_object())
-                        .and_then(|alias| alias.get("name"))
+                        .and_then(|alias| alias.get(NAME_FIELD))
                         && !names.contains(name)
                     {
                         names.push(name.clone());
                     }
                 }
             }
-            for child in fields.values() {
-                collect_cte_names(child, names);
-            }
+            fields
+                .values()
+                .fold(names, |names, child| collect_cte_names(child, names))
         }
-        Value::Array(items) => {
-            for item in items {
-                collect_cte_names(item, names);
-            }
-        }
-        _ => {}
+        Value::Array(items) => items
+            .iter()
+            .fold(names, |names, item| collect_cte_names(item, names)),
+        _ => names,
     }
 }
 
@@ -180,7 +180,7 @@ fn known_cte_references(
         .skip(1)
         .filter(|node| node.variant_name() == TABLE_KIND)
     {
-        push_known(&mut references, casefold(table.get_name()), names_by_key);
+        references = push_known(references, casefold(table.get_name()), names_by_key);
     }
     Ok(references)
 }
@@ -200,7 +200,7 @@ fn identifier_references(
             Ok(Some(end)) if IDENTIFIER_QUOTES.contains(&bytes[index]) => {
                 let quote: &str = &sql[index..=index];
                 let name: String = sql[index + 1..end - 1].replace(&quote.repeat(2), quote);
-                push_known(&mut references, casefold(&name), names_by_key);
+                references = push_known(references, casefold(&name), names_by_key);
                 index = end;
             }
             Ok(Some(end)) => index = end,
@@ -210,7 +210,7 @@ fn identifier_references(
                     .skip(1)
                     .find(|(_, next)| !(next.is_alphanumeric() || *next == '_'))
                     .map_or(sql.len(), |(offset, _)| index + offset);
-                push_known(&mut references, casefold(&sql[index..end]), names_by_key);
+                references = push_known(references, casefold(&sql[index..end]), names_by_key);
                 index = end;
             }
             Ok(None) => index += character.len_utf8(),
@@ -219,10 +219,16 @@ fn identifier_references(
     Ok(references)
 }
 
-fn push_known(references: &mut Vec<String>, key: String, names_by_key: &HashMap<String, &str>) {
+/// `references` with `key` appended when it names a file CTE not yet read.
+fn push_known(
+    mut references: Vec<String>,
+    key: String,
+    names_by_key: &HashMap<String, &str>,
+) -> Vec<String> {
     if names_by_key.contains_key(&key) && !references.contains(&key) {
         references.push(key);
     }
+    references
 }
 
 fn unclosed_message(construct: Unclosed) -> String {

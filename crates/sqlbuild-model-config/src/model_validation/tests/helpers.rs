@@ -19,8 +19,7 @@ pub(super) fn validator_error(text: &str) -> ValidationStop {
     )))
 }
 
-/// Validate `config` for `orders_daily`: `accepted`, `external <index>`, or the error message;
-/// a `kind!:name` reference is a dbt reference its resolver rejects.
+/// Validate `config` for `orders_daily`; a `kind!:name` reference is one its resolver rejects.
 pub(super) fn validation_outcome(
     config: Vec<(&'static str, Value)>,
     references: &[&str],

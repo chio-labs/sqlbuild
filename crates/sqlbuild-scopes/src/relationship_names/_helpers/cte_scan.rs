@@ -226,8 +226,7 @@ fn skip_ignorable(
     Ok(index)
 }
 
-/// `sql[start:start + len(keyword)].upper() == keyword` with no identifier character on either
-/// side, counting code points as Python slices do.
+/// `sql[start:start + len(keyword)].upper() == keyword` between non-identifier characters.
 fn try_consume_keyword(sql: &str, start: usize, keyword: &str) -> Option<usize> {
     let window_end: usize = sql[start..]
         .char_indices()

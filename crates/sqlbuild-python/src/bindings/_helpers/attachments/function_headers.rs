@@ -129,13 +129,12 @@ fn header_value(value: &Bound<'_, PyAny>) -> HeaderValue {
     HeaderValue::Other
 }
 
-/// A `str` (or subclass) as text; lone surrogates, rejected where text enters a compile, read as
-/// U+FFFD.
+/// A `str` (or subclass) as text; lone surrogates, rejected at compile entry, read as U+FFFD.
 fn text_value(value: &Bound<'_, PyAny>) -> Option<String> {
-    value
-        .downcast::<PyString>()
-        .ok()
-        .map(|text| text.to_string_lossy().into_owned())
+    match value.downcast::<PyString>() {
+        Ok(text) => Some(text.to_string_lossy().into_owned()),
+        Err(_) => None,
+    }
 }
 
 fn header_row(header: FunctionHeader) -> HeaderRow {

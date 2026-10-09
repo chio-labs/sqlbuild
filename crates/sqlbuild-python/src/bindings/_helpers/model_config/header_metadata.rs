@@ -24,9 +24,7 @@ struct ContractClasses<'py> {
     allocate: Bound<'py, PyAny>,
 }
 
-/// Return a model's columns and audits, each as contract tuples or its error.
-///
-/// The audits are `None` when the columns failed, since parsing stops at the first error.
+/// A model's columns and audits as contract tuples or errors; no audits after a column error.
 #[pyfunction]
 fn parse_model_header_metadata<'py>(
     py: Python<'py>,

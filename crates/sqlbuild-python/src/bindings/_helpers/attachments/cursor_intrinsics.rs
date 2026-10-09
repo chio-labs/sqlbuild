@@ -5,10 +5,8 @@ use pyo3::types::{PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
-use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::{
-    IntrinsicModel, validated_model_intrinsics,
-};
-use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
+use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
+use sqlbuild_attachments::cursor_intrinsics::models::{IntrinsicCheck, IntrinsicModel};
 use sqlbuild_core::text::models::PythonText;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -56,10 +54,10 @@ fn validated_model_cursor_intrinsics(
     let incremental: bool = materialized
         .downcast::<PyString>()
         .is_ok_and(|text| text.to_string_lossy() == INCREMENTAL_MATERIALIZATION);
-    let cursor: Option<String> = cursor
-        .downcast::<PyString>()
-        .ok()
-        .map(|text| text.to_string_lossy().into_owned());
+    let cursor: Option<String> = match cursor.downcast::<PyString>() {
+        Ok(text) => Some(text.to_string_lossy().into_owned()),
+        Err(_) => None,
+    };
     compiler_guard(|| {
         Ok(
             match validated_model_intrinsics(
@@ -79,8 +77,7 @@ fn validated_model_cursor_intrinsics(
     })
 }
 
-/// `sql` with intrinsic calls replaced by the start and end SQL, whether any was, and no error;
-/// or the error for `context`.
+/// `sql` with intrinsic calls replaced and whether any was, or the error for `context`.
 #[pyfunction]
 fn replace_cursor_intrinsics(
     sql: &str,

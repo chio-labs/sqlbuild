@@ -26,8 +26,7 @@ type ResourceNames = (
     HashSet<String>,
 );
 
-/// References as `(kind, name, externally rejected)`, declared schema columns, unmanaged
-/// retention and declared table type.
+/// References `(kind, name, rejected)`, schema columns, unmanaged retention and table type.
 type ModelFacts = (Vec<(String, String, bool)>, Option<Vec<String>>, bool, bool);
 
 /// The project facts every model's validation reads, captured once per compile.
@@ -67,8 +66,7 @@ impl NativeModelValidator {
         })
     }
 
-    /// Return `None` when the validators accept, the first error, or the index of the first
-    /// reference whose external resolver rejected it.
+    /// `None` when accepted, the first error, or the first externally rejected reference.
     fn validate(
         &self,
         py: Python<'_>,

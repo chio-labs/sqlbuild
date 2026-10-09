@@ -19,9 +19,11 @@ pub(crate) fn macro_call(text: &str) -> bool {
         {
             index += 1;
         }
-        text[index..]
-            .chars()
-            .find(|character| !is_python_space(*character))
-            == Some('(')
+        opens_call(&text[index..])
     })
+}
+
+/// Whether the first non-whitespace character of `rest` is `(`.
+fn opens_call(rest: &str) -> bool {
+    rest.trim_start_matches(is_python_space).starts_with('(')
 }

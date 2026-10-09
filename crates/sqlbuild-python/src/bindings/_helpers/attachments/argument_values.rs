@@ -7,8 +7,7 @@ use pyo3::types::{
 };
 use sqlbuild_attachments::audits::models::ArgumentValue;
 
-/// Read a `dict[str, object]` in insertion order; keys that are not strings can neither be
-/// referenced by a parameter nor repeat an implicit argument, so they are left out.
+/// Read a `dict[str, object]` in insertion order, leaving out keys no parameter can name.
 pub(crate) fn argument_pairs(
     arguments: &Bound<'_, PyDict>,
 ) -> PyResult<Vec<(String, ArgumentValue)>> {

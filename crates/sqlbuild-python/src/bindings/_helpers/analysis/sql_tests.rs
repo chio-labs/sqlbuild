@@ -78,12 +78,10 @@ fn function_type_error(
     context: &str,
 ) -> PyResult<Option<String>> {
     py.compiler_detach(|| {
-        Ok::<_, String>(
-            sqlbuild_analysis::compiler::main::function_type_validation::function_type_error(
-                type_sql,
-                adapter_name,
-                context,
-            ),
+        sqlbuild_analysis::compiler::main::function_type_validation::function_type_error(
+            type_sql,
+            adapter_name,
+            context,
         )
     })
     .map_err(value_error)
