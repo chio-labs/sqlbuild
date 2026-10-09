@@ -3,10 +3,9 @@
 use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
 use rayon::ThreadPool;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
