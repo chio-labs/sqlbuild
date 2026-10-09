@@ -27,3 +27,16 @@ class DeferredSemanticTestCase:
     keeps_catalog: bool
     non_ascii_comment: bool
     expected_kinds: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class GeneratedMetadataParityTestCase:
+    """Seeded projects whose metadata checks Python and the native engine must agree on."""
+
+    description: str
+    seed: int
+    count: int
+    model_count: int
+    dialects: tuple[str, ...]
+    expected_minimum_native: int
+    expected_minimum_families: dict[str, int]

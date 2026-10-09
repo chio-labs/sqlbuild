@@ -5,11 +5,11 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::semantic_checks::_helpers::columns::{closest_column, ordered_columns};
-use crate::semantic_checks::_helpers::messages::{
+use crate::semantic_checks::_helpers::explanation::columns::{closest_column, ordered_columns};
+use crate::semantic_checks::_helpers::explanation::messages::{
     comparison_help, compiled, missing_column, pattern, semantic_help, sentence_message, type_words,
 };
-use crate::semantic_checks::_helpers::text::{
+use crate::semantic_checks::_helpers::sql_text::text::{
     LineIndex, ascii, last_newline_before, newlines_before, prefix,
 };
 use crate::semantic_checks::constants::{

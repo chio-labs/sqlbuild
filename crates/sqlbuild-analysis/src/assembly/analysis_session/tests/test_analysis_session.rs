@@ -1,8 +1,12 @@
+use crate::assembly::analysis_session::main::prove_dynamic_contract::prove_dynamic_contract;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
+use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, model_requests, orders_request, session_lines,
+    catalog, failed, model_requests, orders_request, pivot_request, proven, session_lines,
 };
-use crate::assembly::analysis_session::tests::test_types::{SessionTestCase, UnscheduledTestCase};
+use crate::assembly::analysis_session::tests::test_types::{
+    PivotTestCase, SessionTestCase, UnscheduledTestCase,
+};
 
 #[test]
 fn given_models_when_running_the_session_then_defers_and_publishes_as_python_does() {
@@ -53,14 +57,14 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
             ],
         },
         SessionTestCase {
-            description: "an unknown column is a binding diagnostic and an untyped output defers",
+            description: "an unknown column is a binding diagnostic and enriches natively",
             models: &[(
                 "orders_bad",
                 "SELECT missing_column FROM __source(\"raw_orders\")",
                 &["raw_orders"],
                 &[],
             )],
-            expected_steps: &[&["defer enrichment 0"], &[]],
+            expected_steps: &[&[]],
             expected_outcomes: &[&[
                 "missing_column - unknown",
                 "succeeded=true star=false/false diagnostics=[\"B002\"]",
@@ -83,7 +87,6 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
                 ),
             ],
             expected_steps: &[
-                &["defer enrichment 0"],
                 &["publish events event_id:UNKNOWN", "defer analysis 1"],
                 &[],
             ],
@@ -159,6 +162,130 @@ fn given_unschedulable_models_when_starting_then_python_analyses() {
         assert_eq!(
             start_analysis_session(request, &catalog).is_some(),
             test_case.expected_started,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_dynamic_pivots_when_proving_then_matches_python_or_defers() {
+    let test_cases = [
+        PivotTestCase {
+            description: "a bare DuckDB pivot keeps its GROUP BY columns",
+            dialect: "duckdb",
+            sql: "PIVOT __source(\"raw_orders\") ON status USING MAX(amount) GROUP BY customer_id",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: proven(
+                &[("customer_id", "INTEGER", "non_null")],
+                Some("DOUBLE"),
+                "raw_orders",
+                true,
+            ),
+        },
+        PivotTestCase {
+            description: "a cast aggregate renders its target type",
+            dialect: "duckdb",
+            sql: "PIVOT __source(\"raw_orders\") ON status \
+                USING MIN(CAST(amount AS DECIMAL(12, 2))) GROUP BY customer_id",
+            family: Some(("status", "amount", "MIN")),
+            expected_outcome: proven(
+                &[("customer_id", "INTEGER", "non_null")],
+                Some("DECIMAL(12, 2)"),
+                "raw_orders",
+                true,
+            ),
+        },
+        PivotTestCase {
+            description: "a CTE input without GROUP BY keeps the remaining input columns",
+            dialect: "snowflake",
+            sql: "WITH base AS (SELECT customer_id, status, amount FROM __source(\"raw_orders\")) \
+                SELECT * FROM base PIVOT (SUM(amount) FOR status IN (ANY ORDER BY status))",
+            family: Some(("status", "amount", "SUM")),
+            expected_outcome: proven(
+                &[("customer_id", "INTEGER", "non_null")],
+                None,
+                "raw_orders",
+                false,
+            ),
+        },
+        PivotTestCase {
+            description: "a passthrough redeclaring the upstream families",
+            dialect: "duckdb",
+            sql: "SELECT * FROM __ref(\"status_amounts\")",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: proven(
+                &[("customer_id", "INTEGER", "unknown")],
+                Some("DOUBLE"),
+                "status_amounts",
+                false,
+            ),
+        },
+        PivotTestCase {
+            description: "static pivot values",
+            dialect: "snowflake",
+            sql: "SELECT * FROM __source(\"raw_orders\") PIVOT (MAX(amount) FOR status IN ('placed'))",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: failed(
+                "static pivot values must use ordinary exact column declarations",
+            ),
+        },
+        PivotTestCase {
+            description: "DuckDB values on the ON clause",
+            dialect: "duckdb",
+            sql: "PIVOT __source(\"raw_orders\") ON status IN ('placed') USING MAX(amount)",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: failed(
+                "dynamic column contracts currently require exactly one pivot column",
+            ),
+        },
+        PivotTestCase {
+            description: "a dialect without dynamic pivots",
+            dialect: "postgres",
+            sql: "SELECT 1",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: failed(
+                "adapter dialect 'postgres' does not support compiler-proven dynamic pivots",
+            ),
+        },
+        PivotTestCase {
+            description: "a declared pivot column the pivot does not use",
+            dialect: "duckdb",
+            sql: "PIVOT __source(\"raw_orders\") ON status USING MAX(amount) GROUP BY customer_id",
+            family: Some(("order_id", "amount", "MAX")),
+            expected_outcome: failed(
+                "dynamic family 'amounts' declares pivot_column 'order_id' but the output pivot uses 'status'",
+            ),
+        },
+        PivotTestCase {
+            description: "SQL Python reports as a parse error",
+            dialect: "duckdb",
+            sql: "PIVOT FROM WHERE",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: PivotOutcome::Deferred,
+        },
+        PivotTestCase {
+            description: "non-ASCII names Python casefolds differently",
+            dialect: "duckdb",
+            sql: "SELECT * FROM __ref(\"stra\u{df}e\")",
+            family: Some(("status", "amount", "MAX")),
+            expected_outcome: PivotOutcome::Deferred,
+        },
+        PivotTestCase {
+            description: "no declared families",
+            dialect: "duckdb",
+            sql: "SELECT 1",
+            family: None,
+            expected_outcome: PivotOutcome::Absent,
+        },
+    ];
+    for test_case in test_cases {
+        let request = pivot_request(test_case.dialect, test_case.sql, test_case.family);
+
+        let outcome = prove_dynamic_contract(&request).expect("the proof runs");
+
+        assert_eq!(
+            outcome, test_case.expected_outcome,
             "{}",
             test_case.description
         );

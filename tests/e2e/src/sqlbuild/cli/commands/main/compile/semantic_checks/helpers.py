@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_install
 SEMANTIC_WHEEL_SITES: tuple[str, ...] = (
     "compiler/compile/_helpers/diagnostics/type_recovery.py:_projection_spans",
     "compiler/compile/_helpers/diagnostics/details.py:_parsed_model",
+    "compiler/compile/_helpers/assembly/metadata_validation.py:_function_errors",
 )
 SEMANTIC_DEFERRAL_SITES: frozenset[str] = frozenset(
     {COMPLETION_DEFERRAL_SITE, METADATA_DEFERRAL_SITE, TYPE_RECOVERY_DEFERRAL_SITE}

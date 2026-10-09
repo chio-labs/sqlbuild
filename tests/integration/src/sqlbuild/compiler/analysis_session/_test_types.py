@@ -14,6 +14,10 @@ class GeneratedAnalysisParityTestCase:
     dialects: tuple[str | None, ...]
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
+    expected_minimum_pivot_proofs: int
+    expected_minimum_proven_pivots: int
+    expected_maximum_enrichment_deferrals: int
+    expected_minimum_native_enrichments: int
 
 
 @dataclass(frozen=True)
@@ -35,3 +39,13 @@ class SessionFailureTestCase:
     seed: int
     model_count: int
     expected_kinds: dict[str, int]
+
+
+@dataclass(frozen=True)
+class StandalonePivotProofTestCase:
+    """A pivot model left out of model analysis, whose proof assembly takes natively."""
+
+    description: str
+    analysed_models: frozenset[str]
+    expected_native_proofs: int
+    expected_proven_by_model: dict[str, bool | None]

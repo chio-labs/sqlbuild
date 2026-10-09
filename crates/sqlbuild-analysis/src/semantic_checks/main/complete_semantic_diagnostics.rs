@@ -2,7 +2,7 @@
 
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
-use crate::semantic_checks::_helpers::completion::complete;
+use crate::semantic_checks::_helpers::explanation::completion::complete;
 use crate::semantic_checks::models::{CompletionOutcome, CompletionRequest, SemanticDeferral};
 use crate::semantic_validation::models::ProjectCatalog;
 

@@ -403,6 +403,20 @@ class NativeModelAnalysisSession:
             ],
             list[tuple[str, list[tuple[str, str]]]],
             list[str],
+            list[
+                tuple[
+                    str,
+                    tuple[
+                        bool,
+                        list[tuple[str, str | None, str]],
+                        list[tuple[str, str | None]],
+                        list[str],
+                        str | None,
+                        bool,
+                    ]
+                    | None,
+                ]
+            ],
         ]
         | None
     ): ...
@@ -412,6 +426,29 @@ class NativeModelAnalysisSession:
 def start_model_analysis_session(
     catalog: object, request: tuple[object, ...], /
 ) -> NativeModelAnalysisSession | None: ...
+def prove_dynamic_column_contract(
+    request: tuple[
+        str,
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
+        str,
+        list[tuple[str, str, str, str, str, str | None]],
+    ],
+    /,
+) -> tuple[
+    str,
+    tuple[
+        bool,
+        list[tuple[str, str | None, str]],
+        list[tuple[str, str | None]],
+        list[str],
+        str | None,
+        bool,
+    ]
+    | None,
+]: ...
 def infer_expression_source_shapes(
     catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
 ) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
@@ -449,6 +486,37 @@ def plan_semantic_type_recovery(
     ],
     /,
 ) -> SemanticTypeRecovery: ...
+def check_semantic_metadata_rows(
+    catalog: object,
+    request: tuple[
+        str | None,
+        list[tuple[str, str]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[
+            tuple[
+                str,
+                str,
+                str,
+                bool,
+                bool,
+                list[tuple[str, list[str]]],
+                list[tuple[str, list[str]]],
+                str | None,
+                str | None,
+            ]
+        ],
+        list[tuple[str, str | None, str]],
+        list[tuple[str, list[tuple[str, list[str]]]]],
+    ],
+    /,
+) -> tuple[
+    str | None,
+    list[tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]],
+    list[tuple[int, tuple[str, str, int, int]]],
+    list[tuple[int, tuple[str, str, int, int], int]],
+    list[str],
+]: ...
 def complete_semantic_checks(
     catalog: object,
     request: tuple[
@@ -500,6 +568,45 @@ def complete_semantic_checks(
 ]: ...
 
 # Native analysis: contracts.
+def evaluate_native_model_contracts(
+    request: tuple[
+        str,
+        bool,
+        list[
+            tuple[
+                str,
+                str | None,
+                tuple[list[tuple[str, str | None, bool, bool]], list[tuple[str, str]], bool, bool]
+                | None,
+                list[tuple[str, str | None, bool]] | None,
+                bool,
+                tuple[bool, str | None, list[tuple[str, str | None]]] | None,
+                list[str],
+            ]
+        ],
+    ],
+    /,
+) -> list[
+    tuple[
+        str | None,
+        list[
+            tuple[
+                str,
+                bool,
+                str,
+                str | None,
+                int | None,
+                str | None,
+                tuple[str, str] | None,
+                str,
+            ]
+        ],
+    ]
+]: ...
+def native_promotion_conflicts(
+    request: tuple[str | None, str, str, list[tuple[str, str | None, str | None, str | None]]],
+    /,
+) -> list[tuple[int, str, str, str]]: ...
 
 # Native analysis: column lineage facts.
 def build_fast_column_lineage(

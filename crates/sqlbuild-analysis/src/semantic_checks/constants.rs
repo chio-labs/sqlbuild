@@ -24,6 +24,58 @@ pub(crate) const ADDITIONAL_HELP_SEPARATOR: &str = "\n  = help: ";
 pub(crate) const TIMESTAMP_TYPE: &str = "TIMESTAMP";
 pub(crate) const DATE_TYPE: &str = "DATE";
 pub(crate) const BIGQUERY_DIALECT: &str = "bigquery";
+pub(crate) const UNKNOWN_TYPE: &str = "UNKNOWN";
+pub(crate) const UNKNOWN_COLUMN_REFERENCE_CODE: &str = "B300";
+pub(crate) const TYPE_MISMATCH_CODE: &str = "B301";
+pub(crate) const ARGUMENT_COUNT_CODE: &str = "B102";
+pub(crate) const UDF_NAME_PREFIX: &str = "__sqlbuild_udf_";
+pub(crate) const COLUMN_KIND: &str = "column";
+pub(crate) const TIMESTAMP_KIND: &str = "timestamp";
+pub(crate) const BOOLEAN_TYPE_NAME: &str = "BOOLEAN";
+pub(crate) const CUSTOM_TYPE_NAME: &str = "CUSTOM";
+pub(crate) const DECIMAL_TYPE_NAME: &str = "DECIMAL";
+pub(crate) const TIMESTAMP_WITH_TIME_ZONE_TYPE_NAME: &str = "TIMESTAMPTZ";
+pub(crate) const VARCHAR_DATA_TYPES: [&str; 2] = ["var_char", "varchar"];
+pub(crate) const STRING_LITERAL_TYPE: &str = "VARCHAR";
+pub(crate) const NUMBER_LITERAL_TYPE: &str = "DOUBLE";
+pub(crate) const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
+pub(crate) const SQL_TEST_CTE_PATTERN: &str = r"\A__(?:expected|ref|source|seed)__(.+)\z";
+pub(crate) const BOOLEAN_RESULT_KINDS: [&str; 18] = [
+    "boolean",
+    "and",
+    "between",
+    "eq",
+    "exists",
+    "gt",
+    "gte",
+    "ilike",
+    "in",
+    "is",
+    "is_null",
+    "like",
+    "lt",
+    "lte",
+    "neq",
+    "not",
+    "or",
+    "regexp_like",
+];
+/// Python's `_polyglot_type_name` table of serialised cast types.
+pub(crate) const KNOWN_CAST_TYPE_NAMES: [(&str, &str); 13] = [
+    ("big_int", "BIGINT"),
+    ("bool", "BOOLEAN"),
+    ("boolean", "BOOLEAN"),
+    ("date", "DATE"),
+    ("decimal", "DECIMAL"),
+    ("double", "DOUBLE"),
+    ("float", "FLOAT"),
+    ("int", "INT"),
+    ("integer", "INT"),
+    ("text", "TEXT"),
+    ("timestamp", "TIMESTAMP"),
+    ("var_char", "TEXT"),
+    ("varchar", "TEXT"),
+];
 
 pub(crate) const TYPE_WORDS_PATTERN: &str = r"(?i)\b(timestamp|integer|varchar|boolean|date|interval|double|float|decimal|numeric|bigint|smallint|text|time|string|binary|array|struct)\b";
 pub(crate) const MISSING_PATTERN: &str = r"Unknown column '([^']+)'(?: in table '([^']+)')?";

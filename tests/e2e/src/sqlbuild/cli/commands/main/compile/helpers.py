@@ -16,6 +16,7 @@ import sys
 import time
 import zipfile
 from bisect import bisect_left
+from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
@@ -40,6 +41,7 @@ import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_rec
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
+import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
 import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.lineage.main.columns as column_lineage
@@ -90,6 +92,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
 from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_BRIDGE_PROJECT_FILES,
     MACRO_CALL_LOG_ENV_VAR,
+)
+from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
+    NativeContractOutcome,
+    NativeContractRequest,
+    native_contract_statuses,
 )
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -4881,6 +4888,7 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_sql_test_stage, "assemble_native_sql_tests"),
     (diagnostic_recovery, "complete_native_semantic_diagnostics"),
     (contract_validation, "evaluate_native_model_contracts"),
+    (promotion_conflicts, "native_promotion_conflict_diagnostics"),
     (column_lineage, "build_native_column_lineage"),
     (target_writer, "plan_native_sql_test_artifacts"),
 )
@@ -4929,32 +4937,55 @@ def engine_in_process_compile(
     return run, seams
 
 
+class NativeTypeAnswers(NamedTuple):
+    """What the native type system answered in one compile: each Python-side normalization,
+    contract results that compared at least one typed column, and contract handbacks."""
+
+    normalized: list[bool]
+    typed_comparisons: int
+    handbacks: int
+
+
 def type_system_engine_compile(
     *,
     project_dir: Path,
     engine: str,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-) -> tuple[CompileReuseRun, list[bool]]:
-    """Compile in this process under `engine`; return the run and whether each native type
-    normalization answered."""
+) -> tuple[CompileReuseRun, NativeTypeAnswers]:
+    """Compile in this process under `engine`; return the run and what native types answered."""
 
-    answered: list[bool] = []
+    normalized: list[bool] = []
+    contract_statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
+    evaluate_contracts: Callable[..., list[NativeContractOutcome]] = (
+        native_module.evaluate_native_model_contracts
+    )
 
     def recorded(type_sql: str, dialect: str) -> object:
         result: object = normalize(type_sql, dialect)
-        answered.append(result is not None)
+        normalized.append(result is not None)
         return result
+
+    def recorded_contracts(request: NativeContractRequest) -> list[NativeContractOutcome]:
+        outcomes: list[NativeContractOutcome] = evaluate_contracts(request)
+        contract_statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
+        contract_statuses["handbacks"] += sum(deferral is not None for deferral, _ in outcomes)
+        return outcomes
 
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
+        patch.setattr(native_module, "evaluate_native_model_contracts", recorded_contracts)
         for name, value in {COMPILER_ENGINE_ENV_VAR: engine, REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
-    return run, answered
+    return run, NativeTypeAnswers(
+        normalized=normalized,
+        typed_comparisons=contract_statuses["typed_comparisons"],
+        handbacks=contract_statuses["handbacks"],
+    )
 
 
 def lifecycle_error_type(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> str:

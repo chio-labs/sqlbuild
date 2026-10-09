@@ -133,3 +133,13 @@ class DefaultEngineStageTestCase:
     description: str
     expected_enabled: frozenset[NativeStage]
     expected_disabled: frozenset[NativeStage]
+
+
+@dataclass(frozen=True)
+class NativeStageCouplingTestCase:
+    """A native stage that may only run where the stage it relies on also runs natively."""
+
+    description: str
+    dependent: NativeStage
+    dependency: NativeStage
+    expected_engines_without_dependency: frozenset[CompilerEngine]

@@ -33,6 +33,52 @@ pub struct ModelRequest {
     pub has_set_operation: bool,
     /// The snapshot validity columns a published shape appends.
     pub snapshot_columns: Option<(String, String)>,
+    /// The SQL Python's dynamic pivot proof parses: placeholders replaced by their defaults.
+    pub pivot_sql: String,
+    pub dynamic_families: Vec<DynamicFamily>,
+}
+
+/// One declared family of columns a runtime-dynamic pivot generates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DynamicFamily {
+    pub name: String,
+    pub pivot_column: String,
+    pub value_column: String,
+    pub aggregate: String,
+    pub data_type: String,
+    pub name_pattern: Option<String>,
+}
+
+/// Python's `DynamicColumnContractProof`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractProof {
+    pub output_proven: bool,
+    pub fixed_columns: Vec<ColumnFact>,
+    /// Each family's name and inferred type.
+    pub families: Vec<(String, Option<String>)>,
+    pub input_relations: Vec<String>,
+    pub failure_reason: Option<String>,
+    pub bare_dynamic_pivot: bool,
+}
+
+/// One model's dynamic pivot proof inputs, for a model the session does not analyse.
+#[derive(Debug, Clone, Default)]
+pub struct PivotRequest {
+    pub dialect: String,
+    pub column_types: Shapes,
+    pub authoritative_types: Shapes,
+    pub column_nullability: Shapes,
+    pub families_by_table: Vec<(String, Vec<DynamicFamily>)>,
+    pub sql: String,
+    pub families: Vec<DynamicFamily>,
+}
+
+/// A model's dynamic pivot proof: none declared, left to Python, or proven natively.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PivotOutcome {
+    Absent,
+    Deferred,
+    Proof(ContractProof),
 }
 
 /// Everything one compile's model analysis reads.
@@ -49,6 +95,8 @@ pub struct SessionRequest {
     pub complete_schemas: Shapes,
     /// The Python binding catalog's `schemas` before analysis.
     pub catalog_schemas: Shapes,
+    /// Python's `dynamic_families_by_table`, in dict order.
+    pub dynamic_families_by_table: Vec<(String, Vec<DynamicFamily>)>,
     pub models: Vec<ModelRequest>,
 }
 
@@ -78,6 +126,8 @@ pub enum LineageFacts {
     PythonAnalysis,
     /// The lineage of the analysis Python returned for this model's enrichment deferral.
     PythonEnrichment,
+    /// Plain lineage facts of the native re-analysis with known inputs.
+    NativeEnrichment(Vec<LineageRow>),
 }
 
 /// Python's `PolyglotAnalysisResult` for one model.
@@ -147,6 +197,8 @@ pub struct SessionOutcome {
     pub schema_additions: Shapes,
     /// Relations whose analysis shapes the Python binding catalog records.
     pub analysis_names: Vec<String>,
+    /// Each model's dynamic pivot proof, in request order.
+    pub dynamic_contracts: Vec<PivotOutcome>,
 }
 
 /// One expression source's shape: inferred, absent, or left to Python.

@@ -12,6 +12,9 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
 )
+from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contract import (
+    prove_native_dynamic_contract,
+)
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     get_expression_source_shapes,
@@ -91,8 +94,18 @@ def dynamic_column_contract_by_engine(
     sql_analysis: ModelSqlAnalysis | None,
     python_proof: partial[DynamicColumnContractProof | None],
 ) -> DynamicColumnContractProof | None:
-    """Return the proof the model's native analysis carries, or prove the contract in Python."""
+    """Return the proof native analysis carries or proves alone, or prove it in Python."""
 
     if sql_analysis is not None and sql_analysis.dynamic_column_contract is not None:
         return sql_analysis.dynamic_column_contract
+    if (
+        sql_analysis is None
+        and python_proof.keywords["families"]
+        and native_stage_enabled(NativeStage.MODEL_ANALYSIS)
+    ):
+        native: DynamicColumnContractProof | None = prove_native_dynamic_contract(
+            **python_proof.keywords
+        )
+        if native is not None:
+            return native
     return python_proof()

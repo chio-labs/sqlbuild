@@ -1,4 +1,4 @@
-use crate::semantic_checks::_helpers::messages::comparison_help;
+use crate::semantic_checks::_helpers::explanation::messages::comparison_help;
 use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_checks::tests::helpers::{missing_parts, owned_missing, sentence};
 use crate::semantic_checks::tests::test_types::{ComparisonHelpTestCase, SentenceMessageTestCase};
