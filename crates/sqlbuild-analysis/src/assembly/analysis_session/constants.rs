@@ -137,6 +137,15 @@ pub(crate) const BOOLEAN_RESULT_AST_KINDS: [&str; 18] = [
 pub(crate) const NULLIF_FUNCTION_NAME: &str = "NULLIF";
 pub(crate) const STRING_LITERAL_TYPE: &str = "string";
 pub(crate) const BINARY_OPERAND_COUNT: usize = 2;
+pub(crate) const AGGREGATE_AST_KINDS: [&str; 7] = [
+    "avg",
+    "count",
+    "max",
+    "min",
+    "sum",
+    "array_agg",
+    "string_agg",
+];
 /// The type Python's set operation slots give a bare NULL.
 pub(crate) const NULL_SET_OPERATION_TYPE: &str = "__SQLBUILD_NULL_SET_OPERATION_TYPE__";
 pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";

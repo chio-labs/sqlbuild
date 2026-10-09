@@ -74,13 +74,28 @@ pub(crate) fn with_pair(mut pairs: Pairs, key: &str, value: &str) -> Pairs {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ShapeTable {
     shapes: HashMap<String, Pairs>,
+    /// Each name at its first insertion, Python's dict iteration order.
+    order: Vec<String>,
 }
 
 impl ShapeTable {
     pub(crate) fn from_shapes(shapes: &Shapes) -> Self {
-        Self {
-            shapes: shapes.iter().cloned().collect(),
+        let mut table: Self = Self::default();
+        for (name, shape) in shapes {
+            if table.shapes.insert(name.clone(), shape.clone()).is_none() {
+                table.order.push(name.clone());
+            }
         }
+        table
+    }
+
+    /// The shapes in Python's dict iteration order.
+    pub(crate) fn ordered(&self) -> Vec<(&str, &Pairs)> {
+        self.order
+            .iter()
+            .filter_map(|name| self.shapes.get_key_value(name))
+            .map(|(name, shape)| (name.as_str(), shape))
+            .collect()
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<&Pairs> {
@@ -93,7 +108,10 @@ impl ShapeTable {
 
     /// Python's `setdefault`.
     pub(crate) fn set_default(&mut self, name: &str, shape: Pairs) {
-        self.shapes.entry(name.to_owned()).or_insert(shape);
+        if !self.shapes.contains_key(name) {
+            self.shapes.insert(name.to_owned(), shape);
+            self.order.push(name.to_owned());
+        }
     }
 }
 

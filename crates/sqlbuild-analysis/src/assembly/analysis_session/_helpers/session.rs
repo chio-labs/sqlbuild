@@ -3,10 +3,14 @@
 use std::collections::HashMap;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
+};
+use crate::assembly::analysis_session::_helpers::cte_facts::{
+    LegacyAnalysis, LegacyInput, RecoveryProfile, legacy_analysis,
 };
 use crate::assembly::analysis_session::_helpers::dynamic_pivot::{PivotFacts, pivot_outcome};
 use crate::assembly::analysis_session::_helpers::enrichment::{
@@ -21,8 +25,9 @@ use crate::assembly::analysis_session::constants::{
     DEFERRAL_ANALYSIS, DEFERRAL_ENRICHMENT, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, LineageFacts, ModelAnalysis,
-    ModelOutcome, ModelRequest, Phase, PivotOutcome, SessionOutcome, SessionRequest, SessionStep,
+    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, LineageFacts, LineageRow,
+    ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, SessionOutcome, SessionRequest,
+    SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -248,14 +253,19 @@ impl AnalysisSession {
                     failed_analysis(LineageFacts::Native(Vec::new()), diagnostics)
                 }
                 MemberAnalysis::Legacy { lineage } => {
-                    deferrals.push(Deferral::Analysis {
-                        model: *model,
-                        cleaned_sql: result.cleaned_sql.clone(),
-                        binding_schema: schema.clone(),
-                        binding_diagnostics: diagnostics.clone(),
-                        lineage,
-                    });
-                    failed_analysis(LineageFacts::PythonAnalysis, diagnostics)
+                    match self.native_legacy(&self.request.models[*model], &result.cleaned_sql) {
+                        Ok(legacy) => legacy_outcome(legacy, lineage, diagnostics),
+                        Err(_deferred) => {
+                            deferrals.push(Deferral::Analysis {
+                                model: *model,
+                                cleaned_sql: result.cleaned_sql.clone(),
+                                binding_schema: schema.clone(),
+                                binding_diagnostics: diagnostics.clone(),
+                                lineage,
+                            });
+                            failed_analysis(LineageFacts::PythonAnalysis, diagnostics)
+                        }
+                    }
                 }
             };
             self.outcomes[*model] = Some(ModelOutcome {
@@ -266,6 +276,28 @@ impl AnalysisSession {
             });
         }
         Ok(deferrals)
+    }
+
+    /// Python's legacy analysis of a model the engine handed back, or why Python must answer.
+    fn native_legacy(
+        &self,
+        model: &ModelRequest,
+        cleaned_sql: &str,
+    ) -> Result<LegacyAnalysis, String> {
+        catch_compiler_panic(|| {
+            legacy_analysis(&LegacyInput {
+                cleaned_sql,
+                lineage_references: &model.lineage_references,
+                recover: model.recover_cte_facts,
+                types: &self.available_types,
+                nullability: &self.available_nullability,
+                profile: RecoveryProfile {
+                    dialect: &self.request.dialect,
+                    function_return_types: &self.request.function_return_types,
+                    rules: self.request.nullability_rules.as_ref(),
+                },
+            })
+        })
     }
 
     /// The closed shape of each relation the model binds, open relations empty.
@@ -329,9 +361,14 @@ impl AnalysisSession {
             let outcome: &mut ModelOutcome = self.outcome_mut(model)?;
             outcome.analysis = enriched_analysis(
                 &outcome.analysis,
-                native_answer(model, native.columns, native.has_star),
+                native_answer(
+                    model,
+                    native.analysis_succeeded,
+                    native.columns,
+                    native.has_star,
+                ),
                 star_pending,
-                LineageFacts::NativeEnrichment(native.lineage),
+                LineageFacts::NativeFacts(native.lineage),
             );
         }
         Ok((deferrals, star_pending_by_model))
@@ -510,6 +547,37 @@ fn failed_analysis(lineage: LineageFacts, diagnostics: Vec<DiagnosticRow>) -> Mo
     }
 }
 
+/// Python's `analyze_deferred` result, answered natively.
+fn legacy_outcome(
+    legacy: LegacyAnalysis,
+    native_lineage: Option<Vec<LineageRow>>,
+    diagnostics: Vec<DiagnosticRow>,
+) -> ModelAnalysis {
+    if !legacy.succeeded {
+        return ModelAnalysis {
+            analysis_succeeded: false,
+            columns: None,
+            lineage: LineageFacts::NativeFacts(Vec::new()),
+            has_star: false,
+            star_resolved: false,
+            binding_diagnostics: Vec::new(),
+            binding_validated: false,
+        };
+    }
+    ModelAnalysis {
+        analysis_succeeded: true,
+        columns: legacy.columns,
+        lineage: match native_lineage {
+            Some(rows) => LineageFacts::Native(rows),
+            None => LineageFacts::NativeFacts(legacy.lineage),
+        },
+        has_star: legacy.has_star,
+        star_resolved: false,
+        binding_diagnostics: diagnostics,
+        binding_validated: true,
+    }
+}
+
 fn python_analysis(result: DeferredAnalysis) -> ModelAnalysis {
     ModelAnalysis {
         analysis_succeeded: result.analysis_succeeded,
@@ -585,11 +653,16 @@ fn enriched_analysis(
 }
 
 /// A native re-analysis as Python's successful answer.
-fn native_answer(model: usize, columns: Vec<ColumnFact>, has_star: bool) -> DeferredAnalysis {
+fn native_answer(
+    model: usize,
+    analysis_succeeded: bool,
+    columns: Option<Vec<ColumnFact>>,
+    has_star: bool,
+) -> DeferredAnalysis {
     DeferredAnalysis {
         model,
-        analysis_succeeded: true,
-        columns: Some(columns),
+        analysis_succeeded,
+        columns,
         has_star,
         star_resolved: false,
         binding_diagnostics: Vec::new(),

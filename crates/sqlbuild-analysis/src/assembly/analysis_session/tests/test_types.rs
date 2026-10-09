@@ -66,3 +66,10 @@ pub(crate) struct CteRecoveryTestCase {
     /// None where the recovery defers to Python.
     pub(crate) expected_facts: Option<RecoveredFacts>,
 }
+
+pub(crate) struct LegacyAnalysisTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    /// The outcome, columns and lineage rows; None where the analysis defers to Python.
+    pub(crate) expected_lines: Option<&'static [&'static str]>,
+}

@@ -14,17 +14,23 @@ use crate::assembly::analysis_session::_helpers::dict_walk::{
     py_truthy, python_int, raw_name_payload, set_operation, to_dict, top_level_ctes,
     unwrap_annotations, where_clause,
 };
+use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::constants::{
-    BINARY_OPERAND_COUNT, BOOLEAN_RESULT_AST_KINDS, BOOLEAN_TYPE, CASE_AST_KIND, CAST_AST_KIND,
-    CAST_AST_KINDS, COALESCE_AST_KIND, COLUMN_AST_KIND, CONCAT_AST_KIND, CONDITIONAL_RESULT_RULE,
-    COUNT_AST_KIND, CUSTOM_TYPE_NAME, DECIMAL_TYPE, FIRST_ARG_RULE, FUNCTION_AST_KIND,
-    IF_FUNC_AST_KIND, IS_NULL_AST_KIND, JOIN_FULL, JOIN_LEFT, JOIN_RIGHT, LITERAL_AST_KIND,
-    NON_NULL_NULLABILITY, NULL_AST_KIND, NULL_SET_OPERATION_TYPE, NULLABLE_NULLABILITY,
-    NULLIF_FUNCTION_NAME, POLYGLOT_TYPE_NAMES, SELECT_AST_KIND, SET_OPERATION_AST_KINDS,
-    STRING_LITERAL_TYPE, SUBSTRING_AST_KIND, TABLE_AST_KIND, TEXT_TYPE, TIMESTAMP_TYPE_NAME,
-    TIMESTAMP_TZ_TYPE, TRY_CAST_AST_KIND, TYPE_PASSTHROUGH_AST_KINDS, UNKNOWN_NULLABILITY,
-    VARCHAR_DATA_TYPES, WILDCARD,
+    AGGREGATE_AST_KINDS, BINARY_OPERAND_COUNT, BOOLEAN_RESULT_AST_KINDS, BOOLEAN_TYPE,
+    CASE_AST_KIND, CAST_AST_KIND, CAST_AST_KINDS, COALESCE_AST_KIND, COLUMN_AST_KIND,
+    CONCAT_AST_KIND, CONDITIONAL_RESULT_RULE, COUNT_AST_KIND, CUSTOM_TYPE_NAME, DECIMAL_TYPE,
+    FIRST_ARG_RULE, FUNCTION_AST_KIND, IF_FUNC_AST_KIND, IS_NULL_AST_KIND, JOIN_FULL, JOIN_LEFT,
+    JOIN_RIGHT, LITERAL_AST_KIND, NON_NULL_NULLABILITY, NULL_AST_KIND, NULL_SET_OPERATION_TYPE,
+    NULLABLE_NULLABILITY, NULLIF_FUNCTION_NAME, POLYGLOT_TYPE_NAMES, SELECT_AST_KIND,
+    SET_OPERATION_AST_KINDS, STRING_LITERAL_TYPE, SUBSTRING_AST_KIND, TABLE_AST_KIND, TEXT_TYPE,
+    TIMESTAMP_TYPE_NAME, TIMESTAMP_TZ_TYPE, TRY_CAST_AST_KIND, TYPE_PASSTHROUGH_AST_KINDS,
+    UNKNOWN_NULLABILITY, VARCHAR_DATA_TYPES, WILDCARD,
 };
+use crate::assembly::analysis_session::constants::{
+    CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, TRANSFORM_AGGREGATION, TRANSFORM_CAST,
+    TRANSFORM_CONSTANT, TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR,
+};
+use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeFamily};
@@ -104,6 +110,309 @@ fn recovered(input: &RecoveryInput<'_>) -> Fact<Recovery> {
         }
     }
     Ok(recovery)
+}
+
+/// Python's `analyze_deferred` inputs: the deferred model and the session's relation facts.
+pub(crate) struct LegacyInput<'a> {
+    pub(crate) cleaned_sql: &'a str,
+    /// Python's `lineage_reference_map` items.
+    pub(crate) lineage_references: &'a [(String, String, String)],
+    pub(crate) recover: bool,
+    /// Python's `column_types_by_table`: every known relation's types.
+    pub(crate) types: &'a ShapeTable,
+    /// Python's `column_nullability_by_table`, in its dict order.
+    pub(crate) nullability: &'a ShapeTable,
+    pub(crate) profile: RecoveryProfile<'a>,
+}
+
+/// Python's `_analyze_columns_and_lineage_from_polyglot_ast` result.
+#[derive(Debug)]
+pub(crate) struct LegacyAnalysis {
+    /// False where parsing failed, Python's `PolyglotError` path.
+    pub(crate) succeeded: bool,
+    pub(crate) columns: Option<Vec<ColumnFact>>,
+    pub(crate) has_star: bool,
+    /// Python's own lineage facts of the projections.
+    pub(crate) lineage: Vec<LineageRow>,
+}
+
+/// Python's legacy analysis of a model the native engine handed back, or why it defers.
+pub(crate) fn legacy_analysis(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
+    NON_ASCII_FOLDED.set(false);
+    let analysed: Fact<LegacyAnalysis> = legacy_analysed(input);
+    if NON_ASCII_FOLDED.replace(false) {
+        return Err("non-ASCII text Python casefolds or upper-cases differently".to_owned());
+    }
+    analysed
+}
+
+fn legacy_analysed(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
+    let Some(parsed) = parse_one(input.cleaned_sql, input.profile.dialect)? else {
+        return Ok(LegacyAnalysis {
+            succeeded: false,
+            columns: None,
+            has_star: false,
+            lineage: Vec::new(),
+        });
+    };
+    let root_kind: &str = kind(Some(&parsed));
+    let infer_nullability: bool = !SET_OPERATION_AST_KINDS.contains(&root_kind);
+    let select: Option<&Expression> = if root_kind == SELECT_AST_KIND {
+        Some(&parsed)
+    } else {
+        find_all(&parsed, SELECT_AST_KIND).into_iter().next()
+    };
+    let Some(select) = select else {
+        return Ok(LegacyAnalysis {
+            succeeded: true,
+            columns: None,
+            has_star: false,
+            lineage: Vec::new(),
+        });
+    };
+    let mut nullability: NullRelations = null_relations(input.nullability)?;
+    let known: bool = nullability
+        .iter()
+        .any(|(_, facts)| has_known_nullability(facts));
+    let mut aliases: Vec<(String, &'static str)> = Vec::new();
+    if known {
+        (aliases, nullability) = alias_nullability(select, nullability)?;
+    }
+    let resources: Resources = reference_aliases(select, input.lineage_references);
+    let unqualified: Option<&(String, String)> = single_resource(&resources);
+    let context = Context {
+        profile: &input.profile,
+    };
+    let (cte_types, cte_nullability) = if input.recover {
+        (
+            context.passthrough_types(&parsed, &referenced_types(&parsed, input.types))?,
+            context.passthrough_nullability(&parsed, &nullability)?,
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    let filter: Option<FilterContext> = filter_context(select, &nullability)?;
+    let mut columns: Vec<ColumnFact> = Vec::new();
+    let mut lineage: Vec<LineageRow> = Vec::new();
+    let mut has_star: bool = false;
+    for projection in select.get_expressions() {
+        let projection: Option<&Expression> = unwrap_annotations(Some(projection));
+        let inner: Option<&Expression> = projected_expression(projection);
+        if is_star(projection) || is_star(inner) {
+            has_star = true;
+            continue;
+        }
+        let output: &str = output_name(projection);
+        if output.is_empty() || output == WILDCARD {
+            continue;
+        }
+        let data_type: Option<String> = match dict_get(&cte_types, output) {
+            Some(cte_type) if !cte_type.is_empty() => Some(cte_type.clone()),
+            _ => context.expression_type(inner)?,
+        };
+        let column_nullability: &'static str = if !infer_nullability {
+            UNKNOWN_NULLABILITY
+        } else if non_null_after_filter(inner, filter.as_ref())? {
+            NON_NULL_NULLABILITY
+        } else if let Some(cte_nullability) = dict_get(&cte_nullability, output) {
+            cte_nullability
+        } else if known {
+            context.nullability(inner, &aliases, &nullability)?
+        } else {
+            context.shallow_nullability(inner)?
+        };
+        columns.push(ColumnFact {
+            name: output.to_owned(),
+            data_type,
+            nullability: column_nullability.to_owned(),
+        });
+        let (sources, confidence) = upstream_columns(projection, &resources, unqualified)?;
+        let transform_code: u8 = legacy_transform(inner, !sources.is_empty())?;
+        lineage.push(LineageRow {
+            output_column: output.to_owned(),
+            transform_code,
+            confidence_code: if sources.is_empty() && transform_code != TRANSFORM_CONSTANT {
+                CONFIDENCE_UNKNOWN
+            } else {
+                confidence
+            },
+            sources,
+        });
+    }
+    Ok(LegacyAnalysis {
+        succeeded: true,
+        columns: Some(columns),
+        has_star,
+        lineage,
+    })
+}
+
+/// Python's `_polyglot_reference_alias_map`: `(resource type, resource name)` by table alias.
+type Resources = Vec<(String, (String, String))>;
+
+/// Python's `_polyglot_reference_alias_map` over the select's tables.
+fn reference_aliases(select: &Expression, references: &[(String, String, String)]) -> Resources {
+    let mut resources: Resources = Vec::new();
+    for table in find_all(select, TABLE_AST_KIND) {
+        let table_name: &str = table.get_name();
+        let Some((_, resource_type, resource_name)) = references
+            .iter()
+            .find(|(analysis_name, _, _)| analysis_name == table_name)
+        else {
+            continue;
+        };
+        let resource: (String, String) = (resource_type.clone(), resource_name.clone());
+        resources = dict_set(resources, table_name, resource.clone());
+        let alias: &str = alias_or_name(table);
+        if !alias.is_empty() {
+            resources = dict_set(resources, alias, resource);
+        }
+    }
+    resources
+}
+
+/// Python's `_single_alias_resource`.
+fn single_resource(resources: &Resources) -> Option<&(String, String)> {
+    let (_, first) = resources.first()?;
+    resources
+        .iter()
+        .all(|(_, candidate)| candidate.1 == first.1)
+        .then_some(first)
+}
+
+/// A projection's upstream `(resource type, resource name, column)` and its confidence code.
+type Upstream = (Vec<(String, String, String)>, u8);
+
+/// Python's `_polyglot_lineage_upstream_columns`.
+fn upstream_columns(
+    projection: Option<&Expression>,
+    resources: &Resources,
+    unqualified: Option<&(String, String)>,
+) -> Fact<Upstream> {
+    let mut sources: Vec<(String, String, String)> = Vec::new();
+    let mut seen: HashSet<(String, String, String)> = HashSet::new();
+    let mut confidence: u8 = CONFIDENCE_HIGH;
+    for (column_name, table_name) in column_refs(projection)? {
+        if column_name.is_empty() {
+            continue;
+        }
+        let resource: Option<&(String, String)> = if !table_name.is_empty() {
+            dict_get(resources, &table_name)
+        } else if unqualified.is_some() {
+            confidence = CONFIDENCE_MEDIUM;
+            unqualified
+        } else {
+            confidence = CONFIDENCE_UNKNOWN;
+            None
+        };
+        let Some((resource_type, resource_name)) = resource else {
+            continue;
+        };
+        let key: (String, String, String) =
+            (resource_type.clone(), resource_name.clone(), column_name);
+        if seen.insert(key.clone()) {
+            sources.push(key);
+        }
+    }
+    Ok((sources, confidence))
+}
+
+/// Python's `_polyglot_column_refs_in_expression`.
+fn column_refs(projection: Option<&Expression>) -> Fact<Vec<(String, String)>> {
+    let node: &Expression = projection.ok_or("Python reads columns of a missing projection")?;
+    if node.variant_name() == COLUMN_AST_KIND {
+        return Ok(vec![(node.get_name().to_owned(), column_table_name(node)?)]);
+    }
+    Ok(column_refs_in(&to_dict(node)?, Vec::new()))
+}
+
+/// Python's `visit` over a projection's `to_dict()` payload.
+fn column_refs_in(value: &Value, mut refs: Vec<(String, String)>) -> Vec<(String, String)> {
+    match value {
+        Value::Object(object) => {
+            if let Some(Value::Object(column)) = object.get(COLUMN_AST_KIND) {
+                let table_name: String = match column.get(TABLE_AST_KIND) {
+                    Some(Value::Object(table)) => raw_name_payload(table.get("name")),
+                    _ => String::new(),
+                };
+                refs.push((raw_name_payload(column.get("name")), table_name));
+                return refs;
+            }
+            for nested in object.values() {
+                refs = column_refs_in(nested, refs);
+            }
+            refs
+        }
+        Value::Array(items) => {
+            for item in items {
+                refs = column_refs_in(item, refs);
+            }
+            refs
+        }
+        _ => refs,
+    }
+}
+
+/// Python's `_polyglot_lineage_transform_kind`.
+fn legacy_transform(inner: Option<&Expression>, has_upstream: bool) -> Fact<u8> {
+    if is_star(inner) {
+        return Ok(TRANSFORM_STAR);
+    }
+    let node_kind: &str = kind(inner);
+    if CAST_AST_KINDS.contains(&node_kind) {
+        return Ok(TRANSFORM_CAST);
+    }
+    let node: &Expression = inner.ok_or("Python walks a missing projection expression")?;
+    if node.dfs().any(is_aggregate) {
+        return Ok(TRANSFORM_AGGREGATION);
+    }
+    Ok(match (has_upstream, node_kind == COLUMN_AST_KIND) {
+        (false, _) => TRANSFORM_CONSTANT,
+        (true, true) => TRANSFORM_DIRECT,
+        (true, false) => TRANSFORM_EXPRESSION,
+    })
+}
+
+fn is_aggregate(node: &Expression) -> bool {
+    AGGREGATE_AST_KINDS.contains(&node.variant_name())
+}
+
+/// Python's `column_types_by_table` entries the query's tables name, each its own identity.
+fn referenced_types(root: &Expression, types: &ShapeTable) -> Relations {
+    let mut relations: Relations = Vec::new();
+    for table in find_all(root, TABLE_AST_KIND) {
+        let table_name: &str = table.get_name();
+        if dict_get(&relations, table_name).is_none()
+            && let Some(shape) = types.get(table_name)
+        {
+            relations.push((table_name.to_owned(), Rc::new(shape.clone())));
+        }
+    }
+    relations
+}
+
+/// The session's nullability facts as Python's `InferredNullability` values.
+fn null_relations(table: &ShapeTable) -> Fact<NullRelations> {
+    let mut relations: NullRelations = Vec::new();
+    for (name, shape) in table.ordered() {
+        let mut facts: Vec<(String, &'static str)> = Vec::with_capacity(shape.len());
+        for (column, value) in shape {
+            facts.push((column.clone(), nullability_value(value)?));
+        }
+        relations.push((name.to_owned(), Rc::new(facts)));
+    }
+    Ok(relations)
+}
+
+fn nullability_value(value: &str) -> Fact<&'static str> {
+    [
+        UNKNOWN_NULLABILITY,
+        NON_NULL_NULLABILITY,
+        NULLABLE_NULLABILITY,
+    ]
+    .into_iter()
+    .find(|known| *known == value)
+    .ok_or_else(|| format!("an unknown nullability value {value}"))
 }
 
 /// Python's enrichment types: the input shapes.
@@ -541,6 +850,14 @@ impl Context<'_, '_> {
 
     /// Python's `ExpressionInferenceProfile.function_return_type`.
     fn function_return_type(&self, function_name: &str) -> Fact<Option<String>> {
+        let ascii_keys: bool = self
+            .profile
+            .function_return_types
+            .iter()
+            .all(|(declared, _)| declared.is_ascii());
+        if ascii_keys && keeps_non_ascii_upper(function_name) {
+            return Ok(None);
+        }
         let upper: String = upper(function_name);
         Ok(self
             .profile
@@ -1227,6 +1544,15 @@ fn casefold(text: &str) -> String {
 fn upper(text: &str) -> String {
     flag_non_ascii(text);
     text.to_ascii_uppercase()
+}
+
+/// Whether `text.upper()` keeps a non-ASCII character, so it can equal no ASCII key.
+fn keeps_non_ascii_upper(text: &str) -> bool {
+    text.chars().any(upper_is_non_ascii)
+}
+
+fn upper_is_non_ascii(character: char) -> bool {
+    !character.to_uppercase().all(|upper| upper.is_ascii())
 }
 
 fn flag_non_ascii(text: &str) {
