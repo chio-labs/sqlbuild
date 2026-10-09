@@ -15,6 +15,8 @@ use sqlbuild_analysis::assembly::analysis_session::models::{
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
 
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
@@ -124,7 +126,8 @@ impl NativeModelAnalysisSession {
             return false;
         };
         let answers: Vec<DeferredAnalysis> = results.into_iter().map(deferred_analysis).collect();
-        let provided: Result<(), String> = provide_deferred_analyses(&mut session, answers);
+        let provided: Result<(), String> =
+            catch_compiler_panic(|| provide_deferred_analyses(&mut session, answers));
         self.inner = Some(session);
         self.kept(provided).is_some()
     }
@@ -132,8 +135,9 @@ impl NativeModelAnalysisSession {
     /// Every model's outcome once the session is done, or None to analyse in Python.
     fn finish(&mut self) -> Option<FinishRow> {
         let session: AnalysisSession = self.inner.take()?;
-        let outcome: Result<SessionOutcome, String> = finish_analysis_session(session);
-        self.kept(outcome).map(finish_row)
+        let outcome: Result<FinishRow, String> =
+            catch_compiler_panic(|| finish_analysis_session(session).map(finish_row));
+        self.kept(outcome)
     }
 
     /// Why the session handed the analysis back to Python, when it did.

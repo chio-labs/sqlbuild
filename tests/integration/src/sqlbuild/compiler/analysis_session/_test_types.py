@@ -25,3 +25,13 @@ class AnalysisFallbackTestCase:
     allow_compact_analysis: bool
     keeps_catalog: bool
     expected_kind: str
+
+
+@dataclass(frozen=True)
+class SessionFailureTestCase:
+    """A session that fails after Python answered deferrals, so Python analyses everything."""
+
+    description: str
+    seed: int
+    model_count: int
+    expected_kinds: dict[str, int]

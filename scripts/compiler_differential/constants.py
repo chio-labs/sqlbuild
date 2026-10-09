@@ -86,6 +86,10 @@ CUSTOM_RULE_THRESHOLDS: str = "\n[rules.thresholds]\nmin_custom_rule_test_cases 
 COLD_COMPILE: DifferentialCommand = DifferentialCommand(
     label="compile", arguments=("compile", "--json", "--manifest", "--dag")
 )
+COLD_CAPTURE_COMMAND: str = f"0-{COLD_COMPILE.label}"
+ANALYSIS_CACHE_STATE_POINTERS: frozenset[str] = frozenset(
+    {"/binding_catalog/schemas", "/binding_catalog/analysis_shapes"}
+)
 WARM_COMPILE: DifferentialCommand = DifferentialCommand(
     label="compile-warm", arguments=("compile", "--json")
 )

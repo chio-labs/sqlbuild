@@ -19,13 +19,16 @@ from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AnalysisFallbackTestCase,
     GeneratedAnalysisParityTestCase,
+    SessionFailureTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     AnalysisParity,
+    FailingProvideSession,
     analysis_request,
     compare_analyses,
     compile_inputs,
     deferral_kinds,
+    failing_provide_sessions,
     generated_analysis_files,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
@@ -129,6 +132,41 @@ def test_given_unsupported_analysis_when_analysing_natively_then_python_analyses
 
     assert analyses is None
     assert deferral_kinds(record_dir) == Counter({f"analysis_session:{test_case.expected_kind}": 1})
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SessionFailureTestCase(
+            description="untyped inputs defer enrichments before the session fails",
+            seed=20261009,
+            model_count=12,
+            expected_kinds={"analysis_session:session": 1},
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_session_failure_after_deferrals_when_analysing_then_records_only_the_session(
+    test_case: SessionFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    request: NativeModelAnalysisRequest = analysis_request(
+        inputs=compile_inputs(
+            project_dir=tmp_path / "project",
+            files=generated_analysis_files(
+                rng=random.Random(test_case.seed), model_count=test_case.model_count
+            ),
+        ),
+        monkeypatch=monkeypatch,
+    )
+    sessions: list[FailingProvideSession] = failing_provide_sessions(monkeypatch=monkeypatch)
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+
+    analyses: object = analyze_native_model_sql(request=request)
+
+    assert analyses is None
+    assert sum(session.answered for session in sessions) > 0
+    assert deferral_kinds(record_dir) == Counter(test_case.expected_kinds)
 
 
 if __name__ == "__main__":

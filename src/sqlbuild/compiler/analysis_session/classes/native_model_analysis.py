@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
@@ -62,6 +63,7 @@ class NativeModelAnalysis:
             request.column_nullability_by_table
         )
         self._kept: dict[tuple[int, str], PolyglotAnalysisResult] = {}
+        self._deferrals: Counter[str] = Counter()
 
     def analyses(
         self, session: _native.NativeModelAnalysisSession
@@ -81,6 +83,8 @@ class NativeModelAnalysis:
         self._record_catalog_changes(
             schema_additions=schema_additions, analysis_names=analysis_names
         )
+        for kind, count in self._deferrals.items():
+            record_analysis_deferral(kind=kind, count=count)
         self._python.record_uncached()
         return {
             request.model_input.model_file.file_path.stem: self._model_analysis(
@@ -123,7 +127,7 @@ class NativeModelAnalysis:
         shapes: dict[str, dict[str, str]] = {name: dict(shape) for name, shape in schemas}
         analysis: PolyglotAnalysisResult
         if kind == DEFERRAL_ANALYSIS:
-            record_analysis_deferral(kind=DEFERRAL_LEGACY_ANALYSIS)
+            self._deferrals[DEFERRAL_LEGACY_ANALYSIS] += 1
             analysis = self._python.analyze_deferred(
                 model=model,
                 precomputed=PythonModelAnalysis.legacy_precomputed(
@@ -136,7 +140,7 @@ class NativeModelAnalysis:
                 column_nullability_by_table=self._nullability,
             )
         else:
-            record_analysis_deferral(kind=DEFERRAL_ENRICHMENT)
+            self._deferrals[DEFERRAL_ENRICHMENT] += 1
             analysis = self._python.enrich(model=model, input_schemas=shapes)
         self._kept[(model, kind)] = analysis
         return deferred_row(model=model, analysis=analysis)

@@ -18,6 +18,7 @@ from tests.e2e.scripts.compiler_differential._test_types import (
     WheelSiteReportTestCase,
 )
 from tests.e2e.scripts.compiler_differential.helpers import (
+    CATALOG_PERTURBATION,
     COMPILED_PROJECT_CAPTURE,
     DEFERRAL_PERTURBATION,
     DISCOVERY_PERTURBATION,
@@ -171,6 +172,39 @@ def test_given_perturbed_native_render_when_comparing_then_compile_inputs_captur
         harness_arguments(
             work_dir=tmp_path / "work",
             extra=perturbation_arguments(tmp_path / "perturbation", source=RENDER_PERTURBATION),
+        )
+    )
+
+    output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code, output
+    assert all(line in output for line in test_case.expected_lines), output
+    assert all(re.search(pattern, output) for pattern in test_case.expected_patterns), output
+    assert not any(text in output for text in test_case.expected_absent), output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HarnessRunTestCase(
+            description="wrong_native_catalog_shape",
+            extra_arguments=(),
+            expected_exit_code=1,
+            expected_lines=("DIFF project/waffle_shop",),
+            expected_patterns=(
+                r"- stage capture 0-compile/\d+-compiled_project\.json at /binding_catalog/schemas",
+            ),
+            expected_absent=("warm/", "3-plan/"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wrong_native_catalog_shape_when_comparing_then_only_the_cold_capture_differs(
+    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code: int = run_compiler_differential(
+        harness_arguments(
+            work_dir=tmp_path / "work",
+            extra=perturbation_arguments(tmp_path / "perturbation", source=CATALOG_PERTURBATION),
         )
     )
 
