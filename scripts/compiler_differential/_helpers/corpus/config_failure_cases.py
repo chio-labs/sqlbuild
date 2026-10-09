@@ -31,7 +31,7 @@ _BEYOND_64_BITS: int = 2**64
 _INT64_MAX: int = 2**63 - 1
 
 
-def _header_help(purpose: str, entry: str) -> str:
+def _header_help(*, purpose: str, entry: str) -> str:
     indent: str = " " * 12
     return (
         f"{purpose}, add this to the MODEL header:\n{indent}MODEL (\n"
@@ -287,8 +287,8 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message=f"cursor_start -{_BEYOND_64_BITS} is smaller than a 64-bit integer",
             expected_help=_header_help(
-                "set cursor_start to a value that fits in 64 bits",
-                f"cursor_start {-_INT64_MAX - 1}",
+                purpose="set cursor_start to a value that fits in 64 bits",
+                entry=f"cursor_start {-_INT64_MAX - 1}",
             ),
             files=_staging_header(f"{_INCREMENTAL}  cursor_start -{_BEYOND_64_BITS},"),
         ),
@@ -297,8 +297,8 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message=f"batch_concurrency {_BEYOND_64_BITS} is larger than a 64-bit integer",
             expected_help=_header_help(
-                "set batch_concurrency to a value that fits in 64 bits",
-                f"batch_concurrency {_INT64_MAX}",
+                purpose="set batch_concurrency to a value that fits in 64 bits",
+                entry=f"batch_concurrency {_INT64_MAX}",
             ),
             files=_staging_header(f"{_WATERMARK}  batch_concurrency {_BEYOND_64_BITS},"),
         ),
@@ -307,8 +307,8 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message=f"max_microbatches {_BEYOND_64_BITS} is larger than a 64-bit integer",
             expected_help=_header_help(
-                "set max_microbatches to a value that fits in 64 bits",
-                f"max_microbatches {_INT64_MAX}",
+                purpose="set max_microbatches to a value that fits in 64 bits",
+                entry=f"max_microbatches {_INT64_MAX}",
             ),
             files=_staging_header(f"{_WATERMARK}  max_microbatches {_BEYOND_64_BITS},"),
         ),
@@ -319,8 +319,8 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
                 f"microbatch_limit max_batches {_BEYOND_64_BITS} is larger than a 64-bit integer"
             ),
             expected_help=_header_help(
-                "set microbatch_limit max_batches to a value that fits in 64 bits",
-                f"microbatch_limit (max_batches {_INT64_MAX}, action error)",
+                purpose="set microbatch_limit max_batches to a value that fits in 64 bits",
+                entry=f"microbatch_limit (max_batches {_INT64_MAX}, action error)",
             ),
             files=_staging_header(
                 f"{_WATERMARK}  microbatch_limit (max_batches {_BEYOND_64_BITS}, action error),"
@@ -347,7 +347,7 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
                 "lookback '99999999999999999999d' has a number larger than a 64-bit integer"
             ),
             expected_help=_header_help(
-                "use a lookback whose numbers fit in 64 bits", "lookback '7d'"
+                purpose="use a lookback whose numbers fit in 64 bits", entry="lookback '7d'"
             ),
             files=_staging_header(f"{_INCREMENTAL}  lookback 99999999999999999999d,"),
         ),
@@ -358,7 +358,7 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
                 "batch_size '99999999999999999999d' has a number larger than a 64-bit integer"
             ),
             expected_help=_header_help(
-                "use a batch_size whose numbers fit in 64 bits", "batch_size '7d'"
+                purpose="use a batch_size whose numbers fit in 64 bits", entry="batch_size '7d'"
             ),
             files=_staging_header(
                 _WATERMARK.replace("batch_size 1d", "batch_size 99999999999999999999d")
@@ -372,8 +372,8 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
                 "integer"
             ),
             expected_help=_header_help(
-                "set minimum_samples to a value that fits in 64 bits",
-                f"audits [not_null (minimum_samples {_INT64_MAX})]",
+                purpose="set minimum_samples to a value that fits in 64 bits",
+                entry=f"audits [not_null (minimum_samples {_INT64_MAX})]",
             ),
             files=_staging_header(f"  audits [not_null (minimum_samples {_BEYOND_64_BITS})],"),
         ),
@@ -385,8 +385,8 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
                 "than a 64-bit integer"
             ),
             expected_help=_header_help(
-                "set evidence_limit to a value that fits in 64 bits",
-                f"columns (order_id (audits [not_null (evidence_limit {_INT64_MAX})]))",
+                purpose="set evidence_limit to a value that fits in 64 bits",
+                entry=f"columns (order_id (audits [not_null (evidence_limit {_INT64_MAX})]))",
             ),
             files=_staging_header(
                 f"  columns (order_id (audits [not_null (evidence_limit {_BEYOND_64_BITS})])),"
