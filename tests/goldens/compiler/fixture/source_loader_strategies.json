@@ -1,0 +1,368 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {},
+ "manifest": {
+  "nodes": {},
+  "sources": {
+   "source.source_loader_strategies.raw_countries": {
+    "database": null,
+    "schema": "",
+    "name": "raw_countries",
+    "resource_type": "source",
+    "package_name": "source_loader_strategies",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.source_loader_strategies.raw_countries",
+    "fqn": [
+     "source_loader_strategies",
+     "raw_countries"
+    ],
+    "source_name": "raw_countries",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_countries",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Test source raw_countries.",
+    "columns": {
+     "country_id": {
+      "name": "country_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "country_code": {
+      "name": "country_code",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "country_name": {
+      "name": "country_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw_countries",
+      "auto_load": false,
+      "write_strategy": "table"
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.source_loader_strategies.raw_webhook_events": {
+    "database": null,
+    "schema": "",
+    "name": "raw_webhook_events",
+    "resource_type": "source",
+    "package_name": "source_loader_strategies",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.source_loader_strategies.raw_webhook_events",
+    "fqn": [
+     "source_loader_strategies",
+     "raw_webhook_events"
+    ],
+    "source_name": "raw_webhook_events",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_webhook_events",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Test source raw_webhook_events.",
+    "columns": {
+     "event_id": {
+      "name": "event_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "event_name": {
+      "name": "event_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw_webhook_events",
+      "auto_load": false,
+      "write_strategy": "append"
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.source_loader_strategies.raw_order_events": {
+    "database": null,
+    "schema": "",
+    "name": "raw_order_events",
+    "resource_type": "source",
+    "package_name": "source_loader_strategies",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.source_loader_strategies.raw_order_events",
+    "fqn": [
+     "source_loader_strategies",
+     "raw_order_events"
+    ],
+    "source_name": "raw_order_events",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_order_events",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Test source raw_order_events.",
+    "columns": {
+     "event_id": {
+      "name": "event_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "event_at": {
+      "name": "event_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount_cents": {
+      "name": "amount_cents",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw_order_events",
+      "auto_load": false,
+      "write_strategy": "delete_insert",
+      "cursor_column": "event_at"
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.source_loader_strategies.raw_customers": {
+    "database": null,
+    "schema": "",
+    "name": "raw_customers",
+    "resource_type": "source",
+    "package_name": "source_loader_strategies",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.source_loader_strategies.raw_customers",
+    "fqn": [
+     "source_loader_strategies",
+     "raw_customers"
+    ],
+    "source_name": "raw_customers",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_customers",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Test source raw_customers.",
+    "columns": {
+     "customer_id": {
+      "name": "customer_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "plan_name": {
+      "name": "plan_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "updated_at": {
+      "name": "updated_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw_customers",
+      "auto_load": false,
+      "write_strategy": "merge",
+      "cursor_column": "updated_at",
+      "unique_key": [
+       "customer_id"
+      ]
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.source_loader_strategies.raw_loader_status": {
+    "database": null,
+    "schema": "",
+    "name": "raw_loader_status",
+    "resource_type": "source",
+    "package_name": "source_loader_strategies",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.source_loader_strategies.raw_loader_status",
+    "fqn": [
+     "source_loader_strategies",
+     "raw_loader_status"
+    ],
+    "source_name": "raw_loader_status",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_loader_status",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Test source raw_loader_status.",
+    "columns": {
+     "status_id": {
+      "name": "status_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status_name": {
+      "name": "status_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "loaded_by": {
+      "name": "loaded_by",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw_loader_status",
+      "auto_load": false
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   }
+  },
+  "macros": {},
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {
+   "source.source_loader_strategies.raw_countries": [],
+   "source.source_loader_strategies.raw_webhook_events": [],
+   "source.source_loader_strategies.raw_order_events": [],
+   "source.source_loader_strategies.raw_customers": [],
+   "source.source_loader_strategies.raw_loader_status": []
+  },
+  "group_map": {},
+  "docs": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+ }
+}

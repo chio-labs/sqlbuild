@@ -1,0 +1,30 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "rule",
+     "severity": "error",
+     "code": "SQBRSQL005",
+     "message": "CTE is unreachable from the final query",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 6,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 6
+     },
+     "help": "Reference the CTE from the final query or another reachable CTE, or remove it.",
+     "notes": [
+      "Fix available: `sqb format --fix` applies it after compiler verification"
+     ]
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

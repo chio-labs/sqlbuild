@@ -99,6 +99,18 @@ if _directory:
         _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
 """
 
+REFERENCE_SCAN_SABOTAGE: str = """
+import sqlbuild.compiler.compile._helpers.refs.references as references
+
+references.extract_native_sql_references = lambda **_: None
+"""
+
+MODEL_ANALYSIS_SABOTAGE: str = """
+import sqlbuild._native as native
+
+native.start_model_analysis_session = lambda *_args: None
+"""
+
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "broken_orders"\nadapter = "duckdb"\n\n'

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL function functions/sql/order_label.sql returns references unsupported template namespace 'VAR'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

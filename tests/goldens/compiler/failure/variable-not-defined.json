@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "unknown project variable '@@region' in '<project>/models/staging/stg_orders.sql'. Available vars: none"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

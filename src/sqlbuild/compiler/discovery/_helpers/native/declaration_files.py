@@ -49,6 +49,8 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.discovery.types import NativeFileScope, NativeLocation, NativeScopeFields
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 type _NativeDeclarationFile = tuple[str, NativeFileScope | None, tuple[object, ...]]
@@ -274,6 +276,7 @@ def _record[RecordT](
     scope, payload = item
     tag: object = payload[0]
     if tag == NATIVE_DEFERRED_TAG:
+        report_native_fallback(site=NativeFallbackSite.DECLARATION_FILE)
         return parse_with_python(relative_path=relative_path, scope=scope)
     if tag == NATIVE_PARSED_TAG:
         return build(

@@ -15,6 +15,9 @@ from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
     expand_native_config_templates,
@@ -284,6 +287,13 @@ def expand_config_templates(
     ):
         record_template_reads(outcome.reads)
         raise native_config_error(error=outcome.error, bridge_independent=True)
+    if native:
+        report_native_fallback(
+            site=NativeFallbackSite.CONFIG_TEMPLATES,
+            kind="unsupported" if outcome is None or isinstance(outcome, str) else "missing_value",
+        )
+    elif native_stage_enabled(NativeStage.MODEL_CONFIG):
+        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="config")
     return expand_template_data(
         value=value,
         variables=variables,

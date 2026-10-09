@@ -1,0 +1,3234 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-select",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-no-analysis",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-rich-lineage",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {
+  "audits/generic/audited_stg_fulfillment_1/id_present__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"audited_stg_fulfillment_1\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/checked_stg_fulfillment_2/accepted_values__status.sql": [
+   "SELECT status",
+   "FROM __ref(\"checked_stg_fulfillment_2\")",
+   "WHERE status IS NOT NULL",
+   "  AND status NOT IN ('placed', 'expédié', '取消', 'returned ✓')",
+   ""
+  ],
+  "audits/generic/checked_stg_fulfillment_2/expression_is_true.sql": [
+   "SELECT *",
+   "FROM __ref(\"checked_stg_fulfillment_2\")",
+   "WHERE NOT (amount >= -1000)",
+   ""
+  ],
+  "audits/generic/checked_stg_fulfillment_2/relationships__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"checked_stg_fulfillment_2\")",
+   "WHERE id IS NOT NULL",
+   "  AND id NOT IN (",
+   "    SELECT id",
+   "    FROM __ref(\"stg_fulfillment_2\")",
+   "    WHERE id IS NOT NULL",
+   "  )",
+   ""
+  ],
+  "audits/generic/fulfillment_summary_0/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"fulfillment_summary_0\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/sales_summary_0/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"sales_summary_0\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/sales_summary_1/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"sales_summary_1\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/shaped_stg_inventory_2/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"shaped_stg_inventory_2\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/stated_stg_inventory_2/accepted_values__status.sql": [
+   "SELECT status",
+   "FROM __ref(\"stated_stg_inventory_2\")",
+   "WHERE status IS NOT NULL",
+   "  AND status NOT IN ('placed', 'expédié', '取消', 'returned ✓')",
+   ""
+  ],
+  "audits/generic/stg_fulfillment_0/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"stg_fulfillment_0\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_fulfillment_2/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"stg_fulfillment_2\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_inventory_1/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"stg_inventory_1\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "functions/python/is_large.sql": [
+   "REGISTER PYTHON FUNCTION is_large(DOUBLE) RETURNS BOOLEAN",
+   ""
+  ],
+  "functions/sql/is_placed.sql": [
+   "CREATE OR REPLACE MACRO main.is_placed(event_status) AS (",
+   "event_status = 'placed'",
+   ")",
+   ""
+  ],
+  "functions/sql/table_fn__events_above.sql": [
+   "CREATE OR REPLACE MACRO main.table_fn__events_above(p_minimum) AS TABLE",
+   "SELECT id, amount",
+   "FROM __ref(\"stg_sales_0\")",
+   "WHERE amount > p_minimum",
+   ""
+  ],
+  "models/analysis/chain_1_stg_fulfillment_2.sql": [
+   "SELECT id, label, amount",
+   "FROM __ref(\"contracted_stg_fulfillment_2\")",
+   ""
+  ],
+  "models/analysis/chain_2_stg_fulfillment_2.sql": [
+   "SELECT id, UPPER(label) AS label, amount",
+   "FROM __ref(\"chain_1_stg_fulfillment_2\")",
+   ""
+  ],
+  "models/analysis/chain_3_stg_fulfillment_2.sql": [
+   "SELECT id, label, amount",
+   "FROM __ref(\"chain_2_stg_fulfillment_2\")",
+   ""
+  ],
+  "models/analysis/checked_stg_fulfillment_2.sql": [
+   "SELECT id, amount, status",
+   "FROM __ref(\"stg_fulfillment_2\")",
+   ""
+  ],
+  "models/analysis/contracted_stg_fulfillment_2.sql": [
+   "SELECT CAST(id AS INTEGER) AS id, CAST(status AS VARCHAR(18)) AS label,",
+   "  amount",
+   "FROM __source(\"raw_events_0\")",
+   ""
+  ],
+  "models/analysis/regional_stg_fulfillment_0.sql": [
+   "SELECT id, amount, 'north' AS region",
+   "FROM __ref(\"stg_fulfillment_0\")",
+   ""
+  ],
+  "models/features/audited_stg_fulfillment_1.sql": [
+   "SELECT id, amount",
+   "FROM __ref(\"stg_fulfillment_1\")",
+   ""
+  ],
+  "models/features/batched_rolling_window_stg_sales_0.sql": [
+   "SELECT CAST(created_at AS DATE) AS created_at, SUM(amount) AS amount",
+   "FROM __ref(\"stg_sales_0\")",
+   "GROUP BY CAST(created_at AS DATE)",
+   ""
+  ],
+  "models/features/check_history_stg_inventory_1.sql": [
+   "SELECT id, status, amount",
+   "FROM __ref(\"stg_inventory_1\")",
+   ""
+  ],
+  "models/features/copied_stg_fulfillment_2.sql": [
+   "SELECT id, status",
+   "FROM __ref(\"stg_fulfillment_2\")",
+   ""
+  ],
+  "models/features/flagged_stg_sales_0.sql": [
+   "SELECT id, __udf(\"is_placed\")(status) AS is_placed,",
+   "  __udf(\"is_large\")(amount) AS is_large",
+   "FROM __ref(\"stg_sales_0\")",
+   ""
+  ],
+  "models/features/hooked_stg_inventory_1.sql": [
+   "SELECT id, amount",
+   "FROM __ref(\"stg_inventory_1\")",
+   ""
+  ],
+  "models/features/merge_stg_inventory_0.sql": [
+   "SELECT id, amount, status, created_at",
+   "FROM __ref(\"stg_inventory_0\")",
+   ""
+  ],
+  "models/features/shaped_stg_inventory_2.sql": [
+   "SELECT CAST(id AS INTEGER) AS id, status",
+   "FROM __ref(\"stg_inventory_2\")",
+   ""
+  ],
+  "models/features/spaced_stg_fulfillment_0.sql": [
+   "-- Généré pour café ☕ counter",
+   "SELECT",
+   "\tid,",
+   "\t'Ελληνικά orders' AS label, -- étiquette ✓",
+   "\tamount",
+   "FROM __ref(\"stg_fulfillment_0\")",
+   ""
+  ],
+  "models/features/taxed_stg_inventory_0.sql": [
+   "SELECT id, ROUND(amount * 1.2, 2) AS taxed, ROUND(amount, 1) AS rounded",
+   "FROM __ref(\"stg_inventory_0\")",
+   ""
+  ],
+  "models/fulfillment/marts/fulfillment_summary_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  3 AS priority,",
+   "  (t.amount + LENGTH('east')) AS adjust_1_amount",
+   "FROM __ref(\"stg_fulfillment_0\") t",
+   ""
+  ],
+  "models/fulfillment/staging/stg_fulfillment_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  3 AS priority,",
+   "  'Ελληνικά orders' AS threshold_0_label,",
+   "  '東京 warehouse' AS site_label",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/fulfillment/staging/stg_fulfillment_1.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/fulfillment/staging/stg_fulfillment_2.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  ROUND(ROUND((t.amount * 2), 2), 2) AS adjust_0_amount",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/inventory/marts/inventory_summary_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at",
+   "FROM __ref(\"stg_inventory_1\") t",
+   "WHERE t.status <> '取消'",
+   ""
+  ],
+  "models/inventory/marts/inventory_summary_1.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at",
+   "FROM __ref(\"stg_inventory_2\") t",
+   ""
+  ],
+  "models/inventory/staging/stg_inventory_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  '東京 warehouse' AS site_label",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/inventory/staging/stg_inventory_1.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/inventory/staging/stg_inventory_2.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  ROUND(ROUND((t.amount * 2), 2), 2) AS adjust_0_amount,",
+   "  '東京 warehouse' AS site_label",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/rendering/large_events.sql": [
+   "SELECT id, amount",
+   "FROM __table_fn(\"table_fn__events_above\")(4)",
+   ""
+  ],
+  "models/rendering/stated_stg_inventory_2.sql": [
+   "SELECT CAST(id AS INTEGER) AS id, status,",
+   "  CASE WHEN amount >= 9 THEN 'HIGH'",
+   "    ELSE 'LOW' END AS tier",
+   "FROM __ref(\"stg_inventory_2\")",
+   ""
+  ],
+  "models/sales/marts/sales_summary_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  ROUND(ROUND((t.amount * 2), 2), 2) AS adjust_0_amount",
+   "FROM __ref(\"stg_sales_0\") t",
+   ""
+  ],
+  "models/sales/marts/sales_summary_1.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at",
+   "FROM __ref(\"stg_sales_0\") t",
+   "LEFT JOIN __ref(\"stg_inventory_1\") j1 ON t.id = j1.id",
+   ""
+  ],
+  "models/sales/staging/stg_sales_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  '東京 warehouse' AS site_label",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "tests/macro doubles_amounts/doubles_amounts.sql": [
+   "WITH input_values AS (SELECT 4 AS amount),",
+   "__actual__macro_doubles_amounts AS (SELECT (amount * 2) AS doubled",
+   "  FROM input_values),",
+   "__expected__macro_doubles_amounts AS (SELECT 8 AS doubled)",
+   "SELECT 0 AS step_index, 'macro doubles_amounts' AS model_name, (SELECT COUNT(*) FROM __actual__macro_doubles_amounts) AS actual_count, (SELECT COUNT(*) FROM __expected__macro_doubles_amounts) AS expected_count, (SELECT COUNT(*) FROM (SELECT * FROM __actual__macro_doubles_amounts EXCEPT SELECT * FROM __expected__macro_doubles_amounts) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT * FROM __expected__macro_doubles_amounts EXCEPT SELECT * FROM __actual__macro_doubles_amounts) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/macro taxes_amounts/taxes_amounts.sql": [
+   "WITH input_values AS (SELECT 10 AS amount),",
+   "__actual__macro_taxes_amounts AS (SELECT ROUND(amount * 1.2, 2) AS taxed",
+   "  FROM input_values),",
+   "__expected__macro_taxes_amounts AS (SELECT 12.0 AS taxed)",
+   "SELECT 0 AS step_index, 'macro taxes_amounts' AS model_name, (SELECT COUNT(*) FROM __actual__macro_taxes_amounts) AS actual_count, (SELECT COUNT(*) FROM __expected__macro_taxes_amounts) AS expected_count, (SELECT COUNT(*) FROM (SELECT * FROM __actual__macro_taxes_amounts EXCEPT SELECT * FROM __expected__macro_taxes_amounts) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT * FROM __expected__macro_taxes_amounts EXCEPT SELECT * FROM __actual__macro_taxes_amounts) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/regional_stg_fulfillment_0/test_regional_stg_fulfillment_0.sql": [
+   "WITH __ref__stg_fulfillment_0 AS (SELECT 1 AS id, CAST(4 AS DOUBLE) AS amount, 'placed' AS status,",
+   "    TIMESTAMP '2026-01-01 00:00:00' AS created_at),",
+   "__ref__regional_stg_fulfillment_0 AS (SELECT id, amount, 'west' AS region",
+   "FROM __ref__stg_fulfillment_0),",
+   "__actual__regional_stg_fulfillment_0 AS (SELECT * FROM __ref__regional_stg_fulfillment_0),",
+   "__expected__regional_stg_fulfillment_0 AS (SELECT 1 AS id, CAST(4 AS DOUBLE) AS amount, 'west' AS region)",
+   "SELECT 0 AS step_index, 'regional_stg_fulfillment_0' AS model_name, (SELECT COUNT(*) FROM __actual__regional_stg_fulfillment_0) AS actual_count, (SELECT COUNT(*) FROM __expected__regional_stg_fulfillment_0) AS expected_count, (SELECT COUNT(*) FROM (SELECT id, amount, region FROM __actual__regional_stg_fulfillment_0 EXCEPT SELECT id, amount, region FROM __expected__regional_stg_fulfillment_0) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT id, amount, region FROM __expected__regional_stg_fulfillment_0 EXCEPT SELECT id, amount, region FROM __actual__regional_stg_fulfillment_0) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/stg_sales_0/test_stg_sales_0.sql": [
+   "WITH __source__raw_events_0 AS (SELECT 1 AS id, CAST(10 AS DOUBLE) AS amount, 'placed' AS status,",
+   "    TIMESTAMP '2026-01-01 00:00:00' AS created_at),",
+   "__ref__stg_sales_0 AS (SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  '東京 warehouse' AS site_label",
+   "FROM __source__raw_events_0 t),",
+   "__actual__stg_sales_0 AS (SELECT * FROM __ref__stg_sales_0),",
+   "__expected__stg_sales_0 AS (SELECT 1 AS id, 'placed' AS status)",
+   "SELECT 0 AS step_index, 'stg_sales_0' AS model_name, (SELECT COUNT(*) FROM __actual__stg_sales_0) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_sales_0) AS expected_count, (SELECT COUNT(*) FROM (SELECT id, status FROM __actual__stg_sales_0 EXCEPT SELECT id, status FROM __expected__stg_sales_0) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT id, status FROM __expected__stg_sales_0 EXCEPT SELECT id, status FROM __actual__stg_sales_0) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/udf detects_placed_events/detects_placed_events.sql": [
+   "WITH input_values AS (SELECT 'placed' AS event_status),",
+   "__actual__udf_detects_placed_events AS (SELECT event_status, main.is_placed(event_status) AS is_placed",
+   "  FROM input_values),",
+   "__expected__udf_detects_placed_events AS (SELECT 'placed' AS event_status, TRUE AS is_placed)",
+   "SELECT 0 AS step_index, 'udf detects_placed_events' AS model_name, (SELECT COUNT(*) FROM __actual__udf_detects_placed_events) AS actual_count, (SELECT COUNT(*) FROM __expected__udf_detects_placed_events) AS expected_count, (SELECT COUNT(*) FROM (SELECT * FROM __actual__udf_detects_placed_events EXCEPT SELECT * FROM __expected__udf_detects_placed_events) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT * FROM __expected__udf_detects_placed_events EXCEPT SELECT * FROM __actual__udf_detects_placed_events) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ]
+ },
+ "manifest": {
+  "nodes": {
+   "model.generated_6.chain_1_stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "chain_1_stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/analysis/chain_1_stg_fulfillment_2.sql",
+    "original_file_path": "models/analysis/chain_1_stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.chain_1_stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "analysis",
+     "chain_1_stg_fulfillment_2"
+    ],
+    "alias": "chain_1_stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Level 1 below the contracted copy of stg_fulfillment_2",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.chain_1_stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.contracted_stg_fulfillment_2"
+     ]
+    }
+   },
+   "model.generated_6.chain_2_stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "chain_2_stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/analysis/chain_2_stg_fulfillment_2.sql",
+    "original_file_path": "models/analysis/chain_2_stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.chain_2_stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "analysis",
+     "chain_2_stg_fulfillment_2"
+    ],
+    "alias": "chain_2_stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Level 2 below the contracted copy of stg_fulfillment_2",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.chain_2_stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.chain_1_stg_fulfillment_2"
+     ]
+    }
+   },
+   "model.generated_6.chain_3_stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "chain_3_stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/analysis/chain_3_stg_fulfillment_2.sql",
+    "original_file_path": "models/analysis/chain_3_stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.chain_3_stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "analysis",
+     "chain_3_stg_fulfillment_2"
+    ],
+    "alias": "chain_3_stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Level 3 below the contracted copy of stg_fulfillment_2",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.chain_3_stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.chain_2_stg_fulfillment_2"
+     ]
+    }
+   },
+   "model.generated_6.checked_stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "checked_stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/analysis/checked_stg_fulfillment_2.sql",
+    "original_file_path": "models/analysis/checked_stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.checked_stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "analysis",
+     "checked_stg_fulfillment_2"
+    ],
+    "alias": "checked_stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "id"
+     ],
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Metadata-checked copy of stg_fulfillment_2",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.checked_stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_fulfillment_2"
+     ]
+    }
+   },
+   "model.generated_6.contracted_stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "contracted_stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/analysis/contracted_stg_fulfillment_2.sql",
+    "original_file_path": "models/analysis/contracted_stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.contracted_stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "analysis",
+     "contracted_stg_fulfillment_2"
+    ],
+    "alias": "contracted_stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Contracted copy of raw_events_0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "label": {
+      "name": "label",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR(18)",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.contracted_stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.regional_stg_fulfillment_0": {
+    "database": null,
+    "schema": "main",
+    "name": "regional_stg_fulfillment_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/analysis/regional_stg_fulfillment_0.sql",
+    "original_file_path": "models/analysis/regional_stg_fulfillment_0.sql",
+    "unique_id": "model.generated_6.regional_stg_fulfillment_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "analysis",
+     "regional_stg_fulfillment_0"
+    ],
+    "alias": "regional_stg_fulfillment_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Regional copy of stg_fulfillment_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.regional_stg_fulfillment_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_fulfillment_0"
+     ]
+    }
+   },
+   "model.generated_6.audited_stg_fulfillment_1": {
+    "database": null,
+    "schema": "main",
+    "name": "audited_stg_fulfillment_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/audited_stg_fulfillment_1.sql",
+    "original_file_path": "models/features/audited_stg_fulfillment_1.sql",
+    "unique_id": "model.generated_6.audited_stg_fulfillment_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "audited_stg_fulfillment_1"
+    ],
+    "alias": "audited_stg_fulfillment_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Factory-audited copy of stg_fulfillment_1",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.audited_stg_fulfillment_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_fulfillment_1"
+     ]
+    }
+   },
+   "model.generated_6.batched_rolling_window_stg_sales_0": {
+    "database": null,
+    "schema": "main",
+    "name": "batched_rolling_window_stg_sales_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/batched_rolling_window_stg_sales_0.sql",
+    "original_file_path": "models/features/batched_rolling_window_stg_sales_0.sql",
+    "unique_id": "model.generated_6.batched_rolling_window_stg_sales_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "batched_rolling_window_stg_sales_0"
+    ],
+    "alias": "batched_rolling_window_stg_sales_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Microbatched rolling_window totals of stg_sales_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.batched_rolling_window_stg_sales_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_sales_0"
+     ]
+    }
+   },
+   "model.generated_6.check_history_stg_inventory_1": {
+    "database": null,
+    "schema": "main",
+    "name": "check_history_stg_inventory_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/check_history_stg_inventory_1.sql",
+    "original_file_path": "models/features/check_history_stg_inventory_1.sql",
+    "unique_id": "model.generated_6.check_history_stg_inventory_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "check_history_stg_inventory_1"
+    ],
+    "alias": "check_history_stg_inventory_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "snapshot",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "id"
+     ],
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Check history of stg_inventory_1",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.check_history_stg_inventory_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_1"
+     ]
+    }
+   },
+   "model.generated_6.copied_stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "copied_stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/copied_stg_fulfillment_2.sql",
+    "original_file_path": "models/features/copied_stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.copied_stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "copied_stg_fulfillment_2"
+    ],
+    "alias": "copied_stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "copy_table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Custom copy of stg_fulfillment_2",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.copied_stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_fulfillment_2"
+     ]
+    }
+   },
+   "model.generated_6.flagged_stg_sales_0": {
+    "database": null,
+    "schema": "main",
+    "name": "flagged_stg_sales_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/flagged_stg_sales_0.sql",
+    "original_file_path": "models/features/flagged_stg_sales_0.sql",
+    "unique_id": "model.generated_6.flagged_stg_sales_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "flagged_stg_sales_0"
+    ],
+    "alias": "flagged_stg_sales_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Function-flagged copy of stg_sales_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.flagged_stg_sales_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.is_placed",
+      "model.generated_6.is_large",
+      "model.generated_6.stg_sales_0"
+     ]
+    }
+   },
+   "model.generated_6.hooked_stg_inventory_1": {
+    "database": null,
+    "schema": "main",
+    "name": "hooked_stg_inventory_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/hooked_stg_inventory_1.sql",
+    "original_file_path": "models/features/hooked_stg_inventory_1.sql",
+    "unique_id": "model.generated_6.hooked_stg_inventory_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "hooked_stg_inventory_1"
+    ],
+    "alias": "hooked_stg_inventory_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Hooked copy of stg_inventory_1",
+    "columns": {},
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "python",
+         "name": "note_refresh",
+         "kwargs": {
+          "channel": "café ☕ counter"
+         },
+         "relative_path": "models/features/_sqlbuild/_hooks/python/notify.py",
+         "definition_hash": "55440ff19f0c4f231ad57d453227a3c9d584b81234ee4b3338a39ccdf59814a8",
+         "version_hash": "03b4f786f8ab2736e5be2e4de5016bd16ea44d84beca000ec2a53a397e503eb6"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.hooked_stg_inventory_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_1"
+     ]
+    }
+   },
+   "model.generated_6.merge_stg_inventory_0": {
+    "database": null,
+    "schema": "main",
+    "name": "merge_stg_inventory_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/merge_stg_inventory_0.sql",
+    "original_file_path": "models/features/merge_stg_inventory_0.sql",
+    "unique_id": "model.generated_6.merge_stg_inventory_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "merge_stg_inventory_0"
+    ],
+    "alias": "merge_stg_inventory_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "merge",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "id"
+     ],
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Incremental merge copy of stg_inventory_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.merge_stg_inventory_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_0"
+     ]
+    }
+   },
+   "model.generated_6.shaped_stg_inventory_2": {
+    "database": null,
+    "schema": "main",
+    "name": "shaped_stg_inventory_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/shaped_stg_inventory_2.sql",
+    "original_file_path": "models/features/shaped_stg_inventory_2.sql",
+    "unique_id": "model.generated_6.shaped_stg_inventory_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "shaped_stg_inventory_2"
+    ],
+    "alias": "shaped_stg_inventory_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Schema-shaped copy of stg_inventory_2",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.shaped_stg_inventory_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_2"
+     ]
+    }
+   },
+   "model.generated_6.spaced_stg_fulfillment_0": {
+    "database": null,
+    "schema": "main",
+    "name": "spaced_stg_fulfillment_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/spaced_stg_fulfillment_0.sql",
+    "original_file_path": "models/features/spaced_stg_fulfillment_0.sql",
+    "unique_id": "model.generated_6.spaced_stg_fulfillment_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "spaced_stg_fulfillment_0"
+    ],
+    "alias": "spaced_stg_fulfillment_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "línea",
+      "東京"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "línea",
+     "東京"
+    ],
+    "description": "Copy of stg_fulfillment_0 with 東京 warehouse",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.spaced_stg_fulfillment_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_fulfillment_0"
+     ]
+    }
+   },
+   "model.generated_6.taxed_stg_inventory_0": {
+    "database": null,
+    "schema": "main",
+    "name": "taxed_stg_inventory_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/features/taxed_stg_inventory_0.sql",
+    "original_file_path": "models/features/taxed_stg_inventory_0.sql",
+    "unique_id": "model.generated_6.taxed_stg_inventory_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "features",
+     "taxed_stg_inventory_0"
+    ],
+    "alias": "taxed_stg_inventory_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Taxed copy of stg_inventory_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.taxed_stg_inventory_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_0"
+     ]
+    }
+   },
+   "model.generated_6.fulfillment_summary_0": {
+    "database": null,
+    "schema": "main",
+    "name": "fulfillment_summary_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/fulfillment/marts/fulfillment_summary_0.sql",
+    "original_file_path": "models/fulfillment/marts/fulfillment_summary_0.sql",
+    "unique_id": "model.generated_6.fulfillment_summary_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "fulfillment",
+     "marts",
+     "fulfillment_summary_0"
+    ],
+    "alias": "fulfillment_summary_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "fulfillment",
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [
+      {
+       "sql": "SELECT 'main.fulfillment_summary_0' AS refreshed_relation, 'Ελληνικά orders' AS refresh_label",
+       "transaction": true,
+       "index": 0
+      },
+      {
+       "sql": "SELECT 'main.fulfillment_summary_0' AS refreshed",
+       "transaction": true,
+       "index": 1
+      }
+     ],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "fulfillment",
+     "marts"
+    ],
+    "description": "Summary of fulfillment activity 0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.fulfillment_summary_0' AS refreshed_relation, 'Ελληνικά orders' AS refresh_label",
+         "name": "record_refresh",
+         "relative_path": "hooks/sql/record_refresh.sql",
+         "definition_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+         "kwargs": {
+          "relation": "@@CTX:destination.qualified",
+          "label": "Ελληνικά orders"
+         },
+         "description": "Record a refresh for one relation"
+        },
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.fulfillment_summary_0' AS refreshed"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.fulfillment_summary_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_fulfillment_0"
+     ]
+    }
+   },
+   "model.generated_6.stg_fulfillment_0": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_fulfillment_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/fulfillment/staging/stg_fulfillment_0.sql",
+    "original_file_path": "models/fulfillment/staging/stg_fulfillment_0.sql",
+    "unique_id": "model.generated_6.stg_fulfillment_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "fulfillment",
+     "staging",
+     "stg_fulfillment_0"
+    ],
+    "alias": "stg_fulfillment_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged fulfillment events 0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_fulfillment_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.stg_fulfillment_1": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_fulfillment_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/fulfillment/staging/stg_fulfillment_1.sql",
+    "original_file_path": "models/fulfillment/staging/stg_fulfillment_1.sql",
+    "unique_id": "model.generated_6.stg_fulfillment_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "fulfillment",
+     "staging",
+     "stg_fulfillment_1"
+    ],
+    "alias": "stg_fulfillment_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged fulfillment events 1 (東京 warehouse)",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_fulfillment_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.stg_fulfillment_2": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_fulfillment_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/fulfillment/staging/stg_fulfillment_2.sql",
+    "original_file_path": "models/fulfillment/staging/stg_fulfillment_2.sql",
+    "unique_id": "model.generated_6.stg_fulfillment_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "fulfillment",
+     "staging",
+     "stg_fulfillment_2"
+    ],
+    "alias": "stg_fulfillment_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged fulfillment events 2",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_fulfillment_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.inventory_summary_0": {
+    "database": null,
+    "schema": "main",
+    "name": "inventory_summary_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/inventory/marts/inventory_summary_0.sql",
+    "original_file_path": "models/inventory/marts/inventory_summary_0.sql",
+    "unique_id": "model.generated_6.inventory_summary_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "inventory",
+     "marts",
+     "inventory_summary_0"
+    ],
+    "alias": "inventory_summary_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "inventory",
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [
+      {
+       "sql": "SELECT 'main.inventory_summary_0' AS refreshed_relation, 'naïve résumé' AS refresh_label",
+       "transaction": true,
+       "index": 0
+      },
+      {
+       "sql": "SELECT 'main.inventory_summary_0' AS refreshed",
+       "transaction": true,
+       "index": 1
+      }
+     ],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "inventory",
+     "marts"
+    ],
+    "description": "Summary of inventory activity 0",
+    "columns": {},
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.inventory_summary_0' AS refreshed_relation, 'naïve résumé' AS refresh_label",
+         "name": "record_refresh",
+         "relative_path": "hooks/sql/record_refresh.sql",
+         "definition_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+         "kwargs": {
+          "relation": "@@CTX:destination.qualified",
+          "label": "naïve résumé"
+         },
+         "description": "Record a refresh for one relation"
+        },
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.inventory_summary_0' AS refreshed"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.inventory_summary_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_1"
+     ]
+    }
+   },
+   "model.generated_6.inventory_summary_1": {
+    "database": null,
+    "schema": "main",
+    "name": "inventory_summary_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/inventory/marts/inventory_summary_1.sql",
+    "original_file_path": "models/inventory/marts/inventory_summary_1.sql",
+    "unique_id": "model.generated_6.inventory_summary_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "inventory",
+     "marts",
+     "inventory_summary_1"
+    ],
+    "alias": "inventory_summary_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "inventory",
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [
+      {
+       "sql": "SELECT 'main.inventory_summary_1' AS refreshed_relation, 'café ☕ counter' AS refresh_label",
+       "transaction": true,
+       "index": 0
+      },
+      {
+       "sql": "SELECT 'main.inventory_summary_1' AS refreshed",
+       "transaction": true,
+       "index": 1
+      }
+     ],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "inventory",
+     "marts"
+    ],
+    "description": "Summary of inventory activity 1",
+    "columns": {},
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.inventory_summary_1' AS refreshed_relation, 'café ☕ counter' AS refresh_label",
+         "name": "record_refresh",
+         "relative_path": "hooks/sql/record_refresh.sql",
+         "definition_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+         "kwargs": {
+          "relation": "@@CTX:destination.qualified",
+          "label": "café ☕ counter"
+         },
+         "description": "Record a refresh for one relation"
+        },
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.inventory_summary_1' AS refreshed"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.inventory_summary_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_2"
+     ]
+    }
+   },
+   "model.generated_6.stg_inventory_0": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_inventory_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/inventory/staging/stg_inventory_0.sql",
+    "original_file_path": "models/inventory/staging/stg_inventory_0.sql",
+    "unique_id": "model.generated_6.stg_inventory_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "inventory",
+     "staging",
+     "stg_inventory_0"
+    ],
+    "alias": "stg_inventory_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged inventory events 0 (Ελληνικά orders)",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_inventory_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.stg_inventory_1": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_inventory_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/inventory/staging/stg_inventory_1.sql",
+    "original_file_path": "models/inventory/staging/stg_inventory_1.sql",
+    "unique_id": "model.generated_6.stg_inventory_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "inventory",
+     "staging",
+     "stg_inventory_1"
+    ],
+    "alias": "stg_inventory_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged inventory events 1",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_inventory_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.stg_inventory_2": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_inventory_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/inventory/staging/stg_inventory_2.sql",
+    "original_file_path": "models/inventory/staging/stg_inventory_2.sql",
+    "unique_id": "model.generated_6.stg_inventory_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "inventory",
+     "staging",
+     "stg_inventory_2"
+    ],
+    "alias": "stg_inventory_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged inventory events 2",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_inventory_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_6.large_events": {
+    "database": null,
+    "schema": "main",
+    "name": "large_events",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/rendering/large_events.sql",
+    "original_file_path": "models/rendering/large_events.sql",
+    "unique_id": "model.generated_6.large_events",
+    "fqn": [
+     "generated_6",
+     "models",
+     "rendering",
+     "large_events"
+    ],
+    "alias": "large_events",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Events above a threshold from a table function",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.large_events",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.table_fn__events_above"
+     ]
+    }
+   },
+   "model.generated_6.stated_stg_inventory_2": {
+    "database": null,
+    "schema": "main",
+    "name": "stated_stg_inventory_2",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/rendering/stated_stg_inventory_2.sql",
+    "original_file_path": "models/rendering/stated_stg_inventory_2.sql",
+    "unique_id": "model.generated_6.stated_stg_inventory_2",
+    "fqn": [
+     "generated_6",
+     "models",
+     "rendering",
+     "stated_stg_inventory_2"
+    ],
+    "alias": "stated_stg_inventory_2",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Enum-typed copy of stg_inventory_2",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "tier": {
+      "name": "tier",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stated_stg_inventory_2",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_inventory_2"
+     ]
+    }
+   },
+   "model.generated_6.sales_summary_0": {
+    "database": null,
+    "schema": "main",
+    "name": "sales_summary_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/sales/marts/sales_summary_0.sql",
+    "original_file_path": "models/sales/marts/sales_summary_0.sql",
+    "unique_id": "model.generated_6.sales_summary_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "sales",
+     "marts",
+     "sales_summary_0"
+    ],
+    "alias": "sales_summary_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [
+      {
+       "sql": "SELECT 'main.sales_summary_0' AS refreshed_relation, '東京 warehouse' AS refresh_label",
+       "transaction": true,
+       "index": 0
+      },
+      {
+       "sql": "SELECT 'main.sales_summary_0' AS refreshed",
+       "transaction": true,
+       "index": 1
+      }
+     ],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Summary of sales activity 0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.sales_summary_0' AS refreshed_relation, '東京 warehouse' AS refresh_label",
+         "name": "record_refresh",
+         "relative_path": "hooks/sql/record_refresh.sql",
+         "definition_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+         "kwargs": {
+          "relation": "@@CTX:destination.qualified",
+          "label": "東京 warehouse"
+         },
+         "description": "Record a refresh for one relation"
+        },
+        {
+         "type": "sql",
+         "statement": "SELECT 'main.sales_summary_0' AS refreshed"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.sales_summary_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_sales_0"
+     ]
+    }
+   },
+   "model.generated_6.sales_summary_1": {
+    "database": null,
+    "schema": "main",
+    "name": "sales_summary_1",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/sales/marts/sales_summary_1.sql",
+    "original_file_path": "models/sales/marts/sales_summary_1.sql",
+    "unique_id": "model.generated_6.sales_summary_1",
+    "fqn": [
+     "generated_6",
+     "models",
+     "sales",
+     "marts",
+     "sales_summary_1"
+    ],
+    "alias": "sales_summary_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Summary of sales activity 1 (café ☕ counter)",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.sales_summary_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_6.stg_sales_0",
+      "model.generated_6.stg_inventory_1"
+     ]
+    }
+   },
+   "model.generated_6.stg_sales_0": {
+    "database": null,
+    "schema": "main",
+    "name": "stg_sales_0",
+    "resource_type": "model",
+    "package_name": "generated_6",
+    "path": "models/sales/staging/stg_sales_0.sql",
+    "original_file_path": "models/sales/staging/stg_sales_0.sql",
+    "unique_id": "model.generated_6.stg_sales_0",
+    "fqn": [
+     "generated_6",
+     "models",
+     "sales",
+     "staging",
+     "stg_sales_0"
+    ],
+    "alias": "stg_sales_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged sales events 0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.stg_sales_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_6.raw_events_0"
+     ]
+    }
+   }
+  },
+  "sources": {
+   "source.generated_6.raw_events_0": {
+    "database": null,
+    "schema": "",
+    "name": "raw_events_0",
+    "resource_type": "source",
+    "package_name": "generated_6",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.generated_6.raw_events_0",
+    "fqn": [
+     "generated_6",
+     "raw_events_0"
+    ],
+    "source_name": "raw_events_0",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_events_0",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Generated event feed 0.",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "created_at": {
+      "name": "created_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   }
+  },
+  "macros": {
+   "macro.generated_6.adjust_0": {
+    "name": "adjust_0",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "macros/adjust_0.py",
+    "original_file_path": "macros/adjust_0.py",
+    "unique_id": "macro.generated_6.adjust_0",
+    "macro_sql": "def adjust_0_round(expression: str) -> str:\n    \"\"\"Round an amount to two places.\"\"\"\n    return f\"ROUND({expression}, 2)\"\n\n\ndef adjust_0(expression: str) -> str:\n    \"\"\"Double and round an amount.\"\"\"\n    return adjust_0_round(f\"({expression} * 2)\")\n",
+    "depends_on": {
+     "macros": [
+      "macro.generated_6.adjust_0_round"
+     ]
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6.adjust_0_round": {
+    "name": "adjust_0_round",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "macros/adjust_0.py",
+    "original_file_path": "macros/adjust_0.py",
+    "unique_id": "macro.generated_6.adjust_0_round",
+    "macro_sql": "def adjust_0_round(expression: str) -> str:\n    \"\"\"Round an amount to two places.\"\"\"\n    return f\"ROUND({expression}, 2)\"\n\n\ndef adjust_0(expression: str) -> str:\n    \"\"\"Double and round an amount.\"\"\"\n    return adjust_0_round(f\"({expression} * 2)\")\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6.round_amount": {
+    "name": "round_amount",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "macros/rounding.py",
+    "original_file_path": "macros/rounding.py",
+    "unique_id": "macro.generated_6.round_amount",
+    "macro_sql": "def round_amount(expression: str, places: int = 2) -> str:\n    \"\"\"Round an amount.\"\"\"\n    return f\"ROUND({expression}, {places})\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6.taxed": {
+    "name": "taxed",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "macros/tax.py",
+    "original_file_path": "macros/tax.py",
+    "unique_id": "macro.generated_6.taxed",
+    "macro_sql": "from macros.rounding import round_amount\n\n\ndef taxed(expression: str) -> str:\n    \"\"\"Add tax to an amount, rounded.\"\"\"\n    return round_amount(f\"{expression} * 1.2\")\n",
+    "depends_on": {
+     "macros": [
+      "macro.generated_6.round_amount"
+     ]
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6.analysis_region": {
+    "name": "analysis_region",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "models/analysis/_sqlbuild/_macros/regions.py",
+    "original_file_path": "models/analysis/_sqlbuild/_macros/regions.py",
+    "unique_id": "macro.generated_6.analysis_region",
+    "macro_sql": "def analysis_region() -> str:\n    \"\"\"Return the region rows are assigned to.\"\"\"\n    return \"'north'\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "models/analysis"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6.adjust_1": {
+    "name": "adjust_1",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "models/fulfillment/marts/_sqlbuild/_macros/adjust_1.py",
+    "original_file_path": "models/fulfillment/marts/_sqlbuild/_macros/adjust_1.py",
+    "unique_id": "macro.generated_6.adjust_1",
+    "macro_sql": "import os\n\n\ndef adjust_1(expression: str) -> str:\n    \"\"\"Tag an amount with the deployment region.\"\"\"\n    region = os.environ.get(\"SQB_DIFFERENTIAL_REGION\", \"east\")\n    return f\"({expression} + LENGTH('{region}'))\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "models/fulfillment/marts"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6.doubled": {
+    "name": "doubled",
+    "resource_type": "macro",
+    "package_name": "generated_6",
+    "path": "tests/unit/_macros/scaling.py",
+    "original_file_path": "tests/unit/_macros/scaling.py",
+    "unique_id": "macro.generated_6.doubled",
+    "macro_sql": "def doubled(expression: str) -> str:\n    \"\"\"Double an amount.\"\"\"\n    return f\"({expression} * 2)\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "tests/unit"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_6__sqlbuild_hooks.record_refresh": {
+    "name": "record_refresh",
+    "resource_type": "macro",
+    "package_name": "generated_6__sqlbuild_hooks",
+    "path": "hooks/sql/record_refresh.sql",
+    "original_file_path": "hooks/sql/record_refresh.sql",
+    "unique_id": "macro.generated_6__sqlbuild_hooks.record_refresh",
+    "macro_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "Record a refresh for one relation",
+    "meta": {
+     "sqlbuild_resource_type": "sql_hook",
+     "sqlbuild_hook_name": "record_refresh"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   }
+  },
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {
+   "model.generated_6.chain_1_stg_fulfillment_2": [
+    "model.generated_6.contracted_stg_fulfillment_2"
+   ],
+   "model.generated_6.chain_2_stg_fulfillment_2": [
+    "model.generated_6.chain_1_stg_fulfillment_2"
+   ],
+   "model.generated_6.chain_3_stg_fulfillment_2": [
+    "model.generated_6.chain_2_stg_fulfillment_2"
+   ],
+   "model.generated_6.checked_stg_fulfillment_2": [
+    "model.generated_6.stg_fulfillment_2"
+   ],
+   "model.generated_6.contracted_stg_fulfillment_2": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.regional_stg_fulfillment_0": [
+    "model.generated_6.stg_fulfillment_0"
+   ],
+   "model.generated_6.audited_stg_fulfillment_1": [
+    "model.generated_6.stg_fulfillment_1"
+   ],
+   "model.generated_6.batched_rolling_window_stg_sales_0": [
+    "model.generated_6.stg_sales_0"
+   ],
+   "model.generated_6.check_history_stg_inventory_1": [
+    "model.generated_6.stg_inventory_1"
+   ],
+   "model.generated_6.copied_stg_fulfillment_2": [
+    "model.generated_6.stg_fulfillment_2"
+   ],
+   "model.generated_6.flagged_stg_sales_0": [
+    "model.generated_6.is_placed",
+    "model.generated_6.is_large",
+    "model.generated_6.stg_sales_0"
+   ],
+   "model.generated_6.hooked_stg_inventory_1": [
+    "model.generated_6.stg_inventory_1"
+   ],
+   "model.generated_6.merge_stg_inventory_0": [
+    "model.generated_6.stg_inventory_0"
+   ],
+   "model.generated_6.shaped_stg_inventory_2": [
+    "model.generated_6.stg_inventory_2"
+   ],
+   "model.generated_6.spaced_stg_fulfillment_0": [
+    "model.generated_6.stg_fulfillment_0"
+   ],
+   "model.generated_6.taxed_stg_inventory_0": [
+    "model.generated_6.stg_inventory_0"
+   ],
+   "model.generated_6.fulfillment_summary_0": [
+    "model.generated_6.stg_fulfillment_0"
+   ],
+   "model.generated_6.stg_fulfillment_0": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.stg_fulfillment_1": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.stg_fulfillment_2": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.inventory_summary_0": [
+    "model.generated_6.stg_inventory_1"
+   ],
+   "model.generated_6.inventory_summary_1": [
+    "model.generated_6.stg_inventory_2"
+   ],
+   "model.generated_6.stg_inventory_0": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.stg_inventory_1": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.stg_inventory_2": [
+    "source.generated_6.raw_events_0"
+   ],
+   "model.generated_6.large_events": [
+    "model.generated_6.table_fn__events_above"
+   ],
+   "model.generated_6.stated_stg_inventory_2": [
+    "model.generated_6.stg_inventory_2"
+   ],
+   "model.generated_6.sales_summary_0": [
+    "model.generated_6.stg_sales_0"
+   ],
+   "model.generated_6.sales_summary_1": [
+    "model.generated_6.stg_sales_0",
+    "model.generated_6.stg_inventory_1"
+   ],
+   "model.generated_6.stg_sales_0": [
+    "source.generated_6.raw_events_0"
+   ],
+   "source.generated_6.raw_events_0": [],
+   "model.generated_6.is_placed": [],
+   "model.generated_6.table_fn__events_above": [
+    "model.generated_6.stg_sales_0"
+   ],
+   "model.generated_6.is_large": []
+  },
+  "group_map": {},
+  "docs": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+ }
+}

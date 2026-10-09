@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "models/staging/stg_orders.sql model column 'order_id' has unknown metadata keys: format"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

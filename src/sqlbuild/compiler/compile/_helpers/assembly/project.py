@@ -160,6 +160,9 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     SqlTestMode,
 )
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
@@ -1553,6 +1556,8 @@ def _build_source_relation_entry(
 def _expand_target_value(*, value: str | None, effective_vars: dict[str, object]) -> str | None:
     if value is None:
         return None
+    if native_stage_enabled(NativeStage.MODEL_CONFIG):
+        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="source_target")
     return str(
         expand_template_data(
             value=value,

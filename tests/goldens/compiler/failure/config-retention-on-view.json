@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': managed time_travel_retention is not valid for views; set time_travel_retention disabled"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

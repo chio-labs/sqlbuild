@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "unknown project variable '@@floor_amount' in '<project>/models/staging/_sqlbuild/_audits/generic/floor.sql'. Available vars: region"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

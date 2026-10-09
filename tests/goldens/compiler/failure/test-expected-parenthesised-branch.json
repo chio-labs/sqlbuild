@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL test 'tests/unit/test_stg_orders.sql' must write each __expected__stg_orders set-operation branch as a plain SELECT without enclosing parentheses"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

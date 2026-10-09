@@ -36,6 +36,8 @@ from scripts.compiler_differential.constants import (
 )
 from scripts.compiler_differential.models import FailureCase
 
+_MART_HEADER_START: str = 'MODEL (\n  description "Order totals per customer",\n'
+
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'
 
 
@@ -57,6 +59,7 @@ def all_failure_cases() -> tuple[FailureCase, ...]:
         *reference_failure_cases(),
         *attachment_failure_cases(),
         *analysis_failure_cases(),
+        *engine_error_cases(),
     )
 
 
@@ -588,6 +591,54 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             files=staging_files(
                 FAILURE_BASE_STAGING.replace("status\n", "status, '@@region' AS region\n", 1)
+            ),
+        ),
+    )
+
+
+def engine_error_cases() -> tuple[FailureCase, ...]:
+    """User-facing errors every engine must report with the exact text; see the README."""
+
+    return (
+        failure_case(
+            name="engine-error-unset-environment-variable",
+            expected_code="P001",
+            files=mart_body_files(
+                "SELECT customer_id, '@@ENV:SQB_ENGINE_ERROR_UNSET_REGION' AS region\n"
+                'FROM __ref("stg_orders")\n'
+            ),
+            expected_message=(
+                "unknown environment variable '@@ENV:SQB_ENGINE_ERROR_UNSET_REGION' in "
+                f"'<project>/{FAILURE_MART_PATH}'"
+            ),
+        ),
+        failure_case(
+            name="engine-error-case-folded-duplicate-column",
+            expected_code="P001",
+            files={
+                FAILURE_MART_PATH: _MART_HEADER_START
+                + '  columns (\n    Größe (description "Size"),\n'
+                + '    größe (description "Size again"),\n  ),\n);\n\n'
+                + 'SELECT customer_id AS größe\nFROM __ref("stg_orders")\n'
+            },
+            expected_message=(
+                f"{FAILURE_MART_PATH} model has duplicate column 'größe' "
+                "(column names are case-insensitive)"
+            ),
+        ),
+        failure_case(
+            name="engine-error-week-date-cursor-start",
+            expected_code="P001",
+            files={
+                FAILURE_MART_PATH: _MART_HEADER_START
+                + "  materialized incremental,\n  incremental_strategy append,\n"
+                + "  cursor order_ts,\n  cursor_type timestamp,\n  cursor_grain day,\n"
+                + '  cursor_start "2024-W01-1T25:00",\n);\n\n'
+                + 'SELECT customer_id, CURRENT_TIMESTAMP AS order_ts\nFROM __ref("stg_orders")\n'
+            },
+            expected_message=(
+                "model 'customer_totals': cursor_start value '2024-W01-1T25:00' is not a valid "
+                "ISO timestamp: hour must be in 0..23"
             ),
         ),
     )

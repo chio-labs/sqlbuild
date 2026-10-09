@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model config references missing ENV variable 'SQB_DIFFERENTIAL_UNSET'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

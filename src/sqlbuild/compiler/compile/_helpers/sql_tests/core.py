@@ -29,8 +29,9 @@ from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
 )
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
@@ -158,6 +159,8 @@ def complete_omitted_ceremonial_select(*, sql: str, syntax: SqlLexicalSyntax) ->
         else (False, None)
     )
     if not answered:
+        if native_stage_enabled(NativeStage.ATTACHMENTS):
+            report_native_fallback(site=NativeFallbackSite.OMITTED_SELECT)
         offset = omitted_ceremonial_select_offset(sql=sql, syntax=syntax)
     if offset is None:
         return sql

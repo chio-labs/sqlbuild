@@ -1,0 +1,84 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'"
+    }
+   ]
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'"
+    }
+   ]
+  },
+  {
+   "label": "plan",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "Compiling project...",
+    "error[P001]: Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'",
+    "",
+    ""
+   ]
+  },
+  {
+   "label": "compile-select",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'"
+    }
+   ]
+  },
+  {
+   "label": "compile-no-analysis",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'"
+    }
+   ]
+  },
+  {
+   "label": "compile-rich-lineage",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

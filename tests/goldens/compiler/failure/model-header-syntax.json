@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D002",
+     "message": "MODEL(...) in '<project>/models/staging/stg_orders.sql' contains invalid SQLBuild header syntax: expected key at position 50"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

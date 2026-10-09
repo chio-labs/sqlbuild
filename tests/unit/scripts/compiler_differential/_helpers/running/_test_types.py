@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from scripts.compiler_differential.models import ExpectedOutcome, ProjectComparison
+from scripts.compiler_differential.models import (
+    AnalysisRecords,
+    ExpectedOutcome,
+    ProjectComparison,
+    RecordedRun,
+)
 
 
 @dataclass(frozen=True)
@@ -74,4 +79,37 @@ class AnalysisRecordsTestCase:
     files: dict[str, str]
     expected_wheel_sites: dict[tuple[str, str], int]
     expected_deferrals: dict[tuple[str, str], int]
+    expected_fallbacks: dict[tuple[str, str], int]
     expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FallbackGateTestCase:
+    """An allow-list file, what one run observed, and the problems the gate must report."""
+
+    description: str
+    allow_list: str
+    observed: dict[tuple[str, str, str, str], dict[str, int]]
+    run: RecordedRun
+    expected_problems: list[str]
+
+
+@dataclass(frozen=True)
+class FallbackRecordsTestCase:
+    """Per-engine records of one project and the allow-list entries they add up to."""
+
+    description: str
+    project: str
+    records: tuple[AnalysisRecords, AnalysisRecords]
+    expected_observed: dict[tuple[str, str, str, str], dict[str, int]]
+
+
+@dataclass(frozen=True)
+class FallbackRewriteTestCase:
+    """An allow-list, a run that rewrites it, and the counts the rewritten list must hold."""
+
+    description: str
+    allow_list: str
+    observed: dict[tuple[str, str, str, str], dict[str, int]]
+    run: RecordedRun
+    expected_counts: dict[tuple[str, str, str, str], dict[str, int]]

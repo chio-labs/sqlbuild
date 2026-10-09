@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D014",
+     "message": "HOOK() in '<project>/hooks/sql/record_refresh.sql:3' has unsupported keys: phase",
+     "help": "supported keys: description"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

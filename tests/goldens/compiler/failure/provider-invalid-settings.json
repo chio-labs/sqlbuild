@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D012",
+     "message": "Provider 'export_settings' in providers/export_settings.py has invalid settings:\napi_token: Field required [missing]"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -14,7 +14,9 @@ from scripts.compiler_differential._helpers.running.report import format_compari
 from scripts.compiler_differential.models import (
     CorpusProject,
     DifferentialOptions,
+    FallbackGateRequest,
     ProjectComparison,
+    RecordedRun,
 )
 
 
@@ -31,7 +33,28 @@ def differential_options(*, args: argparse.Namespace, work_dir: Path) -> Differe
         require_discovery_coverage=args.require_discovery_coverage,
         require_render_coverage=args.require_render_coverage,
         require_analysis_coverage=args.require_analysis_coverage,
-        analysis_records=args.wheel_site_report is not None,
+        analysis_records=args.wheel_site_report is not None or args.native_fallbacks is not None,
+        golden_mode=args.goldens,
+        golden_dir=args.golden_dir,
+    )
+
+
+def fallback_gate_request(
+    *, args: argparse.Namespace, engines: tuple[str, str]
+) -> FallbackGateRequest | None:
+    """Return the run's fallback allow-list gate, or None when it is off."""
+
+    if args.native_fallbacks is None:
+        return None
+    return FallbackGateRequest(
+        mode=args.native_fallbacks,
+        allow_list=args.native_fallback_list,
+        run=RecordedRun(
+            engines=engines,
+            corpora=tuple(args.corpus),
+            seed_start=args.seed_start,
+            seeds=args.seeds,
+        ),
     )
 
 

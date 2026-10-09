@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/marts/customer_totals.sql references unknown model 'stg_payments'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

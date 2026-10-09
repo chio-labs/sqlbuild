@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': snapshot materialization requires unique_key"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

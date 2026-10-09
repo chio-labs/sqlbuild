@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "S102",
+     "message": "Managed loader write collision: targets 'dev' and 'prod' both resolve to database='failure.duckdb' schema='raw'. Set distinct targets.dev.loader_schema and targets.prod.loader_schema values."
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

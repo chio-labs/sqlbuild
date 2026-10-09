@@ -27,8 +27,9 @@ from sqlbuild.compiler.compile.models import (
     ScopeRelationshipBuild,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
@@ -121,6 +122,7 @@ def _build_native_declaration_scope(
         discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
     )
     if native is None:
+        report_native_fallback(site=NativeFallbackSite.SCOPE_INDEX)
         return None
     try:
         validate_scope_index(index=native.index)
@@ -139,10 +141,12 @@ def _build_native_declaration_scope(
         if fault is not None:
             raise CompileInputError(fault, bridge_independent=True)
         if not native.grant(facts):
+            report_native_fallback(site=NativeFallbackSite.SCOPE_GRANTS)
             return None
     index: ScopeIndex = native.index_with_relationships()
     lookup: ScopeLookup | None = native.lookup(index=index)
     if lookup is None:
+        report_native_fallback(site=NativeFallbackSite.SCOPE_LOOKUP)
         return None
     return DeclarationScopeBuild(
         loaded_macros=loaded_macros,

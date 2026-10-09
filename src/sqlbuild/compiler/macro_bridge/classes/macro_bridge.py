@@ -14,6 +14,8 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge._helpers.splicing import splice_text
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     digest_module_files,
@@ -139,8 +141,10 @@ class MacroBridge:
                 _native.scan_macro_call_sites(sql, self._python_version, self._unicode_version)
             )
         except UnicodeEncodeError:
+            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SCAN, kind="unencodable")
             return None
         if rows is None:
+            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SCAN)
             return None
         return tuple(
             MacroCallSite(
@@ -271,6 +275,7 @@ class MacroBridge:
         try:
             rendered, spans = _native.splice_macro_calls(sql, bounds, outputs)
         except UnicodeEncodeError:
+            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SPLICE, kind="unencodable")
             rendered, spans = splice_text(sql=sql, bounds=bounds, outputs=outputs)
         return rendered, tuple(
             ExpansionSpan(

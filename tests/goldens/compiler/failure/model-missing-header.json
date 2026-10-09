@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D002",
+     "message": "SQL model '<project>/models/staging/stg_orders.sql' must start with a MODEL(...) header as the first non-whitespace content"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

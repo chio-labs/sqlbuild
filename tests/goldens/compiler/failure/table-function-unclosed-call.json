@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "models/marts/customer_totals.sql:6:6: SQL table function call contains an unclosed parenthesis"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

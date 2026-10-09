@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "models/marts/_sqlbuild/_audits/singular/ is invalid: singular audits are never used by name, so folder-only visibility has no meaning; use _sqlbuild/audits/singular/"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

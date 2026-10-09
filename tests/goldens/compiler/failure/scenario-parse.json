@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D009",
+     "message": "SQL scenario '<project>/tests/scenarios/orders.sql' must start with a SCENARIO() header as the first non-whitespace content"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D007",
+     "message": "path_defaults['reporting/finance'] does not match any model paths. Known model folders include: marts, staging"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

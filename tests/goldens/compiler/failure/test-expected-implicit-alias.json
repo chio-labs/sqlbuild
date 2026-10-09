@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL test 'tests/unit/test_stg_orders.sql' must alias every non-trivial __expected__stg_orders projection",
+     "help": "name the column with an alias, for example amount IS NULL AS <name>; only a bare or qualified column reference may go unaliased"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

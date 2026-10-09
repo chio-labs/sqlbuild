@@ -9,6 +9,8 @@ from pathlib import Path
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.model_config.constants import (
     AUDITS_HEADER_KEY,
     COLUMNS_HEADER_KEY,
@@ -47,7 +49,13 @@ def parse_native_header_metadata(
             },
         )
     except (TypeError, ValueError):
+        report_native_fallback(site=NativeFallbackSite.CONFIG_HEADER_METADATA, kind="batch")
         return {}
+    for metadata in parsed:
+        if metadata == UNSUPPORTED_OUTCOME:
+            report_native_fallback(
+                site=NativeFallbackSite.CONFIG_HEADER_METADATA, kind="unsupported"
+            )
     return {
         model_file.file_path: _native_metadata(model_file=model_file, metadata=metadata)
         for model_file, metadata in zip(model_files, parsed, strict=True)
