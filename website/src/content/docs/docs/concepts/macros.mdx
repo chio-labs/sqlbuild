@@ -69,6 +69,9 @@ Macro calls accept Python literal values:
 - `__ref("model")`, `__source("source")`, and `__seed("seed")` references, alone or inside lists
   and dictionaries
 
+Bytes (`b"text"`), complex numbers (`2j`), f-strings, and `...` are rejected. An argument error
+names its line and column within the call's arguments.
+
 Positional and keyword arguments are supported:
 
 ```sql
