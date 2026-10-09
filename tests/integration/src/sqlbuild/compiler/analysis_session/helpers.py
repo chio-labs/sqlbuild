@@ -146,6 +146,54 @@ _TYPED_PIVOT_PASSTHROUGH: str = (
     _PIVOT_HEADER.format(pivot="status", value="amount", aggregate="MAX")
     + 'SELECT * FROM __ref("status_amounts")\n'
 )
+_ADAPTER_RULE_SQL: dict[str, tuple[str, str]] = {
+    "adapter_rules_cte": (
+        "  contract enforced,\n",
+        "WITH base AS (\n  SELECT customer_id, IFF(region IS NULL, 'a', NULL) AS maybe_label,\n"
+        "    IFF(region IS NULL, 'a', 'b') AS label, UPPER(region) AS upper_region,\n"
+        "    LOWER('X') AS lower_constant, SPLIT_PART(region, '_', 1) AS region_prefix,\n"
+        "    REPLACE(region, '_', '-') AS dashed_region\n"
+        '  FROM __source("raw_payments")\n)\n'
+        "SELECT customer_id, maybe_label, label, upper_region, lower_constant, region_prefix,\n"
+        "  dashed_region\nFROM base",
+    ),
+    "adapter_rules_untyped_cte": (
+        "  contract enforced,\n",
+        'WITH base AS (SELECT event_id, kind FROM __source("raw_events"))\n'
+        "SELECT event_id, IFF(kind IS NULL, 'a', NULL) AS maybe_label, UPPER(kind) AS upper_kind,\n"
+        "  LOWER('X') AS lower_constant, SPLIT_PART(kind, '_', 1) AS kind_prefix\nFROM base",
+    ),
+    "adapter_rules_staging": (
+        "",
+        "SELECT event_id, IFF(kind IS NULL, 'a', NULL) AS maybe_label, UPPER(kind) AS upper_kind,\n"
+        "  LISTAGG(kind) AS kinds, TO_DATE('2026-01-01') AS start_date\n"
+        'FROM __source("raw_events")\nGROUP BY event_id, kind',
+    ),
+    "long_s_cte": (
+        "  contract enforced,\n",
+        "WITH base AS (SELECT event_id, 'ſplit_part' AS label FROM __source(\"raw_events\"))\n"
+        "SELECT event_id, label FROM base",
+    ),
+    "long_s_staging": (
+        "",
+        "SELECT event_id, 'ſplit_part' AS label, kind FROM __source(\"raw_events\")",
+    ),
+    "dotless_i_staging": (
+        "",
+        "SELECT event_id, 'lıstagg' AS label FROM __source(\"raw_events\")",
+    ),
+    "umlaut_cte": (
+        "  contract enforced,\n",
+        "WITH base AS (SELECT event_id, 'grüße' AS label FROM __source(\"raw_events\"))\n"
+        "SELECT event_id, label FROM base",
+    ),
+}
+ADAPTER_RULE_MODELS: dict[str, str] = {
+    f"models/adapter_rules/{name}.sql": (
+        f'MODEL (\n  description "Adapter rule model {name}",\n{header});\n\n{sql}\n'
+    )
+    for name, (header, sql) in _ADAPTER_RULE_SQL.items()
+}
 _CONTRACT_CTE_MODELS: dict[str, str] = {
     "models/marts/payments_by_customer.sql": (
         'MODEL (\n  description "Payments passed through a CTE",\n  contract enforced,\n'
@@ -502,12 +550,12 @@ class AnalysisParity:
 def compare_analyses(
     *,
     inputs: CompileProjectInputs,
-    dialect: str | None,
+    inference_profile: ExpressionInferenceProfile,
     lineage_mode: ColumnLineageMode,
     parity: AnalysisParity,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Assemble `inputs`, analysing every seam call with both engines into `parity`."""
+    """Assemble `inputs` under `inference_profile`, analysing every seam call with both engines."""
 
     sessions: list[Any] = []
 
@@ -619,7 +667,7 @@ def compare_analyses(
         with suppress(CompileInputError):
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
-                inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
+                inference_profile=replace(inference_profile),
                 column_lineage_mode=lineage_mode,
             )
 
