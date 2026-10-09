@@ -20,15 +20,21 @@ from tests.integration.src.sqlbuild.compiler.sql_test_glue._test_types import (
     GeneratedSqlTestPlanningParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import (
+    INVERTED_WINDOW,
+    NO_WINDOW,
+    VALID_WINDOW,
     PlanningCallOutcome,
+    SqlTestCorpusShape,
     artifact_outcome,
     chain_outcome,
     compiled_project,
     generated_sql_test_files,
+    native_raised_kinds,
     outcome_kind,
     planning_outcome,
     record_native_answers,
     use_sql_test_glue,
+    with_unmocked_assertion,
 )
 
 _ADAPTERS: dict[str, BaseAdapter] = {
@@ -44,16 +50,49 @@ _ADAPTERS: dict[str, BaseAdapter] = {
     "test_case",
     [
         GeneratedSqlTestPlanningParityTestCase(
-            description="mocks, expected outputs, assertions, helpers, windows and direct tests",
+            description="mocks, expected outputs, assertions, helpers, windows and failing tests",
             seed=20261009,
             count=4,
             test_count=12,
+            shape=SqlTestCorpusShape(
+                windows=(NO_WINDOW, VALID_WINDOW, INVERTED_WINDOW),
+                stray_window_share=0.1,
+                helper_redefinition_share=0.15,
+                assertion_share=0.2,
+                unflattenable_assertion_share=0.1,
+            ),
             adapter_names=("duckdb", "postgres", "snowflake", "bigquery", "sqlserver"),
-            expected_minimum_native_planned=850,
-            expected_minimum_native_with_errors=150,
-            expected_minimum_native_chains=350,
-            expected_minimum_raised=40,
-        )
+            expected_minimum_native_planned=624,
+            expected_minimum_native_with_errors=144,
+            expected_minimum_native_chains=398,
+            expected_minimum_native_raised=102,
+            expected_native_raised_kinds=frozenset(
+                {"compile_input", "planner_input", "sql_test_reference"}
+            ),
+            expected_minimum_answered_batches=0,
+            expected_minimum_raised_outcomes=108,
+        ),
+        GeneratedSqlTestPlanningParityTestCase(
+            description="multi-test batches that plan without window or helper errors",
+            seed=20261010,
+            count=3,
+            test_count=12,
+            shape=SqlTestCorpusShape(
+                windows=(NO_WINDOW, VALID_WINDOW),
+                stray_window_share=0.0,
+                helper_redefinition_share=0.0,
+                assertion_share=0.3,
+                unflattenable_assertion_share=0.0,
+            ),
+            adapter_names=("duckdb", "postgres", "snowflake", "bigquery", "sqlserver"),
+            expected_minimum_native_planned=1068,
+            expected_minimum_native_with_errors=192,
+            expected_minimum_native_chains=122,
+            expected_minimum_native_raised=45,
+            expected_native_raised_kinds=frozenset({"sql_test_reference"}),
+            expected_minimum_answered_batches=30,
+            expected_minimum_raised_outcomes=30,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -69,11 +108,14 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
     for index in range(test_case.count):
         project: CompiledProject = compiled_project(
             project_dir=tmp_path / f"project_{index}",
-            files=generated_sql_test_files(rng=rng, test_count=test_case.test_count),
+            files=generated_sql_test_files(
+                rng=rng, test_count=test_case.test_count, shape=test_case.shape
+            ),
         )
         batches: tuple[tuple[CompiledSqlTest, ...], ...] = (
             project.sql_tests,
             *((test,) for test in project.sql_tests),
+            (with_unmocked_assertion(project=project),),
         )
         for adapter_name in test_case.adapter_names:
             adapter: BaseAdapter = _ADAPTERS[adapter_name]
@@ -97,6 +139,7 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
                     inputs.append((adapter_name, render_sql, tuple(test.name for test in tests)))
                 differences.extend(mismatches(inputs=inputs, expected=expected, actual=actual))
                 outcomes.update(map(outcome_kind, actual[1:]))
+                outcomes[f"batch_{outcome_kind(actual[0])}"] += 1
             differences.extend(
                 mismatches(
                     inputs=[(adapter_name, "artifacts", tests) for tests in batches],
@@ -123,5 +166,8 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
         native_answers["native_planned"] >= test_case.expected_minimum_native_planned,
         native_answers["native_with_errors"] >= test_case.expected_minimum_native_with_errors,
         native_answers["native_chains"] >= test_case.expected_minimum_native_chains,
-        outcomes["raised"] >= test_case.expected_minimum_raised,
-    ) == ([], True, True, True, True), (native_answers, outcomes)
+        native_answers["native_raised"] >= test_case.expected_minimum_native_raised,
+        native_raised_kinds(answers=native_answers) >= test_case.expected_native_raised_kinds,
+        outcomes["batch_answered"] >= test_case.expected_minimum_answered_batches,
+        outcomes["raised"] >= test_case.expected_minimum_raised_outcomes,
+    ) == ([], True, True, True, True, True, True, True), (native_answers, outcomes)

@@ -82,7 +82,7 @@ def plan_and_render_sql_test_artifacts(
             NativeSqlTestArtifact(
                 sql=plan.sql,
                 model_names=plan.model_names,
-                error_messages=sql_test_plan_error_messages(warnings=plan.warnings),
+                error_messages=plan.error_messages,
             )
         )
     return tuple(artifacts)
@@ -98,7 +98,7 @@ def plan_compiled_sql_test_artifacts(
     """Plan and render SQL tests from the compiled objects, with natively projected errors."""
 
     artifacts: list[NativeSqlTestArtifact] = []
-    for plan, error_messages in _plan_compiled_sql_tests(
+    for plan in _plan_compiled_sql_tests(
         project=project,
         tests=tests,
         adapter=adapter,
@@ -110,7 +110,7 @@ def plan_compiled_sql_test_artifacts(
             raise NativeSqlTestPlanningError("native SQL-test planning omitted rendered SQL")
         artifacts.append(
             NativeSqlTestArtifact(
-                sql=plan.sql, model_names=plan.model_names, error_messages=error_messages
+                sql=plan.sql, model_names=plan.model_names, error_messages=plan.error_messages
             )
         )
     return tuple(artifacts)
@@ -138,16 +138,13 @@ def plan_sql_tests_natively(
     """Plan SQL-test chains and assertions in one native batch, optionally rendering SQL."""
 
     if native_stage_enabled(NativeStage.SQL_TEST_GLUE):
-        return tuple(
-            plan
-            for plan, _error_messages in _plan_compiled_sql_tests(
-                project=project,
-                tests=tests,
-                adapter=adapter,
-                sql_analysis_enabled=sql_analysis_enabled,
-                render_sql=render_sql,
-                include_plan=include_plan,
-            )
+        return _plan_compiled_sql_tests(
+            project=project,
+            tests=tests,
+            adapter=adapter,
+            sql_analysis_enabled=sql_analysis_enabled,
+            render_sql=render_sql,
+            include_plan=include_plan,
         )
     return _plan_sql_tests_from_json(
         project=project,
@@ -167,7 +164,7 @@ def _plan_compiled_sql_tests(
     sql_analysis_enabled: bool,
     render_sql: bool,
     include_plan: bool,
-) -> tuple[tuple[NativeSqlTestPlan, tuple[str, ...]], ...]:
+) -> tuple[NativeSqlTestPlan, ...]:
     """Plan from the compiled objects natively; Python supplies only the adapter's renderings."""
 
     if not tests:
@@ -208,9 +205,9 @@ def _plan_compiled_sql_tests(
     return tuple(_plan_from_row(row=row) for row in rows)
 
 
-def _plan_from_row(*, row: NativeSqlTestPlanRow) -> tuple[NativeSqlTestPlan, tuple[str, ...]]:
+def _plan_from_row(*, row: NativeSqlTestPlanRow) -> NativeSqlTestPlan:
     sql, chain, assertions, model_names, warnings, error_messages = row
-    plan: NativeSqlTestPlan = NativeSqlTestPlan(
+    return NativeSqlTestPlan(
         chain=tuple(_chain_step_from_row(row=step) for step in chain),
         assertions=tuple(_assertion_step_from_row(row=step) for step in assertions),
         model_names=tuple(model_names),
@@ -218,9 +215,9 @@ def _plan_from_row(*, row: NativeSqlTestPlanRow) -> tuple[NativeSqlTestPlan, tup
             PlanWarning(model_name=model_name, severity=WarningSeverity(severity), message=message)
             for model_name, severity, message in warnings
         ),
+        error_messages=tuple(error_messages),
         sql=sql,
     )
-    return plan, tuple(error_messages)
 
 
 def _assertion_step_from_row(*, row: NativeAssertionStepRow) -> SqlTestAssertionStep:
@@ -466,11 +463,13 @@ def _plan_from_payload(*, value: object) -> NativeSqlTestPlan:
         or not isinstance(warnings, list)
     ):
         raise NativeSqlTestPlanningError("native SQL-test planning returned an invalid result")
+    plan_warnings: tuple[PlanWarning, ...] = tuple(_warning(value=warning) for warning in warnings)
     return NativeSqlTestPlan(
         chain=tuple(_chain_step(value=step) for step in chain),
         assertions=tuple(_assertion_step(value=step) for step in assertions),
         model_names=_string_tuple(value=payload.get("modelNames"), context="model names"),
-        warnings=tuple(_warning(value=warning) for warning in warnings),
+        warnings=plan_warnings,
+        error_messages=sql_test_plan_error_messages(warnings=plan_warnings),
         sql=sql if isinstance(sql, str) else None,
     )
 

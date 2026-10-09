@@ -574,23 +574,17 @@ def _plan_static_test_artifacts(
     with OperationLifecycle(
         operation_kind="project", operation_name="sql_test_planning"
     ) as lifecycle:
-        native_artifacts: tuple[NativeSqlTestArtifact, ...] | None = (
-            plan_native_sql_test_artifacts(
-                project=project,
-                tests=tests,
-                adapter=adapter,
-                sql_analysis_enabled=project.settings.sql_analysis,
-            )
+        plan_artifacts: Callable[..., tuple[NativeSqlTestArtifact, ...]] = (
+            plan_native_sql_test_artifacts
             if native_stage_enabled(NativeStage.SQL_TEST_GLUE)
-            else None
+            else plan_and_render_sql_test_artifacts
         )
-        if native_artifacts is None:
-            native_artifacts = plan_and_render_sql_test_artifacts(
-                project=project,
-                tests=tests,
-                adapter=adapter,
-                sql_analysis_enabled=project.settings.sql_analysis,
-            )
+        native_artifacts: tuple[NativeSqlTestArtifact, ...] = plan_artifacts(
+            project=project,
+            tests=tests,
+            adapter=adapter,
+            sql_analysis_enabled=project.settings.sql_analysis,
+        )
         lifecycle.completed(metadata={"item_count": len(native_artifacts)})
     return native_artifacts
 

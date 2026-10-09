@@ -16,7 +16,7 @@ def plan_native_sql_test_artifacts(
     tests: tuple[CompiledSqlTest, ...],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
-) -> tuple[NativeSqlTestArtifact, ...] | None:
+) -> tuple[NativeSqlTestArtifact, ...]:
     """Return one artifact per test, planned from the compiled objects without a JSON request."""
 
     return plan_compiled_sql_test_artifacts(

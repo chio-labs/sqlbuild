@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import chain, compress
 from pathlib import Path
 from typing import cast
@@ -15,7 +15,12 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models import (
+    CompiledModelSqlTestPayload,
+    CompiledProject,
+    CompiledSqlTest,
+    CompileSqlTestCte,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -34,6 +39,17 @@ class PlanningCallOutcome:
 
     value: object
     raised: tuple[str, str] | None
+
+
+@dataclass(frozen=True)
+class SqlTestCorpusShape:
+    """The cursor windows and failing shapes a generated SQL-test project draws from."""
+
+    windows: tuple[str, ...]
+    stray_window_share: float
+    helper_redefinition_share: float
+    assertion_share: float
+    unflattenable_assertion_share: float
 
 
 _PROJECT_TOML: str = (
@@ -159,19 +175,23 @@ _DIRECT_TESTS: tuple[str, ...] = (
     "__table_fn_expected__ AS (SELECT 1 AS order_id, 150 AS amount)\nSELECT 1\n",
 )
 _DIRECT_TEST_SHARE: float = 0.8
-_STRAY_WINDOW_SHARE: float = 0.1
 _MOCK_SHARE: float = 0.85
 _MACRO_MOCK_SHARE: float = 0.5
 _HELPER_SHARE: float = 0.4
-_ASSERTION_SHARE: float = 0.2
-_WINDOWS: tuple[str, ...] = (
-    "",
-    ', cursor_start "2026-02-01", cursor_end "2026-02-03"',
-    ', cursor_start "2026-02-03", cursor_end "2026-02-01"',
+_UNMOCKED_ASSERTION: CompileSqlTestCte = CompileSqlTestCte(
+    name="__assert__no_returns", sql_body='SELECT order_id FROM __source("raw_returns") WHERE 1 = 0'
 )
+_REGIONS_ASSERTION: str = 'SELECT * FROM __ref("fct_regions") WHERE 1 = 0'
+_NATIVE_ERROR_KIND_SEPARATOR: str = ":"
+_NATIVE_RAISED_PREFIX: str = "native_raised:"
+NO_WINDOW: str = ""
+VALID_WINDOW: str = ', cursor_start "2026-02-01", cursor_end "2026-02-03"'
+INVERTED_WINDOW: str = ', cursor_start "2026-02-03", cursor_end "2026-02-01"'
 
 
-def generated_sql_test_files(*, rng: random.Random, test_count: int) -> dict[str, str]:
+def generated_sql_test_files(
+    *, rng: random.Random, test_count: int, shape: SqlTestCorpusShape
+) -> dict[str, str]:
     """A project of mocked, expected, asserted, helper, direct and failing SQL tests."""
 
     files: dict[str, str] = {
@@ -189,7 +209,7 @@ def generated_sql_test_files(*, rng: random.Random, test_count: int) -> dict[str
         for name, sql in _BASE_MODELS.items()
     )
     files.update(
-        (f"tests/unit/test_generated_{index}.sql", _model_test(rng=rng, index=index))
+        (f"tests/unit/test_generated_{index}.sql", _model_test(rng=rng, index=index, shape=shape))
         for index in range(test_count)
     )
     files.update(
@@ -204,12 +224,16 @@ def generated_sql_test_files(*, rng: random.Random, test_count: int) -> dict[str
     return files
 
 
-def _model_test(*, rng: random.Random, index: int) -> str:
-    """One model test: the first target's first mock, then random mocks, helper and checks."""
+def _model_test(*, rng: random.Random, index: int, shape: SqlTestCorpusShape) -> str:
+    """One model test: the first target's first mock, then random mocks, helper and checks.
+
+    A helper may be read through a CTE whose nested WITH redefines it, which native planning
+    rejects; an assertion on a model beginning with WITH cannot be flattened for SQL Server.
+    """
 
     targets: list[str] = rng.sample(sorted(_UPSTREAM), k=rng.choice((1, 1, 2)))
-    windowed: bool = "daily_orders" in targets or rng.random() < _STRAY_WINDOW_SHARE
-    window: str = rng.choice(((_WINDOWS[0],), _WINDOWS)[windowed])
+    windowed: bool = "daily_orders" in targets or rng.random() < shape.stray_window_share
+    window: str = rng.choice(((NO_WINDOW,), shape.windows)[windowed])
     fixtures: list[str] = list(chain.from_iterable(_UPSTREAM[target] for target in targets))
     mocks: list[str] = [
         fixtures[0],
@@ -219,26 +243,42 @@ def _model_test(*, rng: random.Random, index: int) -> str:
     ]
     has_helper: bool = rng.random() < _HELPER_SHARE
     helper: str = f"wanted_{index}"
+    shadow: str = f"shadowing_{index}"
+    redefined: bool = rng.random() < shape.helper_redefinition_share
     helper_ctes: list[tuple[str, str]] = [
         (
+            shadow,
+            f"WITH {helper} AS (SELECT 1 AS order_id) SELECT order_id FROM {helper}",
+        ),
+        (
             helper,
-            rng.choice(
-                ("SELECT 1 AS order_id", f'SELECT order_id FROM __ref("{rng.choice(targets)}")')
-            ),
-        )
-    ][: int(has_helper)]
+            (
+                rng.choice(
+                    (
+                        "SELECT 1 AS order_id",
+                        f'SELECT order_id FROM __ref("{rng.choice(targets)}")',
+                    )
+                ),
+                f"SELECT order_id FROM {shadow}",
+            )[redefined],
+        ),
+    ][int(not redefined) : 2 * int(has_helper)]
     expected_sql: str = ("SELECT 1 AS order_id", f"SELECT order_id FROM {helper}")[has_helper]
     checks: list[tuple[str, str]] = [
         (
             (f"__expected__{target}", expected_sql),
             (f"__assert__{target}_has_rows", f'SELECT * FROM __ref("{target}") WHERE 1 = 0'),
-        )[rng.random() < _ASSERTION_SHARE]
+        )[rng.random() < shape.assertion_share]
         for target in targets
+    ]
+    unflattenable: list[tuple[str, str]] = [(f"__assert__regions_{index}", _REGIONS_ASSERTION)][
+        : int(rng.random() < shape.unflattenable_assertion_share)
     ]
     ctes: dict[str, str] = {
         **{mock: _FIXTURES[mock] for mock in mocks},
         **dict(helper_ctes),
         **dict(checks),
+        **dict(unflattenable),
     }
     body: str = ",\n".join(f"{name} AS (\n  {sql}\n)" for name, sql in ctes.items())
     return f'TEST (name "generated_{index}"{window});\n\nWITH\n{body}\nSELECT 1\n'
@@ -255,6 +295,29 @@ def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledPro
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
     ).project
+
+
+def with_unmocked_assertion(*, project: CompiledProject) -> CompiledSqlTest:
+    """The first model test with an assertion calling a source nothing mocks.
+
+    The compiler reports such a call itself, so this stands in for a reference it missed and
+    reaches the planner's own unresolved-reference error.
+    """
+
+    test: CompiledSqlTest = next(
+        filter(
+            lambda test: isinstance(test.payload, CompiledModelSqlTestPayload), project.sql_tests
+        )
+    )
+    payload: CompiledModelSqlTestPayload = cast(CompiledModelSqlTestPayload, test.payload)
+    return replace(
+        test,
+        payload=replace(
+            payload,
+            assertion_ctes=(*payload.assertion_ctes, _UNMOCKED_ASSERTION),
+            authored_ctes=(*payload.authored_ctes, _UNMOCKED_ASSERTION),
+        ),
+    )
 
 
 def use_sql_test_glue(*, monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None:
@@ -329,10 +392,12 @@ def outcome_kind(outcome: object) -> str:
 
 
 def record_native_answers(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count the plans and chains the native glue itself returns for the rest of the test.
+    """Count the plans, chains and errors the native glue itself returns for the rest of the test.
 
     A plan with native error messages counts as `native_with_errors`, any other as
-    `native_planned`; JSON-path plans never reach these bindings, so they are never counted.
+    `native_planned`; an error a glue binding raises counts as `native_raised` and under
+    `native_raised:<kind>`. JSON-path planning never reaches these bindings, and errors Python
+    raises before calling them are never counted.
     """
 
     answers: Counter[str] = Counter()
@@ -346,20 +411,40 @@ def record_native_answers(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     def counted_plans(
         request: NativeSqlTestPlanningRequest,
     ) -> tuple[list[NativeSqlTestPlanRow], int, int]:
-        response: tuple[list[NativeSqlTestPlanRow], int, int] = plan(request)
+        response: tuple[list[NativeSqlTestPlanRow], int, int] = _counting_raises(
+            call=lambda: plan(request), answers=answers
+        )
         answers.update(
             ("native_planned", "native_with_errors")[bool(row[5])] for row in response[0]
         )
         return response
 
     def counted_chains(request: NativeSqlTestChainRequest) -> list[list[str]]:
-        chains: list[list[str]] = resolve(request)
+        chains: list[list[str]] = _counting_raises(call=lambda: resolve(request), answers=answers)
         answers["native_chains"] += len(chains)
         return chains
 
     monkeypatch.setattr(native_module, "plan_compiled_sql_tests", counted_plans)
     monkeypatch.setattr(native_module, "resolve_compiled_sql_test_chains", counted_chains)
     return answers
+
+
+def native_raised_kinds(*, answers: Counter[str]) -> frozenset[str]:
+    """The kinds (message prefixes) of the errors the native glue bindings raised."""
+
+    return frozenset(
+        kind.removeprefix(_NATIVE_RAISED_PREFIX)
+        for kind in filter(lambda kind: kind.startswith(_NATIVE_RAISED_PREFIX), answers)
+    )
+
+
+def _counting_raises[T](*, call: Callable[[], T], answers: Counter[str]) -> T:
+    try:
+        return call()
+    except ValueError as error:
+        answers["native_raised"] += 1
+        answers[_NATIVE_RAISED_PREFIX + str(error).partition(_NATIVE_ERROR_KIND_SEPARATOR)[0]] += 1
+        raise
 
 
 def _outcome(call: Callable[[], object]) -> PlanningCallOutcome:
