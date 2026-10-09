@@ -14,12 +14,20 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile.models import (
+    CompiledProject,
+    CompileProjectInputs,
+    DynamicColumnContractProof,
+)
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AnalysisFallbackTestCase,
     GeneratedAnalysisParityTestCase,
     SessionFailureTestCase,
+    StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     AnalysisParity,
@@ -30,6 +38,8 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     deferral_kinds,
     failing_provide_sessions,
     generated_analysis_files,
+    native_pivot_proofs,
+    pivot_project_files,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -44,7 +54,7 @@ _ORDERS_PROJECT: dict[str, str] = {
     "test_case",
     [
         GeneratedAnalysisParityTestCase(
-            description="stars, CTEs, set operations, untyped inputs, contracts and pivots",
+            description="stars, CTEs, set operations, untyped inputs, contracts, contract CTEs, pivots",
             seed=20261008,
             count=6,
             model_count=24,
@@ -53,6 +63,8 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
             expected_minimum_proven_pivots=12,
+            expected_maximum_enrichment_deferrals=120,
+            expected_minimum_native_enrichments=90,
         )
     ],
     ids=lambda case: case.description,
@@ -86,6 +98,11 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     assert parity.pivot_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.standalone_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.proven_pivots >= test_case.expected_minimum_proven_pivots
+    assert (
+        kinds["analysis_session:input_enrichment"]
+        <= test_case.expected_maximum_enrichment_deferrals
+    )
+    assert parity.native_enrichments >= test_case.expected_minimum_native_enrichments
 
 
 @pytest.mark.parametrize(
@@ -173,6 +190,47 @@ def test_given_session_failure_after_deferrals_when_analysing_then_records_only_
     assert analyses is None
     assert sum(session.answered for session in sessions) > 0
     assert deferral_kinds(record_dir) == Counter(test_case.expected_kinds)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandalonePivotProofTestCase(
+            description="a selection that leaves the pivots out of model analysis",
+            analysed_models=frozenset({"orders_list"}),
+            expected_native_proofs=2,
+            expected_proven_by_model={
+                "orders_list": None,
+                "status_amounts": True,
+                "status_passthrough": True,
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_without_the_wheel(
+    test_case: StandalonePivotProofTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs: CompileProjectInputs = compile_inputs(
+        project_dir=tmp_path / "project", files=pivot_project_files()
+    )
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
+    proofs: list[DynamicColumnContractProof | None] = native_pivot_proofs(monkeypatch=monkeypatch)
+
+    project: CompiledProject = assemble_compiled_project(
+        inputs=inputs,
+        inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+        analysis_model_names=test_case.analysed_models,
+    )
+
+    assert (
+        all(proof is not None for proof in proofs),
+        len(proofs),
+        {
+            model.name: getattr(model.dynamic_column_contract, "output_proven", None)
+            for model in project.models
+        },
+    ) == (True, test_case.expected_native_proofs, test_case.expected_proven_by_model)
 
 
 if __name__ == "__main__":
