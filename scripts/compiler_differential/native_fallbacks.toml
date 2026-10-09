@@ -17,29 +17,8 @@ counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
 engine = "native"
 stage = "attachments"
 site = "attachments.native"
-kind = "omitted_select_scans"
-counts = { example = 24, failure = 21, fixture = 32, seed = 193 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
-site = "attachments.native"
-kind = "scenario_ctes"
-counts = { example = 8, failure = 1, fixture = 12, seed = 37 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
-site = "attachments.native"
 kind = "seed_pairs"
 counts = { example = 8, fixture = 4, seed = 26 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
-site = "attachments.scenario_independence"
-kind = "deferred"
-counts = { failure = 1 }
 
 [[entry]]
 engine = "native"
@@ -68,13 +47,6 @@ stage = "declaration_scopes"
 site = "declaration_scopes.native"
 kind = "scope_indexes"
 counts = { example = 12, failure = 237, fixture = 12, seed = 44 }
-
-[[entry]]
-engine = "native"
-stage = "declaration_scopes"
-site = "declaration_scopes.relationship_ctes"
-kind = "expected_names"
-counts = { example = 1, failure = 3, fixture = 3, seed = 26 }
 
 [[entry]]
 engine = "native"
@@ -185,29 +157,8 @@ counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
 engine = "native-preview"
 stage = "attachments"
 site = "attachments.native"
-kind = "omitted_select_scans"
-counts = { example = 24, failure = 21, fixture = 32, seed = 193 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.native"
-kind = "scenario_ctes"
-counts = { example = 8, failure = 1, fixture = 12, seed = 37 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.native"
 kind = "seed_pairs"
 counts = { example = 8, fixture = 4, seed = 26 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.scenario_independence"
-kind = "deferred"
-counts = { failure = 1 }
 
 [[entry]]
 engine = "native-preview"
@@ -250,13 +201,6 @@ stage = "declaration_scopes"
 site = "declaration_scopes.native"
 kind = "scope_indexes"
 counts = { example = 12, failure = 237, fixture = 12, seed = 44 }
-
-[[entry]]
-engine = "native-preview"
-stage = "declaration_scopes"
-site = "declaration_scopes.relationship_ctes"
-kind = "expected_names"
-counts = { example = 1, failure = 3, fixture = 3, seed = 26 }
 
 [[entry]]
 engine = "native-preview"
@@ -453,13 +397,6 @@ stage = "declaration_scopes"
 site = "declaration_scopes.native"
 kind = "scope_indexes"
 counts = { example = 12, failure = 237, fixture = 12, seed = 44 }
-
-[[entry]]
-engine = "python"
-stage = "declaration_scopes"
-site = "declaration_scopes.relationship_ctes"
-kind = "expected_names"
-counts = { example = 1, failure = 3, fixture = 3, seed = 26 }
 
 [[entry]]
 engine = "python"
