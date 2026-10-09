@@ -24,6 +24,8 @@ NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "type_recovery.py": "semantic_checks",
     "recovery.py": "semantic_checks",
     "metadata_validation.py": "semantic_checks",
+    "contracts/columns.py": "contracts",
+    "contracts/promotion.py": "contracts",
 }
 NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE: str = "analysis"
 NATIVE_FALLBACK_LIST_HEADER: str = (
@@ -48,7 +50,7 @@ GOLDEN_RESOURCE_DROPPED_FIELDS: frozenset[str] = frozenset(
 )
 GOLDEN_PATH_MASK: str = "<project>"
 GOLDEN_VERSION_MASK: str = "<sqlbuild-version>"
-GOLDEN_MISSING_HINT: str = "no golden; record it with `make compiler-goldens`"
+GOLDEN_MISSING_HINT: str = "no golden; record it with `make compiler-baselines`"
 ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")
 DEFAULT_ENGINES: tuple[str, str] = ("python", "native-preview")
 SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
