@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.147.0](https://github.com/chio-labs/sqlbuild/compare/v0.146.0...v0.147.0) (2026-10-09)
+
+
+### Features
+
+* **native:** make native rendering the default compiler path ([#1043](https://github.com/chio-labs/sqlbuild/issues/1043)) ([95491e1](https://github.com/chio-labs/sqlbuild/commit/95491e1ed70afe8c834da7841297f7d9663699fc))
+* **native:** report SQL test and scenario errors natively ([#1046](https://github.com/chio-labs/sqlbuild/issues/1046)) ([0e87c96](https://github.com/chio-labs/sqlbuild/commit/0e87c96b2e940e025bf2bb771d48ee7f317eadb1))
+
 ## [0.146.0](https://github.com/chio-labs/sqlbuild/compare/v0.145.0...v0.146.0) (2026-10-08)
 
 
