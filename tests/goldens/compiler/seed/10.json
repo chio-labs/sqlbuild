@@ -149,6 +149,17 @@
    "FROM __source(\"raw_events_1\")",
    ""
   ],
+  "models/analysis/cte_facts_stg_sales_0.sql": [
+   "WITH base AS (",
+   "  SELECT id, CAST(amount AS DECIMAL(12, 2)) AS amount, 'event' AS kind,",
+   "    COALESCE(status, 'unknown') AS status",
+   "  FROM __ref(\"stg_sales_0\")",
+   "  WHERE id IS NOT NULL",
+   ")",
+   "SELECT id + 0 AS id, amount, UPPER(kind) AS kind, UPPER(status) AS status",
+   "FROM base",
+   ""
+  ],
   "models/analysis/regional_stg_inventory_0.sql": [
    "SELECT id, amount, 'north' AS region",
    "FROM __ref(\"stg_inventory_0\")",
@@ -766,6 +777,112 @@
      "macros": [],
      "nodes": [
       "source.generated_10.raw_events_1"
+     ]
+    }
+   },
+   "model.generated_10.cte_facts_stg_sales_0": {
+    "database": null,
+    "schema": "main",
+    "name": "cte_facts_stg_sales_0",
+    "resource_type": "model",
+    "package_name": "generated_10",
+    "path": "models/analysis/cte_facts_stg_sales_0.sql",
+    "original_file_path": "models/analysis/cte_facts_stg_sales_0.sql",
+    "unique_id": "model.generated_10.cte_facts_stg_sales_0",
+    "fqn": [
+     "generated_10",
+     "models",
+     "analysis",
+     "cte_facts_stg_sales_0"
+    ],
+    "alias": "cte_facts_stg_sales_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "main",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Contracted CTE reads of stg_sales_0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "Recovered id",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "Recovered amount",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "kind": {
+      "name": "kind",
+      "description": "Recovered kind",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "Recovered status",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "main.cte_facts_stg_sales_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_10.stg_sales_0"
      ]
     }
    },
@@ -3207,6 +3324,9 @@
    ],
    "model.generated_10.contracted_stg_sales_0": [
     "source.generated_10.raw_events_1"
+   ],
+   "model.generated_10.cte_facts_stg_sales_0": [
+    "model.generated_10.stg_sales_0"
    ],
    "model.generated_10.regional_stg_inventory_0": [
     "model.generated_10.stg_inventory_0"
