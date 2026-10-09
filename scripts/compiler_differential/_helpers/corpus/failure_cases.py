@@ -33,6 +33,7 @@ from scripts.compiler_differential.constants import (
     FAILURE_CONFIG_PATH,
     FAILURE_MART_PATH,
     FAILURE_SOURCES_PATH,
+    FAILURE_UNDECODABLE_ENV_VAR,
 )
 from scripts.compiler_differential.models import FailureCase
 
@@ -720,6 +721,42 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
                 "use '...' (Ellipsis) at line 1, column 1 of the '@cents' arguments"
             ),
             expected_help=("Pass None, or a string the macro understands, instead of '...'"),
+        ),
+        failure_case(
+            name="engine-error-undecodable-environment-variable",
+            expected_code="P001",
+            files=mart_body_files(
+                f"SELECT customer_id, '@@ENV:{FAILURE_UNDECODABLE_ENV_VAR}' AS region\n"
+                'FROM __ref("stg_orders")\n'
+            ),
+            expected_message=(
+                f"Environment variable '{FAILURE_UNDECODABLE_ENV_VAR}' is not valid UTF-8 text"
+            ),
+            expected_help=(
+                "Its value is b'\\xff'; set it to UTF-8 text, since SQLBuild cannot send "
+                "undecodable bytes to a warehouse"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-output-lone-surrogate",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: (
+                    'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
+                    "    return expression + chr(0xDCFF)\n"
+                ),
+                **mart_body_files(
+                    "SELECT customer_id, @cents('amount') AS cents\nFROM __ref(\"stg_orders\")\n"
+                ),
+            },
+            expected_message=(
+                f"Macro '@cents' in '<project>/{FAILURE_MART_PATH}' returned text with the lone "
+                "surrogate '\\udcff', which is not valid Unicode"
+            ),
+            expected_help=(
+                "Return valid Unicode text from the macro; lone surrogates usually come from "
+                "bytes decoded with errors='surrogateescape'"
+            ),
         ),
         failure_case(
             name="engine-error-week-date-cursor-start",

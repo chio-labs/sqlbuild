@@ -955,12 +955,13 @@ class NativeMacroErrorTestCase:
 
 @dataclass(frozen=True)
 class UnkeyableMacroCallTestCase:
-    """Compile arguments whose values no store key can hold; every engine must match Python."""
+    """Compile arguments holding text that is not valid Unicode; every engine rejects them."""
 
     description: str
     project_files: dict[str, str]
     compile_args: tuple[str, ...]
     expected_returncodes: tuple[int, ...]
+    expected_report_fragment: str
 
 
 @dataclass(frozen=True)

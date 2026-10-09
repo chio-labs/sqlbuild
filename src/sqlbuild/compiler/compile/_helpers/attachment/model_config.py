@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -36,6 +35,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     contains_template_data,
     record_template_reads,
 )
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
     MODEL_AUDIT_OVERRIDE_KEYS,
@@ -882,7 +882,7 @@ def native_model_config_session(
                 project_config.path_defaults,
                 (SqlHookEntry, NamedSqlHookEntry, PythonHookEntry),
             ),
-            (inputs.effective_vars, os.environ),
+            (inputs.effective_vars, UnicodeEnvironment()),
             (inputs.effective_target_name, inputs.run_id),
             None if target is None else (target.database, target.schema),
         ),

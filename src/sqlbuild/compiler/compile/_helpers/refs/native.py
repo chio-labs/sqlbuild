@@ -32,10 +32,7 @@ def extract_native_sql_references(
 ) -> SqlReferenceScan | SqlReferenceScanFailure | None:
     """Return the references and rejected calls, Python's located error, or None for Python."""
 
-    try:
-        extraction: _NativeExtraction = _scanner(syntax).extract(sql)
-    except UnicodeError:
-        return None
+    extraction: _NativeExtraction = _scanner(syntax).extract(sql)
     if extraction is None:
         return None
     scanned, failure = extraction

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import os
-
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.model_config.models import (
     NativeTemplateExpansion,
     NativeTemplateRejection,
@@ -24,7 +23,7 @@ def expand_native_config_templates(
 
     outcome: tuple[object, list[tuple[str, str]]] = _native.expand_config_templates(
         value,
-        (variables, os.environ, context_values),
+        (variables, UnicodeEnvironment(), context_values),
         (
             flags.allow_context,
             flags.preserve_context_tokens,

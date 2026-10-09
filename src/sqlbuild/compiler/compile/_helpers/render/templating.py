@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, TEMPLATE_OPEN_TOKEN
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
     expand_native_config_templates,
@@ -22,13 +23,36 @@ from sqlbuild.compiler.model_config.models import (
 def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     """Resolve merged effective vars with recursive `${name}` expansion."""
 
+    for name, value in raw_values.items():
+        _reject_lone_surrogates(name=name, value=value, root=value)
     outcome: tuple[object, list[tuple[str, str]]] = _native.expand_effective_vars(
-        raw_values, os.environ
+        raw_values, UnicodeEnvironment()
     )
     record_template_reads(tuple(outcome[1]))
     if isinstance(outcome[0], _native.NativeConfigError):
         raise native_config_error(error=outcome[0], bridge_independent=True)
     return cast(dict[str, object], outcome[0])
+
+
+def _reject_lone_surrogates(*, name: str, value: object, root: object) -> None:
+    if isinstance(value, dict):
+        for item in (*value.keys(), *value.values()):
+            _reject_lone_surrogates(name=name, value=item, root=root)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            _reject_lone_surrogates(name=name, value=item, root=root)
+    elif isinstance(value, str):
+        try:
+            _ = value.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise CompileInputError(
+                f"Variable '{name}' holds the lone surrogate {value[error.start]!r}, which is not "
+                "valid Unicode text",
+                help=(
+                    f"Set '{name}' to valid Unicode text in --vars or the [vars] table; its "
+                    f"current value is {root!r}"
+                ),
+            ) from None
 
 
 def contains_template_data(value: object) -> bool:

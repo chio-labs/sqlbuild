@@ -515,15 +515,19 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
     "test_case",
     [
         UnkeyableMacroCallTestCase(
-            description="context macro with a lone surrogate var",
+            description="a lone surrogate var is rejected before any macro runs",
             project_files=_TAGGED_STAGING,
             compile_args=("--vars", '{"regions": ["\\udcff"]}'),
-            expected_returncodes=(0, 0, 0),
+            expected_returncodes=(1, 1, 1),
+            expected_report_fragment=(
+                "Variable 'regions' holds the lone surrogate '\\udcff', which is not valid "
+                "Unicode text"
+            ),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_var_no_store_key_can_hold_when_compiling_then_every_engine_matches_python(
+def test_given_unencodable_var_when_compiling_then_every_engine_rejects_it(
     test_case: UnkeyableMacroCallTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = tmp_path / "orders"
@@ -544,6 +548,7 @@ def test_given_var_no_store_key_can_hold_when_compiling_then_every_engine_matche
         tuple(run.returncode for run in runs),
         {report_without_engine(run) for run in runs} == {report_without_engine(runs[0])},
         [run.compiled for run in runs] == [runs[0].compiled] * len(runs),
-    ) == (test_case.expected_returncodes, True, True), tuple(
+        all(test_case.expected_report_fragment in run.report + run.stderr for run in runs),
+    ) == (test_case.expected_returncodes, True, True, True), tuple(
         run.report + run.stderr for run in runs
     )
