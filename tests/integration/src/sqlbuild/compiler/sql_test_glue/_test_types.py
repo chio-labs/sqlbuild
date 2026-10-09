@@ -22,3 +22,15 @@ class GeneratedSqlTestPlanningParityTestCase:
     expected_native_raised_kinds: frozenset[str]
     expected_minimum_answered_batches: int
     expected_minimum_raised_outcomes: int
+
+
+@dataclass(frozen=True)
+class GeneratedSqlTestAssemblyParityTestCase:
+    """Seeded SQL-test projects native and Python assembly must compile identically."""
+
+    description: str
+    seed: int
+    count: int
+    test_count: int
+    shape: SqlTestCorpusShape
+    expected_native_assemblies: dict[str, int]

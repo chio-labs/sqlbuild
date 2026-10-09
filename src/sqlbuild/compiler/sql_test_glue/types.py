@@ -1,4 +1,4 @@
-"""Row shapes the native SQL-test planning glue returns."""
+"""Row shapes the native SQL-test glue returns."""
 
 from __future__ import annotations
 
@@ -22,3 +22,13 @@ type NativeSqlTestPlanRow = tuple[
     list[NativePlanWarningRow],
     list[str],
 ]
+type NativeSqlTestDiagnosticRow = tuple[int, int, int, int, str, str]
+type NativeSqlTestFactsRow = tuple[
+    str,
+    list[tuple[str, str]],
+    list[str],
+    str | None,
+    str,
+    list[NativeSqlTestDiagnosticRow],
+]
+type NativeSqlTestAssemblyRow = tuple[NativeSqlTestFactsRow | None, str | None]

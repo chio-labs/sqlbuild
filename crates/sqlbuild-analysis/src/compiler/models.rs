@@ -182,3 +182,153 @@ pub struct SqlTestAssertionStep {
     #[serde(default)]
     pub comparison_body_sql: Option<String>,
 }
+
+/// The compiled SQL tests to assemble, with the facts of every model the project compiles.
+#[derive(Debug)]
+pub struct SqlTestAssemblyBatch {
+    pub models: Vec<SqlTestAssemblyModel>,
+    pub tests: Vec<SqlTestAssemblyTest>,
+    pub lexical_syntax: LexicalSyntax,
+}
+
+/// What assembly reads of one model: its name, macro dependencies and references.
+#[derive(Debug)]
+pub struct SqlTestAssemblyModel {
+    pub name: String,
+    pub macro_deps: Vec<String>,
+    /// Pre-macro SQL Python scans for calls: set only without macro deps and with a macro token.
+    pub unscanned_macro_source: Option<String>,
+    pub references: Vec<SqlTestAssemblyReference>,
+}
+
+/// One logical reference: Python `SqlReferenceKind` value, name and optional package.
+#[derive(Clone, Debug)]
+pub struct SqlTestAssemblyReference {
+    pub kind: String,
+    pub name: String,
+    pub package: Option<String>,
+}
+
+/// One expanded SQL test case as compile inputs carry it.
+#[derive(Debug)]
+pub struct SqlTestAssemblyTest {
+    pub block_name: Option<String>,
+    pub file_stem: String,
+    pub relative_path: String,
+    pub relative_stem: String,
+    pub contents: String,
+    pub block_sql: String,
+    pub block_index: i64,
+    pub sql_body: String,
+    pub case_name: Option<String>,
+    /// `(name, value kind, nullable)` per declared parameter.
+    pub parameter_schema: Vec<(String, String, bool)>,
+    pub parameter_values: Vec<(String, SqlTestParameterValue)>,
+    pub payload: SqlTestAssemblyPayload,
+}
+
+/// A typed SQL value as its kind and payload; decimals keep their unnormalized digits.
+#[derive(Clone, Debug)]
+pub enum SqlTestParameterValue {
+    String(String),
+    Integer(i64),
+    Boolean(bool),
+    Float(f64),
+    Decimal {
+        negative: bool,
+        digits: Vec<u8>,
+        exponent: i64,
+    },
+    Null,
+    List(Vec<SqlTestParameterValue>),
+    Set(Vec<SqlTestParameterValue>),
+    Object(Vec<(String, SqlTestParameterValue)>),
+}
+
+/// The part of a test's payload assembly reads.
+#[derive(Debug)]
+pub enum SqlTestAssemblyPayload {
+    /// A macro, UDF or table-function test of the named resources.
+    Direct {
+        mode: String,
+        tested_resource_names: Vec<String>,
+    },
+    Model(SqlTestAssemblyModelPayload),
+}
+
+#[derive(Debug)]
+pub struct SqlTestAssemblyModelPayload {
+    pub authored_ctes: Vec<SqlTestCte>,
+    pub expected_ctes: Vec<SqlTestCte>,
+    pub assertion_ctes: Vec<SqlTestCte>,
+    pub expected_model_names: Vec<String>,
+    pub assertion_target_model_names: Vec<String>,
+    pub reference_target_model_names: Vec<String>,
+    pub mock_model_names: Vec<String>,
+    pub has_macro_mocks: bool,
+}
+
+/// One test's assembled facts, or why Python assembles it.
+#[derive(Debug, PartialEq)]
+pub enum SqlTestAssemblyOutcome {
+    Assembled(AssembledSqlTestFacts),
+    Deferred(SqlTestAssemblyDeferral),
+}
+
+/// The facts Python's `_assemble_compiled_sql_test` computes for one test.
+#[derive(Debug, PartialEq)]
+pub struct AssembledSqlTestFacts {
+    pub name: String,
+    /// `(resource type, name)` per scope dependency, in Python's order.
+    pub scope_deps: Vec<(&'static str, String)>,
+    pub target_model_names: Vec<String>,
+    pub case_fingerprint: Option<String>,
+    /// Resource name of the test's diagnostics: the block name, else the relative path's stem.
+    pub diagnostic_resource_name: String,
+    pub diagnostics: Vec<SqlTestHelperDiagnostic>,
+}
+
+/// One P013 diagnostic for a mock that reads a helper calling a reference.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SqlTestHelperDiagnostic {
+    pub line: usize,
+    pub column: usize,
+    pub end_line: usize,
+    pub end_column: usize,
+    pub message: String,
+    pub help: String,
+}
+
+/// Why one test is assembled by Python instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SqlTestAssemblyDeferral {
+    /// Macro mocks re-expand every model, which only Python's macro expansion does.
+    MacroMocks,
+    /// A model's macro call scan raises in Python or meets text Python classifies by Unicode.
+    MacroCallScan,
+    /// The reference scan fails or cannot classify the text as Python does.
+    ReferenceScan,
+    /// Non-ASCII text where Python's case folding or Unicode classes would apply.
+    NonAsciiText,
+    /// A decimal parameter Python's decimal context would round or clamp.
+    DecimalContext,
+    /// A parameter value the JSON encoder cannot encode as Python's does.
+    UnencodableValue,
+    /// A parsed CTE tree too deep, or otherwise unfit, to read as Python's `to_dict` walk does.
+    UnreadableTree,
+}
+
+impl SqlTestAssemblyDeferral {
+    /// The kind recorded for the deferral.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MacroMocks => "macro_mocks",
+            Self::MacroCallScan => "macro_call_scan",
+            Self::ReferenceScan => "reference_scan",
+            Self::NonAsciiText => "non_ascii_text",
+            Self::DecimalContext => "decimal_context",
+            Self::UnencodableValue => "unencodable_value",
+            Self::UnreadableTree => "unreadable_tree",
+        }
+    }
+}

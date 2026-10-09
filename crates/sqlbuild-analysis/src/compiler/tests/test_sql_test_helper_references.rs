@@ -1,11 +1,19 @@
 use serde_json::{Value, json};
 
+use crate::compiler::_helpers::sql_tests::extraction::generic_syntax;
+use crate::compiler::main::sql_test_assembly::assemble_sql_test_batch;
+use crate::compiler::models::{
+    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyDeferral, SqlTestAssemblyModel,
+    SqlTestAssemblyModelPayload, SqlTestAssemblyOutcome, SqlTestAssemblyPayload,
+    SqlTestAssemblyReference, SqlTestAssemblyTest, SqlTestCte, SqlTestHelperDiagnostic,
+    SqlTestParameterValue,
+};
 use crate::compiler::tests::helpers::{
     chain_helper_reference_case, defined_before, plan_helper_reference_case,
     plan_helper_reference_response,
 };
 use crate::compiler::tests::test_types::{
-    HelperReferenceTestCase, UnresolvedReaderReferenceTestCase,
+    HelperReferenceTestCase, SqlTestAssemblyTestCase, UnresolvedReaderReferenceTestCase,
 };
 
 const HELPER_READS_MODEL: (&str, &str) = (
@@ -29,6 +37,14 @@ const ASSERT_DOUBLED: (&str, &str) = (
     "__assert__doubles_amount",
     "SELECT order_id FROM doubled WHERE amount_doubled <> 20",
 );
+
+const MOCK_READS_HELPER_TEST: &str = "TEST (name \"mock_reads_helper\");\n\nWITH\n\
+orders_feed AS (SELECT * FROM __source(\"raw_orders\")),\n\
+__ref__stg_orders AS (SELECT * FROM orders_feed),\n\
+__expected__customer_totals AS (SELECT 1 AS customer_id)\nSELECT 1\n";
+/// Python's `build_sql_test_case_fingerprint` of the parameterized case below.
+const PYTHON_CASE_FINGERPRINT: &str =
+    "8f2adcab557ba4476fcb70de1fc11014acda9f1b597a3ca5c3245afb632e5d0f";
 
 #[test]
 fn given_helper_cte_references_when_planning_then_references_resolve_in_dependency_order() {
@@ -487,6 +503,204 @@ fn given_unresolvable_reader_references_when_planning_directly_then_planner_reje
                 .iter()
                 .all(|fragment| error.contains(fragment)),
             "{}: {error}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python_or_defer() {
+    let cte = |name: &str, sql_body: &str| SqlTestCte {
+        name: name.to_owned(),
+        sql_body: sql_body.to_owned(),
+    };
+    let strings =
+        |names: &[&str]| -> Vec<String> { names.iter().map(|n| (*n).to_owned()).collect() };
+    let model_test = |contents: &str, has_macro_mocks: bool| SqlTestAssemblyTest {
+        block_name: Some("mock_reads_helper".to_owned()),
+        file_stem: "test_customer_totals".to_owned(),
+        relative_path: "tests/unit/test_customer_totals.sql".to_owned(),
+        relative_stem: "test_customer_totals".to_owned(),
+        contents: contents.to_owned(),
+        block_sql: contents
+            .split_once("\n\n")
+            .map_or("", |(_, body)| body)
+            .to_owned(),
+        block_index: 1,
+        sql_body: "SELECT 1".to_owned(),
+        case_name: None,
+        parameter_schema: Vec::new(),
+        parameter_values: Vec::new(),
+        payload: SqlTestAssemblyPayload::Model(SqlTestAssemblyModelPayload {
+            authored_ctes: vec![
+                cte("orders_feed", "SELECT * FROM __source(\"raw_orders\")"),
+                cte("__ref__stg_orders", "SELECT * FROM orders_feed"),
+            ],
+            expected_ctes: vec![cte(
+                "__expected__customer_totals",
+                "SELECT 1 AS customer_id",
+            )],
+            assertion_ctes: Vec::new(),
+            expected_model_names: strings(&["customer_totals"]),
+            assertion_target_model_names: Vec::new(),
+            reference_target_model_names: Vec::new(),
+            mock_model_names: strings(&["stg_orders"]),
+            has_macro_mocks,
+        }),
+    };
+    let model = |name: &str, macro_deps: &[&str], source: Option<&str>, refs: &[(&str, &str)]| {
+        SqlTestAssemblyModel {
+            name: name.to_owned(),
+            macro_deps: strings(macro_deps),
+            unscanned_macro_source: source.map(str::to_owned),
+            references: refs
+                .iter()
+                .map(|(kind, name)| SqlTestAssemblyReference {
+                    kind: (*kind).to_owned(),
+                    name: (*name).to_owned(),
+                    package: None,
+                })
+                .collect(),
+        }
+    };
+    let models = || {
+        vec![
+            model("stg_orders", &[], None, &[("source", "raw_orders")]),
+            model("customer_totals", &[], None, &[("ref", "stg_orders")]),
+            model(
+                "order_cents",
+                &[],
+                Some("SELECT @enum(\"order_channel\").WEB, @@scale * @ cents(amount) FROM t"),
+                &[],
+            ),
+            model(
+                "order_dollars",
+                &[],
+                Some("SELECT '@cents(x)', @dollars (amount)"),
+                &[],
+            ),
+        ]
+    };
+    let batch = |tests: Vec<SqlTestAssemblyTest>| SqlTestAssemblyBatch {
+        models: models(),
+        tests,
+        lexical_syntax: generic_syntax(),
+    };
+    let macro_test = SqlTestAssemblyTest {
+        block_name: None,
+        payload: SqlTestAssemblyPayload::Direct {
+            mode: "macro".to_owned(),
+            tested_resource_names: strings(&["dollars"]),
+        },
+        ..model_test(MOCK_READS_HELPER_TEST, false)
+    };
+    let case_test = |decimal_digits: Vec<u8>| SqlTestAssemblyTest {
+        relative_path: "tests/unit/test_cases.sql".to_owned(),
+        case_name: Some("first".to_owned()),
+        parameter_schema: vec![
+            ("p_decimal".to_owned(), "decimal".to_owned(), true),
+            ("p_float".to_owned(), "float".to_owned(), false),
+        ],
+        parameter_values: vec![
+            (
+                "p_decimal".to_owned(),
+                SqlTestParameterValue::Decimal {
+                    negative: true,
+                    digits: decimal_digits,
+                    exponent: -4,
+                },
+            ),
+            ("p_float".to_owned(), SqlTestParameterValue::Float(0.1)),
+            (
+                "p_string".to_owned(),
+                SqlTestParameterValue::String("caf\u{e9}".to_owned()),
+            ),
+        ],
+        payload: SqlTestAssemblyPayload::Model(SqlTestAssemblyModelPayload {
+            authored_ctes: Vec::new(),
+            expected_ctes: Vec::new(),
+            assertion_ctes: Vec::new(),
+            expected_model_names: strings(&["orders", "customers"]),
+            assertion_target_model_names: strings(&["orders"]),
+            reference_target_model_names: Vec::new(),
+            mock_model_names: Vec::new(),
+            has_macro_mocks: false,
+        }),
+        ..model_test(MOCK_READS_HELPER_TEST, false)
+    };
+    let test_cases = [
+        SqlTestAssemblyTestCase {
+            description: "a mock reading a helper that calls a source reports P013 at the call",
+            batch: batch(vec![model_test(MOCK_READS_HELPER_TEST, false)]),
+            expected_outcomes: vec![SqlTestAssemblyOutcome::Assembled(AssembledSqlTestFacts {
+                name: "mock_reads_helper".to_owned(),
+                scope_deps: vec![("model", "customer_totals".to_owned())],
+                target_model_names: strings(&["customer_totals"]),
+                case_fingerprint: None,
+                diagnostic_resource_name: "mock_reads_helper".to_owned(),
+                diagnostics: vec![SqlTestHelperDiagnostic {
+                    line: 4,
+                    column: 31,
+                    end_line: 4,
+                    end_column: 53,
+                    message: "SQL test mock '__ref__stg_orders' reads helper CTE 'orders_feed', \
+                              which calls __source(\"raw_orders\"); mocks and fixtures are \
+                              defined before the models the test runs, so the helper cannot \
+                              be resolved for them"
+                        .to_owned(),
+                    help: "Read a mock by its CTE name instead, for example FROM \
+                           __source__raw_orders rather than FROM __source(\"raw_orders\"), \
+                           defining __source__raw_orders AS (SELECT ...) if the test does not \
+                           mock it, or write the rows of '__ref__stg_orders' directly."
+                        .to_owned(),
+                }],
+            })],
+        },
+        SqlTestAssemblyTestCase {
+            description: "macro mocks, non-ASCII text and out-of-context decimals defer",
+            batch: batch(vec![
+                model_test(MOCK_READS_HELPER_TEST, true),
+                model_test(&format!("-- caf\u{e9}\n{MOCK_READS_HELPER_TEST}"), false),
+                case_test(vec![1; 29]),
+            ]),
+            expected_outcomes: vec![
+                SqlTestAssemblyOutcome::Deferred(SqlTestAssemblyDeferral::MacroMocks),
+                SqlTestAssemblyOutcome::Deferred(SqlTestAssemblyDeferral::NonAsciiText),
+                SqlTestAssemblyOutcome::Deferred(SqlTestAssemblyDeferral::DecimalContext),
+            ],
+        },
+        SqlTestAssemblyTestCase {
+            description: "a case fingerprint and a macro test's scanned scope match Python",
+            batch: batch(vec![case_test(vec![2, 4, 7, 0, 0]), macro_test]),
+            expected_outcomes: vec![
+                SqlTestAssemblyOutcome::Assembled(AssembledSqlTestFacts {
+                    name: "mock_reads_helper [first]".to_owned(),
+                    scope_deps: vec![
+                        ("model", "orders".to_owned()),
+                        ("model", "customers".to_owned()),
+                    ],
+                    target_model_names: strings(&["orders", "customers"]),
+                    case_fingerprint: Some(PYTHON_CASE_FINGERPRINT.to_owned()),
+                    diagnostic_resource_name: "mock_reads_helper".to_owned(),
+                    diagnostics: Vec::new(),
+                }),
+                SqlTestAssemblyOutcome::Assembled(AssembledSqlTestFacts {
+                    name: "test_customer_totals".to_owned(),
+                    scope_deps: vec![("model", "order_dollars".to_owned())],
+                    target_model_names: Vec::new(),
+                    case_fingerprint: None,
+                    diagnostic_resource_name: "test_customer_totals".to_owned(),
+                    diagnostics: Vec::new(),
+                }),
+            ],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            assemble_sql_test_batch(&test_case.batch),
+            test_case.expected_outcomes,
+            "{}",
             test_case.description
         );
     }
