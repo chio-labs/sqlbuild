@@ -309,7 +309,7 @@ def interpolate_sql_batch(
         Mapping[str, object],
         Mapping[str, str],
         Mapping[str, str | None] | None,
-        Callable[[object, str], str],
+        Callable[..., str],
     ],
     python_version: tuple[int, int],
     unicode_version: str,

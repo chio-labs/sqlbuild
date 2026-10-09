@@ -1,4 +1,4 @@
-//! The value plan of one macro call's arguments, and why parsing them stopped.
+//! The value plan of one macro call's arguments.
 
 /// One argument value; Python builds the object, calling nested macros by their index.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,15 +37,4 @@ pub struct MacroArguments {
     pub keywords: Vec<(String, ArgumentValue)>,
     /// `(function, name)` of every typed reference, in Python's `ast.walk` order.
     pub typed_references: Vec<(String, String)>,
-}
-
-/// Why the arguments cannot be used, where, and how to fix them.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ArgumentError {
-    /// What is wrong, completing "Macro arguments in '<file>' ...".
-    pub detail: String,
-    pub help: String,
-    /// 1-based line and column, in characters, within the argument text.
-    pub line: usize,
-    pub column: usize,
 }

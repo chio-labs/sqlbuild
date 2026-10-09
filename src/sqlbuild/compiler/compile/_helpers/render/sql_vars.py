@@ -36,6 +36,10 @@ from sqlbuild.compiler.model_loop.main._scan_native_declaration_references impor
 )
 from sqlbuild.sql_values.types import CollectionRendering
 
+type _InterpolationRow = tuple[
+    str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None
+]
+
 
 def expand_authored_sql_result(  # noqa: PLR0913
     *,
@@ -177,20 +181,14 @@ def interpolate_sql_batch(
 ) -> tuple[SqlInterpolation, ...]:
     """Interpolate every `(sql, file path)` natively; errors wait in their result."""
 
-    rows = _native.interpolate_sql_batch(
+    rows: list[_InterpolationRow] = _native.interpolate_sql_batch(
         [(sql, str(file_path)) for sql, file_path in sqls],
-        (effective_vars, UnicodeEnvironment(), context_values, _render_variable),
+        (effective_vars, UnicodeEnvironment(), context_values, render_project_var_text),
         (sys.version_info[0], sys.version_info[1]),
         unicodedata.unidata_version,
     )
     return tuple(
-        SqlInterpolation(
-            sql=rendered if rendered is not None else sql,
-            spans=tuple(ExpansionSpan(*span) for span in spans),
-            reads=tuple(reads),
-            error=error,
-        )
-        for (sql, _file_path), (rendered, spans, reads, error) in zip(sqls, rows, strict=True)
+        _interpolation(sql=sql, row=row) for (sql, _file_path), row in zip(sqls, rows, strict=True)
     )
 
 
@@ -203,5 +201,15 @@ def applied_interpolation(interpolation: SqlInterpolation) -> str:
     return interpolation.sql
 
 
-def _render_variable(value: object, label: str) -> str:
-    return render_project_var_text(value=value, label=label)
+def _interpolation(
+    *,
+    sql: str,
+    row: _InterpolationRow,
+) -> SqlInterpolation:
+    rendered, spans, reads, error = row
+    return SqlInterpolation(
+        sql=rendered if rendered is not None else sql,
+        spans=tuple(ExpansionSpan(*span) for span in spans),
+        reads=tuple(reads),
+        error=error,
+    )

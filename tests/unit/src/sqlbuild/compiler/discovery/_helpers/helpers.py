@@ -148,19 +148,18 @@ _STATEMENT_HEADER_PARSERS: dict[str, Callable[..., object]] = {
 }
 
 
-_DECLARATION_STATEMENT_DIRECTORIES: dict[str, str] = {
-    "AUDIT": "audits/generic",
-    "HOOK": "hooks/sql",
+_STATEMENT_FILE_PATHS: dict[str, Callable[[Path], Path]] = {
+    "AUDIT": lambda project_dir: project_dir / "audits" / "generic" / "orders.sql",
+    "HOOK": lambda project_dir: project_dir / "hooks" / "sql" / "orders.sql",
 }
 
 
 def statement_header_file_path(*, statement: str, project_dir: Path) -> Path:
     """Return where a statement file is parsed from: in the project for declaration kinds."""
 
-    directory: str | None = _DECLARATION_STATEMENT_DIRECTORIES.get(statement)
-    if directory is None:
-        return Path("orders.sql")
-    return project_dir / directory / "orders.sql"
+    return _STATEMENT_FILE_PATHS.get(statement, lambda _project_dir: Path("orders.sql"))(
+        project_dir
+    )
 
 
 def parse_statement_header_file(*, statement: str, contents: str, file_path: Path) -> object:

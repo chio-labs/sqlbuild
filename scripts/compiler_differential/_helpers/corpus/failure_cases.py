@@ -41,6 +41,12 @@ _MART_HEADER_START: str = 'MODEL (\n  description "Order totals per customer",\n
 
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'
 
+_ENGINE_ERROR_MACROS: str = "macros/cents.py"
+_ENGINE_ERROR_CENTS: str = (
+    'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
+    '    return f"({expression} * 100)"\n'
+)
+
 
 def _rules(*codes: str) -> dict[str, str]:
     return {
@@ -595,13 +601,6 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
             ),
         ),
     )
-
-
-_ENGINE_ERROR_MACROS: str = "macros/cents.py"
-_ENGINE_ERROR_CENTS: str = (
-    'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
-    '    return f"({expression} * 100)"\n'
-)
 
 
 def engine_error_cases() -> tuple[FailureCase, ...]:

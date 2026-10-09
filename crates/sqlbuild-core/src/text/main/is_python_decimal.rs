@@ -1,6 +1,6 @@
 //! Python's `str.isdecimal()`, the regex `\d` of `str` patterns, from a generated table.
 
-use crate::text::main::is_python_alnum::in_ranges;
+use crate::text::_helpers::code_point_ranges::in_ranges;
 use crate::text::models::PythonText;
 
 /// Whether Python's `str.isdecimal()` is true for one character.

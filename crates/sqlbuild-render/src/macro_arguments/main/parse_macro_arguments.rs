@@ -4,7 +4,8 @@ use crate::macro_arguments::_helpers::evaluation::evaluate_arguments;
 use crate::macro_arguments::_helpers::failures::Failure;
 use crate::macro_arguments::_helpers::lexer::tokenize;
 use crate::macro_arguments::_helpers::syntax_tree::parse_call_arguments;
-use crate::macro_arguments::models::{ArgumentError, MacroArguments};
+use crate::macro_arguments::errors::ArgumentError;
+use crate::macro_arguments::models::MacroArguments;
 use crate::macro_arguments::types::ArgumentHost;
 
 /// The value plan of `text`, whose nested macro calls fill the `[start, end)` code point spans.

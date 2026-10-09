@@ -9,8 +9,8 @@ use crate::compiler::models::{
     AuthoredValue, DeclarationReferenceKind, DeclarationReferenceScan, DeclarationReferenceStop,
     InterpolationRead,
 };
-use crate::compiler::tests::test_types::HeaderNestingTestCase;
-use crate::compiler::types::{CharSpan, InterpolationHost};
+use crate::compiler::tests::test_types::{HeaderNestingTestCase, MapHost};
+use crate::compiler::types::CharSpan;
 use sqlbuild_core::text::main::python_text::python_text;
 use std::collections::BTreeMap;
 use std::thread;
@@ -262,51 +262,6 @@ pub(crate) fn nesting_error_at(position: usize) -> String {
     format!("values nest deeper than 256 levels at position {position}")
 }
 
-/// Variables, environment and context for interpolation tests.
-pub(crate) struct MapHost {
-    pub(crate) variables: BTreeMap<&'static str, Result<&'static str, &'static str>>,
-    pub(crate) environment: BTreeMap<&'static str, &'static str>,
-    pub(crate) context: Option<BTreeMap<&'static str, Option<&'static str>>>,
-}
-
-impl InterpolationHost for MapHost {
-    fn variable(&self, name: &str) -> Option<Result<String, String>> {
-        self.variables
-            .get(name)
-            .map(|value| value.map(str::to_owned).map_err(str::to_owned))
-    }
-
-    fn variable_names(&self) -> Vec<String> {
-        self.variables
-            .keys()
-            .map(|name| (*name).to_owned())
-            .collect()
-    }
-
-    fn environment(&self, name: &str) -> Result<Option<String>, String> {
-        Ok(self.environment.get(name).map(|value| (*value).to_owned()))
-    }
-
-    fn context_allowed(&self) -> bool {
-        self.context.is_some()
-    }
-
-    fn context(&self, name: &str) -> Option<Option<String>> {
-        self.context
-            .as_ref()?
-            .get(name)
-            .map(|value| value.map(str::to_owned))
-    }
-
-    fn context_names(&self) -> Vec<String> {
-        self.context
-            .iter()
-            .flat_map(BTreeMap::keys)
-            .map(|name| (*name).to_owned())
-            .collect()
-    }
-}
-
 /// A host with `region = north`, `revision = 7`, `REGION=eu` and context `this`, `this.schema`.
 pub(crate) fn interpolation_host(context: bool) -> MapHost {
     MapHost {
@@ -341,8 +296,8 @@ pub(crate) fn interpolation_facts(
     sql: &str,
 ) -> (Vec<CharSpan>, Vec<InterpolationRead>) {
     let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
-    match interpolate_sql(python, host, sql, "models/orders.sql") {
-        Ok(result) => (result.spans, result.reads),
-        Err(failure) => (Vec::new(), failure.reads),
-    }
+    interpolate_sql(python, host, sql, "models/orders.sql").map_or_else(
+        |failure| (Vec::new(), failure.reads),
+        |result| (result.spans, result.reads),
+    )
 }
