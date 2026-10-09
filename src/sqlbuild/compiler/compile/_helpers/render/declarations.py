@@ -48,8 +48,9 @@ from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.scopes.constants import CURRENT_PATH_COMPONENT, QUALIFIED_IDENTITY_SEPARATOR
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
-from sqlbuild.compiler.scopes.main._normalize_scope_path import normalize_scope_path
-from sqlbuild.compiler.scopes.main._query_scope_target import query_scope_target
+from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
+    resolve_scope_declaration_visibility,
+)
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -244,15 +245,11 @@ def _queried_matches(
     target_path: Path,
     resource: ResourceIdentity | None,
 ) -> tuple[tuple[ResourceRecord, ...], ResourceIdentity | None]:
-    """The resources a scope query matches, or the lexical path record of an unknown target.
+    """The resources a scope query matches, or an unknown path's lexical folder record."""
 
-    A path that is not an indexed resource, such as a declaration file or an audit, reads
-    declarations from its own folder; a declaration file reads from its owner's folder.
-    """
-
-    query: ScopeTargetQuery = query_scope_target(
+    query: ScopeTargetQuery = resolve_scope_declaration_visibility(
         lookup=resolver.lookup, target=resource or target_path
-    )
+    ).target
     if not query.unknown:
         return query.matches, resource or (query.matches[0].identity if query.matches else None)
     definition_record: DeclarationRecord | None = next(
@@ -268,7 +265,6 @@ def _queried_matches(
         if definition_record is not None
         else target_path.as_posix()
     )
-    _ = normalize_scope_path(path=lexical_path)
     return (
         ResourceRecord(
             identity=ResourceIdentity(ResourceKind.MODEL, f"<path:{lexical_path}>"),

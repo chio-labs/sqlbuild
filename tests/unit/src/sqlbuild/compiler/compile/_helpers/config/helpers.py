@@ -100,15 +100,14 @@ def validate_natively(  # noqa: PLR0913
         (set(names), set(), set(), set(), set()),
         set(custom_materialization_names),
         microbatch_concurrency,
-        (sys.version_info[0], sys.version_info[1]),
-        unicodedata.unidata_version,
+        ((sys.version_info[0], sys.version_info[1]), unicodedata.unidata_version),
     )
     outcome: int | _native.NativeConfigError | None = validator.validate(
         config.values,
         (model_name, query_sql, f"models/{model_name}.sql"),
         (
             [("ref", name, False) for name in names],
-            None if declared_columns is None else list(declared_columns),
+            declared_columns,
             config.time_travel_retention.unmanaged,
             config.table_type.declared,
         ),

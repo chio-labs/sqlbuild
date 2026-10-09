@@ -63,6 +63,16 @@ pub enum ValidationStop {
     External(usize),
 }
 
+impl ValidationStop {
+    /// The config error, or the index of the externally rejected reference.
+    pub fn into_error(self) -> Result<ConfigError, usize> {
+        match self {
+            Self::Error(error) => Ok(error),
+            Self::External(index) => Err(index),
+        }
+    }
+}
+
 /// The header's `time_travel_retention`, applied over the inherited policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RetentionOverride {

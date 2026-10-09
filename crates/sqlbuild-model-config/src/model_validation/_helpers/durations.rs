@@ -3,7 +3,8 @@
 use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
 use sqlbuild_core::text::models::PythonText;
 
-use crate::model_validation::constants::DAY_UNIT_INDEX;
+use crate::model_validation::constants::{DAY_UNIT_INDEX, MAX_DURATION_AMOUNT};
+use crate::model_validation::errors::DurationNumberError;
 
 const MONTHS_PER_YEAR: u128 = 12;
 const UNIT_SECONDS: [u128; 4] = [86_400, 3_600, 60, 1];
@@ -18,15 +19,6 @@ pub(crate) struct Duration {
     pub(crate) fixed_seconds: u128,
     /// Amounts by unit, in `UNITS` order.
     amounts: [u128; 6],
-}
-
-/// A duration Python reads but SQLBuild rejects.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DurationNumberError {
-    /// An amount uses digits outside ASCII.
-    NonAsciiDigits,
-    /// An amount does not fit in a signed 64-bit integer.
-    TooLarge,
 }
 
 impl Duration {
@@ -69,11 +61,7 @@ pub(crate) fn parse_duration(
             return Ok(None);
         };
         non_ascii |= !rest[..digits].is_ascii();
-        amounts[unit] = rest[..digits]
-            .parse::<u128>()
-            .ok()
-            .filter(|amount| i64::try_from(*amount).is_ok())
-            .unwrap_or(u128::MAX);
+        amounts[unit] = bounded_amount(&rest[..digits]);
         rest = &rest[digits + UNITS[unit].len()..];
         next_unit = unit + 1;
     }
@@ -97,4 +85,12 @@ pub(crate) fn parse_duration(
         fixed_seconds,
         amounts,
     }))
+}
+
+/// The amount `digits` spell, or `u128::MAX` when it is not ASCII or exceeds a signed 64-bit integer.
+fn bounded_amount(digits: &str) -> u128 {
+    match digits.parse::<u128>() {
+        Ok(amount) if amount <= MAX_DURATION_AMOUNT => amount,
+        Ok(_) | Err(_) => u128::MAX,
+    }
 }

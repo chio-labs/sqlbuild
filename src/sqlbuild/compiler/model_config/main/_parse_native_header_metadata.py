@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cache
 from pathlib import Path
 
 import sqlbuild._native as _native
@@ -10,16 +11,6 @@ from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.model_config.types import NativeHeaderMetadataRow
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn, SourceLocation
-
-_CONTRACT_CLASSES: dict[str, object] = {
-    "schema_column": SchemaColumn,
-    "schema_audit_instance": SchemaAuditInstance,
-    "measurement_thresholds": MeasurementThresholds,
-    "measurement_threshold_bound": MeasurementThresholdBound,
-    "severities": {severity.value: severity for severity in AuditSeverity},
-    "threshold_operators": {operator.value: operator for operator in ThresholdOperator},
-    "allocate": object.__new__,
-}
 
 
 def parse_native_header_metadata(
@@ -32,7 +23,7 @@ def parse_native_header_metadata(
     """Return one model's header columns and audits, or the error each raises."""
 
     row: NativeHeaderMetadataRow = _native.parse_model_header_metadata(
-        raw_columns, raw_audits, column_locations, str(file_path), _CONTRACT_CLASSES
+        (raw_columns, raw_audits), (column_locations, str(file_path)), _contract_classes()
     )
     columns, audits = row
     return NativeHeaderMetadata(
@@ -41,3 +32,16 @@ def parse_native_header_metadata(
         columns_error=columns if isinstance(columns, _native.NativeConfigError) else None,
         audits_error=audits if isinstance(audits, _native.NativeConfigError) else None,
     )
+
+
+@cache
+def _contract_classes() -> dict[str, object]:
+    return {
+        "schema_column": SchemaColumn,
+        "schema_audit_instance": SchemaAuditInstance,
+        "measurement_thresholds": MeasurementThresholds,
+        "measurement_threshold_bound": MeasurementThresholdBound,
+        "severities": {severity.value: severity for severity in AuditSeverity},
+        "threshold_operators": {operator.value: operator for operator in ThresholdOperator},
+        "allocate": object.__new__,
+    }

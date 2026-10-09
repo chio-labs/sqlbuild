@@ -110,16 +110,22 @@ struct BuiltConfig<'py> {
     reads: Vec<(&'static str, String)>,
 }
 
+/// `((target name, run id), (database, schema) or None)` of the active target.
+type TargetInputs<'py> = (
+    (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+);
+
 #[pymethods]
 impl NativeModelConfigBuilder {
     #[new]
     fn new(
         layers: (Bound<'_, PyDict>, Bound<'_, PyDict>, Bound<'_, PyTuple>),
         sources: (Bound<'_, PyDict>, Bound<'_, PyAny>),
-        run: (Bound<'_, PyAny>, Bound<'_, PyAny>),
-        target_namespace: Option<(Bound<'_, PyAny>, Bound<'_, PyAny>)>,
+        target: TargetInputs<'_>,
         python: ((u8, u8), String),
     ) -> PyResult<Self> {
+        let (run, target_namespace) = target;
         let (defaults, path_defaults, hook_entry_types) = layers;
         let (python_version, unicode_version) = python;
         let python = python_text(python_version, &unicode_version).ok_or_else(|| {

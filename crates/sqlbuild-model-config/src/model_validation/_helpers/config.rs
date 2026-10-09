@@ -7,8 +7,9 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_core::text::models::PythonText;
 
 use crate::errors::ConfigError;
-use crate::model_validation::_helpers::durations::{Duration, DurationNumberError, parse_duration};
+use crate::model_validation::_helpers::durations::{Duration, parse_duration};
 use crate::model_validation::constants::SETTING_SNIPPET_INDENT;
+use crate::model_validation::errors::DurationNumberError;
 use crate::model_validation::models::ValidationStop;
 use crate::types::{AuthoredNode, NodeKind};
 

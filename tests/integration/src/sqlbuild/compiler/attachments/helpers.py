@@ -327,11 +327,13 @@ def _native_rendering(parity: AuditParity) -> tuple[object, ...]:
 
 def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
     owner: Path = Path("models/orders.sql")
+    implicit: dict[object, object] = cast(dict[object, object], audit.implicit_arguments)
     overrides: list[object] = [
         name
-        for name, value in audit.explicit_arguments.items()
-        if name in audit.implicit_arguments
-        and cast(dict[object, object], audit.implicit_arguments)[name] != value
+        for name, value in filter(
+            lambda item: item[0] in implicit and implicit[item[0]] != item[1],
+            audit.explicit_arguments.items(),
+        )
     ]
     try:
         for name in overrides[:1]:

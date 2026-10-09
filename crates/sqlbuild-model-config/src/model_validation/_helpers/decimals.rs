@@ -84,10 +84,10 @@ fn parse_ascii(text: &str) -> DecimalText {
             }
         }
     };
-    let Some(exponent) = i64::try_from(fraction.len())
-        .ok()
-        .and_then(|places| exponent.checked_sub(places))
-    else {
+    let Ok(places) = i64::try_from(fraction.len()) else {
+        return DecimalText::Invalid;
+    };
+    let Some(exponent) = exponent.checked_sub(places) else {
         return DecimalText::Invalid;
     };
     let digits: String = format!("{whole}{fraction}")

@@ -14,24 +14,27 @@ pub(crate) struct IsoDateTime {
     pub(crate) offset_micros: Option<i64>,
 }
 
-/// Why `fromisoformat` raises `ValueError`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum IsoError {
-    /// `Invalid isoformat string: <repr>`.
-    InvalidString,
-    /// Any other `ValueError` message.
-    Message(String),
-}
+use crate::model_validation::constants::{
+    BASIC_WEEK_DATE_LENGTH, CENTURY, CLOCK_COMPONENTS, DAYS_BEFORE_MONTH, DAYS_IN_MONTH,
+    DAYS_PER_4_YEARS, DAYS_PER_400_YEARS, DAYS_PER_CENTURY, DAYS_PER_WEEK, DAYS_PER_YEAR,
+    DECEMBER_INDEX, EXTENDED_DATE_LENGTH, EXTENDED_WEEK_DATE_LENGTH, EXTENDED_WEEK_DAY_LENGTH,
+    FEBRUARY, FRACTION_CORRECTION, FRACTION_DIGITS, GREGORIAN_CYCLE, HOURS_PER_DAY, LAST_HOUR,
+    LAST_MINUTE, LAST_SECOND, LEAP_CYCLE, LONG_YEAR_WEEKS, MAX_YEAR, MICROS_PER_DAY,
+    MICROS_PER_SECOND, MIN_YEAR, MONTHS_PER_YEAR, ORDINAL_MONTH_BIAS, ORDINAL_MONTH_SHIFT,
+    PYTHON_313, PYTHON_314, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, THURSDAY, WEDNESDAY,
+    WEEK_DATE_MARK_INDEX, YEAR_DIGITS,
+};
+use crate::model_validation::errors::IsoError;
 
-const MIN_YEAR: i64 = 1;
-const MAX_YEAR: i64 = 9999;
-const MICROS_PER_SECOND: i64 = 1_000_000;
-const MICROS_PER_DAY: i64 = 86_400 * MICROS_PER_SECOND;
-const DAYS_BEFORE_MONTH: [i64; 13] = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-const FRACTION_CORRECTION: [i64; 5] = [100_000, 10_000, 1_000, 100, 10];
-const FRACTION_DIGITS: usize = 6;
-const PYTHON_313: u8 = 13;
-const PYTHON_314: u8 = 14;
+/// A clock read by `parse_hh_mm_ss_ff`: hour, minute, second, microsecond.
+type Clock = [i64; 4];
+
+/// The byte span `[start, end)` a clock or time is read from.
+#[derive(Clone, Copy)]
+struct Span {
+    start: usize,
+    end: usize,
+}
 
 /// Parse `text` as `datetime.fromisoformat` does on CPython 3.`minor`.
 pub(crate) fn datetime_fromisoformat(text: &str, minor: u8) -> Result<IsoDateTime, IsoError> {
@@ -40,18 +43,20 @@ pub(crate) fn datetime_fromisoformat(text: &str, minor: u8) -> Result<IsoDateTim
     let separator: Option<usize> = isoformat_separator(bytes);
     let (year, month, day) =
         parse_date(bytes, separator.unwrap_or(usize::MAX)).map_err(|_| IsoError::InvalidString)?;
-    let mut time = TimeFields::default();
-    let mut has_offset = false;
-    if let Some(separator) = separator.filter(|separator| length > *separator) {
-        let start: usize = separator + utf8_width(byte_at(bytes, separator));
-        has_offset = parse_time(bytes, start, length, minor, &mut time)
-            .map_err(|_| IsoError::InvalidString)?;
-    }
+    let (time, has_offset): (TimeFields, bool) =
+        match separator.filter(|separator| length > *separator) {
+            Some(separator) => {
+                let start: usize = separator + utf8_width(byte_at(bytes, separator));
+                parse_time(bytes, Span { start, end: length }, minor)
+                    .map_err(|_| IsoError::InvalidString)?
+            }
+            None => (TimeFields::default(), false),
+        };
     let offset_micros: Option<i64> = has_offset
         .then(|| time.offset_seconds * MICROS_PER_SECOND + time.offset_micros)
         .map(|offset| checked_offset(offset, time.offset_seconds, minor))
         .transpose()?;
-    let mut parsed = IsoDateTime {
+    let parsed = IsoDateTime {
         year,
         month,
         day,
@@ -61,9 +66,14 @@ pub(crate) fn datetime_fromisoformat(text: &str, minor: u8) -> Result<IsoDateTim
         microsecond: time.microsecond,
         offset_micros,
     };
-    if minor >= PYTHON_314 && parsed.hour == 24 && (1..=12).contains(&parsed.month) {
-        roll_iso_midnight(&mut parsed)?;
-    }
+    let parsed: IsoDateTime = if minor >= PYTHON_314
+        && parsed.hour == HOURS_PER_DAY
+        && (1..=MONTHS_PER_YEAR).contains(&parsed.month)
+    {
+        roll_iso_midnight(parsed)?
+    } else {
+        parsed
+    };
     check_ranges(&parsed)?;
     Ok(parsed)
 }
@@ -71,7 +81,8 @@ pub(crate) fn datetime_fromisoformat(text: &str, minor: u8) -> Result<IsoDateTim
 /// Microseconds since 0001-01-01 00:00 of the local wall time, ignoring any offset.
 pub(crate) fn local_micros(parsed: &IsoDateTime) -> i64 {
     let days: i64 = ymd_to_ordinal(parsed.year, parsed.month, parsed.day) - 1;
-    let seconds: i64 = parsed.hour * 3_600 + parsed.minute * 60 + parsed.second;
+    let seconds: i64 =
+        parsed.hour * SECONDS_PER_HOUR + parsed.minute * SECONDS_PER_MINUTE + parsed.second;
     days * MICROS_PER_DAY + seconds * MICROS_PER_SECOND + parsed.microsecond
 }
 
@@ -101,7 +112,7 @@ pub(crate) fn utc_isoformat(parsed: &IsoDateTime) -> String {
     )
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 struct TimeFields {
     hour: i64,
     minute: i64,
@@ -135,63 +146,69 @@ fn utf8_width(lead: u8) -> usize {
 /// `_find_isoformat_datetime_separator`; `None` stands for its -1.
 fn isoformat_separator(bytes: &[u8]) -> Option<usize> {
     let length: usize = bytes.len();
-    if length == 7 {
-        return Some(7);
+    if length == BASIC_WEEK_DATE_LENGTH {
+        return Some(BASIC_WEEK_DATE_LENGTH);
     }
-    if byte_at(bytes, 4) == b'-' {
-        if byte_at(bytes, 5) != b'W' {
-            return Some(10);
+    if byte_at(bytes, YEAR_DIGITS) == b'-' {
+        if byte_at(bytes, WEEK_DATE_MARK_INDEX) != b'W' {
+            return Some(EXTENDED_DATE_LENGTH);
         }
-        if length < 8 {
+        if length < EXTENDED_WEEK_DATE_LENGTH {
             return None;
         }
-        if length > 8 && byte_at(bytes, 8) == b'-' {
-            if length == 9 {
+        if length > EXTENDED_WEEK_DATE_LENGTH && byte_at(bytes, EXTENDED_WEEK_DATE_LENGTH) == b'-' {
+            if length == EXTENDED_WEEK_DATE_LENGTH + 1 {
                 return None;
             }
-            if length > 10 && is_digit(byte_at(bytes, 10)) {
-                return Some(8);
+            if length > EXTENDED_WEEK_DAY_LENGTH
+                && is_digit(byte_at(bytes, EXTENDED_WEEK_DAY_LENGTH))
+            {
+                return Some(EXTENDED_WEEK_DATE_LENGTH);
             }
-            return Some(10);
+            return Some(EXTENDED_WEEK_DAY_LENGTH);
         }
-        return Some(8);
+        return Some(EXTENDED_WEEK_DATE_LENGTH);
     }
-    if byte_at(bytes, 4) != b'W' {
-        return Some(8);
+    if byte_at(bytes, YEAR_DIGITS) != b'W' {
+        return Some(EXTENDED_WEEK_DATE_LENGTH);
     }
-    let digits_end: usize = (7..length)
+    let digits_end: usize = (BASIC_WEEK_DATE_LENGTH..length)
         .find(|index| !is_digit(byte_at(bytes, *index)))
-        .unwrap_or(length.max(7));
-    if digits_end < 9 {
+        .unwrap_or(length.max(BASIC_WEEK_DATE_LENGTH));
+    if digits_end <= EXTENDED_WEEK_DATE_LENGTH {
         return Some(digits_end);
     }
-    Some(if digits_end.is_multiple_of(2) { 7 } else { 8 })
+    Some(if digits_end.is_multiple_of(2) {
+        BASIC_WEEK_DATE_LENGTH
+    } else {
+        EXTENDED_WEEK_DATE_LENGTH
+    })
 }
 
-/// `parse_digits`: read `count` digits at `start` into `value`; `None` at a non-digit.
-fn parse_digits(bytes: &[u8], start: usize, count: usize, value: &mut i64) -> Option<usize> {
+/// `parse_digits`: the position after `count` digits at `start` and their value, or `None`.
+fn parse_digits(bytes: &[u8], start: usize, count: usize) -> Option<(usize, i64)> {
+    let mut value: i64 = 0;
     for index in start..start + count {
         let byte: u8 = byte_at(bytes, index);
         if !is_digit(byte) {
             return None;
         }
-        *value = *value * 10 + i64::from(byte - b'0');
+        value = value * 10 + i64::from(byte - b'0');
     }
-    Some(start + count)
+    Some((start + count, value))
 }
 
 /// `parse_isoformat_date`, reading the date in the first `length` bytes.
 fn parse_date(bytes: &[u8], length: usize) -> Result<(i64, i64, i64), i32> {
-    let mut year: i64 = 0;
-    let mut position: usize = parse_digits(bytes, 0, 4, &mut year).ok_or(-1)?;
+    let (mut position, year): (usize, i64) = parse_digits(bytes, 0, YEAR_DIGITS).ok_or(-1)?;
     let uses_separator: bool = byte_at(bytes, position) == b'-';
     if uses_separator {
         position += 1;
     }
     if byte_at(bytes, position) == b'W' {
-        let mut week: i64 = 0;
-        let mut weekday: i64 = 0;
-        position = parse_digits(bytes, position + 1, 2, &mut week).ok_or(-3)?;
+        let week: i64;
+        (position, week) = parse_digits(bytes, position + 1, 2).ok_or(-3)?;
+        let mut weekday: i64 = 1;
         if position < length {
             if uses_separator {
                 if byte_at(bytes, position) != b'-' {
@@ -199,39 +216,31 @@ fn parse_date(bytes: &[u8], length: usize) -> Result<(i64, i64, i64), i32> {
                 }
                 position += 1;
             }
-            parse_digits(bytes, position, 1, &mut weekday).ok_or(-4)?;
-        } else {
-            weekday = 1;
+            (_, weekday) = parse_digits(bytes, position, 1).ok_or(-4)?;
         }
         return iso_to_ymd(year, week, weekday);
     }
-    let mut month: i64 = 0;
-    let mut day: i64 = 0;
-    position = parse_digits(bytes, position, 2, &mut month).ok_or(-1)?;
+    let month: i64;
+    (position, month) = parse_digits(bytes, position, 2).ok_or(-1)?;
     if uses_separator {
         if byte_at(bytes, position) != b'-' {
             return Err(-2);
         }
         position += 1;
     }
-    parse_digits(bytes, position, 2, &mut day).ok_or(-1)?;
+    let (_, day): (usize, i64) = parse_digits(bytes, position, 2).ok_or(-1)?;
     Ok((year, month, day))
 }
 
-/// `parse_hh_mm_ss_ff` over `[start, end)`; `Ok(true)` when text follows the time.
-fn parse_clock(
-    bytes: &[u8],
-    start: usize,
-    end: usize,
-    minor: u8,
-    fields: &mut [i64; 4],
-) -> Result<bool, i32> {
-    *fields = [0; 4];
+/// `parse_hh_mm_ss_ff` over `span`: the clock, and whether text follows the time.
+fn parse_clock(bytes: &[u8], span: Span, minor: u8) -> Result<(Clock, bool), i32> {
+    let Span { start, end } = span;
+    let mut fields: Clock = [0; 4];
     let mut position: usize = start;
     let mut has_separator: bool = true;
     let mut component: usize = 0;
-    while component < 3 {
-        position = parse_digits(bytes, position, 2, &mut fields[component]).ok_or(-3)?;
+    while component < CLOCK_COMPONENTS {
+        (position, fields[component]) = parse_digits(bytes, position, 2).ok_or(-3)?;
         let character: u8 = byte_at(bytes, position);
         position += 1;
         if component == 0 {
@@ -239,7 +248,7 @@ fn parse_clock(
         }
         let decimal_mark: bool = matches!(character, b'.' | b',');
         if minor >= PYTHON_313 && decimal_mark {
-            if minor >= PYTHON_314 && component < 2 {
+            if minor >= PYTHON_314 && component + 1 < CLOCK_COMPONENTS {
                 return Err(-3);
             }
             if position >= end {
@@ -248,10 +257,10 @@ fn parse_clock(
             break;
         }
         if position >= end {
-            return Ok(character != 0);
+            return Ok((fields, character != 0));
         }
         if has_separator && character == b':' {
-            if minor >= PYTHON_314 && component == 2 {
+            if minor >= PYTHON_314 && component + 1 == CLOCK_COMPONENTS {
                 return Err(-4);
             }
             component += 1;
@@ -268,27 +277,23 @@ fn parse_clock(
         component += 1;
     }
     let to_parse: usize = end.saturating_sub(position).min(FRACTION_DIGITS);
-    position = parse_digits(bytes, position, to_parse, &mut fields[3]).ok_or(-3)?;
+    (position, fields[CLOCK_COMPONENTS]) = parse_digits(bytes, position, to_parse).ok_or(-3)?;
     if let Some(correction) = to_parse
         .checked_sub(1)
         .and_then(|at| FRACTION_CORRECTION.get(at))
     {
-        fields[3] *= correction;
+        fields[CLOCK_COMPONENTS] *= correction;
     }
     while is_digit(byte_at(bytes, position)) {
         position += 1;
     }
-    Ok(byte_at(bytes, position) != 0)
+    Ok((fields, byte_at(bytes, position) != 0))
 }
 
-/// `parse_isoformat_time` over `[start, end)`; `Ok(true)` when it read a UTC offset.
-fn parse_time(
-    bytes: &[u8],
-    start: usize,
-    end: usize,
-    minor: u8,
-    time: &mut TimeFields,
-) -> Result<bool, i32> {
+/// `parse_isoformat_time` over `span`: the time, and whether it read a UTC offset.
+fn parse_time(bytes: &[u8], span: Span, minor: u8) -> Result<(TimeFields, bool), i32> {
+    let Span { start, end } = span;
+    let mut time = TimeFields::default();
     let mut offset_at: usize = start;
     loop {
         if matches!(byte_at(bytes, offset_at), b'Z' | b'+' | b'-') {
@@ -299,15 +304,21 @@ fn parse_time(
             break;
         }
     }
-    let mut clock: [i64; 4] = [0; 4];
-    let trailing: bool = parse_clock(bytes, start, offset_at, minor, &mut clock)?;
+    let (clock, trailing): (Clock, bool) = parse_clock(
+        bytes,
+        Span {
+            start,
+            end: offset_at,
+        },
+        minor,
+    )?;
     [time.hour, time.minute, time.second, time.microsecond] = clock;
     if offset_at == end {
-        return if trailing { Err(-5) } else { Ok(false) };
+        return if trailing { Err(-5) } else { Ok((time, false)) };
     }
     if byte_at(bytes, offset_at) == b'Z' {
         return if byte_at(bytes, offset_at + 1) == 0 {
-            Ok(true)
+            Ok((time, true))
         } else {
             Err(-5)
         };
@@ -317,11 +328,22 @@ fn parse_time(
     } else {
         1
     };
-    let mut offset: [i64; 4] = [0; 4];
-    let offset_trailing: bool = parse_clock(bytes, offset_at + 1, end, minor, &mut offset)?;
-    time.offset_seconds = sign * (offset[0] * 3_600 + offset[1] * 60 + offset[2]);
-    time.offset_micros = sign * offset[3];
-    if offset_trailing { Err(-5) } else { Ok(true) }
+    let (offset, offset_trailing): (Clock, bool) = parse_clock(
+        bytes,
+        Span {
+            start: offset_at + 1,
+            end,
+        },
+        minor,
+    )?;
+    time.offset_seconds =
+        sign * (offset[0] * SECONDS_PER_HOUR + offset[1] * SECONDS_PER_MINUTE + offset[2]);
+    time.offset_micros = sign * offset[CLOCK_COMPONENTS];
+    if offset_trailing {
+        Err(-5)
+    } else {
+        Ok((time, true))
+    }
 }
 
 /// `tzinfo_from_isoformat_results`: `None` for UTC, else the checked offset.
@@ -364,10 +386,10 @@ fn timedelta_repr(micros: i64) -> String {
 }
 
 /// Python 3.14's `24:00`: midnight of the next day, when the rest of the clock is zero.
-fn roll_iso_midnight(parsed: &mut IsoDateTime) -> Result<(), IsoError> {
+fn roll_iso_midnight(mut parsed: IsoDateTime) -> Result<IsoDateTime, IsoError> {
     let month_days: i64 = days_in_month(parsed.year, parsed.month);
     if parsed.day > month_days {
-        return Ok(());
+        return Ok(parsed);
     }
     if parsed.minute != 0 || parsed.second != 0 || parsed.microsecond != 0 {
         return Err(IsoError::Message(
@@ -379,27 +401,27 @@ fn roll_iso_midnight(parsed: &mut IsoDateTime) -> Result<(), IsoError> {
     if parsed.day > month_days {
         parsed.day = 1;
         parsed.month += 1;
-        if parsed.month > 12 {
+        if parsed.month > MONTHS_PER_YEAR {
             parsed.month = 1;
             parsed.year += 1;
         }
     }
-    Ok(())
+    Ok(parsed)
 }
 
 /// `check_date_args` then `check_time_args`.
 fn check_ranges(parsed: &IsoDateTime) -> Result<(), IsoError> {
     let message: Option<String> = if !(MIN_YEAR..=MAX_YEAR).contains(&parsed.year) {
         Some(format!("year {} is out of range", parsed.year))
-    } else if !(1..=12).contains(&parsed.month) {
+    } else if !(1..=MONTHS_PER_YEAR).contains(&parsed.month) {
         Some("month must be in 1..12".to_owned())
     } else if parsed.day < 1 || parsed.day > days_in_month(parsed.year, parsed.month) {
         Some("day is out of range for month".to_owned())
-    } else if !(0..=23).contains(&parsed.hour) {
+    } else if !(0..=LAST_HOUR).contains(&parsed.hour) {
         Some("hour must be in 0..23".to_owned())
-    } else if !(0..=59).contains(&parsed.minute) {
+    } else if !(0..=LAST_MINUTE).contains(&parsed.minute) {
         Some("minute must be in 0..59".to_owned())
-    } else if !(0..=59).contains(&parsed.second) {
+    } else if !(0..=LAST_SECOND).contains(&parsed.second) {
         Some("second must be in 0..59".to_owned())
     } else {
         None
@@ -412,62 +434,73 @@ fn iso_to_ymd(year: i64, week: i64, weekday: i64) -> Result<(i64, i64, i64), i32
     if !(MIN_YEAR..=MAX_YEAR).contains(&year) {
         return Err(-7);
     }
-    if week <= 0 || week >= 53 {
-        let first_weekday: i64 = (ymd_to_ordinal(year, 1, 1) + 6) % 7;
-        let long_year: bool = first_weekday == 3 || (first_weekday == 2 && is_leap(year));
-        if week != 53 || !long_year {
+    if week <= 0 || week >= LONG_YEAR_WEEKS {
+        let first_weekday: i64 = (ymd_to_ordinal(year, 1, 1) + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
+        let long_year: bool =
+            first_weekday == THURSDAY || (first_weekday == WEDNESDAY && is_leap(year));
+        if week != LONG_YEAR_WEEKS || !long_year {
             return Err(-5);
         }
     }
-    if weekday <= 0 || weekday >= 8 {
+    if weekday <= 0 || weekday > DAYS_PER_WEEK {
         return Err(-6);
     }
     let first_day: i64 = ymd_to_ordinal(year, 1, 1);
-    let first_weekday: i64 = (first_day + 6) % 7;
-    let week1_monday: i64 = first_day - first_weekday + if first_weekday > 3 { 7 } else { 0 };
-    Ok(ordinal_to_ymd(week1_monday + (week - 1) * 7 + weekday - 1))
+    let first_weekday: i64 = (first_day + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
+    let week1_monday: i64 = first_day - first_weekday
+        + if first_weekday > THURSDAY {
+            DAYS_PER_WEEK
+        } else {
+            0
+        };
+    Ok(ordinal_to_ymd(
+        week1_monday + (week - 1) * DAYS_PER_WEEK + weekday - 1,
+    ))
 }
 
 fn is_leap(year: i64) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+    year.rem_euclid(LEAP_CYCLE) == 0
+        && (year.rem_euclid(CENTURY) != 0 || year.rem_euclid(GREGORIAN_CYCLE) == 0)
 }
 
 fn days_in_month(year: i64, month: i64) -> i64 {
-    match month {
-        2 if is_leap(year) => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
+    let index: usize = usize::try_from(month.clamp(1, MONTHS_PER_YEAR)).unwrap_or(1);
+    DAYS_IN_MONTH[index] + i64::from(month == FEBRUARY && is_leap(year))
 }
 
 fn ymd_to_ordinal(year: i64, month: i64, day: i64) -> i64 {
     let before_year: i64 = year - 1;
-    let days_before_year: i64 =
-        before_year * 365 + before_year / 4 - before_year / 100 + before_year / 400;
-    let index: usize = usize::try_from(month.clamp(1, 12)).unwrap_or(1);
-    days_before_year + DAYS_BEFORE_MONTH[index] + i64::from(month > 2 && is_leap(year)) + day
+    let days_before_year: i64 = before_year * DAYS_PER_YEAR + before_year / LEAP_CYCLE
+        - before_year / CENTURY
+        + before_year / GREGORIAN_CYCLE;
+    let index: usize = usize::try_from(month.clamp(1, MONTHS_PER_YEAR)).unwrap_or(1);
+    days_before_year + DAYS_BEFORE_MONTH[index] + i64::from(month > FEBRUARY && is_leap(year)) + day
 }
 
 /// `ord_to_ymd`.
 fn ordinal_to_ymd(ordinal: i64) -> (i64, i64, i64) {
     let mut days: i64 = ordinal - 1;
-    let four_centuries: i64 = days / 146_097;
-    days %= 146_097;
-    let centuries: i64 = days / 36_524;
-    days %= 36_524;
-    let four_years: i64 = days / 1_461;
-    days %= 1_461;
-    let years: i64 = days / 365;
-    days %= 365;
-    let year: i64 = four_centuries * 400 + 1 + centuries * 100 + four_years * 4 + years;
-    if years == 4 || centuries == 4 {
-        return (year - 1, 12, 31);
+    let four_centuries: i64 = days / DAYS_PER_400_YEARS;
+    days %= DAYS_PER_400_YEARS;
+    let centuries: i64 = days / DAYS_PER_CENTURY;
+    days %= DAYS_PER_CENTURY;
+    let four_years: i64 = days / DAYS_PER_4_YEARS;
+    days %= DAYS_PER_4_YEARS;
+    let years: i64 = days / DAYS_PER_YEAR;
+    days %= DAYS_PER_YEAR;
+    let year: i64 = four_centuries * GREGORIAN_CYCLE
+        + 1
+        + centuries * CENTURY
+        + four_years * LEAP_CYCLE
+        + years;
+    if years == LEAP_CYCLE || centuries == LEAP_CYCLE {
+        return (year - 1, MONTHS_PER_YEAR, DAYS_IN_MONTH[DECEMBER_INDEX]);
     }
-    let leap: bool = years == 3 && (four_years != 24 || centuries == 3);
-    let mut month: i64 = (days + 50) >> 5;
+    let leap: bool = years == LEAP_CYCLE - 1
+        && (four_years != CENTURY / LEAP_CYCLE - 1 || centuries == LEAP_CYCLE - 1);
+    let mut month: i64 = (days + ORDINAL_MONTH_BIAS) >> ORDINAL_MONTH_SHIFT;
     let month_index: usize = usize::try_from(month).unwrap_or(1);
-    let mut preceding: i64 = DAYS_BEFORE_MONTH[month_index] + i64::from(month > 2 && leap);
+    let mut preceding: i64 = DAYS_BEFORE_MONTH[month_index] + i64::from(month > FEBRUARY && leap);
     if preceding > days {
         month -= 1;
         preceding -= days_in_month(year, month);

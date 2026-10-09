@@ -647,16 +647,17 @@ def native_model_config_session(
                 (SqlHookEntry, NamedSqlHookEntry, PythonHookEntry),
             ),
             (inputs.effective_vars, UnicodeEnvironment()),
-            (inputs.effective_target_name, inputs.run_id),
-            None if target is None else (target.database, target.schema),
+            (
+                (inputs.effective_target_name, inputs.run_id),
+                None if target is None else (target.database, target.schema),
+            ),
             (_PYTHON_VERSION, unicodedata.unidata_version),
         ),
         validator=_native.NativeModelValidator(
             (names.models, names.seeds, names.sources, names.functions, names.table_functions),
             set(names.custom_materializations),
             inputs.microbatch_concurrency,
-            _PYTHON_VERSION,
-            unicodedata.unidata_version,
+            (_PYTHON_VERSION, unicodedata.unidata_version),
         ),
         inherited_storage={
             materialized: (

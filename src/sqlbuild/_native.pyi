@@ -171,10 +171,8 @@ class NativeConfigError:
     key: str | None
 
 def parse_model_header_metadata(
-    columns: object,
-    audits: object,
-    locations: dict[str, Any],
-    path: str,
+    header: tuple[object, object],
+    source: tuple[dict[str, Any], str],
     classes: dict[str, object],
 ) -> tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None]: ...
 def expand_config_templates(
@@ -191,8 +189,7 @@ class NativeModelConfigBuilder:
         self,
         layers: tuple[dict[str, object], dict[str, dict[str, object]], tuple[type, ...]],
         sources: tuple[dict[str, object], object],
-        run: tuple[str | None, str],
-        target_namespace: tuple[str | None, str | None] | None,
+        target: tuple[tuple[str | None, str], tuple[str | None, str | None] | None],
         python: tuple[tuple[int, int], str],
     ) -> None: ...
     def path_default(self, model_path: str) -> str | NativeConfigError | None: ...
@@ -215,14 +212,13 @@ class NativeModelValidator:
         names: tuple[set[str], set[str], set[str], set[str], set[str]],
         custom_materializations: set[str],
         microbatch_concurrency: bool,
-        python: tuple[int, int],
-        unicode_version: str,
+        python: tuple[tuple[int, int], str],
     ) -> None: ...
     def validate(
         self,
         values: dict[str, object],
         model: tuple[str, str, str],
-        facts: tuple[list[tuple[str, str, bool]], list[str] | None, bool, bool],
+        facts: tuple[list[tuple[str, str, bool]], Sequence[str] | None, bool, bool],
     ) -> int | NativeConfigError | None: ...
     def references(
         self, model: tuple[str, str], references: list[tuple[str, str, bool]]

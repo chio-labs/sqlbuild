@@ -209,3 +209,59 @@ pub const TRANSIENT_TABLE_TYPE: &str = "transient";
 
 /// The position of days among duration units.
 pub const DAY_UNIT_INDEX: usize = 2;
+
+/// The first and last years `datetime` accepts.
+pub(crate) const MIN_YEAR: i64 = 1;
+pub(crate) const MAX_YEAR: i64 = 9999;
+pub(crate) const MICROS_PER_SECOND: i64 = 1_000_000;
+pub(crate) const SECONDS_PER_MINUTE: i64 = 60;
+pub(crate) const SECONDS_PER_HOUR: i64 = 3_600;
+pub(crate) const HOURS_PER_DAY: i64 = 24;
+pub(crate) const MICROS_PER_DAY: i64 = 86_400 * MICROS_PER_SECOND;
+/// The largest valid hour, minute and second fields.
+pub(crate) const LAST_HOUR: i64 = HOURS_PER_DAY - 1;
+pub(crate) const LAST_MINUTE: i64 = SECONDS_PER_MINUTE - 1;
+pub(crate) const LAST_SECOND: i64 = SECONDS_PER_MINUTE - 1;
+pub(crate) const MONTHS_PER_YEAR: i64 = 12;
+pub(crate) const FEBRUARY: i64 = 2;
+pub(crate) const DECEMBER_INDEX: usize = 12;
+pub(crate) const DAYS_PER_WEEK: i64 = 7;
+pub(crate) const DAYS_PER_YEAR: i64 = 365;
+pub(crate) const DAYS_PER_4_YEARS: i64 = 1_461;
+pub(crate) const DAYS_PER_CENTURY: i64 = 36_524;
+pub(crate) const DAYS_PER_400_YEARS: i64 = 146_097;
+/// The Gregorian leap-year cycles in years.
+pub(crate) const LEAP_CYCLE: i64 = 4;
+pub(crate) const CENTURY: i64 = 100;
+pub(crate) const GREGORIAN_CYCLE: i64 = 400;
+/// `ord_to_ymd`'s month estimate `(days + 50) >> 5`.
+pub(crate) const ORDINAL_MONTH_BIAS: i64 = 50;
+pub(crate) const ORDINAL_MONTH_SHIFT: i64 = 5;
+/// Monday-based weekday numbers of the first day of a year with 53 ISO weeks.
+pub(crate) const WEDNESDAY: i64 = 2;
+pub(crate) const THURSDAY: i64 = 3;
+pub(crate) const LONG_YEAR_WEEKS: i64 = 53;
+/// Days before each month in a common year, indexed by month.
+pub(crate) const DAYS_BEFORE_MONTH: [i64; 13] =
+    [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+/// Days in each month of a common year, indexed by month.
+pub(crate) const DAYS_IN_MONTH: [i64; 13] = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+/// Multipliers that scale a fraction of 1-5 digits to microseconds.
+pub(crate) const FRACTION_CORRECTION: [i64; 5] = [100_000, 10_000, 1_000, 100, 10];
+pub(crate) const FRACTION_DIGITS: usize = 6;
+/// Hour, minute and second; the fraction follows them.
+pub(crate) const CLOCK_COMPONENTS: usize = 3;
+/// ISO date text lengths `_find_isoformat_datetime_separator` tests.
+pub(crate) const YEAR_DIGITS: usize = 4;
+pub(crate) const WEEK_DATE_MARK_INDEX: usize = 5;
+pub(crate) const BASIC_WEEK_DATE_LENGTH: usize = 7;
+pub(crate) const EXTENDED_WEEK_DATE_LENGTH: usize = 8;
+pub(crate) const EXTENDED_DATE_LENGTH: usize = 10;
+pub(crate) const EXTENDED_WEEK_DAY_LENGTH: usize = 10;
+/// CPython minor releases whose `fromisoformat` behaviour changed.
+pub(crate) const PYTHON_313: u8 = 13;
+pub(crate) const PYTHON_314: u8 = 14;
+/// The largest duration amount SQLBuild accepts: a signed 64-bit integer.
+pub(crate) const MAX_DURATION_AMOUNT: u128 = i64::MAX as u128;
+/// The MODEL header key of the retention override.
+pub(crate) const RETENTION_KEY: &str = "time_travel_retention";

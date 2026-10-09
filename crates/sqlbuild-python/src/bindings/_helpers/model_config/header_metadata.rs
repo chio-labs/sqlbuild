@@ -28,12 +28,13 @@ struct ContractClasses<'py> {
 #[pyfunction]
 fn parse_model_header_metadata<'py>(
     py: Python<'py>,
-    columns: Bound<'py, PyAny>,
-    audits: Bound<'py, PyAny>,
-    locations: Bound<'py, PyDict>,
-    path: &str,
+    header: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    source: (Bound<'py, PyDict>, String),
     classes: ContractClasses<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
+    let (columns, audits) = header;
+    let (locations, path) = source;
+    let path: &str = &path;
     let metadata = parse_header_metadata(&PyNode(columns), &PyNode(audits), path);
     let columns = match metadata.columns {
         Err(error) => {

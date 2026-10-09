@@ -52,10 +52,8 @@ pub(super) fn validation_outcome(
 }
 
 fn stop_text(stop: ValidationStop) -> String {
-    match stop {
-        ValidationStop::Error(error) => error.message,
-        ValidationStop::External(index) => format!("external {index}"),
-    }
+    stop.into_error()
+        .map_or_else(|index| format!("external {index}"), |error| error.message)
 }
 
 /// A list of strings.

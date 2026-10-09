@@ -330,15 +330,15 @@ fn valid_roles<N: AuthoredNode>(roles: &N) -> Option<Vec<&'static str>> {
     if items.is_empty() {
         return None;
     }
-    items
+    items.iter().map(input_role).collect()
+}
+
+/// The cursor input role `item` names, if it names one.
+fn input_role<N: AuthoredNode>(item: &N) -> Option<&'static str> {
+    CURSOR_INPUT_ROLES
         .iter()
-        .map(|item| {
-            CURSOR_INPUT_ROLES
-                .iter()
-                .copied()
-                .find(|role| item.is_text(role))
-        })
-        .collect()
+        .copied()
+        .find(|role| item.is_text(role))
 }
 
 /// The resolved batch limit and its action, as `_validate_model_microbatch_limit` returns them.

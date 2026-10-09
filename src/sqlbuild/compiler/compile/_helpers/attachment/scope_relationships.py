@@ -261,10 +261,7 @@ def _scanned_expected_names(
     stored: Sequence[tuple[tuple[str, ...], ...] | None],
     syntax: SqlLexicalSyntax,
 ) -> dict[tuple[int, int], _BlockNames]:
-    """Scan model-mode blocks of unstored files natively: their names or their error.
-
-    Blocks in other modes declare no expected models.
-    """
+    """Scan model-mode blocks of unstored files natively: their names or their error."""
 
     pending: list[tuple[int, int]] = []
     for file_index, test_file in enumerate(test_files):

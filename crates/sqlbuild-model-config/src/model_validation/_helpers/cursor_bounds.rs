@@ -6,10 +6,11 @@ use crate::model_validation::_helpers::config::ConfigView;
 use crate::model_validation::_helpers::config::model_header_help;
 use crate::model_validation::_helpers::decimals::{DecimalText, FiniteDecimal, decimal_text};
 use crate::model_validation::_helpers::isoformat::{
-    IsoDateTime, IsoError, datetime_fromisoformat, epoch_micros, local_micros, supported_micros,
+    IsoDateTime, datetime_fromisoformat, epoch_micros, local_micros, supported_micros,
     utc_isoformat,
 };
 use crate::model_validation::constants::{INTEGER_CURSOR, TIMESTAMP_CURSOR};
+use crate::model_validation::errors::IsoError;
 use crate::model_validation::models::ValidationStop;
 use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
@@ -118,9 +119,10 @@ pub(crate) fn bound_key<N: AuthoredNode>(
     } else {
         value.text()?
     };
-    datetime_fromisoformat(&text, config.python.minor_version())
-        .ok()
-        .map(|parsed| timestamp_key(&parsed))
+    match datetime_fromisoformat(&text, config.python.minor_version()) {
+        Ok(parsed) => Some(timestamp_key(&parsed)),
+        Err(IsoError::InvalidString | IsoError::Message(_)) => None,
+    }
 }
 
 /// Return whether `start < end` as Python compares the two `Decimal` keys.

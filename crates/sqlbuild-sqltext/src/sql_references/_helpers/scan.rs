@@ -199,8 +199,10 @@ fn authored_names(
     end: usize,
     syntax: &LexicalSyntax,
 ) -> Option<Vec<String>> {
-    split_arguments(text, start, end, syntax)
-        .ok()?
+    let Ok(arguments) = split_arguments(text, start, end, syntax) else {
+        return None;
+    };
+    arguments
         .iter()
         .map(|argument| {
             let bytes: &[u8] = argument.as_bytes();

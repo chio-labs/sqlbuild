@@ -14,6 +14,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     SQL_TRIPLE_QUOTE_LENGTH,
     SUPPORTED_SQL_LINE_COMMENT_PREFIXES,
 )
+from sqlbuild.compiler.sql_analysis.exceptions import UnsupportedLexicalSyntaxError
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ class SqlLexicalSyntax:
             self.line_comment_prefixes - SUPPORTED_SQL_LINE_COMMENT_PREFIXES
         )
         if unsupported:
-            raise ValueError(
+            raise UnsupportedLexicalSyntaxError(
                 f"SQL line comment prefixes {sorted(unsupported)} are not supported; SQLBuild "
                 f"scans only {sorted(SUPPORTED_SQL_LINE_COMMENT_PREFIXES)}"
             )

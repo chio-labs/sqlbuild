@@ -42,11 +42,11 @@ impl NativeModelValidator {
         names: ResourceNames,
         custom_materializations: HashSet<String>,
         microbatch_concurrency: bool,
-        python: (u8, u8),
-        unicode_version: &str,
+        python: ((u8, u8), String),
     ) -> PyResult<Self> {
+        let (python, unicode_version) = python;
         let (models, seeds, sources, functions, table_functions) = names;
-        let python = python_text(python, unicode_version).ok_or_else(|| {
+        let python = python_text(python, &unicode_version).ok_or_else(|| {
             PyValueError::new_err(format!(
                 "no Python string semantics for Python {}.{} with Unicode {unicode_version}",
                 python.0, python.1
@@ -140,9 +140,9 @@ impl NativeModelValidator {
 }
 
 fn stop_object(py: Python<'_>, stop: ValidationStop) -> PyResult<Py<PyAny>> {
-    match stop {
-        ValidationStop::External(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
-        ValidationStop::Error(error) => Ok(native_config_error(py, error)?.into_any()),
+    match stop.into_error() {
+        Err(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
+        Ok(error) => Ok(native_config_error(py, error)?.into_any()),
     }
 }
 

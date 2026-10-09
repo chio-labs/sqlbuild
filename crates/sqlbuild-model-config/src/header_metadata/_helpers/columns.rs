@@ -98,9 +98,14 @@ fn column<N: AuthoredNode>(
 fn unknown_keys<N: AuthoredNode>(entries: &[(N, N)]) -> Vec<String> {
     let mut unknown: Vec<String> = entries
         .iter()
-        .filter(|(key, _)| !MODEL_COLUMN_KEYS.iter().any(|name| key.is_text(name)))
+        .filter(|(key, _)| !is_model_column_key(key))
         .map(|(key, _)| key.python_str())
         .collect();
     unknown.sort_unstable();
     unknown
+}
+
+/// Whether `key` is one of `MODEL_COLUMN_KEYS`.
+fn is_model_column_key<N: AuthoredNode>(key: &N) -> bool {
+    MODEL_COLUMN_KEYS.iter().any(|name| key.is_text(name))
 }
