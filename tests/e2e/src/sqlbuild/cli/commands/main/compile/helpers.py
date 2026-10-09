@@ -16,6 +16,7 @@ import sys
 import time
 import zipfile
 from bisect import bisect_left
+from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
@@ -91,6 +92,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
 from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_BRIDGE_PROJECT_FILES,
     MACRO_CALL_LOG_ENV_VAR,
+)
+from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
+    NativeContractOutcome,
+    NativeContractRequest,
+    native_contract_statuses,
 )
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -4931,30 +4937,40 @@ def engine_in_process_compile(
     return run, seams
 
 
+class NativeTypeAnswers(NamedTuple):
+    """What the native type system answered in one compile: each Python-side normalization,
+    contract results that compared at least one typed column, and contract handbacks."""
+
+    normalized: list[bool]
+    typed_comparisons: int
+    handbacks: int
+
+
 def type_system_engine_compile(
     *,
     project_dir: Path,
     engine: str,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-) -> tuple[CompileReuseRun, list[bool]]:
-    """Compile in this process under `engine`; return the run and whether each native type
-    answer, a normalization or a native contract comparison, was given."""
+) -> tuple[CompileReuseRun, NativeTypeAnswers]:
+    """Compile in this process under `engine`; return the run and what native types answered."""
 
-    answered: list[bool] = []
+    normalized: list[bool] = []
+    contract_statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
-    evaluate_contracts: Callable[..., list[tuple[str | None, list[Any]]]] = (
+    evaluate_contracts: Callable[..., list[NativeContractOutcome]] = (
         native_module.evaluate_native_model_contracts
     )
 
     def recorded(type_sql: str, dialect: str) -> object:
         result: object = normalize(type_sql, dialect)
-        answered.append(result is not None)
+        normalized.append(result is not None)
         return result
 
-    def recorded_contracts(request: Any) -> list[tuple[str | None, list[Any]]]:
-        outcomes: list[tuple[str | None, list[Any]]] = evaluate_contracts(request)
-        answered.extend(deferral is None for deferral, _ in outcomes)
+    def recorded_contracts(request: NativeContractRequest) -> list[NativeContractOutcome]:
+        outcomes: list[NativeContractOutcome] = evaluate_contracts(request)
+        contract_statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
+        contract_statuses["handbacks"] += sum(deferral is not None for deferral, _ in outcomes)
         return outcomes
 
     type_normalization.normalize_type.cache_clear()
@@ -4965,7 +4981,11 @@ def type_system_engine_compile(
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
-    return run, answered
+    return run, NativeTypeAnswers(
+        normalized=normalized,
+        typed_comparisons=contract_statuses["typed_comparisons"],
+        handbacks=contract_statuses["handbacks"],
+    )
 
 
 def lifecycle_error_type(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> str:

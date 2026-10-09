@@ -16,6 +16,7 @@ from tests.integration.src.sqlbuild.compiler.contracts._test_types import (
     GeneratedPromotionParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
+    NativeContractRecord,
     compiled_contract_project,
     contract_views,
     deferral_records,
@@ -37,8 +38,9 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
             seed=20261009,
             variants=60,
             dialects=(None, "duckdb", "postgres", "snowflake", "bigquery", "databricks", "tsql"),
-            expected_minimum_native=1500,
-            expected_minimum_diagnostics=1500,
+            expected_minimum_native=800,
+            expected_minimum_typed_comparisons=300,
+            expected_minimum_diagnostics=2000,
             expected_codes=frozenset({"K001", "K002", "K003", "K004", "K005", "K006", "K011"}),
         )
     ],
@@ -50,12 +52,11 @@ def test_given_generated_contracts_when_validating_natively_then_diagnostics_mat
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
-    statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
+    record: NativeContractRecord = record_native_outcomes(monkeypatch=monkeypatch)
     base: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
     labels: list[object] = []
     python_views: list[object] = []
     native_views: list[object] = []
-    native_codes: set[str] = set()
     for variant in range(test_case.variants):
         project: CompiledProject = perturbed_project(project=base, rng=rng)
         for dialect in test_case.dialects:
@@ -65,12 +66,12 @@ def test_given_generated_contracts_when_validating_natively_then_diagnostics_mat
             labels.append((variant, dialect))
             python_views.append(python)
             native_views.append(native)
-            native_codes.update(diagnostic.code for diagnostic in native)
 
     assert mismatches(inputs=labels, expected=python_views, actual=native_views) == []
-    assert statuses["native"] >= test_case.expected_minimum_native
-    assert statuses["native_diagnostics"] >= test_case.expected_minimum_diagnostics
-    assert native_codes >= test_case.expected_codes
+    assert record.statuses["native"] >= test_case.expected_minimum_native
+    assert record.statuses["typed_comparisons"] >= test_case.expected_minimum_typed_comparisons
+    assert record.statuses["native_diagnostics"] >= test_case.expected_minimum_diagnostics
+    assert set(record.codes) >= test_case.expected_codes
 
 
 @pytest.mark.parametrize(
@@ -140,7 +141,7 @@ def test_given_input_native_cannot_answer_when_validating_then_python_answers_an
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     record_dir: Path = tmp_path / "records"
-    statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
+    record: NativeContractRecord = record_native_outcomes(monkeypatch=monkeypatch)
     project: CompiledProject = with_declared_type(
         project=compiled_contract_project(project_dir=tmp_path / "project"),
         declared_type=test_case.declared_type,
@@ -152,7 +153,7 @@ def test_given_input_native_cannot_answer_when_validating_then_python_answers_an
     )
 
     assert native == python
-    assert statuses[test_case.expected_kind] == test_case.expected_deferred_models
+    assert record.statuses[test_case.expected_kind] == test_case.expected_deferred_models
     assert (
         deferral_records(record_dir)
         == [{"kind": test_case.expected_kind, "site": "contracts/columns.py"}]

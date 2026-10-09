@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
+    NativeTypeAnswers,
     report_without_engine,
     type_system_engine_compile,
 )
@@ -44,6 +45,9 @@ _ORDER_TOTALS_MODEL: str = """MODEL (
 
 SELECT order_id, amount AS total FROM __ref("orders")
 """
+_NO_NATIVE_ANSWERS: NativeTypeAnswers = NativeTypeAnswers(
+    normalized=[], typed_comparisons=0, handbacks=0
+)
 _IMMEDIATE_PROMOTION_TOML: str = (
     _PROJECT_TOML + '\n[settings]\ntable_promotion_mode = "immediate"\n'
 )
@@ -150,7 +154,7 @@ def test_given_contract_types_when_compiling_with_each_engine_then_reports_match
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    outcomes: dict[str, tuple[CompileReuseRun, list[bool]]] = {
+    outcomes: dict[str, tuple[CompileReuseRun, NativeTypeAnswers]] = {
         engine: type_system_engine_compile(
             project_dir=prepare_inline_project(
                 tmp_path=tmp_path, project_name=engine, repo_files=test_case.project_files
@@ -172,7 +176,8 @@ def test_given_contract_types_when_compiling_with_each_engine_then_reports_match
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)
     assert (native_run.compiled, preview_run.compiled) == (python_run.compiled,) * 2
-    assert (python_answers, native_answers, any(preview_answers)) == ([], [], True)
+    assert (python_answers, native_answers) == (_NO_NATIVE_ANSWERS, _NO_NATIVE_ANSWERS)
+    assert (preview_answers.typed_comparisons >= 1, preview_answers.handbacks) == (True, 0)
 
 
 if __name__ == "__main__":

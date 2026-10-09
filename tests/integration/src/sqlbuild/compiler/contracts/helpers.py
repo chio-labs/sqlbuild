@@ -9,7 +9,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -166,6 +166,9 @@ _PROMOTION_MODES: tuple[str | None, ...] = (None, "immediate", "staged", "IMMEDI
 _SETTINGS_FILES: tuple[str, ...] = ("sqlbuild_project.toml", "sqlbuild_local.toml")
 
 type ContractView = tuple[CompilerDiagnostic, ...]
+type NativeContractRequest = tuple[str, bool, list[Any]]
+type NativeContractOutcome = tuple[str | None, list[Any]]
+_EMPTY_SCHEMA_ROW: tuple[list[Any], list[Any], bool, bool] = ([], [], False, False)
 
 
 def compiled_contract_project(*, project_dir: Path) -> CompiledProject:
@@ -337,24 +340,94 @@ def _on_engine(
     return run()
 
 
-def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count native contract outcomes (`native` or the deferral kind) for the rest of the test."""
+class NativeContractRecord(NamedTuple):
+    """Native contract outcomes: `native` (evaluated natively), `typed_comparisons`, handback
+    kinds and `native_diagnostics` in `statuses`; codes of natively built diagnostics in `codes`."""
 
-    statuses: Counter[str] = Counter()
-    evaluate: Callable[..., Sequence[tuple[str | None, list[Any]]]] = (
+    statuses: Counter[str]
+    codes: Counter[str]
+
+
+def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContractRecord:
+    """Record native contract outcomes for the rest of the test."""
+
+    record: NativeContractRecord = NativeContractRecord(statuses=Counter(), codes=Counter())
+    evaluate: Callable[..., list[NativeContractOutcome]] = (
         native_module.evaluate_native_model_contracts
     )
 
-    def counted(*arguments: Any) -> Sequence[tuple[str | None, list[Any]]]:
-        outcomes: Sequence[tuple[str | None, list[Any]]] = evaluate(*arguments)
-        statuses.update(
-            [("native", str(deferral))[deferral is not None] for deferral, _ in outcomes]
+    def counted(request: NativeContractRequest) -> list[NativeContractOutcome]:
+        outcomes: list[NativeContractOutcome] = evaluate(request)
+        record.statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
+        answered: list[NativeContractOutcome] = list(filter(_answered, outcomes))
+        rows: Iterator[Sequence[Any]] = itertools.chain.from_iterable(
+            diagnostics for _, diagnostics in answered
         )
-        statuses["native_diagnostics"] += sum(len(rows) for _, rows in outcomes)
+        record.codes.update(row[0] for row in rows)
         return outcomes
 
     monkeypatch.setattr(native_module, "evaluate_native_model_contracts", counted)
+    return record
+
+
+def native_contract_statuses(
+    *, request: NativeContractRequest, outcomes: list[NativeContractOutcome]
+) -> Counter[str]:
+    """Per-request counts: `native` for models native evaluated, `typed_comparisons` for those
+    that compared at least one typed column, each handback kind, and `native_diagnostics`."""
+
+    _, implicit, models = request
+    pairs: list[tuple[Sequence[Any], NativeContractOutcome]] = list(
+        zip(models, outcomes, strict=True)
+    )
+    answered: list[tuple[Sequence[Any], NativeContractOutcome]] = list(
+        filter(lambda pair: _answered(pair[1]), pairs)
+    )
+    evaluated: list[Sequence[Any]] = list(
+        filter(
+            lambda model: _requires_evaluation(model=model, implicit=implicit),
+            (model for model, _ in answered),
+        )
+    )
+    statuses: Counter[str] = Counter(
+        str(deferral) for deferral, _ in filter(lambda outcome: not _answered(outcome), outcomes)
+    )
+    statuses["native"] += len(evaluated)
+    statuses["typed_comparisons"] += sum(
+        _compares_typed_column(model=model, implicit=implicit) for model in evaluated
+    )
+    statuses["native_diagnostics"] += sum(len(diagnostics) for _, (_, diagnostics) in answered)
     return statuses
+
+
+def _answered(outcome: NativeContractOutcome) -> bool:
+    return outcome[0] is None
+
+
+def _schema(model: Sequence[Any]) -> Sequence[Any]:
+    return (_EMPTY_SCHEMA_ROW, model[2])[model[2] is not None]
+
+
+def _shape_validation_active(*, model: Sequence[Any], implicit: bool) -> bool:
+    contract: str | None = model[1]
+    return contract == "enforced" or (contract != "none" and implicit and bool(_schema(model)[0]))
+
+
+def _requires_evaluation(*, model: Sequence[Any], implicit: bool) -> bool:
+    return _shape_validation_active(model=model, implicit=implicit) or bool(_schema(model)[2])
+
+
+def _compares_typed_column(*, model: Sequence[Any], implicit: bool) -> bool:
+    inferred_types: dict[str, str | None] = {
+        name: inferred_type for name, inferred_type, _ in (model[3] or ())
+    }
+    return (
+        any(
+            declared_type is not None and inferred_types.get(name) is not None
+            for name, declared_type, _, _ in _schema(model)[0]
+        )
+        and model[3] is not None
+    )
 
 
 def record_native_promotion_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:

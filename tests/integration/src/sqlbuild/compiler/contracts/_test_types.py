@@ -14,6 +14,7 @@ class GeneratedContractParityTestCase:
     variants: int
     dialects: tuple[str | None, ...]
     expected_minimum_native: int
+    expected_minimum_typed_comparisons: int
     expected_minimum_diagnostics: int
     expected_codes: frozenset[str]
 
