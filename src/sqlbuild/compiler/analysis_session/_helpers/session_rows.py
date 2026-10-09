@@ -134,28 +134,12 @@ def deferred_row(*, model: int, analysis: PolyglotAnalysisResult) -> DeferredRow
 
 
 def inferred_columns(rows: list[ColumnRow] | None) -> tuple[InferredColumn, ...] | None:
-    return shared_inferred_columns(rows=rows, shared={})
-
-
-def shared_inferred_columns(
-    *, rows: list[ColumnRow] | None, shared: dict[ColumnRow, InferredColumn]
-) -> tuple[InferredColumn, ...] | None:
-    """Columns as Python's analysis shares them: one object per distinct column value."""
-
     if rows is None:
         return None
-    return tuple(_shared_column(row=row, shared=shared) for row in rows)
-
-
-def _shared_column(*, row: ColumnRow, shared: dict[ColumnRow, InferredColumn]) -> InferredColumn:
-    column: InferredColumn | None = shared.get(row)
-    if column is None:
-        name, data_type, nullability = row
-        column = InferredColumn(
-            name=name, type=data_type, nullability=InferredNullability(nullability)
-        )
-        shared[row] = column
-    return column
+    return tuple(
+        InferredColumn(name=name, type=data_type, nullability=InferredNullability(nullability))
+        for name, data_type, nullability in rows
+    )
 
 
 def binding_diagnostics(rows: list[DiagnosticRow]) -> tuple[SqlBindingDiagnostic, ...]:

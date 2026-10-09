@@ -15,7 +15,6 @@ from sqlbuild.compiler.analysis_session._helpers.session_rows import (
     contract_proof,
     deferred_row,
     lineage_facts,
-    shared_inferred_columns,
 )
 from sqlbuild.compiler.analysis_session.constants import (
     CONTRACT_DEFERRED,
@@ -179,6 +178,23 @@ class NativeModelAnalysis:
             },
         )
 
+    def _inferred_columns(self, rows: list[ColumnRow] | None) -> tuple[InferredColumn, ...] | None:
+        """Columns as Python's analysis shares them: one object per distinct column value."""
+
+        if rows is None:
+            return None
+        return tuple(map(self._inferred_column, rows))
+
+    def _inferred_column(self, row: ColumnRow) -> InferredColumn:
+        column: InferredColumn | None = self._columns.get(row)
+        if column is None:
+            name, data_type, nullability = row
+            column = InferredColumn(
+                name=name, type=data_type, nullability=InferredNullability(nullability)
+            )
+            self._columns[row] = column
+        return column
+
     def _model_analysis(
         self,
         *,
@@ -208,7 +224,7 @@ class NativeModelAnalysis:
         return ModelSqlAnalysis(
             polyglot_analysis=PolyglotAnalysisResult(
                 analysis_succeeded=succeeded,
-                columns=shared_inferred_columns(rows=columns, shared=self._columns),
+                columns=self._inferred_columns(columns),
                 lineage_columns=lineage,
                 has_star=has_star,
                 star_resolved=star_resolved,
