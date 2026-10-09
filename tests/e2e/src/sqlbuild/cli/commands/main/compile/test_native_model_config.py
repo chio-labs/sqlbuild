@@ -1,4 +1,4 @@
-"""Native model config in the preview engine compiles exactly as the Python engine does."""
+"""Native model config in the default engine compiles exactly as the Python engine does."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ _TARGET_SCHEMA: tuple[str, str] = (
             project_files={"models/marts/order_quality.sql": _ORDER_QUALITY_MODEL},
             project_config_replacements=(_TARGET_SCHEMA,),
             environment={"SQB_TARGET_SCHEMA": "analytics"},
-            engines=("python", "native-preview"),
+            engines=("python", "native"),
             expected_exit_codes=(0, 0),
             expected_report_text="order_quality",
         ),
@@ -89,14 +89,14 @@ _TARGET_SCHEMA: tuple[str, str] = (
             project_files={"models/marts/order_quality.sql": _INVALID_SEVERITY_MODEL},
             project_config_replacements=(),
             environment={},
-            engines=("python", "native-preview"),
+            engines=("python", "native"),
             expected_exit_codes=(1, 1),
             expected_report_text="severity",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_authored_model_config_when_compiling_with_preview_then_output_matches_python(
+def test_given_authored_model_config_when_compiling_natively_then_output_matches_python(
     test_case: NativeModelConfigParityTestCase, tmp_path: Path
 ) -> None:
     prepared_project: Path = tmp_path / "orders"

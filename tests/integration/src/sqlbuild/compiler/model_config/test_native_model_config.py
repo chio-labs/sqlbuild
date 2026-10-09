@@ -161,11 +161,11 @@ def test_given_generated_templates_when_expanding_then_native_matches_python_or_
             },
         ),
         ModelConfigTierTestCase(
-            description="shipped native stages only",
+            description="shipped native stages",
             engine="native",
             expected_native_calls={
-                "parse_model_header_metadata": 0,
-                "expand_config_templates": 0,
+                "parse_model_header_metadata": 1,
+                "expand_config_templates": 1,
                 "config_contains_template": 0,
                 "config_contains_macro_call": 0,
             },
@@ -183,7 +183,7 @@ def test_given_generated_templates_when_expanding_then_native_matches_python_or_
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_tier_when_building_model_inputs_then_native_config_runs_only_in_preview(
+def test_given_engine_tier_when_building_model_inputs_then_native_config_runs_only_in_native_engines(
     test_case: ModelConfigTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls, config = model_config_engine_outcome(

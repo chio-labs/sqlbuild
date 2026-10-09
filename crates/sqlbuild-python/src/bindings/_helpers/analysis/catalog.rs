@@ -23,7 +23,7 @@ impl ProjectCatalog {
         sql: &str,
         #[pyo3(from_py_with = conversions::columns)] columns: validation::Columns,
         #[pyo3(from_py_with = conversions::relations)] inputs: Relations,
-    ) -> PyResult<HashMap<String, Option<String>>> {
+    ) -> PyResult<Vec<(String, Option<String>)>> {
         py.compiler_detach(|| self.inner.inferred_schema(sql, columns, inputs))
             .map_err(compiler_error)
     }

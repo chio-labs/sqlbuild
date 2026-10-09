@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import cast
 
 import orjson
 
+from sqlbuild.compiler.compile._helpers.analysis.ctes import (
+    extract_top_level_ctes_with_sql_analysis,
+)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
     find_nested_macro_call_names,
@@ -19,11 +22,13 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_sql_test_expected_model_names,
     extract_unclassified_sql_test_ctes,
 )
+from sqlbuild.compiler.compile._helpers.sql_tests.native import native_sql_test_ctes
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import (
     MACRO_ACTUAL_TEST_CTE_NAME,
     SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
     ScopeRelationshipBuild,
@@ -57,6 +62,8 @@ from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 type _SharedDeclarations = dict[tuple[str, str], tuple[DeclarationRecord, ...]]
 type _BlockNames = tuple[str, ...] | Exception
+
+_SQL_TEST_CONTEXT: str = "SQL test"
 
 
 def build_scope_relationship_grants(
@@ -105,8 +112,21 @@ def extract_scope_relationship_facts(
         syntax=sql_lexical_syntax,
         scan_natively=True,
     )
+    macro_blocks: list[tuple[str, str]] = []
+    for test_file in discovered_inputs.test_files:
+        macro_blocks.extend(
+            (block.sql_body, str(test_file.relative_path))
+            for block in test_file.blocks
+            if block.mode is SqlTestMode.MACRO
+        )
+    macro_test_ctes: Iterator[tuple[tuple[str, str], ...] | str | None] = iter(
+        native_sql_test_ctes(texts=macro_blocks, syntax=sql_lexical_syntax)
+    )
     for test_file, file_names in zip(discovered_inputs.test_files, names_by_file, strict=True):
         for block, block_names in zip(test_file.blocks, file_names, strict=True):
+            native_ctes: tuple[tuple[str, str], ...] | str | None = (
+                next(macro_test_ctes) if block.mode is SqlTestMode.MACRO else None
+            )
             try:
                 expected_names: tuple[str, ...] = _names_or_raise(block_names)
                 called_macros: tuple[str, ...] = find_nested_macro_call_names(block.sql_body)
@@ -118,7 +138,8 @@ def extract_scope_relationship_facts(
                         expected_models=expected_names,
                         called_macros=called_macros,
                         tested_macros=(
-                            _tested_macro_names(
+                            _natively_tested_macro_names(
+                                native_ctes=native_ctes,
                                 sql=block.sql_body,
                                 file_label=str(test_file.relative_path),
                                 syntax=sql_lexical_syntax,
@@ -130,11 +151,18 @@ def extract_scope_relationship_facts(
                 )
             except Exception as error:
                 faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
-    scenario_names: list[tuple[str, ...] | None] = native_expected_model_names(
-        sqls=[scenario.sql_body for scenario in discovered_inputs.scenario_files],
+    scenario_names: list[tuple[str, ...] | str | None] = native_expected_model_names(
+        texts=[
+            (scenario.sql_body, str(scenario.relative_path))
+            for scenario in discovered_inputs.scenario_files
+        ],
+        scenario=True,
         syntax=sql_lexical_syntax,
     )
     for scenario, scanned in zip(discovered_inputs.scenario_files, scenario_names, strict=True):
+        if isinstance(scanned, str):
+            faults.append(ScopeRelationshipFault(scenario.relative_path, scanned))
+            continue
         try:
             facts.append(
                 RelationshipFact(
@@ -171,7 +199,7 @@ def _expected_names_by_file(
         )
         for test_file in test_files
     ]
-    scanned: dict[tuple[int, int], tuple[str, ...]] = (
+    scanned: dict[tuple[int, int], _BlockNames] = (
         _scanned_expected_names(test_files=test_files, stored=stored, syntax=syntax)
         if scan_natively
         else {}
@@ -184,7 +212,7 @@ def _expected_names_by_file(
             continue
         file_names: list[_BlockNames] = []
         for block_index, block in enumerate(test_file.blocks):
-            native_names: tuple[str, ...] | None = scanned.get((file_index, block_index))
+            native_names: _BlockNames | None = scanned.get((file_index, block_index))
             if native_names is not None:
                 file_names.append(native_names)
                 continue
@@ -252,8 +280,8 @@ def _scanned_expected_names(
     test_files: Sequence[DiscoveredSqlTestFile],
     stored: Sequence[tuple[tuple[str, ...], ...] | None],
     syntax: SqlLexicalSyntax,
-) -> dict[tuple[int, int], tuple[str, ...]]:
-    """Scan model-mode blocks of unstored files natively, keeping only names the scan reproduces."""
+) -> dict[tuple[int, int], _BlockNames]:
+    """Scan model-mode blocks of unstored files natively: names or Python's error, where exact."""
 
     pending: list[tuple[int, int]] = []
     for file_index, test_file in enumerate(test_files):
@@ -264,18 +292,50 @@ def _scanned_expected_names(
             for block_index, block in enumerate(test_file.blocks)
             if block.mode is SqlTestMode.MODEL
         )
-    scanned: list[tuple[str, ...] | None] = native_expected_model_names(
-        sqls=[
-            test_files[file_index].blocks[block_index].sql_body
+    scanned: list[tuple[str, ...] | str | None] = native_expected_model_names(
+        texts=[
+            (
+                test_files[file_index].blocks[block_index].sql_body,
+                str(test_files[file_index].relative_path),
+            )
             for file_index, block_index in pending
         ],
+        scenario=False,
         syntax=syntax,
     )
     return {
-        position: names
+        position: CompileInputError(names, bridge_independent=True)
+        if isinstance(names, str)
+        else names
         for position, names in zip(pending, scanned, strict=True)
         if names is not None
     }
+
+
+def _natively_tested_macro_names(
+    *,
+    native_ctes: tuple[tuple[str, str], ...] | str | None,
+    sql: str,
+    file_label: str,
+    syntax: SqlLexicalSyntax,
+) -> tuple[str, ...]:
+    """Macros a macro test's actual CTE calls, scanned natively where Python's scanner is exact."""
+
+    if native_ctes is None:
+        return _tested_macro_names(sql=sql, file_label=file_label, syntax=syntax)
+    if isinstance(native_ctes, str):
+        polyglot_ctes: tuple[tuple[str, str], ...] | None = (
+            extract_top_level_ctes_with_sql_analysis(
+                sql=sql, file_label=file_label, context_label=_SQL_TEST_CONTEXT
+            )
+        )
+        if polyglot_ctes is None:
+            raise CompileInputError(native_ctes, bridge_independent=True)
+        native_ctes = polyglot_ctes
+    actual_sql: str | None = next(
+        (body for name, body in native_ctes if name == MACRO_ACTUAL_TEST_CTE_NAME), None
+    )
+    return () if actual_sql is None else find_macro_call_names(actual_sql)
 
 
 def _tested_macro_names(*, sql: str, file_label: str, syntax: SqlLexicalSyntax) -> tuple[str, ...]:

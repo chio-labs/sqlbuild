@@ -732,6 +732,18 @@ class BrokenEditInvalidationTestCase:
 
 
 @dataclass(frozen=True)
+class StoredMacroModuleEditTestCase:
+    """An outside module behind a stored macro call, edited after a compile that reused the call."""
+
+    description: str
+    engine: str
+    import_name: str
+    module_files: dict[str, str]
+    edited_files: dict[str, str]
+    expected_compiled_value: str
+
+
+@dataclass(frozen=True)
 class ExternalModuleEditTestCase:
     """An outside module a macro imports while rendering, rewritten in place after a compile."""
 
@@ -790,6 +802,18 @@ class CompilerEngineParityTestCase:
     right_engine: str
     expected_engines: tuple[str, str]
     expected_exit_codes: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class DefaultEngineParityTestCase:
+    """The Python oracle and the unset default compiling copies of one project, with stores."""
+
+    description: str
+    oracle_engine: str
+    default_engine: str
+    expected_engines: tuple[str, str]
+    expected_exit_codes: tuple[int, int]
+    expected_macro_call_stores: tuple[tuple[str, ...], tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -920,6 +944,35 @@ class ReferenceScanErrorTestCase:
 
 
 @dataclass(frozen=True)
+class NativeMacroErrorTestCase:
+    """A failing macro project every engine must report identically, running each call once."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_report_text: str
+    expected_macro_runs: list[str]
+
+
+@dataclass(frozen=True)
+class UnkeyableMacroCallTestCase:
+    """Compile arguments whose values no store key can hold; every engine must match Python."""
+
+    description: str
+    project_files: dict[str, str]
+    compile_args: tuple[str, ...]
+    expected_returncodes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MacroErrorLifecycleTestCase:
+    """A failing macro project whose invocation lifecycle every engine reports the same way."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_error_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class NativeConfigErrorTestCase:
     """A failing project whose model config error both engines must report the same way."""
 
@@ -932,7 +985,7 @@ class NativeConfigErrorTestCase:
 
 @dataclass(frozen=True)
 class MacroExpandedValidatorErrorTestCase:
-    """A validator error from macro-expanded SQL that the preview bridge must re-run."""
+    """A validator error from macro-expanded SQL that every engine reports, running macros once."""
 
     description: str
     project_files: dict[str, str]

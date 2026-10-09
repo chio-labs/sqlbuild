@@ -225,7 +225,10 @@ SQLBuild relies on this contract to reuse macro results:
 - [Compile reuse](../cli/compile.md) replays an unchanged compile without running macros again.
 - A compile may run each distinct macro call once and reuse its result for identical calls
   elsewhere in the project.
-- Macro call results may be kept between compiles under `target/cache/`. They are recomputed when
+- A compile that fails stops at its first error. It does not run the project's macros a second
+  time to report that error.
+- Macro call results are kept between compiles under `target/cache/` by default, so editing a
+  model does not run its unchanged macro calls again. They are recomputed when
   macro or other Python files, configuration, declarations, seeds, sources, variables, the target,
   the adapter, the installed packages, or the SQLBuild version change. Editing only model SQL keeps
   them, and a changed call is always run again. Only the first compile in a process uses and saves

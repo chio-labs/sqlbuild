@@ -14,6 +14,8 @@ _STAGING_ENUM: str = "ENUM (name staged_status, members [PLACED]);\n"
 _MART_HEADER: str = 'MODEL (\n  description "Order totals per customer",\n);\n\n'
 _STAGING_HEADER: str = 'MODEL (\n  description "Staged orders",\n);\n\n'
 _TEST_PATH: str = "tests/unit/test_customer_totals.sql"
+_SCOPE_SCENARIO_PATH: str = "tests/scenarios/orders.sql"
+_SCENARIO_HEADER: str = 'SCENARIO (\n  description "Order flow"\n);\n\n'
 
 
 _GLOBAL_MACRO_PATH: str = "macros/amounts.py"
@@ -104,6 +106,31 @@ def scope_failure_cases() -> tuple[FailureCase, ...]:
                 _TEST_PATH: 'TEST (name "totals_by_customer");\n\nWITH\n'
                 "__ref__stg_orders AS (\n  SELECT 10 AS customer_id\n),\n"
                 "__expected__ AS (\n  SELECT 10 AS customer_id\n)\nSELECT 1\n",
+            },
+        ),
+        _case(
+            name="scope-scenario-expected-without-target",
+            expected_code="P001",
+            expected_message=(
+                f"SQL scenario '{_SCOPE_SCENARIO_PATH}' must use __expected__<model> to identify "
+                "a target"
+            ),
+            files={
+                _STAGING_ENUM_PATH: _STAGING_ENUM,
+                _SCOPE_SCENARIO_PATH: _SCENARIO_HEADER
+                + "WITH\n__source__raw_orders AS (SELECT 1 AS order_id),\n"
+                "__expected__ AS (SELECT 1)\n",
+            },
+        ),
+        _case(
+            name="scope-macro-test-cte-without-body",
+            expected_code="P001",
+            expected_message=f"SQL test '{_TEST_PATH}' CTE '__macro_actual__' must use AS (...)",
+            files={
+                _STAGING_ENUM_PATH: _STAGING_ENUM,
+                "macros/amounts.py": "def doubled(value):\n    return f'{value} * 2'\n",
+                _TEST_PATH: 'TEST (mode macro, name "doubled");\n\nWITH\n'
+                "__macro_actual__ AS SELECT @doubled('1') AS amount\n",
             },
         ),
     )
