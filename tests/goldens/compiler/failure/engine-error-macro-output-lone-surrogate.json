@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro '@cents' in '<project>/models/marts/customer_totals.sql' returned text with the lone surrogate '\\udcff', which is not valid Unicode",
+     "help": "Return valid Unicode text from the macro; lone surrogates usually come from bytes decoded with errors='surrogateescape'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}
