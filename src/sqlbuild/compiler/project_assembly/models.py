@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    DynamicColumnContractProof,
+)
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -17,3 +21,19 @@ class NativeProjectResources:
     seed_destinations: tuple[CompiledRelationLocation, ...]
     function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NativeModelFacts:
+    """One model's native facts; each None where Python derives it."""
+
+    deps: tuple[CompiledObjectKey, ...] | None
+    dynamic_contract: DynamicColumnContractProof | None
+
+
+@dataclass(frozen=True, slots=True)
+class NativeProjectFacts:
+    """Every model's native facts, and the resource facts unless Python must assemble them."""
+
+    models: tuple[NativeModelFacts, ...]
+    resources: NativeProjectResources | None

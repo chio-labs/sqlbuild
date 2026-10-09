@@ -73,3 +73,10 @@ pub(crate) struct EnvironmentTestCase {
     pub(crate) expected_schema: Option<&'static str>,
     pub(crate) expected_reads: Vec<InputRead>,
 }
+
+pub(crate) struct SyntaxBatchTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sqls: &'static [&'static str],
+    /// None where native defers to Python.
+    pub(crate) expected_valid: Option<bool>,
+}

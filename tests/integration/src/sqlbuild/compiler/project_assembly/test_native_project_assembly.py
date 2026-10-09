@@ -19,6 +19,7 @@ from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import
     AssemblyDeferralTestCase,
     DeferredAssemblyTestCase,
     GeneratedAssemblyParityTestCase,
+    OptOutTestCase,
     WindowsEnvironmentTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
@@ -29,6 +30,7 @@ from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
     project_inputs,
     python_resource_calls,
     recorded_assembly,
+    rejected_opt_outs,
     seed_yml,
     windows_environ,
 )
@@ -37,6 +39,11 @@ _PROJECT_TOML: str = (
     'name = "assembly"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'
 )
 _ORDERS_MODEL: str = 'MODEL (description "Orders");\n\nSELECT 1 AS n\n'
+_REQUIRED_ANALYSIS_TOML: str = (
+    'name = "assembly"\nadapter = "duckdb"\n\n'
+    '[connection]\ndatabase = ":memory:"\n\n[settings]\nrequire_sql_analysis = true\n'
+)
+_OPT_OUT_HEADER: str = 'MODEL (\n  description "Orders",\n  sql_analysis false,\n'
 _SEED_FILES: dict[str, str] = {
     "seeds/countries.csv": "n\n1\n",
     "models/orders.sql": _ORDERS_MODEL,
@@ -260,4 +267,48 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
 
     assert python.seeds[0].destination.schema == test_case.expected_schema
     assert assembly_view(native) == assembly_view(python)
+    assert assembly_deferrals(record_dir) == Counter()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OptOutTestCase(
+            description="parseable, unparseable and unparseable-hook opt-outs",
+            models={
+                "models/parses.sql": f"{_OPT_OUT_HEADER});\n\nSELECT 1 AS n\n",
+                "models/broken_query.sql": f"{_OPT_OUT_HEADER});\n\nSELECT FROM WHERE (\n",
+                "models/broken_hook.sql": (
+                    f'{_OPT_OUT_HEADER}  post_hooks [inline_sql("SELECT FROM (")],\n);\n\n'
+                    "SELECT 1 AS n\n"
+                ),
+            },
+            expected_rejected={"broken_hook": False, "broken_query": False, "parses": True},
+            expected_python_validations=7,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejections_match(
+    test_case: OptOutTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    files: dict[str, str] = {"sqlbuild_project.toml": _REQUIRED_ANALYSIS_TOML, **test_case.models}
+
+    python: tuple[dict[str, bool], int] = rejected_opt_outs(
+        project_dir=tmp_path / "python",
+        files=files,
+        engine=CompilerEngine.PYTHON,
+        monkeypatch=monkeypatch,
+    )
+    native: tuple[dict[str, bool], int] = rejected_opt_outs(
+        project_dir=tmp_path / "native",
+        files=files,
+        engine=CompilerEngine.NATIVE_PREVIEW,
+        monkeypatch=monkeypatch,
+    )
+
+    assert python == (test_case.expected_rejected, test_case.expected_python_validations)
+    assert native == (test_case.expected_rejected, 0)
     assert assembly_deferrals(record_dir) == Counter()

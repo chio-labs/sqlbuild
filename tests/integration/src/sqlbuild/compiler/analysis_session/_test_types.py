@@ -48,4 +48,5 @@ class StandalonePivotProofTestCase:
     description: str
     analysed_models: frozenset[str]
     expected_native_proofs: int
+    expected_session_proofs: int
     expected_proven_by_model: dict[str, bool | None]

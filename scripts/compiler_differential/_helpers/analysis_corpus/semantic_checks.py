@@ -19,6 +19,13 @@ _TIMED_STAGING: str = FAILURE_BASE_STAGING.replace(
     "amount, status", "amount, status, CAST('2026-01-01' AS TIMESTAMP) AS ordered_at"
 )
 
+_INTERMEDIATE_PATH: str = "models/intermediate/int_orders.sql"
+_INTERMEDIATE: str = (
+    'MODEL (\n  description "Doubled order amounts",\n);\n\n'
+    "SELECT customer_id, amount * 2 AS doubled_amount\n"
+    'FROM __ref("stg_orders")\n'
+)
+
 _FUNCTION_PATH: str = "functions/sql/scaled_amount.sql"
 _SCALED_AMOUNT: str = (
     "FUNCTION (\n"
@@ -57,6 +64,24 @@ def semantic_checks_failure_cases() -> tuple[FailureCase, ...]:
                 **mart_body_files(
                     f"SELECT customer_id, SUM(amount) AS total_amount\nFROM {_ORDERS}\n"
                     "GROUP BY customer_id\n"
+                ),
+            },
+        ),
+        failure_case(
+            name="semantic-recovered-uses-through-intermediate",
+            expected_code="B002",
+            expected_message="Unknown column 'amonut' in raw_orders",
+            expected_help="did you mean 'amount'?",
+            expected_notes=(
+                "raw_orders has: amount, status, customer_id, order_id",
+                "1 downstream uses of stg_orders.amount were not checked because of this error",
+            ),
+            files={
+                **staging_files(FAILURE_BASE_STAGING.replace("amount, status", "amonut, status")),
+                _INTERMEDIATE_PATH: _INTERMEDIATE,
+                **mart_body_files(
+                    "SELECT customer_id, SUM(doubled_amount) AS total_amount\n"
+                    'FROM __ref("int_orders")\nGROUP BY customer_id\n'
                 ),
             },
         ),

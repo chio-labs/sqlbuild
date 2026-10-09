@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,
-    DynamicColumnContractProof,
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
@@ -32,6 +31,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     AnalysisParity,
     FailingProvideSession,
+    NativePivotProofs,
     analysis_request,
     compare_analyses,
     compile_inputs,
@@ -97,6 +97,7 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     assert parity.expression_shapes >= test_case.expected_minimum_expression_shapes
     assert parity.pivot_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.standalone_proofs >= test_case.expected_minimum_pivot_proofs
+    assert parity.session_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.proven_pivots >= test_case.expected_minimum_proven_pivots
     assert (
         kinds["analysis_session:input_enrichment"]
@@ -199,12 +200,24 @@ def test_given_session_failure_after_deferrals_when_analysing_then_records_only_
             description="a selection that leaves the pivots out of model analysis",
             analysed_models=frozenset({"orders_list"}),
             expected_native_proofs=2,
+            expected_session_proofs=2,
             expected_proven_by_model={
                 "orders_list": None,
                 "status_amounts": True,
                 "status_passthrough": True,
             },
-        )
+        ),
+        StandalonePivotProofTestCase(
+            description="no model analysis, so the proofs run without a session",
+            analysed_models=frozenset(),
+            expected_native_proofs=2,
+            expected_session_proofs=0,
+            expected_proven_by_model={
+                "orders_list": None,
+                "status_amounts": True,
+                "status_passthrough": True,
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -215,7 +228,7 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
         project_dir=tmp_path / "project", files=pivot_project_files()
     )
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
-    proofs: list[DynamicColumnContractProof | None] = native_pivot_proofs(monkeypatch=monkeypatch)
+    recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
 
     project: CompiledProject = assemble_compiled_project(
         inputs=inputs,
@@ -224,13 +237,19 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     )
 
     assert (
-        all(proof is not None for proof in proofs),
-        len(proofs),
+        all(proof is not None for proof in recorded.proofs),
+        len(recorded.proofs),
+        recorded.session_proofs,
         {
             model.name: getattr(model.dynamic_column_contract, "output_proven", None)
             for model in project.models
         },
-    ) == (True, test_case.expected_native_proofs, test_case.expected_proven_by_model)
+    ) == (
+        True,
+        test_case.expected_native_proofs,
+        test_case.expected_session_proofs,
+        test_case.expected_proven_by_model,
+    )
 
 
 if __name__ == "__main__":

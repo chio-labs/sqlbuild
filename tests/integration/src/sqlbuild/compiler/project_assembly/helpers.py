@@ -15,6 +15,7 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly import project as project_module
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile._helpers.diagnostics import sql_analysis_opt_outs
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -38,6 +39,7 @@ _PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = (
     "audit_scope_deps",
 )
 _ASSEMBLY_RECORD_PREFIX: str = "project_assembly:"
+_OPT_OUT_VALIDATORS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
 _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),
     collection_rendering=CollectionRendering.VALUE_LIST,
@@ -196,6 +198,38 @@ def assembly_view(project: CompiledProject) -> object:
         tuple((function.name, function.deps) for function in project.functions),
         tuple((audit.name, audit.scope_deps) for audit in project.audits),
         project.diagnostics,
+    )
+
+
+def rejected_opt_outs(
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[dict[str, bool], int]:
+    """Attach `files` with `engine`; return each opt-out's rejection and Python validations."""
+
+    calls: Counter[str] = Counter()
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
+    with monkeypatch.context() as patch:
+        _ = [
+            patch.setattr(
+                sql_analysis_opt_outs,
+                name,
+                _counted(name=name, function=getattr(sql_analysis_opt_outs, name), calls=calls),
+            )
+            for name in _OPT_OUT_VALIDATORS
+        ]
+        inputs: CompileProjectInputs = project_inputs(project_dir=project_dir, files=files)
+    return (
+        {
+            model_input.model_file.file_path.stem: (
+                model_input.rejected_sql_analysis_opt_out is not None
+            )
+            for model_input in inputs.model_inputs
+        },
+        calls.total(),
     )
 
 
