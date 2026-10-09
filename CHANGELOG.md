@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.152.0](https://github.com/chio-labs/sqlbuild/compare/v0.151.0...v0.152.0) (2026-10-09)
+
+
+### Features
+
+* **native:** assemble project resource facts natively behind the preview engine ([#1066](https://github.com/chio-labs/sqlbuild/issues/1066)) ([daf0620](https://github.com/chio-labs/sqlbuild/commit/daf062043373b9b844a681c69d091ee2624f468f))
+
 ## [0.151.0](https://github.com/chio-labs/sqlbuild/compare/v0.150.0...v0.151.0) (2026-10-09)
 
 
