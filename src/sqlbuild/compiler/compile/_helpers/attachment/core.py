@@ -129,8 +129,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
@@ -696,8 +695,6 @@ def _build_model_input(
             raise
         raise error.located(location) from None
     expanded_query_sql: str = macro_expansion.sql
-    if native_stage_enabled(NativeStage.MODEL_LOOP):
-        report_native_fallback(site=NativeFallbackSite.CURSOR_INTRINSIC_VALIDATION)
     expanded_query_sql = get_validated_model_cursor_intrinsics(
         sql=expanded_query_sql,
         config_values=effective_config.values,

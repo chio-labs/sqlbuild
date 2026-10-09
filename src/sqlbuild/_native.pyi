@@ -274,9 +274,18 @@ def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> tuple[bool
 def scan_test_parameter_references(
     sql: str, declared: list[str], owner: str
 ) -> tuple[list[tuple[int, int, str]], str | None]: ...
-def sql_free_of_cursor_intrinsics(
-    sql: str, reserved_markers: list[str], context: str
-) -> tuple[bool, str | None]: ...
+def cursor_intrinsics_rejection(
+    sql: str, reserved_markers: list[str], context: str, python: tuple[tuple[int, int], str]
+) -> str | None: ...
+def validated_model_cursor_intrinsics(
+    sql: str,
+    reserved_markers: list[str],
+    model: tuple[str, object, object],
+    python: tuple[tuple[int, int], str],
+) -> tuple[str | None, str | None]: ...
+def replace_cursor_intrinsics(
+    sql: str, context: str, replacements: tuple[str, str], python: tuple[tuple[int, int], str]
+) -> tuple[str, bool, str | None]: ...
 def parse_function_header_values(
     header_values: dict[str, object], python: bool, relative_path: str
 ) -> (

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model 'stg_orders' intrinsic __cursor_end does not accept arguments"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

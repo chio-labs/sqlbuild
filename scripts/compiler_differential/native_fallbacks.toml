@@ -24,13 +24,6 @@ counts = { example = 120, failure = 10, fixture = 112, seed = 354 }
 engine = "native"
 stage = "attachments"
 site = "attachments.native"
-kind = "cursor_intrinsic_rejections"
-counts = { example = 160, failure = 170, fixture = 156, seed = 961 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
-site = "attachments.native"
 kind = "function_headers"
 counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
 
@@ -88,7 +81,7 @@ engine = "native"
 stage = "declaration_scopes"
 site = "declaration_scopes.native"
 kind = "scope_indexes"
-counts = { example = 12, failure = 236, fixture = 12, seed = 44 }
+counts = { example = 12, failure = 237, fixture = 12, seed = 44 }
 
 [[entry]]
 engine = "native"
@@ -102,7 +95,7 @@ engine = "native"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 304, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 305, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native"
@@ -144,14 +137,14 @@ engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "config_builds"
-counts = { example = 56, failure = 313, fixture = 64, seed = 890 }
+counts = { example = 56, failure = 314, fixture = 64, seed = 890 }
 
 [[entry]]
 engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
-counts = { example = 29, failure = 251, fixture = 15, seed = 121 }
+counts = { example = 29, failure = 252, fixture = 15, seed = 121 }
 
 [[entry]]
 engine = "native"
@@ -165,14 +158,7 @@ engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "validations"
-counts = { example = 56, failure = 397, fixture = 64, seed = 1100 }
-
-[[entry]]
-engine = "native"
-stage = "model_loop"
-site = "model_loop.cursor_intrinsic_validation"
-kind = "deferred"
-counts = { example = 56, failure = 403, fixture = 64, seed = 1100 }
+counts = { example = 56, failure = 398, fixture = 64, seed = 1100 }
 
 [[entry]]
 engine = "native"
@@ -186,21 +172,21 @@ engine = "native"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
-counts = { example = 56, failure = 423, fixture = 64, seed = 1103 }
+counts = { example = 56, failure = 425, fixture = 64, seed = 1103 }
 
 [[entry]]
 engine = "native"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "variable_substitutions"
-counts = { example = 56, failure = 477, fixture = 72, seed = 1163 }
+counts = { example = 56, failure = 479, fixture = 72, seed = 1163 }
 
 [[entry]]
 engine = "native"
 stage = "reference_extraction"
 site = "reference_extraction.native"
 kind = "reference_scans"
-counts = { example = 250, failure = 464, fixture = 249, seed = 1523 }
+counts = { example = 250, failure = 465, fixture = 249, seed = 1523 }
 
 [[entry]]
 engine = "native-preview"
@@ -215,13 +201,6 @@ stage = "attachments"
 site = "attachments.native"
 kind = "audit_renderings"
 counts = { example = 120, failure = 10, fixture = 112, seed = 354 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.native"
-kind = "cursor_intrinsic_rejections"
-counts = { example = 160, failure = 170, fixture = 156, seed = 961 }
 
 [[entry]]
 engine = "native-preview"
@@ -298,7 +277,7 @@ engine = "native-preview"
 stage = "declaration_scopes"
 site = "declaration_scopes.native"
 kind = "scope_indexes"
-counts = { example = 12, failure = 236, fixture = 12, seed = 44 }
+counts = { example = 12, failure = 237, fixture = 12, seed = 44 }
 
 [[entry]]
 engine = "native-preview"
@@ -312,7 +291,7 @@ engine = "native-preview"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 304, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 305, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native-preview"
@@ -396,14 +375,14 @@ engine = "native-preview"
 stage = "model_config"
 site = "model_config.native"
 kind = "config_builds"
-counts = { example = 56, failure = 313, fixture = 64, seed = 890 }
+counts = { example = 56, failure = 314, fixture = 64, seed = 890 }
 
 [[entry]]
 engine = "native-preview"
 stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
-counts = { example = 29, failure = 251, fixture = 15, seed = 121 }
+counts = { example = 29, failure = 252, fixture = 15, seed = 121 }
 
 [[entry]]
 engine = "native-preview"
@@ -417,14 +396,7 @@ engine = "native-preview"
 stage = "model_config"
 site = "model_config.native"
 kind = "validations"
-counts = { example = 56, failure = 397, fixture = 64, seed = 1100 }
-
-[[entry]]
-engine = "native-preview"
-stage = "model_loop"
-site = "model_loop.cursor_intrinsic_validation"
-kind = "deferred"
-counts = { example = 56, failure = 403, fixture = 64, seed = 1100 }
+counts = { example = 56, failure = 398, fixture = 64, seed = 1100 }
 
 [[entry]]
 engine = "native-preview"
@@ -438,14 +410,14 @@ engine = "native-preview"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
-counts = { example = 56, failure = 423, fixture = 64, seed = 1103 }
+counts = { example = 56, failure = 425, fixture = 64, seed = 1103 }
 
 [[entry]]
 engine = "native-preview"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "variable_substitutions"
-counts = { example = 56, failure = 477, fixture = 72, seed = 1163 }
+counts = { example = 56, failure = 479, fixture = 72, seed = 1163 }
 
 [[entry]]
 engine = "native-preview"
@@ -459,7 +431,7 @@ engine = "native-preview"
 stage = "reference_extraction"
 site = "reference_extraction.native"
 kind = "reference_scans"
-counts = { example = 250, failure = 464, fixture = 249, seed = 1523 }
+counts = { example = 250, failure = 465, fixture = 249, seed = 1523 }
 
 [[entry]]
 engine = "native-preview"
@@ -508,7 +480,7 @@ engine = "python"
 stage = "declaration_scopes"
 site = "declaration_scopes.native"
 kind = "scope_indexes"
-counts = { example = 12, failure = 236, fixture = 12, seed = 44 }
+counts = { example = 12, failure = 237, fixture = 12, seed = 44 }
 
 [[entry]]
 engine = "python"
@@ -522,7 +494,7 @@ engine = "python"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 304, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 305, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "python"
@@ -536,14 +508,14 @@ engine = "python"
 stage = "model_config"
 site = "model_config.native"
 kind = "config_builds"
-counts = { example = 56, failure = 313, fixture = 64, seed = 890 }
+counts = { example = 56, failure = 314, fixture = 64, seed = 890 }
 
 [[entry]]
 engine = "python"
 stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
-counts = { example = 29, failure = 251, fixture = 15, seed = 121 }
+counts = { example = 29, failure = 252, fixture = 15, seed = 121 }
 
 [[entry]]
 engine = "python"
@@ -557,25 +529,25 @@ engine = "python"
 stage = "model_config"
 site = "model_config.native"
 kind = "validations"
-counts = { example = 56, failure = 397, fixture = 64, seed = 1100 }
+counts = { example = 56, failure = 398, fixture = 64, seed = 1100 }
 
 [[entry]]
 engine = "python"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
-counts = { example = 56, failure = 423, fixture = 64, seed = 1103 }
+counts = { example = 56, failure = 425, fixture = 64, seed = 1103 }
 
 [[entry]]
 engine = "python"
 stage = "model_loop"
 site = "model_loop.native"
 kind = "variable_substitutions"
-counts = { example = 56, failure = 477, fixture = 72, seed = 1163 }
+counts = { example = 56, failure = 479, fixture = 72, seed = 1163 }
 
 [[entry]]
 engine = "python"
 stage = "reference_extraction"
 site = "reference_extraction.native"
 kind = "reference_scans"
-counts = { example = 250, failure = 463, fixture = 249, seed = 1523 }
+counts = { example = 250, failure = 464, fixture = 249, seed = 1523 }

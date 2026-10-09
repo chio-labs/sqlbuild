@@ -44,18 +44,6 @@ class AttachmentProjectTestCase:
 
 
 @dataclass(frozen=True)
-class CursorIntrinsicParityTestCase:
-    """Seeded SQL checked for cursor intrinsics natively and by Python, with the native errors."""
-
-    description: str
-    seed: int
-    count: int
-    expected_minimum_free: int
-    expected_minimum_native_errors: int
-    expected_minimum_python_errors: int
-
-
-@dataclass(frozen=True)
 class ParameterParityTestCase:
     """Seeded SQL test bodies whose `@param` references each engine expands."""
 

@@ -1,6 +1,8 @@
-//! Python's cursor intrinsic scan over quotes, comments, identifier boundaries and calls.
+//! The cursor intrinsic scan over quotes, comments, identifier boundaries and calls.
 
+use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 use crate::sql_lexing::main::python_non_code_end::python_non_code_end;
@@ -9,7 +11,7 @@ use crate::sql_lexing::models::NonCode;
 
 const INTRINSIC_NAMES: [&str; 2] = ["__cursor_start", "__cursor_end"];
 
-/// What Python's scan finds at one offset.
+/// What the scan finds at one offset.
 pub(crate) enum ScanStep {
     Next(usize),
     Unclosed(Unclosed),
@@ -18,23 +20,21 @@ pub(crate) enum ScanStep {
         name: &'static str,
         end: usize,
     },
-    /// Python decides by its Unicode identifier rules.
-    Deferred,
 }
 
-/// How the text after an intrinsic name reads as Python's empty call.
+/// How the text after an intrinsic name reads as an empty call.
 pub(crate) enum CallScan {
     /// `name()`, with the offset of the closing parenthesis.
     Called(usize),
     NotCalled,
     Arguments,
-    UnclosedParenthesis,
-    /// Quotes, comments or nested parentheses inside the call, which only Python matches.
-    Deferred,
+    /// The call reaches the end of the SQL inside this construct.
+    Unclosed(Unclosed),
 }
 
-/// Python's scan at `index`.
-pub(crate) fn step(bytes: &[u8], index: usize) -> ScanStep {
+/// The scan at `index`, a character boundary of `sql`.
+pub(crate) fn step(python: PythonText, sql: &str, index: usize) -> ScanStep {
+    let bytes: &[u8] = sql.as_bytes();
     match python_non_code_end(bytes, index) {
         NonCode::End(end) => return ScanStep::Next(end),
         NonCode::Raises => return ScanStep::Unclosed(unclosed_construct(bytes, index)),
@@ -43,21 +43,19 @@ pub(crate) fn step(bytes: &[u8], index: usize) -> ScanStep {
     for name in INTRINSIC_NAMES {
         if bytes[index..].starts_with(name.as_bytes()) {
             let end: usize = index + name.len();
-            let before: Option<u8> = index.checked_sub(1).map(|previous| bytes[previous]);
-            return match (
-                continues_identifier(before),
-                continues_identifier(bytes.get(end).copied()),
-            ) {
-                (Some(false), Some(false)) => ScanStep::Intrinsic { name, end },
-                (Some(_), Some(_)) => ScanStep::Next(end),
-                _ => ScanStep::Deferred,
+            let bounded: bool = !continues_identifier(python, sql[..index].chars().next_back())
+                && !continues_identifier(python, sql[end..].chars().next());
+            return if bounded {
+                ScanStep::Intrinsic { name, end }
+            } else {
+                ScanStep::Next(end)
             };
         }
     }
-    ScanStep::Next(index + 1)
+    ScanStep::Next(index + sql[index..].chars().next().map_or(1, char::len_utf8))
 }
 
-/// Python's whitespace skip, `(` check, parenthesis match and argument check after a name.
+/// The whitespace skip, `(` check, parenthesis match and argument check after a name.
 pub(crate) fn call_scan(sql: &str, name_end: usize) -> CallScan {
     let mut open: usize = name_end;
     while let Some(character) = sql[open..].chars().next() {
@@ -70,32 +68,39 @@ pub(crate) fn call_scan(sql: &str, name_end: usize) -> CallScan {
     if bytes.get(open) != Some(&b'(') {
         return CallScan::NotCalled;
     }
+    let mut depth: usize = 1;
     let mut index: usize = open + 1;
-    while let Some(byte) = bytes.get(index) {
-        match byte {
-            b')' => {
-                return if sql[open + 1..index].chars().all(is_python_space) {
-                    CallScan::Called(index)
-                } else {
-                    CallScan::Arguments
-                };
+    while index < bytes.len() {
+        match python_non_code_end(bytes, index) {
+            NonCode::End(end) => {
+                index = end;
+                continue;
             }
-            b'-' if bytes.get(index + 1) == Some(&b'-') => return CallScan::Deferred,
-            b'/' if bytes.get(index + 1) == Some(&b'*') => return CallScan::Deferred,
-            b'#' | b'\'' | b'"' | b'`' | b'$' | b'(' => return CallScan::Deferred,
-            _ => index += 1,
+            NonCode::Raises => return CallScan::Unclosed(unclosed_construct(bytes, index)),
+            NonCode::Code => {}
         }
+        match bytes[index] {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return if sql[open + 1..index].chars().all(is_python_space) {
+                        CallScan::Called(index)
+                    } else {
+                        CallScan::Arguments
+                    };
+                }
+            }
+            _ => {}
+        }
+        index += 1;
     }
-    CallScan::UnclosedParenthesis
+    CallScan::Unclosed(Unclosed::Parenthesis)
 }
 
-/// Python's `isalnum() or _`; non-ASCII neighbours defer to Python's Unicode rules.
-fn continues_identifier(byte: Option<u8>) -> Option<bool> {
-    match byte {
-        None => Some(false),
-        Some(byte) if !byte.is_ascii() => None,
-        Some(byte) => Some(byte.is_ascii_alphanumeric() || byte == b'_'),
-    }
+/// Python's `isalnum() or _` for a neighbouring character; the SQL edge continues nothing.
+fn continues_identifier(python: PythonText, character: Option<char>) -> bool {
+    character.is_some_and(|character| character == '_' || is_python_alnum(python, character))
 }
 
 /// Python's `any(name in sql for name in _INTRINSIC_NAMES)`.

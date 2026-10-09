@@ -47,9 +47,7 @@ _INCREMENTAL: str = (
     "  materialized incremental,\n  incremental_strategy append,\n  cursor order_id,\n"
     "  cursor_type integer,\n"
 )
-_FALLBACKS: tuple[tuple[ModuleType, str], ...] = (
-    (context_templates, "expand_template_data"),
-)
+_FALLBACKS: tuple[tuple[ModuleType, str], ...] = ((context_templates, "expand_template_data"),)
 _PROJECT_FILES: dict[str, str] = {
     "macros/counted.py": _COUNTED_MACRO,
     "models/marts/customer_totals.sql": _COUNTED_MART,
