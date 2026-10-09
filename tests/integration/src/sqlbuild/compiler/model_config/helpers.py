@@ -112,7 +112,7 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
             "x",
         ),
     ),
-    ("minimum_samples", (0, 5, -1, True, None, 2**70)),
+    ("minimum_samples", (0, 5, -1, True, None, 2**63 - 1)),
     ("evidence_limit", (0, 10, -3, None)),
     ("values", (["PLACED", "SHIPPED"], None, {"nested": [1, 2]})),
     ("minimum", (1, 2.5)),

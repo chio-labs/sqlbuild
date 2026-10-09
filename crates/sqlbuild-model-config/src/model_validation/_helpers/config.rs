@@ -125,9 +125,10 @@ impl<'a, N: AuthoredNode> ConfigView<'a, N> {
         value: &N,
         entry: impl Fn(i64) -> String,
     ) -> ValidationStop {
-        let (comparison, bound) = match value.kind() {
-            NodeKind::Int { negative: true } => ("smaller", i64::MIN),
-            _ => ("larger", i64::MAX),
+        let (comparison, bound) = if value.python_str().starts_with('-') {
+            ("smaller", i64::MIN)
+        } else {
+            ("larger", i64::MAX)
         };
         ValidationStop::Error(
             self.config_error(format!(
