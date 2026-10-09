@@ -12,6 +12,8 @@ from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments impo
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import ParsedMacroArguments
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 
 type _ValueRow = tuple[object, ...]
 
@@ -35,6 +37,7 @@ def parse_macro_call_arguments(
             help=cast(str, help_text),
         )
     _, positional, keywords, references = parsed
+    report_native_answer(stage=NativeStage.MACRO_CALLS, kind="parsed_arguments")
     context: tuple[Sequence[object], str] = (nested_values, f"'{file_path}' in {label}")
     return ParsedMacroArguments(
         args=tuple(_built(row, context) for row in cast(list[_ValueRow], positional)),
