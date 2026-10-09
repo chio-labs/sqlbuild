@@ -89,6 +89,8 @@ pub struct SessionRequest {
     /// Whether published shapes keep authored quoting, Python's `inferred_binding_shape` test.
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`; None where one is not Python's.
+    pub nullability_rules: Option<Pairs>,
     pub rich_type_inference: bool,
     pub column_types: Shapes,
     pub column_nullability: Shapes,
@@ -256,4 +258,31 @@ pub struct AnalysisSession {
     pub(crate) phase: Phase,
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,
+}
+
+/// One query's CTE fact recovery, as Python's compact enrichment runs it.
+#[derive(Debug, Clone)]
+pub struct CteFactRequest {
+    pub cleaned_sql: String,
+    pub dialect: String,
+    /// Input relation types; every input column's nullability is unknown, as in enrichment.
+    pub input_schemas: Shapes,
+    pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`; None where one is not Python's.
+    pub nullability_rules: Option<Pairs>,
+    /// Whether Python runs `_polyglot_cte_passthrough_facts` past its early return.
+    pub recover: bool,
+    /// Whether a filter reads NULL, so Python looks for filtered non-null outputs.
+    pub null_filter: bool,
+}
+
+/// Python's recovered CTE pass-through facts and filtered non-null outputs for one query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CteFacts {
+    pub types: Pairs,
+    pub nullability: Pairs,
+    /// Sorted direct CTE output names.
+    pub direct_outputs: Vec<String>,
+    /// Sorted outputs a filter proves non-null.
+    pub non_null_outputs: Vec<String>,
 }

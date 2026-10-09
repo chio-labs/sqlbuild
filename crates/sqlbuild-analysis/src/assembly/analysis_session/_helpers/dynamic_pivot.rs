@@ -2,17 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
     casefold, column_name, dict_list, identifier_name, is_single_wildcard, nested, node_key,
-    payload, relation_name, render_type, truthy,
+    parse_one, payload, relation_name, render_type, to_dict, truthy,
 };
 use crate::assembly::analysis_session::constants::{
     ALIAS_AST_KIND, CAST_AST_KIND, CTE_AST_KIND, DUCKDB_DIALECT, DYNAMIC_VALUE_SOURCE_KINDS,
-    MAX_FUNCTION_CALL_DEPTH, MOTHERDUCK_DIALECT, PIVOT_AST_KIND, QUERY_AST_KINDS, SELECT_AST_KIND,
+    MOTHERDUCK_DIALECT, PIVOT_AST_KIND, QUERY_AST_KINDS, SELECT_AST_KIND,
     SIMPLIFIED_PIVOT_DIALECTS, SUPPORTED_PIVOT_DIALECTS, TYPE_PRESERVING_AGGREGATES,
     UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
@@ -80,25 +79,9 @@ pub(crate) fn pivot_outcome(
 
 /// Python's `parse_one(...).to_dict()`, or None where Python reports a parse error.
 fn parsed(sql: &str, dialect: &str) -> Result<Option<Value>, String> {
-    let guard: ComplexityGuardOptions =
-        serde_json::from_value(json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}))
-            .map_err(|error| error.to_string())?;
-    let options: ParseOptions = ParseOptions {
-        complexity_guard: Some(guard),
-    };
-    let parsed: Result<Vec<Expression>, _> = Dialect::get_by_name(dialect)
-        .ok_or_else(|| format!("unknown dialect {dialect}"))?
-        .parse_with_options(sql, &options);
-    let expressions: Vec<Expression> = match parsed {
-        Ok(expressions) => expressions,
-        Err(_) => return Ok(None),
-    };
-    let [expression] = expressions.as_slice() else {
-        return Ok(None);
-    };
-    serde_json::to_value(expression)
-        .map(Some)
-        .map_err(|error| error.to_string())
+    parse_one(sql, dialect)?
+        .map(|expression| to_dict(&expression))
+        .transpose()
 }
 
 /// Casefolding equals Python's only for ASCII text.

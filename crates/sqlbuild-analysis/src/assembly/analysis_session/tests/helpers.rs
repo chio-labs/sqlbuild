@@ -1,3 +1,6 @@
+use crate::assembly::analysis_session::_helpers::cte_facts::{
+    Recovery, RecoveryInput, RecoveryProfile, recovery,
+};
 use crate::assembly::analysis_session::_helpers::mappings::catalog_relations;
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
@@ -8,7 +11,7 @@ use crate::assembly::analysis_session::models::{
     ModelOutcome, ModelReference, ModelRequest, PivotOutcome, PivotRequest, SessionRequest,
     SessionStep,
 };
-use crate::assembly::analysis_session::tests::test_types::ModelSpec;
+use crate::assembly::analysis_session::tests::test_types::{ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
 
@@ -95,6 +98,7 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
         dialect: "duckdb".to_owned(),
         case_sensitive_shapes: false,
         function_return_types: Vec::new(),
+        nullability_rules: Some(Vec::new()),
         rich_type_inference: true,
         column_types: raw_orders.clone(),
         column_nullability: shapes(&[(
@@ -295,5 +299,54 @@ pub(crate) fn proven(
         input_relations: vec![input.to_owned()],
         failure_reason: None,
         bare_dynamic_pivot: bare,
+    })
+}
+
+/// Python's recovery over `orders` for a contract-enforced model whose filter reads NULL.
+pub(crate) fn recovered_facts(sql: &str) -> Option<(Pairs, Pairs, Vec<String>, Vec<String>)> {
+    let input_schemas: Shapes = shapes(&[(
+        "orders",
+        &[
+            ("order_id", "INTEGER"),
+            ("amount", "DOUBLE"),
+            ("status", "VARCHAR"),
+        ],
+    )]);
+    let rules: Pairs = pairs(&[("UPPER", "first_arg")]);
+    let recovered: Recovery = recovery(&RecoveryInput {
+        cleaned_sql: sql,
+        input_schemas: &input_schemas,
+        recover: true,
+        null_filter: true,
+        profile: RecoveryProfile {
+            dialect: "duckdb",
+            function_return_types: &Vec::new(),
+            rules: Some(&rules),
+        },
+    })
+    .ok()?;
+    let mut direct: Vec<String> = recovered.direct_outputs.into_iter().collect();
+    direct.sort();
+    let mut non_null: Vec<String> = recovered.non_null_outputs.into_iter().collect();
+    non_null.sort();
+    let nullability: Pairs = recovered
+        .nullability
+        .into_iter()
+        .map(|(name, value)| (name, value.to_owned()))
+        .collect();
+    Some((recovered.types, nullability, direct, non_null))
+}
+
+/// The expected recovery as owned values.
+pub(crate) fn expected_facts(
+    facts: Option<RecoveredFacts>,
+) -> Option<(Pairs, Pairs, Vec<String>, Vec<String>)> {
+    facts.map(|(types, nullability, direct, non_null)| {
+        (
+            pairs(types),
+            pairs(nullability),
+            direct.iter().map(|name| (*name).to_owned()).collect(),
+            non_null.iter().map(|name| (*name).to_owned()).collect(),
+        )
     })
 }

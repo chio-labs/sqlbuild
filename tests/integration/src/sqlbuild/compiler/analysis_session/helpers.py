@@ -15,6 +15,7 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.analysis_session.classes.native_model_analysis as native_model_analysis
+import sqlbuild.compiler.compile._helpers.analysis.compact as compact_analysis
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -172,6 +173,8 @@ def _pivot_models(rng: random.Random) -> dict[str, str]:
     return files
 
 
+_PYTHON_CTE_RECOVERY: Callable[..., Any] = compact_analysis._polyglot_cte_passthrough_facts
+
 type _Relation = tuple[str, tuple[str, ...]]
 type _Template = Callable[[random.Random, list[_Relation]], tuple[str, str, tuple[str, ...]]]
 
@@ -259,6 +262,35 @@ def _contract(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tu
     return header, sql, ("contract_key", "contract_label")
 
 
+_CTE_CONTRACT_BODIES: tuple[str, ...] = (
+    "WITH base AS (\n  SELECT {a}, {b} FROM {left}\n)\nSELECT {a}, {b} FROM base",
+    "WITH base AS (\n  SELECT CAST({a} AS VARCHAR(12)) AS label, COALESCE({b}, {a}) AS filled,\n"
+    "    'fixed' AS tag, CAST(1.5 AS DECIMAL(10, 2)) AS ratio, {a} IS NULL AS missing\n"
+    "  FROM {left}\n  WHERE {a} IS NOT NULL\n)\n"
+    "SELECT label, filled, tag, ratio, missing FROM base",
+    "WITH base AS (\n  SELECT CASE WHEN {a} IS NULL THEN 'none' ELSE 'some' END AS state,\n"
+    "    UPPER(CAST({b} AS VARCHAR)) AS upper_b, CAST({a} AS TEXT) || '-x' AS joined\n"
+    "  FROM {left}\n)\nSELECT state, upper_b, joined FROM base",
+    "WITH unioned AS (\n  SELECT {a} AS shared FROM {left}\n  UNION ALL\n"
+    "  SELECT {c} FROM {right}\n)\nSELECT shared FROM unioned",
+    "WITH base AS (\n  SELECT * EXCLUDE ({a}) FROM {left}\n)\nSELECT {b} FROM base",
+    "WITH lhs AS (\n  SELECT {a}, {b} FROM {left}\n),\nrhs AS (\n  SELECT {c} FROM {right}\n)\n"
+    "SELECT l.{a}, r.{c}\nFROM lhs l\nLEFT JOIN rhs r ON l.{a} = r.{c}",
+    "WITH outer_cte AS (\n  WITH inner_cte AS (SELECT {a}, {b} FROM {left})\n"
+    "  SELECT {a}, {b} FROM inner_cte\n)\nSELECT {a}, {b} FROM outer_cte",
+    "WITH base AS (\n  SELECT {a}, NULLIF({b}, {b}) AS cleared, MAX({b}) AS latest FROM {left}\n"
+    "  GROUP BY {a}\n)\nSELECT {a}, cleared, latest FROM base WHERE {a} IS NOT NULL",
+)
+
+
+def _cte_contract(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tuple[str, ...]]:
+    (left, left_columns), (right, right_columns) = inputs[0], inputs[-1]
+    first, second = rng.sample(list(left_columns), k=2)
+    body: str = rng.choice(_CTE_CONTRACT_BODIES)
+    sql: str = body.format(a=first, b=second, c=right_columns[0], left=left, right=right)
+    return "  contract enforced,\n", sql, (first, second)
+
+
 def _unknown_column(
     rng: random.Random, inputs: list[_Relation]
 ) -> tuple[str, str, tuple[str, ...]]:
@@ -283,6 +315,7 @@ _TEMPLATES: tuple[_Template, ...] = (
     _aggregate,
     _quoted,
     _contract,
+    _cte_contract,
     _unknown_column,
     _subquery,
 )
@@ -428,6 +461,7 @@ class AnalysisParity:
     analysed_models: int = 0
     expression_shapes: int = 0
     pivot_proofs: int = 0
+    python_cte_recoveries: int = 0
     standalone_proofs: int = 0
     proven_pivots: int = 0
     native_enrichments: int = 0
@@ -461,7 +495,13 @@ def compare_analyses(
                 dynamic_families_by_table=dynamic_families_by_table,
             )
         )
-        python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                compact_analysis,
+                "_polyglot_cte_passthrough_facts",
+                partial(_counted_cte_recovery, parity=parity),
+            )
+            python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
         columns: list[InferredColumn] = list(
             chain.from_iterable(map(_native_columns, (native or {}).values()))
         )
@@ -579,6 +619,10 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
 
 def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
     return analysis.polyglot_analysis.columns or ()
+def _counted_cte_recovery(*, parity: AnalysisParity, **arguments: Any) -> Any:
+    recovered: Any = _PYTHON_CTE_RECOVERY(**arguments)
+    parity.python_cte_recoveries += bool(recovered[2])
+    return recovered
 
 
 def _append(parity: AnalysisParity, name: str, python: object, native: object) -> None:
