@@ -19,14 +19,11 @@ from tests.e2e.scripts.compiler_differential.helpers import (
 _WAFFLE_SHOP_NATIVE_STAGES: tuple[str, ...] = (
     "attachments",
     "contracts",
-    "declaration_files",
-    "declaration_scopes",
     "lineage_facts",
     "macro_call_store",
     "macro_calls",
     "model_analysis",
     "model_config",
-    "model_loop",
     "reference_extraction",
     "semantic_checks",
 )
@@ -84,14 +81,14 @@ _VANISHED_ENTRY: str = (
         ),
         NativeFallbackGateTestCase(
             description="shipped_stages_switched_to_python_fail",
-            perturbation=stage_disable_sabotage(("reference_extraction", "declaration_files")),
+            perturbation=stage_disable_sabotage(("reference_extraction", "model_config")),
             appended_entries="",
             expected_exit_code=1,
             expected_lines=(
                 "Native fallback allow-list: native-preview reference_extraction "
                 f"reference_extraction.native reference_scans (project): {_ANSWER_VANISHED}",
-                "Native fallback allow-list: native-preview declaration_files "
-                f"declaration_files.native parsed_files (project): {_ANSWER_VANISHED}",
+                "Native fallback allow-list: native-preview model_config "
+                f"model_config.native config_builds (project): {_ANSWER_VANISHED}",
                 "Intended? Run `make compiler-baselines`",
             ),
         ),
