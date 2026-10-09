@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D004",
+     "message": "AUDIT(...) in '<project>/models/marts/_sqlbuild/audits/singular/broken.sql' contains invalid SQLBuild header syntax: unexpected token 'name' without a value; quote values with spaces"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

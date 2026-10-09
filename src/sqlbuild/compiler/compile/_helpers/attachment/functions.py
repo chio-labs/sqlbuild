@@ -72,8 +72,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
@@ -337,6 +338,8 @@ def _sql_function_header(
         if native
         else None
     )
+    if native and native_header is None:
+        report_native_fallback(site=NativeFallbackSite.FUNCTION_HEADER, kind="sql")
     if native_header is not None:
         _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
         arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
@@ -485,6 +488,8 @@ def _build_python_function_input(
         if native
         else None
     )
+    if native and native_header is None:
+        report_native_fallback(site=NativeFallbackSite.FUNCTION_HEADER, kind="python")
     arguments: tuple[FunctionArgument, ...]
     returns: str
     runtime_version: str

@@ -1,0 +1,48 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Unknown macro '@not_a_macro' in '<project>/models/inventory/marts/inventory_summary_0.sql'. Available macros: adjust_0, adjust_1"
+    }
+   ]
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Unknown macro '@not_a_macro' in '<project>/models/inventory/marts/inventory_summary_0.sql'. Available macros: adjust_0, adjust_1"
+    }
+   ]
+  },
+  {
+   "label": "plan",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "Compiling project...",
+    "error[P001]: Unknown macro '@not_a_macro' in '<project>/models/inventory/marts/inventory_summary_0.sql'. Available macros: adjust_0, adjust_1",
+    "",
+    ""
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

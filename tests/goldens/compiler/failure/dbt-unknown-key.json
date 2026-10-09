@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D001",
+     "message": "<project>/sqlbuild_project.toml dbt contains unknown key(s): manifest. Allowed keys: profiles_dir, project_dir, target, target_path, vars",
+     "help": "supported keys: profiles_dir, project_dir, target, target_path, vars"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

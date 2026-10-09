@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro '@staged_amount' in '<project>/models/marts/customer_totals.sql' is inaccessible. Defined at 'models/staging/_macros/amounts.py:1:1' with scope owner 'models/staging'; consumer/definition path is '<project>/models/marts/customer_totals.sql'. Visible macros: none"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

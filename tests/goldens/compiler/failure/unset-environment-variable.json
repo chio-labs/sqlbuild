@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "unknown environment variable '@@ENV:SQB_DIFFERENTIAL_UNSET' in '<project>/models/staging/stg_orders.sql'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

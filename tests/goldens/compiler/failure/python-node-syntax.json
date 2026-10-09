@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D011",
+     "message": "Failed to import Python node file python/tasks/exports.py: invalid syntax (exports.py, line 1)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

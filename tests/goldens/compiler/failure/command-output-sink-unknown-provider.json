@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D015",
+     "message": "Command-output sink 'publish_output' in sinks/output.py requires unknown provider 'destination_client'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

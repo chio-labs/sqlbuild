@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D007",
+     "message": "Duplicate Python node found for 'export_orders' in python/tasks/first.py and python/tasks/second.py; loader, task, asset, and check names must be globally unique"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

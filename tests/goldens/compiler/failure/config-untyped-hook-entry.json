@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders' pre_hooks entries must use typed inline_sql(...), sql(...), or python(...) hook syntax"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "<project>/models/staging/_sqlbuild/_enums/order_status.sql enum 'order_status' has duplicate member 'PLACED'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

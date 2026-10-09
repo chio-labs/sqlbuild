@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D011",
+     "message": "Failed to import materialization file materializations/copy_table.py: No module named 'missing_warehouse_client'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

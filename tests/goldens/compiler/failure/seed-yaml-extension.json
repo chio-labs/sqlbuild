@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D005",
+     "message": "Seed declaration file seeds/order_channels.yaml must use .yml; .yaml is not supported"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

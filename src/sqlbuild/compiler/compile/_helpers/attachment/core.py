@@ -142,8 +142,9 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
 )
@@ -746,6 +747,11 @@ def _build_model_input(
         else None
     )
     if declaration_expansion is None:
+        if native_stage_enabled(NativeStage.MODEL_LOOP):
+            report_native_fallback(
+                site=NativeFallbackSite.DECLARATION_REFERENCES,
+                kind="scan" if prepared_var_substituted_sql is not None else "after_variables",
+            )
         declaration_expansion = expand_declaration_references_result(
             sql=var_substituted_sql,
             file_path=model_file.file_path,
@@ -764,6 +770,8 @@ def _build_model_input(
         consumer=model_identity,
     )
     expanded_query_sql: str = macro_expansion.sql
+    if native_stage_enabled(NativeStage.MODEL_LOOP):
+        report_native_fallback(site=NativeFallbackSite.CURSOR_INTRINSIC_VALIDATION)
     expanded_query_sql = get_validated_model_cursor_intrinsics(
         sql=expanded_query_sql,
         config_values=effective_config.values,
@@ -1263,6 +1271,8 @@ def build_effective_connection(
             connection.update(local_config.connections.get(connection_name, {}))
         connection.update(target_config.connection)
     connection.update(local_config.connection)
+    if native_stage_enabled(NativeStage.MODEL_CONFIG):
+        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="connection")
     return cast(
         dict[str, object],
         expand_template_data(

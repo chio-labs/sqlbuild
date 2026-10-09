@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "Declaration root models/marts/_enums/_constants/ is nested inside another declaration tree"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

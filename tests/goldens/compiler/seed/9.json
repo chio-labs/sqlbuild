@@ -1,0 +1,3210 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {
+  "audits/generic/billing_summary_0/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"billing_summary_0\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/configured_events/accepted_values__id.sql": [
+   "SELECT id",
+   "FROM __source(\"configured_events\")",
+   "WHERE id IS NOT NULL",
+   "  AND id NOT IN ('1')",
+   ""
+  ],
+  "audits/generic/configured_stg_support_1/accepted_values__status.sql": [
+   "SELECT status",
+   "FROM __ref(\"configured_stg_support_1\")",
+   "WHERE status IS NOT NULL",
+   "  AND status NOT IN ('placed', 'shipped')",
+   ""
+  ],
+  "audits/generic/configured_stg_support_1/configured_amount_floor.sql": [
+   "SELECT *",
+   "FROM __ref(\"configured_stg_support_1\")",
+   "WHERE amount < -37",
+   ""
+  ],
+  "audits/generic/configured_stg_support_1/configured_id_present__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"configured_stg_support_1\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/generic/configured_stg_support_1/unique__id.sql": [
+   "SELECT id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"configured_stg_support_1\")",
+   "WHERE id IS NOT NULL",
+   "GROUP BY id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/guarded_stg_billing_0/amount_at_least__amount.sql": [
+   "SELECT *",
+   "FROM __ref(\"guarded_stg_billing_0\")",
+   "WHERE amount < 0",
+   ""
+  ],
+  "audits/generic/labelled_stg_support_1/tidy_status__status.sql": [
+   "SELECT *",
+   "FROM __ref(\"labelled_stg_support_1\")",
+   "WHERE status <> LOWER(TRIM(status))",
+   ""
+  ],
+  "audits/generic/stated_stg_support_0/accepted_values__status.sql": [
+   "SELECT status",
+   "FROM __ref(\"stated_stg_support_0\")",
+   "WHERE status IS NOT NULL",
+   "  AND status NOT IN ('placed', 'expédié', '取消', 'returned ✓')",
+   ""
+  ],
+  "audits/generic/stg_support_1/not_null__id.sql": [
+   "SELECT id",
+   "FROM __ref(\"stg_support_1\")",
+   "WHERE id IS NULL",
+   ""
+  ],
+  "audits/singular/labelled_channels_match.sql": [
+   "SELECT l.id",
+   "FROM __ref(\"labelled_stg_support_1\") l",
+   "JOIN __ref(\"channel_labels\") c ON l.id = c.id",
+   "WHERE l.status = c.channel",
+   ""
+  ],
+  "functions/python/is_large.sql": [
+   "REGISTER PYTHON FUNCTION is_large(DOUBLE) RETURNS BOOLEAN",
+   ""
+  ],
+  "functions/sql/configured_label.sql": [
+   "CREATE OR REPLACE MACRO ci_checks.configured_label(raw_status) AS (",
+   "UPPER(raw_status)",
+   ")",
+   ""
+  ],
+  "functions/sql/is_placed.sql": [
+   "CREATE OR REPLACE MACRO ci_checks.is_placed(event_status) AS (",
+   "event_status = 'placed'",
+   ")",
+   ""
+  ],
+  "functions/sql/tidy_status.sql": [
+   "CREATE OR REPLACE MACRO ci_checks.tidy_status(raw_status) AS (",
+   "LOWER(TRIM(raw_status))",
+   ")",
+   ""
+  ],
+  "models/analysis/combined_stg_billing_0.sql": [
+   "WITH recent AS (",
+   "  SELECT id, created_at FROM __ref(\"stg_billing_0\") WHERE amount > 0",
+   "),",
+   "older AS (",
+   "  SELECT id, created_at FROM __ref(\"stg_support_0\")",
+   ")",
+   "SELECT id, created_at FROM recent",
+   "UNION ALL",
+   "SELECT id, created_at FROM older",
+   ""
+  ],
+  "models/analysis/every_open_event.sql": [
+   "SELECT *",
+   "FROM __source(\"open_events\")",
+   ""
+  ],
+  "models/analysis/every_raw_events_1.sql": [
+   "SELECT *",
+   "FROM __source(\"raw_events_1\")",
+   ""
+  ],
+  "models/analysis/every_stg_billing_0.sql": [
+   "SELECT *",
+   "FROM __ref(\"stg_billing_0\")",
+   ""
+  ],
+  "models/analysis/passed_stg_billing_0.sql": [
+   "WITH passthrough AS (",
+   "  SELECT id, created_at FROM __ref(\"stg_billing_0\")",
+   ")",
+   "SELECT id, created_at",
+   "FROM passthrough",
+   ""
+  ],
+  "models/analysis/pivot_input_stg_support_0.sql": [
+   "SELECT CAST(id AS INTEGER) AS id, CAST(status AS VARCHAR) AS status, amount",
+   "FROM __ref(\"stg_support_0\")",
+   ""
+  ],
+  "models/analysis/pivoted_stg_support_0.sql": [
+   "PIVOT __ref(\"pivot_input_stg_support_0\")",
+   "ON status",
+   "USING MAX(amount)",
+   "GROUP BY id",
+   ""
+  ],
+  "models/analysis/quoted_stg_support_0.sql": [
+   "SELECT \"ID\" AS \"OrderKey\", \"Amount\", \"Status\" AS \"Status\"",
+   "FROM __ref(\"stg_support_0\")",
+   ""
+  ],
+  "models/analysis/typed_stg_billing_0.sql": [
+   "SELECT id, amount * 2 AS doubled_amount, CAST(status AS VARCHAR) AS status_text,",
+   "  created_at, NULL AS missing_note",
+   "FROM __ref(\"stg_billing_0\")",
+   ""
+  ],
+  "models/analysis/unanalysed_stg_support_1.sql": [
+   "SELECT id, amount",
+   "FROM __ref(\"stg_support_1\")",
+   "WHERE id = ANY [1, 2]",
+   ""
+  ],
+  "models/billing/marts/billing_summary_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  t.amount * 2.4700 AS threshold_0_amount",
+   "FROM __ref(\"stg_billing_0\") t",
+   "WHERE t.status <> 'placed'",
+   ""
+  ],
+  "models/billing/staging/stg_billing_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  t.amount * 2.4700 AS threshold_0_amount,",
+   "  (t.amount + 0 + 1) AS adjust_0_amount,",
+   "  'Zürich – depot' AS site_label",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/features/append_stg_support_0.sql": [
+   "SELECT id, amount, status, created_at",
+   "FROM __ref(\"stg_support_0\")",
+   ""
+  ],
+  "models/features/batched_rolling_window_stg_support_1.sql": [
+   "SELECT CAST(created_at AS DATE) AS created_at, SUM(amount) AS amount",
+   "FROM __ref(\"stg_support_1\")",
+   "GROUP BY CAST(created_at AS DATE)",
+   ""
+  ],
+  "models/features/delete_insert_stg_billing_0.sql": [
+   "SELECT id, amount, status, created_at",
+   "FROM __ref(\"stg_billing_0\")",
+   ""
+  ],
+  "models/features/flagged_stg_billing_0.sql": [
+   "SELECT id, __udf(\"is_placed\")(status) AS is_placed,",
+   "  __udf(\"is_large\")(amount) AS is_large",
+   "FROM __ref(\"stg_billing_0\")",
+   ""
+  ],
+  "models/features/guarded_stg_billing_0.sql": [
+   "SELECT id, amount",
+   "FROM __ref(\"stg_billing_0\")",
+   ""
+  ],
+  "models/features/kept_stg_support_1.sql": [
+   "SELECT id, status, amount * 0.5 AS weighted",
+   "FROM __ref(\"stg_support_1\")",
+   "WHERE status IN ('取消', 'placed')",
+   "  AND amount * 1.0 IN (0.5, 1.25, 2500.75) OR id > 0",
+   ""
+  ],
+  "models/features/product_labels.sql": [
+   "SELECT id, label",
+   "FROM __source(\"loaded_products\")",
+   ""
+  ],
+  "models/features/spaced_stg_support_0.sql": [
+   "-- Généré pour café ☕ counter",
+   "SELECT",
+   "\tid,",
+   "\t'Zürich – depot' AS label, -- étiquette ✓",
+   "\tamount",
+   "FROM __ref(\"stg_support_0\")",
+   ""
+  ],
+  "models/features/timestamp_history_stg_support_1.sql": [
+   "SELECT id, status, created_at",
+   "FROM __ref(\"stg_support_1\")",
+   ""
+  ],
+  "models/rendering/channel_labels.sql": [
+   "SELECT id, channel",
+   "FROM __source(\"labelled_channels\")",
+   ""
+  ],
+  "models/rendering/configured_stg_support_1.sql": [
+   "SELECT id, amount, status",
+   "FROM __ref(\"stg_support_1\")",
+   ""
+  ],
+  "models/rendering/labelled_stg_support_1.sql": [
+   "SELECT id, LOWER(TRIM(status)) AS status,",
+   "  __udf(\"tidy_status\")(status) AS tidied",
+   "FROM __ref(\"stg_support_1\")",
+   ""
+  ],
+  "models/rendering/legacy_event_ids.sql": [
+   "SELECT id",
+   "FROM __ref(\"stg_support_0\") AS legacy",
+   ""
+  ],
+  "models/rendering/stated_stg_support_0.sql": [
+   "SELECT CAST(id AS INTEGER) AS id, status,",
+   "  CASE WHEN amount >= 2 THEN 'HIGH'",
+   "    ELSE 'LOW' END AS tier",
+   "FROM __ref(\"stg_support_0\")",
+   ""
+  ],
+  "models/support/marts/support_summary_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  'Zürich – depot' AS site_label",
+   "FROM __ref(\"stg_support_0\") t",
+   ""
+  ],
+  "models/support/staging/stg_support_0.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  t.amount * 2.4700 AS threshold_0_amount",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "models/support/staging/stg_support_1.sql": [
+   "SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  (t.amount + 0 + 1) AS adjust_0_amount",
+   "FROM __source(\"raw_events_0\") t",
+   ""
+  ],
+  "tests/_chain_/labelled_stg_support_1__stg_support_1/test_labelled_stg_support_1.sql": [
+   "WITH __source__raw_events_0 AS (SELECT 1 AS id, CAST(1 AS DOUBLE) AS amount, 'placed' AS status, TIMESTAMP '2026-01-01 00:00:00' AS created_at UNION ALL SELECT 2 AS id, CAST(2 AS DOUBLE) AS amount, 'placed' AS status, TIMESTAMP '2026-01-02 00:00:00' AS created_at),",
+   "__ref__stg_support_1 AS (SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  (t.amount + 0 + 1) AS adjust_0_amount",
+   "FROM __source__raw_events_0 t),",
+   "__ref__labelled_stg_support_1 AS (SELECT id, LOWER(TRIM(status)) AS status,",
+   "  ci_checks.tidy_status(status) AS tidied",
+   "FROM __ref__stg_support_1),",
+   "__actual__labelled_stg_support_1 AS (SELECT * FROM __ref__labelled_stg_support_1),",
+   "__expected__labelled_stg_support_1 AS (SELECT 1 AS id, LOWER(TRIM('placed')) AS status",
+   "  UNION ALL",
+   "  SELECT 2 AS id, 'placed' AS status)",
+   "SELECT 1 AS step_index, 'labelled_stg_support_1' AS model_name, (SELECT COUNT(*) FROM __actual__labelled_stg_support_1) AS actual_count, (SELECT COUNT(*) FROM __expected__labelled_stg_support_1) AS expected_count, (SELECT COUNT(*) FROM (SELECT id, status FROM __actual__labelled_stg_support_1 EXCEPT SELECT id, status FROM __expected__labelled_stg_support_1) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT id, status FROM __expected__labelled_stg_support_1 EXCEPT SELECT id, status FROM __actual__labelled_stg_support_1) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/stg_support_0/test_stg_support_0.sql": [
+   "WITH __source__raw_events_0 AS (SELECT 1 AS id, CAST(10 AS DOUBLE) AS amount, 'placed' AS status,",
+   "    TIMESTAMP '2026-01-01 00:00:00' AS created_at),",
+   "__ref__stg_support_0 AS (SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  t.amount * 2.4700 AS threshold_0_amount",
+   "FROM __source__raw_events_0 t),",
+   "__actual__stg_support_0 AS (SELECT * FROM __ref__stg_support_0),",
+   "__expected__stg_support_0 AS (SELECT 1 AS id, 'placed' AS status)",
+   "SELECT 0 AS step_index, 'stg_support_0' AS model_name, (SELECT COUNT(*) FROM __actual__stg_support_0) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_support_0) AS expected_count, (SELECT COUNT(*) FROM (SELECT id, status FROM __actual__stg_support_0 EXCEPT SELECT id, status FROM __expected__stg_support_0) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT id, status FROM __expected__stg_support_0 EXCEPT SELECT id, status FROM __actual__stg_support_0) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/tests/unit/test_stg_support_0_cases/block_1__labelled.sql": [
+   "WITH __source__raw_events_0 AS (SELECT 1 AS id, CAST(2.25 AS DOUBLE) AS amount,",
+   "    'Zürich – depot' AS status,",
+   "    TIMESTAMP '2026-01-01 00:00:00' AS created_at),",
+   "__ref__stg_support_0 AS (SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  t.amount * 2.4700 AS threshold_0_amount",
+   "FROM __source__raw_events_0 t),",
+   "__actual__stg_support_0 AS (SELECT * FROM __ref__stg_support_0),",
+   "__expected__stg_support_0 AS (SELECT 1 AS id)",
+   "SELECT 0 AS step_index, 'stg_support_0' AS model_name, (SELECT COUNT(*) FROM __actual__stg_support_0) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_support_0) AS expected_count, (SELECT COUNT(*) FROM (SELECT id FROM __actual__stg_support_0 EXCEPT SELECT id FROM __expected__stg_support_0) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT id FROM __expected__stg_support_0 EXCEPT SELECT id FROM __actual__stg_support_0) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/tests/unit/test_stg_support_0_cases/block_1__placed.sql": [
+   "WITH __source__raw_events_0 AS (SELECT 1 AS id, CAST(1.5 AS DOUBLE) AS amount,",
+   "    'placed' AS status,",
+   "    TIMESTAMP '2026-01-01 00:00:00' AS created_at),",
+   "__ref__stg_support_0 AS (SELECT",
+   "  t.id,",
+   "  t.amount,",
+   "  t.status,",
+   "  t.created_at,",
+   "  t.amount * 2.4700 AS threshold_0_amount",
+   "FROM __source__raw_events_0 t),",
+   "__actual__stg_support_0 AS (SELECT * FROM __ref__stg_support_0),",
+   "__expected__stg_support_0 AS (SELECT 1 AS id)",
+   "SELECT 0 AS step_index, 'stg_support_0' AS model_name, (SELECT COUNT(*) FROM __actual__stg_support_0) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_support_0) AS expected_count, (SELECT COUNT(*) FROM (SELECT id FROM __actual__stg_support_0 EXCEPT SELECT id FROM __expected__stg_support_0) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT id FROM __expected__stg_support_0 EXCEPT SELECT id FROM __actual__stg_support_0) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/udf detects_placed_events/detects_placed_events.sql": [
+   "WITH input_values AS (SELECT 'placed' AS event_status),",
+   "__actual__udf_detects_placed_events AS (SELECT event_status, ci_checks.is_placed(event_status) AS is_placed",
+   "  FROM input_values),",
+   "__expected__udf_detects_placed_events AS (SELECT 'placed' AS event_status, TRUE AS is_placed)",
+   "SELECT 0 AS step_index, 'udf detects_placed_events' AS model_name, (SELECT COUNT(*) FROM __actual__udf_detects_placed_events) AS actual_count, (SELECT COUNT(*) FROM __expected__udf_detects_placed_events) AS expected_count, (SELECT COUNT(*) FROM (SELECT * FROM __actual__udf_detects_placed_events EXCEPT SELECT * FROM __expected__udf_detects_placed_events) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT * FROM __expected__udf_detects_placed_events EXCEPT SELECT * FROM __actual__udf_detects_placed_events) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ]
+ },
+ "manifest": {
+  "nodes": {
+   "model.generated_9.combined_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "combined_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/combined_stg_billing_0.sql",
+    "original_file_path": "models/analysis/combined_stg_billing_0.sql",
+    "unique_id": "model.generated_9.combined_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "combined_stg_billing_0"
+    ],
+    "alias": "combined_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Recent and older rows of stg_billing_0 and stg_support_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.combined_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0",
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.every_open_event": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "every_open_event",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/every_open_event.sql",
+    "original_file_path": "models/analysis/every_open_event.sql",
+    "unique_id": "model.generated_9.every_open_event",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "every_open_event"
+    ],
+    "alias": "every_open_event",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Every column of an open source",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.every_open_event",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.open_events"
+     ]
+    }
+   },
+   "model.generated_9.every_raw_events_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "every_raw_events_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/every_raw_events_1.sql",
+    "original_file_path": "models/analysis/every_raw_events_1.sql",
+    "unique_id": "model.generated_9.every_raw_events_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "every_raw_events_1"
+    ],
+    "alias": "every_raw_events_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Every column of raw_events_1",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.every_raw_events_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.raw_events_1"
+     ]
+    }
+   },
+   "model.generated_9.every_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "every_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/every_stg_billing_0.sql",
+    "original_file_path": "models/analysis/every_stg_billing_0.sql",
+    "unique_id": "model.generated_9.every_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "every_stg_billing_0"
+    ],
+    "alias": "every_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Every column of stg_billing_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.every_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.passed_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "passed_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/passed_stg_billing_0.sql",
+    "original_file_path": "models/analysis/passed_stg_billing_0.sql",
+    "unique_id": "model.generated_9.passed_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "passed_stg_billing_0"
+    ],
+    "alias": "passed_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Columns of stg_billing_0 passed through a CTE",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.passed_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.pivot_input_stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "pivot_input_stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/pivot_input_stg_support_0.sql",
+    "original_file_path": "models/analysis/pivot_input_stg_support_0.sql",
+    "unique_id": "model.generated_9.pivot_input_stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "pivot_input_stg_support_0"
+    ],
+    "alias": "pivot_input_stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Contracted pivot input from stg_support_0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.pivot_input_stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.pivoted_stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "pivoted_stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/pivoted_stg_support_0.sql",
+    "original_file_path": "models/analysis/pivoted_stg_support_0.sql",
+    "unique_id": "model.generated_9.pivoted_stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "pivoted_stg_support_0"
+    ],
+    "alias": "pivoted_stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Amounts of stg_support_0 pivoted by status",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "dynamic_columns": [
+       {
+        "name": "status_amounts",
+        "pivot_column": "status",
+        "value_column": "amount",
+        "aggregate": "MAX",
+        "type": "DOUBLE",
+        "name_pattern": null
+       }
+      ]
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.pivoted_stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.pivot_input_stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.quoted_stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "quoted_stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/quoted_stg_support_0.sql",
+    "original_file_path": "models/analysis/quoted_stg_support_0.sql",
+    "unique_id": "model.generated_9.quoted_stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "quoted_stg_support_0"
+    ],
+    "alias": "quoted_stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Quoted identifiers over stg_support_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.quoted_stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.typed_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "typed_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/typed_stg_billing_0.sql",
+    "original_file_path": "models/analysis/typed_stg_billing_0.sql",
+    "unique_id": "model.generated_9.typed_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "typed_stg_billing_0"
+    ],
+    "alias": "typed_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Typed and untyped outputs of stg_billing_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.typed_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.unanalysed_stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "unanalysed_stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/analysis/unanalysed_stg_support_1.sql",
+    "original_file_path": "models/analysis/unanalysed_stg_support_1.sql",
+    "unique_id": "model.generated_9.unanalysed_stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "analysis",
+     "unanalysed_stg_support_1"
+    ],
+    "alias": "unanalysed_stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Copy of stg_support_1 that SQL analysis cannot parse",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.unanalysed_stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_1"
+     ]
+    }
+   },
+   "model.generated_9.billing_summary_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "billing_summary_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/billing/marts/billing_summary_0.sql",
+    "original_file_path": "models/billing/marts/billing_summary_0.sql",
+    "unique_id": "model.generated_9.billing_summary_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "billing",
+     "marts",
+     "billing_summary_0"
+    ],
+    "alias": "billing_summary_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [
+      {
+       "sql": "SELECT 'ci_checks.billing_summary_0' AS refreshed_relation, 'Ελληνικά orders' AS refresh_label",
+       "transaction": true,
+       "index": 0
+      },
+      {
+       "sql": "SELECT 'ci_checks.billing_summary_0' AS refreshed",
+       "transaction": true,
+       "index": 1
+      }
+     ],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Summary of billing activity 0 (Zürich – depot)",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "sql",
+         "statement": "SELECT 'ci_checks.billing_summary_0' AS refreshed_relation, 'Ελληνικά orders' AS refresh_label",
+         "name": "record_refresh",
+         "relative_path": "hooks/sql/record_refresh.sql",
+         "definition_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+         "kwargs": {
+          "relation": "@@CTX:destination.qualified",
+          "label": "Ελληνικά orders"
+         },
+         "description": "Record a refresh for one relation"
+        },
+        {
+         "type": "sql",
+         "statement": "SELECT 'ci_checks.billing_summary_0' AS refreshed"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.billing_summary_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/billing/staging/stg_billing_0.sql",
+    "original_file_path": "models/billing/staging/stg_billing_0.sql",
+    "unique_id": "model.generated_9.stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "billing",
+     "staging",
+     "stg_billing_0"
+    ],
+    "alias": "stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged billing events 0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_9.append_stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "append_stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/append_stg_support_0.sql",
+    "original_file_path": "models/features/append_stg_support_0.sql",
+    "unique_id": "model.generated_9.append_stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "append_stg_support_0"
+    ],
+    "alias": "append_stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "append",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Incremental append copy of stg_support_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.append_stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.batched_rolling_window_stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "batched_rolling_window_stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/batched_rolling_window_stg_support_1.sql",
+    "original_file_path": "models/features/batched_rolling_window_stg_support_1.sql",
+    "unique_id": "model.generated_9.batched_rolling_window_stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "batched_rolling_window_stg_support_1"
+    ],
+    "alias": "batched_rolling_window_stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Microbatched rolling_window totals of stg_support_1",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.batched_rolling_window_stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_1"
+     ]
+    }
+   },
+   "model.generated_9.delete_insert_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "delete_insert_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/delete_insert_stg_billing_0.sql",
+    "original_file_path": "models/features/delete_insert_stg_billing_0.sql",
+    "unique_id": "model.generated_9.delete_insert_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "delete_insert_stg_billing_0"
+    ],
+    "alias": "delete_insert_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "id"
+     ],
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Incremental delete_insert copy of stg_billing_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.delete_insert_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.flagged_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "flagged_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/flagged_stg_billing_0.sql",
+    "original_file_path": "models/features/flagged_stg_billing_0.sql",
+    "unique_id": "model.generated_9.flagged_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "flagged_stg_billing_0"
+    ],
+    "alias": "flagged_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Function-flagged copy of stg_billing_0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.flagged_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.is_placed",
+      "model.generated_9.is_large",
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.guarded_stg_billing_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "guarded_stg_billing_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/guarded_stg_billing_0.sql",
+    "original_file_path": "models/features/guarded_stg_billing_0.sql",
+    "unique_id": "model.generated_9.guarded_stg_billing_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "guarded_stg_billing_0"
+    ],
+    "alias": "guarded_stg_billing_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Generic-audited copy of stg_billing_0",
+    "columns": {
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.guarded_stg_billing_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_billing_0"
+     ]
+    }
+   },
+   "model.generated_9.kept_stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "kept_stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/kept_stg_support_1.sql",
+    "original_file_path": "models/features/kept_stg_support_1.sql",
+    "unique_id": "model.generated_9.kept_stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "kept_stg_support_1"
+    ],
+    "alias": "kept_stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Statuses kept from stg_support_1",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.kept_stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_1"
+     ]
+    }
+   },
+   "model.generated_9.product_labels": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "product_labels",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/product_labels.sql",
+    "original_file_path": "models/features/product_labels.sql",
+    "unique_id": "model.generated_9.product_labels",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "product_labels"
+    ],
+    "alias": "product_labels",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Product labels from the loader",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.product_labels",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.loaded_products"
+     ]
+    }
+   },
+   "model.generated_9.spaced_stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "spaced_stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/spaced_stg_support_0.sql",
+    "original_file_path": "models/features/spaced_stg_support_0.sql",
+    "unique_id": "model.generated_9.spaced_stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "spaced_stg_support_0"
+    ],
+    "alias": "spaced_stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [
+      "línea",
+      "東京"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "línea",
+     "東京"
+    ],
+    "description": "Copy of stg_support_0 with café ☕ counter",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.spaced_stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.timestamp_history_stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "timestamp_history_stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/features/timestamp_history_stg_support_1.sql",
+    "original_file_path": "models/features/timestamp_history_stg_support_1.sql",
+    "unique_id": "model.generated_9.timestamp_history_stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "features",
+     "timestamp_history_stg_support_1"
+    ],
+    "alias": "timestamp_history_stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "snapshot",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "id"
+     ],
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Timestamp history of stg_support_1",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.timestamp_history_stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_1"
+     ]
+    }
+   },
+   "model.generated_9.channel_labels": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "channel_labels",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/rendering/channel_labels.sql",
+    "original_file_path": "models/rendering/channel_labels.sql",
+    "unique_id": "model.generated_9.channel_labels",
+    "fqn": [
+     "generated_9",
+     "models",
+     "rendering",
+     "channel_labels"
+    ],
+    "alias": "channel_labels",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Normalised channel labels",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.channel_labels",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.labelled_channels"
+     ]
+    }
+   },
+   "model.generated_9.configured_stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "configured_stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/rendering/configured_stg_support_1.sql",
+    "original_file_path": "models/rendering/configured_stg_support_1.sql",
+    "unique_id": "model.generated_9.configured_stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "rendering",
+     "configured_stg_support_1"
+    ],
+    "alias": "configured_stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [
+      "release"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "release"
+    ],
+    "description": "Configured copy of stg_support_1 (réglé)",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "Row key",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "Montant réglé",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.configured_stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_1"
+     ]
+    }
+   },
+   "model.generated_9.labelled_stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "labelled_stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/rendering/labelled_stg_support_1.sql",
+    "original_file_path": "models/rendering/labelled_stg_support_1.sql",
+    "unique_id": "model.generated_9.labelled_stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "rendering",
+     "labelled_stg_support_1"
+    ],
+    "alias": "labelled_stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Labelled copy of stg_support_1",
+    "columns": {
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.labelled_stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.tidy_status",
+      "model.generated_9.stg_support_1"
+     ]
+    }
+   },
+   "model.generated_9.legacy_event_ids": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "legacy_event_ids",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/rendering/legacy_event_ids.sql",
+    "original_file_path": "models/rendering/legacy_event_ids.sql",
+    "unique_id": "model.generated_9.legacy_event_ids",
+    "fqn": [
+     "generated_9",
+     "models",
+     "rendering",
+     "legacy_event_ids"
+    ],
+    "alias": "legacy_event_ids",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Ids read through a macro-generated reference",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.legacy_event_ids",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.stated_stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "stated_stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/rendering/stated_stg_support_0.sql",
+    "original_file_path": "models/rendering/stated_stg_support_0.sql",
+    "unique_id": "model.generated_9.stated_stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "rendering",
+     "stated_stg_support_0"
+    ],
+    "alias": "stated_stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Enum-typed copy of stg_support_0",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "tier": {
+      "name": "tier",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.stated_stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.support_summary_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "support_summary_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/support/marts/support_summary_0.sql",
+    "original_file_path": "models/support/marts/support_summary_0.sql",
+    "unique_id": "model.generated_9.support_summary_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "support",
+     "marts",
+     "support_summary_0"
+    ],
+    "alias": "support_summary_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [
+      "support",
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [
+      {
+       "sql": "SELECT 'ci_checks.support_summary_0' AS refreshed_relation, 'café ☕ counter' AS refresh_label",
+       "transaction": true,
+       "index": 0
+      },
+      {
+       "sql": "SELECT 'ci_checks.support_summary_0' AS refreshed",
+       "transaction": true,
+       "index": 1
+      }
+     ],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "support",
+     "marts"
+    ],
+    "description": "Summary of support activity 0",
+    "columns": {},
+    "meta": {
+     "sqlbuild": {
+      "lifecycle_hooks": {
+       "post_hooks": [
+        {
+         "type": "sql",
+         "statement": "SELECT 'ci_checks.support_summary_0' AS refreshed_relation, 'café ☕ counter' AS refresh_label",
+         "name": "record_refresh",
+         "relative_path": "hooks/sql/record_refresh.sql",
+         "definition_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+         "kwargs": {
+          "relation": "@@CTX:destination.qualified",
+          "label": "café ☕ counter"
+         },
+         "description": "Record a refresh for one relation"
+        },
+        {
+         "type": "sql",
+         "statement": "SELECT 'ci_checks.support_summary_0' AS refreshed"
+        }
+       ]
+      }
+     }
+    },
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.support_summary_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.generated_9.stg_support_0"
+     ]
+    }
+   },
+   "model.generated_9.stg_support_0": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "stg_support_0",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/support/staging/stg_support_0.sql",
+    "original_file_path": "models/support/staging/stg_support_0.sql",
+    "unique_id": "model.generated_9.stg_support_0",
+    "fqn": [
+     "generated_9",
+     "models",
+     "support",
+     "staging",
+     "stg_support_0"
+    ],
+    "alias": "stg_support_0",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged support events 0",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.stg_support_0",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.raw_events_0"
+     ]
+    }
+   },
+   "model.generated_9.stg_support_1": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "stg_support_1",
+    "resource_type": "model",
+    "package_name": "generated_9",
+    "path": "models/support/staging/stg_support_1.sql",
+    "original_file_path": "models/support/staging/stg_support_1.sql",
+    "unique_id": "model.generated_9.stg_support_1",
+    "fqn": [
+     "generated_9",
+     "models",
+     "support",
+     "staging",
+     "stg_support_1"
+    ],
+    "alias": "stg_support_1",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "ci_checks",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Staged support events 1",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "ci_checks.stg_support_1",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.generated_9.raw_events_0"
+     ]
+    }
+   }
+  },
+  "sources": {
+   "source.generated_9.configured_events": {
+    "database": null,
+    "schema": "",
+    "name": "configured_events",
+    "resource_type": "source",
+    "package_name": "generated_9",
+    "path": "sources/configured.yml",
+    "original_file_path": "sources/configured.yml",
+    "unique_id": "source.generated_9.configured_events",
+    "fqn": [
+     "generated_9",
+     "configured_events"
+    ],
+    "source_name": "configured_events",
+    "source_description": "",
+    "loader": "",
+    "identifier": "configured_events",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Configured feed events",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "Key id",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "owner": "orders team"
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.generated_9.labelled_channels": {
+    "database": null,
+    "schema": "",
+    "name": "labelled_channels",
+    "resource_type": "source",
+    "package_name": "generated_9",
+    "path": "sources/labelled.yml",
+    "original_file_path": "sources/labelled.yml",
+    "unique_id": "source.generated_9.labelled_channels",
+    "fqn": [
+     "generated_9",
+     "labelled_channels"
+    ],
+    "source_name": "labelled_channels",
+    "source_description": "",
+    "loader": "",
+    "identifier": "labelled_channels",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Channel labels normalised in the source expression.",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "channel": {
+      "name": "channel",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.generated_9.loaded_products": {
+    "database": null,
+    "schema": "ci_checks",
+    "name": "loaded_products",
+    "resource_type": "source",
+    "package_name": "generated_9",
+    "path": "sources/managed.yml",
+    "original_file_path": "sources/managed.yml",
+    "unique_id": "source.generated_9.loaded_products",
+    "fqn": [
+     "generated_9",
+     "loaded_products"
+    ],
+    "source_name": "loaded_products",
+    "source_description": "",
+    "loader": "",
+    "identifier": "loaded_products",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Products loaded by a project loader.",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "label": {
+      "name": "label",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "loaded_products",
+      "auto_load": false,
+      "write_strategy": "table"
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.generated_9.open_events": {
+    "database": null,
+    "schema": "",
+    "name": "open_events",
+    "resource_type": "source",
+    "package_name": "generated_9",
+    "path": "sources/open.yml",
+    "original_file_path": "sources/open.yml",
+    "unique_id": "source.generated_9.open_events",
+    "fqn": [
+     "generated_9",
+     "open_events"
+    ],
+    "source_name": "open_events",
+    "source_description": "",
+    "loader": "",
+    "identifier": "open_events",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Events whose columns are only known to the warehouse.",
+    "columns": {},
+    "meta": {},
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.generated_9.raw_events_0": {
+    "database": null,
+    "schema": "",
+    "name": "raw_events_0",
+    "resource_type": "source",
+    "package_name": "generated_9",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.generated_9.raw_events_0",
+    "fqn": [
+     "generated_9",
+     "raw_events_0"
+    ],
+    "source_name": "raw_events_0",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_events_0",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Generated event feed 0.",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "created_at": {
+      "name": "created_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.generated_9.raw_events_1": {
+    "database": null,
+    "schema": "",
+    "name": "raw_events_1",
+    "resource_type": "source",
+    "package_name": "generated_9",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.generated_9.raw_events_1",
+    "fqn": [
+     "generated_9",
+     "raw_events_1"
+    ],
+    "source_name": "raw_events_1",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw_events_1",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Generated event feed 1.",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount": {
+      "name": "amount",
+      "description": "",
+      "meta": {},
+      "data_type": "DOUBLE",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "created_at": {
+      "name": "created_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   }
+  },
+  "macros": {
+   "macro.generated_9.adjust_0": {
+    "name": "adjust_0",
+    "resource_type": "macro",
+    "package_name": "generated_9",
+    "path": "macros/adjust_0.py",
+    "original_file_path": "macros/adjust_0.py",
+    "unique_id": "macro.generated_9.adjust_0",
+    "macro_sql": "def adjust_0(expression: str) -> str:\n    \"\"\"Offset an amount.\"\"\"\n    return f\"({expression} + 0 + 1)\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_9.tidy_label": {
+    "name": "tidy_label",
+    "resource_type": "macro",
+    "package_name": "generated_9",
+    "path": "macros/labels.py",
+    "original_file_path": "macros/labels.py",
+    "unique_id": "macro.generated_9.tidy_label",
+    "macro_sql": "def tidy_label(expression: str) -> str:\n    \"\"\"Trim and lower-case a label.\"\"\"\n    return f\"LOWER(TRIM({expression}))\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_9.legacy_events": {
+    "name": "legacy_events",
+    "resource_type": "macro",
+    "package_name": "generated_9",
+    "path": "models/rendering/_sqlbuild/_macros/legacy.py",
+    "original_file_path": "models/rendering/_sqlbuild/_macros/legacy.py",
+    "unique_id": "macro.generated_9.legacy_events",
+    "macro_sql": "def legacy_events() -> str:\n    \"\"\"Return a staged relation the way a migrated project wrote it.\"\"\"\n    return '__ref(\"stg_support_0\")'\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "models/rendering"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_9.event_rows": {
+    "name": "event_rows",
+    "resource_type": "macro",
+    "package_name": "generated_9",
+    "path": "tests/unit/rendering/_sqlbuild/_macros/fixtures.py",
+    "original_file_path": "tests/unit/rendering/_sqlbuild/_macros/fixtures.py",
+    "unique_id": "macro.generated_9.event_rows",
+    "macro_sql": "def event_rows(count: int = 2) -> str:\n    \"\"\"Return fixture event rows.\"\"\"\n    return \" UNION ALL \".join(\n        f\"SELECT {index} AS id, CAST({index} AS DOUBLE) AS amount, \"\n        f\"'placed' AS status, \"\n        f\"TIMESTAMP '2026-01-0{index} 00:00:00' AS created_at\"\n        for index in range(1, count + 1)\n    )\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "tests/unit/rendering"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.generated_9__sqlbuild_hooks.record_refresh": {
+    "name": "record_refresh",
+    "resource_type": "macro",
+    "package_name": "generated_9__sqlbuild_hooks",
+    "path": "hooks/sql/record_refresh.sql",
+    "original_file_path": "hooks/sql/record_refresh.sql",
+    "unique_id": "macro.generated_9__sqlbuild_hooks.record_refresh",
+    "macro_sql": "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "Record a refresh for one relation",
+    "meta": {
+     "sqlbuild_resource_type": "sql_hook",
+     "sqlbuild_hook_name": "record_refresh"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   }
+  },
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {
+   "model.generated_9.combined_stg_billing_0": [
+    "model.generated_9.stg_billing_0",
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.every_open_event": [
+    "source.generated_9.open_events"
+   ],
+   "model.generated_9.every_raw_events_1": [
+    "source.generated_9.raw_events_1"
+   ],
+   "model.generated_9.every_stg_billing_0": [
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.passed_stg_billing_0": [
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.pivot_input_stg_support_0": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.pivoted_stg_support_0": [
+    "model.generated_9.pivot_input_stg_support_0"
+   ],
+   "model.generated_9.quoted_stg_support_0": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.typed_stg_billing_0": [
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.unanalysed_stg_support_1": [
+    "model.generated_9.stg_support_1"
+   ],
+   "model.generated_9.billing_summary_0": [
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.stg_billing_0": [
+    "source.generated_9.raw_events_0"
+   ],
+   "model.generated_9.append_stg_support_0": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.batched_rolling_window_stg_support_1": [
+    "model.generated_9.stg_support_1"
+   ],
+   "model.generated_9.delete_insert_stg_billing_0": [
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.flagged_stg_billing_0": [
+    "model.generated_9.is_placed",
+    "model.generated_9.is_large",
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.guarded_stg_billing_0": [
+    "model.generated_9.stg_billing_0"
+   ],
+   "model.generated_9.kept_stg_support_1": [
+    "model.generated_9.stg_support_1"
+   ],
+   "model.generated_9.product_labels": [
+    "source.generated_9.loaded_products"
+   ],
+   "model.generated_9.spaced_stg_support_0": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.timestamp_history_stg_support_1": [
+    "model.generated_9.stg_support_1"
+   ],
+   "model.generated_9.channel_labels": [
+    "source.generated_9.labelled_channels"
+   ],
+   "model.generated_9.configured_stg_support_1": [
+    "model.generated_9.stg_support_1"
+   ],
+   "model.generated_9.labelled_stg_support_1": [
+    "model.generated_9.tidy_status",
+    "model.generated_9.stg_support_1"
+   ],
+   "model.generated_9.legacy_event_ids": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.stated_stg_support_0": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.support_summary_0": [
+    "model.generated_9.stg_support_0"
+   ],
+   "model.generated_9.stg_support_0": [
+    "source.generated_9.raw_events_0"
+   ],
+   "model.generated_9.stg_support_1": [
+    "source.generated_9.raw_events_0"
+   ],
+   "source.generated_9.configured_events": [],
+   "source.generated_9.labelled_channels": [],
+   "source.generated_9.loaded_products": [],
+   "source.generated_9.open_events": [],
+   "source.generated_9.raw_events_0": [],
+   "source.generated_9.raw_events_1": [],
+   "model.generated_9.configured_label": [],
+   "model.generated_9.is_placed": [],
+   "model.generated_9.tidy_status": [],
+   "model.generated_9.is_large": []
+  },
+  "group_map": {},
+  "docs": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+ }
+}

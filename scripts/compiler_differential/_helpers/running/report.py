@@ -31,15 +31,16 @@ def format_summary(
     engines: tuple[str, str],
     seconds: float,
     missing_coverage: dict[str, tuple[str, ...]] | None = None,
+    gate_failures: tuple[str, ...] = (),
 ) -> str:
-    """Summarize the run; any difference or missing coverage, keyed by stage, reports FAILED."""
+    """Summarize the run; a difference, missing coverage or gate failure reports FAILED."""
 
     differing: list[ProjectComparison] = [item for item in comparisons if item.differences]
     gaps: dict[str, tuple[str, ...]] = {
         stage: kinds for stage, kinds in (missing_coverage or {}).items() if kinds
     }
     left_engine, right_engine = engines
-    if not differing and not gaps:
+    if not differing and not gaps and not gate_failures:
         return (
             f"Compiler differential passed: {len(comparisons)} projects identical "
             f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
@@ -54,6 +55,8 @@ def format_summary(
     lines.extend(
         f"Required {stage} coverage missing: {', '.join(kinds)}" for stage, kinds in gaps.items()
     )
+    if gate_failures:
+        lines.append(f"Native fallback allow-list: {len(gate_failures)} problems (listed above)")
     return "\n".join(lines)
 
 

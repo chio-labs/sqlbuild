@@ -96,7 +96,7 @@ jobs:
                 ;;
             esac
             case "${path}" in
-              scripts/compiler_differential/*|scripts/run_compiler_differential.py|tests/*/scripts/compiler_differential/*|.github/workflows/verify.yml|Makefile)
+              scripts/compiler_differential/*|scripts/run_compiler_differential.py|tests/*/scripts/compiler_differential/*|tests/goldens/*|src/sqlbuild/cli/commands/_helpers/compile/*|.github/workflows/verify.yml|Makefile)
                 compiler_differential=true
                 ;;
             esac

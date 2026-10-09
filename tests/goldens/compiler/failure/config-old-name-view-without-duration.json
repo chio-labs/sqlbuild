@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': old_name_view must be a positive duration such as 7d, or false; got 'soon'",
+     "help": "write for example old_name_view 7d, or old_name_view false"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

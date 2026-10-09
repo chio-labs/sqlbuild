@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D008",
+     "message": "Seed CSV seeds/lookups.csv has no matching declaration for seed 'lookups' under seeds/**/*.yml"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

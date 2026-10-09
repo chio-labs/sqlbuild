@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import tempfile
@@ -13,11 +12,9 @@ from pathlib import Path
 from scripts.compiler_differential._helpers.coverage.analysis import required_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import required_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import required_render_kinds
+from scripts.compiler_differential._helpers.running.native_fallbacks import native_fallback_gate
 from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
-from scripts.compiler_differential._helpers.running.records import (
-    format_wheel_site_report,
-    wheel_site_report,
-)
+from scripts.compiler_differential._helpers.running.records import write_wheel_site_report
 from scripts.compiler_differential._helpers.running.report import (
     format_analysis_coverage,
     format_discovery_coverage,
@@ -27,6 +24,7 @@ from scripts.compiler_differential._helpers.running.report import (
 from scripts.compiler_differential._helpers.running.run import (
     compare_corpus,
     differential_options,
+    fallback_gate_request,
     selected_corpus,
 )
 from scripts.compiler_differential.constants import (
@@ -37,6 +35,10 @@ from scripts.compiler_differential.constants import (
     DEFAULT_SEED_COUNT,
     ENGINE_NAMES,
     EXPECT_SUCCESS,
+    GOLDEN_DIRECTORY,
+    GOLDEN_MODES,
+    NATIVE_FALLBACK_LIST,
+    NATIVE_FALLBACK_MODES,
     PER_PULL_REQUEST_CORPORA,
 )
 from scripts.compiler_differential.models import DifferentialOptions, ProjectComparison
@@ -60,25 +62,26 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
         else {}
     )
     if args.wheel_site_report is not None:
-        report: dict[str, object] = wheel_site_report(
-            comparisons=comparisons, engines=options.engines
+        write_wheel_site_report(
+            path=args.wheel_site_report, comparisons=comparisons, engines=options.engines
         )
-        args.wheel_site_report.parent.mkdir(parents=True, exist_ok=True)
-        _ = args.wheel_site_report.write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        print(format_wheel_site_report(report))
+    fallback_failures: tuple[str, ...] = native_fallback_gate(
+        request=fallback_gate_request(args=args, engines=options.engines),
+        comparisons=comparisons,
+    )
     print(
         format_summary(
             comparisons=comparisons,
             engines=options.engines,
             seconds=time.monotonic() - started,
             missing_coverage=missing_coverage,
+            gate_failures=fallback_failures,
         )
     )
     return (
         1
         if any(missing_coverage.values())
+        or fallback_failures
         or any(comparison.differences for comparison in comparisons)
         else 0
     )
@@ -180,6 +183,37 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--native-fallbacks",
+        choices=NATIVE_FALLBACK_MODES,
+        default=None,
+        help=(
+            "record native-to-Python fallbacks and analysis deferrals in every engine process and "
+            "check them against the allow-list (new, changed or vanished entries fail), or "
+            "rewrite the list from this run"
+        ),
+    )
+    parser.add_argument(
+        "--native-fallback-list",
+        type=Path,
+        default=None,
+        help=f"fallback allow-list file (default: {NATIVE_FALLBACK_LIST} in the repository)",
+    )
+    parser.add_argument(
+        "--goldens",
+        choices=GOLDEN_MODES,
+        default=None,
+        help=(
+            "check every engine's fixture, example, seed and failure outputs against the golden "
+            "files, or rewrite them from the first (oracle) engine"
+        ),
+    )
+    parser.add_argument(
+        "--golden-dir",
+        type=Path,
+        default=None,
+        help=f"golden output directory (default: {GOLDEN_DIRECTORY} in the repository)",
+    )
+    parser.add_argument(
         "--engine-env",
         action="append",
         default=[],
@@ -189,6 +223,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, default=None, help="keep run directories here")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     args: argparse.Namespace = parser.parse_args(argv)
+    repo_root: Path = Path(__file__).resolve().parents[3]
+    if args.golden_dir is None:
+        args.golden_dir = repo_root / GOLDEN_DIRECTORY
+    if args.native_fallback_list is None:
+        args.native_fallback_list = repo_root / NATIVE_FALLBACK_LIST
     for flag, required in (
         ("--require-discovery-coverage", args.require_discovery_coverage),
         ("--require-render-coverage", args.require_render_coverage),

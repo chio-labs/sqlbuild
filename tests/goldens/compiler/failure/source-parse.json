@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D006",
+     "message": "<project>/sources/raw.yml contains invalid YAML at line 4, column 1: while parsing a node, did not find expected node content"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

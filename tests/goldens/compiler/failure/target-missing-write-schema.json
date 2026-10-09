@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "S103",
+     "message": "Model 'customer_totals' has no explicitly resolved physical write schema. Set schema on the resource or its defaults, selected target, loader_schema, or connection."
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

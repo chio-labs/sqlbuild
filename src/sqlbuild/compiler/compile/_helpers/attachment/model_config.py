@@ -65,6 +65,8 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
 )
@@ -136,6 +138,7 @@ def contains_config_templates(
         native: bool | None = native_config_contains_template(values)
         if native is not None:
             return native
+        report_native_fallback(site=NativeFallbackSite.CONFIG_PRESENCE_SCAN, kind="templates")
     return _contains_template_data_cached(
         value=values, cache=scan_cache.template_presence if scan_cache is not None else None
     )
@@ -152,6 +155,7 @@ def contains_config_macro_calls(
         )
         if native is not None:
             return native
+        report_native_fallback(site=NativeFallbackSite.CONFIG_PRESENCE_SCAN, kind="macros")
     return _contains_model_config_macro_cached(
         values=values, cache=scan_cache.macro_presence if scan_cache is not None else None
     )
@@ -372,6 +376,8 @@ def build_model_header_schema_entry(
         )
         else None
     )
+    if native_metadata is not None and native is None:
+        report_native_fallback(site=NativeFallbackSite.CONFIG_HEADER_METADATA, kind="stale")
     if native is not None and native.columns_error is not None:
         raise native_config_error(error=native.columns_error, bridge_independent=True)
     local_columns: tuple[SchemaColumn, ...] = (
@@ -931,6 +937,7 @@ def build_native_model_config(
         model_file.header_values, matched_path_default, model_file.file_path.stem
     )
     if built is None:
+        report_native_fallback(site=NativeFallbackSite.CONFIG_BUILD)
         return None
     if isinstance(built, _native.NativeConfigError):
         raise native_config_error(error=built, bridge_independent=True)
@@ -1019,6 +1026,7 @@ def validate_model_config(
             raise native_validation_error(error=outcome, values=request.config.values)
         if outcome:
             return
+        report_native_fallback(site=NativeFallbackSite.CONFIG_VALIDATORS)
     run_python_model_validators(context=context, request=request)
 
 

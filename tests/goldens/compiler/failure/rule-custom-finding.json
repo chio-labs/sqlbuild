@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "rule",
+     "severity": "error",
+     "code": "XSQBRDIFF001",
+     "message": "Models avoid the stg_ prefix",
+     "path": "models/staging/stg_orders.sql",
+     "line": 1,
+     "column": 1,
+     "location": {
+      "path": "models/staging/stg_orders.sql",
+      "line": 1,
+      "column": 1
+     },
+     "help": "Rename the model."
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

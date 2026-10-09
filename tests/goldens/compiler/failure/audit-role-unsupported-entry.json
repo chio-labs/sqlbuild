@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "Unsupported entries in audits/: audits/at_least.sql; audit files must live in audits/generic/ or audits/singular/"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

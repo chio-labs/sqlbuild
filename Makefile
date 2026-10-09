@@ -7,7 +7,8 @@ SHELL := /bin/bash
 	test-e2e-duckdb-integrations test-e2e-performance \
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
 	test-e2e-dense-compile-performance test-e2e-varied-cache-performance \
-	compiler-differential compiler-differential-shipped compiler-differential-dense
+	compiler-differential compiler-differential-shipped compiler-differential-dense \
+	compiler-goldens
 
 format:
 	uv run ruff format .
@@ -293,11 +294,15 @@ COMPILER_DIFFERENTIAL_SEEDS ?= 12
 COMPILER_DIFFERENTIAL_SHIPPED_SEEDS ?= 12
 COMPILER_DIFFERENTIAL_DENSE_MODELS ?= 3000
 COMPILER_DIFFERENTIAL_ARGS ?=
+# Native-to-Python fallbacks and analysis deferrals must match the allow-list exactly, and every
+# output its golden. Pass `--native-fallbacks update` in COMPILER_DIFFERENTIAL_ARGS to rewrite
+# the list (see scripts/compiler_differential/README.md).
+COMPILER_DIFFERENTIAL_GATES := --native-fallbacks check --goldens check
 
 compiler-differential:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SEEDS) \
-		$(COMPILER_DIFFERENTIAL_ARGS)
+		$(COMPILER_DIFFERENTIAL_GATES) $(COMPILER_DIFFERENTIAL_ARGS)
 
 # python vs native-preview above covers every native stage; this keeps the shipped `native` default
 # (native discovery and rendering) covered on a bounded corpus.
@@ -305,7 +310,15 @@ compiler-differential-shipped:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
 		--engines python native --corpus seeds failures \
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SHIPPED_SEEDS) \
-		$(COMPILER_DIFFERENTIAL_ARGS)
+		$(COMPILER_DIFFERENTIAL_GATES) $(COMPILER_DIFFERENTIAL_ARGS)
+
+# Rewrite tests/goldens/compiler from the python oracle (from native once Python is deleted);
+# review the diff like code. See scripts/compiler_differential/README.md.
+compiler-goldens:
+	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
+		--engines python native --corpus fixtures examples seeds failures \
+		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SEEDS) \
+		--goldens update $(COMPILER_DIFFERENTIAL_ARGS)
 
 compiler-differential-dense:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \

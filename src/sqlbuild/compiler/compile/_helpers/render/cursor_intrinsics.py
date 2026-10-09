@@ -11,8 +11,9 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -70,6 +71,7 @@ def reject_cursor_intrinsics(*, sql: str, context: str) -> None:
             return
         if error is not None:
             raise CompileInputError(error)
+        report_native_fallback(site=NativeFallbackSite.CURSOR_INTRINSIC_REJECTION)
     _assert_no_reserved_cursor_markers(sql=sql, context=context)
     _, found = _transform_cursor_intrinsics(
         sql=sql,

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D015",
+     "message": "Event exporter 'ignore_events' in sinks/lifecycle.py parameters must not have defaults"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

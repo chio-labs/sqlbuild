@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D001",
+     "message": "<project>/sqlbuild_local.toml settings contains unknown key(s): sql_analysiss. Allowed keys: auto_load_sources, column_contract_mode, concurrency, default_audit_run_scope, default_audit_severity, max_concurrency, microbatch_concurrency, microbatch_unaccounted_partition_policy, query_change_tracking, require_sql_analysis, sql_analysis, sql_validation, table_promotion_mode",
+     "help": "did you mean 'sql_analysis'?"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

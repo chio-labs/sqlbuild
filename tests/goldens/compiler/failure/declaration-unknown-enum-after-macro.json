@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Unknown enum 'missing_status' in '<project>/models/staging/stg_orders.sql'. Visible enums: none"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

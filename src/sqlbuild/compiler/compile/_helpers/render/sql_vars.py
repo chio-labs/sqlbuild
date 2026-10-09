@@ -37,8 +37,9 @@ from sqlbuild.compiler.compile.models import (
     MacroExpansionResult,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
@@ -116,6 +117,8 @@ def expand_authored_sql_result(  # noqa: PLR0913
         if native
         else None
     )
+    if native and scanned_result is None:
+        report_native_fallback(site=NativeFallbackSite.DECLARATION_REFERENCES, kind="scan")
     declaration_result: DeclarationExpansionResult = (
         scanned_result
         if scanned_result is not None
@@ -227,6 +230,7 @@ def prepare_static_project_vars_batch(
     if not isinstance(raw_results, list) or len(raw_results) != len(sqls):
         raise CompileInputError("native static SQL interpolation returned an invalid batch")
     results: list[str | None] = []
+    counted: bool = native_stage_enabled(NativeStage.MODEL_LOOP)
     for sql, raw_result in zip(sqls, raw_results, strict=True):
         if not (
             isinstance(raw_result, tuple)
@@ -241,6 +245,8 @@ def prepare_static_project_vars_batch(
         elif status == _NATIVE_SUBSTITUTED and rendered is not None:
             results.append(rendered)
         elif status == _NATIVE_FALLBACK and rendered is None:
+            if counted:
+                report_native_fallback(site=NativeFallbackSite.SQL_VARIABLES)
             results.append(None)
         elif status in _NATIVE_ERROR_STATUSES:
             if error_file_path is not None:
@@ -250,6 +256,8 @@ def prepare_static_project_vars_batch(
                     file_path=error_file_path,
                     effective_vars=effective_vars,
                 )
+            if counted:
+                report_native_fallback(site=NativeFallbackSite.SQL_VARIABLES, kind="error")
             results.append(None)
         else:
             raise CompileInputError("native static SQL interpolation returned an invalid status")

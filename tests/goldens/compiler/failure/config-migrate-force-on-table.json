@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': migrate_force is only valid for incremental and snapshot models; nothing is replaced when a 'table' model migrates, because tables and views are rebuilt under their new name",
+     "help": "remove migrate_force from the model header"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}
