@@ -60,13 +60,12 @@ def engine_semantic_run(
     for path in sorted(record_dir.glob("analysis-deferrals-*.jsonl")):
         for line in path.read_text("utf-8").splitlines():
             record: dict[str, str] = json.loads(line)
-            if record["site"] in SEMANTIC_DEFERRAL_SITES:
-                deferrals.append((record["kind"], record["site"]))
+            deferrals.append((record["kind"], record["site"]))
     return EngineSemanticRun(
         report=report,
         returncode=compiled.returncode,
         semantic_wheel_calls=sum(calls[site] for site in SEMANTIC_WHEEL_SITES),
-        deferrals=tuple(deferrals),
+        deferrals=tuple(filter(lambda deferral: deferral[1] in SEMANTIC_DEFERRAL_SITES, deferrals)),
     )
 
 
