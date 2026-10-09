@@ -20,7 +20,10 @@ from sqlbuild.compiler.contracts._helpers.columns import (
     _output_column_location,
     _output_related_locations,
 )
-from sqlbuild.compiler.contracts._helpers.evaluation import python_model_contract_diagnostics
+from sqlbuild.compiler.contracts._helpers.evaluation import (
+    python_model_contract_diagnostics,
+    requires_contract_evaluation,
+)
 from sqlbuild.compiler.contracts._helpers.native_deferrals import record_contract_deferral
 from sqlbuild.compiler.contracts.constants import (
     NATIVE_CONTRACTS_DEFERRAL_SITE,
@@ -72,9 +75,10 @@ def native_model_contracts(
     for model, (deferral, rows) in zip(project.models, outcomes, strict=True):
         if deferral is not None:
             record_contract_deferral(kind=deferral, site=NATIVE_CONTRACTS_DEFERRAL_SITE)
-            diagnostics.extend(
-                python_model_contract_diagnostics(model=model, mode=mode, dialect=dialect)
-            )
+            if requires_contract_evaluation(model=model, mode=mode):
+                diagnostics.extend(
+                    python_model_contract_diagnostics(model=model, mode=mode, dialect=dialect)
+                )
             continue
         diagnostics.extend(_diagnostic(model=model, row=row) for row in rows)
     return ContractValidationResult(diagnostics=tuple(diagnostics))
