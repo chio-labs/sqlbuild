@@ -1,4 +1,4 @@
-"""The analysis stage seams defer to Python, so every engine compiles a project identically."""
+"""The analysis stage seams defer to Python or match it, so every engine compiles identically."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from unittest.mock import ANY
 
 import pytest
 
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
@@ -32,7 +33,7 @@ _ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
                 "infer_native_expression_source_shapes": [None],
                 "analyze_native_model_sql": [None],
                 "assemble_native_sql_tests": [None],
-                "complete_native_semantic_diagnostics": [None],
+                "complete_native_semantic_diagnostics": [ANY],
                 "evaluate_native_model_contracts": [None],
                 "build_native_column_lineage": [ANY],
                 "plan_native_sql_test_artifacts": [None],
@@ -72,6 +73,7 @@ def test_given_project_when_compiling_with_each_engine_then_seams_defer_and_outp
         test_case.expected_preview_returns,
     )
     assert isinstance(preview_seams["build_native_column_lineage"][0], ProjectColumnLineage)
+    assert isinstance(preview_seams["complete_native_semantic_diagnostics"][0], CompiledProject)
     assert (native_run.returncode, preview_run.returncode) == (0, 0)
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)
