@@ -16,7 +16,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
-from sqlbuild.compiler.macro_bridge._helpers.splicing import splice_text
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     digest_module_files,
     module_digests_metadata,
@@ -136,13 +135,9 @@ class MacroBridge:
     def scan(self, sql: str) -> tuple[MacroCallSite, ...] | None:
         """Return the top-level call sites of `sql`, or None when Python must expand it."""
 
-        try:
-            rows: list[tuple[int, int, str, list[str], bool]] | None = (
-                _native.scan_macro_call_sites(sql, self._python_version, self._unicode_version)
-            )
-        except UnicodeEncodeError:
-            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SCAN, kind="unencodable")
-            return None
+        rows: list[tuple[int, int, str, list[str], bool]] | None = _native.scan_macro_call_sites(
+            sql, self._python_version, self._unicode_version
+        )
         if rows is None:
             report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SCAN)
             return None
@@ -251,19 +246,15 @@ class MacroBridge:
 
         if self._store_trusted and len(sys.modules) != len(self._observed_modules):
             _ = self._observe_modules()
-        try:
-            self._memo.record(
-                class_id,
-                call_text,
-                (
-                    sql,
-                    [(relation.kind.value, relation.name) for relation in relations],
-                    list(events),
-                ),
-            )
-        except UnicodeEncodeError:
-            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_MEMO, kind="unencodable")
-            return
+        self._memo.record(
+            class_id,
+            call_text,
+            (
+                sql,
+                [(relation.kind.value, relation.name) for relation in relations],
+                list(events),
+            ),
+        )
 
     def splice(
         self, *, sql: str, sites: tuple[MacroCallSite, ...], outputs: list[str]
@@ -273,11 +264,7 @@ class MacroBridge:
         rendered: str
         spans: list[tuple[int, int, int, int]]
         bounds: list[tuple[int, int]] = [(site.start, site.end) for site in sites]
-        try:
-            rendered, spans = _native.splice_macro_calls(sql, bounds, outputs)
-        except UnicodeEncodeError:
-            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SPLICE, kind="unencodable")
-            rendered, spans = splice_text(sql=sql, bounds=bounds, outputs=outputs)
+        rendered, spans = _native.splice_macro_calls(sql, bounds, outputs)
         return rendered, tuple(
             ExpansionSpan(
                 source_start=source_start,

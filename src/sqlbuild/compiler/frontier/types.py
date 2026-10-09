@@ -57,8 +57,6 @@ class NativeFallbackSite(StrEnum):
     LINT_EXPANSION = "model_loop.lint_expansion"
     MACRO_CALL_SCAN = "macro_calls.scan"
     MACRO_CALL_RESOLUTION = "macro_calls.resolution"
-    MACRO_CALL_SPLICE = "macro_calls.splice"
-    MACRO_CALL_MEMO = "macro_calls.memo"
     MACRO_UNBRIDGED_EXPANSION = "macro_calls.unbridged_expansion"
     MACRO_BRIDGE_UNAVAILABLE = "macro_calls.bridge_unavailable"
     REFERENCE_SCAN = "reference_extraction.scan"

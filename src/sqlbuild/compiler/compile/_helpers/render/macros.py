@@ -1743,6 +1743,17 @@ def _record_macro_declaration_usage(
 
 
 def _validate_final_macro_sql(*, macro_name: str, file_path: Path, macro_result: str) -> None:
+    try:
+        _ = macro_result.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise CompileInputError(
+            f"Macro '@{macro_name}' in '{file_path}' returned text with the lone surrogate "
+            f"{macro_result[error.start]!r}, which is not valid Unicode",
+            help=(
+                "Return valid Unicode text from the macro; lone surrogates usually come from "
+                "bytes decoded with errors='surrogateescape'"
+            ),
+        ) from None
     generated_calls: tuple[str, ...] = _find_sqlbuild_call_names(macro_result)
     if not generated_calls:
         return

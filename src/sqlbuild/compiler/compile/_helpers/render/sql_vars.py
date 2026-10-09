@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import unicodedata
 from collections.abc import Mapping
@@ -18,6 +17,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_with_spans,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -179,7 +179,7 @@ def interpolate_sql_batch(
 
     rows = _native.interpolate_sql_batch(
         [(sql, str(file_path)) for sql, file_path in sqls],
-        (effective_vars, os.environ, context_values, _render_variable),
+        (effective_vars, UnicodeEnvironment(), context_values, _render_variable),
         (sys.version_info[0], sys.version_info[1]),
         unicodedata.unidata_version,
     )
