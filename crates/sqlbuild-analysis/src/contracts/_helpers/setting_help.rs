@@ -2,19 +2,27 @@
 
 use crate::contracts::constants::{ADDITIONAL_HELP_SEPARATOR, SETTING_SNIPPET_INDENT};
 
+/// One string setting: the file it belongs to, its TOML section and key, and its value.
+pub(crate) struct StringSetting<'a> {
+    pub(crate) file_name: &'a str,
+    pub(crate) section: &'a str,
+    pub(crate) key: &'a str,
+    pub(crate) value: &'a str,
+}
+
 /// A TOML string literal, as Python's `toml_value` renders a string.
 pub(crate) fn toml_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 /// `<purpose>, set this in <file>:` followed by the indented section and key.
-pub(crate) fn setting_help(
-    purpose: &str,
-    file_name: &str,
-    section: &str,
-    key: &str,
-    value: &str,
-) -> String {
+pub(crate) fn setting_help(purpose: &str, setting: &StringSetting<'_>) -> String {
+    let StringSetting {
+        file_name,
+        section,
+        key,
+        value,
+    } = setting;
     format!(
         "{purpose}, set this in {file_name}:\n{SETTING_SNIPPET_INDENT}[{section}]\n\
          {SETTING_SNIPPET_INDENT}{key} = {}",
@@ -23,13 +31,13 @@ pub(crate) fn setting_help(
 }
 
 /// A setting's current value, set explicitly or by default.
-pub(crate) fn setting_note(
-    file_name: &str,
-    section: &str,
-    key: &str,
-    value: &str,
-    explicit: bool,
-) -> String {
+pub(crate) fn setting_note(setting: &StringSetting<'_>, explicit: bool) -> String {
+    let StringSetting {
+        file_name,
+        section,
+        key,
+        value,
+    } = setting;
     let rendered: String = toml_string(value);
     if explicit {
         format!("{file_name} sets [{section}] {key} = {rendered}")

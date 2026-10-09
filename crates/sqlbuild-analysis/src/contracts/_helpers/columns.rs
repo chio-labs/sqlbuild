@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::contracts::_helpers::dynamic::dynamic_column_diagnostics;
-use crate::contracts::_helpers::types::{TypeComparison, types_equal};
+use crate::contracts::_helpers::type_comparison::{TypeComparison, types_equal};
 use crate::contracts::constants::{
     CONTRACT_ENFORCED, CONTRACT_NONE, DYNAMIC_OUTPUT_NOT_PROVEN_CODE, EXTRA_COLUMN_CODE,
     EXTRA_COLUMN_HELP, EXTRA_COLUMN_NAMED_SCHEMA_HELP, MISSING_COLUMN_CODE,
@@ -103,15 +103,22 @@ pub(crate) fn model_contract_diagnostics(
             declared_type,
             inferred,
         };
-        diagnostics.extend(column_type(
-            &checked,
-            schema.type_enforcement,
-            &unchecked,
+        let check = TypeCheck {
+            type_enforcement: schema.type_enforcement,
             contract_enforced,
+            unchecked: &unchecked,
             dialect,
-        )?);
+        };
+        diagnostics.extend(column_type(&checked, &check)?);
     }
     Ok(diagnostics)
+}
+
+struct TypeCheck<'a> {
+    type_enforcement: bool,
+    contract_enforced: bool,
+    unchecked: &'a HashSet<&'a str>,
+    dialect: &'a str,
 }
 
 struct TypedColumn<'a> {
@@ -241,15 +248,12 @@ fn missing_column(
 
 fn column_type(
     column: &TypedColumn<'_>,
-    type_enforcement: bool,
-    unchecked: &HashSet<&str>,
-    contract_enforced: bool,
-    dialect: &str,
+    check: &TypeCheck<'_>,
 ) -> Result<Option<ContractDiagnostic>, ContractDeferral> {
     let name: &str = &column.declared.name;
     let declared_type: &str = column.declared_type;
     let Some(inferred_type) = column.inferred.inferred_type.as_deref() else {
-        if !type_enforcement || unchecked.contains(column.inferred.name.as_str()) {
+        if !check.type_enforcement || check.unchecked.contains(column.inferred.name.as_str()) {
             return Ok(None);
         }
         return Ok(Some(ContractDiagnostic {
@@ -267,12 +271,12 @@ fn column_type(
             help: UNKNOWN_TYPE_HELP.to_owned(),
         }));
     };
-    if types_equal(declared_type, inferred_type, dialect)? == TypeComparison::Equal {
+    if types_equal(declared_type, inferred_type, check.dialect)? == TypeComparison::Equal {
         return Ok(None);
     }
     Ok(Some(ContractDiagnostic {
         code: TYPE_MISMATCH_CODE,
-        severity: if type_enforcement || contract_enforced {
+        severity: if check.type_enforcement || check.contract_enforced {
             ContractSeverity::Error
         } else {
             ContractSeverity::Warning

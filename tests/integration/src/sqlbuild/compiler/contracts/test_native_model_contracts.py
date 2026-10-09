@@ -16,7 +16,6 @@ from tests.integration.src.sqlbuild.compiler.contracts._test_types import (
     GeneratedPromotionParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
-    ContractView,
     compiled_contract_project,
     contract_views,
     deferral_records,
@@ -54,8 +53,9 @@ def test_given_generated_contracts_when_validating_natively_then_diagnostics_mat
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
     base: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
     labels: list[object] = []
-    python_views: list[ContractView] = []
-    native_views: list[ContractView] = []
+    python_views: list[object] = []
+    native_views: list[object] = []
+    native_codes: set[str] = set()
     for variant in range(test_case.variants):
         project: CompiledProject = perturbed_project(project=base, rng=rng)
         for dialect in test_case.dialects:
@@ -65,13 +65,12 @@ def test_given_generated_contracts_when_validating_natively_then_diagnostics_mat
             labels.append((variant, dialect))
             python_views.append(python)
             native_views.append(native)
+            native_codes.update(diagnostic.code for diagnostic in native)
 
     assert mismatches(inputs=labels, expected=python_views, actual=native_views) == []
     assert statuses["native"] >= test_case.expected_minimum_native
     assert statuses["native_diagnostics"] >= test_case.expected_minimum_diagnostics
-    assert {diagnostic.code for view in native_views for diagnostic in view} >= (
-        test_case.expected_codes
-    )
+    assert native_codes >= test_case.expected_codes
 
 
 @pytest.mark.parametrize(
@@ -95,8 +94,8 @@ def test_given_generated_lifecycles_when_finding_promotion_conflicts_natively_th
     calls: Counter[str] = record_native_promotion_calls(monkeypatch=monkeypatch)
     base: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
     labels: list[object] = []
-    python_views: list[ContractView] = []
-    native_views: list[ContractView] = []
+    python_views: list[object] = []
+    native_views: list[object] = []
     for variant in range(test_case.variants):
         project: CompiledProject = perturbed_project(project=base, rng=rng)
         adapter_default, settings_file = promotion_settings(rng=rng)

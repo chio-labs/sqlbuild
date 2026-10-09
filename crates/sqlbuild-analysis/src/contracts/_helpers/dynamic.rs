@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::contracts::_helpers::types::{TypeComparison, types_equal};
+use crate::contracts::_helpers::type_comparison::{TypeComparison, types_equal};
 use crate::contracts::constants::{
     DYNAMIC_FAMILY_TYPE_MISMATCH_HELP, DYNAMIC_FAMILY_UNKNOWN_TYPE_HELP,
     DYNAMIC_OUTPUT_NOT_PROVEN_CODE, DYNAMIC_OUTPUT_NOT_PROVEN_HELP, NO_COMPILER_EVIDENCE,

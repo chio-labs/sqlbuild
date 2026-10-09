@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import random
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -346,7 +347,9 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
 
     def counted(*arguments: Any) -> Sequence[tuple[str | None, list[Any]]]:
         outcomes: Sequence[tuple[str | None, list[Any]]] = evaluate(*arguments)
-        statuses.update(("native", deferral)[deferral is not None] for deferral, _ in outcomes)
+        statuses.update(
+            [("native", str(deferral))[deferral is not None] for deferral, _ in outcomes]
+        )
         statuses["native_diagnostics"] += sum(len(rows) for _, rows in outcomes)
         return outcomes
 
@@ -375,11 +378,11 @@ def record_native_promotion_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter
 def deferral_records(directory: Path) -> list[dict[str, str]]:
     """Every deferral record written under `directory`, in file order."""
 
-    return [
-        json.loads(line)
+    lines: Iterator[str] = itertools.chain.from_iterable(
+        path.read_text(encoding="utf-8").splitlines()
         for path in sorted(directory.glob("analysis-deferrals-*.jsonl"))
-        for line in path.read_text(encoding="utf-8").splitlines()
-    ]
+    )
+    return [json.loads(line) for line in lines]
 
 
 def with_declared_type(*, project: CompiledProject, declared_type: str) -> CompiledProject:

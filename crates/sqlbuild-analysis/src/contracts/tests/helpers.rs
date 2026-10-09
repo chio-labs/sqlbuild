@@ -1,7 +1,7 @@
 use crate::contracts::models::{
-    ContractDiagnostic, ContractLocation, ContractModel, ContractOutcome, ContractSchema,
-    ContractSeverity, DeclaredColumn, DeclaredColumnFamily, DynamicContractProof,
-    InferredOutputColumn, PromotionModel,
+    ContractDiagnostic, ContractModel, ContractOutcome, ContractSchema, DeclaredColumn,
+    DeclaredColumnFamily, DynamicContractProof, InferredOutputColumn, PromotionModel,
+    PromotionRequest,
 };
 
 pub(crate) fn model(contract: Option<&str>, schema: Option<ContractSchema>) -> ContractModel {
@@ -100,24 +100,19 @@ pub(crate) fn promotion_model(
 }
 
 pub(crate) fn outcome_lines(outcome: &ContractOutcome) -> Vec<String> {
-    match outcome {
-        ContractOutcome::Deferred(deferral) => vec![format!("deferred:{}", deferral.as_str())],
-        ContractOutcome::Diagnostics(diagnostics) => {
-            diagnostics.iter().map(diagnostic_line).collect()
-        }
-    }
+    let (deferral, diagnostics) = outcome.clone().into_parts();
+    deferral.map_or_else(
+        || diagnostics.iter().map(diagnostic_line).collect(),
+        |deferral| vec![format!("deferred:{}", deferral.as_str())],
+    )
 }
 
 fn diagnostic_line(diagnostic: &ContractDiagnostic) -> String {
-    let severity: &str = match diagnostic.severity {
-        ContractSeverity::Error => "error",
-        ContractSeverity::Warning => "warning",
-    };
-    let location: String = match &diagnostic.location {
-        ContractLocation::None => "-".to_owned(),
-        ContractLocation::Declared(index) => format!("declared:{index}"),
-        ContractLocation::Output(column) => format!("output:{column}"),
-    };
+    let (declared, output) = diagnostic.location.clone().into_parts();
+    let location: String = declared
+        .map(|index| format!("declared:{index}"))
+        .or_else(|| output.map(|column| format!("output:{column}")))
+        .unwrap_or_else(|| "-".to_owned());
     let related: String = diagnostic
         .related_output
         .as_ref()
@@ -125,7 +120,29 @@ fn diagnostic_line(diagnostic: &ContractDiagnostic) -> String {
             format!(" [{}: {}]", related.column_name, related.message)
         });
     format!(
-        "{} {severity} {location} {}{related}",
-        diagnostic.code, diagnostic.message
+        "{} {} {location} {}{related}",
+        diagnostic.code,
+        diagnostic.severity.as_str(),
+        diagnostic.message
     )
+}
+
+pub(crate) fn promotion_request(
+    explicit_mode: Option<&str>,
+    adapter_default: &str,
+    settings_file: &str,
+) -> PromotionRequest {
+    PromotionRequest {
+        explicit_mode: explicit_mode.map(str::to_owned),
+        adapter_default: adapter_default.to_owned(),
+        settings_file: settings_file.to_owned(),
+        models: vec![
+            promotion_model(Some("enforced"), Some("table"), None),
+            promotion_model(Some("enforced"), Some("view"), None),
+            promotion_model(Some("enforced"), Some("incremental"), Some("microbatch")),
+            promotion_model(None, Some("table"), None),
+            promotion_model(Some("enforced"), Some("incremental"), Some("merge")),
+            promotion_model(Some("enforced"), None, None),
+        ],
+    }
 }

@@ -5,7 +5,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::contracts::main::evaluate_model_contracts::evaluate_model_contracts;
 use sqlbuild_analysis::contracts::main::promotion_conflicts::promotion_conflicts;
 use sqlbuild_analysis::contracts::models::{
-    ContractDiagnostic, ContractLocation, ContractModel, ContractOutcome, ContractRequest,
+    ContractDeferral, ContractDiagnostic, ContractModel, ContractOutcome, ContractRequest,
     ContractSchema, ContractSeverity, DeclaredColumn, DeclaredColumnFamily, DynamicContractProof,
     InferredOutputColumn, PromotionConflict, PromotionModel, PromotionRequest,
 };
@@ -109,16 +109,7 @@ fn contract_model(
         name,
         contract,
         schema: schema.map(contract_schema),
-        inferred_columns: inferred.map(|columns| {
-            columns
-                .into_iter()
-                .map(|(name, inferred_type, nullable)| InferredOutputColumn {
-                    name,
-                    inferred_type,
-                    nullable,
-                })
-                .collect()
-        }),
+        inferred_columns: inferred.map(inferred_columns),
         fast_lineage_has_star: has_star,
         dynamic_proof: proof.map(|(output_proven, failure_reason, families)| {
             DynamicContractProof {
@@ -129,6 +120,17 @@ fn contract_model(
         }),
         unchecked_output_columns: unchecked,
     }
+}
+
+fn inferred_columns(columns: Vec<(String, Option<String>, bool)>) -> Vec<InferredOutputColumn> {
+    columns
+        .into_iter()
+        .map(|(name, inferred_type, nullable)| InferredOutputColumn {
+            name,
+            inferred_type,
+            nullable,
+        })
+        .collect()
 }
 
 fn contract_schema(
@@ -159,20 +161,15 @@ fn contract_schema(
 }
 
 fn outcome_row(outcome: ContractOutcome) -> OutcomeRow {
-    match outcome {
-        ContractOutcome::Deferred(deferral) => (Some(deferral.as_str()), Vec::new()),
-        ContractOutcome::Diagnostics(diagnostics) => {
-            (None, diagnostics.into_iter().map(diagnostic_row).collect())
-        }
-    }
+    let (deferral, diagnostics) = outcome.into_parts();
+    (
+        deferral.map(ContractDeferral::as_str),
+        diagnostics.into_iter().map(diagnostic_row).collect(),
+    )
 }
 
 fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {
-    let (declared_index, output_column) = match diagnostic.location {
-        ContractLocation::None => (None, None),
-        ContractLocation::Declared(index) => (Some(index), None),
-        ContractLocation::Output(column) => (None, Some(column)),
-    };
+    let (declared_index, output_column) = diagnostic.location.into_parts();
     (
         diagnostic.code,
         diagnostic.severity == ContractSeverity::Error,

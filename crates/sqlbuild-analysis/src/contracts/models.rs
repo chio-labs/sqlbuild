@@ -78,6 +78,17 @@ pub enum ContractSeverity {
     Warning,
 }
 
+impl ContractSeverity {
+    /// The value of Python's `DiagnosticSeverity` member.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warning => "warning",
+        }
+    }
+}
+
 /// Where a contract diagnostic points.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContractLocation {
@@ -86,6 +97,18 @@ pub enum ContractLocation {
     Declared(usize),
     /// The output expression of this column in the model's SQL.
     Output(String),
+}
+
+impl ContractLocation {
+    /// `(declared column index, output column name)`; at most one is set.
+    #[must_use]
+    pub fn into_parts(self) -> (Option<usize>, Option<String>) {
+        match self {
+            Self::None => (None, None),
+            Self::Declared(index) => (Some(index), None),
+            Self::Output(column) => (None, Some(column)),
+        }
+    }
 }
 
 /// A related output location: the column whose output expression it points at, and its message.
@@ -132,6 +155,17 @@ impl ContractDeferral {
 pub enum ContractOutcome {
     Diagnostics(Vec<ContractDiagnostic>),
     Deferred(ContractDeferral),
+}
+
+impl ContractOutcome {
+    /// `(deferral, diagnostics)`: a deferred model has no diagnostics.
+    #[must_use]
+    pub fn into_parts(self) -> (Option<ContractDeferral>, Vec<ContractDiagnostic>) {
+        match self {
+            Self::Diagnostics(diagnostics) => (None, diagnostics),
+            Self::Deferred(deferral) => (Some(deferral), Vec::new()),
+        }
+    }
 }
 
 /// The inputs to table promotion conflict detection.

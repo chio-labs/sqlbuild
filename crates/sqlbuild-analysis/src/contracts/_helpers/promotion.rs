@@ -1,7 +1,7 @@
 //! Python's `promotion_conflict_diagnostics_impl`: enforced contracts under immediate promotion.
 
 use crate::contracts::_helpers::setting_help::{
-    join_helps, setting_help, setting_note, snippet_help,
+    StringSetting, join_helps, setting_help, setting_note, snippet_help,
 };
 use crate::contracts::constants::{
     CONTRACT_ENFORCED, IMMEDIATE_PROMOTION_MODE, MICROBATCH_INCREMENTAL_MODE,
@@ -51,10 +51,12 @@ fn conflict_help(request: &PromotionRequest) -> String {
     let explicit: bool = request.explicit_mode.is_some();
     let file: &str = &request.settings_file;
     let current: String = setting_note(
-        file,
-        SETTINGS_SECTION,
-        TABLE_PROMOTION_MODE_SETTING_KEY,
-        IMMEDIATE_PROMOTION_MODE,
+        &StringSetting {
+            file_name: file,
+            section: SETTINGS_SECTION,
+            key: TABLE_PROMOTION_MODE_SETTING_KEY,
+            value: IMMEDIATE_PROMOTION_MODE,
+        },
         explicit,
     ) + "; enforced contracts are validated in a staging table before promotion";
     let staged_fix: String = if explicit && request.adapter_default == STAGED_PROMOTION_MODE {
@@ -69,10 +71,12 @@ fn conflict_help(request: &PromotionRequest) -> String {
     } else {
         setting_help(
             "to validate enforced contracts before promotion",
-            file,
-            SETTINGS_SECTION,
-            TABLE_PROMOTION_MODE_SETTING_KEY,
-            STAGED_PROMOTION_MODE,
+            &StringSetting {
+                file_name: file,
+                section: SETTINGS_SECTION,
+                key: TABLE_PROMOTION_MODE_SETTING_KEY,
+                value: STAGED_PROMOTION_MODE,
+            },
         )
     };
     join_helps(&[

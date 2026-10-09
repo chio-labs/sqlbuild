@@ -4939,19 +4939,28 @@ def type_system_engine_compile(
     capsys: pytest.CaptureFixture[str],
 ) -> tuple[CompileReuseRun, list[bool]]:
     """Compile in this process under `engine`; return the run and whether each native type
-    normalization answered."""
+    answer, a normalization or a native contract comparison, was given."""
 
     answered: list[bool] = []
     normalize: Callable[[str, str], object] = native_module.normalize_type
+    evaluate_contracts: Callable[..., list[tuple[str | None, list[Any]]]] = (
+        native_module.evaluate_native_model_contracts
+    )
 
     def recorded(type_sql: str, dialect: str) -> object:
         result: object = normalize(type_sql, dialect)
         answered.append(result is not None)
         return result
 
+    def recorded_contracts(request: Any) -> list[tuple[str | None, list[Any]]]:
+        outcomes: list[tuple[str | None, list[Any]]] = evaluate_contracts(request)
+        answered.extend(deferral is None for deferral, _ in outcomes)
+        return outcomes
+
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
+        patch.setattr(native_module, "evaluate_native_model_contracts", recorded_contracts)
         for name, value in {COMPILER_ENGINE_ENV_VAR: engine, REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
