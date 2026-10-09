@@ -253,9 +253,7 @@ fn references(sql: &str, syntax: &LexicalSyntax) -> Deferrable<Vec<Reference>> {
         ReferenceExtraction::Extracted(scan) => {
             Ok(scan.references.into_iter().map(scanned).collect())
         }
-        ReferenceExtraction::Failed(_) | ReferenceExtraction::Deferred => {
-            Err(SqlTestAssemblyDeferral::ReferenceScan)
-        }
+        ReferenceExtraction::Failed(_) => Err(SqlTestAssemblyDeferral::ReferenceScan),
     }
 }
 
