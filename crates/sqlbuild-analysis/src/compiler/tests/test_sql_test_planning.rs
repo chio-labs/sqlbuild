@@ -22,6 +22,65 @@ use crate::compiler::tests::test_types::{
     SqlTestPlanningTestCase,
 };
 
+/// A mocked model test, a test missing its source mock and a UDF test over two models.
+const GLUE_REQUEST: &str = r#"{
+  "lexicalSyntax": {
+    "backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false,
+    "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]
+  },
+  "models": [
+    {"name": "stg_orders", "querySql": "SELECT order_id, amount FROM __source(\"raw_orders\")"},
+    {
+      "name": "orders",
+      "querySql": "WITH big AS (SELECT * FROM __ref(\"stg_orders\") WHERE __udf(\"udf__is_big\")(amount)) SELECT order_id FROM big",
+      "modelDependencies": ["stg_orders"]
+    }
+  ],
+  "functions": [{
+    "name": "udf__is_big", "udfPrefix": "main.udf__is_big(", "udfSuffix": ")",
+    "tableFunctionPrefix": "main.udf__is_big(", "tableFunctionSuffix": ")"
+  }],
+  "tests": [
+    {
+      "name": "mocked", "fileLabel": "tests/mocked.sql",
+      "payload": {
+        "kind": "model",
+        "authoredCtes": [
+          {"name": "__source__raw_orders", "sqlBody": "SELECT 1 AS order_id, 5 AS amount"},
+          {"name": "__seed__unused", "sqlBody": "SELECT 1 AS id"}
+        ],
+        "expectedCtes": [{"name": "__expected__orders", "sqlBody": "SELECT 1 AS order_id"}],
+        "expectedModelNames": ["orders"],
+        "assertionCtes": [{
+          "name": "__assert__orders_exist",
+          "sqlBody": "SELECT * FROM __ref(\"orders\") WHERE 1 = 0"
+        }],
+        "readHelperNames": [], "referenceTargetModelNames": []
+      }
+    },
+    {
+      "name": "missing_mock", "fileLabel": "tests/missing_mock.sql",
+      "payload": {
+        "kind": "model",
+        "authoredCtes": [{"name": "__seed__unused", "sqlBody": "SELECT 1 AS id"}],
+        "expectedCtes": [{"name": "__expected__orders", "sqlBody": "SELECT 1 AS order_id"}],
+        "expectedModelNames": ["orders"],
+        "readHelperNames": [], "referenceTargetModelNames": []
+      }
+    },
+    {
+      "name": "udf_case", "fileLabel": "tests/udf_case.sql",
+      "payload": {
+        "kind": "direct", "mode": "udf",
+        "actualCte": {
+          "name": "__udf_actual__", "sqlBody": "SELECT __udf(\"udf__is_big\")(150) AS is_big"
+        },
+        "expectedCte": {"name": "__udf_expected__", "sqlBody": "SELECT TRUE AS is_big"}
+      }
+    }
+  ]
+}"#;
+
 #[test]
 fn given_sql_test_upstream_fallback_when_planning_then_descendants_and_assertions_resolve() {
     let test_cases = [SqlTestPlanningTestCase {
@@ -118,65 +177,6 @@ fn given_sql_test_planning_cases_when_exercising_native_planner_then_expected_be
         );
     }
 }
-
-/// A mocked model test, a test missing its source mock and a UDF test over two models.
-const GLUE_REQUEST: &str = r#"{
-  "lexicalSyntax": {
-    "backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false,
-    "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]
-  },
-  "models": [
-    {"name": "stg_orders", "querySql": "SELECT order_id, amount FROM __source(\"raw_orders\")"},
-    {
-      "name": "orders",
-      "querySql": "WITH big AS (SELECT * FROM __ref(\"stg_orders\") WHERE __udf(\"udf__is_big\")(amount)) SELECT order_id FROM big",
-      "modelDependencies": ["stg_orders"]
-    }
-  ],
-  "functions": [{
-    "name": "udf__is_big", "udfPrefix": "main.udf__is_big(", "udfSuffix": ")",
-    "tableFunctionPrefix": "main.udf__is_big(", "tableFunctionSuffix": ")"
-  }],
-  "tests": [
-    {
-      "name": "mocked", "fileLabel": "tests/mocked.sql",
-      "payload": {
-        "kind": "model",
-        "authoredCtes": [
-          {"name": "__source__raw_orders", "sqlBody": "SELECT 1 AS order_id, 5 AS amount"},
-          {"name": "__seed__unused", "sqlBody": "SELECT 1 AS id"}
-        ],
-        "expectedCtes": [{"name": "__expected__orders", "sqlBody": "SELECT 1 AS order_id"}],
-        "expectedModelNames": ["orders"],
-        "assertionCtes": [{
-          "name": "__assert__orders_exist",
-          "sqlBody": "SELECT * FROM __ref(\"orders\") WHERE 1 = 0"
-        }],
-        "readHelperNames": [], "referenceTargetModelNames": []
-      }
-    },
-    {
-      "name": "missing_mock", "fileLabel": "tests/missing_mock.sql",
-      "payload": {
-        "kind": "model",
-        "authoredCtes": [{"name": "__seed__unused", "sqlBody": "SELECT 1 AS id"}],
-        "expectedCtes": [{"name": "__expected__orders", "sqlBody": "SELECT 1 AS order_id"}],
-        "expectedModelNames": ["orders"],
-        "readHelperNames": [], "referenceTargetModelNames": []
-      }
-    },
-    {
-      "name": "udf_case", "fileLabel": "tests/udf_case.sql",
-      "payload": {
-        "kind": "direct", "mode": "udf",
-        "actualCte": {
-          "name": "__udf_actual__", "sqlBody": "SELECT __udf(\"udf__is_big\")(150) AS is_big"
-        },
-        "expectedCte": {"name": "__udf_expected__", "sqlBody": "SELECT TRUE AS is_big"}
-      }
-    }
-  ]
-}"#;
 
 #[test]
 fn given_typed_requests_when_planning_then_plans_and_chains_equal_the_json_entry_points() {
