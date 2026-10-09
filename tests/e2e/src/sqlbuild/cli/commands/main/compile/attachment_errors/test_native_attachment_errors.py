@@ -74,6 +74,12 @@ _CASES: dict[str, FailureCase] = {case.name: case for case in attachment_failure
             expected_error_types=_ERROR_TYPES,
         ),
         NativeAttachmentErrorTestCase(
+            description="a SQL function return type the adapter dialect cannot parse",
+            case_name="sql-function-invalid-return-type",
+            expected_macro_calls=(1, 1, 1),
+            expected_error_types=_ERROR_TYPES,
+        ),
+        NativeAttachmentErrorTestCase(
             description="a SQL function without returns",
             case_name="sql-function-missing-returns",
             expected_macro_calls=(1, 1, 1),

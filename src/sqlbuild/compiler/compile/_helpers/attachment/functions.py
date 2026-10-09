@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.attachments.constants import (
     HEADER_ARGUMENTS_STAGE,
     HEADER_METADATA_STAGE,
@@ -73,7 +74,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
-from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
@@ -546,23 +546,9 @@ def _expand_function_header_value(
 def validate_native_type(*, type_sql: str, adapter_name: str, context: str) -> None:
     """Validate an adapter-native type string with SQL analysis when a dialect is known."""
 
-    dialect_by_adapter: dict[str, str] = {
-        "duckdb": "duckdb",
-        "bigquery": "bigquery",
-        "snowflake": "snowflake",
-        "databricks": "databricks",
-    }
-    dialect: str | None = dialect_by_adapter.get(adapter_name)
-    if dialect is None:
-        return
-    polyglot_module: Any = import_polyglot()
-    try:
-        polyglot_module.parse_data_type(type_sql, dialect=dialect)
-    except polyglot_module.PolyglotError as error:
-        raise CompileInputError(
-            f"{context} type '{type_sql}' is not valid for adapter '{adapter_name}' "
-            f"SQL analysis dialect '{dialect}': {error}"
-        ) from error
+    error: str | None = _native.function_type_error(type_sql, adapter_name, context)
+    if error is not None:
+        raise CompileInputError(error)
 
 
 def _resolve_function_logical_namespace(

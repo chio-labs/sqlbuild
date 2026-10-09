@@ -69,7 +69,28 @@ fn extract_sql_scenario_json(
     .map_err(value_error)
 }
 
+/// The error for a function type the adapter's SQL analysis dialect cannot parse, or `None`.
+#[pyfunction]
+fn function_type_error(
+    py: Python<'_>,
+    type_sql: &str,
+    adapter_name: &str,
+    context: &str,
+) -> PyResult<Option<String>> {
+    py.compiler_detach(|| {
+        Ok::<_, String>(
+            sqlbuild_analysis::compiler::main::function_type_validation::function_type_error(
+                type_sql,
+                adapter_name,
+                context,
+            ),
+        )
+    })
+    .map_err(value_error)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(function_type_error, module)?)?;
     module.add_function(wrap_pyfunction!(extract_sql_scenario_json, module)?)?;
     module.add_function(wrap_pyfunction!(render_sql_test_comparisons_json, module)?)?;
     module.add_function(wrap_pyfunction!(plan_and_render_sql_tests_json, module)?)?;

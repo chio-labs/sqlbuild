@@ -110,6 +110,18 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="sql-function-invalid-return-type",
+            expected_code="P001",
+            expected_message=(
+                "type 'DECIMAL(10,' is not valid for adapter 'duckdb' SQL analysis dialect "
+                "'duckdb': Parse error at line 1, column 12: Expected number"
+            ),
+            files=_order_label(
+                '  description "Order label",\n  arguments (p_status VARCHAR),\n'
+                '  returns "DECIMAL(10,",\n'
+            ),
+        ),
+        failure_case(
             name="source-description-unknown-variable",
             expected_code="P001",
             expected_message="references unknown variable 'channel'",
