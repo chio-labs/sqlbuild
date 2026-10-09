@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 
 use regex::{Captures, Regex};
 
-use crate::semantic_checks::_helpers::text::ascii;
+use crate::semantic_checks::_helpers::sql_text::text::ascii;
 use crate::semantic_checks::constants::{
     BIGQUERY_DIALECT, COMPARISON_CODE, CONTEXT_SUFFIX_PATTERN, DATE_TYPE, MISSING_PATTERN,
     QUOTED_PIECE_PATTERN, SEMANTIC_HELP, TIMESTAMP_TYPE, TYPE_WORDS_PATTERN,

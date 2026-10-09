@@ -1,10 +1,4 @@
-pub(crate) mod bindings;
-pub(crate) mod columns;
-pub(crate) mod completion;
-pub(crate) mod explain;
-pub(crate) mod messages;
-pub(crate) mod opt_outs;
-pub(crate) mod parsed_sql;
-pub(crate) mod poison;
-pub(crate) mod text;
-pub(crate) mod type_recovery;
+pub(crate) mod explanation;
+pub(crate) mod metadata_checks;
+pub(crate) mod recovery;
+pub(crate) mod sql_text;

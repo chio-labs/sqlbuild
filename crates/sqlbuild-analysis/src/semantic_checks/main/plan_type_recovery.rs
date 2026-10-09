@@ -2,7 +2,7 @@
 
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
-use crate::semantic_checks::_helpers::type_recovery::plan;
+use crate::semantic_checks::_helpers::recovery::type_recovery::plan;
 use crate::semantic_checks::models::{SemanticDeferral, TypeRecoveryRequest, TypeRecoveryStep};
 use crate::semantic_validation::models::ProjectCatalog;
 

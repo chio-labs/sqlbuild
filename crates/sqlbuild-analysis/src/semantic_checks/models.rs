@@ -66,6 +66,7 @@ pub enum SemanticDeferral {
     UnreadableSql,
     NonAsciiText,
     UnexpectedPosition,
+    UnsupportedType,
     NativeFailure,
 }
 
@@ -77,6 +78,7 @@ impl SemanticDeferral {
             Self::UnreadableSql => "unreadable_sql",
             Self::NonAsciiText => "non_ascii_text",
             Self::UnexpectedPosition => "unexpected_position",
+            Self::UnsupportedType => "unsupported_type",
             Self::NativeFailure => "native_failure",
         }
     }
@@ -261,4 +263,88 @@ impl CompletionOutcome {
             Self::Deferred(deferral) => (Some(deferral.as_str()), None),
         }
     }
+}
+
+/// One declared project function as Python's metadata checks read it.
+#[derive(Clone, Debug)]
+pub struct MetadataFunction {
+    /// Python's `function.name.casefold()`, the key calls are looked up by.
+    pub key: String,
+    /// `(argument name, declared type)` in declaration order.
+    pub arguments: Vec<(String, String)>,
+}
+
+/// One model as Python's metadata checks read it.
+#[derive(Clone, Debug)]
+pub struct MetadataModel {
+    pub name: String,
+    pub query_sql: String,
+    pub authored_sql: String,
+    /// False when the model opts out of SQL analysis or was never binding-validated.
+    pub checked: bool,
+    /// Whether the model references a UDF or table function.
+    pub calls_functions: bool,
+    /// `(config key, column names)` checked against the model's own shape, in Python's order.
+    pub references: Vec<(String, Vec<String>)>,
+    /// `(upstream, column names)` of `cursor_inputs`, in Python's dict order.
+    pub cursor_inputs: Vec<(String, Vec<String>)>,
+    pub cursor: Option<String>,
+    pub cursor_type: Option<String>,
+}
+
+/// One source's cursor column and file text.
+#[derive(Clone, Debug)]
+pub struct MetadataSource {
+    pub name: String,
+    /// The cursor column, when it is set and non-empty.
+    pub cursor_column: Option<String>,
+    pub contents: String,
+}
+
+/// One model SQL test's file text and its CTEs with their inferred column names.
+#[derive(Clone, Debug)]
+pub struct MetadataSqlTest {
+    pub contents: String,
+    pub ctes: Vec<(String, Vec<String>)>,
+}
+
+/// Python's `get_semantic_metadata_diagnostics` inputs, apart from audits and resource SQL.
+#[derive(Clone, Debug)]
+pub struct MetadataRequest {
+    pub dialect: Option<String>,
+    /// The inference profile's declared function return types.
+    pub return_types: Vec<(String, String)>,
+    pub functions: Vec<MetadataFunction>,
+    /// Closed relation shapes in Python's dict order.
+    pub shapes: Vec<(String, Vec<(String, String)>)>,
+    pub models: Vec<MetadataModel>,
+    pub sources: Vec<MetadataSource>,
+    pub sql_tests: Vec<MetadataSqlTest>,
+}
+
+/// One metadata error located in its resource's text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MetadataFinding {
+    pub code: &'static str,
+    pub message: String,
+    pub line: i64,
+    pub column: i64,
+}
+
+/// One model's function errors, which precede its audits, and its config reference errors.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModelMetadataFindings {
+    pub functions: Vec<MetadataFinding>,
+    pub references: Vec<MetadataFinding>,
+}
+
+/// The metadata errors per resource, and the types whose normalization fell back to text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MetadataOutcome {
+    pub models: Vec<ModelMetadataFindings>,
+    /// `(source index, error)`.
+    pub sources: Vec<(usize, MetadataFinding)>,
+    /// `(SQL test index, error, end column)`.
+    pub sql_tests: Vec<(usize, MetadataFinding, i64)>,
+    pub fallback_types: Vec<String>,
 }

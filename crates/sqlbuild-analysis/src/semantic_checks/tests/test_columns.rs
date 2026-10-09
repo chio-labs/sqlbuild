@@ -1,4 +1,4 @@
-use crate::semantic_checks::_helpers::columns::{closest_column, ordered_columns};
+use crate::semantic_checks::_helpers::explanation::columns::{closest_column, ordered_columns};
 use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_checks::tests::helpers::shape;
 use crate::semantic_checks::tests::test_types::ClosestColumnTestCase;

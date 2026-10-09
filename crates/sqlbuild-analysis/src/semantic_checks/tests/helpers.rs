@@ -1,19 +1,24 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
-use polyglot_sql::{DialectType, SchemaValidationOptions};
+use polyglot_sql::{DialectType, ExpressionWalk, SchemaValidationOptions};
 
-use crate::semantic_checks::_helpers::messages::{missing_column, sentence_message};
-use crate::semantic_checks::_helpers::parsed_sql::parsed_model_facts;
+use crate::semantic_checks::_helpers::explanation::messages::{missing_column, sentence_message};
+use crate::semantic_checks::_helpers::metadata_checks::argument_types::expression_type;
+use crate::semantic_checks::_helpers::sql_text::parsed_sql::{parsed_model, parsed_model_facts};
+use crate::semantic_checks::main::check_semantic_metadata::check_semantic_metadata;
 use crate::semantic_checks::main::complete_semantic_diagnostics::complete_semantic_diagnostics;
 use crate::semantic_checks::main::finish_type_recovery::finish_type_recovery;
 use crate::semantic_checks::main::plan_type_recovery::plan_type_recovery;
 use crate::semantic_checks::models::{
     CompletedDiagnostic, CompletionModel, CompletionRequest, DiagnosticOwner, FinalDiagnostic,
-    LineageOutput, ModelBinding, RawBinding, RecoveryModel, SemanticDeferral, SemanticDiagnostic,
-    SemanticLocation, TypeRecoveryPlan, TypeRecoveryRequest,
+    LineageOutput, MetadataFinding, MetadataFunction, MetadataModel, MetadataOutcome,
+    MetadataRequest, MetadataSource, MetadataSqlTest, ModelBinding, ModelMetadataFindings,
+    RawBinding, RecoveryModel, SemanticDeferral, SemanticDiagnostic, SemanticLocation,
+    TypeRecoveryPlan, TypeRecoveryRequest,
 };
 use crate::semantic_checks::tests::test_types::{
-    CompletionTestCase, DescribedDiagnostic, OperandTypeTestCase, TypeRecoveryTestCase,
+    CompletionTestCase, DescribedDiagnostic, MetadataTestCase, OperandTypeTestCase,
+    TypeRecoveryTestCase,
 };
 use crate::semantic_validation::models::ProjectCatalog;
 
@@ -496,4 +501,195 @@ pub(crate) fn operand_type_summary(test_case: &OperandTypeTestCase) -> Completio
         .map(|entry| described_entry(&request, &diagnostics, entry))
         .collect();
     (deferral, described_order, model_bindings)
+}
+
+/// The type Python infers for the first projection of `SELECT {expression}` on DuckDB.
+pub(crate) fn projected_type(expression: &str) -> Option<String> {
+    let parsed = parsed_model(&format!("SELECT {expression}"), Some("duckdb"))
+        .expect("duckdb parses")
+        .expect("the projection parses");
+    let projection = parsed
+        .children()
+        .into_iter()
+        .next()
+        .expect("one projection");
+    let return_types: HashMap<String, String> =
+        HashMap::from([("MY_FN".to_owned(), "DATE".to_owned())]);
+    expression_type(projection, &return_types).expect("ASCII expressions are typed")
+}
+
+fn metadata_model(name: &str, query_sql: &str, checked: bool) -> MetadataModel {
+    MetadataModel {
+        name: name.to_owned(),
+        query_sql: query_sql.to_owned(),
+        authored_sql: format!("MODEL (\n  description \"{name}\",\n);\n\n{query_sql}\n"),
+        checked,
+        calls_functions: true,
+        references: vec![
+            ("unique_key".to_owned(), strings(&["order_id"])),
+            ("cursor".to_owned(), strings(&["label"])),
+            (
+                "row_diff_exclude_columns".to_owned(),
+                strings(&["missing_col"]),
+            ),
+        ],
+        cursor_inputs: vec![
+            (
+                "raw_orders".to_owned(),
+                strings(&["updated_at", "created_at"]),
+            ),
+            ("unknown_upstream".to_owned(), strings(&["x"])),
+        ],
+        cursor: Some("label".to_owned()),
+        cursor_type: Some("timestamp".to_owned()),
+    }
+}
+
+/// A mart calling declared functions badly, with config, source and SQL test metadata.
+pub(crate) fn metadata_request(test_case: &MetadataTestCase) -> MetadataRequest {
+    let query_sql = "SELECT __udf(\"scaled_amount\")(o.amount, 2) AS scaled,\n  \
+                     __udf(\"scaled_amount\")(o.status, 'x') AS wrong,\n  \
+                     __udf(\"label_status\")(o.status, 1) AS label\nFROM __ref(\"stg\") AS o";
+    MetadataRequest {
+        dialect: Some(test_case.dialect.to_owned()),
+        return_types: Vec::new(),
+        functions: vec![
+            MetadataFunction {
+                key: "scaled_amount".to_owned(),
+                arguments: shape(&[("p_amount", "DOUBLE"), ("p_factor", "INTEGER")]),
+            },
+            MetadataFunction {
+                key: "label_status".to_owned(),
+                arguments: shape(&[("p_status", "VARCHAR")]),
+            },
+        ],
+        shapes: vec![
+            (
+                "stg".to_owned(),
+                shape(&[
+                    ("order_id", "INTEGER"),
+                    ("amount", "DOUBLE"),
+                    ("status", "VARCHAR"),
+                ]),
+            ),
+            (
+                "raw_orders".to_owned(),
+                shape(&[("order_id", "INTEGER"), ("updated_at", "TIMESTAMP")]),
+            ),
+            ("mart".to_owned(), shape(test_case.mart_shape)),
+        ],
+        models: vec![
+            metadata_model("mart", query_sql, true),
+            metadata_model("skipped", query_sql, false),
+        ],
+        sources: vec![MetadataSource {
+            name: "raw_orders".to_owned(),
+            cursor_column: Some("loaded_at".to_owned()),
+            contents: "sources:\n  - name: raw_orders\n    cursor_column: loaded_at\n".to_owned(),
+        }],
+        sql_tests: vec![MetadataSqlTest {
+            contents: "-- test\nWITH __ref__stg AS (SELECT 1 AS order_id, 2 AS refund)\n"
+                .to_owned(),
+            ctes: vec![
+                ("__ref__stg".to_owned(), strings(&["order_id", "refund"])),
+                ("__expected__mart".to_owned(), strings(&["scaled", "LABEL"])),
+                ("helper".to_owned(), strings(&["zzz"])),
+            ],
+        }],
+    }
+}
+
+/// One expected located metadata error.
+pub(crate) fn metadata_finding(
+    code: &'static str,
+    message: &str,
+    line: i64,
+    column: i64,
+) -> MetadataFinding {
+    MetadataFinding {
+        code,
+        message: message.to_owned(),
+        line,
+        column,
+    }
+}
+
+/// Run the metadata checks on a fresh catalog.
+pub(crate) fn metadata_outcome(
+    test_case: &MetadataTestCase,
+) -> Result<MetadataOutcome, SemanticDeferral> {
+    check_semantic_metadata(&metadata_request(test_case), &catalog()).expect("the pool runs")
+}
+
+/// The findings Python reports for the checked mart of `metadata_request`.
+pub(crate) fn expected_checked_outcome() -> MetadataOutcome {
+    MetadataOutcome {
+        models: vec![
+            ModelMetadataFindings {
+                functions: vec![
+                    metadata_finding(
+                        "B301",
+                        "Function 'scaled_amount' argument 'p_amount' expects DOUBLE, received \
+                         VARCHAR; convert the argument explicitly",
+                        5,
+                        15,
+                    ),
+                    metadata_finding(
+                        "B301",
+                        "Function 'scaled_amount' argument 'p_factor' expects INTEGER, received \
+                         VARCHAR; convert the argument explicitly",
+                        5,
+                        15,
+                    ),
+                    metadata_finding(
+                        "B102",
+                        "Function 'label_status' expects 1 arguments but received 2",
+                        7,
+                        10,
+                    ),
+                ],
+                references: vec![
+                    metadata_finding(
+                        "B300",
+                        "row_diff_exclude_columns references unknown column 'missing_col'",
+                        1,
+                        1,
+                    ),
+                    metadata_finding(
+                        "B300",
+                        "cursor_inputs raw_orders references unknown column 'created_at'",
+                        1,
+                        1,
+                    ),
+                    metadata_finding(
+                        "B301",
+                        "cursor_type timestamp does not match column 'label' type VARCHAR",
+                        7,
+                        41,
+                    ),
+                ],
+            },
+            ModelMetadataFindings::default(),
+        ],
+        sources: vec![(
+            0,
+            metadata_finding(
+                "B300",
+                "cursor_column references unknown column 'loaded_at'",
+                3,
+                20,
+            ),
+        )],
+        sql_tests: vec![(
+            0,
+            metadata_finding(
+                "B302",
+                "SQL test '__ref__stg' names unknown column 'refund'",
+                2,
+                48,
+            ),
+            54,
+        )],
+        fallback_types: Vec::new(),
+    }
 }

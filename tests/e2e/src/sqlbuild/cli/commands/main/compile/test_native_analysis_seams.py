@@ -8,6 +8,7 @@ from unittest.mock import ANY
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
@@ -34,7 +35,8 @@ _ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
                 "analyze_native_model_sql": [ANY],
                 "assemble_native_sql_tests": [None],
                 "complete_native_semantic_diagnostics": [ANY],
-                "evaluate_native_model_contracts": [None],
+                "evaluate_native_model_contracts": [ANY],
+                "native_promotion_conflict_diagnostics": [()],
                 "build_native_column_lineage": [ANY],
                 "plan_native_sql_test_artifacts": [None],
             },
@@ -76,6 +78,7 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     assert isinstance(preview_seams["analyze_native_model_sql"][0], dict)
     assert isinstance(preview_seams["infer_native_expression_source_shapes"][0], tuple)
     assert isinstance(preview_seams["complete_native_semantic_diagnostics"][0], CompiledProject)
+    assert isinstance(preview_seams["evaluate_native_model_contracts"][0], ContractValidationResult)
     assert (native_run.returncode, preview_run.returncode) == (0, 0)
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)

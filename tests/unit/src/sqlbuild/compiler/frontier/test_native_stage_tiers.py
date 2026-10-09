@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from itertools import compress
+
 import pytest
 
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.constants import (
+    COMPILER_ENGINE_ENV_VAR,
+    ENGINE_NATIVE_STAGE_TIERS,
+    NATIVE_STAGE_TIERS,
+)
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.types import CompilerEngine, NativeStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     DefaultEngineStageTestCase,
+    NativeStageCouplingTestCase,
     NativeStageTierTestCase,
 )
 
@@ -357,6 +364,47 @@ def test_given_no_engine_selection_when_checking_native_stages_then_rendering_ru
         **dict.fromkeys(test_case.expected_enabled, True),
         **dict.fromkeys(test_case.expected_disabled, False),
     }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeStageCouplingTestCase(
+            description=(
+                "semantic checks normalize types with the native type system unconditionally, "
+                "while Python only does so where the type system stage runs natively"
+            ),
+            dependent=NativeStage.SEMANTIC_CHECKS,
+            dependency=NativeStage.TYPE_SYSTEM,
+            expected_engines_without_dependency=frozenset(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_coupled_native_stages_when_reading_tiers_then_dependent_never_runs_alone(
+    test_case: NativeStageCouplingTestCase,
+) -> None:
+    engines: tuple[CompilerEngine, ...] = tuple(ENGINE_NATIVE_STAGE_TIERS)
+    dependent_engines: frozenset[CompilerEngine] = frozenset(
+        compress(
+            engines,
+            (
+                NATIVE_STAGE_TIERS[test_case.dependent] in tiers
+                for tiers in ENGINE_NATIVE_STAGE_TIERS.values()
+            ),
+        )
+    )
+    dependency_engines: frozenset[CompilerEngine] = frozenset(
+        compress(
+            engines,
+            (
+                NATIVE_STAGE_TIERS[test_case.dependency] in tiers
+                for tiers in ENGINE_NATIVE_STAGE_TIERS.values()
+            ),
+        )
+    )
+
+    assert dependent_engines - dependency_engines == (test_case.expected_engines_without_dependency)
 
 
 if __name__ == "__main__":

@@ -118,6 +118,20 @@ pub(crate) fn parsed_model_facts(
     query_sql: &str,
     dialect: Option<&str>,
 ) -> Result<ParsedModelFacts, SemanticDeferral> {
+    let Some(parsed) = parsed_model(query_sql, dialect)? else {
+        return Ok(ParsedModelFacts::default());
+    };
+    Ok(ParsedModelFacts {
+        aliases: input_aliases(&parsed),
+        unaliased_outputs: unaliased_outputs(&parsed),
+    })
+}
+
+/// The wheel's guarded `parse_one` of normalized model SQL; None where it raises.
+pub(crate) fn parsed_model(
+    query_sql: &str,
+    dialect: Option<&str>,
+) -> Result<Option<Expression>, SemanticDeferral> {
     let sql = normalized_sql(query_sql, dialect)?;
     let parser = polyglot_dialect(dialect.unwrap_or(GENERIC_DIALECT))?;
     let guard: ComplexityGuardOptions = serde_json::from_value(serde_json::json!({
@@ -128,16 +142,12 @@ pub(crate) fn parsed_model_facts(
         complexity_guard: Some(guard),
     };
     let Ok(mut statements) = parser.parse_with_options(&sql, &options) else {
-        return Ok(ParsedModelFacts::default());
+        return Ok(None);
     };
     if statements.len() != 1 {
-        return Ok(ParsedModelFacts::default());
+        return Ok(None);
     }
-    let parsed: Expression = statements.remove(0);
-    Ok(ParsedModelFacts {
-        aliases: input_aliases(&parsed),
-        unaliased_outputs: unaliased_outputs(&parsed),
-    })
+    Ok(Some(statements.remove(0)))
 }
 
 fn input_aliases(parsed: &Expression) -> HashMap<String, String> {

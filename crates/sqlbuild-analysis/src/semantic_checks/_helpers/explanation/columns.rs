@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::semantic_checks::_helpers::text::{ascii, casefold};
+use crate::semantic_checks::_helpers::sql_text::text::{ascii, casefold};
 use crate::semantic_checks::constants::{MAX_EDIT_DISTANCE, MIN_ABBREVIATION_LENGTH};
 use crate::semantic_checks::models::SemanticDeferral;
 
