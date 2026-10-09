@@ -2,9 +2,9 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::semantic_checks::_helpers::bindings::{BindingOwner, binding_positions};
-use crate::semantic_checks::_helpers::parsed_sql::{normalized_sql, projection_spans};
-use crate::semantic_checks::_helpers::poison::Poison;
+use crate::semantic_checks::_helpers::recovery::bindings::{BindingOwner, binding_positions};
+use crate::semantic_checks::_helpers::recovery::poison::Poison;
+use crate::semantic_checks::_helpers::sql_text::parsed_sql::{normalized_sql, projection_spans};
 use crate::semantic_checks::models::{
     RecoveryModel, SemanticDeferral, TypeRecoveryOutcome, TypeRecoveryPlan, TypeRecoveryRequest,
     TypeRecoveryStep,

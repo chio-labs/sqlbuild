@@ -47,6 +47,47 @@ _FAILING_FILES: dict[str, str] = {
         'FROM __ref("stg_orders")\n'
     ),
 }
+_METADATA_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _CONFIG,
+    "sources/raw.yml": _SOURCES
+    + (
+        "  - name: raw_events\n    description: Loaded events.\n    managed: true\n"
+        "    write_strategy: append\n    contract: enforced\n    cursor_column: loaded_at\n"
+        "    columns:\n      - name: event_id\n        type: INTEGER\n"
+        "      - name: load_seq\n        type: INTEGER\n"
+    ),
+    "python/loaders/raw_events.py": (
+        "from sqlbuild.loaders import loader\n\n\n@loader\n"
+        "def raw_events(ctx):\n    '''Load events.'''\n"
+        "    return [{'event_id': 1, 'load_seq': 1}]\n"
+    ),
+    "functions/sql/scaled_amount.sql": (
+        'FUNCTION (\n  description "Scale an amount",\n'
+        "  arguments (p_amount DOUBLE, p_factor INTEGER),\n  returns DOUBLE,\n);\n\n"
+        "p_amount * p_factor\n"
+    ),
+    "models/staging/stg_orders.sql": (
+        'MODEL (description "Staged orders");\n\n'
+        "SELECT order_id, customer_id, amount, status, ordered_at\n"
+        'FROM __source("raw_orders")\n'
+    ),
+    "models/marts/customer_totals.sql": (
+        'MODEL (\n  description "Totals per customer",\n'
+        "  materialized incremental,\n  incremental_strategy delete_insert,\n"
+        "  unique_key [customer_key],\n  cursor ordered_at,\n  cursor_type integer,\n"
+        "  cursor_inputs (\n    stg_orders placed_at,\n  ),\n);\n\n"
+        "SELECT o.customer_id, MAX(o.ordered_at) AS ordered_at,\n"
+        '  SUM(__udf("scaled_amount")(o.status, 2)) AS scaled_total,\n'
+        '  MAX(__udf("scaled_amount")(o.amount)) AS top_amount\n'
+        'FROM __ref("stg_orders") AS o\nGROUP BY o.customer_id\n'
+    ),
+    "tests/unit/test_stg_orders.sql": (
+        "TEST();\n\nWITH\n__source__raw_orders AS (\n"
+        "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,"
+        " 'placed' AS status, TIMESTAMP '2026-01-01' AS ordered_at\n),\n"
+        "__expected__stg_orders AS (\n  SELECT 1 AS order_id, 2 AS discount\n)\nSELECT 1\n"
+    ),
+}
 
 
 @pytest.mark.parametrize(
@@ -62,7 +103,14 @@ _FAILING_FILES: dict[str, str] = {
                 "o.ordered_at is TIMESTAMP, 5 is INTEGER",
                 "raw_orders has: amount, status, ordered_at, customer_id, order_id",
             ),
-            expected_preview_deferrals=(("metadata_checks", "metadata_validation.py"),),
+            expected_preview_deferrals=(),
+        ),
+        NativeSemanticChecksCliTestCase(
+            description="UDF calls, config and cursor references, a source cursor and a SQL test",
+            files=_METADATA_FILES,
+            expected_codes=("B301", "B102", "B300", "B300", "B301", "B300", "B302"),
+            expected_notes=(),
+            expected_preview_deferrals=(),
         ),
     ],
     ids=lambda case: case.description,

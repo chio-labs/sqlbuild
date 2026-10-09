@@ -1,4 +1,4 @@
-use crate::semantic_checks::_helpers::parsed_sql::projection_spans;
+use crate::semantic_checks::_helpers::sql_text::parsed_sql::projection_spans;
 use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_checks::tests::helpers::{names, pairs, parsed_facts};
 use crate::semantic_checks::tests::test_types::{ParsedFactsTestCase, ProjectionSpanTestCase};

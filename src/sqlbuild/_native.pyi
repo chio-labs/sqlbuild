@@ -443,6 +443,37 @@ def plan_semantic_type_recovery(
     ],
     /,
 ) -> SemanticTypeRecovery: ...
+def check_semantic_metadata_rows(
+    catalog: object,
+    request: tuple[
+        str | None,
+        list[tuple[str, str]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[
+            tuple[
+                str,
+                str,
+                str,
+                bool,
+                bool,
+                list[tuple[str, list[str]]],
+                list[tuple[str, list[str]]],
+                str | None,
+                str | None,
+            ]
+        ],
+        list[tuple[str, str | None, str]],
+        list[tuple[str, list[tuple[str, list[str]]]]],
+    ],
+    /,
+) -> tuple[
+    str | None,
+    list[tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]],
+    list[tuple[int, tuple[str, str, int, int]]],
+    list[tuple[int, tuple[str, str, int, int], int]],
+    list[str],
+]: ...
 def complete_semantic_checks(
     catalog: object,
     request: tuple[

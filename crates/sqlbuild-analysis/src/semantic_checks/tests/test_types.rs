@@ -1,4 +1,4 @@
-use crate::semantic_checks::models::SemanticDeferral;
+use crate::semantic_checks::models::{MetadataOutcome, SemanticDeferral};
 
 /// One located `(code, message, help, notes, location)` diagnostic of a completed project.
 pub(crate) type DescribedDiagnostic = (
@@ -72,4 +72,25 @@ pub(crate) struct OperandTypeTestCase {
     pub(crate) joined: &'static str,
     pub(crate) shapes: &'static [(&'static str, &'static [(&'static str, &'static str)])],
     pub(crate) expected_diagnostics: Vec<DescribedDiagnostic>,
+}
+
+pub(crate) struct TextPositionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) text: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) offset: usize,
+    pub(crate) expected_position: Result<(i64, i64), SemanticDeferral>,
+}
+
+pub(crate) struct ArgumentTypeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expression: &'static str,
+    pub(crate) expected_type: Option<&'static str>,
+}
+
+pub(crate) struct MetadataTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) mart_shape: &'static [(&'static str, &'static str)],
+    pub(crate) expected_outcome: Result<MetadataOutcome, SemanticDeferral>,
 }

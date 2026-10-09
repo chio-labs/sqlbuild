@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::semantic_checks::_helpers::messages::{compiled, pattern};
+use crate::semantic_checks::_helpers::explanation::messages::{compiled, pattern};
 use crate::semantic_checks::constants::{
     ADDITIONAL_HELP_SEPARATOR, FINDING_KINDS, PROJECT_CONFIG_FILENAME, REQUIRE_SQL_ANALYSIS_KEY,
     SETTING_SNIPPET_INDENT, SETTINGS_SECTION,

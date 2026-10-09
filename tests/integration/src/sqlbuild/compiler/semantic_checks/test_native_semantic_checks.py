@@ -110,10 +110,7 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
             dialect="duckdb",
             keeps_catalog=True,
             non_ascii_comment=True,
-            expected_kinds=(
-                ("metadata_checks", "metadata_validation.py"),
-                ("non_ascii_text", "recovery.py"),
-            ),
+            expected_kinds=(("non_ascii_text", "recovery.py"),),
         ),
         DeferredSemanticTestCase(
             description="a project without an analysis catalog to run on",
