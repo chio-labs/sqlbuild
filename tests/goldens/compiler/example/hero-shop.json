@@ -1,0 +1,220 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {
+  "models/finance/daily_revenue.sql": [
+   "SELECT",
+   "  CAST(paid_at AS DATE) AS revenue_date,",
+   "  SUM(amount_cents) AS total_revenue_cents",
+   "FROM __seed(\"payments\")",
+   "GROUP BY",
+   "  CAST(paid_at AS DATE)",
+   ""
+  ]
+ },
+ "manifest": {
+  "nodes": {
+   "model.waffle_shop.daily_revenue": {
+    "database": null,
+    "schema": "prod",
+    "name": "daily_revenue",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/finance/daily_revenue.sql",
+    "original_file_path": "models/finance/daily_revenue.sql",
+    "unique_id": "model.waffle_shop.daily_revenue",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "finance",
+     "daily_revenue"
+    ],
+    "alias": "daily_revenue",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "prod",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Daily revenue from successful payments",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "prod.daily_revenue",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "seed.waffle_shop.payments"
+     ]
+    }
+   },
+   "seed.waffle_shop.payments": {
+    "database": null,
+    "schema": "prod",
+    "name": "payments",
+    "resource_type": "seed",
+    "package_name": "waffle_shop",
+    "path": "seeds/payments.csv",
+    "original_file_path": "seeds/payments.csv",
+    "unique_id": "seed.waffle_shop.payments",
+    "fqn": [
+     "waffle_shop",
+     "seeds",
+     "payments"
+    ],
+    "alias": "payments",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "prod",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "seed",
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     },
+     "delimiter": ",",
+     "quote_columns": null
+    },
+    "tags": [],
+    "description": "Successful payments.",
+    "columns": {
+     "payment_id": {
+      "name": "payment_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "paid_at": {
+      "name": "paid_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "amount_cents": {
+      "name": "amount_cents",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "prod.payments",
+    "root_path": null,
+    "depends_on": {
+     "macros": []
+    }
+   }
+  },
+  "sources": {},
+  "macros": {},
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {
+   "model.waffle_shop.daily_revenue": [
+    "seed.waffle_shop.payments"
+   ],
+   "seed.waffle_shop.payments": []
+  },
+  "group_map": {},
+  "docs": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'customer_totals': cursor_start value '2024-W01-1T25:00' is not a valid ISO timestamp: hour must be in 0..23"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

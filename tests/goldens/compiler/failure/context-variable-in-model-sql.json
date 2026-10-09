@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL text in '<project>/models/staging/stg_orders.sql' does not allow @@CTX templates"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

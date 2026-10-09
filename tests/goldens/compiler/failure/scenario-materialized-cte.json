@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL scenario 'tests/scenarios/orders.sql' CTE '__source__raw_orders' must not use AS MATERIALIZED; materialization hints are not supported in SQL scenario CTEs\n  --> tests/scenarios/orders.sql:6:25",
+     "help": "remove MATERIALIZED and write __source__raw_orders AS (...)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

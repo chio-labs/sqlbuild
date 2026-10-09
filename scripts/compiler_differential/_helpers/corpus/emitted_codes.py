@@ -12,9 +12,11 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
     first_diagnostic_message,
 )
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
+from scripts.compiler_differential._helpers.goldens.goldens import golden_path_masks, masked_text
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
     ANALYSIS_CODE_SCAN_ROOTS,
+    COLD_COMPILE,
     CORPUS_FAILURES,
     DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
@@ -29,6 +31,8 @@ from scripts.compiler_differential.models import (
     DifferentialOptions,
     EmittedCodes,
     EngineRun,
+    ExpectedOutcome,
+    FailureCase,
 )
 from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_SHADOW_CODE
 from sqlbuild.compiler.compile import constants as compile_constants
@@ -58,6 +62,20 @@ def emitted_failure_codes(*, options: DifferentialOptions) -> dict[str, EmittedC
             pool.map(lambda project: _emitted_codes(project=project, options=options), corpus)
         )
     return {project.name: codes for project, codes in zip(corpus, emitted, strict=True)}
+
+
+def case_emitted_codes(*, case: FailureCase, options: DifferentialOptions) -> EmittedCodes:
+    """Compile one failure case under the first engine and return what it really emitted."""
+
+    return _emitted_codes(
+        project=CorpusProject(
+            name=f"{CORPUS_FAILURES}/{case.name}",
+            commands=(COLD_COMPILE,),
+            expected=ExpectedOutcome(error_code=case.expected_code),
+            writer=case.write,
+        ),
+        options=options,
+    )
 
 
 def discovery_error_codes() -> frozenset[str]:
@@ -182,14 +200,20 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
         options=options,
     )
     first: dict[str, object] = first_diagnostic(outcome=run.outcomes[0], severity=ERROR_SEVERITY)
+    message: str | None = first_diagnostic_message(outcome=run.outcomes[0], severity=ERROR_SEVERITY)
     notes: object = first.get("notes")
     line: object = first.get("line")
     column: object = first.get("column")
     return EmittedCodes(
         errors=diagnostic_codes(outcome=run.outcomes[0], severity=ERROR_SEVERITY),
         warnings=diagnostic_codes(outcome=run.outcomes[0], severity=WARNING_SEVERITY),
-        first_error_message=first_diagnostic_message(
-            outcome=run.outcomes[0], severity=ERROR_SEVERITY
+        first_error_message=(
+            None
+            if message is None
+            else masked_text(
+                text=message,
+                masks=golden_path_masks(case_dir=case_dir, work_dir=options.work_dir),
+            )
         ),
         first_error_help=None if first.get("help") is None else str(first.get("help")),
         first_error_notes=tuple(str(note) for note in notes) if isinstance(notes, list) else (),

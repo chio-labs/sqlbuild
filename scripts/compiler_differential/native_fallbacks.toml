@@ -1,0 +1,651 @@
+# Every native-to-Python fallback and preview analysis deferral the CI corpus may still
+# reach, with its exact count per corpus. `--native-fallbacks check` fails on anything new,
+# changed or gone. Ports delete their entries; see scripts/compiler_differential/README.md.
+# The corpus does not reach type normalization (type_system): its callers are the planner,
+# the executor and the preview fallbacks, so test_native_type_parity.py covers that stage.
+seed_start = 0
+seeds = 12
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.audit_rendering"
+kind = "deferred"
+counts = { seed = 16 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.native"
+kind = "audit_renderings"
+counts = { example = 120, failure = 10, fixture = 112, seed = 354 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.native"
+kind = "cursor_intrinsic_rejections"
+counts = { example = 160, failure = 172, fixture = 156, seed = 961 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.native"
+kind = "function_headers"
+counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.native"
+kind = "omitted_select_scans"
+counts = { example = 24, failure = 21, fixture = 32, seed = 193 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.native"
+kind = "scenario_ctes"
+counts = { example = 8, failure = 1, fixture = 12, seed = 37 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.native"
+kind = "seed_pairs"
+counts = { example = 8, fixture = 4, seed = 26 }
+
+[[entry]]
+engine = "native"
+stage = "attachments"
+site = "attachments.scenario_independence"
+kind = "deferred"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native"
+stage = "declaration_files"
+site = "declaration_files.native"
+kind = "failed_files"
+counts = { failure = 9 }
+
+[[entry]]
+engine = "native"
+stage = "declaration_files"
+site = "declaration_files.native"
+kind = "parsed_files"
+counts = { example = 32, failure = 69, fixture = 20, seed = 799 }
+
+[[entry]]
+engine = "native"
+stage = "declaration_files"
+site = "declaration_files.native"
+kind = "seed_files"
+counts = { example = 8, failure = 3, fixture = 4, seed = 43 }
+
+[[entry]]
+engine = "native"
+stage = "declaration_scopes"
+site = "declaration_scopes.native"
+kind = "scope_indexes"
+counts = { example = 12, failure = 225, fixture = 12, seed = 44 }
+
+[[entry]]
+engine = "native"
+stage = "declaration_scopes"
+site = "declaration_scopes.rebind_lookup"
+kind = "deferred"
+counts = { failure = 1, seed = 781 }
+
+[[entry]]
+engine = "native"
+stage = "declaration_scopes"
+site = "declaration_scopes.relationship_ctes"
+kind = "expected_names"
+counts = { example = 1, failure = 3, fixture = 3, seed = 26 }
+
+[[entry]]
+engine = "native"
+stage = "discovery"
+site = "discovery.native"
+kind = "model_file_listings"
+counts = { example = 12, failure = 290, fixture = 12, seed = 50 }
+
+[[entry]]
+engine = "native"
+stage = "macro_call_store"
+site = "macro_call_store.native"
+kind = "served_calls"
+counts = { example = 18, fixture = 15, seed = 192 }
+
+[[entry]]
+engine = "native"
+stage = "macro_calls"
+site = "macro_calls.arguments"
+kind = "deferred"
+counts = { example = 6, failure = 14, fixture = 5, seed = 484 }
+
+[[entry]]
+engine = "native"
+stage = "macro_calls"
+site = "macro_calls.native"
+kind = "bridged_calls"
+counts = { example = 32, failure = 9, fixture = 28, seed = 466 }
+
+[[entry]]
+engine = "native"
+stage = "macro_calls"
+site = "macro_calls.resolution"
+kind = "deferred"
+counts = { failure = 4, seed = 3 }
+
+[[entry]]
+engine = "native"
+stage = "macro_calls"
+site = "macro_calls.unbridged_expansion"
+kind = "macro_mocks"
+counts = { seed = 238 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.header_metadata"
+kind = "stale"
+counts = { seed = 19 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.header_metadata"
+kind = "unsupported"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.native"
+kind = "config_builds"
+counts = { example = 56, failure = 304, fixture = 64, seed = 890 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.native"
+kind = "validations"
+counts = { example = 56, failure = 374, fixture = 60, seed = 1091 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "api"
+counts = { example = 16, failure = 2, seed = 36 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "config"
+counts = { example = 12, failure = 115, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "connection"
+counts = { example = 18, failure = 117, fixture = 9, seed = 63 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "effective_vars"
+counts = { example = 29, failure = 240, fixture = 15, seed = 121 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "seed_target"
+counts = { example = 8, seed = 30 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "source_target"
+counts = { example = 8, seed = 23 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.validators"
+kind = "deferred"
+counts = { failure = 2, fixture = 4, seed = 3 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.cursor_intrinsic_validation"
+kind = "deferred"
+counts = { example = 56, failure = 404, fixture = 64, seed = 1100 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.declaration_context"
+kind = "no_resource"
+counts = { example = 24, failure = 9, fixture = 20, seed = 245 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.declaration_references"
+kind = "after_variables"
+counts = { seed = 3 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.native"
+kind = "declaration_expansions"
+counts = { example = 56, failure = 415, fixture = 64, seed = 1100 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.native"
+kind = "variable_substitutions"
+counts = { example = 56, failure = 457, fixture = 72, seed = 1157 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.sql_variables"
+kind = "deferred"
+counts = { failure = 3, seed = 195 }
+
+[[entry]]
+engine = "native"
+stage = "model_loop"
+site = "model_loop.sql_variables"
+kind = "error"
+counts = { failure = 2 }
+
+[[entry]]
+engine = "native"
+stage = "reference_extraction"
+site = "reference_extraction.native"
+kind = "reference_scans"
+counts = { example = 250, failure = 466, fixture = 249, seed = 1523 }
+
+[[entry]]
+engine = "native-preview"
+stage = "analysis"
+site = "project_assembly"
+kind = "syntax_error"
+counts = { failure = 3 }
+
+[[entry]]
+engine = "native-preview"
+stage = "analysis"
+site = "project_assembly"
+kind = "unsupported_dialect"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.audit_rendering"
+kind = "deferred"
+counts = { seed = 16 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.native"
+kind = "audit_renderings"
+counts = { example = 120, failure = 10, fixture = 112, seed = 354 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.native"
+kind = "cursor_intrinsic_rejections"
+counts = { example = 160, failure = 172, fixture = 156, seed = 961 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.native"
+kind = "function_headers"
+counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.native"
+kind = "omitted_select_scans"
+counts = { example = 24, failure = 21, fixture = 32, seed = 193 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.native"
+kind = "scenario_ctes"
+counts = { example = 8, failure = 1, fixture = 12, seed = 37 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.native"
+kind = "seed_pairs"
+counts = { example = 8, fixture = 4, seed = 26 }
+
+[[entry]]
+engine = "native-preview"
+stage = "attachments"
+site = "attachments.scenario_independence"
+kind = "deferred"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native-preview"
+stage = "contracts"
+site = "contracts.native"
+kind = "contract_validations"
+counts = { example = 9, failure = 109, fixture = 6, seed = 25 }
+
+[[entry]]
+engine = "native-preview"
+stage = "contracts"
+site = "contracts.native"
+kind = "promotion_checks"
+counts = { example = 12, failure = 109, fixture = 8, seed = 33 }
+
+[[entry]]
+engine = "native-preview"
+stage = "declaration_files"
+site = "declaration_files.native"
+kind = "failed_files"
+counts = { failure = 9 }
+
+[[entry]]
+engine = "native-preview"
+stage = "declaration_files"
+site = "declaration_files.native"
+kind = "parsed_files"
+counts = { example = 32, failure = 69, fixture = 20, seed = 799 }
+
+[[entry]]
+engine = "native-preview"
+stage = "declaration_files"
+site = "declaration_files.native"
+kind = "seed_files"
+counts = { example = 8, failure = 3, fixture = 4, seed = 43 }
+
+[[entry]]
+engine = "native-preview"
+stage = "declaration_scopes"
+site = "declaration_scopes.native"
+kind = "scope_indexes"
+counts = { example = 12, failure = 225, fixture = 12, seed = 44 }
+
+[[entry]]
+engine = "native-preview"
+stage = "declaration_scopes"
+site = "declaration_scopes.rebind_lookup"
+kind = "deferred"
+counts = { failure = 1, seed = 781 }
+
+[[entry]]
+engine = "native-preview"
+stage = "declaration_scopes"
+site = "declaration_scopes.relationship_ctes"
+kind = "expected_names"
+counts = { example = 1, failure = 3, fixture = 3, seed = 26 }
+
+[[entry]]
+engine = "native-preview"
+stage = "discovery"
+site = "discovery.native"
+kind = "model_file_listings"
+counts = { example = 12, failure = 290, fixture = 12, seed = 50 }
+
+[[entry]]
+engine = "native-preview"
+stage = "lineage_facts"
+site = "lineage_facts.native"
+kind = "lineage_graphs"
+counts = { example = 9, failure = 109, fixture = 6, seed = 22 }
+
+[[entry]]
+engine = "native-preview"
+stage = "macro_call_store"
+site = "macro_call_store.native"
+kind = "served_calls"
+counts = { example = 18, fixture = 15, seed = 192 }
+
+[[entry]]
+engine = "native-preview"
+stage = "macro_calls"
+site = "macro_calls.arguments"
+kind = "deferred"
+counts = { example = 6, failure = 14, fixture = 5, seed = 484 }
+
+[[entry]]
+engine = "native-preview"
+stage = "macro_calls"
+site = "macro_calls.native"
+kind = "bridged_calls"
+counts = { example = 32, failure = 9, fixture = 28, seed = 466 }
+
+[[entry]]
+engine = "native-preview"
+stage = "macro_calls"
+site = "macro_calls.resolution"
+kind = "deferred"
+counts = { failure = 4, seed = 3 }
+
+[[entry]]
+engine = "native-preview"
+stage = "macro_calls"
+site = "macro_calls.unbridged_expansion"
+kind = "macro_mocks"
+counts = { seed = 238 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_analysis"
+site = "analysis_session"
+kind = "input_enrichment"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_analysis"
+site = "analysis_session"
+kind = "legacy_analysis"
+counts = { failure = 2, seed = 10 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_analysis"
+site = "model_analysis.native"
+kind = "dynamic_contract_proofs"
+counts = { seed = 3 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_analysis"
+site = "model_analysis.native"
+kind = "expression_shapes"
+counts = { example = 4, failure = 115, fixture = 4, seed = 100 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_analysis"
+site = "model_analysis.native"
+kind = "model_analyses"
+counts = { example = 56, failure = 223, fixture = 52, seed = 686 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.header_metadata"
+kind = "stale"
+counts = { seed = 19 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.header_metadata"
+kind = "unsupported"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.native"
+kind = "config_builds"
+counts = { example = 56, failure = 304, fixture = 64, seed = 890 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.native"
+kind = "validations"
+counts = { example = 56, failure = 374, fixture = 60, seed = 1091 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "api"
+counts = { example = 16, failure = 2, seed = 36 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "config"
+counts = { example = 12, failure = 115, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "connection"
+counts = { example = 18, failure = 117, fixture = 9, seed = 63 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.python_templates"
+kind = "effective_vars"
+counts = { example = 29, failure = 240, fixture = 15, seed = 121 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.validators"
+kind = "deferred"
+counts = { failure = 2, fixture = 4, seed = 3 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.cursor_intrinsic_validation"
+kind = "deferred"
+counts = { example = 56, failure = 404, fixture = 64, seed = 1100 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.declaration_context"
+kind = "no_resource"
+counts = { example = 24, failure = 9, fixture = 20, seed = 245 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.declaration_references"
+kind = "after_variables"
+counts = { seed = 3 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.native"
+kind = "declaration_expansions"
+counts = { example = 56, failure = 415, fixture = 64, seed = 1100 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.native"
+kind = "variable_substitutions"
+counts = { example = 56, failure = 457, fixture = 72, seed = 1157 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.sql_variables"
+kind = "deferred"
+counts = { failure = 3, seed = 195 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_loop"
+site = "model_loop.sql_variables"
+kind = "error"
+counts = { failure = 2 }
+
+[[entry]]
+engine = "native-preview"
+stage = "project_assembly"
+site = "project_assembly.assembly"
+kind = "deferred"
+counts = { failure = 4 }
+
+[[entry]]
+engine = "native-preview"
+stage = "project_assembly"
+site = "project_assembly.native"
+kind = "project_assemblies"
+counts = { example = 12, failure = 111, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native-preview"
+stage = "reference_extraction"
+site = "reference_extraction.native"
+kind = "reference_scans"
+counts = { example = 250, failure = 466, fixture = 249, seed = 1523 }
+
+[[entry]]
+engine = "native-preview"
+stage = "semantic_checks"
+site = "semantic_checks.native"
+kind = "semantic_completions"
+counts = { example = 12, failure = 111, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native-preview"
+stage = "sql_test_glue"
+site = "sql_test_glue.assembly"
+kind = "deferred"
+counts = { example = 12, failure = 111, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native-preview"
+stage = "sql_test_glue"
+site = "sql_test_glue.native"
+kind = "sql_test_plans"
+counts = { example = 1, failure = 4, fixture = 1, seed = 9 }
+
+[[entry]]
+engine = "python"
+stage = "discovery"
+site = "discovery.native"
+kind = "model_file_listings"
+counts = { example = 12, failure = 290, fixture = 12, seed = 50 }

@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage, NativeStage
+from sqlbuild.compiler.frontier.types import (
+    CompilerEngine,
+    CompilerStage,
+    NativeFallbackSite,
+    NativeStage,
+)
 
 
 @dataclass(frozen=True)
@@ -143,3 +148,12 @@ class NativeStageCouplingTestCase:
     dependent: NativeStage
     dependency: NativeStage
     expected_engines_without_dependency: frozenset[CompilerEngine]
+
+
+@dataclass(frozen=True)
+class NativeFallbackRecorderTestCase:
+    """Fallbacks one process records and the record file it writes at exit."""
+
+    description: str
+    recorded: tuple[tuple[NativeFallbackSite, str], ...]
+    expected_files: list[list[list[object]]]

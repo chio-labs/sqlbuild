@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "unknown audit run_scope 'always'; valid values: delta_and_final, final"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

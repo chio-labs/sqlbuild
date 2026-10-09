@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D011",
+     "message": "Duplicate hook name 'note_refresh' found in hooks/python/first.py and hooks/python/second.py"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

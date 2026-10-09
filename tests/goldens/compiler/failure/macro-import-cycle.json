@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro import cycle in 'macros/first.py': macros.first -> macros.second -> macros.first"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

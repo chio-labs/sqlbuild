@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro '@blow_up' in '<project>/models/marts/customer_totals.sql' failed: cannot render total"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

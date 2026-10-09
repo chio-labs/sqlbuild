@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "S101",
+     "message": "snowflake execution requires explicit target database. model 'customer_totals' resolved to database=None schema='ANALYTICS'. Set them in the model config, the environment config, or the project defaults.",
+     "help": "to set project-wide defaults, set this in sqlbuild_project.toml:\n            [defaults]\n            database = \"my_database\""
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

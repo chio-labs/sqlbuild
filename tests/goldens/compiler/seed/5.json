@@ -1,0 +1,48 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro name collision for 'adjust_0': macros/adjust_0.py and macros/duplicate_adjust_0.py"
+    }
+   ]
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro name collision for 'adjust_0': macros/adjust_0.py and macros/duplicate_adjust_0.py"
+    }
+   ]
+  },
+  {
+   "label": "plan",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "Compiling project...",
+    "error[P001]: Macro name collision for 'adjust_0': macros/adjust_0.py and macros/duplicate_adjust_0.py",
+    "",
+    ""
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

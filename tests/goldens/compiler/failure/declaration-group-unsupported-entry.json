@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "Declaration group models/marts/_sqlbuild/ contains unsupported entries: models/marts/_sqlbuild/notes.txt"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

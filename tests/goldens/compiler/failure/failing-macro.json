@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro '@cents' in '<project>/models/staging/stg_orders.sql' failed: cannot convert amount"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

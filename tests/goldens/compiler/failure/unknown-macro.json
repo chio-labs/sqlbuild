@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Unknown macro '@cents' in '<project>/models/staging/stg_orders.sql'. Available macros: none"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

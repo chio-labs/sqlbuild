@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': unknown materialization 'archive'; not a built-in type and no custom materialization with that name was discovered"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

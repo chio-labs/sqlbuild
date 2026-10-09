@@ -33,6 +33,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.scopes.main._native_expected_model_names import (
     native_expected_model_names,
 )
@@ -158,6 +160,10 @@ def extract_scope_relationship_facts(
         if isinstance(scanned, str):
             faults.append(ScopeRelationshipFault(scenario.relative_path, scanned))
             continue
+        if scanned is None:
+            report_native_fallback(
+                site=NativeFallbackSite.SCOPE_RELATIONSHIP_CTES, kind="scenario_expected_names"
+            )
         try:
             facts.append(
                 RelationshipFact(
@@ -211,6 +217,10 @@ def _expected_names_by_file(
             if native_names is not None:
                 file_names.append(native_names)
                 continue
+            if scan_natively:
+                report_native_fallback(
+                    site=NativeFallbackSite.SCOPE_RELATIONSHIP_CTES, kind="expected_names"
+                )
             try:
                 file_names.append(
                     extract_sql_test_expected_model_names(
@@ -317,6 +327,7 @@ def _natively_tested_macro_names(
     """Macros a macro test's actual CTE calls, scanned natively where Python's scanner is exact."""
 
     if native_ctes is None:
+        report_native_fallback(site=NativeFallbackSite.SCOPE_RELATIONSHIP_CTES, kind="macro_test")
         return _tested_macro_names(sql=sql, file_label=file_label, syntax=syntax)
     if isinstance(native_ctes, str):
         raise CompileInputError(native_ctes, bridge_independent=True)

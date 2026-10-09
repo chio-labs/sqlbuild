@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D014",
+     "message": "SQL hook '<project>/hooks/sql/record_refresh.sql' must start with a HOOK() header as the first non-whitespace content"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

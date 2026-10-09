@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D007",
+     "message": "Duplicate scenario file name found for 'orders' in tests/scenarios/north/orders.sql and tests/scenarios/south/orders.sql"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

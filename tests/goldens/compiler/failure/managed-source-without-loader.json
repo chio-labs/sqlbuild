@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D007",
+     "message": "Managed source 'loaded_products' in sources/raw.yml requires loader 'loaded_products'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL scenario 'tests/scenarios/orders.sql' must define at least one __expected__<model> or __assert__<assertion> CTE"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Enum and constant expansion contains an unclosed quoted string"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

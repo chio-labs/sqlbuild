@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "ENUM(...) in '<project>/enums/order_status.sql' contains invalid SQLBuild header syntax: expected value at position 35"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

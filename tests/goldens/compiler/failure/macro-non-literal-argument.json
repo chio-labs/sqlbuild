@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments in '<project>/models/staging/stg_orders.sql' must use only Python literals, nested macro calls, and __ref(), __source(), or __seed() references"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P002",
+     "message": "models/staging/stg_orders.sql column 'amount' cannot set nullable = true and audit not_null",
+     "help": "remove the not_null audit or set nullable = false"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

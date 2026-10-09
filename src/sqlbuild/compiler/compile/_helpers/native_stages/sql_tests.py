@@ -11,7 +11,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestInput,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.sql_test_glue.main._assemble_native_sql_tests import (
     assemble_native_sql_tests,
 )
@@ -31,9 +33,11 @@ def assemble_sql_tests_by_engine(
     tests: list[CompiledSqlTest] = []
     for test_input, assembly in zip(inputs.test_inputs, native, strict=True):
         if assembly is None:
+            report_native_fallback(site=NativeFallbackSite.SQL_TEST_ASSEMBLY)
             tests.append(assemble_python_test(test_input))
             continue
         for key, diagnostic in assembly.diagnostics:
             report_compile_diagnostic(key=key, diagnostic=diagnostic)
+        report_native_answer(stage=NativeStage.SQL_TEST_GLUE, kind="sql_test_assemblies")
         tests.append(assembly.test)
     return tuple(tests)

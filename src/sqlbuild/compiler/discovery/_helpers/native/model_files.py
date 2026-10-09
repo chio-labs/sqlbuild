@@ -28,6 +28,8 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveryFileFault
 from sqlbuild.compiler.discovery.types import NativeFiles, NativeLocation
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 
 
 def discover_native_model_files(
@@ -58,6 +60,7 @@ def discover_native_model_files(
             project_dir=project_dir,
         )
         seed_snapshot_listings(project_dir=project_dir, tree=tree)
+    report_native_answer(stage=NativeStage.DISCOVERY, kind="model_file_listings")
     return materialise_native_files(
         project_dir=project_dir,
         files=(

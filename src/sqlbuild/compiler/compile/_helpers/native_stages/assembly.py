@@ -31,7 +31,9 @@ from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
     assemble_native_project_resources,
@@ -73,6 +75,10 @@ def project_facts_by_engine(
             ),
         ),
     )
+    if resources is not None:
+        report_native_answer(stage=NativeStage.PROJECT_ASSEMBLY, kind="project_assemblies")
+    else:
+        report_native_fallback(site=NativeFallbackSite.PROJECT_ASSEMBLY)
     pivots: dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]] = (
         standalone_pivot_models(model_inputs=inputs.model_inputs, analyses=analyses)
         if native_stage_enabled(NativeStage.MODEL_ANALYSIS)
@@ -94,6 +100,10 @@ def project_facts_by_engine(
             ),
             strict=True,
         )
+    )
+    proven: int = len([proof for proof in proofs.values() if proof is not None])
+    report_native_answer(
+        stage=NativeStage.MODEL_ANALYSIS, kind="dynamic_contract_proofs", units=proven
     )
     return NativeProjectFacts(
         models=tuple(
@@ -117,6 +127,9 @@ def expression_source_shapes_by_engine(
             infer_native_expression_source_shapes(expressions=expressions, profile=profile)
         )
         if native_shapes is not None:
+            report_native_answer(
+                stage=NativeStage.MODEL_ANALYSIS, kind="expression_shapes", units=len(native_shapes)
+            )
             return native_shapes
     return get_expression_source_shapes(expressions=expressions, profile=profile)
 
@@ -135,6 +148,9 @@ def analyze_model_sql_by_engine(
             )
         )
         if native is not None:
+            report_native_answer(
+                stage=NativeStage.MODEL_ANALYSIS, kind="model_analyses", units=len(native.analyses)
+            )
             return native.analyses, native.session
     return python_analysis(), None
 

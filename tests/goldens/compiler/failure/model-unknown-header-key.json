@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D002",
+     "message": "MODEL() in '<project>/models/staging/stg_orders.sql:3' has unsupported keys: materialised",
+     "help": "did you mean 'materialized'?"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

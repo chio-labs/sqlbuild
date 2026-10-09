@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P003",
+     "message": "MODEL sql_analysis conflicts with legacy sql_validation"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

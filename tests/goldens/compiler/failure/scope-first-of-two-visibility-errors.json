@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Enum 'staged_status' is known but inaccessible in '<project>/models/marts/customer_totals.sql'. It is defined at models/staging/_enums/status.sql:1:1 with local scope owned by 'models/staging'; consumer path: '<project>/models/marts/customer_totals.sql'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

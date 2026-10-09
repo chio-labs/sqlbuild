@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from scripts.compiler_differential.constants import (
     ANALYSIS_INDIRECT_KINDS,
+    BASELINES_HINT,
     CONFIG_ONLY_KINDS,
+    GOLDEN_LABEL,
     RENDER_CONFIG_ONLY_KINDS,
     RENDER_INDIRECT_KINDS,
 )
@@ -31,15 +33,16 @@ def format_summary(
     engines: tuple[str, str],
     seconds: float,
     missing_coverage: dict[str, tuple[str, ...]] | None = None,
+    gate_failures: tuple[str, ...] = (),
 ) -> str:
-    """Summarize the run; any difference or missing coverage, keyed by stage, reports FAILED."""
+    """Summarize the run; a difference, missing coverage or gate failure reports FAILED."""
 
     differing: list[ProjectComparison] = [item for item in comparisons if item.differences]
     gaps: dict[str, tuple[str, ...]] = {
         stage: kinds for stage, kinds in (missing_coverage or {}).items() if kinds
     }
     left_engine, right_engine = engines
-    if not differing and not gaps:
+    if not differing and not gaps and not gate_failures:
         return (
             f"Compiler differential passed: {len(comparisons)} projects identical "
             f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
@@ -54,7 +57,15 @@ def format_summary(
     lines.extend(
         f"Required {stage} coverage missing: {', '.join(kinds)}" for stage, kinds in gaps.items()
     )
+    if gate_failures:
+        lines.append(f"Native fallback allow-list: {len(gate_failures)} problems (listed above)")
+    if gate_failures or any(_golden_differs(comparison) for comparison in differing):
+        lines.append(BASELINES_HINT)
     return "\n".join(lines)
+
+
+def _golden_differs(comparison: ProjectComparison) -> bool:
+    return any(GOLDEN_LABEL in (difference.labels or ()) for difference in comparison.differences)
 
 
 def format_discovery_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': merge_exclude_columns cannot include unique_key column(s): ORDER_ID"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

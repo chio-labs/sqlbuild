@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model file models/staging/stg_orders.sql references unknown source 'raw_payments'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

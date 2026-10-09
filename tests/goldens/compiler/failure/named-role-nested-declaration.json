@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "Declaration directory schemas/enums/ is not allowed inside the project-wide schemas/ role; scoped declarations belong under <folder>/_sqlbuild/ below a resource tree"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}
