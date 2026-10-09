@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any, NamedTuple, cast
 
 from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
+from sqlbuild.compiler.semantic_checks.constants import (
+    COMPLETION_DEFERRAL_SITE,
+    METADATA_DEFERRAL_SITE,
+    TYPE_RECOVERY_DEFERRAL_SITE,
+)
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_installed_sqb
 
@@ -15,10 +20,13 @@ SEMANTIC_WHEEL_SITES: tuple[str, ...] = (
     "compiler/compile/_helpers/diagnostics/type_recovery.py:_projection_spans",
     "compiler/compile/_helpers/diagnostics/details.py:_parsed_model",
 )
+SEMANTIC_DEFERRAL_SITES: frozenset[str] = frozenset(
+    {COMPLETION_DEFERRAL_SITE, METADATA_DEFERRAL_SITE, TYPE_RECOVERY_DEFERRAL_SITE}
+)
 
 
 class EngineSemanticRun(NamedTuple):
-    """One engine's compile report, semantic wheel calls and recorded deferrals."""
+    """One engine's compile report, semantic wheel calls and semantic-stage deferrals."""
 
     report: dict[str, object]
     returncode: int
@@ -52,7 +60,8 @@ def engine_semantic_run(
     for path in sorted(record_dir.glob("analysis-deferrals-*.jsonl")):
         for line in path.read_text("utf-8").splitlines():
             record: dict[str, str] = json.loads(line)
-            deferrals.append((record["kind"], record["site"]))
+            if record["site"] in SEMANTIC_DEFERRAL_SITES:
+                deferrals.append((record["kind"], record["site"]))
     return EngineSemanticRun(
         report=report,
         returncode=compiled.returncode,
