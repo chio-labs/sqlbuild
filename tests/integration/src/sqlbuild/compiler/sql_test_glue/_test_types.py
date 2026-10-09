@@ -33,7 +33,4 @@ class GeneratedSqlTestAssemblyParityTestCase:
     count: int
     test_count: int
     shape: SqlTestCorpusShape
-    expected_minimum_native_assembled: int
-    expected_minimum_native_with_diagnostics: int
-    expected_minimum_native_case_fingerprints: int
-    expected_minimum_deferred_macro_mocks: int
+    expected_native_assemblies: dict[str, int]

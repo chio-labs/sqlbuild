@@ -193,10 +193,14 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
                 assertion_share=0.2,
                 unflattenable_assertion_share=0.1,
             ),
-            expected_minimum_native_assembled=150,
-            expected_minimum_native_with_diagnostics=13,
-            expected_minimum_native_case_fingerprints=80,
-            expected_minimum_deferred_macro_mocks=3,
+            expected_native_assemblies={
+                "native_assembled": 181,
+                "native_with_diagnostics": 17,
+                "native_case_fingerprints": 96,
+                "deferred_macro_mocks": 4,
+                "deferred_non_ascii_text": 11,
+                "deferred_decimal_context": 5,
+            },
         )
     ],
     ids=lambda case: case.description,
@@ -227,13 +231,7 @@ def test_given_generated_sql_tests_when_assembling_natively_then_compiled_tests_
         differences.extend(mismatches(inputs=[index], expected=[expected], actual=[actual]))
         outcomes[outcome_kind(actual)] += 1
 
-    assert (
-        differences,
-        native_assemblies["native_assembled"] >= test_case.expected_minimum_native_assembled,
-        native_assemblies["native_with_diagnostics"]
-        >= test_case.expected_minimum_native_with_diagnostics,
-        native_assemblies["native_case_fingerprints"]
-        >= test_case.expected_minimum_native_case_fingerprints,
-        native_assemblies["deferred_macro_mocks"]
-        >= test_case.expected_minimum_deferred_macro_mocks,
-    ) == ([], True, True, True, True), (native_assemblies, outcomes)
+    assert (differences, dict(native_assemblies)) == (
+        [],
+        test_case.expected_native_assemblies,
+    ), outcomes
