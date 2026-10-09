@@ -12,6 +12,7 @@ class GeneratedSqlTestPlanningParityTestCase:
     count: int
     test_count: int
     adapter_names: tuple[str, ...]
-    expected_minimum_planned: int
-    expected_minimum_with_errors: int
+    expected_minimum_native_planned: int
+    expected_minimum_native_with_errors: int
+    expected_minimum_native_chains: int
     expected_minimum_raised: int

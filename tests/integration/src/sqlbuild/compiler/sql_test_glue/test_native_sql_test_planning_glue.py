@@ -27,6 +27,7 @@ from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import (
     generated_sql_test_files,
     outcome_kind,
     planning_outcome,
+    record_native_answers,
     use_sql_test_glue,
 )
 
@@ -48,8 +49,9 @@ _ADAPTERS: dict[str, BaseAdapter] = {
             count=4,
             test_count=12,
             adapter_names=("duckdb", "postgres", "snowflake", "bigquery", "sqlserver"),
-            expected_minimum_planned=400,
-            expected_minimum_with_errors=80,
+            expected_minimum_native_planned=850,
+            expected_minimum_native_with_errors=150,
+            expected_minimum_native_chains=350,
             expected_minimum_raised=40,
         )
     ],
@@ -61,6 +63,7 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
+    native_answers: Counter[str] = record_native_answers(monkeypatch=monkeypatch)
     outcomes: Counter[str] = Counter()
     differences: list[tuple[object, object, object]] = []
     for index in range(test_case.count):
@@ -117,7 +120,8 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
 
     assert (
         differences,
-        outcomes["planned"] >= test_case.expected_minimum_planned,
-        outcomes["errors"] >= test_case.expected_minimum_with_errors,
+        native_answers["native_planned"] >= test_case.expected_minimum_native_planned,
+        native_answers["native_with_errors"] >= test_case.expected_minimum_native_with_errors,
+        native_answers["native_chains"] >= test_case.expected_minimum_native_chains,
         outcomes["raised"] >= test_case.expected_minimum_raised,
-    ) == ([], True, True, True), outcomes
+    ) == ([], True, True, True, True), (native_answers, outcomes)

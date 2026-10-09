@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import random
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import chain, compress
-from operator import attrgetter
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
@@ -19,12 +20,12 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.planner._helpers.sql_tests import native_planning
-from sqlbuild.compiler.planner.models import (
-    NativeSqlTestArtifact,
-    NativeSqlTestPlan,
-    PlanWarning,
+from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
+from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestChainRequest,
+    NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 
 
 @dataclass(frozen=True)
@@ -321,13 +322,44 @@ def chain_outcome(
 
 
 def outcome_kind(outcome: object) -> str:
-    """`raised`, `errors` when a plan reports an error, or `planned`."""
+    """`raised` when the call raised, else `answered`; only native rows count as native work."""
 
     called: PlanningCallOutcome = cast(PlanningCallOutcome, outcome)
-    plans: tuple[NativeSqlTestPlan, ...] = cast(tuple[NativeSqlTestPlan, ...], called.value or ())
-    warnings: chain[PlanWarning] = chain.from_iterable(map(attrgetter("warnings"), plans))
-    has_errors: bool = any(warning.severity is WarningSeverity.ERROR for warning in warnings)
-    return ("planned", "errors", "raised", "raised")[has_errors + 2 * (called.raised is not None)]
+    return ("answered", "raised")[called.raised is not None]
+
+
+def record_native_answers(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    """Count the plans and chains the native glue itself returns for the rest of the test.
+
+    A plan with native error messages counts as `native_with_errors`, any other as
+    `native_planned`; JSON-path plans never reach these bindings, so they are never counted.
+    """
+
+    answers: Counter[str] = Counter()
+    plan: Callable[[NativeSqlTestPlanningRequest], tuple[list[NativeSqlTestPlanRow], int, int]] = (
+        native_module.plan_compiled_sql_tests
+    )
+    resolve: Callable[[NativeSqlTestChainRequest], list[list[str]]] = (
+        native_module.resolve_compiled_sql_test_chains
+    )
+
+    def counted_plans(
+        request: NativeSqlTestPlanningRequest,
+    ) -> tuple[list[NativeSqlTestPlanRow], int, int]:
+        response: tuple[list[NativeSqlTestPlanRow], int, int] = plan(request)
+        answers.update(
+            ("native_planned", "native_with_errors")[bool(row[5])] for row in response[0]
+        )
+        return response
+
+    def counted_chains(request: NativeSqlTestChainRequest) -> list[list[str]]:
+        chains: list[list[str]] = resolve(request)
+        answers["native_chains"] += len(chains)
+        return chains
+
+    monkeypatch.setattr(native_module, "plan_compiled_sql_tests", counted_plans)
+    monkeypatch.setattr(native_module, "resolve_compiled_sql_test_chains", counted_chains)
+    return answers
 
 
 def _outcome(call: Callable[[], object]) -> PlanningCallOutcome:
