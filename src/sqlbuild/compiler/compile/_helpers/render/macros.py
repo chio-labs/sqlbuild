@@ -1213,11 +1213,10 @@ def expand_sql_macros_result(
         facts=facts,
         consumer=consumer,
     )
-    bridge: MacroBridge | None = active_macro_bridge() if not state.macro_overrides else None
+    bridge: MacroBridge | None = active_macro_bridge()
     if bridge is None and MACRO_TOKEN in sql and native_stage_enabled(NativeStage.MACRO_CALLS):
         report_native_fallback(
-            site=NativeFallbackSite.MACRO_UNBRIDGED_EXPANSION,
-            kind="macro_mocks" if state.macro_overrides else "outside_compile_inputs",
+            site=NativeFallbackSite.MACRO_UNBRIDGED_EXPANSION, kind="outside_compile_inputs"
         )
     expanded_sql, spans = (
         _expand_sql_macros(
