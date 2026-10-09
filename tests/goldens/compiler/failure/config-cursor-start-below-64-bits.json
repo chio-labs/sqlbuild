@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': cursor_start -18446744073709551616 is smaller than a 64-bit integer",
+     "help": "set cursor_start to a value that fits in 64 bits, add this to the MODEL header:\n            MODEL (\n              cursor_start -9223372036854775808,\n              ...\n            );"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

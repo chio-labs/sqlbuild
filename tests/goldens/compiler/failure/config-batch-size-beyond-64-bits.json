@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': batch_size '99999999999999999999d' has a number larger than a 64-bit integer",
+     "help": "use a batch_size whose numbers fit in 64 bits, add this to the MODEL header:\n            MODEL (\n              batch_size '7d',\n              ...\n            );"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}
