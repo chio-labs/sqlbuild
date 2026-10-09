@@ -17,6 +17,8 @@ pub(crate) struct SessionCatalog {
     additions: Shapes,
     analysis_names: Vec<String>,
     recorded_analysis: HashSet<String>,
+    /// The `(types, nullability)` this session gave each relation's analysis.
+    analysis_shapes: HashMap<String, (Pairs, Pairs)>,
 }
 
 impl SessionCatalog {
@@ -28,6 +30,7 @@ impl SessionCatalog {
             additions: Vec::new(),
             analysis_names: Vec::new(),
             recorded_analysis: HashSet::new(),
+            analysis_shapes: HashMap::new(),
         }
     }
 
@@ -86,12 +89,30 @@ impl SessionCatalog {
                 name.clone(),
                 (catalog_columns(&column_types), catalog_columns(columns)),
             );
+            self.analysis_shapes
+                .insert(name.clone(), (column_types, columns.clone()));
             if self.recorded_analysis.insert(name.clone()) {
                 self.analysis_names.push(name.clone());
             }
         }
         if !updates.is_empty() {
             self.native.update_analysis(updates);
+        }
+    }
+
+    /// The analysis shape this session set for `name`; inherited shapes are not known here.
+    pub(crate) fn session_analysis_shape(&self, name: &str) -> Option<&(Pairs, Pairs)> {
+        self.analysis_shapes.get(name)
+    }
+
+    /// The shape a binding of `columns` for `name` resolves: Python's override or catalog entry.
+    pub(crate) fn effective_binding_shape(&self, name: &str, columns: &Pairs) -> Pairs {
+        if columns.is_empty() {
+            return Vec::new();
+        }
+        match self.schemas.get(name) {
+            Some(known) if same_mapping(known, columns) => known.clone(),
+            _ => columns.clone(),
         }
     }
 

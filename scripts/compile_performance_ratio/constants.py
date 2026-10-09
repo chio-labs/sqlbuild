@@ -47,6 +47,7 @@ REPORTED_PHASES: tuple[str, ...] = (
     "total_ms",
     "graph_ms",
     "model_analysis_ms",
+    "model_analysis_cpu_ms",
     "analysis_native_ms",
     "contracts_ms",
     "contracts_cpu_ms",

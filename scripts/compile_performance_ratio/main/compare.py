@@ -62,6 +62,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             runs=args.runs,
             modes=modes,
             engines=(args.base_engine, args.head_engine),
+            compile_args=tuple(args.compile_args),
         )
     mode_max_ratios: dict[str, float] = (
         {} if args.edit_max_ratio is None else {EDIT_MODE: args.edit_max_ratio}
@@ -93,6 +94,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         mode_max_ratios=mode_max_ratios,
         engines=(args.base_engine, args.head_engine),
         gate_phases=gate_phases,
+        compile_args=tuple(args.compile_args),
     )
     print(markdown)
     _ = append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
@@ -147,6 +149,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--head-engine",
         default=None,
         help="Compiler engine the head build runs; defaults to the build's own default.",
+    )
+    parser.add_argument(
+        "--compile-arg",
+        dest="compile_args",
+        action="append",
+        default=[],
+        help="Extra `sqb compile` argument for both builds, e.g. `--compile-arg=--select=*`.",
     )
     parser.add_argument(
         "--gate-phase",

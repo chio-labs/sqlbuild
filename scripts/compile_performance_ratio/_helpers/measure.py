@@ -118,6 +118,7 @@ def compare_builds(
     runs: int,
     modes: tuple[str, ...],
     engines: tuple[str | None, str | None] = (None, None),
+    compile_args: tuple[str, ...] = (),
 ) -> tuple[CompileComparison, ...]:
     """Alternate base and head compiles per mode; warm and edit reuse the cold project."""
 
@@ -133,7 +134,12 @@ def compare_builds(
         if mode == COLD_MODE:
             for label, python, project_dir, engine in builds:
                 _ = _compile_once(
-                    label=label, python=python, project_dir=project_dir, mode=mode, engine=engine
+                    label=label,
+                    python=python,
+                    project_dir=project_dir,
+                    mode=mode,
+                    engine=engine,
+                    compile_args=compile_args,
                 )
             cache_primed = False
         elif not cache_primed:
@@ -144,6 +150,7 @@ def compare_builds(
                     project_dir=project_dir,
                     mode=WARM_MODE,
                     engine=engine,
+                    compile_args=compile_args,
                 )
             cache_primed = True
         results: dict[str, list[CompileRun]] = {BASE_LABEL: [], HEAD_LABEL: []}
@@ -152,7 +159,12 @@ def compare_builds(
                 if mode == EDIT_MODE:
                     _ = apply_one_model_edit(project_dir=project_dir, revision=revision)
                 run: CompileRun = _compile_once(
-                    label=label, python=python, project_dir=project_dir, mode=mode, engine=engine
+                    label=label,
+                    python=python,
+                    project_dir=project_dir,
+                    mode=mode,
+                    engine=engine,
+                    compile_args=compile_args,
                 )
                 _check_cache_use(run=run, mode=mode)
                 results[label].append(run)
@@ -201,7 +213,13 @@ def _check_cache_use(*, run: CompileRun, mode: str) -> None:
 
 
 def _compile_once(
-    *, label: str, python: Path, project_dir: Path, mode: str, engine: str | None
+    *,
+    label: str,
+    python: Path,
+    project_dir: Path,
+    mode: str,
+    engine: str | None,
+    compile_args: tuple[str, ...],
 ) -> CompileRun:
     cache_args: tuple[str, ...] = ()
     if mode == COLD_MODE:
@@ -223,6 +241,7 @@ def _compile_once(
             "compile",
             "--json",
             *cache_args,
+            *compile_args,
         ],
         capture_output=True,
         text=True,

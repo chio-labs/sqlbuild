@@ -20,6 +20,7 @@ def comparison_markdown(
     mode_max_ratios: Mapping[str, float] | None = None,
     engines: tuple[str | None, str | None] = (None, None),
     gate_phases: tuple[str, ...] = (),
+    compile_args: tuple[str, ...] = (),
 ) -> str:
     """Summarize medians, ratios and per-phase timings of every mode as Markdown tables."""
 
@@ -39,6 +40,8 @@ def comparison_markdown(
         )
     if gate_phases:
         lines.extend((f"Gated phases: {', '.join(gate_phases)}.", ""))
+    if compile_args:
+        lines.extend((f"Compile arguments: `{' '.join(compile_args)}`.", ""))
     for comparison in comparisons:
         lines.extend(
             (

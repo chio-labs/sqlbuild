@@ -166,6 +166,7 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
+from sqlbuild.compiler.profiling.main.record_cpu import record_compile_cpu_timing
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
@@ -326,7 +327,10 @@ def assemble_compiled_project(
     )
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
     if sql_analysis_enabled:
-        with record_compile_timing("model_analysis_ms"):
+        with (
+            record_compile_timing("model_analysis_ms"),
+            record_compile_cpu_timing("model_analysis_cpu_ms"),
+        ):
             python_analysis: partial[dict[str, _ModelSqlAnalysis]] = partial(
                 _analyze_model_sql_in_parallel,
                 known_functions=known_function_names(inputs.sql_function_inputs),
