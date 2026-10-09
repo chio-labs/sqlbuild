@@ -6,14 +6,14 @@ from typing import cast
 import pytest
 
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
-from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
-from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
+from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock, DiscoveredAuditFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseMeasurementAuditTestCase,
     ParseSqlAuditFileErrorTestCase,
     ParseSqlAuditFileTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import discover_declaration_file
 
 
 @pytest.mark.parametrize(
@@ -96,10 +96,16 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
 )
 def test_given_sql_audit_file_variants_when_parsing_then_it_returns_expected_raw_blocks(
     test_case: ParseSqlAuditFileTestCase,
+    tmp_path: Path,
 ) -> None:
-    discovered_blocks: tuple[DiscoveredAuditBlock, ...] = parse_sql_audit_file(
-        contents=test_case.contents, file_path=Path("audits/orders.sql")
-    )
+    discovered_blocks: tuple[DiscoveredAuditBlock, ...] = cast(
+        DiscoveredAuditFile,
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path="audits/generic/orders.sql",
+            contents=test_case.contents,
+        ),
+    ).blocks
 
     assert tuple(block.name for block in discovered_blocks) == test_case.expected_names
     assert tuple(block.sql_body for block in discovered_blocks) == test_case.expected_sql_bodies
@@ -221,9 +227,14 @@ def test_given_sql_audit_file_variants_when_parsing_then_it_returns_expected_raw
 )
 def test_given_invalid_sql_audit_file_contents_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSqlAuditFileErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(SqlAuditParseError, match=test_case.expected_error_fragment):
-        parse_sql_audit_file(contents=test_case.contents, file_path=Path("audits/orders.sql"))
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path="audits/generic/orders.sql",
+            contents=test_case.contents,
+        )
 
 
 @pytest.mark.parametrize(
@@ -256,11 +267,16 @@ def test_given_invalid_sql_audit_file_contents_when_parsing_then_it_raises_clear
 )
 def test_given_measurement_audit_with_evidence_when_parsing_then_contract_and_queries_are_separate(
     test_case: ParseMeasurementAuditTestCase,
+    tmp_path: Path,
 ) -> None:
-    blocks: tuple[DiscoveredAuditBlock, ...] = parse_sql_audit_file(
-        contents=test_case.contents,
-        file_path=Path("audits/rate.sql"),
-    )
+    blocks: tuple[DiscoveredAuditBlock, ...] = cast(
+        DiscoveredAuditFile,
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path="audits/generic/rate.sql",
+            contents=test_case.contents,
+        ),
+    ).blocks
 
     block: DiscoveredAuditBlock = blocks[0]
     assert block.evaluation_mode == AuditEvaluationMode.MEASUREMENT
@@ -305,6 +321,11 @@ def test_given_measurement_audit_with_evidence_when_parsing_then_contract_and_qu
 )
 def test_given_invalid_evaluation_grammar_when_parsing_then_clear_error_is_raised(
     test_case: ParseSqlAuditFileErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(SqlAuditParseError, match=test_case.expected_error_fragment):
-        parse_sql_audit_file(contents=test_case.contents, file_path=Path("audits/rate.sql"))
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path="audits/generic/rate.sql",
+            contents=test_case.contents,
+        )

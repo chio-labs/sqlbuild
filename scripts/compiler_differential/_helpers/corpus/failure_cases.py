@@ -627,6 +627,22 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="engine-error-non-ascii-digit-bare-number",
+            expected_code="D013",
+            files={
+                "enums/order_priority.sql": (
+                    "ENUM (\n  name order_priority,\n  members (LOW 1, HIGH \u0663),\n);\n"
+                )
+            },
+            expected_message=(
+                "<project>/enums/order_priority.sql has the bare number '\u0663', written with "
+                "non-ASCII digits"
+            ),
+            expected_help=(
+                'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
+            ),
+        ),
+        failure_case(
             name="engine-error-week-date-cursor-start",
             expected_code="P001",
             files={

@@ -24,7 +24,6 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_
 from sqlbuild.compiler.discovery._helpers.sql.schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
-    NATIVE_DEFERRED_TAG,
     NATIVE_FAILED_TAG,
     NATIVE_PARSED_TAG,
     SQL_AUDIT_HEADER_KEYS,
@@ -50,12 +49,10 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.discovery.types import NativeFileScope, NativeLocation, NativeScopeFields
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 type _NativeDeclarationFile = tuple[str, NativeFileScope | None, tuple[object, ...]]
-type _PythonParse[RecordT] = Callable[..., RecordT]
 type _Build[RecordT] = Callable[..., RecordT]
 type _EnumPayload = tuple[str, dict[str, object], str]
 type _ConstantPayload = tuple[str, dict[str, object], str | None, str | None]
@@ -69,7 +66,6 @@ def native_enum_files(
     project_dir: Path,
     isolate_declaration_kind: bool,
     on_fault: Callable[[DiscoveryFileFault], None] | None,
-    parse_with_python: _PythonParse[DiscoveredEnumFile],
 ) -> tuple[DiscoveredEnumFile, ...]:
     """Discover the enum files natively; Python parses the files native parsing defers."""
 
@@ -78,7 +74,6 @@ def native_enum_files(
         kind=DeclarationKind.ENUM,
         isolate_kind=isolate_declaration_kind,
         build=_enum_file,
-        parse_with_python=parse_with_python,
         on_fault=on_fault,
     )
 
@@ -88,7 +83,6 @@ def native_constant_files(
     project_dir: Path,
     isolate_declaration_kind: bool,
     on_fault: Callable[[DiscoveryFileFault], None] | None,
-    parse_with_python: _PythonParse[DiscoveredConstantFile],
 ) -> tuple[DiscoveredConstantFile, ...]:
     """Discover the constant files natively; Python normalises each constant's value."""
 
@@ -97,7 +91,6 @@ def native_constant_files(
         kind=DeclarationKind.CONSTANT,
         isolate_kind=isolate_declaration_kind,
         build=_constant_file,
-        parse_with_python=parse_with_python,
         on_fault=on_fault,
     )
 
@@ -106,7 +99,6 @@ def native_model_schema_files(
     *,
     project_dir: Path,
     on_fault: Callable[[DiscoveryFileFault], None] | None,
-    parse_with_python: _PythonParse[DiscoveredModelSchemaFile],
 ) -> tuple[DiscoveredModelSchemaFile, ...]:
     """Discover the reusable model schema files natively; Python parses each schema's columns."""
 
@@ -114,7 +106,6 @@ def native_model_schema_files(
         project_dir=project_dir,
         kind="model_schema",
         build=_schema_file,
-        parse_with_python=parse_with_python,
         on_fault=on_fault,
     )
 
@@ -123,7 +114,6 @@ def native_sql_function_files(
     *,
     project_dir: Path,
     on_fault: Callable[[DiscoveryFileFault], None] | None,
-    parse_with_python: _PythonParse[DiscoveredSqlFunctionFile],
 ) -> tuple[DiscoveredSqlFunctionFile, ...]:
     """Discover the SQL function files natively."""
 
@@ -131,7 +121,6 @@ def native_sql_function_files(
         project_dir=project_dir,
         kind="sql_function",
         build=_function_file,
-        parse_with_python=parse_with_python,
         on_fault=on_fault,
     )
 
@@ -140,7 +129,6 @@ def native_sql_hook_files(
     *,
     project_dir: Path,
     on_fault: Callable[[DiscoveryFileFault], None] | None,
-    parse_with_python: _PythonParse[DiscoveredSqlHookFile],
 ) -> tuple[DiscoveredSqlHookFile, ...]:
     """Discover the named SQL hook files natively."""
 
@@ -148,7 +136,6 @@ def native_sql_hook_files(
         project_dir=project_dir,
         kind="sql_hook",
         build=_hook_file,
-        parse_with_python=parse_with_python,
         on_fault=on_fault,
     )
 
@@ -157,7 +144,6 @@ def native_audit_files(
     *,
     project_dir: Path,
     on_fault: Callable[[DiscoveryFileFault], None] | None,
-    parse_with_python: _PythonParse[DiscoveredAuditFile],
 ) -> tuple[DiscoveredAuditFile, ...]:
     """Discover the generic and singular audit files natively."""
 
@@ -165,7 +151,6 @@ def native_audit_files(
         project_dir=project_dir,
         kind="audit",
         build=_audit_file,
-        parse_with_python=parse_with_python,
         on_fault=on_fault,
     )
 
@@ -174,7 +159,6 @@ def native_macro_files(
     *,
     project_dir: Path,
     isolate_declaration_kind: bool,
-    read_with_python: _PythonParse[DiscoveredMacroFile],
 ) -> tuple[DiscoveredMacroFile, ...]:
     """Discover and read the macro files natively; Python reads the files native reading defers."""
 
@@ -183,7 +167,6 @@ def native_macro_files(
         kind=DeclarationKind.MACRO,
         isolate_kind=isolate_declaration_kind,
         build=_macro_file,
-        parse_with_python=read_with_python,
         on_fault=None,
     )
 
@@ -211,7 +194,6 @@ def _native_records[RecordT](
     project_dir: Path,
     kind: str,
     build: _Build[RecordT],
-    parse_with_python: _PythonParse[RecordT],
     on_fault: Callable[[DiscoveryFileFault], None] | None,
     isolate_kind: bool = False,
 ) -> tuple[RecordT, ...]:
@@ -226,7 +208,6 @@ def _native_records[RecordT](
             relative_path=relative_path,
             item=item,
             build=build,
-            parse_with_python=parse_with_python,
         ),
         on_fault=on_fault,
     )
@@ -272,15 +253,11 @@ def _record[RecordT](
     relative_path: Path,
     item: tuple[NativeFileScope | None, tuple[object, ...]],
     build: _Build[RecordT],
-    parse_with_python: _PythonParse[RecordT],
 ) -> RecordT:
-    """Build a parsed file or raise Python's error for it; Python parses the files native defers."""
+    """Build a parsed file or raise Python's error for it."""
 
     scope, payload = item
     tag: object = payload[0]
-    if tag == NATIVE_DEFERRED_TAG:
-        report_native_fallback(site=NativeFallbackSite.DECLARATION_FILE)
-        return parse_with_python(relative_path=relative_path, scope=scope)
     if tag == NATIVE_PARSED_TAG:
         report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="parsed_files")
         return build(

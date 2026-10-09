@@ -216,7 +216,9 @@ def test_given_scoped_project_when_scope_command_builds_index_then_engines_match
     "test_case",
     [
         ScopeEngineTierTestCase(
-            description="python oracle", engine="python", expected_native_attempts=0
+            description="python engine, since the compile scope index is native-only",
+            engine="python",
+            expected_native_attempts=1,
         ),
         ScopeEngineTierTestCase(
             description="shipped native stages", engine="native", expected_native_attempts=1
@@ -227,7 +229,7 @@ def test_given_scoped_project_when_scope_command_builds_index_then_engines_match
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_tier_when_building_scope_then_native_scopes_run_only_in_native_engines(
+def test_given_engine_tier_when_building_scope_then_the_native_index_is_built_once(
     test_case: ScopeEngineTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=SCOPED_PROJECT)

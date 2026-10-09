@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 type ProjectProvider = Provider
 type NativeLocation = tuple[str, int, int, int, int]
 type NativeListing = tuple[str, list[tuple[str, bool, bool]]]
-type NativeDeclarationFact = tuple[str, str, str, str, str | None, str]
 type NativeFiles = list[tuple[str, tuple[object, ...]]]
 type NativeFileScope = tuple[str, str, str | None, str | None, str | None]
 

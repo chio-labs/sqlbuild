@@ -189,9 +189,9 @@ pub(crate) fn batch_sizes_bound_workers_by_contract() -> bool {
 
 /// Spell a scan as `kind:name[.member]@start..end, ...` plus ` | stop:<error>` when it stops.
 pub(crate) fn scanned_references(sql: &str) -> Option<String> {
-    let scan: DeclarationReferenceScan = scan_declaration_references(&[sql.to_owned()])
-        .pop()
-        .flatten()?;
+    let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
+    let scan: DeclarationReferenceScan =
+        scan_declaration_references(python, &[sql.to_owned()]).pop()?;
     let references: String = scan
         .references
         .iter()

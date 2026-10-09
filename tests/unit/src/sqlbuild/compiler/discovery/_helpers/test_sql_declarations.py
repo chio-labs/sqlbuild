@@ -7,14 +7,14 @@ from typing import cast
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
-    parse_constant_declaration_file,
-    parse_enum_declaration_file,
     parse_model_constant_declarations,
-    parse_model_schema_declaration_file,
 )
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredModelSchemaFile,
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseModelSchemaDeclarationTestCase,
     ParseTypedConstantsTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import discover_declaration_file
 
 
 @pytest.mark.parametrize(
@@ -70,12 +71,14 @@ ENUM (
 )
 def test_given_enum_declarations_when_parsing_then_returns_typed_members(
     test_case: ParseDeclarationFileTestCase,
+    tmp_path: Path,
 ) -> None:
-    declarations: tuple[EnumDeclaration, ...] = parse_enum_declaration_file(
-        contents=test_case.contents,
-        file_path=Path("enums/domain.sql"),
-        relative_path=Path("enums/domain.sql"),
-    )
+    declarations: tuple[EnumDeclaration, ...] = cast(
+        DiscoveredEnumFile,
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="enums/domain.sql", contents=test_case.contents
+        ),
+    ).declarations
 
     assert tuple(declaration.name for declaration in declarations) == test_case.expected_names
     assert (
@@ -106,12 +109,16 @@ CONSTANT (name fallback_source, value "web");
 )
 def test_given_constant_declarations_when_parsing_then_returns_typed_values(
     test_case: ParseDeclarationFileTestCase,
+    tmp_path: Path,
 ) -> None:
-    declarations: tuple[ConstantDeclaration, ...] = parse_constant_declaration_file(
-        contents=test_case.contents,
-        file_path=Path("constants/thresholds.sql"),
-        relative_path=Path("constants/thresholds.sql"),
-    )
+    declarations: tuple[ConstantDeclaration, ...] = cast(
+        DiscoveredConstantFile,
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path="constants/thresholds.sql",
+            contents=test_case.contents,
+        ),
+    ).declarations
 
     assert tuple(declaration.name for declaration in declarations) == test_case.expected_names
     assert (
@@ -148,12 +155,14 @@ CONSTANT (name labels, value (FR "France", GB "Great Britain"));
 )
 def test_given_typed_public_constants_when_parsing_then_returns_normalized_values(
     test_case: ParseTypedConstantsTestCase,
+    tmp_path: Path,
 ) -> None:
-    declarations: tuple[ConstantDeclaration, ...] = parse_constant_declaration_file(
-        contents=test_case.contents,
-        file_path=Path("constants/domain.sql"),
-        relative_path=Path("constants/domain.sql"),
-    )
+    declarations: tuple[ConstantDeclaration, ...] = cast(
+        DiscoveredConstantFile,
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="constants/domain.sql", contents=test_case.contents
+        ),
+    ).declarations
 
     assert (
         tuple(declaration.value.kind.value for declaration in declarations)
@@ -243,12 +252,11 @@ def test_given_local_shorthand_and_wrapper_constants_when_parsing_then_honors_op
 )
 def test_given_invalid_typed_constant_when_parsing_then_raises_contextual_error(
     test_case: ParseDeclarationFileErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
-        parse_constant_declaration_file(
-            contents=test_case.contents,
-            file_path=Path("constants/domain.sql"),
-            relative_path=Path("constants/domain.sql"),
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="constants/domain.sql", contents=test_case.contents
         )
 
 
@@ -295,12 +303,11 @@ def test_given_invalid_typed_constant_when_parsing_then_raises_contextual_error(
 )
 def test_given_invalid_enum_declaration_when_parsing_then_raises_declaration_error(
     test_case: ParseDeclarationFileErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
-        parse_enum_declaration_file(
-            contents=test_case.contents,
-            file_path=Path("enums/domain.sql"),
-            relative_path=Path("enums/domain.sql"),
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="enums/domain.sql", contents=test_case.contents
         )
 
 
@@ -319,15 +326,14 @@ def test_given_invalid_enum_declaration_when_parsing_then_raises_declaration_err
 )
 def test_given_noncanonical_declaration_identity_when_parsing_then_d016_suggests_canonical_identity(
     test_case: DeclarationResourceIdentityErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(
         ResourceIdentityError,
         match=test_case.expected_error_fragment,
     ) as error_info:
-        parse_enum_declaration_file(
-            contents=test_case.contents,
-            file_path=Path("enums/domain.sql"),
-            relative_path=Path("enums/domain.sql"),
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="enums/domain.sql", contents=test_case.contents
         )
 
     assert error_info.value.code == "D016"
@@ -366,12 +372,14 @@ SCHEMA (
 )
 def test_given_model_schema_declarations_when_parsing_then_returns_typed_columns(
     test_case: ParseModelSchemaDeclarationTestCase,
+    tmp_path: Path,
 ) -> None:
-    declarations: tuple[ModelSchemaDeclaration, ...] = parse_model_schema_declaration_file(
-        contents=test_case.contents,
-        file_path=Path("schemas/orders.sql"),
-        relative_path=Path("schemas/orders.sql"),
-    )
+    declarations: tuple[ModelSchemaDeclaration, ...] = cast(
+        DiscoveredModelSchemaFile,
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="schemas/orders.sql", contents=test_case.contents
+        ),
+    ).declarations
 
     assert tuple(declaration.name for declaration in declarations) == test_case.expected_names
     assert declarations[0].description == test_case.expected_description
@@ -405,12 +413,11 @@ def test_given_model_schema_declarations_when_parsing_then_returns_typed_columns
 )
 def test_given_empty_model_schema_when_parsing_then_raises_declaration_error(
     test_case: ParseDeclarationFileErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
-        parse_model_schema_declaration_file(
-            contents=test_case.contents,
-            file_path=Path("schemas/empty.sql"),
-            relative_path=Path("schemas/empty.sql"),
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="schemas/empty.sql", contents=test_case.contents
         )
 
 

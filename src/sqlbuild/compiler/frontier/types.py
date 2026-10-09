@@ -50,13 +50,8 @@ class CompilerStage(StrEnum):
 class NativeFallbackSite(StrEnum):
     """A place where a shipped native stage still hands its work to the Python implementation."""
 
-    DECLARATION_FILE = "declaration_files.file"
-    SCOPE_INDEX = "declaration_scopes.index"
-    SCOPE_GRANTS = "declaration_scopes.grants"
-    SCOPE_LOOKUP = "declaration_scopes.lookup"
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
     SCOPE_RELATIONSHIP_CTES = "declaration_scopes.relationship_ctes"
-    DECLARATION_REFERENCES = "model_loop.declaration_references"
     DECLARATION_CONTEXT = "model_loop.declaration_context"
     CURSOR_INTRINSIC_VALIDATION = "model_loop.cursor_intrinsic_validation"
     LINT_EXPANSION = "model_loop.lint_expansion"

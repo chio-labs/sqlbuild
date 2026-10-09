@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.discovery.exceptions import ProjectPathError
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
-    CollidingNamesTestCase,
+    UndecodableDeclarationNameTestCase,
     UndecodablePathToleranceTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    declared_enums_outcome,
     description_inputs_outcome,
     selected_contract_outcome,
     tolerant_scope_fault_outcome,
@@ -108,55 +109,45 @@ def test_given_undecodable_paths_when_discovering_tolerantly_then_each_read_path
 @pytest.mark.parametrize(
     "test_case",
     [
-        CollidingNamesTestCase(
-            description="an enum file whose name is not UTF-8 is read by its real name",
-            files=((os.fsdecode(b"enums/st\xe9.sql"), _ORDER_STATUS),),
-            expected_enums=((os.fsdecode(b"enums/st\xe9.sql"), ("order_status",)),),
+        UndecodableDeclarationNameTestCase(
+            description="an enum file whose name is not UTF-8",
+            relative_path=b"enums/st\xe9.sql",
+            contents=_ORDER_STATUS,
+            expected_path="enums/st\\xe9.sql",
         ),
-        CollidingNamesTestCase(
-            description="enum files sharing a lossy name each keep their own declarations",
-            files=(
-                (os.fsdecode(b"enums/st\xe9.sql"), _ORDER_STATUS),
-                (os.fsdecode(b"enums/st\xe8.sql"), _TIER),
-            ),
-            expected_enums=(
-                (os.fsdecode(b"enums/st\xe8.sql"), ("tier",)),
-                (os.fsdecode(b"enums/st\xe9.sql"), ("order_status",)),
-            ),
+        UndecodableDeclarationNameTestCase(
+            description="a scoped enum directory whose name is not UTF-8",
+            relative_path=b"models/a\xe8/_enums/y.sql",
+            contents=_TIER,
+            expected_path="models/a\\xe8/_enums/y.sql",
         ),
-        CollidingNamesTestCase(
-            description="a valid replacement-character name is not replaced by a raw sibling",
-            files=(
-                ("enums/st\ufffd.sql", _ORDER_STATUS),
-                (os.fsdecode(b"enums/st\xe8.sql"), _TIER),
-            ),
-            expected_enums=(
-                (os.fsdecode(b"enums/st\xe8.sql"), ("tier",)),
-                ("enums/st\ufffd.sql", ("order_status",)),
-            ),
-        ),
-        CollidingNamesTestCase(
-            description="directories sharing a lossy name each keep their own files",
-            files=(
-                (os.fsdecode(b"models/a\xe9/_enums/x.sql"), _ORDER_STATUS),
-                (os.fsdecode(b"models/a\xe8/_enums/y.sql"), _TIER),
-            ),
-            expected_enums=(
-                (os.fsdecode(b"models/a\xe8/_enums/y.sql"), ("tier",)),
-                (os.fsdecode(b"models/a\xe9/_enums/x.sql"), ("order_status",)),
-            ),
+        UndecodableDeclarationNameTestCase(
+            description="a SQL hook whose name is not UTF-8",
+            relative_path=b"hooks/sql/refresh_\xff.sql",
+            contents=b"HOOK ();\nSELECT 1\n",
+            expected_path="hooks/sql/refresh_\\xff.sql",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_names_sharing_a_lossy_spelling_when_discovering_then_each_file_keeps_its_identity(
-    test_case: CollidingNamesTestCase, tmp_path: Path
+def test_given_declaration_file_named_with_invalid_utf8_when_discovering_then_d016_names_it(
+    test_case: UndecodableDeclarationNameTestCase, tmp_path: Path
 ) -> None:
-    write_project(project_dir=tmp_path, files=(("models/orders.sql", _MODEL), *test_case.files))
+    write_project(
+        project_dir=tmp_path,
+        files=(
+            ("models/orders.sql", _MODEL),
+            (os.fsdecode(test_case.relative_path), test_case.contents),
+        ),
+    )
 
-    outcome: tuple[object, ...] = declared_enums_outcome(project_dir=tmp_path)
+    with pytest.raises(ProjectPathError) as raised:
+        discover_project_inputs(project_dir=tmp_path)
 
-    assert outcome == (test_case.expected_enums, test_case.expected_models), test_case.description
+    assert (raised.value.code, str(raised.value)) == (
+        "D016",
+        f"Project path {tmp_path / test_case.expected_path}{_RENAME}",
+    ), test_case.description
 
 
 if __name__ == "__main__":

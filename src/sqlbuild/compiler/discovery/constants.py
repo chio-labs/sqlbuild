@@ -8,7 +8,6 @@ LEGACY_PROJECT_CONFIG_FILENAME: str = "sqlbuild_project.yml"
 LEGACY_LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.yml"
 TOML_FILE_SUFFIX: str = ".toml"
 SCHEMA_FILE_NAME: str = "schema.yml"
-SEED_FILE_SUFFIX: str = ".csv"
 YAML_FILE_SUFFIXES: frozenset[str] = frozenset({".yml", ".yaml"})
 RESERVED_MODEL_NAMES: frozenset[str] = frozenset({"_chain_"})
 
@@ -162,7 +161,6 @@ SOURCE_LOADER_CONFIG_KEY: str = "loader"
 SOURCE_AGE_POLICY_CONFIG_KEY: str = "age_policy"
 
 MODELS_DIRECTORY_NAME: str = "models"
-MODEL_SCHEMAS_DIRECTORY_NAME: str = "schemas"
 SEEDS_DIRECTORY_NAME: str = "seeds"
 CURRENT_DIRECTORY_PATH: str = "."
 SQL_TESTS_OWNERSHIP_ROOT: str = "tests/unit"
@@ -199,7 +197,6 @@ STATEMENT_HEADER_BODY_PATTERN: str = (
 NATIVE_FAILED_TAG: str = "error"
 NATIVE_UNREADABLE_TAG: str = "read"
 NATIVE_UNLISTABLE_TAG: str = "unlistable"
-NATIVE_DEFERRED_TAG: str = "defer"
 NATIVE_PARSED_TAG: str = "ok"
 NATIVE_SOURCE_YAML_KIND: str = "source"
 NATIVE_SCHEMA_YAML_KIND: str = "schema"

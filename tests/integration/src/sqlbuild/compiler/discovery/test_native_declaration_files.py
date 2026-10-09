@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 from collections import Counter
 from pathlib import Path
 
 import pytest
 
 from sqlbuild import _native
-from sqlbuild.compiler.discovery._helpers.filesystem import core
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryFileFault
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -17,20 +15,16 @@ from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeclarationFilesParityTestCase,
     DeepDeclarationHeaderTestCase,
     GeneratedDeclarationFileTestCase,
-    NativeDeclarationFailureTestCase,
     NativeSessionTestCase,
     TolerantDeclarationFilesTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
-    accept_any_declarations,
     declaration_files_outcome,
     generated_declaration_outcomes,
     native_declaration_tag,
-    reject_any_contents,
     stage_outcome,
     tolerant_declaration_outcome,
     write_project,
-    write_undecodable_hook,
 )
 
 _PREVIEW: str = "native-preview"
@@ -358,36 +352,6 @@ def test_given_deeply_nested_declaration_header_when_discovering_then_engines_re
     )
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="needs file names that are not UTF-8")
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DeclarationFilesParityTestCase(
-            description="a hook named with invalid UTF-8 is read by Python under both engines",
-            files=(("hooks/sql/refresh.sql", _HOOK),),
-            expected_failure_type="ResourceIdentityError",
-            expected_message_fragment="refresh_",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_hook_named_with_invalid_utf8_when_discovering_then_engines_agree(
-    test_case: DeclarationFilesParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_undecodable_hook(project_dir=tmp_path, contents=test_case.files[0][1])
-    python: tuple[object, ...] = stage_outcome(
-        project_dir=tmp_path, engine="python", monkeypatch=monkeypatch
-    )
-
-    native: tuple[object, ...] = stage_outcome(
-        project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch
-    )
-
-    assert native == python
-    assert native[1] == test_case.expected_failure_type
-    assert test_case.expected_message_fragment in str(native[2])
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -428,45 +392,6 @@ def test_given_broken_declaration_files_when_discovering_tolerantly_then_faults_
 @pytest.mark.parametrize(
     "test_case",
     [
-        NativeDeclarationFailureTestCase(
-            description="a native parse error stands even where Python would accept the file",
-            relative_path="enums/status.sql",
-            contents=b"ENUM (name order_status);\n",
-            patched_parser="parse_enum_declaration_file",
-            patched=accept_any_declarations,
-            expected_failure_type="DeclarationParseError",
-            expected_error_fragment="enums/status.sql",
-        ),
-        NativeDeclarationFailureTestCase(
-            description="a native parse error stands where Python would fail differently",
-            relative_path="audits/generic/is_true.sql",
-            contents=b"SELECT 1\n",
-            patched_parser="parse_sql_audit_file",
-            patched=reject_any_contents,
-            expected_failure_type="SqlAuditParseError",
-            expected_error_fragment="audits/generic/is_true.sql",
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_native_declaration_failure_when_discovering_then_python_is_not_rerun(
-    test_case: NativeDeclarationFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_project(project_dir=tmp_path, files=((test_case.relative_path, test_case.contents),))
-    monkeypatch.setattr(core, test_case.patched_parser, test_case.patched)
-    outcome: tuple[object, ...] = stage_outcome(
-        project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch
-    )
-
-    assert (outcome[1], test_case.expected_error_fragment in str(outcome[2])) == (
-        test_case.expected_failure_type,
-        True,
-    ), outcome
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         NativeSessionTestCase(
             description="the preview engine keeps its declaration session",
             engine=_PREVIEW,
@@ -478,14 +403,14 @@ def test_given_native_declaration_failure_when_discovering_then_python_is_not_re
             expected_session=True,
         ),
         NativeSessionTestCase(
-            description="the Python engine reads declaration files in Python",
+            description="the Python engine keeps it too, since declaration files are native-only",
             engine="python",
-            expected_session=False,
+            expected_session=True,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_discovering_then_native_session_is_kept_only_for_native_engines(
+def test_given_engine_when_discovering_then_native_session_is_kept(
     test_case: NativeSessionTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=_EVERY_KIND)

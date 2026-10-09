@@ -11,7 +11,10 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ProjectConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     StatementHeaderKeysTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import parse_statement_header_file
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    parse_statement_header_file,
+    statement_header_file_path,
+)
 
 
 @pytest.mark.parametrize(
@@ -99,14 +102,17 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import parse_st
     ids=lambda case: case.description,
 )
 def test_given_unsupported_header_key_when_parsing_then_rejects_with_location_and_help(
-    test_case: StatementHeaderKeysTestCase,
+    test_case: StatementHeaderKeysTestCase, tmp_path: Path
 ) -> None:
+    file_path: Path = statement_header_file_path(
+        statement=test_case.file_name, project_dir=tmp_path
+    )
     with pytest.raises(DiscoveryError) as raised:
         parse_statement_header_file(
-            statement=test_case.file_name, contents=test_case.contents, file_path=Path("orders.sql")
+            statement=test_case.file_name, contents=test_case.contents, file_path=file_path
         )
 
-    assert raised.value.message == test_case.expected_error
+    assert raised.value.message == test_case.expected_error.replace("'orders.sql", f"'{file_path}")
     assert raised.value.help == test_case.expected_help
 
 
@@ -127,14 +133,17 @@ def test_given_unsupported_header_key_when_parsing_then_rejects_with_location_an
     ids=lambda case: case.description,
 )
 def test_given_removed_model_key_when_parsing_then_explains_removal(
-    test_case: StatementHeaderKeysTestCase,
+    test_case: StatementHeaderKeysTestCase, tmp_path: Path
 ) -> None:
+    file_path: Path = statement_header_file_path(
+        statement=test_case.file_name, project_dir=tmp_path
+    )
     with pytest.raises(DiscoveryError) as raised:
         parse_statement_header_file(
-            statement=test_case.file_name, contents=test_case.contents, file_path=Path("orders.sql")
+            statement=test_case.file_name, contents=test_case.contents, file_path=file_path
         )
 
-    assert raised.value.message == test_case.expected_error
+    assert raised.value.message == test_case.expected_error.replace("'orders.sql", f"'{file_path}")
     assert raised.value.code == "D002"
 
 

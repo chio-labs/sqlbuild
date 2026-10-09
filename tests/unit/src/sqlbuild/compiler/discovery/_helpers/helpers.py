@@ -3,12 +3,14 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_audit_files,
     discover_constant_files,
     discover_enum_files,
     discover_macro_files,
+    discover_model_schema_files,
+    discover_sql_function_files,
+    discover_sql_hook_files,
 )
-from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
-from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
@@ -105,17 +107,60 @@ def write_unreadable_files(*, project_dir: Path, relative_paths: tuple[str, ...]
         _ = file_path.write_bytes(b"\xff\xfe\xfa")
 
 
+_DECLARATION_FILE_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
+    "enums": discover_enum_files,
+    "constants": discover_constant_files,
+    "schemas": discover_model_schema_files,
+    "functions": discover_sql_function_files,
+    "hooks": discover_sql_hook_files,
+    "audits": discover_audit_files,
+}
+
+
+def discover_declaration_file(*, project_dir: Path, relative_path: str, contents: str) -> object:
+    """Write one declaration file into a project and return the file discovery reads from it."""
+
+    file_path: Path = project_dir / relative_path
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = file_path.write_text(contents, encoding="utf-8")
+    discovered: tuple[object, ...] = _DECLARATION_FILE_DISCOVERERS[relative_path.split("/")[0]](
+        project_dir=project_dir
+    )
+    return discovered[0]
+
+
 _STATEMENT_HEADER_PARSERS: dict[str, Callable[..., object]] = {
     "MODEL": parse_model_sql,
-    "AUDIT": parse_sql_audit_file,
+    "AUDIT": lambda *, contents, file_path: discover_declaration_file(
+        project_dir=file_path.parents[2],
+        relative_path=file_path.relative_to(file_path.parents[2]).as_posix(),
+        contents=contents,
+    ),
     "TEST": parse_sql_test_file,
-    "HOOK": lambda *, contents, file_path: parse_sql_hook_file(
-        contents=contents, file_path=file_path, relative_path=file_path
+    "HOOK": lambda *, contents, file_path: discover_declaration_file(
+        project_dir=file_path.parents[2],
+        relative_path=file_path.relative_to(file_path.parents[2]).as_posix(),
+        contents=contents,
     ),
     "SCENARIO": lambda *, contents, file_path: parse_sql_scenario_file(
         contents=contents, file_path=file_path, relative_path=file_path
     ),
 }
+
+
+_DECLARATION_STATEMENT_DIRECTORIES: dict[str, str] = {
+    "AUDIT": "audits/generic",
+    "HOOK": "hooks/sql",
+}
+
+
+def statement_header_file_path(*, statement: str, project_dir: Path) -> Path:
+    """Return where a statement file is parsed from: in the project for declaration kinds."""
+
+    directory: str | None = _DECLARATION_STATEMENT_DIRECTORIES.get(statement)
+    if directory is None:
+        return Path("orders.sql")
+    return project_dir / directory / "orders.sql"
 
 
 def parse_statement_header_file(*, statement: str, contents: str, file_path: Path) -> object:

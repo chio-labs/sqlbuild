@@ -584,128 +584,6 @@ def _validate_no_inherited_column_overrides(
         )
 
 
-def expand_declaration_references_with_spans(
-    *,
-    sql: str,
-    file_path: Path,
-    enums: dict[str, EnumDeclaration],
-    constants: dict[str, ConstantDeclaration],
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-    inaccessible_enums: dict[str, DeclarationRecord] | None = None,
-    inaccessible_constants: dict[str, DeclarationRecord] | None = None,
-) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    """Resolve declaration references, returning the span of every substitution."""
-
-    result: DeclarationExpansionResult = expand_declaration_references_result(
-        sql=sql,
-        file_path=file_path,
-        value_renderer=value_renderer,
-        collection_rendering=collection_rendering,
-        declarations=DeclarationResolutionContext(
-            enums=enums,
-            constants=constants,
-            inaccessible_enums=inaccessible_enums or {},
-            inaccessible_constants=inaccessible_constants or {},
-        ),
-    )
-    return result.sql, result.spans
-
-
-def expand_declaration_references_result(
-    *,
-    sql: str,
-    file_path: Path,
-    declarations: DeclarationResolutionContext,
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-) -> DeclarationExpansionResult:
-    """Resolve references and retain usage facts from the resolving token walk."""
-
-    rendered_parts: list[str] = []
-    spans: list[ExpansionSpan] = []
-    usages: list[UsageRecord] = []
-    output_length: int = 0
-    cursor: int = 0
-    while cursor < len(sql):
-        reference_start: int | None = _find_next_reference_start(sql=sql, start=cursor)
-        if reference_start is None:
-            rendered_parts.append(sql[cursor:])
-            break
-        leading_literal: str = sql[cursor:reference_start]
-        rendered_parts.append(leading_literal)
-        output_length += len(leading_literal)
-        start_match: re.Match[str] | None = _DECLARATION_REFERENCE_START_PATTERN.match(
-            sql, reference_start
-        )
-        if start_match is None:
-            raise CompileInputError(
-                f"Invalid declaration reference in '{file_path}'", bridge_independent=True
-            )
-        kind: str = start_match.group("kind")
-        if kind == _ENUM_REFERENCE_KIND:
-            enum_match: re.Match[str] | None = _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
-            if enum_match is None:
-                raise CompileInputError(
-                    _invalid_reference_message(kind=kind, file_path=file_path),
-                    bridge_independent=True,
-                )
-            replacement: str
-            next_cursor: int
-            replacement, next_cursor = _resolve_enum_reference(
-                sql=sql,
-                reference_start=reference_start,
-                file_path=file_path,
-                enums=declarations.enums,
-                inaccessible_enums=declarations.inaccessible_enums,
-            )
-            visibility: tuple[VisibilityRecord, ...] = declarations.enum_visibility.get(
-                enum_match.group("name"), ()
-            )
-            member: str | None = enum_match.group("member")
-        else:
-            constant_match: re.Match[str] | None = _CONSTANT_REFERENCE_PATTERN.match(
-                sql, reference_start
-            )
-            if constant_match is None:
-                raise CompileInputError(
-                    _invalid_reference_message(kind=kind, file_path=file_path),
-                    bridge_independent=True,
-                )
-            replacement, next_cursor = _resolve_constant_reference(
-                sql=sql,
-                reference_start=reference_start,
-                file_path=file_path,
-                constants=declarations.constants,
-                inaccessible_constants=declarations.inaccessible_constants,
-                value_renderer=value_renderer,
-                collection_rendering=collection_rendering,
-            )
-            visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
-            member = None
-        usages.extend(
-            declaration_reference_usages(
-                declarations=declarations, visibility=visibility, enum_member=member
-            )
-        )
-        rendered_parts.append(replacement)
-        spans.append(
-            ExpansionSpan(
-                source_start=reference_start,
-                source_end=next_cursor,
-                output_start=output_length,
-                output_end=output_length + len(replacement),
-            )
-        )
-        output_length += len(replacement)
-        cursor = next_cursor
-    return DeclarationExpansionResult(
-        sql="".join(rendered_parts),
-        spans=tuple(spans),
-        usages=tuple(dict.fromkeys(usages)),
-    )
-
-
 def declaration_reference_usages(
     *,
     declarations: DeclarationResolutionContext,
@@ -731,16 +609,14 @@ def declaration_reference_usages(
 def expand_scanned_declaration_references(  # noqa: PLR0913
     *,
     sql: str,
-    references: NativeDeclarationScan | None,
+    references: NativeDeclarationScan,
     file_path: Path,
     declarations: DeclarationResolutionContext,
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
-) -> DeclarationExpansionResult | None:
-    """Splice scanned references and raise Python's first error, or None for Python to expand."""
+) -> DeclarationExpansionResult:
+    """Splice natively scanned references and raise the first error the scan stopped at."""
 
-    if references is None:
-        return None
     scanned, stop = references
     if not scanned and stop is None:
         return DeclarationExpansionResult(sql=sql, spans=(), usages=())
@@ -874,29 +750,6 @@ def _with_declaration[T: EnumDeclaration | ConstantDeclaration](
     return declarations | {declaration.name: declaration}
 
 
-def _resolve_enum_reference(
-    *,
-    sql: str,
-    reference_start: int,
-    file_path: Path,
-    enums: dict[str, EnumDeclaration],
-    inaccessible_enums: dict[str, DeclarationRecord],
-) -> tuple[str, int]:
-    match: re.Match[str] | None = _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
-    if match is None:
-        raise CompileInputError(
-            f"Invalid enum reference in '{file_path}'; use @enum(\"name\").MEMBER",
-            bridge_independent=True,
-        )
-    return _enum_member_text(
-        name=match.group("name"),
-        member_name=match.group("member"),
-        file_path=file_path,
-        enums=enums,
-        inaccessible_enums=inaccessible_enums,
-    ), match.end()
-
-
 def _enum_member_text(
     *,
     name: str,
@@ -933,32 +786,6 @@ def _enum_member_text(
             bridge_independent=True,
         )
     return render_enum_member_value(value=member.value)
-
-
-def _resolve_constant_reference(
-    *,
-    sql: str,
-    reference_start: int,
-    file_path: Path,
-    constants: dict[str, ConstantDeclaration],
-    inaccessible_constants: dict[str, DeclarationRecord],
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-) -> tuple[str, int]:
-    match: re.Match[str] | None = _CONSTANT_REFERENCE_PATTERN.match(sql, reference_start)
-    if match is None:
-        raise CompileInputError(
-            f"Invalid constant reference in '{file_path}'; use @const(\"name\")",
-            bridge_independent=True,
-        )
-    return _constant_text(
-        name=match.group("name"),
-        file_path=file_path,
-        constants=constants,
-        inaccessible_constants=inaccessible_constants,
-        value_renderer=value_renderer,
-        collection_rendering=collection_rendering,
-    ), match.end()
 
 
 def _constant_text(

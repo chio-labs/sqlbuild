@@ -8,7 +8,6 @@ import functools
 import itertools
 import json
 import math
-import os
 import random
 import struct
 import tomllib
@@ -53,7 +52,6 @@ from sqlbuild.compiler.discovery.main._model_description_inputs import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredEnumFile,
     DiscoveredProjectInputs,
     DiscoveryFileFault,
     NamedSqlHookEntry,
@@ -810,23 +808,6 @@ def _inputs_paths(inputs: DiscoveredProjectInputs) -> tuple[object, ...]:
     )
 
 
-def declared_enums_outcome(*, project_dir: Path) -> tuple[object, ...]:
-    """Return each discovered enum file with the enum names it declares, and the model paths."""
-
-    inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    return (
-        tuple(_declared_enum_names(enum_file) for enum_file in inputs.enum_files),
-        tuple(model.relative_path.as_posix() for model in inputs.model_files),
-    )
-
-
-def _declared_enum_names(enum_file: DiscoveredEnumFile) -> tuple[str, tuple[str, ...]]:
-    return (
-        enum_file.relative_path.as_posix(),
-        tuple(declaration.name for declaration in enum_file.declarations),
-    )
-
-
 DECLARATION_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
     "enum": discover_enum_files,
     "constant": discover_constant_files,
@@ -1270,27 +1251,6 @@ def generated_declaration_outcomes(
         ] += 1
         agreements.append(native == python)
     return tuple(compress(range(test_case.case_count), map(not_, agreements))), tags
-
-
-def accept_any_declarations(**_: object) -> tuple[object, ...]:
-    """A patched Python parser that accepts every file."""
-
-    return ()
-
-
-def reject_any_contents(**_: object) -> tuple[object, ...]:
-    """A patched Python parser that rejects every file with an unrelated error."""
-
-    raise ValueError("different")
-
-
-def write_undecodable_hook(*, project_dir: Path, contents: bytes) -> None:
-    """Write a project whose only SQL hook has a file name that is not valid UTF-8."""
-
-    write_project(project_dir=project_dir, files=())
-    hooks: Path = project_dir / "hooks" / "sql"
-    hooks.mkdir(parents=True)
-    _ = Path(os.fsdecode(bytes(hooks) + b"/refresh_\xff.sql")).write_bytes(contents)
 
 
 def on_deep_stack(*, frames: int, call: Callable[[], object]) -> object:

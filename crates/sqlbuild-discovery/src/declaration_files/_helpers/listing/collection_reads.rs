@@ -37,14 +37,14 @@ pub(crate) fn read_collection(
         CollectionKind::Enums => DeclarationCollection::Enums(
             declaration_files(source, DeclarationKind::Enum, isolate_kind).map(|files| {
                 read_files(root, tree, files, |file_path, _, contents| {
-                    parse_enum_file(file_path, contents)
+                    parse_enum_file(file_path, contents, options.python)
                 })
             }),
         ),
         CollectionKind::Constants => DeclarationCollection::Constants(
             declaration_files(source, DeclarationKind::Constant, isolate_kind).map(|files| {
                 read_files(root, tree, files, |file_path, _, contents| {
-                    parse_constant_file(file_path, contents)
+                    parse_constant_file(file_path, contents, options.python)
                 })
             }),
         ),
@@ -58,7 +58,7 @@ pub(crate) fn read_collection(
         CollectionKind::ModelSchemas => DeclarationCollection::ModelSchemas(
             named_declaration_files(source, &[NamedKind::Schema], false).map(|files| {
                 read_files(root, tree, files, |file_path, _, contents| {
-                    parse_schema_file(file_path, contents)
+                    parse_schema_file(file_path, contents, options.python)
                 })
             }),
         ),

@@ -14,20 +14,10 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
 )
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import NATIVE_FAILED_TAG
-from sqlbuild.compiler.discovery.types import NativeDeclarationFact
 from sqlbuild.compiler.scopes.types import DeclarationKind
 
 _LAYOUT_MEMO_KEY: str = "native_declaration_layout"
 _GROUPS_MEMO_KEY: str = "native_declaration_groups"
-
-
-def native_declaration_file_facts(
-    *, project_dir: Path, declaration_kind: DeclarationKind | None
-) -> list[NativeDeclarationFact]:
-    """Return the declaration files of one kind (or every kind), raising an invalid layout."""
-
-    facts, _groups = _layout(project_dir=project_dir, declaration_kind=declaration_kind)
-    return cast(list[NativeDeclarationFact], _rows(facts))
 
 
 def native_declaration_groups(*, project_dir: Path) -> list[tuple[str, str]]:

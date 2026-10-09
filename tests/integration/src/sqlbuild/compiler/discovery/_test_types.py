@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 import unicodedata
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
@@ -156,13 +155,13 @@ class NativeOsErrorTestCase:
 
 
 @dataclass(frozen=True)
-class CollidingNamesTestCase:
-    """Files whose names are not UTF-8 but share a lossy spelling, each keeping its own identity."""
+class UndecodableDeclarationNameTestCase:
+    """A declaration file whose path holds a name that is not UTF-8, which discovery rejects."""
 
     description: str
-    files: tuple[tuple[str, bytes], ...]
-    expected_enums: tuple[tuple[str, tuple[str, ...]], ...]
-    expected_models: tuple[str, ...] = ("models/orders.sql",)
+    relative_path: bytes
+    contents: bytes
+    expected_path: str
 
 
 @dataclass(frozen=True)
@@ -187,19 +186,6 @@ class DeclarationFilesParityTestCase:
     files: tuple[tuple[str, bytes], ...]
     expected_failure_type: str = "NoneType"
     expected_message_fragment: str = ""
-
-
-@dataclass(frozen=True)
-class NativeDeclarationFailureTestCase:
-    """A declaration file native discovery rejects while the Python parser is patched away."""
-
-    description: str
-    relative_path: str
-    contents: bytes
-    patched_parser: str
-    patched: Callable[..., object]
-    expected_failure_type: str
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
