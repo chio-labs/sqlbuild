@@ -2,6 +2,8 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-pub(crate) fn register(_module: &Bound<'_, PyModule>) -> PyResult<()> {
-    Ok(())
+use crate::bindings::_helpers::contracts::model_contracts;
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    model_contracts::register(module)
 }

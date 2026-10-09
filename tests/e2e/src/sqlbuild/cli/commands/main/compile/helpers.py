@@ -40,6 +40,7 @@ import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_rec
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
+import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
 import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.lineage.main.columns as column_lineage
@@ -4881,6 +4882,7 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_sql_test_stage, "assemble_native_sql_tests"),
     (diagnostic_recovery, "complete_native_semantic_diagnostics"),
     (contract_validation, "evaluate_native_model_contracts"),
+    (promotion_conflicts, "native_promotion_conflict_diagnostics"),
     (column_lineage, "build_native_column_lineage"),
     (target_writer, "plan_native_sql_test_artifacts"),
 )

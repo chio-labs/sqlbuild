@@ -1075,3 +1075,16 @@ class DollarQuotedProjectVarCompileCase:
     engine: str
     model_sql: str
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class NativeContractParityTestCase:
+    """A project failing every contract family, compiled by each engine."""
+
+    description: str
+    project_files: dict[str, str]
+    promotion_mode: str
+    engines: tuple[str, ...]
+    expected_exit_code: int
+    expected_codes: frozenset[str]
+    expected_contract_deferrals: int
