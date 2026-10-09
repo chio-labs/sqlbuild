@@ -19,6 +19,8 @@ _DECLARED_ERROR_PREFIX: str = (
     "SQL test 'declared_window_case' in 'tests/unit/declared_window_case.sql'"
 )
 
+_PREVIEW_ENGINE: tuple[tuple[str, str], ...] = (("SQLBUILD_COMPILER_ENGINE", "native-preview"),)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -33,6 +35,17 @@ _DECLARED_ERROR_PREFIX: str = (
                 "TIMESTAMP '2999-12-31 00:00:00'",
             ),
         ),
+        CursorWindowE2ETestCase(
+            description="windows planned natively on the native-preview engine",
+            tests=CURSOR_WINDOW_PASSING_TESTS,
+            expected_exit_code=0,
+            expected_output_fragments=("PASS=6  FAIL=0  TOTAL=6",),
+            expected_compiled_fragments=(
+                "TIMESTAMP '1900-01-01 00:00:00'",
+                "TIMESTAMP '2999-12-31 00:00:00'",
+            ),
+            engine_env=_PREVIEW_ENGINE,
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -45,11 +58,12 @@ def test_given_models_using_cursor_intrinsics_when_testing_then_window_is_render
         project_name="cursor_window_project",
         repo_files=build_cursor_window_project_files(tests=test_case.tests),
     )
+    engine_env: dict[str, str] = dict(test_case.engine_env)
     test_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "test"), project_dir=project_dir
+        command=("--no-color", "test"), project_dir=project_dir, env=engine_env
     )
     compile_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "compile"), project_dir=project_dir
+        command=("--no-color", "compile"), project_dir=project_dir, env=engine_env
     )
 
     output: str = test_result.stdout + test_result.stderr
@@ -93,6 +107,22 @@ def test_given_models_using_cursor_intrinsics_when_testing_then_window_is_render
                     "'2026-02-01' for model 'daily_orders'"
                 ),
             ),
+        ),
+        CursorWindowE2ETestCase(
+            description="inverted declared window on the native-preview engine",
+            tests=build_declared_window_test(
+                window='cursor_start "2026-02-03", cursor_end "2026-02-01"',
+                model_name="daily_orders",
+            ),
+            expected_exit_code=1,
+            expected_output_fragments=(
+                (
+                    _DECLARED_ERROR_PREFIX
+                    + ": cursor_start '2026-02-03' must be before the exclusive cursor_end "
+                    "'2026-02-01' for model 'daily_orders'"
+                ),
+            ),
+            engine_env=_PREVIEW_ENGINE,
         ),
         CursorWindowE2ETestCase(
             description="invalid timestamp bound",
@@ -167,7 +197,11 @@ def test_given_invalid_declared_cursor_window_when_testing_and_compiling_then_er
     )
 
     results: tuple[subprocess.CompletedProcess[str], ...] = tuple(
-        run_sqb(command=command, project_dir=project_dir)
+        run_sqb(
+            command=command,
+            project_dir=project_dir,
+            env=dict(test_case.engine_env),
+        )
         for command in (("--no-color", "test"), ("--no-color", "compile"))
     )
 

@@ -3,6 +3,12 @@
 from collections.abc import Sequence
 from typing import Any, TypedDict
 
+from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestChainRequest,
+    NativeSqlTestPlanningRequest,
+)
+from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
+
 BUILD_IDENTITY: str
 
 class LintPreparationRequest(TypedDict):
@@ -610,6 +616,10 @@ def build_fast_column_lineage(
 ) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
 
 # Native analysis: SQL test planning glue.
+def plan_compiled_sql_tests(
+    request: NativeSqlTestPlanningRequest, /
+) -> tuple[list[NativeSqlTestPlanRow], int, int]: ...
+def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
 
 # Native analysis: compiled project assembly.
 

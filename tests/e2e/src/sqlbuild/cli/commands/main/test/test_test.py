@@ -116,6 +116,8 @@ _UNKNOWN_COLUMN_MESSAGE: str = (
     "expected output 'orders' lists columns that model 'orders' does not output: region"
 )
 
+_PREVIEW_ENGINE: tuple[tuple[str, str], ...] = (("SQLBUILD_COMPILER_ENGINE", "native-preview"),)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -537,6 +539,16 @@ def test_given_invalid_fixture_when_testing_then_static_diagnostics_prevent_conn
             ),
         ),
         SqlTestPlanInspectionE2ETestCase(
+            description="ref mock boundary planned natively on the native-preview engine",
+            repo_files=build_mock_boundary_test_project_files(),
+            expected_stdout_fragments=(
+                "mocked refs: stg_orders",
+                "real models: int_orders, fact_orders",
+                "boundary: stg_orders is replaced by __ref__stg_orders",
+            ),
+            engine_env=_PREVIEW_ENGINE,
+        ),
+        SqlTestPlanInspectionE2ETestCase(
             description="recursive derived columns are not required from the mocked input",
             repo_files=build_recursive_ref_fixture_project_files(),
             expected_stdout_fragments=(
@@ -570,6 +582,7 @@ def test_given_sql_test_when_inspecting_then_fixture_boundaries_and_chain_are_sh
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "test", "--inspect"),
         project_dir=project_dir,
+        env=dict(test_case.engine_env),
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr

@@ -1426,6 +1426,7 @@ class NativeSqlTestPlan:
     assertions: tuple[SqlTestAssertionStep, ...]
     model_names: tuple[str, ...]
     warnings: tuple[PlanWarning, ...]
+    error_messages: tuple[str, ...]
     sql: str | None = None
 
 

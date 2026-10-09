@@ -31,7 +31,6 @@ from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_sql_tests_natively,
     resolve_sql_test_model_chains,
-    sql_test_plan_error_messages,
 )
 from sqlbuild.compiler.planner.exceptions import SqlTestFixtureValidationError
 from sqlbuild.compiler.planner.models import (
@@ -94,7 +93,7 @@ def plan_sql_tests(
             )
             continue
         plan_diagnostics: tuple[str, ...] = (
-            *sql_test_plan_error_messages(warnings=plan.warnings),
+            *plan.error_messages,
             *_expected_column_diagnostics(
                 test=test, plan=plan, fixture_planning_context=validation_context
             ),
