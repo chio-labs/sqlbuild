@@ -6,8 +6,11 @@ import random
 import re
 from collections.abc import Callable
 from contextvars import Token
+from dataclasses import dataclass
 from functools import partial
+from itertools import compress
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -39,6 +42,7 @@ from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
+from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 MACRO_CALL_LOG_ENV_VAR: str = "SQLBUILD_TEST_MACRO_CALL_LOG"
 _RUN_ID_PATTERN: re.Pattern[str] = re.compile(r'"run_id": "[^"]*"')
@@ -47,7 +51,8 @@ _DIFFERENTIAL_FRAGMENTS: tuple[str, ...] = (
     "@n(@mm(3), '@m(4)')", "@tag(__ref('orders'))", "@tag(__seed('rates'))",
     "@tag(__ref('customers'))", "@cols(__ref('orders'))", "@gen()", "@nope(1)", "@m(x)",
     "@ab c(1)", "@m('é')", "'@m(1)'", "-- @m(1)\n", "/* @n() */", "$$@m()$$", "`@m()`", "@@v",
-    "@", " ", "\n", "\u3000", "é", "'", "(", ")", "SELECT ", ", ", "\"q\"",
+    "@", " ", "\n", "\u3000", "é", "'", "(", ")", "SELECT ", ", ", "\"q\"", "'\udcff'",
+    "@m('\udcff')", "@sur()",
 )  # fmt: skip
 _DIFFERENTIAL_FILE: Path = Path("models/orders_summary.sql")
 
@@ -290,6 +295,10 @@ def _cols(relation: object) -> str:
     return f"SELECT * FROM {relation}"
 
 
+def _surrogate() -> str:
+    return "x\udcff"
+
+
 def _generated() -> str:
     return '(SELECT id FROM __ref("orders"))'
 
@@ -310,6 +319,7 @@ DIFFERENTIAL_MACROS: dict[str, LoadedMacro] = {
         ("tag", _tag),
         ("cols", _cols),
         ("gen", _generated),
+        ("sur", _surrogate),
     )
 }
 _DIFFERENTIAL_CONTEXT: MacroContext = MacroContext(
@@ -318,7 +328,7 @@ _DIFFERENTIAL_CONTEXT: MacroContext = MacroContext(
 
 
 class ExpansionFailureCapture:
-    """Swallow and keep the compile input error a block raises."""
+    """Swallow and keep the error a block raises."""
 
     def __init__(self) -> None:
         self.failure: BaseException | None = None
@@ -328,7 +338,7 @@ class ExpansionFailureCapture:
 
     def __exit__(self, error_type: object, error: BaseException | None, traceback: object) -> bool:
         self.failure = error
-        return isinstance(error, CompileInputError)
+        return isinstance(error, Exception)
 
 
 def random_macro_sql(*, rng: random.Random) -> str:
@@ -363,3 +373,187 @@ def expansion_outcome(*, sql: str, bridge: MacroBridge | None) -> tuple[object, 
         True: rendered[0],
         False: (type(capture.failure).__name__, str(capture.failure)),
     }[capture.failure is None]
+
+
+_FAILING_MACRO_LOG: str = (
+    "def _log(value: object) -> None:\n"
+    f'    path = os.environ.get("{MACRO_CALL_LOG_ENV_VAR}")\n'
+    "    if path:\n"
+    '        with open(path, "a", encoding="utf-8") as log:\n'
+    '            log.write(f"{value}\\n")\n\n\n'
+)
+_FAILING_MACROS: str = (
+    '"""Macros that render, raise after a side effect or return values that are not SQL."""\n\n'
+    "import os\n\n\n" + _FAILING_MACRO_LOG + "def cents(column: str) -> str:\n"
+    '    """Convert an amount to cents."""\n'
+    "    _log(column)\n"
+    '    return f"{column} * 100"\n\n\n'
+    "def wrap(expression: str) -> str:\n"
+    '    """Parenthesise an expression."""\n'
+    '    _log("wrap " + expression)\n'
+    '    return f"({expression})"\n\n\n'
+    "def explode(column: str) -> str:\n"
+    '    """Fail after logging the call."""\n'
+    "    _log(column)\n"
+    '    raise ValueError(f"cannot render {column}")\n\n\n'
+    "def number(column: str) -> int:\n"
+    '    """Return a value that is not SQL."""\n'
+    "    _log(column)\n"
+    "    return 1\n\n\n"
+    "def _hidden(column: str) -> str:\n"
+    "    return column\n"
+)
+_LOCAL_MACROS: str = (
+    '"""Macros only the marts models can see."""\n\n'
+    "import os\n\n\n" + _FAILING_MACRO_LOG + "def mart_only(column: str) -> str:\n"
+    '    """Qualify a column for marts."""\n'
+    "    _log(column)\n"
+    '    return f"marts_{column}"\n'
+)
+_CYCLIC_MACROS: str = (
+    '"""Macros that call each other forever."""\n\n\n'
+    "def ping(column: str) -> str:\n"
+    '    """Call pong."""\n'
+    "    return pong(column)\n\n\n"
+    "def pong(column: str) -> str:\n"
+    '    """Call ping."""\n'
+    "    return ping(column)\n"
+)
+_FAILING_CALLS: tuple[str, ...] = (
+    *("@cents('{arg}')",) * 24, *("@wrap(@cents('{arg}'))",) * 6, "@mart_only('{arg}')",
+    "@mart_only('{arg}')", "@explode('{arg}')",
+    "@wrap(@explode('{arg}'))", "@number('{arg}')", "@cents('{arg}', 'extra')",
+    "@cents('{arg}',,)", "@cents({arg})", "@nope('{arg}')", "@_hidden('{arg}')",
+    "@cents('{arg}'", "@cents x('{arg}')",
+)  # fmt: skip
+_MODEL_FOLDERS: tuple[str, ...] = ("staging", "marts")
+_ERROR_SPECIFICS: re.Pattern[str] = re.compile(r"'[^']*'|c\d+_\d+")
+_CYCLE_CHANCE: tuple[bool, ...] = (False,) * 11 + (True,)
+
+
+def generated_failing_macro_project(*, rng: random.Random) -> dict[str, str]:
+    """Return a project whose models call macros that may raise, mistype or be unreachable."""
+
+    models: dict[str, str] = dict(
+        _generated_model(rng=rng, model=model) for model in range(rng.randint(2, 6))
+    )
+    cyclic: dict[str, str] = {True: {"macros/cyclic.py": _CYCLIC_MACROS}, False: {}}[
+        rng.choice(_CYCLE_CHANCE)
+    ]
+    return {
+        "sqlbuild_project.toml": MACRO_BRIDGE_PROJECT_FILES["sqlbuild_project.toml"],
+        "macros/common.py": _FAILING_MACROS,
+        "models/marts/_sqlbuild/macros/local.py": _LOCAL_MACROS,
+        **cyclic,
+        **models,
+    }
+
+
+def _generated_model(*, rng: random.Random, model: int) -> tuple[str, str]:
+    calls: list[str] = [
+        f"{rng.choice(_FAILING_CALLS).format(arg=f'c{model}_{call}')} AS c{call}"
+        for call in range(rng.randint(1, 3))
+    ]
+    return (
+        f"models/{rng.choice(_MODEL_FOLDERS)}/m{model}.sql",
+        f'MODEL (description "Generated {model}");\n\nSELECT {", ".join(calls)}\n',
+    )
+
+
+@dataclass(frozen=True)
+class FailingMacroParity:
+    """How each engine's render of generated failing-macro projects compared with Python's."""
+
+    mismatches: list[list[tuple[object, object, object]]]
+    failures: int
+    successes: int
+    failures_after_macro_runs: int
+    distinct_errors: list[str]
+
+
+def failing_macro_parity(
+    *,
+    projects: list[dict[str, str]],
+    root: Path,
+    engines: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> FailingMacroParity:
+    """Render every project under each engine; compare errors and macro runs with the first."""
+
+    project_dirs: list[Path] = [
+        write_project(root=root / f"project_{index}", files=files)
+        for index, files in enumerate(projects)
+    ]
+    outcomes: dict[str, list[object]] = {
+        engine: _engine_outcomes(
+            project_dirs=project_dirs,
+            engine=engine,
+            log_path=root / f"{engine}.log",
+            monkeypatch=monkeypatch,
+        )
+        for engine in engines
+    }
+    python_outcomes: list[object] = outcomes[engines[0]]
+    failed: list[bool] = [_is_failure(outcome) for outcome in python_outcomes]
+    failures: list[tuple[tuple[object, ...], tuple[str, ...]]] = cast(
+        list[tuple[tuple[object, ...], tuple[str, ...]]], list(compress(python_outcomes, failed))
+    )
+    return FailingMacroParity(
+        mismatches=[
+            mismatches(
+                inputs=list[object](project_dirs),
+                expected=python_outcomes,
+                actual=outcomes[engine],
+            )
+            for engine in engines[1:]
+        ],
+        failures=len(failures),
+        successes=len(python_outcomes) - len(failures),
+        failures_after_macro_runs=sum(bool(runs) for _, runs in failures),
+        distinct_errors=sorted(
+            {_ERROR_SPECIFICS.sub("''", str(error[1])) for error, _ in failures}
+        ),
+    )
+
+
+def _engine_outcomes(
+    *, project_dirs: list[Path], engine: str, log_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> list[object]:
+    return [
+        engine_render_outcome(
+            project_dir=project_dir, engine=engine, log_path=log_path, monkeypatch=monkeypatch
+        )
+        for project_dir in project_dirs
+    ]
+
+
+def _is_failure(outcome: object) -> bool:
+    return isinstance(cast(tuple[object, ...], outcome)[0], tuple)
+
+
+def engine_render_outcome(
+    *, project_dir: Path, engine: str, log_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[object, tuple[str, ...]]:
+    """Render under `engine`; return the error's full shape or the capture, and macro runs."""
+
+    _ = log_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
+    capture: ExpansionFailureCapture = ExpansionFailureCapture()
+    rendered: list[object] = [None]
+    with capture:
+        rendered[0] = comparable_capture(
+            render_compile_inputs(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
+        )
+    failure: BaseException | None = capture.failure
+    outcome: object = {
+        True: rendered[0],
+        False: (
+            type(failure).__name__,
+            str(failure),
+            getattr(failure, "code", None),
+            getattr(failure, "help", None),
+            type(getattr(failure, "__cause__", None)).__name__,
+            str(getattr(failure, "__cause__", None)),
+        ),
+    }[failure is None]
+    return outcome, tuple(log_path.read_text(encoding="utf-8").splitlines())

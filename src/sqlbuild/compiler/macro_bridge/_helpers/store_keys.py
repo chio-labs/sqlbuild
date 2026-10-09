@@ -21,18 +21,29 @@ from sqlbuild.compiler.macro_bridge.exceptions import UncacheableValueError
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.python_nodes.models import SqlResourceRef
 
+_UNSTABLE_KEY_ERRORS: tuple[type[Exception], ...] = (
+    UncacheableValueError,
+    UnicodeEncodeError,
+    RecursionError,
+)
 
-def macro_store_token(*, loaded: LoadedMacro, identity: DeclarationIdentity | None) -> str:
-    """Name a macro by its name, file, declaration identity and exact source."""
 
-    return _key_text(
-        [
-            loaded.name,
-            loaded.relative_path.as_posix(),
-            _canonical(identity),
-            _native.content_digest([loaded.raw_source]),
-        ]
-    )
+def macro_store_token(*, loaded: LoadedMacro, identity: DeclarationIdentity | None) -> str | None:
+    """Name a macro by its name, file, identity and exact source, or None when it has no key."""
+
+    try:
+        return _encodable(
+            _key_text(
+                [
+                    loaded.name,
+                    loaded.relative_path.as_posix(),
+                    _canonical(identity),
+                    _native.content_digest([loaded.raw_source]),
+                ]
+            )
+        )
+    except _UNSTABLE_KEY_ERRORS:
+        return None
 
 
 def context_store_token(
@@ -41,22 +52,25 @@ def context_store_token(
     """Digest the whole context a macro may read, or None when a value has no stable text."""
 
     try:
-        text: str = _key_text(
+        return _native.content_digest(
             [
-                _canonical_context(macro_context),
-                None
-                if declarations is None
-                else [
-                    _canonical(declarations.constants),
-                    _canonical(declarations.enums),
-                    sorted(declarations.inaccessible_constants),
-                    sorted(declarations.inaccessible_enums),
-                ],
+                _key_text(
+                    [
+                        _canonical_context(macro_context),
+                        None
+                        if declarations is None
+                        else [
+                            _canonical(declarations.constants),
+                            _canonical(declarations.enums),
+                            sorted(declarations.inaccessible_constants),
+                            sorted(declarations.inaccessible_enums),
+                        ],
+                    ]
+                )
             ]
         )
-    except UncacheableValueError:
+    except _UNSTABLE_KEY_ERRORS:
         return None
-    return _native.content_digest([text])
 
 
 def call_class_store_text(
@@ -64,18 +78,23 @@ def call_class_store_text(
     macro_tokens: tuple[str, ...],
     context_token: str | None,
     prior_relations: tuple[SqlResourceRef, ...] | None,
-) -> str:
-    """Text of one persistent call class: its macros, context and relations passed so far."""
+) -> str | None:
+    """Text of one persistent call class, or None when a relation name has no UTF-8 text."""
 
-    return _key_text(
-        [
-            list(macro_tokens),
-            context_token,
-            None
-            if prior_relations is None
-            else [[relation.kind.value, relation.name] for relation in prior_relations],
-        ]
-    )
+    try:
+        return _encodable(
+            _key_text(
+                [
+                    list(macro_tokens),
+                    context_token,
+                    None
+                    if prior_relations is None
+                    else [[relation.kind.value, relation.name] for relation in prior_relations],
+                ]
+            )
+        )
+    except UnicodeEncodeError:
+        return None
 
 
 def _canonical_context(macro_context: MacroContext) -> object:
@@ -141,3 +160,10 @@ def _type_name(kind: type) -> str:
 
 def _key_text(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _encodable(text: str) -> str:
+    """Return `text`, raising `UnicodeEncodeError` when the native store cannot hold it."""
+
+    _ = text.encode("utf-8")
+    return text

@@ -10,8 +10,7 @@ class MacroBridgeFailureTestCase:
 
     description: str
     stage_with_bridge: Callable[[], str]
-    stage_without_bridge: Callable[[], str]
-    expected_error: type[Exception]
+    expected_error_message: str
     expected_bridged_runs: list[bool]
 
 
@@ -22,12 +21,3 @@ class MacroBridgeSuccessTestCase:
     description: str
     expected_result: str
     expected_bridged_runs: list[bool]
-
-
-@dataclass(frozen=True)
-class MacroBridgeErrorContextTestCase:
-    """A stage whose Python error must not chain the bridge failure as its context."""
-
-    description: str
-    stage: Callable[[], str]
-    expected_context: BaseException | None
