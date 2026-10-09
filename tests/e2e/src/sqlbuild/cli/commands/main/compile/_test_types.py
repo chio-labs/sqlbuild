@@ -818,7 +818,7 @@ class DefaultEngineParityTestCase:
 
 @dataclass(frozen=True)
 class NativeTypeSystemTestCase:
-    """Python and preview compiles of one project whose contracts compare type spellings."""
+    """Compiles of one project by each engine whose contracts compare types or fail."""
 
     description: str
     project_files: dict[str, str]
