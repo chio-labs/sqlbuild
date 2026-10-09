@@ -179,8 +179,8 @@ def _comparison(
         head_wall_seconds=statistics.median(run.wall_seconds for run in head),
         base_cpu_seconds=statistics.median(run.cpu_seconds for run in base),
         head_cpu_seconds=statistics.median(run.cpu_seconds for run in head),
-        base_timings_ms=_median_phases(runs=base),
-        head_timings_ms=_median_phases(runs=head),
+        base_timings_ms=median_phases(runs=base),
+        head_timings_ms=median_phases(runs=head),
     )
 
 
@@ -260,9 +260,12 @@ def _compile_environment() -> dict[str, str]:
     }
 
 
-def _median_phases(*, runs: list[CompileRun]) -> dict[str, float]:
+def median_phases(*, runs: list[CompileRun]) -> dict[str, float]:
+    """Return each phase's median over runs, omitting phases any run did not report."""
+
     medians: dict[str, float] = {}
     for phase in REPORTED_PHASES:
-        values: list[int] = [run.timings_ms.get(phase, 0) for run in runs]
-        medians[phase] = statistics.median(values)
+        values: list[int] = [run.timings_ms[phase] for run in runs if phase in run.timings_ms]
+        if values and len(values) == len(runs):
+            medians[phase] = statistics.median(values)
     return medians
