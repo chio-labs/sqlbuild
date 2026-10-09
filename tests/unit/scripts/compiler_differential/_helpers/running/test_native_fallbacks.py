@@ -36,6 +36,17 @@ _ANSWER_ENTRY: str = (
     '\n[[entry]]\nengine = "native"\nstage = "reference_extraction"\n'
     'site = "reference_extraction.native"\nkind = "reference_scans"\n'
 )
+_LOOP_ANSWER: FallbackKey = ("native", "model_loop", "model_loop.native", "models")
+_LOOP_VARIABLE_ANSWER: FallbackKey = (
+    "native",
+    "model_loop",
+    "model_loop.native",
+    "sql_variables",
+)
+_LOOP_ANSWER_ENTRY: str = (
+    '\n[[entry]]\nengine = "native"\nstage = "model_loop"\n'
+    'site = "model_loop.native"\nkind = "models"\n'
+)
 _SESSION: FallbackKey = ("native-preview", "model_analysis", "analysis_session", "session")
 _SHIPPED_RUN: RecordedRun = RecordedRun(
     engines=("python", "native"), corpora=("seeds", "failures"), seed_start=0, seeds=12
@@ -105,13 +116,34 @@ def test_given_engine_records_when_observing_then_entries_are_summed_per_corpus(
             ],
         ),
         FallbackGateTestCase(
-            description="vanished_entry_fails_until_removed",
-            allow_list=_LIST_HEAD + _VARIABLES_ENTRY + "counts = { seed = 195 }\n",
-            observed={},
+            description="vanished_entry_with_more_native_answers_fails_until_removed",
+            allow_list=_LIST_HEAD
+            + _VARIABLES_ENTRY
+            + "counts = { seed = 195 }\n"
+            + _LOOP_ANSWER_ENTRY
+            + "counts = { seed = 10 }\n",
+            observed={_LOOP_ANSWER: {"seed": 10}, _LOOP_VARIABLE_ANSWER: {"seed": 195}},
             run=_SHIPPED_RUN,
             expected_problems=[
+                "native model_loop model_loop.native sql_variables (seed): native answered 195, "
+                "not on the allow-list; record it",
                 "native model_loop model_loop.sql_variables deferred (seed): listed but no "
-                "longer occurs; remove it from the allow-list"
+                "longer occurs; remove it from the allow-list",
+            ],
+        ),
+        FallbackGateTestCase(
+            description="vanished_entry_without_more_native_answers_means_the_stage_is_off",
+            allow_list=_LIST_HEAD
+            + _VARIABLES_ENTRY
+            + "counts = { seed = 195 }\n"
+            + _LOOP_ANSWER_ENTRY
+            + "counts = { seed = 10 }\n",
+            observed={_LOOP_ANSWER: {"seed": 10}},
+            run=_SHIPPED_RUN,
+            expected_problems=[
+                "native model_loop model_loop.sql_variables deferred (seed): fallback disappeared "
+                "but native answers did not appear; the stage may be switched off. A port that "
+                "removes a fallback must report native answers for the work it now does"
             ],
         ),
         FallbackGateTestCase(

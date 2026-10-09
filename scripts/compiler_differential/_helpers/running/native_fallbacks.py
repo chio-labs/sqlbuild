@@ -114,6 +114,10 @@ def fallback_problems(
             f"{allowed.seeds}; this run used --seed-start {run.seed_start} --seeds {run.seeds}"
         ]
     corpora: frozenset[str] = _corpus_prefixes(run.corpora)
+    observed_answers: Counter[tuple[str, str, str]] = _answer_totals(observed)
+    allowed_answers: Counter[tuple[str, str, str]] = _answer_totals(
+        {**allowed.counts, **allowed.max_counts}
+    )
     problems: list[str] = []
     for key in sorted({*allowed.counts, *allowed.max_counts, *observed}):
         if key[0] not in run.engines:
@@ -128,6 +132,8 @@ def fallback_problems(
                 actual=actual.get(corpus, 0),
                 exact=None if exact is None else exact.get(corpus, 0),
                 bound=None if bound is None else bound.get(corpus, 0),
+                answers_rose=observed_answers[(key[0], key[1], corpus)]
+                > allowed_answers[(key[0], key[1], corpus)],
             )
             if problem is not None:
                 problems.append(problem)
@@ -183,7 +189,13 @@ def write_allow_list(
 
 
 def _corpus_problem(
-    *, label: str, answer: bool, actual: int, exact: int | None, bound: int | None
+    *,
+    label: str,
+    answer: bool,
+    actual: int,
+    exact: int | None,
+    bound: int | None,
+    answers_rose: bool,
 ) -> str | None:
     if answer and exact is None and bound is None:
         return f"{label}: native answered {actual}, not on the allow-list; record it"
@@ -194,6 +206,12 @@ def _corpus_problem(
         )
     if exact is None and bound is None:
         return f"{label}: {actual} not on the allow-list; port it or list it with a reason"
+    if actual == 0 and not answers_rose:
+        return (
+            f"{label}: fallback disappeared but native answers did not appear; the stage may be "
+            "switched off. A port that removes a fallback must report native answers for the "
+            "work it now does"
+        )
     if actual == 0:
         return f"{label}: listed but no longer occurs; remove it from the allow-list"
     if bound is not None:
@@ -201,6 +219,18 @@ def _corpus_problem(
     if actual != exact:
         return f"{label}: {actual} where the allow-list expects {exact}; update the count"
     return None
+
+
+def _answer_totals(
+    entries: dict[FallbackKey, dict[str, int]],
+) -> Counter[tuple[str, str, str]]:
+    """Native answer counts summed by engine, stage and corpus."""
+
+    totals: Counter[tuple[str, str, str]] = Counter()
+    for (engine, stage, site, _), by_corpus in entries.items():
+        for corpus, count in by_corpus.items():
+            totals[(engine, stage, corpus)] += count * site.endswith(NATIVE_FALLBACK_ANSWER_SUFFIX)
+    return totals
 
 
 def _label(*, key: FallbackKey, corpus: str) -> str:

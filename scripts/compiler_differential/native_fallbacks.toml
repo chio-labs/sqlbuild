@@ -1,6 +1,8 @@
 # Every native-to-Python fallback and preview analysis deferral the CI corpus may still
 # reach, with its exact count per corpus. `--native-fallbacks check` fails on anything new,
 # changed or gone. Ports delete their entries; see scripts/compiler_differential/README.md.
+# The corpus does not reach type normalization (type_system): its callers are the planner,
+# the executor and the preview fallbacks, so test_native_type_parity.py covers that stage.
 seed_start = 0
 seeds = 12
 
@@ -113,8 +115,8 @@ counts = { example = 12, failure = 286, fixture = 12, seed = 50 }
 engine = "native"
 stage = "macro_call_store"
 site = "macro_call_store.native"
-kind = "store_attachments"
-counts = { example = 12, failure = 231, fixture = 12, seed = 47 }
+kind = "served_calls"
+counts = { example = 18, fixture = 15, seed = 192 }
 
 [[entry]]
 engine = "native"
@@ -407,8 +409,8 @@ counts = { example = 9, failure = 106, fixture = 6, seed = 22 }
 engine = "native-preview"
 stage = "macro_call_store"
 site = "macro_call_store.native"
-kind = "store_attachments"
-counts = { example = 12, failure = 231, fixture = 12, seed = 47 }
+kind = "served_calls"
+counts = { example = 18, fixture = 15, seed = 192 }
 
 [[entry]]
 engine = "native-preview"

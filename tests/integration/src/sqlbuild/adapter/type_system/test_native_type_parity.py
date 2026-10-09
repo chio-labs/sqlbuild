@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 
 import pytest
 
+import sqlbuild._native as native_module
+from sqlbuild.adapter.contract.models import NormalizedType
+from sqlbuild.adapter.type_system._helpers.type_normalization import (
+    normalize_type as cached_normalize_type,
+)
 from sqlbuild.adapter.type_system.main._native_normalize_type import normalize_native_type
+from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.adapter.type_system._test_types import (
     DeepTypeTestCase,
     GeneratedTypeParityTestCase,
+    PublicNativeTypeTestCase,
     TypeParityTestCase,
 )
 from tests.integration.src.sqlbuild.adapter.type_system.helpers import (
@@ -167,6 +176,52 @@ def test_given_type_past_the_wheel_depth_when_normalizing_natively_then_it_defer
     assert normalize_native_type(type_sql=test_case.type_sql, dialect="generic") is (
         test_case.expected_native
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PublicNativeTypeTestCase(
+            description="the public entry point asks native first under the preview engine",
+            engine="native-preview",
+            dialect="snowflake",
+            type_strings=("NUMBER(38, 0)", "VARCHAR", "TIMESTAMP_NTZ(9)"),
+            expected_native_calls=(
+                ("NUMBER(38, 0)", "snowflake"),
+                ("VARCHAR", "snowflake"),
+                ("TIMESTAMP_NTZ(9)", "snowflake"),
+            ),
+            expected_answered=3,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_preview_engine_when_normalizing_publicly_then_native_answers(
+    test_case: PublicNativeTypeTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, str]] = []
+    answers: list[object] = []
+    native_normalize: Callable[[str, str], object] = native_module.normalize_type
+
+    def spy(type_sql: str, dialect: str) -> object:
+        calls.append((type_sql, dialect))
+        answers.append(native_normalize(type_sql, dialect))
+        return answers[-1]
+
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine)
+    monkeypatch.setattr(native_module, "normalize_type", spy)
+    cached_normalize_type.cache_clear()
+    normalized: list[NormalizedType] = [
+        normalize_type(type_sql=type_sql, dialect=test_case.dialect)
+        for type_sql in test_case.type_strings
+    ]
+    cached_normalize_type.cache_clear()
+
+    assert (
+        tuple(calls),
+        sum(answer is not None for answer in answers),
+        len(normalized),
+    ) == (test_case.expected_native_calls, test_case.expected_answered, len(test_case.type_strings))
 
 
 if __name__ == "__main__":

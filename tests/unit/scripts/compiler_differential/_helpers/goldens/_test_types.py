@@ -36,3 +36,4 @@ class GoldenCheckTestCase:
     recorded: tuple[EngineRun, ...]
     checked: tuple[EngineRun, ...]
     expected_differences: tuple[tuple[str, tuple[str, str] | None], ...]
+    seed_range_dir: str = ""
