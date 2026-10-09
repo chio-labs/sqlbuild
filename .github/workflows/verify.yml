@@ -308,7 +308,8 @@ jobs:
           SQB_DIAG_SCRIPT: ${{ github.workspace }}/scripts/_diag_sql_test_cache.py
         run: >-
           make compiler-differential
-          COMPILER_DIFFERENTIAL_ARGS="--corpus examples fixtures --stage-captures
+          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
+          --require-render-coverage --require-analysis-coverage
           --wheel-site-report ${{ runner.temp }}/compiler-differential-wheel-sites.json"
       - name: Upload the Polyglot wheel-site and deferral report
         if: always()
@@ -319,6 +320,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Compare generated seeds and the failure corpus (python vs shipped native)
+        env:
+          SQB_DIAG_SCRIPT: ${{ github.workspace }}/scripts/_diag_sql_test_cache.py
         run: >-
           make compiler-differential-shipped
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
