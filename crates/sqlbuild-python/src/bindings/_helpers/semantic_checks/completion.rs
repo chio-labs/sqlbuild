@@ -8,7 +8,9 @@ use sqlbuild_analysis::semantic_checks::models::{
     SemanticLocation,
 };
 
+use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::semantic_checks::session_facts::session_model_facts;
 use crate::bindings::_helpers::semantic_checks::type_recovery::{LineageInput, lineage_outputs};
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
@@ -33,8 +35,8 @@ type ModelInput = (
     String,
     String,
     String,
-    Vec<String>,
-    Vec<LineageInput>,
+    Option<Vec<String>>,
+    Option<Vec<LineageInput>>,
     Vec<String>,
     Option<String>,
 );
@@ -66,14 +68,16 @@ type OutcomeRow = (
     Vec<OrderRow>,
 );
 
-/// Recover, explain and reject opt-outs on `catalog`'s analysis pool.
+/// Recover, explain and reject opt-outs, reading facts the payload omits from `session`.
 #[pyfunction]
+#[pyo3(signature = (catalog, request, session=None))]
 fn complete_semantic_checks(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
     request: RequestInput,
+    session: Option<PyRef<'_, NativeModelAnalysisSession>>,
 ) -> PyResult<OutcomeRow> {
-    let request = completion_request(request);
+    let request = completion_request(request, session.as_deref()).map_err(compiler_error)?;
     let catalog = &catalog.inner;
     let outcome = py
         .compiler_detach(|| complete_semantic_diagnostics(&request, catalog))
@@ -106,13 +110,19 @@ fn location_row(location: SemanticLocation) -> LocationRow {
     )
 }
 
-fn completion_request((dialect, diagnostics, models, shapes): RequestInput) -> CompletionRequest {
-    CompletionRequest {
+fn completion_request(
+    (dialect, diagnostics, models, shapes): RequestInput,
+    session: Option<&NativeModelAnalysisSession>,
+) -> Result<CompletionRequest, String> {
+    Ok(CompletionRequest {
         dialect,
         diagnostics: diagnostics.into_iter().map(semantic_diagnostic).collect(),
-        models: models.into_iter().map(completion_model).collect(),
+        models: models
+            .into_iter()
+            .map(|model| completion_model(model, session))
+            .collect::<Result<_, _>>()?,
         shapes,
-    }
+    })
 }
 
 fn semantic_diagnostic(
@@ -134,8 +144,20 @@ fn semantic_diagnostic(
 
 fn completion_model(
     (name, query_sql, authored_sql, inferred_columns, lineage, binding_codes, opt_out): ModelInput,
-) -> CompletionModel {
-    CompletionModel {
+    session: Option<&NativeModelAnalysisSession>,
+) -> Result<CompletionModel, String> {
+    let inferred_columns: Vec<String> = match inferred_columns {
+        Some(names) => names,
+        None => session_model_facts(session, &name)?
+            .columns
+            .clone()
+            .unwrap_or_default(),
+    };
+    let lineage: Vec<LineageInput> = match lineage {
+        Some(lineage) => lineage,
+        None => session_model_facts(session, &name)?.lineage.clone(),
+    };
+    Ok(CompletionModel {
         name,
         query_sql,
         authored_sql,
@@ -143,7 +165,7 @@ fn completion_model(
         lineage: lineage_outputs(lineage),
         binding_codes,
         rejected_opt_out_file: opt_out,
-    }
+    })
 }
 
 fn completed_row(diagnostic: CompletedDiagnostic) -> CompletedRow {

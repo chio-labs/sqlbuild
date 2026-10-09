@@ -1,8 +1,12 @@
 //! Python's `analyze_dynamic_column_contract` over the crate's parse of the model SQL.
 
 use std::collections::{HashMap, HashSet};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use serde_json::{Map, Value};
+use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
+use rayon::ThreadPool;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use serde_json::{Map, Value, json};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
@@ -16,7 +20,7 @@ use crate::assembly::analysis_session::constants::{
     UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
 use crate::assembly::analysis_session::models::{
-    ColumnFact, ContractProof, DynamicFamily, PivotOutcome,
+    ColumnFact, ContractProof, DynamicFamily, PivotModel, PivotOutcome, PivotTables,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 
@@ -30,6 +34,47 @@ pub(crate) struct PivotFacts<'a> {
     pub(crate) authoritative_types: &'a Shapes,
     pub(crate) column_nullability: &'a Shapes,
     pub(crate) families_by_table: &'a [(String, Vec<DynamicFamily>)],
+}
+
+/// Each model's proof in order; a model whose proof panics is deferred to Python.
+pub(crate) fn pivot_outcomes(models: &[PivotModel], tables: &PivotTables) -> Vec<PivotOutcome> {
+    let facts = pivot_facts(tables);
+    models
+        .iter()
+        .map(|model| guarded_outcome(model, &facts))
+        .collect()
+}
+
+/// Each model's proof in order on `pool`; a model whose proof panics is deferred to Python.
+pub(crate) fn pooled_pivot_outcomes(
+    pool: &ThreadPool,
+    models: &[PivotModel],
+    tables: &PivotTables,
+) -> Vec<PivotOutcome> {
+    let facts = pivot_facts(tables);
+    pool.install(|| {
+        models
+            .par_iter()
+            .map(|model| guarded_outcome(model, &facts))
+            .collect()
+    })
+}
+
+fn pivot_facts(tables: &PivotTables) -> PivotFacts<'_> {
+    PivotFacts {
+        dialect: &tables.dialect,
+        column_types: &tables.column_types,
+        authoritative_types: &tables.authoritative_types,
+        column_nullability: &tables.column_nullability,
+        families_by_table: &tables.families_by_table,
+    }
+}
+
+fn guarded_outcome(model: &PivotModel, facts: &PivotFacts<'_>) -> PivotOutcome {
+    catch_unwind(AssertUnwindSafe(|| {
+        pivot_outcome(&model.sql, &model.families, facts)
+    }))
+    .unwrap_or(PivotOutcome::Deferred)
 }
 
 /// One CTE body by folded name; None for a CTE with column aliases.

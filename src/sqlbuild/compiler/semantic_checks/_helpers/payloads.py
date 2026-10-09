@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
+    DynamicColumnContractProof,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
@@ -15,6 +18,25 @@ def lineage_payload(model: CompiledModel) -> list[tuple[str, list[tuple[str, str
     """Each output column with the `(resource, column)` pairs it reads."""
 
     return [_output_payload(output) for output in model.fast_lineage_columns or ()]
+
+
+def session_fact_models(*, project: CompiledProject, session: Any | None) -> frozenset[str]:
+    """Models whose output names and lineage are the finished session's, so need no payload."""
+
+    if session is None:
+        return frozenset()
+    kept: frozenset[str] = frozenset(cast(list[str], session.fact_models))
+    return frozenset(
+        model.name
+        for model in project.models
+        if model.name in kept and not _output_proven(model.dynamic_column_contract)
+    )
+
+
+def _output_proven(proof: DynamicColumnContractProof | None) -> bool:
+    """Whether a dynamic proof replaced the analysed output names."""
+
+    return proof is not None and proof.output_proven
 
 
 def _output_payload(output: CompiledLineageColumnFact) -> tuple[str, list[tuple[str, str]]]:

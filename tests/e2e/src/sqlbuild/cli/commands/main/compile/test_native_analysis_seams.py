@@ -8,6 +8,7 @@ from unittest.mock import ANY, Mock
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild.compiler.analysis_session.models import NativeModelAnalyses
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
@@ -82,7 +83,8 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     )
     assert isinstance(preview_seams["build_native_column_lineage"][0], ProjectColumnLineage)
     assert isinstance(preview_seams["assemble_native_project_resources"][0], NativeProjectResources)
-    assert isinstance(preview_seams["analyze_native_model_sql"][0], dict)
+    assert isinstance(preview_seams["analyze_native_model_sql"][0], NativeModelAnalyses)
+    assert preview_seams["analyze_native_model_sql"][0].session is not None
     assert isinstance(preview_seams["infer_native_expression_source_shapes"][0], tuple)
     assembled_tests: object = preview_seams["assemble_native_sql_tests"][0]
     assert isinstance(assembled_tests, tuple)

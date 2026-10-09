@@ -28,7 +28,11 @@ type _Completed = tuple[
 
 
 def complete_native_diagnostics(
-    *, project: CompiledProject, catalog: object
+    *,
+    project: CompiledProject,
+    catalog: object,
+    session: Any | None,
+    session_models: frozenset[str],
 ) -> CompiledProject | None:
     """Return the recovered, explained and opt-out-checked project, or None to use Python."""
 
@@ -40,10 +44,15 @@ def complete_native_diagnostics(
     request: Any = (
         project.sql_analysis_dialect,
         [_diagnostic_payload(item=item, ids=ids) for item in project.diagnostics],
-        [_model_payload(model=model, lineage=recovers) for model in project.models],
+        [
+            _model_payload(model=model, lineage=recovers, from_session=model.name in session_models)
+            for model in project.models
+        ],
         [(name, list(columns.items())) for name, columns in shapes.items()],
     )
-    deferral, completed, model_bindings, order = _native.complete_semantic_checks(catalog, request)
+    deferral, completed, model_bindings, order = _native.complete_semantic_checks(
+        catalog, request, session
+    )
     if deferral is not None:
         record_semantic_deferral(kind=deferral, site=COMPLETION_DEFERRAL_SITE)
         return None
@@ -98,14 +107,14 @@ def _diagnostic_payload(
     )
 
 
-def _model_payload(*, model: CompiledModel, lineage: bool) -> tuple[Any, ...]:
+def _model_payload(*, model: CompiledModel, lineage: bool, from_session: bool) -> tuple[Any, ...]:
     opt_out: SourceLocation | None = model.rejected_sql_analysis_opt_out
     return (
         model.name,
         model.query_sql,
         model.authored_sql,
-        [column.name for column in model.inferred_columns or ()],
-        lineage_payload(model) if lineage else [],
+        None if from_session else [column.name for column in model.inferred_columns or ()],
+        _lineage(model=model, lineage=lineage, from_session=from_session),
         [item.code for item in model.binding_diagnostics],
         None if opt_out is None else opt_out.path.name,
     )
@@ -151,3 +160,15 @@ def _opt_out(
         notes=(note,),
         help=help_text,
     )
+
+
+def _lineage(
+    *, model: CompiledModel, lineage: bool, from_session: bool
+) -> list[tuple[str, list[tuple[str, str]]]] | None:
+    """The model's lineage rows; None asks for the session's, and only recovery reads them."""
+
+    if not lineage:
+        return []
+    if from_session:
+        return None
+    return lineage_payload(model)

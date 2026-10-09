@@ -45,3 +45,13 @@ class WindowsEnvironmentTestCase:
     environment: dict[str, str]
     seed_schema: str
     expected_schema: str
+
+
+@dataclass(frozen=True)
+class OptOutTestCase:
+    """Models opting out of required SQL analysis, and which ones parse so Python rejects them."""
+
+    description: str
+    models: dict[str, str]
+    expected_rejected: dict[str, bool]
+    expected_python_validations: int

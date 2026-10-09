@@ -1,15 +1,18 @@
+use std::collections::HashMap;
+
 use crate::assembly::analysis_session::_helpers::cte_facts::{
     Recovery, RecoveryInput, RecoveryProfile, recovery,
 };
 use crate::assembly::analysis_session::_helpers::mappings::catalog_relations;
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
+use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
 use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis, DynamicFamily,
-    ModelOutcome, ModelReference, ModelRequest, PivotOutcome, PivotRequest, SessionRequest,
-    SessionStep,
+    FinishedSession, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel,
+    PivotOutcome, PivotTables, SessionModelFacts, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::tests::test_types::{ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -117,11 +120,11 @@ pub(crate) fn started(request: SessionRequest) -> AnalysisSession {
     start_analysis_session(request, &catalog).expect("the models form no cycle")
 }
 
-/// Run to completion, answering every deferral with `answer`; return the steps and outcomes.
+/// Run to completion, answering every deferral with `answer`: the steps, outcomes and session.
 pub(crate) fn completed(
     mut session: AnalysisSession,
     answer: fn(&Deferral) -> DeferredAnalysis,
-) -> (Vec<SessionStep>, Vec<ModelOutcome>) {
+) -> (Vec<SessionStep>, Vec<ModelOutcome>, FinishedSession) {
     let mut done: bool = false;
     let steps: Vec<SessionStep> = std::iter::from_fn(|| {
         (!done).then(|| {
@@ -135,8 +138,8 @@ pub(crate) fn completed(
         })
     })
     .collect();
-    let outcome = finish_analysis_session(session).expect("the session finished");
-    (steps, outcome.models)
+    let (outcome, finished) = finish_analysis_session(session).expect("the session finished");
+    (steps, outcome.models, finished)
 }
 
 /// `name type nullability` per column, or `failed` when analysis did not succeed.
@@ -209,7 +212,7 @@ pub(crate) fn model_requests(models: &[ModelSpec]) -> Vec<ModelRequest> {
 
 /// Run `models` over the orders request: each step's lines and each model's description.
 pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
-    let (steps, outcomes) = completed(
+    let (steps, outcomes, _) = completed(
         started(orders_request(model_requests(models))),
         empty_answer,
     );
@@ -219,12 +222,35 @@ pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<
     )
 }
 
-/// A pivot proof request over typed `raw_orders`, whose upstream `status_amounts` is a pivot.
+/// Run `models` and describe the facts the finished session kept for each, or `none`.
+pub(crate) fn fact_lines(models: &[ModelSpec]) -> Vec<String> {
+    let (_, _, finished) = completed(
+        started(orders_request(model_requests(models))),
+        empty_answer,
+    );
+    models
+        .iter()
+        .map(|(name, ..)| {
+            finished_model_facts(&finished, name).map_or("none".to_owned(), fact_line)
+        })
+        .collect()
+}
+
+fn fact_line(facts: &SessionModelFacts) -> String {
+    let lineage: Vec<String> = facts
+        .lineage
+        .iter()
+        .map(|(output, sources)| format!("{output}<-{sources:?}"))
+        .collect();
+    format!("{:?} {}", facts.columns, lineage.join(" "))
+}
+
+/// Proofs over typed `raw_orders` and pivot `status_amounts`: the model, then a family-less one.
 pub(crate) fn pivot_request(
     dialect: &str,
     sql: &str,
     family: Option<(&str, &str, &str)>,
-) -> PivotRequest {
+) -> PivotBatchRequest {
     let raw_orders: Shapes = shapes(&[(
         "raw_orders",
         &[
@@ -241,17 +267,36 @@ pub(crate) fn pivot_request(
         })
         .into_iter()
         .collect();
-    PivotRequest {
-        dialect: dialect.to_owned(),
-        column_types: [raw_orders.clone(), upstream].concat(),
-        authoritative_types: raw_orders,
-        column_nullability: shapes(&[("raw_orders", &[("customer_id", "non_null")])]),
-        families_by_table: vec![(
-            "status_amounts".to_owned(),
-            vec![amounts("status", "amount", "MAX")],
-        )],
-        sql: sql.to_owned(),
-        families,
+    PivotBatchRequest {
+        tables: PivotTables {
+            dialect: dialect.to_owned(),
+            column_types: [raw_orders.clone(), upstream].concat(),
+            authoritative_types: raw_orders,
+            column_nullability: shapes(&[("raw_orders", &[("customer_id", "non_null")])]),
+            families_by_table: vec![(
+                "status_amounts".to_owned(),
+                vec![amounts("status", "amount", "MAX")],
+            )],
+        },
+        models: vec![
+            PivotModel {
+                sql: sql.to_owned(),
+                families,
+            },
+            PivotModel {
+                sql: "SELECT 1".to_owned(),
+                families: Vec::new(),
+            },
+        ],
+    }
+}
+
+/// A finished session holding `tables` and an analysis pool.
+pub(crate) fn finished_session(tables: PivotTables) -> FinishedSession {
+    FinishedSession {
+        tables,
+        pool: catalog("duckdb", &Vec::new()).analysis_pool(),
+        models: HashMap::new(),
     }
 }
 

@@ -13,15 +13,16 @@ from sqlbuild.compiler.analysis_session.constants import (
     DEFERRAL_NO_COMPACT_ANALYSIS,
     DEFERRAL_SESSION,
 )
-from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
+from sqlbuild.compiler.analysis_session.models import (
+    NativeModelAnalyses,
+    NativeModelAnalysisRequest,
+)
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.models import ModelSqlAnalysis
 
 
-def native_model_analyses(
-    *, request: NativeModelAnalysisRequest
-) -> dict[str, ModelSqlAnalysis] | None:
-    """Each model's analysis by name, or None (recorded) where Python must analyse."""
+def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModelAnalyses | None:
+    """Each model's analysis by name and the finished session, or None (recorded) for Python."""
 
     catalog: Any = request.inference_profile.binding_catalog
     if not request.allow_compact_analysis:
@@ -31,7 +32,7 @@ def native_model_analyses(
         record_analysis_deferral(kind=DEFERRAL_NO_CATALOG)
         return None
     if not request.model_inputs:
-        return {}
+        return NativeModelAnalyses(analyses={}, session=None)
     python: PythonModelAnalysis = PythonModelAnalysis(
         model_inputs=request.model_inputs,
         inference_profile=request.inference_profile,
@@ -46,4 +47,7 @@ def native_model_analyses(
     if session is None:
         record_analysis_deferral(kind=DEFERRAL_SESSION)
         return None
-    return NativeModelAnalysis(request=request, python=python, catalog=catalog).analyses(session)
+    analyses: dict[str, ModelSqlAnalysis] | None = NativeModelAnalysis(
+        request=request, python=python, catalog=catalog
+    ).analyses(session)
+    return None if analyses is None else NativeModelAnalyses(analyses=analyses, session=session)

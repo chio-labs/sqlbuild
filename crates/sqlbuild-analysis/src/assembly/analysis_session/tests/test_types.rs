@@ -17,6 +17,13 @@ pub(crate) struct SessionTestCase {
     pub(crate) expected_outcomes: &'static [&'static [&'static str]],
 }
 
+pub(crate) struct SessionFactsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: &'static [ModelSpec],
+    /// `fact_lines` of each model, in request order.
+    pub(crate) expected_facts: &'static [&'static str],
+}
+
 pub(crate) struct UnscheduledTestCase {
     pub(crate) description: &'static str,
     pub(crate) models: &'static [ModelSpec],

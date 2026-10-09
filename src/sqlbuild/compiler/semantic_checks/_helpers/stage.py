@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
@@ -10,6 +11,7 @@ from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.semantic_checks._helpers.completion import complete_native_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.deferrals import record_semantic_deferral
 from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
+from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models
 from sqlbuild.compiler.semantic_checks._helpers.type_recovery import recover_native_output_types
 from sqlbuild.compiler.semantic_checks.constants import (
     COMPLETION_DEFERRAL_SITE,
@@ -24,6 +26,7 @@ def completed_semantic_project(
     profile: ExpressionInferenceProfile,
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
     resource_sql_analysis: bool,
+    session: Any | None,
 ) -> CompiledProject | None:
     """Python's completed project, or None where any native step hands the stage back."""
 
@@ -31,8 +34,13 @@ def completed_semantic_project(
         record_semantic_deferral(kind=NATIVE_SEMANTIC_NO_CATALOG, site=COMPLETION_DEFERRAL_SITE)
         return None
     catalog: object = project.binding_catalog.native
+    session_models: frozenset[str] = session_fact_models(project=project, session=session)
     recovered: CompiledProject | None = recover_native_output_types(
-        project=project, binding_results=binding_results, catalog=catalog
+        project=project,
+        binding_results=binding_results,
+        catalog=catalog,
+        session=session,
+        session_models=session_models,
     )
     if recovered is None:
         return None
@@ -49,4 +57,6 @@ def completed_semantic_project(
     return complete_native_diagnostics(
         project=replace(recovered, diagnostics=(*recovered.diagnostics, *metadata)),
         catalog=catalog,
+        session=session,
+        session_models=session_models,
     )

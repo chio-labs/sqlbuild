@@ -1,7 +1,9 @@
 //! The session's phases: Python's uncached model analysis, wave by wave.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use rayon::ThreadPool;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
@@ -21,8 +23,9 @@ use crate::assembly::analysis_session::constants::{
     DEFERRAL_ANALYSIS, DEFERRAL_ENRICHMENT, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, LineageFacts, ModelAnalysis,
-    ModelOutcome, ModelRequest, Phase, PivotOutcome, SessionOutcome, SessionRequest, SessionStep,
+    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, FinishedSession,
+    LineageFacts, LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome,
+    PivotTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -148,23 +151,43 @@ impl AnalysisSession {
     }
 
     /// Every model's outcome and the binding catalog changes Python records.
-    pub(crate) fn finish(self) -> Result<SessionOutcome, String> {
+    pub(crate) fn finish(self) -> Result<(SessionOutcome, FinishedSession), String> {
         if !matches!(self.phase, Phase::Done) {
             return Err("the session has not finished".to_owned());
         }
         let dynamic_contracts: Vec<PivotOutcome> = self.dynamic_contracts()?;
+        let pool: Result<Arc<ThreadPool>, String> = self.catalog.native.analysis_pool();
         let models: Vec<ModelOutcome> = self
             .outcomes
             .into_iter()
             .collect::<Option<_>>()
             .ok_or("the session left a model unanalysed")?;
         let (schema_additions, analysis_names) = self.catalog.into_changes();
-        Ok(SessionOutcome {
+        let request: SessionRequest = self.request;
+        let mut model_facts: HashMap<String, SessionModelFacts> = HashMap::new();
+        for (model, outcome) in request.models.iter().zip(&models) {
+            if let Some(facts) = session_model_facts(&outcome.analysis) {
+                model_facts.insert(model.name.clone(), facts);
+            }
+        }
+        let finished = FinishedSession {
+            tables: PivotTables {
+                dialect: request.dialect,
+                column_types: request.column_types,
+                authoritative_types: request.complete_schemas,
+                column_nullability: request.column_nullability,
+                families_by_table: request.dynamic_families_by_table,
+            },
+            pool,
+            models: model_facts,
+        };
+        let outcome = SessionOutcome {
             models,
             schema_additions,
             analysis_names,
             dynamic_contracts,
-        })
+        };
+        Ok((outcome, finished))
     }
 
     /// Python's dynamic pivot proof of each model over the relation facts before analysis.
@@ -595,4 +618,29 @@ fn native_answer(model: usize, columns: Vec<ColumnFact>, has_star: bool) -> Defe
         binding_diagnostics: Vec::new(),
         binding_validated: false,
     }
+}
+
+/// A compiled model's output names and lineage from a successful analysis with native lineage.
+fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
+    let rows: &Vec<LineageRow> = match &analysis.lineage {
+        LineageFacts::Native(rows) | LineageFacts::NativeEnrichment(rows) => rows,
+        LineageFacts::PythonAnalysis | LineageFacts::PythonEnrichment => return None,
+    };
+    analysis.analysis_succeeded.then(|| SessionModelFacts {
+        columns: analysis.columns.as_deref().map(column_names),
+        lineage: rows.iter().map(output_sources).collect(),
+    })
+}
+
+fn column_names(columns: &[ColumnFact]) -> Vec<String> {
+    columns.iter().map(|column| column.name.clone()).collect()
+}
+
+/// One lineage row as `(output column, [(resource name, column name)])`.
+fn output_sources(row: &LineageRow) -> (String, Vec<(String, String)>) {
+    let mut sources: Vec<(String, String)> = Vec::with_capacity(row.sources.len());
+    for (_, name, column) in &row.sources {
+        sources.push((name.clone(), column.clone()));
+    }
+    (row.output_column.clone(), sources)
 }
