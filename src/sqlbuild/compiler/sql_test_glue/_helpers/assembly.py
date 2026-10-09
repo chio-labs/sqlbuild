@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlbuild.compiler.compile.constants import SQL_TEST_HELPER_REFERENCE_CODE
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
@@ -10,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlTest,
     CompiledSqlTestResource,
+    CompileModelSqlTestInputPayload,
     CompilerDiagnostic,
     CompileSqlTestInput,
 )
@@ -18,12 +21,29 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
+from sqlbuild.compiler.sql_test_glue._helpers.deferrals import record_sql_test_assembly_deferral
 from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
 from sqlbuild.compiler.sql_test_glue.types import (
+    NativeSqlTestAssemblyRow,
     NativeSqlTestDiagnosticRow,
     NativeSqlTestFactsRow,
 )
 from sqlbuild.spec.contracts.models import SourceLocation
+
+
+def native_sql_test_assemblies(
+    *, test_inputs: tuple[CompileSqlTestInput, ...], rows: list[NativeSqlTestAssemblyRow]
+) -> tuple[NativeSqlTestAssembly | None, ...]:
+    """One assembly per test input, or None, recorded, where the native assembly defers."""
+
+    assemblies: list[NativeSqlTestAssembly | None] = []
+    for test_input, (facts, deferral) in zip(test_inputs, rows, strict=True):
+        if facts is None:
+            record_sql_test_assembly_deferral(kind=str(deferral))
+            assemblies.append(None)
+            continue
+        assemblies.append(native_sql_test_assembly(test_input=test_input, facts=facts))
+    return tuple(assemblies)
 
 
 def native_sql_test_assembly(
@@ -36,7 +56,9 @@ def native_sql_test_assembly(
         CompiledObjectKey(resource_type=resource_type, name=dep_name)
         for resource_type, dep_name in scope_dep_rows
     )
-    payload = test_input.payload
+    payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload = (
+        test_input.payload
+    )
     compiled_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload
     tested_resources: tuple[CompiledSqlTestResource, ...] = ()
     expected_model_names: tuple[str, ...] = ()
@@ -115,7 +137,7 @@ def _keyed_diagnostic(
     *, test_input: CompileSqlTestInput, resource_name: str, row: NativeSqlTestDiagnosticRow
 ) -> tuple[tuple[str, ...], CompilerDiagnostic]:
     line, column, end_line, end_column, message, help_text = row
-    path = test_input.test_file.relative_path
+    path: Path = test_input.test_file.relative_path
     return (
         (SQL_TEST_HELPER_REFERENCE_CODE, path.as_posix(), f"{line:09d}:{column:09d}", message),
         CompilerDiagnostic(

@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlTest,
+    CompileProjectInputs,
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -28,13 +29,13 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.planner._helpers.sql_tests import native_planning
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestAssembly,
     NativeSqlTestAssemblyRequest,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import (
     NativeSqlTestAssemblyRow,
-    NativeSqlTestFactsRow,
     NativeSqlTestPlanRow,
 )
 
@@ -466,27 +467,40 @@ def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, objec
 
 
 def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count tests the native assembly itself assembles, with diagnostics, cases, or defers.
+    """Count tests compile takes from the native assembly, with diagnostics, cases, or defers.
 
-    `native_assembled` counts only rows carrying native facts; a deferred test counts under
-    `deferred_<kind>` and is assembled by Python, so it never counts as native work.
+    `native_assembled` counts only assemblies the stage seam hands compile; a deferred test
+    counts under `deferred_<kind>` and is assembled by Python, so it never counts as native work.
     """
 
     answers: Counter[str] = Counter()
     assemble: Callable[[NativeSqlTestAssemblyRequest], list[NativeSqlTestAssemblyRow]] = (
         native_module.assemble_compiled_sql_tests
     )
+    seam: Callable[..., tuple[NativeSqlTestAssembly | None, ...]] = (
+        sql_test_stage.assemble_native_sql_tests
+    )
 
-    def counted(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
+    def counted_deferrals(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
         rows: list[NativeSqlTestAssemblyRow] = assemble(request)
-        facts: list[NativeSqlTestFactsRow] = [row[0] for row in rows if row[0] is not None]
-        answers["native_assembled"] += len(facts)
-        answers["native_with_diagnostics"] += sum(bool(row[5]) for row in facts)
-        answers["native_case_fingerprints"] += sum(row[3] is not None for row in facts)
-        answers.update(f"deferred_{row[1]}" for row in rows if row[1] is not None)
+        deferrals: list[str] = list(filter(None, (row[1] for row in rows)))
+        answers.update(f"deferred_{kind}" for kind in deferrals)
         return rows
 
-    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted)
+    def counted_assemblies(
+        *, inputs: CompileProjectInputs
+    ) -> tuple[NativeSqlTestAssembly | None, ...]:
+        assemblies: tuple[NativeSqlTestAssembly | None, ...] = seam(inputs=inputs)
+        native: list[NativeSqlTestAssembly] = list(filter(None, assemblies))
+        answers["native_assembled"] += len(native)
+        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in native)
+        answers["native_case_fingerprints"] += sum(
+            item.test.case_fingerprint is not None for item in native
+        )
+        return assemblies
+
+    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_deferrals)
+    monkeypatch.setattr(sql_test_stage, "assemble_native_sql_tests", counted_assemblies)
     return answers
 
 

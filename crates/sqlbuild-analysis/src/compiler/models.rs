@@ -196,8 +196,7 @@ pub struct SqlTestAssemblyBatch {
 pub struct SqlTestAssemblyModel {
     pub name: String,
     pub macro_deps: Vec<String>,
-    /// The pre-macro SQL to scan for calls when no macro dependencies were recorded and it
-    /// contains a macro token; Python scans it only then.
+    /// Pre-macro SQL Python scans for calls: set only without macro deps and with a macro token.
     pub unscanned_macro_source: Option<String>,
     pub references: Vec<SqlTestAssemblyReference>,
 }

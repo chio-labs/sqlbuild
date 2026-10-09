@@ -25,7 +25,7 @@ pub(crate) fn macro_call_names(sql: &str) -> Scan<Vec<String>> {
             Ok(None) => {}
             Err(_) => return Err(SqlTestAssemblyDeferral::MacroCallScan),
         }
-        if bytes[index] != b'@' || !is_call_start(bytes, index)? {
+        if bytes[index] != b'@' || !macro_call_at(bytes, index)? {
             index += 1;
             continue;
         }
@@ -47,7 +47,7 @@ pub(crate) fn macro_call_names(sql: &str) -> Scan<Vec<String>> {
 }
 
 /// Python's `_is_macro_call_start`, which skips whitespace after each name character.
-fn is_call_start(bytes: &[u8], at: usize) -> Scan<bool> {
+fn macro_call_at(bytes: &[u8], at: usize) -> Scan<bool> {
     let Some(&first) = bytes.get(at + 1) else {
         return Ok(false);
     };

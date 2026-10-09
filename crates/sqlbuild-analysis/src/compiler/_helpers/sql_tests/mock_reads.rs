@@ -1,9 +1,10 @@
-//! Python's `report_mocks_reading_referencing_helpers`: mocks a test reads that read a helper
-//! calling a reference, which cannot resolve because mocks are defined before the models run.
+//! Python's `report_mocks_reading_referencing_helpers`: P013s for mocks reading referencing helpers.
 
 use std::collections::HashSet;
 
-use polyglot_sql::{Dialect, DialectType, Expression, ExpressionWalk};
+use polyglot_sql::{
+    ComplexityGuardOptions, Dialect, DialectType, Expression, ExpressionWalk, ParseOptions,
+};
 use serde_json::Value;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
@@ -14,7 +15,6 @@ use crate::compiler::models::{
     SqlTestAssemblyDeferral, SqlTestAssemblyModel, SqlTestAssemblyModelPayload,
     SqlTestAssemblyReference, SqlTestAssemblyTest, SqlTestCte, SqlTestHelperDiagnostic,
 };
-use crate::lineage::_helpers::parsed_lineage::proxy_parse_options;
 
 const REF_KIND: &str = "ref";
 const TABLE_FUNCTION_KIND: &str = "table_fn";
@@ -28,6 +28,8 @@ const RELATION_KINDS: [&str; 5] = [
 ];
 /// Payload nesting past which the parsed tree is left to Python's `to_dict` walk.
 const MAX_TREE_DEPTH: usize = 400;
+/// The function call depth SQLBuild's Polyglot proxy allows `parse_one`.
+const MAX_FUNCTION_CALL_DEPTH: usize = 512;
 
 type Deferrable<T> = Result<T, SqlTestAssemblyDeferral>;
 
@@ -39,26 +41,72 @@ struct Reference {
     package: Option<String>,
 }
 
+/// One model test whose mocks may read referencing helpers, with the project's models.
+pub(crate) struct MockReadsRequest<'a> {
+    pub(crate) test: &'a SqlTestAssemblyTest,
+    pub(crate) payload: &'a SqlTestAssemblyModelPayload,
+    pub(crate) models: &'a [SqlTestAssemblyModel],
+    pub(crate) target_model_names: &'a [String],
+    pub(crate) syntax: &'a LexicalSyntax,
+}
+
+/// A Python dict by string key: a repeated key keeps its first position and takes the new value.
+struct OrderedEntries<T> {
+    entries: Vec<(String, T)>,
+}
+
+impl<T> OrderedEntries<T> {
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    fn assign(&mut self, key: String, value: T) {
+        match self
+            .entries
+            .iter_mut()
+            .find(|(candidate, _)| *candidate == key)
+        {
+            Some(entry) => entry.1 = value,
+            None => self.entries.push((key, value)),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&T> {
+        self.entries
+            .iter()
+            .find(|(candidate, _)| candidate == key)
+            .map(|(_, value)| value)
+    }
+
+    fn keys(&self) -> Vec<String> {
+        self.entries.iter().map(|(key, _)| key.clone()).collect()
+    }
+}
+
 /// Python's `SqlTestCteGraph`, keyed by case-folded CTE name in first-definition order.
 struct CteGraph<'a> {
-    ctes: Vec<(String, &'a SqlTestCte)>,
-    reads: Vec<(String, Vec<String>)>,
+    ctes: OrderedEntries<&'a SqlTestCte>,
+    reads: OrderedEntries<Vec<String>>,
     reader_reads: Vec<String>,
+}
+
+/// A located span as Python's `reference_call_location` reports it.
+struct Span {
+    line: usize,
+    column: usize,
+    end_line: usize,
+    end_column: usize,
 }
 
 impl CteGraph<'_> {
     fn cte(&self, key: &str) -> Option<&SqlTestCte> {
-        self.ctes
-            .iter()
-            .find(|(candidate, _)| candidate == key)
-            .map(|(_, cte)| *cte)
+        self.ctes.get(key).copied()
     }
 
     fn reads(&self, key: &str) -> &[String] {
-        self.reads
-            .iter()
-            .find(|(candidate, _)| candidate == key)
-            .map_or(&[], |(_, reads)| reads.as_slice())
+        self.reads.get(key).map_or(&[], Vec::as_slice)
     }
 
     /// Python's `reachable_cte_keys`: breadth first, roots included, in visit order.
@@ -92,77 +140,74 @@ impl CteGraph<'_> {
 
 /// The P013 diagnostics Python reports for one model test, in report order.
 pub(crate) fn mock_reading_helper_diagnostics(
-    test: &SqlTestAssemblyTest,
-    payload: &SqlTestAssemblyModelPayload,
-    models: &[SqlTestAssemblyModel],
-    target_model_names: &[String],
-    syntax: &LexicalSyntax,
+    request: &MockReadsRequest<'_>,
 ) -> Deferrable<Vec<SqlTestHelperDiagnostic>> {
-    let mut referencing: Vec<(String, Reference)> = Vec::new();
+    let payload = request.payload;
+    let mut referencing: OrderedEntries<Reference> = OrderedEntries::new();
     for cte in &payload.authored_ctes {
         if is_mock_name(&cte.name) {
             continue;
         }
-        let first = references(&cte.sql_body, syntax)?
+        let first = references(&cte.sql_body, request.syntax)?
             .into_iter()
             .find(|reference| RELATION_KINDS.contains(&reference.kind.as_str()));
         if let Some(reference) = first {
-            insert(&mut referencing, ascii_fold(&cte.name)?, reference);
+            referencing.assign(ascii_fold(&cte.name)?, reference);
         }
     }
-    if referencing.is_empty() {
+    if referencing.entries.is_empty() {
         return Ok(Vec::new());
     }
-    require_ascii(test, payload)?;
+    require_ascii(request.test, payload)?;
     let readers: Vec<&SqlTestCte> = payload
         .expected_ctes
         .iter()
         .chain(&payload.assertion_ctes)
         .collect();
     let graph = cte_graph(&payload.authored_ctes, &readers)?;
+    let mut scanned: Vec<&str> = readers.iter().map(|cte| cte.sql_body.as_str()).collect();
+    for key in read_helper_keys(&graph) {
+        if let Some(cte) = graph.cte(&key) {
+            scanned.push(cte.sql_body.as_str());
+        }
+    }
     let mut called_mocks: Vec<String> = Vec::new();
-    let read_helpers = read_helper_keys(&graph);
-    let helper_sqls = read_helpers
-        .iter()
-        .filter_map(|key| graph.cte(key).map(|cte| cte.sql_body.as_str()));
-    for sql in readers
-        .iter()
-        .map(|cte| cte.sql_body.as_str())
-        .chain(helper_sqls)
-    {
-        for reference in references(sql, syntax)? {
+    for sql in scanned {
+        for reference in references(sql, request.syntax)? {
             called_mocks.extend(mock_keys(&reference)?);
         }
     }
-    let used = used_mock_keys(
-        &graph,
-        &called_mocks,
-        models,
-        target_model_names,
-        &payload.mock_model_names,
-    )?;
+    let used = used_mock_keys(request, &graph, &called_mocks)?;
     let mut diagnostics: Vec<SqlTestHelperDiagnostic> = Vec::new();
     for mock_key in used {
-        let reachable = graph.reachable(graph.reads(&mock_key));
-        let Some((helper_key, reference)) = reachable.iter().find_map(|key| {
-            referencing
-                .iter()
-                .find(|(candidate, _)| candidate == key)
-                .map(|(_, reference)| (key, reference))
-        }) else {
+        let mut helper: Option<(String, &Reference)> = None;
+        for key in graph.reachable(graph.reads(&mock_key)) {
+            if let Some(reference) = referencing.get(&key) {
+                helper = Some((key, reference));
+                break;
+            }
+        }
+        let Some((helper_key, reference)) = helper else {
             continue;
         };
-        let (Some(mock), Some(helper)) = (graph.cte(&mock_key), graph.cte(helper_key)) else {
+        let (Some(mock), Some(helper)) = (graph.cte(&mock_key), graph.cte(&helper_key)) else {
             continue;
         };
         let call = reference_call(reference);
-        let message = format!(
-            "SQL test mock '{}' reads helper CTE '{}', which calls {call}; mocks and fixtures are \
-             defined before the models the test runs, so the helper cannot be resolved for them",
-            mock.name, helper.name
-        );
-        let help = mock_reference_help(&mock.name, &call, reference);
-        diagnostics.push(located(test, &helper.name, &call, message, help));
+        let span = located(request.test, &helper.name, &call);
+        diagnostics.push(SqlTestHelperDiagnostic {
+            line: span.line,
+            column: span.column,
+            end_line: span.end_line,
+            end_column: span.end_column,
+            message: format!(
+                "SQL test mock '{}' reads helper CTE '{}', which calls {call}; mocks and \
+                 fixtures are defined before the models the test runs, so the helper cannot be \
+                 resolved for them",
+                mock.name, helper.name
+            ),
+            help: mock_reference_help(&mock.name, &call, reference),
+        });
     }
     Ok(diagnostics)
 }
@@ -171,14 +216,6 @@ fn is_mock_name(name: &str) -> bool {
     MOCK_CTE_PREFIXES
         .iter()
         .any(|prefix| name.starts_with(prefix))
-}
-
-/// Python dict assignment: a repeated key keeps its first position and takes the new value.
-fn insert<T>(entries: &mut Vec<(String, T)>, key: String, value: T) {
-    match entries.iter_mut().find(|(candidate, _)| *candidate == key) {
-        Some(entry) => entry.1 = value,
-        None => entries.push((key, value)),
-    }
 }
 
 /// Python's `str.casefold`, exact only on ASCII text.
@@ -240,19 +277,19 @@ fn model_reference(reference: &SqlTestAssemblyReference) -> Reference {
 
 /// Python's `sql_test_cte_graph`.
 fn cte_graph<'a>(authored: &'a [SqlTestCte], readers: &[&SqlTestCte]) -> Deferrable<CteGraph<'a>> {
-    let mut ctes: Vec<(String, &'a SqlTestCte)> = Vec::new();
+    let mut ctes: OrderedEntries<&'a SqlTestCte> = OrderedEntries::new();
     for cte in authored {
-        insert(&mut ctes, ascii_fold(&cte.name)?, cte);
+        ctes.assign(ascii_fold(&cte.name)?, cte);
     }
-    let keys: Vec<String> = ctes.iter().map(|(key, _)| key.clone()).collect();
-    let mut reads: Vec<(String, Vec<String>)> = Vec::new();
-    for (key, cte) in &ctes {
+    let keys: Vec<String> = ctes.keys();
+    let mut reads: OrderedEntries<Vec<String>> = OrderedEntries::new();
+    for (key, cte) in &ctes.entries {
         let others: Vec<String> = keys.iter().filter(|other| *other != key).cloned().collect();
         let cte_reads = match parsed_reads(&cte.sql_body, &others)? {
             Some(parsed) => parsed,
             None => token_reads(&cte.sql_body, &others),
         };
-        reads.push((key.clone(), cte_reads));
+        reads.assign(key.clone(), cte_reads);
     }
     let mut reader_reads: Vec<String> = Vec::new();
     for reader in readers {
@@ -279,9 +316,7 @@ fn parsed_reads(sql: &str, keys: &[String]) -> Deferrable<Option<Vec<String>>> {
     if !keys.iter().any(|key| folded.contains(key.as_str())) {
         return Ok(Some(Vec::new()));
     }
-    let Ok(options) = proxy_parse_options() else {
-        return Err(SqlTestAssemblyDeferral::UnreadableTree);
-    };
+    let options = proxy_parse_options()?;
     let Ok(mut statements) = Dialect::get(DialectType::Generic).parse_with_options(sql, &options)
     else {
         return Ok(None);
@@ -305,6 +340,17 @@ fn parsed_reads(sql: &str, keys: &[String]) -> Deferrable<Option<Vec<String>>> {
         }
     }
     Ok(Some(reads))
+}
+
+/// The parse options SQLBuild's Polyglot proxy gives `parse_one`.
+fn proxy_parse_options() -> Deferrable<ParseOptions> {
+    let guard: ComplexityGuardOptions = serde_json::from_value(serde_json::json!({
+        "maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH,
+    }))
+    .map_err(|_| SqlTestAssemblyDeferral::UnreadableTree)?;
+    Ok(ParseOptions {
+        complexity_guard: Some(guard),
+    })
 }
 
 /// Python's `_defined_cte_keys` over the serialized tree Python's `to_dict` returns.
@@ -395,12 +441,11 @@ fn mock_keys(reference: &Reference) -> Deferrable<Vec<String>> {
 
 /// Python's `_used_mock_keys`.
 fn used_mock_keys(
+    request: &MockReadsRequest<'_>,
     graph: &CteGraph<'_>,
     called_mocks: &[String],
-    models: &[SqlTestAssemblyModel],
-    target_model_names: &[String],
-    mock_model_names: &[String],
 ) -> Deferrable<Vec<String>> {
+    let mock_model_names = &request.payload.mock_model_names;
     let mut used: Vec<String> = graph
         .reachable(&graph.reader_reads)
         .into_iter()
@@ -416,15 +461,12 @@ fn used_mock_keys(
             used.push(key.clone());
         }
     }
-    let mut model_references: Vec<(String, &[SqlTestAssemblyReference])> = Vec::new();
-    for model in models {
-        insert(
-            &mut model_references,
-            model.name.clone(),
-            model.references.as_slice(),
-        );
+    let mut model_references: OrderedEntries<&[SqlTestAssemblyReference]> = OrderedEntries::new();
+    for model in request.models {
+        model_references.assign(model.name.clone(), model.references.as_slice());
     }
-    let mut pending: Vec<String> = target_model_names
+    let mut pending: Vec<String> = request
+        .target_model_names
         .iter()
         .filter(|name| !mock_model_names.contains(name))
         .cloned()
@@ -434,10 +476,10 @@ fn used_mock_keys(
     while cursor < pending.len() {
         let model_name = pending[cursor].clone();
         cursor += 1;
-        let references = model_references
-            .iter()
-            .find(|(name, _)| *name == model_name)
-            .map_or(&[][..], |(_, references)| *references);
+        let references: &[SqlTestAssemblyReference] = model_references
+            .get(&model_name)
+            .copied()
+            .unwrap_or_default();
         for reference in references {
             let reference = model_reference(reference);
             for mock_key in mock_keys(&reference)? {
@@ -487,13 +529,7 @@ fn mock_reference_help(mock_name: &str, call: &str, reference: &Reference) -> St
 }
 
 /// Python's `sql_test_cte_location` and `reference_call_location` on ASCII contents.
-fn located(
-    test: &SqlTestAssemblyTest,
-    cte_name: &str,
-    call: &str,
-    message: String,
-    help: String,
-) -> SqlTestHelperDiagnostic {
+fn located(test: &SqlTestAssemblyTest, cte_name: &str, call: &str) -> Span {
     let contents = test.contents.as_str();
     let block_offset = contents.find(test.block_sql.as_str()).unwrap_or(0);
     let (start, length) = match cte_header(contents, cte_name, block_offset) {
@@ -501,16 +537,13 @@ fn located(
             .map_or((header_start, cte_name.len()), |found| (found, call.len())),
         None => (block_offset, 0),
     };
-    let end = start + length;
     let (line, column) = line_and_column(contents, start);
-    let (end_line, end_column) = line_and_column(contents, end);
-    SqlTestHelperDiagnostic {
+    let (end_line, end_column) = line_and_column(contents, start + length);
+    Span {
         line,
         column,
         end_line,
         end_column,
-        message,
-        help,
     }
 }
 

@@ -5,10 +5,12 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::compiler::_helpers::sql_tests::case_identity::case_fingerprint;
 use crate::compiler::_helpers::sql_tests::macro_call_names::macro_call_names;
-use crate::compiler::_helpers::sql_tests::mock_reads::mock_reading_helper_diagnostics;
+use crate::compiler::_helpers::sql_tests::mock_reads::{
+    MockReadsRequest, mock_reading_helper_diagnostics,
+};
 use crate::compiler::models::{
     AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyDeferral, SqlTestAssemblyModel,
-    SqlTestAssemblyOutcome, SqlTestAssemblyPayload, SqlTestAssemblyTest,
+    SqlTestAssemblyOutcome, SqlTestAssemblyPayload, SqlTestAssemblyTest, SqlTestHelperDiagnostic,
 };
 
 const MODEL_RESOURCE: &str = "model";
@@ -63,7 +65,7 @@ fn assemble(
     let syntax = project.syntax;
     let mut target_model_names: Vec<String> = Vec::new();
     let mut tested_resources: Vec<(String, String)> = Vec::new();
-    let mut diagnostics = Vec::new();
+    let mut diagnostics: Vec<SqlTestHelperDiagnostic> = Vec::new();
     let scope_deps: Vec<(&'static str, String)> = match &test.payload {
         SqlTestAssemblyPayload::Direct {
             mode,
@@ -89,13 +91,13 @@ fn assemble(
                     target_model_names.push(name.clone());
                 }
             }
-            diagnostics = mock_reading_helper_diagnostics(
+            diagnostics = mock_reading_helper_diagnostics(&MockReadsRequest {
                 test,
                 payload,
                 models,
-                &target_model_names,
+                target_model_names: &target_model_names,
                 syntax,
-            )?;
+            })?;
             target_model_names
                 .iter()
                 .map(|name| (MODEL_RESOURCE, name.clone()))

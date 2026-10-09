@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompileProjectInputs
-from sqlbuild.compiler.sql_test_glue._helpers.assembly import native_sql_test_assembly
-from sqlbuild.compiler.sql_test_glue._helpers.deferrals import record_sql_test_assembly_deferral
+from sqlbuild.compiler.sql_test_glue._helpers.assembly import native_sql_test_assemblies
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssembly,
     NativeSqlTestAssemblyRequest,
@@ -25,11 +24,4 @@ def assemble_native_sql_tests(
             lexical_syntax=inputs.sql_lexical_syntax.native_mapping,
         )
     )
-    assemblies: list[NativeSqlTestAssembly | None] = []
-    for test_input, (facts, deferral) in zip(inputs.test_inputs, rows, strict=True):
-        if facts is None:
-            record_sql_test_assembly_deferral(kind=str(deferral))
-            assemblies.append(None)
-            continue
-        assemblies.append(native_sql_test_assembly(test_input=test_input, facts=facts))
-    return tuple(assemblies)
+    return native_sql_test_assemblies(test_inputs=inputs.test_inputs, rows=rows)
