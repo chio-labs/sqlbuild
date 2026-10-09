@@ -67,6 +67,7 @@ class SqlTestArtifactCacheRecord:
     relative_path: Path
     size: int
     mtime_ns: int
+    content_sha256: str
 
 
 @dataclass(frozen=True)
