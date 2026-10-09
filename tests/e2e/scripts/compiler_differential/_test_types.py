@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from scripts.compiler_differential.models import FailureCase
+
 
 @dataclass(frozen=True)
 class HarnessRunTestCase:
@@ -114,3 +116,32 @@ class WheelSiteReportTestCase:
     expected_lines: tuple[str, ...]
     expected_sites: frozenset[str]
     expected_deferrals: frozenset[str]
+
+
+@dataclass(frozen=True)
+class NativeFallbackGateTestCase:
+    """A recorded allow-list, an edit or sabotage, and the verdict of the next checked run."""
+
+    description: str
+    perturbation: str
+    appended_entries: str
+    expected_exit_code: int
+    expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GoldenOutputTestCase:
+    """Goldens recorded for one project, an edit to them, and the check verdict."""
+
+    description: str
+    golden_edit: tuple[str, str]
+    expected_exit_code: int
+    expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EngineErrorCaseTestCase:
+    """One shared all-engine error case from the failure corpus, holding its exact error."""
+
+    description: str
+    expected_error_case: FailureCase

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL test 'tests/unit/test_customer_totals.sql' CTE '__macro_actual__' must use AS (...)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

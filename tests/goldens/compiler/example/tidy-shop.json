@@ -1,0 +1,115 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {
+  "models/daily_revenue.sql": [
+   "SELECT CAST('2026-04-01' AS DATE) AS revenue_date, 2850 AS total_revenue_cents",
+   ""
+  ]
+ },
+ "manifest": {
+  "nodes": {
+   "model.waffle_shop.daily_revenue": {
+    "database": null,
+    "schema": "prod",
+    "name": "daily_revenue",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/daily_revenue.sql",
+    "original_file_path": "models/daily_revenue.sql",
+    "unique_id": "model.waffle_shop.daily_revenue",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "daily_revenue"
+    ],
+    "alias": "daily_revenue",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "prod",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [],
+    "description": "Daily revenue from successful payments",
+    "columns": {},
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "prod.daily_revenue",
+    "depends_on": {
+     "macros": [],
+     "nodes": []
+    }
+   }
+  },
+  "sources": {},
+  "macros": {},
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {
+   "model.waffle_shop.daily_revenue": []
+  },
+  "group_map": {},
+  "docs": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+ }
+}

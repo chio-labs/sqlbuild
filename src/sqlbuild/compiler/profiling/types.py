@@ -5,6 +5,7 @@ from typing import Literal
 type CompileTimingPhase = Literal[
     "attachment_ms",
     "model_analysis_ms",
+    "model_analysis_cpu_ms",
     "analysis_preparation_ms",
     "analysis_native_ms",
     "analysis_projection_ms",

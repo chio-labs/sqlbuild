@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D003",
+     "message": "SQL test '<project>/tests/unit/test_stg_orders.sql' must start with a TEST() header as the first non-whitespace content"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

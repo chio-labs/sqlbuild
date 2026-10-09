@@ -30,7 +30,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCtes,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL scenario"
@@ -50,7 +52,10 @@ def extract_sql_scenario_ctes(
         else None
     )
     if native_ctes is not None:
+        report_native_answer(stage=NativeStage.ATTACHMENTS, kind="scenario_ctes")
         return native_ctes
+    if native_stage_enabled(NativeStage.ATTACHMENTS):
+        report_native_fallback(site=NativeFallbackSite.SCENARIO_CTES)
     ctes: tuple[CompileSqlScenarioCte, ...] = extract_top_level_ctes_with_scanner(
         sql=sql,
         file_label=file_label,
@@ -91,6 +96,7 @@ def _scenario_from_native_outcome(
 
     independence: list[list[str]] | None = outcome.get("independence")
     if independence is not None:
+        report_native_fallback(site=NativeFallbackSite.SCENARIO_INDEPENDENCE)
         validate_independent_expected_and_assertion_ctes(
             ctes=_scenario_ctes(independence),
             expected_prefix=EXPECTED_TEST_CTE_PREFIX,

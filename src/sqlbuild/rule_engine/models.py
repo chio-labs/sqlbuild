@@ -311,6 +311,7 @@ class RulesResult:
     cache_misses: int = 0
     built_in_ms: int = 0
     custom_ms: int = 0
+    custom_cpu_ms: int = 0
 
 
 @dataclass(frozen=True)
@@ -346,6 +347,7 @@ class RulesRunResult:
     evaluated_models: int
     built_in_ms: int
     custom_ms: int
+    custom_cpu_ms: int = 0
     unevaluated_resources: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
@@ -431,6 +433,7 @@ class CustomRulesOutcome:
     cache_hits: int
     cache_misses: int
     custom_ms: int
+    custom_cpu_ms: int = 0
 
 
 @dataclass(frozen=True)

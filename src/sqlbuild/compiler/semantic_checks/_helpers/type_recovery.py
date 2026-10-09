@@ -39,6 +39,8 @@ def recover_native_output_types(
     project: CompiledProject,
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
     catalog: object,
+    session: Any | None,
+    session_models: frozenset[str],
 ) -> CompiledProject | None:
     """Return `recover_output_types`'s project, or None where Python must recover the types."""
 
@@ -49,7 +51,13 @@ def recover_native_output_types(
     request: Any = (
         project.sql_analysis_dialect,
         [
-            _model_payload(model=model, binding_results=binding_results, ids=ids, raw_ids=raw_ids)
+            _model_payload(
+                model=model,
+                binding_results=binding_results,
+                ids=ids,
+                raw_ids=raw_ids,
+                from_session=model.name in session_models,
+            )
             for model in project.models
         ],
         [
@@ -62,7 +70,9 @@ def recover_native_output_types(
             for item in project.diagnostics
         ],
     )
-    recovery: _native.SemanticTypeRecovery = _native.plan_semantic_type_recovery(catalog, request)
+    recovery: _native.SemanticTypeRecovery = _native.plan_semantic_type_recovery(
+        catalog, request, session
+    )
     if recovery.status == NATIVE_TYPE_RECOVERY_UNCHANGED:
         return project
     if recovery.status == NATIVE_TYPE_RECOVERY_DEFERRED:
@@ -120,6 +130,7 @@ def _model_payload(
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
     ids: dict[CompilerDiagnostic, int],
     raw_ids: dict[SqlBindingDiagnostic, int],
+    from_session: bool,
 ) -> tuple[Any, ...]:
     raws: tuple[SqlBindingDiagnostic, ...] = (
         binding_results.get(model.name, ()) if model.binding_diagnostics else ()
@@ -128,10 +139,10 @@ def _model_payload(
         model.name,
         model.query_sql,
         None
-        if model.inferred_columns is None
+        if from_session or model.inferred_columns is None
         else [column.name for column in model.inferred_columns],
         [reference.ref_name for reference in model.references],
-        lineage_payload(model),
+        None if from_session else lineage_payload(model),
         [(ids[item], item.code, item.message, item.is_error) for item in model.binding_diagnostics],
         [(raw_ids[raw], raw.code, raw.message, raw.start, raw.end) for raw in raws],
     )

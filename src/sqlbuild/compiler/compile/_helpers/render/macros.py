@@ -49,6 +49,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
     DECLARATION_READ_EVENT,
@@ -1209,6 +1212,11 @@ def expand_sql_macros_result(
         consumer=consumer,
     )
     bridge: MacroBridge | None = active_macro_bridge() if not state.macro_overrides else None
+    if bridge is None and MACRO_TOKEN in sql and native_stage_enabled(NativeStage.MACRO_CALLS):
+        report_native_fallback(
+            site=NativeFallbackSite.MACRO_UNBRIDGED_EXPANSION,
+            kind="macro_mocks" if state.macro_overrides else "outside_compile_inputs",
+        )
     expanded_sql, spans = (
         _expand_sql_macros(
             sql=sql,
@@ -1772,6 +1780,8 @@ def _parse_macro_arguments(
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
+    if native_stage_enabled(NativeStage.MACRO_CALLS):
+        report_native_fallback(site=NativeFallbackSite.MACRO_ARGUMENTS)
     rewritten_args_source: str
     placeholder_values: dict[str, object]
     rewritten_args_source, placeholder_values = _rewrite_nested_macro_calls(

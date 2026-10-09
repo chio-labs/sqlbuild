@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL scenario 'tests/scenarios/orders.sql' does not support macro mock CTE '__macro__tidy'. Scenarios run real project macros; use SQL unit tests for macro mocks."
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

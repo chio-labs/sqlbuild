@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::contracts::_helpers::type_comparison::{TypeComparison, types_equal};
+use crate::contracts::_helpers::type_comparison::{TypeComparer, TypeComparison};
 use crate::contracts::constants::{
     DYNAMIC_FAMILY_TYPE_MISMATCH_HELP, DYNAMIC_FAMILY_UNKNOWN_TYPE_HELP,
     DYNAMIC_OUTPUT_NOT_PROVEN_CODE, DYNAMIC_OUTPUT_NOT_PROVEN_HELP, NO_COMPILER_EVIDENCE,
@@ -16,7 +16,7 @@ use crate::contracts::models::{
 /// The dynamic column contract diagnostics of one model, before its fixed columns.
 pub(crate) fn dynamic_column_diagnostics(
     model: &ContractModel,
-    dialect: &str,
+    types: &TypeComparer<'_>,
 ) -> Result<Vec<ContractDiagnostic>, ContractDeferral> {
     let Some(schema) = model
         .schema
@@ -49,7 +49,7 @@ pub(crate) fn dynamic_column_diagnostics(
             ));
             continue;
         };
-        if types_equal(declared, inferred, dialect)? == TypeComparison::Different {
+        if types.types_equal(declared, inferred)? == TypeComparison::Different {
             diagnostics.push(family_diagnostic(
                 TYPE_MISMATCH_CODE,
                 ContractSeverity::Error,

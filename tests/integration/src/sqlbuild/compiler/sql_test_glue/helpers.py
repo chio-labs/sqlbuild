@@ -15,10 +15,12 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlTest,
+    CompileProjectInputs,
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -27,10 +29,15 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.planner._helpers.sql_tests import native_planning
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestAssembly,
+    NativeSqlTestAssemblyRequest,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
+from sqlbuild.compiler.sql_test_glue.types import (
+    NativeSqlTestAssemblyRow,
+    NativeSqlTestPlanRow,
+)
 
 
 @dataclass(frozen=True)
@@ -284,13 +291,121 @@ def _model_test(*, rng: random.Random, index: int, shape: SqlTestCorpusShape) ->
     return f'TEST (name "generated_{index}"{window});\n\nWITH\n{body}\nSELECT 1\n'
 
 
-def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProject:
-    """Write and compile a project, keeping any compile diagnostics on it."""
+_CASE_VALUES: dict[str, tuple[str, ...]] = {
+    "string": ('"open"', '"O\\\'Brien"', '"caf\u00e9 \u2603"', '""', '"a\\\\b"', "null"),
+    "integer": ("0", "-7", "8", "9223372036854775807", "null"),
+    "boolean": ("true", "false", "null"),
+    "float": ("1.25", "-0.5", "0.1", "100.0", "0.0", "null"),
+    "decimal": (
+        '"2.4700"',
+        '"-0.000"',
+        '"3.00"',
+        '"1E+5"',
+        '"0.0001230"',
+        '"12345678901234567890123456789.5"',
+        "null",
+    ),
+}
+_REFERENCING_HELPERS: tuple[str, ...] = (
+    'SELECT order_id, amount FROM __source("raw_orders")',
+    'SELECT order_id, amount FROM __ref("stg_orders")',
+    'SELECT region, label FROM __seed("regions")',
+    'SELECT order_id, amount FROM __table_fn("table_fn__customer_orders")(1)',
+    "SELECT 1 AS order_id, 2 AS amount",
+)
+_MOCK_READS: tuple[str, ...] = (
+    "SELECT * FROM {helper}",
+    "SELECT * FROM {upper_helper}",
+    "SELECT * FROM {via}",
+    "WITH {helper} AS (SELECT 1 AS order_id) SELECT * FROM {helper}",
+    "SELECT * FROM main.{helper}",
+    "SELECT * FROM {helper} WHERE order_id ==> 1",
+    "SELECT 1 AS order_id",
+)
+_ASSEMBLY_TARGETS: tuple[str, ...] = ("stg_orders", "int_orders", "fct_regions")
+
+
+def generated_sql_test_assembly_files(
+    *, rng: random.Random, test_count: int, shape: SqlTestCorpusShape
+) -> dict[str, str]:
+    """The planning projects plus typed parameter cases and mocks reading referencing helpers."""
+
+    files: dict[str, str] = generated_sql_test_files(rng=rng, test_count=test_count, shape=shape)
+    files.update(
+        (f"tests/unit/test_cases_{index}.sql", _case_test(rng=rng, index=index))
+        for index in range(test_count)
+    )
+    files.update(
+        (f"tests/unit/test_helper_mock_{index}.sql", _helper_mock_test(rng=rng, index=index))
+        for index in range(test_count)
+    )
+    return files
+
+
+def _case_test(*, rng: random.Random, index: int) -> str:
+    """A parameterized test over random typed parameters and up to three random cases."""
+
+    kinds: list[str] = rng.sample(sorted(_CASE_VALUES), k=rng.randint(1, 3))
+    parameters: str = ", ".join(f"p_{kind} (type {kind}, nullable true)" for kind in kinds)
+    cases: str = ", ".join(
+        f"case_{case} ({_case_values(rng=rng, kinds=kinds)})" for case in range(rng.randint(1, 3))
+    )
+    target: str = rng.choice(_ASSEMBLY_TARGETS)
+    used: str = ", ".join(f'@param("p_{kind}") AS p_{kind}' for kind in kinds)
+    return (
+        f'TEST (name "cases_{index}", parameters ({parameters}), cases ({cases}));\n\n'
+        f"WITH\n{_UPSTREAM[target][0]} AS (SELECT 1 AS order_id, {used}),\n"
+        f'__assert__{target}_rows AS (SELECT * FROM __ref("{target}") WHERE 1 = 0)\nSELECT 1\n'
+    )
+
+
+def _case_values(*, rng: random.Random, kinds: list[str]) -> str:
+    return ", ".join(f"p_{kind} {rng.choice(_CASE_VALUES[kind])}" for kind in kinds)
+
+
+def _helper_mock_test(*, rng: random.Random, index: int) -> str:
+    """A model test whose mocks read helpers, some of which call a reference."""
+
+    helper: str = f"source_rows_{index}"
+    via: str = f"via_{index}"
+    target: str = rng.choice(_ASSEMBLY_TARGETS)
+    mocks: list[str] = rng.sample(list(_UPSTREAM[target]), k=rng.randint(1, len(_UPSTREAM[target])))
+    reads: dict[str, str] = {"helper": helper, "upper_helper": helper.upper(), "via": via}
+    mock_ctes: list[str] = [
+        f"{mock} AS (\n  {rng.choice(_MOCK_READS).format(**reads)}\n)" for mock in mocks
+    ]
+    check: str = rng.choice(
+        (
+            f"__expected__{target} AS (SELECT order_id FROM {helper})",
+            f'__assert__{target}_rows AS (SELECT * FROM __ref("{target}") WHERE 1 = 0)',
+            f"__expected__{target} AS (SELECT 1 AS order_id)",
+        )
+    )
+    comment: str = rng.choice(("", "", "-- r\u00e9sum\u00e9\n"))
+    ctes: str = ",\n".join(
+        (
+            f"{helper} AS (\n  {rng.choice(_REFERENCING_HELPERS)}\n)",
+            f"{via} AS (SELECT * FROM {helper})",
+            *mock_ctes,
+            check,
+        )
+    )
+    return f'TEST (name "helper_mock_{index}");\n\nWITH\n{comment}{ctes}\nSELECT 1\n'
+
+
+def write_project(*, project_dir: Path, files: dict[str, str]) -> None:
+    """Write a project's files below `project_dir`."""
 
     for relative_path, contents in files.items():
         path: Path = project_dir / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_text(contents, encoding="utf-8")
+
+
+def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProject:
+    """Write and compile a project, keeping any compile diagnostics on it."""
+
+    write_project(project_dir=project_dir, files=files)
     return build_project_graph(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
@@ -328,6 +443,65 @@ def use_sql_test_glue(*, monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None
         "native_stage_enabled",
         lambda stage: enabled and stage is NativeStage.SQL_TEST_GLUE,
     )
+
+
+def assembly_outcome(
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, native: bool
+) -> PlanningCallOutcome:
+    """The compiled SQL tests and diagnostics with native or Python assembly, or what it raises."""
+
+    monkeypatch.setattr(
+        sql_test_stage,
+        "native_stage_enabled",
+        lambda stage: native and stage is NativeStage.SQL_TEST_GLUE,
+    )
+    return _outcome(lambda: _compiled_tests_and_diagnostics(project_dir=project_dir))
+
+
+def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, object]:
+    project: CompiledProject = build_project_graph(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=DuckDbAdapter(),
+    ).project
+    return project.sql_tests, project.diagnostics
+
+
+def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    """Count tests compile takes from the native assembly, with diagnostics, cases, or defers.
+
+    `native_assembled` counts only assemblies the stage seam hands compile; a deferred test
+    counts under `deferred_<kind>` and is assembled by Python, so it never counts as native work.
+    """
+
+    answers: Counter[str] = Counter()
+    assemble: Callable[[NativeSqlTestAssemblyRequest], list[NativeSqlTestAssemblyRow]] = (
+        native_module.assemble_compiled_sql_tests
+    )
+    seam: Callable[..., tuple[NativeSqlTestAssembly | None, ...]] = (
+        sql_test_stage.assemble_native_sql_tests
+    )
+
+    def counted_deferrals(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
+        rows: list[NativeSqlTestAssemblyRow] = assemble(request)
+        deferrals: list[str] = list(filter(None, (row[1] for row in rows)))
+        answers.update(f"deferred_{kind}" for kind in deferrals)
+        return rows
+
+    def counted_assemblies(
+        *, inputs: CompileProjectInputs
+    ) -> tuple[NativeSqlTestAssembly | None, ...]:
+        assemblies: tuple[NativeSqlTestAssembly | None, ...] = seam(inputs=inputs)
+        native: list[NativeSqlTestAssembly] = list(filter(None, assemblies))
+        answers["native_assembled"] += len(native)
+        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in native)
+        answers["native_case_fingerprints"] += sum(
+            item.test.case_fingerprint is not None for item in native
+        )
+        return assemblies
+
+    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_deferrals)
+    monkeypatch.setattr(sql_test_stage, "assemble_native_sql_tests", counted_assemblies)
+    return answers
 
 
 def planning_outcome(

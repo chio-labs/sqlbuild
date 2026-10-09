@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro '@answer' in '<project>/models/staging/stg_orders.sql' must return a SQL string when used directly in SQL"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

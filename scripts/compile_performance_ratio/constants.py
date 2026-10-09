@@ -34,6 +34,8 @@ BASE_GENERATOR_ENTRY: str = (
     "kind=sys.argv[1], project_dir=Path(sys.argv[2]), models=int(sys.argv[3]))"
 )
 PYTHONPATH_KEY: str = "PYTHONPATH"
+COMPILER_ENGINE_KEY: str = "SQLBUILD_COMPILER_ENGINE"
+PHASE_NOISE_FLOOR_MS: float = 50.0
 ERROR_TAIL_CHARACTERS: int = 2000
 FRESH_SOURCE_SHARE: float = 713 / 3000
 FRESH_SEED_SHARE: float = 141 / 3000
@@ -45,9 +47,13 @@ REPORTED_PHASES: tuple[str, ...] = (
     "total_ms",
     "graph_ms",
     "model_analysis_ms",
+    "model_analysis_cpu_ms",
     "analysis_native_ms",
+    "contracts_ms",
+    "contracts_cpu_ms",
     "built_in_rules_ms",
     "custom_rules_ms",
+    "custom_rules_cpu_ms",
     "test_planning_ms",
     "write_ms",
 )

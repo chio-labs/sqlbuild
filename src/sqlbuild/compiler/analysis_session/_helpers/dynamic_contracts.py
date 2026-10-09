@@ -1,0 +1,73 @@
+"""Prove dynamic column contracts natively for models outside the analysis session."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import sqlbuild._native as _native
+from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_analysis_deferral
+from sqlbuild.compiler.analysis_session._helpers.session_rows import (
+    contract_proof,
+    family_rows,
+    shape_rows,
+)
+from sqlbuild.compiler.analysis_session.constants import CONTRACT_DEFERRED, DEFERRAL_DYNAMIC_PIVOT
+from sqlbuild.compiler.analysis_session.models import NativePivotTables
+from sqlbuild.compiler.analysis_session.types import ContractRow, ShapeRows
+from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
+from sqlbuild.compiler.compile.models import DynamicColumnContractProof
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
+
+type _ModelRow = tuple[str, list[tuple[str, str, str, str, str, str | None]]]
+
+
+def native_dynamic_contracts(
+    *,
+    session: Any | None,
+    tables: NativePivotTables,
+    models: tuple[tuple[str, tuple[SchemaDynamicColumnFamily, ...]], ...],
+) -> tuple[DynamicColumnContractProof | None, ...]:
+    """Each model's proof in order, None (recorded) where Python must prove it."""
+
+    if not models:
+        return ()
+    rows: list[_ModelRow] = [_model_row(sql=sql, families=families) for sql, families in models]
+    contracts: list[ContractRow] | None = (
+        session.prove_dynamic_contracts(rows)
+        if session is not None
+        else _standalone_contracts(tables=tables, rows=rows)
+    )
+    if contracts is None:
+        record_analysis_deferral(kind=DEFERRAL_DYNAMIC_PIVOT, count=len(models))
+        return (None,) * len(models)
+    record_analysis_deferral(
+        kind=DEFERRAL_DYNAMIC_PIVOT,
+        count=sum(kind == CONTRACT_DEFERRED for kind, _ in contracts),
+    )
+    return tuple(contract_proof(proof) for _, proof in contracts)
+
+
+def _model_row(*, sql: str, families: tuple[SchemaDynamicColumnFamily, ...]) -> _ModelRow:
+    return (sql, list(map(PythonModelAnalysis.family_row, families)))
+
+
+def _standalone_contracts(
+    *, tables: NativePivotTables, rows: list[_ModelRow]
+) -> list[ContractRow] | None:
+    shapes: tuple[ShapeRows | None, ...] = (
+        shape_rows(tables.column_types_by_table),
+        shape_rows(tables.authoritative_column_types_by_table),
+        shape_rows(tables.column_nullability_by_table),
+    )
+    if any(shape is None for shape in shapes):
+        return None
+    return _native.prove_dynamic_column_contracts(
+        (
+            tables.dialect or "generic",
+            shapes[0] or [],
+            shapes[1] or [],
+            shapes[2] or [],
+            family_rows(tables.dynamic_families_by_table),
+            rows,
+        )
+    )

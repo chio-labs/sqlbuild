@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D002",
+     "message": "FUNCTION(...) in '<project>/functions/sql/is_placed.sql' contains invalid SQLBuild header syntax: expected value at position 42"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

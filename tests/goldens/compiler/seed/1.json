@@ -1,0 +1,37 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "C214",
+     "message": "Model file models/features/dbt_order_counts.sql uses __dbt_ref(\"upstream_orders\") but no dbt manifest was found",
+     "help": "Run dbt compile or configure dbt target_path so SQLBuild can read manifest.json."
+    }
+   ]
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "C214",
+     "message": "Model file models/features/dbt_order_counts.sql uses __dbt_ref(\"upstream_orders\") but no dbt manifest was found",
+     "help": "Run dbt compile or configure dbt target_path so SQLBuild can read manifest.json."
+    }
+   ]
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

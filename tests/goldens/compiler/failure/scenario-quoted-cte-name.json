@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL scenario 'tests/scenarios/orders.sql' CTE name \"__source__raw_orders\" must be an unquoted identifier of ASCII letters, digits and underscores\n  --> tests/scenarios/orders.sql:6:1",
+     "help": "rename the CTE, for example __source__raw_orders; quoted CTE names and names with $ or non-ASCII characters are not supported"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D008",
+     "message": "Seed declaration 'order_channels' in seeds/order_channels.yml has no matching CSV file under seeds/"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

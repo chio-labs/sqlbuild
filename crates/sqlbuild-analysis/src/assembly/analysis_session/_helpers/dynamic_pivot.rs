@@ -1,23 +1,25 @@
 //! Python's `analyze_dynamic_column_contract` over the crate's parse of the model SQL.
 
 use std::collections::{HashMap, HashSet};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
-use serde_json::{Map, Value, json};
+use rayon::ThreadPool;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use serde_json::{Map, Value};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
     casefold, column_name, dict_list, identifier_name, is_single_wildcard, nested, node_key,
-    payload, relation_name, render_type, truthy,
+    parse_one, payload, relation_name, render_type, to_dict, truthy,
 };
 use crate::assembly::analysis_session::constants::{
     ALIAS_AST_KIND, CAST_AST_KIND, CTE_AST_KIND, DUCKDB_DIALECT, DYNAMIC_VALUE_SOURCE_KINDS,
-    MAX_FUNCTION_CALL_DEPTH, MOTHERDUCK_DIALECT, PIVOT_AST_KIND, QUERY_AST_KINDS, SELECT_AST_KIND,
+    MOTHERDUCK_DIALECT, PIVOT_AST_KIND, QUERY_AST_KINDS, SELECT_AST_KIND,
     SIMPLIFIED_PIVOT_DIALECTS, SUPPORTED_PIVOT_DIALECTS, TYPE_PRESERVING_AGGREGATES,
     UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
 use crate::assembly::analysis_session::models::{
-    ColumnFact, ContractProof, DynamicFamily, PivotOutcome,
+    ColumnFact, ContractProof, DynamicFamily, PivotModel, PivotOutcome, PivotTables,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 
@@ -31,6 +33,47 @@ pub(crate) struct PivotFacts<'a> {
     pub(crate) authoritative_types: &'a Shapes,
     pub(crate) column_nullability: &'a Shapes,
     pub(crate) families_by_table: &'a [(String, Vec<DynamicFamily>)],
+}
+
+/// Each model's proof in order; a model whose proof panics is deferred to Python.
+pub(crate) fn pivot_outcomes(models: &[PivotModel], tables: &PivotTables) -> Vec<PivotOutcome> {
+    let facts = pivot_facts(tables);
+    models
+        .iter()
+        .map(|model| guarded_outcome(model, &facts))
+        .collect()
+}
+
+/// Each model's proof in order on `pool`; a model whose proof panics is deferred to Python.
+pub(crate) fn pooled_pivot_outcomes(
+    pool: &ThreadPool,
+    models: &[PivotModel],
+    tables: &PivotTables,
+) -> Vec<PivotOutcome> {
+    let facts = pivot_facts(tables);
+    pool.install(|| {
+        models
+            .par_iter()
+            .map(|model| guarded_outcome(model, &facts))
+            .collect()
+    })
+}
+
+fn pivot_facts(tables: &PivotTables) -> PivotFacts<'_> {
+    PivotFacts {
+        dialect: &tables.dialect,
+        column_types: &tables.column_types,
+        authoritative_types: &tables.authoritative_types,
+        column_nullability: &tables.column_nullability,
+        families_by_table: &tables.families_by_table,
+    }
+}
+
+fn guarded_outcome(model: &PivotModel, facts: &PivotFacts<'_>) -> PivotOutcome {
+    catch_unwind(AssertUnwindSafe(|| {
+        pivot_outcome(&model.sql, &model.families, facts)
+    }))
+    .unwrap_or(PivotOutcome::Deferred)
 }
 
 /// One CTE body by folded name; None for a CTE with column aliases.
@@ -80,25 +123,9 @@ pub(crate) fn pivot_outcome(
 
 /// Python's `parse_one(...).to_dict()`, or None where Python reports a parse error.
 fn parsed(sql: &str, dialect: &str) -> Result<Option<Value>, String> {
-    let guard: ComplexityGuardOptions =
-        serde_json::from_value(json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}))
-            .map_err(|error| error.to_string())?;
-    let options: ParseOptions = ParseOptions {
-        complexity_guard: Some(guard),
-    };
-    let parsed: Result<Vec<Expression>, _> = Dialect::get_by_name(dialect)
-        .ok_or_else(|| format!("unknown dialect {dialect}"))?
-        .parse_with_options(sql, &options);
-    let expressions: Vec<Expression> = match parsed {
-        Ok(expressions) => expressions,
-        Err(_) => return Ok(None),
-    };
-    let [expression] = expressions.as_slice() else {
-        return Ok(None);
-    };
-    serde_json::to_value(expression)
-        .map(Some)
-        .map_err(|error| error.to_string())
+    parse_one(sql, dialect)?
+        .map(|expression| to_dict(&expression))
+        .transpose()
 }
 
 /// Casefolding equals Python's only for ASCII text.

@@ -6,6 +6,7 @@ import random
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,7 +19,6 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,
-    DynamicColumnContractProof,
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
@@ -27,11 +27,13 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
     AnalysisFallbackTestCase,
     GeneratedAnalysisParityTestCase,
     SessionFailureTestCase,
+    SharedAnalysisTestCase,
     StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     AnalysisParity,
     FailingProvideSession,
+    NativePivotProofs,
     analysis_request,
     compare_analyses,
     compile_inputs,
@@ -40,6 +42,8 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     generated_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
+    shared_analysis_files,
+    started_sessions,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -54,7 +58,7 @@ _ORDERS_PROJECT: dict[str, str] = {
     "test_case",
     [
         GeneratedAnalysisParityTestCase(
-            description="stars, CTEs, set operations, untyped inputs, contracts, contract CTEs, pivots",
+            description="stars, CTEs, CTE facts, set operations, untyped inputs, contracts, pivots",
             seed=20261008,
             count=6,
             model_count=24,
@@ -62,8 +66,9 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
+            expected_minimum_python_cte_recoveries=40,
             expected_minimum_proven_pivots=12,
-            expected_maximum_enrichment_deferrals=120,
+            expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=90,
         )
     ],
@@ -90,19 +95,82 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
     assert kinds["analysis_session:session"] == kinds["analysis_session:expression_shapes"] == 0
     assert kinds["analysis_session:dynamic_pivot"] == 0
+    assert parity.python_cte_recoveries >= test_case.expected_minimum_python_cte_recoveries
     assert (
-        parity.analysed_models - kinds["analysis_session:legacy_analysis"]
+        parity.analysed_models
+        - kinds["analysis_session:legacy_analysis"]
+        - kinds["analysis_session:input_enrichment"]
         >= test_case.expected_minimum_native
     )
     assert parity.expression_shapes >= test_case.expected_minimum_expression_shapes
     assert parity.pivot_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.standalone_proofs >= test_case.expected_minimum_pivot_proofs
+    assert parity.session_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.proven_pivots >= test_case.expected_minimum_proven_pivots
     assert (
         kinds["analysis_session:input_enrichment"]
         <= test_case.expected_maximum_enrichment_deferrals
     )
     assert parity.native_enrichments >= test_case.expected_minimum_native_enrichments
+    assert parity.native_column_objects == parity.native_column_values > 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedAnalysisTestCase(
+            description="equal regional queries, missing-column readers and a unique summary",
+            regions=("east", "west", "north", "south"),
+            inexact_regions=("east", "west", "north"),
+            dialects=("duckdb", "snowflake"),
+            expected_analysed=24,
+            expected_shared=22,
+            expected_reanalysed=6,
+            expected_unshared=2,
+            expected_column_values=12,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_equal_model_queries_when_analysing_natively_then_shares_and_matches_python(
+    test_case: SharedAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    inputs: CompileProjectInputs = compile_inputs(
+        project_dir=tmp_path / "project",
+        files=shared_analysis_files(
+            regions=test_case.regions, inexact_regions=test_case.inexact_regions
+        ),
+    )
+    sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
+    parity: AnalysisParity = AnalysisParity()
+
+    _ = [
+        compare_analyses(inputs=inputs, dialect=dialect, parity=parity, monkeypatch=monkeypatch)
+        for dialect in test_case.dialects
+    ]
+
+    shared: int = sum(session.sharing[0] for session in sessions)
+
+    assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
+    assert (
+        parity.analysed_models,
+        shared,
+        sum(session.sharing[1] for session in sessions),
+        parity.analysed_models - shared,
+        deferral_kinds(record_dir),
+        parity.native_column_objects,
+        parity.native_column_values,
+    ) == (
+        test_case.expected_analysed,
+        test_case.expected_shared,
+        test_case.expected_reanalysed,
+        test_case.expected_unshared,
+        Counter(),
+        test_case.expected_column_values,
+        test_case.expected_column_values,
+    )
 
 
 @pytest.mark.parametrize(
@@ -199,12 +267,24 @@ def test_given_session_failure_after_deferrals_when_analysing_then_records_only_
             description="a selection that leaves the pivots out of model analysis",
             analysed_models=frozenset({"orders_list"}),
             expected_native_proofs=2,
+            expected_session_proofs=2,
             expected_proven_by_model={
                 "orders_list": None,
                 "status_amounts": True,
                 "status_passthrough": True,
             },
-        )
+        ),
+        StandalonePivotProofTestCase(
+            description="no model analysis, so the proofs run without a session",
+            analysed_models=frozenset(),
+            expected_native_proofs=2,
+            expected_session_proofs=0,
+            expected_proven_by_model={
+                "orders_list": None,
+                "status_amounts": True,
+                "status_passthrough": True,
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -215,7 +295,7 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
         project_dir=tmp_path / "project", files=pivot_project_files()
     )
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
-    proofs: list[DynamicColumnContractProof | None] = native_pivot_proofs(monkeypatch=monkeypatch)
+    recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
 
     project: CompiledProject = assemble_compiled_project(
         inputs=inputs,
@@ -224,13 +304,19 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     )
 
     assert (
-        all(proof is not None for proof in proofs),
-        len(proofs),
+        all(proof is not None for proof in recorded.proofs),
+        len(recorded.proofs),
+        recorded.session_proofs,
         {
             model.name: getattr(model.dynamic_column_contract, "output_proven", None)
             for model in project.models
         },
-    ) == (True, test_case.expected_native_proofs, test_case.expected_proven_by_model)
+    ) == (
+        True,
+        test_case.expected_native_proofs,
+        test_case.expected_session_proofs,
+        test_case.expected_proven_by_model,
+    )
 
 
 if __name__ == "__main__":

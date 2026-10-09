@@ -23,7 +23,6 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     record_analysis_cache_metrics,
     write_model_analyses,
 )
-from sqlbuild.compiler.compile._helpers.analysis.columns import substitute_placeholder_defaults
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     NativeCompactAnalysis,
     analyze_columns_and_lineage_with_polyglot,
@@ -33,6 +32,10 @@ from sqlbuild.compiler.compile._helpers.analysis.compact import (
 )
 from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
     analyze_dynamic_column_contract,
+)
+from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import (
+    model_dynamic_families,
+    model_pivot_sql,
 )
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import (
     model_placeholders as _model_placeholders,
@@ -86,7 +89,7 @@ from sqlbuild.compiler.compile._helpers.native_stages.assembly import (
     analyze_model_sql_by_engine,
     dynamic_column_contract_by_engine,
     expression_source_shapes_by_engine,
-    project_resources_by_engine,
+    project_facts_by_engine,
 )
 from sqlbuild.compiler.compile._helpers.native_stages.sql_tests import (
     assemble_sql_tests_by_engine,
@@ -109,6 +112,11 @@ from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     report_mocks_reading_referencing_helpers,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
+from sqlbuild.compiler.compile._helpers.sql_tests.scope_deps import (
+    function_sql_test_scope_deps,
+    macro_sql_test_scope_deps,
+    udf_sql_test_scope_deps,
+)
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
@@ -163,11 +171,18 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     SqlTestMode,
 )
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.profiling.main._record_cpu import record_compile_cpu_timing
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
-from sqlbuild.compiler.project_assembly.models import NativeProjectResources
-from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.project_assembly.models import (
+    NativeModelFacts,
+    NativeProjectFacts,
+    NativeProjectResources,
+)
 from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -325,8 +340,12 @@ def assemble_compiled_project(
         else None
     )
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
+    native_session: Any | None = None
     if sql_analysis_enabled:
-        with record_compile_timing("model_analysis_ms"):
+        with (
+            record_compile_timing("model_analysis_ms"),
+            record_compile_cpu_timing("model_analysis_cpu_ms"),
+        ):
             python_analysis: partial[dict[str, _ModelSqlAnalysis]] = partial(
                 _analyze_model_sql_in_parallel,
                 known_functions=known_function_names(inputs.sql_function_inputs),
@@ -350,20 +369,22 @@ def assemble_compiled_project(
                 analysis_cache=analysis_cache,
                 complete_binding_schemas=complete_binding_schemas,
             )
-            model_sql_analysis_by_name = analyze_model_sql_by_engine(
+            model_sql_analysis_by_name, native_session = analyze_model_sql_by_engine(
                 python_analysis=python_analysis,
                 dynamic_families_by_table=dynamic_families_by_table,
             )
-    native: NativeProjectResources | None = project_resources_by_engine(
+    native: NativeProjectFacts | None = project_facts_by_engine(
         inputs=inputs,
         dialect=profile.sql_analysis_dialect,
         analysis_model_names=analysis_model_names,
-        analysis_succeeded=frozenset(
-            name
-            for name, analysis in model_sql_analysis_by_name.items()
-            if analysis.polyglot_analysis.analysis_succeeded
-        ),
+        analyses=model_sql_analysis_by_name,
+        session=native_session,
+        column_types_by_table=column_types_by_table,
+        authoritative_column_types_by_table=complete_binding_schemas,
+        column_nullability_by_table=column_nullability_by_table,
+        dynamic_families_by_table=dynamic_families_by_table,
     )
+    resources: NativeProjectResources | None = native.resources if native else None
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
     report_scope_index_errors(index=scope_index)
     effective_target_values: dict[str, object] = resolve_early_model_templates(
@@ -416,7 +437,7 @@ def assemble_compiled_project(
                 sql_validation_enabled=(
                     analysis_model_names is None or _model_name(model_input) in analysis_model_names
                 ),
-                native_deps=native.model_deps[index] if native else None,
+                native_model=native.models[index] if native else None,
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
                 dynamic_contract_analysis_inputs=dynamic_contract_analysis_inputs,
@@ -431,7 +452,7 @@ def assemble_compiled_project(
                 source_input=source_input,
                 target_config=inputs.effective_target,
                 effective_vars=inputs.effective_vars,
-                native_entry=native.source_entries[index] if native else None,
+                native_entry=resources.source_entries[index] if resources else None,
             )
             for index, source_input in enumerate(inputs.source_inputs)
         ),
@@ -441,7 +462,7 @@ def assemble_compiled_project(
                 defaults=inputs.project_config.defaults,
                 target_config=inputs.effective_target,
                 effective_vars=inputs.effective_vars,
-                native_destination=native.seed_destinations[index] if native else None,
+                native_destination=resources.seed_destinations[index] if resources else None,
             )
             for index, seed_input in enumerate(inputs.seed_inputs)
         ),
@@ -449,14 +470,14 @@ def assemble_compiled_project(
             _assemble_compiled_function(
                 function_input=function_input,
                 seed_names=seed_names,
-                native_deps=native.function_deps[index] if native else None,
+                native_deps=resources.function_deps[index] if resources else None,
             )
             for index, function_input in enumerate(inputs.sql_function_inputs)
         ),
         audits=tuple(
             _assemble_compiled_audit(
                 audit_input=audit_input,
-                native_scope_deps=native.audit_scope_deps[index] if native else None,
+                native_scope_deps=resources.audit_scope_deps[index] if resources else None,
             )
             for index, audit_input in enumerate(inputs.audit_inputs)
         ),
@@ -493,6 +514,7 @@ def assemble_compiled_project(
         project=project,
         profile=profile,
         resource_sql_analysis=sql_analysis_enabled and not inputs.no_sql_validation,
+        native_session=native_session,
         binding_results={
             name: analysis.polyglot_analysis.binding_diagnostics
             for name, analysis in model_sql_analysis_by_name.items()
@@ -519,7 +541,7 @@ def _assemble_compiled_model(
     model_input: CompileModelInput,
     sql_analysis_enabled: bool,
     sql_validation_enabled: bool = True,
-    native_deps: tuple[CompiledObjectKey, ...] | None = None,
+    native_model: NativeModelFacts | None = None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     column_types_by_table: dict[str, dict[str, str]] | None = None,
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs | None = None,
@@ -528,6 +550,7 @@ def _assemble_compiled_model(
     allow_compact_analysis: bool = False,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
+    native_deps: tuple[CompiledObjectKey, ...] | None = native_model.deps if native_model else None
     syntax_validated: bool = native_deps is not None
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     analysis_query_sql: str = cursor_intrinsics_analysis_sql(
@@ -595,22 +618,12 @@ def _assemble_compiled_model(
         )
     dynamic_column_contract: DynamicColumnContractProof | None = dynamic_column_contract_by_engine(
         sql_analysis=sql_analysis,
+        native_proof=native_model.dynamic_contract if native_model else None,
         python_proof=partial(
             analyze_dynamic_column_contract,
-            query_sql=(
-                substitute_placeholder_defaults(
-                    query_sql=analysis_query_sql,
-                    placeholders=placeholders,
-                )
-                if placeholders
-                else analysis_query_sql
-            ),
+            query_sql=model_pivot_sql(query_sql=analysis_query_sql, placeholders=placeholders),
             dialect=profile.sql_analysis_dialect,
-            families=(
-                model_input.schema_entry.dynamic_columns
-                if model_input.schema_entry is not None
-                else ()
-            ),
+            families=model_dynamic_families(model_input),
             column_types_by_table=column_types_by_table or {},
             authoritative_column_types_by_table=(
                 dynamic_contract_analysis_inputs.authoritative_column_types_by_table
@@ -1570,6 +1583,8 @@ def _build_source_relation_entry(
 def _expand_target_value(*, value: str | None, effective_vars: dict[str, object]) -> str | None:
     if value is None:
         return None
+    if native_stage_enabled(NativeStage.MODEL_CONFIG):
+        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="source_target")
     return str(
         expand_template_data(
             value=value,
@@ -1720,17 +1735,17 @@ def _assemble_compiled_sql_test(
     target_model_names: tuple[str, ...] = ()
     if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload):
         if test_input.payload.mode == SqlTestMode.MACRO:
-            scope_deps = _macro_sql_test_scope_deps(
+            scope_deps = macro_sql_test_scope_deps(
                 tested_macro_names=test_input.payload.tested_resource_names,
                 model_inputs=model_inputs,
             )
         elif test_input.payload.mode == SqlTestMode.UDF:
-            scope_deps = _udf_sql_test_scope_deps(
+            scope_deps = udf_sql_test_scope_deps(
                 tested_udf_names=test_input.payload.tested_resource_names,
                 model_inputs=model_inputs,
             )
         else:
-            scope_deps = _function_sql_test_scope_deps(
+            scope_deps = function_sql_test_scope_deps(
                 tested_function_names=test_input.payload.tested_resource_names,
             )
         compiled_payload = CompiledDirectLogicSqlTestPayload(
@@ -1848,59 +1863,6 @@ def _assemble_compiled_sql_test(
         ),
         target_model_names=target_model_names,
         tested_resources=tested_resources,
-    )
-
-
-def _macro_sql_test_scope_deps(
-    *, tested_macro_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
-) -> tuple[CompiledObjectKey, ...]:
-    tested_names: frozenset[str] = frozenset(tested_macro_names)
-    scope_deps: list[CompiledObjectKey] = []
-    model_input: CompileModelInput
-    for model_input in model_inputs:
-        model_macro_deps: frozenset[str] = frozenset(
-            model_input.macro_deps or find_macro_call_names(model_input.macro_source_sql)
-        )
-        if not tested_names.intersection(model_macro_deps):
-            continue
-        scope_deps.append(
-            CompiledObjectKey(
-                resource_type=CompiledResourceType.MODEL,
-                name=model_input.model_file.file_path.stem,
-            )
-        )
-    return tuple(scope_deps)
-
-
-def _udf_sql_test_scope_deps(
-    *, tested_udf_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
-) -> tuple[CompiledObjectKey, ...]:
-    tested_names: frozenset[str] = frozenset(tested_udf_names)
-    scope_deps: list[CompiledObjectKey] = []
-    model_input: CompileModelInput
-    for model_input in model_inputs:
-        model_udf_deps: frozenset[str] = frozenset(
-            reference.ref_name
-            for reference in model_input.references
-            if reference.ref_kind == SqlReferenceKind.UDF
-        )
-        if not tested_names.intersection(model_udf_deps):
-            continue
-        scope_deps.append(
-            CompiledObjectKey(
-                resource_type=CompiledResourceType.MODEL,
-                name=model_input.model_file.file_path.stem,
-            )
-        )
-    return tuple(scope_deps)
-
-
-def _function_sql_test_scope_deps(
-    *, tested_function_names: tuple[str, ...]
-) -> tuple[CompiledObjectKey, ...]:
-    return tuple(
-        CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name)
-        for function_name in tested_function_names
     )
 
 

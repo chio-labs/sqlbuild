@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "template expression has unterminated single-quoted string at position 9"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

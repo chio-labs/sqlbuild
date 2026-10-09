@@ -161,6 +161,7 @@ def evaluate_native(
         cache_misses=(0 if reused else native_misses) + custom.cache_misses,
         built_in_ms=0 if reused else int(payload.get("built_in_ms", 0)),
         custom_ms=custom.custom_ms,
+        custom_cpu_ms=custom.custom_cpu_ms,
     )
 
 

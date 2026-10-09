@@ -26,6 +26,13 @@ def _pivot_model(*, pivot_column: str, body: str) -> str:
     )
 
 
+def _contract_header(columns: str) -> str:
+    return (
+        'MODEL (\n  description "Order totals per customer",\n  contract enforced,\n'
+        f"  columns (\n{columns}  ),\n);\n\n"
+    )
+
+
 def analysis_session_failure_cases() -> tuple[FailureCase, ...]:
     """Return this lane's failure cases; the lane appends here without editing shared lists."""
 
@@ -68,6 +75,29 @@ def analysis_session_failure_cases() -> tuple[FailureCase, ...]:
                 "  columns (\n    customer_id (type INTEGER),\n    amount (type VARCHAR),\n  ),\n"
                 ");\n\n"
                 f"SELECT customer_id, amount\nFROM (SELECT * FROM {_ORDERS}) staged\n",
+            },
+        ),
+        failure_case(
+            name="analysis-session-cte-fact-type-mismatch",
+            expected_code="K002",
+            files={
+                FAILURE_MART_PATH: _contract_header(
+                    "    customer_id (type INTEGER),\n    total_amount (type VARCHAR),\n"
+                )
+                + "WITH totals AS (\n  SELECT customer_id, CAST(amount AS DOUBLE) AS total_amount\n"
+                f"  FROM {_ORDERS}\n)\n"
+                "SELECT customer_id + 0 AS customer_id, total_amount FROM totals\n",
+            },
+        ),
+        failure_case(
+            name="analysis-session-cte-fact-nullability",
+            expected_code="K004",
+            files={
+                FAILURE_MART_PATH: _contract_header(
+                    "    customer_id (type INTEGER),\n    note (type VARCHAR, nullable false),\n"
+                )
+                + "WITH base AS (\n  SELECT customer_id, CAST(NULL AS VARCHAR) AS note\n"
+                f"  FROM {_ORDERS}\n)\nSELECT customer_id + 0 AS customer_id, note FROM base\n",
             },
         ),
         failure_case(

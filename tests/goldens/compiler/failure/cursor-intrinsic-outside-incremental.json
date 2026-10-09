@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Model 'stg_orders' uses cursor intrinsics but is not a built-in incremental model"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

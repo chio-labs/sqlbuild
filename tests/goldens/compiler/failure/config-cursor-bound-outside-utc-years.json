@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'stg_orders': cursor_start value '0001-01-01T00:00:00+01:00' falls outside years 1-9999 once converted to UTC",
+     "help": "keep cursor_start within years 1-9999 in UTC, add this to the MODEL header:\n            MODEL (\n              cursor_start '0001-01-01T00:00:00+00:00',\n              ...\n            );"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

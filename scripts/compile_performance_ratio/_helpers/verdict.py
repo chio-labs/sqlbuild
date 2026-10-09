@@ -47,5 +47,38 @@ def ratio_failures(
     return tuple(failures)
 
 
+def phase_failures(
+    *,
+    comparisons: tuple[CompileComparison, ...],
+    modes: tuple[str, ...],
+    phases: tuple[str, ...],
+    max_ratio: float,
+    noise_floor_ms: float,
+) -> tuple[str, ...]:
+    """Describe every gated phase that is unmeasured or slower than ratio plus floor allow."""
+
+    measured: dict[str, CompileComparison] = {
+        comparison.mode: comparison for comparison in comparisons
+    }
+    failures: list[str] = []
+    for mode in modes:
+        comparison: CompileComparison | None = measured.get(mode)
+        if comparison is None:
+            failures.append(f"{mode}: no measurement")
+            continue
+        for phase in phases:
+            prefix: str = f"{comparison.kind} {comparison.models} {mode} {phase}"
+            base: float | None = comparison.base_timings_ms.get(phase)
+            head: float | None = comparison.head_timings_ms.get(phase)
+            if base is None or head is None:
+                failures.append(f"{prefix}: not reported")
+            elif head > base * max_ratio + noise_floor_ms:
+                failures.append(
+                    f"{prefix}: {head:.0f} ms exceeds {max_ratio:.2f}x base {base:.0f} ms "
+                    f"plus {noise_floor_ms:.0f} ms"
+                )
+    return tuple(failures)
+
+
 def _measured(seconds: float) -> bool:
     return math.isfinite(seconds) and seconds > 0

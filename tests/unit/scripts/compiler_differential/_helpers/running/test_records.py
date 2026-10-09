@@ -1,4 +1,4 @@
-"""Wheel-site and deferral records are summed per engine, site and corpus, never gated."""
+"""Wheel-site, deferral and fallback records are summed per engine, site and corpus."""
 
 from __future__ import annotations
 
@@ -33,16 +33,26 @@ _SITE: str = "compiler/compile/_helpers/analysis/columns.py:_infer_columns_with_
                 "2-plan/analysis-deferrals-12.jsonl": (
                     json.dumps({"kind": "legacy_fallback", "site": "compact.py"}) + "\n"
                 ),
+                "0-compile/native-fallbacks-11.json": json.dumps(
+                    {"fallbacks": [["model_loop.sql_variables", "deferred", 2]]}
+                ),
+                "2-plan/native-fallbacks-12.json": json.dumps(
+                    {"fallbacks": [["model_loop.sql_variables", "deferred", 1]]}
+                ),
             },
             expected_wheel_sites={(_SITE, "parse_one"): 5},
             expected_deferrals={("legacy_fallback", "compact.py"): 1},
+            expected_fallbacks={("model_loop.sql_variables", "deferred"): 3},
             expected_lines=(
                 "Polyglot wheel calls (python):",
                 f"        5 {_SITE} parse_one (seed 5)",
                 "Analysis deferrals (python):",
                 "        1 legacy_fallback compact.py (seed 1)",
+                "Native-to-Python fallbacks (python):",
+                "        3 model_loop.sql_variables deferred (seed 3)",
                 "Polyglot wheel calls (native-preview): none recorded",
                 "Analysis deferrals (native-preview): none recorded",
+                "Native-to-Python fallbacks (native-preview): none recorded",
             ),
         )
     ],
@@ -71,9 +81,10 @@ def test_given_record_files_when_reporting_then_counts_are_summed_per_engine_and
         )
     )
 
-    assert (records.wheel_sites, records.deferrals) == (
+    assert (records.wheel_sites, records.deferrals, records.fallbacks) == (
         test_case.expected_wheel_sites,
         test_case.expected_deferrals,
+        test_case.expected_fallbacks,
     )
     assert report.splitlines() == list(test_case.expected_lines)
 

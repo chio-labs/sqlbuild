@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D015",
+     "message": "Event exporter 'publish_events' in sinks/lifecycle.py requires unknown provider 'destination_client'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

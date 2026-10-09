@@ -34,7 +34,9 @@ from sqlbuild.compiler.compile.types import (
     SqlReferenceScanFailure,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
@@ -99,7 +101,11 @@ def _reference_scan_outcome(
         native: SqlReferenceScan | SqlReferenceScanFailure | None = extract_native_sql_references(
             sql=sql, syntax=syntax
         )
-        return native if native is not None else python_reference_scan(sql=sql, syntax=syntax)
+        if native is not None:
+            report_native_answer(stage=NativeStage.REFERENCE_EXTRACTION, kind="reference_scans")
+            return native
+        report_native_fallback(site=NativeFallbackSite.REFERENCE_SCAN)
+        return python_reference_scan(sql=sql, syntax=syntax)
     if syntax.reads_differently_from_generic(sql):
         return python_reference_scan(sql=sql, syntax=syntax)
     native_references: list[tuple[str, str, str | None, int | None]] | None = (

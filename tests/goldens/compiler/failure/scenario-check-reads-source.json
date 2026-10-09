@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL scenario file tests/scenarios/orders.sql CTE '__expected__stg_orders' must not reference project source 'raw_orders' with __source(); source-backed scenario data is only allowed in helper and fixture CTEs"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

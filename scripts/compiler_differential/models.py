@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from scripts.compiler_differential.types import FallbackKey
+
 
 @dataclass(frozen=True)
 class DifferentialCommand:
@@ -51,10 +53,11 @@ class CommandOutcome:
 
 @dataclass(frozen=True)
 class AnalysisRecords:
-    """Wheel calls by `(site, api)` and analysis deferrals by `(kind, site)` for one run."""
+    """Wheel calls by `(site, api)`, deferrals by `(kind, site)`, fallbacks by `(site, kind)`."""
 
     wheel_sites: dict[tuple[str, str], int] = field(default_factory=dict)
     deferrals: dict[tuple[str, str], int] = field(default_factory=dict)
+    fallbacks: dict[tuple[str, str], int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,8 @@ class DifferentialOptions:
     require_analysis_coverage: bool = False
     analysis_records: bool = False
     evidence_dir: Path | None = None
+    golden_mode: str | None = None
+    golden_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -206,3 +211,32 @@ class EmittedCodes:
         """Return the first reported error code, if any."""
 
         return self.errors[0] if self.errors else None
+
+
+@dataclass(frozen=True)
+class RecordedRun:
+    """The engines, corpora and seed range one harness run covered."""
+
+    engines: tuple[str, ...]
+    corpora: tuple[str, ...]
+    seed_start: int
+    seeds: int
+
+
+@dataclass(frozen=True)
+class AllowList:
+    """Allowed counts by `(engine, stage, site, kind)` and corpus, and the seeds they hold for."""
+
+    seed_start: int
+    seeds: int
+    counts: dict[FallbackKey, dict[str, int]]
+    max_counts: dict[FallbackKey, dict[str, int]]
+
+
+@dataclass(frozen=True)
+class FallbackGateRequest:
+    """One run's fallback gate: check or rewrite `allow_list` from what the engines recorded."""
+
+    mode: str
+    allow_list: Path
+    run: RecordedRun

@@ -1,0 +1,2136 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "compile-store-warm",
+   "exit_code": 0,
+   "diagnostics": []
+  },
+  {
+   "label": "plan",
+   "exit_code": 0,
+   "diagnostics": []
+  }
+ ],
+ "compiled": {
+  "audits/generic/customer_status_snapshot/not_null__customer_id.sql": [
+   "SELECT customer_id",
+   "FROM __ref(\"customer_status_snapshot\")",
+   "WHERE customer_id IS NULL",
+   ""
+  ],
+  "audits/generic/customer_status_snapshot/unique__customer_id.sql": [
+   "SELECT customer_id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"customer_status_snapshot\")",
+   "WHERE customer_id IS NOT NULL",
+   "GROUP BY customer_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/daily_order_partitioned/not_null__order_date.sql": [
+   "SELECT order_date",
+   "FROM __ref(\"daily_order_partitioned\")",
+   "WHERE order_date IS NULL",
+   ""
+  ],
+  "audits/generic/daily_order_partitioned/waffles_ordered_is_positive.sql": [
+   "SELECT *",
+   "FROM __ref(\"daily_order_partitioned\")",
+   "WHERE NOT (waffles_ordered > 0)",
+   ""
+  ],
+  "audits/generic/daily_order_rollup/daily_orders_placed_is_non_negative.sql": [
+   "SELECT *",
+   "FROM __ref(\"daily_order_rollup\")",
+   "WHERE NOT (orders_placed >= 0)",
+   ""
+  ],
+  "audits/generic/daily_order_rollup/not_null__activity_day.sql": [
+   "SELECT activity_day",
+   "FROM __ref(\"daily_order_rollup\")",
+   "WHERE activity_day IS NULL",
+   ""
+  ],
+  "audits/generic/daily_revenue/revenue_is_non_negative.sql": [
+   "SELECT *",
+   "FROM __ref(\"daily_revenue\")",
+   "WHERE NOT (total_revenue_cents >= 0)",
+   ""
+  ],
+  "audits/generic/dim_customers/not_null__customer_id.sql": [
+   "SELECT customer_id",
+   "FROM __ref(\"dim_customers\")",
+   "WHERE customer_id IS NULL",
+   ""
+  ],
+  "audits/generic/dim_customers/unique__customer_id.sql": [
+   "SELECT customer_id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"dim_customers\")",
+   "WHERE customer_id IS NOT NULL",
+   "GROUP BY customer_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/fact_orders/not_null__order_id.sql": [
+   "SELECT order_id",
+   "FROM __ref(\"fact_orders\")",
+   "WHERE order_id IS NULL",
+   ""
+  ],
+  "audits/generic/hourly_activity_with_daily_context/day_orders_cover_hourly_orders.sql": [
+   "SELECT *",
+   "FROM __ref(\"hourly_activity_with_daily_context\")",
+   "WHERE NOT (day_orders_placed >= orders_placed)",
+   ""
+  ],
+  "audits/generic/hourly_activity_with_daily_context/not_null__activity_hour.sql": [
+   "SELECT activity_hour",
+   "FROM __ref(\"hourly_activity_with_daily_context\")",
+   "WHERE activity_hour IS NULL",
+   ""
+  ],
+  "audits/generic/hourly_order_activity/not_null__activity_hour.sql": [
+   "SELECT activity_hour",
+   "FROM __ref(\"hourly_order_activity\")",
+   "WHERE activity_hour IS NULL",
+   ""
+  ],
+  "audits/generic/hourly_order_activity/orders_placed_is_non_negative.sql": [
+   "SELECT *",
+   "FROM __ref(\"hourly_order_activity\")",
+   "WHERE NOT (orders_placed >= 0)",
+   ""
+  ],
+  "audits/generic/order_status_index/not_null__order_id.sql": [
+   "SELECT order_id",
+   "FROM __ref(\"order_status_index\")",
+   "WHERE order_id IS NULL",
+   ""
+  ],
+  "audits/generic/order_status_index/unique__order_id.sql": [
+   "SELECT order_id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"order_status_index\")",
+   "WHERE order_id IS NOT NULL",
+   "GROUP BY order_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/stg_customers/not_null__customer_id.sql": [
+   "SELECT customer_id",
+   "FROM __ref(\"stg_customers\")",
+   "WHERE customer_id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_customers/not_null__email.sql": [
+   "SELECT email",
+   "FROM __ref(\"stg_customers\")",
+   "WHERE email IS NULL",
+   ""
+  ],
+  "audits/generic/stg_customers/unique__customer_id.sql": [
+   "SELECT customer_id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"stg_customers\")",
+   "WHERE customer_id IS NOT NULL",
+   "GROUP BY customer_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/stg_orders/accepted_values__status.sql": [
+   "SELECT status",
+   "FROM __ref(\"stg_orders\")",
+   "WHERE status IS NOT NULL",
+   "  AND status NOT IN ('placed', 'preparing', 'ready', 'completed', 'cancelled')",
+   ""
+  ],
+  "audits/generic/stg_orders/not_null__customer_id.sql": [
+   "SELECT customer_id",
+   "FROM __ref(\"stg_orders\")",
+   "WHERE customer_id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_orders/not_null__order_id.sql": [
+   "SELECT order_id",
+   "FROM __ref(\"stg_orders\")",
+   "WHERE order_id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_orders/relationships__waffle_type_id.sql": [
+   "SELECT waffle_type_id",
+   "FROM __ref(\"stg_orders\")",
+   "WHERE waffle_type_id IS NOT NULL",
+   "  AND waffle_type_id NOT IN (",
+   "    SELECT waffle_type_id",
+   "    FROM __seed(\"waffle_types\")",
+   "    WHERE waffle_type_id IS NOT NULL",
+   "  )",
+   ""
+  ],
+  "audits/generic/stg_orders/unique__order_id.sql": [
+   "SELECT order_id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"stg_orders\")",
+   "WHERE order_id IS NOT NULL",
+   "GROUP BY order_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/stg_payments/not_null__order_id.sql": [
+   "SELECT order_id",
+   "FROM __ref(\"stg_payments\")",
+   "WHERE order_id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_payments/not_null__payment_id.sql": [
+   "SELECT payment_id",
+   "FROM __ref(\"stg_payments\")",
+   "WHERE payment_id IS NULL",
+   ""
+  ],
+  "audits/generic/stg_payments/relationships__order_id.sql": [
+   "SELECT order_id",
+   "FROM __ref(\"stg_payments\")",
+   "WHERE order_id IS NOT NULL",
+   "  AND order_id NOT IN (",
+   "    SELECT id",
+   "    FROM __source(\"raw__orders\")",
+   "    WHERE id IS NOT NULL",
+   "  )",
+   ""
+  ],
+  "audits/generic/stg_payments/unique__payment_id.sql": [
+   "SELECT payment_id, COUNT(*) AS duplicate_count",
+   "FROM __ref(\"stg_payments\")",
+   "WHERE payment_id IS NOT NULL",
+   "GROUP BY payment_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/generic/waffle_types/not_null__waffle_type_id.sql": [
+   "SELECT waffle_type_id",
+   "FROM __seed(\"waffle_types\")",
+   "WHERE waffle_type_id IS NULL",
+   ""
+  ],
+  "audits/generic/waffle_types/unique__waffle_type_id.sql": [
+   "SELECT waffle_type_id, COUNT(*) AS duplicate_count",
+   "FROM __seed(\"waffle_types\")",
+   "WHERE waffle_type_id IS NOT NULL",
+   "GROUP BY waffle_type_id",
+   "HAVING COUNT(*) > 1",
+   ""
+  ],
+  "audits/singular/fact_orders_have_customers.sql": [
+   "SELECT f.order_id, f.customer_id",
+   "FROM __ref(\"fact_orders\") f",
+   "LEFT JOIN __ref(\"dim_customers\") d ON f.customer_id = d.customer_id",
+   "WHERE d.customer_id IS NULL",
+   ""
+  ],
+  "functions/sql/table_fn__customer_orders.sql": [
+   "CREATE OR REPLACE MACRO dev.table_fn__customer_orders(p_customer_id) AS TABLE",
+   "SELECT",
+   "  order_id,",
+   "  ordered_at,",
+   "  waffle_name,",
+   "  line_total_cents,",
+   "  order_status,",
+   "  is_completed_order",
+   "FROM __ref(\"fact_orders\")",
+   "WHERE customer_id = p_customer_id",
+   ""
+  ],
+  "functions/sql/udf__is_completed_order.sql": [
+   "CREATE OR REPLACE MACRO dev.udf__is_completed_order(order_status) AS (",
+   "order_status = 'completed'",
+   ")",
+   ""
+  ],
+  "models/intermediate/customer_status_snapshot.sql": [
+   "SELECT",
+   "  customer_id,",
+   "  MAX(ordered_at) AS last_ordered_at,",
+   "  MAX(order_status) AS latest_order_status,",
+   "  COUNT(*) AS total_orders,",
+   "  SUM(line_total_cents) AS total_revenue_cents",
+   "FROM __ref(\"fact_orders\")",
+   "GROUP BY customer_id",
+   ""
+  ],
+  "models/intermediate/order_status_index.sql": [
+   "SELECT",
+   "  order_id,",
+   "  customer_id,",
+   "  order_status,",
+   "  ordered_at,",
+   "  line_total_cents",
+   "FROM __ref(\"fact_orders\")",
+   ""
+  ],
+  "models/marts/daily_order_partitioned.sql": [
+   "SELECT",
+   "  CAST(o.ordered_at AS DATE) AS order_date,",
+   "  COUNT(DISTINCT o.order_id) AS order_count,",
+   "  SUM(o.quantity) AS waffles_ordered,",
+   "  COUNT(DISTINCT o.customer_id) AS unique_customers",
+   "FROM __ref(\"stg_orders\") o",
+   "WHERE CAST(o.ordered_at AS DATE) >= CAST(@@@partition_start AS DATE)",
+   "  AND CAST(o.ordered_at AS DATE) < CAST(@@@partition_end AS DATE)",
+   "GROUP BY CAST(o.ordered_at AS DATE)",
+   ""
+  ],
+  "models/marts/daily_order_rollup.sql": [
+   "SELECT",
+   "  DATE_TRUNC('day', activity_hour) AS activity_day,",
+   "  SUM(orders_placed) AS orders_placed,",
+   "  SUM(waffles_ordered) AS waffles_ordered,",
+   "  SUM(revenue_cents) AS revenue_cents",
+   "FROM __ref(\"hourly_order_activity\")",
+   "GROUP BY DATE_TRUNC('day', activity_hour)",
+   ""
+  ],
+  "models/marts/daily_revenue.sql": [
+   "SELECT",
+   "  CAST(o.ordered_at AS DATE) AS revenue_date,",
+   "  COUNT(DISTINCT o.order_id) AS order_count,",
+   "  SUM(o.quantity) AS waffles_sold,",
+   "  SUM(p.amount_cents) AS total_revenue_cents,",
+   "  ROUND((SUM(p.amount_cents)) / 100.0, 2) AS total_revenue_dollars,",
+   "  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents",
+   "FROM __ref(\"stg_orders\") o",
+   "INNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'",
+   "GROUP BY CAST(o.ordered_at AS DATE)",
+   ""
+  ],
+  "models/marts/dim_customers.sql": [
+   "SELECT",
+   "  c.customer_id,",
+   "  c.first_name,",
+   "  c.last_name,",
+   "  c.email,",
+   "  c.created_at AS customer_since,",
+   "  COUNT(DISTINCT o.order_id) AS lifetime_orders,",
+   "  COALESCE(SUM(p.amount_cents), 0) AS lifetime_spend_cents",
+   "FROM __ref(\"stg_customers\") c",
+   "LEFT JOIN __ref(\"stg_orders\") o ON c.customer_id = o.customer_id",
+   "LEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'",
+   "GROUP BY c.customer_id, c.first_name, c.last_name, c.email, c.created_at",
+   ""
+  ],
+  "models/marts/fact_orders.sql": [
+   "SELECT",
+   "  o.order_id,",
+   "  o.customer_id,",
+   "  o.waffle_type_id,",
+   "  w.waffle_name,",
+   "  w.category AS waffle_category,",
+   "  o.quantity,",
+   "  w.price_cents * o.quantity AS line_total_cents,",
+   "  o.ordered_at,",
+   "  o.status AS order_status,",
+   "  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,",
+   "  p.payment_method,",
+   "  p.payment_status,",
+   "  p.amount_cents AS payment_amount_cents",
+   "FROM __ref(\"stg_orders\") o",
+   "LEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id",
+   "LEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id",
+   ""
+  ],
+  "models/marts/hourly_activity_with_daily_context.sql": [
+   "SELECT",
+   "  h.activity_hour,",
+   "  h.orders_placed,",
+   "  d.orders_placed AS day_orders_placed,",
+   "  h.waffles_ordered,",
+   "  h.revenue_cents",
+   "FROM __ref(\"hourly_order_activity\") h",
+   "INNER JOIN __ref(\"daily_order_rollup\") d",
+   "  ON DATE_TRUNC('day', h.activity_hour) = d.activity_day",
+   ""
+  ],
+  "models/marts/hourly_order_activity.sql": [
+   "SELECT",
+   "  DATE_TRUNC('hour', o.ordered_at) AS activity_hour,",
+   "  COUNT(*) AS orders_placed,",
+   "  SUM(o.quantity) AS waffles_ordered,",
+   "  SUM(o.line_total_cents) AS revenue_cents",
+   "FROM __ref(\"fact_orders\") o",
+   "GROUP BY DATE_TRUNC('hour', o.ordered_at)",
+   ""
+  ],
+  "models/staging/stg_customers.sql": [
+   "SELECT",
+   "  id AS customer_id,",
+   "  first_name,",
+   "  last_name,",
+   "  email,",
+   "  created_at",
+   "FROM __source(\"raw__customers\")",
+   ""
+  ],
+  "models/staging/stg_orders.sql": [
+   "SELECT",
+   "  id AS order_id,",
+   "  customer_id,",
+   "  waffle_type_id,",
+   "  quantity,",
+   "  ordered_at,",
+   "  status",
+   "FROM __source(\"raw__orders\")",
+   ""
+  ],
+  "models/staging/stg_payments.sql": [
+   "SELECT",
+   "  id AS payment_id,",
+   "  order_id,",
+   "  amount_cents,",
+   "  payment_method,",
+   "  paid_at,",
+   "  status AS payment_status",
+   "FROM __source(\"raw__payments\")",
+   ""
+  ],
+  "tests/_chain_/daily_revenue__stg_orders__stg_payments/test_daily_revenue_chain.sql": [
+   "WITH __source__raw__orders AS (SELECT",
+   "    1 AS id,",
+   "    100 AS customer_id,",
+   "    2 AS waffle_type_id,",
+   "    3 AS quantity,",
+   "    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status",
+   "  UNION ALL",
+   "  SELECT",
+   "    2 AS id,",
+   "    101 AS customer_id,",
+   "    1 AS waffle_type_id,",
+   "    1 AS quantity,",
+   "    CAST('2026-04-01 11:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status),",
+   "__ref__stg_orders AS (SELECT",
+   "  id AS order_id,",
+   "  customer_id,",
+   "  waffle_type_id,",
+   "  quantity,",
+   "  ordered_at,",
+   "  status",
+   "FROM __source__raw__orders),",
+   "__source__raw__payments AS (SELECT",
+   "    10 AS id,",
+   "    1 AS order_id,",
+   "    2850 AS amount_cents,",
+   "    'card' AS payment_method,",
+   "    CAST('2026-04-01 10:05:00' AS TIMESTAMP) AS paid_at,",
+   "    'success' AS status",
+   "  UNION ALL",
+   "  SELECT",
+   "    11 AS id,",
+   "    2 AS order_id,",
+   "    850 AS amount_cents,",
+   "    'cash' AS payment_method,",
+   "    CAST('2026-04-01 11:10:00' AS TIMESTAMP) AS paid_at,",
+   "    'failed' AS status),",
+   "__ref__stg_payments AS (SELECT",
+   "  id AS payment_id,",
+   "  order_id,",
+   "  amount_cents,",
+   "  payment_method,",
+   "  paid_at,",
+   "  status AS payment_status",
+   "FROM __source__raw__payments),",
+   "__ref__daily_revenue AS (SELECT",
+   "  CAST(o.ordered_at AS DATE) AS revenue_date,",
+   "  COUNT(DISTINCT o.order_id) AS order_count,",
+   "  SUM(o.quantity) AS waffles_sold,",
+   "  SUM(p.amount_cents) AS total_revenue_cents,",
+   "  ROUND((SUM(p.amount_cents)) / 100.0, 2) AS total_revenue_dollars,",
+   "  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents",
+   "FROM __ref__stg_orders o",
+   "INNER JOIN __ref__stg_payments p ON o.order_id = p.order_id AND p.payment_status = 'success'",
+   "GROUP BY CAST(o.ordered_at AS DATE)),",
+   "__actual__stg_orders AS (SELECT * FROM __ref__stg_orders),",
+   "__expected__stg_orders AS (SELECT",
+   "    1 AS order_id,",
+   "    100 AS customer_id,",
+   "    2 AS waffle_type_id,",
+   "    3 AS quantity,",
+   "    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status",
+   "  UNION ALL",
+   "  SELECT",
+   "    2 AS order_id,",
+   "    101 AS customer_id,",
+   "    1 AS waffle_type_id,",
+   "    1 AS quantity,",
+   "    CAST('2026-04-01 11:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status),",
+   "__actual__stg_payments AS (SELECT * FROM __ref__stg_payments),",
+   "__expected__stg_payments AS (SELECT",
+   "    10 AS payment_id,",
+   "    1 AS order_id,",
+   "    2850 AS amount_cents,",
+   "    'card' AS payment_method,",
+   "    CAST('2026-04-01 10:05:00' AS TIMESTAMP) AS paid_at,",
+   "    'success' AS payment_status",
+   "  UNION ALL",
+   "  SELECT",
+   "    11 AS payment_id,",
+   "    2 AS order_id,",
+   "    850 AS amount_cents,",
+   "    'cash' AS payment_method,",
+   "    CAST('2026-04-01 11:10:00' AS TIMESTAMP) AS paid_at,",
+   "    'failed' AS payment_status),",
+   "__actual__daily_revenue AS (SELECT * FROM __ref__daily_revenue),",
+   "__expected__daily_revenue AS (SELECT",
+   "    CAST('2026-04-01' AS DATE) AS revenue_date,",
+   "    1 AS order_count,",
+   "    3 AS waffles_sold,",
+   "    2850 AS total_revenue_cents,",
+   "    28.5 AS total_revenue_dollars,",
+   "    2850 AS avg_order_value_cents),",
+   "__assert__daily_revenue_is_non_negative AS (SELECT *",
+   "  FROM __ref__daily_revenue",
+   "  WHERE total_revenue_cents < 0)",
+   "SELECT 0 AS step_index, 'stg_orders' AS model_name, (SELECT COUNT(*) FROM __actual__stg_orders) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_orders) AS expected_count, (SELECT COUNT(*) FROM (SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __actual__stg_orders EXCEPT SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __expected__stg_orders) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __expected__stg_orders EXCEPT SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __actual__stg_orders) AS __sqlbuild_missing) AS missing_count",
+   "UNION ALL",
+   "SELECT 1 AS step_index, 'stg_payments' AS model_name, (SELECT COUNT(*) FROM __actual__stg_payments) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_payments) AS expected_count, (SELECT COUNT(*) FROM (SELECT payment_id, order_id, amount_cents, payment_method, paid_at, payment_status FROM __actual__stg_payments EXCEPT SELECT payment_id, order_id, amount_cents, payment_method, paid_at, payment_status FROM __expected__stg_payments) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT payment_id, order_id, amount_cents, payment_method, paid_at, payment_status FROM __expected__stg_payments EXCEPT SELECT payment_id, order_id, amount_cents, payment_method, paid_at, payment_status FROM __actual__stg_payments) AS __sqlbuild_missing) AS missing_count",
+   "UNION ALL",
+   "SELECT 2 AS step_index, 'daily_revenue' AS model_name, (SELECT COUNT(*) FROM __actual__daily_revenue) AS actual_count, (SELECT COUNT(*) FROM __expected__daily_revenue) AS expected_count, (SELECT COUNT(*) FROM (SELECT revenue_date, order_count, waffles_sold, total_revenue_cents, total_revenue_dollars, avg_order_value_cents FROM __actual__daily_revenue EXCEPT SELECT revenue_date, order_count, waffles_sold, total_revenue_cents, total_revenue_dollars, avg_order_value_cents FROM __expected__daily_revenue) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT revenue_date, order_count, waffles_sold, total_revenue_cents, total_revenue_dollars, avg_order_value_cents FROM __expected__daily_revenue EXCEPT SELECT revenue_date, order_count, waffles_sold, total_revenue_cents, total_revenue_dollars, avg_order_value_cents FROM __actual__daily_revenue) AS __sqlbuild_missing) AS missing_count",
+   "UNION ALL",
+   "SELECT 3 AS step_index, 'assertion daily_revenue_is_non_negative' AS model_name, (SELECT COUNT(*) FROM __assert__daily_revenue_is_non_negative) AS actual_count, 0 AS expected_count, (SELECT COUNT(*) FROM __assert__daily_revenue_is_non_negative) AS unexpected_count, 0 AS missing_count",
+   ""
+  ],
+  "tests/fact_orders/test_fact_orders.sql": [
+   "WITH __ref__stg_orders AS (SELECT",
+   "    1 AS order_id,",
+   "    100 AS customer_id,",
+   "    2 AS waffle_type_id,",
+   "    3 AS quantity,",
+   "    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status),",
+   "__ref__stg_payments AS (SELECT",
+   "    10 AS payment_id,",
+   "    1 AS order_id,",
+   "    2850 AS amount_cents,",
+   "    'card' AS payment_method,",
+   "    CAST('2026-04-01 10:05:00' AS TIMESTAMP) AS paid_at,",
+   "    'success' AS payment_status),",
+   "__seed__waffle_types AS (SELECT",
+   "    2 AS waffle_type_id,",
+   "    'Liege' AS waffle_name,",
+   "    'sweet' AS category,",
+   "    950 AS price_cents),",
+   "__ref__fact_orders AS (SELECT",
+   "  o.order_id,",
+   "  o.customer_id,",
+   "  o.waffle_type_id,",
+   "  w.waffle_name,",
+   "  w.category AS waffle_category,",
+   "  o.quantity,",
+   "  w.price_cents * o.quantity AS line_total_cents,",
+   "  o.ordered_at,",
+   "  o.status AS order_status,",
+   "  dev.udf__is_completed_order(o.status) AS is_completed_order,",
+   "  p.payment_method,",
+   "  p.payment_status,",
+   "  p.amount_cents AS payment_amount_cents",
+   "FROM __ref__stg_orders o",
+   "LEFT JOIN __seed__waffle_types w ON o.waffle_type_id = w.waffle_type_id",
+   "LEFT JOIN __ref__stg_payments p ON o.order_id = p.order_id),",
+   "__actual__fact_orders AS (SELECT * FROM __ref__fact_orders),",
+   "__expected__fact_orders AS (SELECT",
+   "    1 AS order_id,",
+   "    100 AS customer_id,",
+   "    2 AS waffle_type_id,",
+   "    'Liege' AS waffle_name,",
+   "    'sweet' AS waffle_category,",
+   "    3 AS quantity,",
+   "    2850 AS line_total_cents,",
+   "    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS order_status,",
+   "    TRUE AS is_completed_order,",
+   "    'card' AS payment_method,",
+   "    'success' AS payment_status,",
+   "    2850 AS payment_amount_cents),",
+   "__assert__line_totals_are_non_negative AS (SELECT *",
+   "  FROM __ref__fact_orders",
+   "  WHERE line_total_cents < 0)",
+   "SELECT 0 AS step_index, 'fact_orders' AS model_name, (SELECT COUNT(*) FROM __actual__fact_orders) AS actual_count, (SELECT COUNT(*) FROM __expected__fact_orders) AS expected_count, (SELECT COUNT(*) FROM (SELECT order_id, customer_id, waffle_type_id, waffle_name, waffle_category, quantity, line_total_cents, ordered_at, order_status, is_completed_order, payment_method, payment_status, payment_amount_cents FROM __actual__fact_orders EXCEPT SELECT order_id, customer_id, waffle_type_id, waffle_name, waffle_category, quantity, line_total_cents, ordered_at, order_status, is_completed_order, payment_method, payment_status, payment_amount_cents FROM __expected__fact_orders) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT order_id, customer_id, waffle_type_id, waffle_name, waffle_category, quantity, line_total_cents, ordered_at, order_status, is_completed_order, payment_method, payment_status, payment_amount_cents FROM __expected__fact_orders EXCEPT SELECT order_id, customer_id, waffle_type_id, waffle_name, waffle_category, quantity, line_total_cents, ordered_at, order_status, is_completed_order, payment_method, payment_status, payment_amount_cents FROM __actual__fact_orders) AS __sqlbuild_missing) AS missing_count",
+   "UNION ALL",
+   "SELECT 1 AS step_index, 'assertion line_totals_are_non_negative' AS model_name, (SELECT COUNT(*) FROM __assert__line_totals_are_non_negative) AS actual_count, 0 AS expected_count, (SELECT COUNT(*) FROM __assert__line_totals_are_non_negative) AS unexpected_count, 0 AS missing_count",
+   ""
+  ],
+  "tests/macro calculates_line_total_cents/calculates_line_total_cents.sql": [
+   "WITH input_values AS (SELECT 950 AS price_cents, 3 AS quantity),",
+   "__actual__macro_calculates_line_total_cents AS (SELECT price_cents * quantity AS line_total_cents",
+   "  FROM input_values),",
+   "__expected__macro_calculates_line_total_cents AS (SELECT 2850 AS line_total_cents)",
+   "SELECT 0 AS step_index, 'macro calculates_line_total_cents' AS model_name, (SELECT COUNT(*) FROM __actual__macro_calculates_line_total_cents) AS actual_count, (SELECT COUNT(*) FROM __expected__macro_calculates_line_total_cents) AS expected_count, (SELECT COUNT(*) FROM (SELECT * FROM __actual__macro_calculates_line_total_cents EXCEPT SELECT * FROM __expected__macro_calculates_line_total_cents) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT * FROM __expected__macro_calculates_line_total_cents EXCEPT SELECT * FROM __actual__macro_calculates_line_total_cents) AS __sqlbuild_missing) AS missing_count",
+   ""
+  ],
+  "tests/stg_orders/test_stg_orders.sql": [
+   "WITH __source__raw__orders AS (SELECT",
+   "    1 AS id,",
+   "    100 AS customer_id,",
+   "    2 AS waffle_type_id,",
+   "    3 AS quantity,",
+   "    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status),",
+   "__ref__stg_orders AS (SELECT",
+   "  id AS order_id,",
+   "  customer_id,",
+   "  waffle_type_id,",
+   "  quantity,",
+   "  ordered_at,",
+   "  status",
+   "FROM __source__raw__orders),",
+   "__actual__stg_orders AS (SELECT * FROM __ref__stg_orders),",
+   "__expected__stg_orders AS (SELECT",
+   "    1 AS order_id,",
+   "    100 AS customer_id,",
+   "    2 AS waffle_type_id,",
+   "    3 AS quantity,",
+   "    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,",
+   "    'completed' AS status),",
+   "__assert__order_ids_are_not_null AS (SELECT *",
+   "  FROM __ref__stg_orders",
+   "  WHERE order_id IS NULL)",
+   "SELECT 0 AS step_index, 'stg_orders' AS model_name, (SELECT COUNT(*) FROM __actual__stg_orders) AS actual_count, (SELECT COUNT(*) FROM __expected__stg_orders) AS expected_count, (SELECT COUNT(*) FROM (SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __actual__stg_orders EXCEPT SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __expected__stg_orders) AS __sqlbuild_mismatch) AS unexpected_count, (SELECT COUNT(*) FROM (SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __expected__stg_orders EXCEPT SELECT order_id, customer_id, waffle_type_id, quantity, ordered_at, status FROM __actual__stg_orders) AS __sqlbuild_missing) AS missing_count",
+   "UNION ALL",
+   "SELECT 1 AS step_index, 'assertion order_ids_are_not_null' AS model_name, (SELECT COUNT(*) FROM __assert__order_ids_are_not_null) AS actual_count, 0 AS expected_count, (SELECT COUNT(*) FROM __assert__order_ids_are_not_null) AS unexpected_count, 0 AS missing_count",
+   ""
+  ]
+ },
+ "manifest": {
+  "nodes": {
+   "model.waffle_shop.customer_status_snapshot": {
+    "database": null,
+    "schema": "dev",
+    "name": "customer_status_snapshot",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/intermediate/customer_status_snapshot.sql",
+    "original_file_path": "models/intermediate/customer_status_snapshot.sql",
+    "unique_id": "model.waffle_shop.customer_status_snapshot",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "intermediate",
+     "customer_status_snapshot"
+    ],
+    "alias": "customer_status_snapshot",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "intermediate",
+      "acceptance"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "merge",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "customer_id"
+     ],
+     "on_schema_change": "sync_all_columns",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "intermediate",
+     "acceptance"
+    ],
+    "description": "Merge-based customer snapshot with timestamp cursor and explicit backfill policies.",
+    "columns": {
+     "customer_id": {
+      "name": "customer_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.customer_status_snapshot",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.fact_orders"
+     ]
+    }
+   },
+   "model.waffle_shop.order_status_index": {
+    "database": null,
+    "schema": "dev",
+    "name": "order_status_index",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/intermediate/order_status_index.sql",
+    "original_file_path": "models/intermediate/order_status_index.sql",
+    "unique_id": "model.waffle_shop.order_status_index",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "intermediate",
+     "order_status_index"
+    ],
+    "alias": "order_status_index",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "intermediate",
+      "acceptance"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "order_id"
+     ],
+     "on_schema_change": "append_new_columns",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "intermediate",
+     "acceptance"
+    ],
+    "description": "Integer-cursor incremental projection over fact orders.",
+    "columns": {
+     "order_id": {
+      "name": "order_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.order_status_index",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.fact_orders"
+     ]
+    }
+   },
+   "model.waffle_shop.daily_order_partitioned": {
+    "database": null,
+    "schema": "dev",
+    "name": "daily_order_partitioned",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/daily_order_partitioned.sql",
+    "original_file_path": "models/marts/daily_order_partitioned.sql",
+    "unique_id": "model.waffle_shop.daily_order_partitioned",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "daily_order_partitioned"
+    ],
+    "alias": "daily_order_partitioned",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "partition_tracked",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts"
+    ],
+    "description": "Partition-tracked daily order summary using custom materialization.",
+    "columns": {
+     "order_date": {
+      "name": "order_date",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.daily_order_partitioned",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.stg_orders"
+     ]
+    }
+   },
+   "model.waffle_shop.daily_order_rollup": {
+    "database": null,
+    "schema": "dev",
+    "name": "daily_order_rollup",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/daily_order_rollup.sql",
+    "original_file_path": "models/marts/daily_order_rollup.sql",
+    "unique_id": "model.waffle_shop.daily_order_rollup",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "daily_order_rollup"
+    ],
+    "alias": "daily_order_rollup",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts",
+      "acceptance"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts",
+     "acceptance"
+    ],
+    "description": "Downstream daily microbatch rollup with a wider batch size than its hourly upstream.",
+    "columns": {
+     "activity_day": {
+      "name": "activity_day",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.daily_order_rollup",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.hourly_order_activity"
+     ]
+    }
+   },
+   "model.waffle_shop.daily_revenue": {
+    "database": null,
+    "schema": "dev",
+    "name": "daily_revenue",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/daily_revenue.sql",
+    "original_file_path": "models/marts/daily_revenue.sql",
+    "unique_id": "model.waffle_shop.daily_revenue",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "daily_revenue"
+    ],
+    "alias": "daily_revenue",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts"
+    ],
+    "description": "Daily revenue aggregation.",
+    "columns": {
+     "revenue_date": {
+      "name": "revenue_date",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.daily_revenue",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.stg_orders",
+      "model.waffle_shop.stg_payments"
+     ]
+    }
+   },
+   "model.waffle_shop.dim_customers": {
+    "database": null,
+    "schema": "dev",
+    "name": "dim_customers",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/dim_customers.sql",
+    "original_file_path": "models/marts/dim_customers.sql",
+    "unique_id": "model.waffle_shop.dim_customers",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "dim_customers"
+    ],
+    "alias": "dim_customers",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": [
+      "customer_id"
+     ],
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts"
+    ],
+    "description": "Customer dimension with lifetime metrics.",
+    "columns": {
+     "customer_id": {
+      "name": "customer_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.dim_customers",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.stg_customers",
+      "model.waffle_shop.stg_orders",
+      "model.waffle_shop.stg_payments"
+     ]
+    }
+   },
+   "model.waffle_shop.fact_orders": {
+    "database": null,
+    "schema": "dev",
+    "name": "fact_orders",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/fact_orders.sql",
+    "original_file_path": "models/marts/fact_orders.sql",
+    "unique_id": "model.waffle_shop.fact_orders",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "fact_orders"
+    ],
+    "alias": "fact_orders",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "table",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts"
+    ],
+    "description": "Order fact table with waffle and payment details.",
+    "columns": {
+     "order_id": {
+      "name": "order_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.fact_orders",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.udf__is_completed_order",
+      "model.waffle_shop.stg_orders",
+      "seed.waffle_shop.waffle_types",
+      "model.waffle_shop.stg_payments"
+     ]
+    }
+   },
+   "model.waffle_shop.hourly_activity_with_daily_context": {
+    "database": null,
+    "schema": "dev",
+    "name": "hourly_activity_with_daily_context",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/hourly_activity_with_daily_context.sql",
+    "original_file_path": "models/marts/hourly_activity_with_daily_context.sql",
+    "unique_id": "model.waffle_shop.hourly_activity_with_daily_context",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "hourly_activity_with_daily_context"
+    ],
+    "alias": "hourly_activity_with_daily_context",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts",
+      "acceptance"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts",
+     "acceptance"
+    ],
+    "description": "Hourly downstream microbatch model that depends on a coarser-grain daily upstream.",
+    "columns": {
+     "activity_hour": {
+      "name": "activity_hour",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.hourly_activity_with_daily_context",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.hourly_order_activity",
+      "model.waffle_shop.daily_order_rollup"
+     ]
+    }
+   },
+   "model.waffle_shop.hourly_order_activity": {
+    "database": null,
+    "schema": "dev",
+    "name": "hourly_order_activity",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/marts/hourly_order_activity.sql",
+    "original_file_path": "models/marts/hourly_order_activity.sql",
+    "unique_id": "model.waffle_shop.hourly_order_activity",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "marts",
+     "hourly_order_activity"
+    ],
+    "alias": "hourly_order_activity",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "marts"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "incremental",
+     "incremental_strategy": "delete_insert",
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "marts"
+    ],
+    "description": "Hourly order activity aggregated via microbatch incremental.",
+    "columns": {
+     "activity_hour": {
+      "name": "activity_hour",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.hourly_order_activity",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "model.waffle_shop.fact_orders"
+     ]
+    }
+   },
+   "model.waffle_shop.stg_customers": {
+    "database": null,
+    "schema": "dev",
+    "name": "stg_customers",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/staging/stg_customers.sql",
+    "original_file_path": "models/staging/stg_customers.sql",
+    "unique_id": "model.waffle_shop.stg_customers",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "staging",
+     "stg_customers"
+    ],
+    "alias": "stg_customers",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Cleaned customer records.",
+    "columns": {
+     "customer_id": {
+      "name": "customer_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "email": {
+      "name": "email",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.stg_customers",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.waffle_shop.raw__customers"
+     ]
+    }
+   },
+   "model.waffle_shop.stg_orders": {
+    "database": null,
+    "schema": "dev",
+    "name": "stg_orders",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/staging/stg_orders.sql",
+    "original_file_path": "models/staging/stg_orders.sql",
+    "unique_id": "model.waffle_shop.stg_orders",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "staging",
+     "stg_orders"
+    ],
+    "alias": "stg_orders",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Cleaned order records.",
+    "columns": {
+     "order_id": {
+      "name": "order_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "customer_id": {
+      "name": "customer_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "waffle_type_id": {
+      "name": "waffle_type_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.stg_orders",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.waffle_shop.raw__orders"
+     ]
+    }
+   },
+   "model.waffle_shop.stg_payments": {
+    "database": null,
+    "schema": "dev",
+    "name": "stg_payments",
+    "resource_type": "model",
+    "package_name": "waffle_shop",
+    "path": "models/staging/stg_payments.sql",
+    "original_file_path": "models/staging/stg_payments.sql",
+    "unique_id": "model.waffle_shop.stg_payments",
+    "fqn": [
+     "waffle_shop",
+     "models",
+     "staging",
+     "stg_payments"
+    ],
+    "alias": "stg_payments",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [
+      "staging"
+     ],
+     "meta": {},
+     "group": null,
+     "materialized": "view",
+     "incremental_strategy": null,
+     "merge_exclude_columns": null,
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     }
+    },
+    "tags": [
+     "staging"
+    ],
+    "description": "Cleaned payment records.",
+    "columns": {
+     "payment_id": {
+      "name": "payment_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "order_id": {
+      "name": "order_id",
+      "description": "",
+      "meta": {},
+      "data_type": null,
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.stg_payments",
+    "depends_on": {
+     "macros": [],
+     "nodes": [
+      "source.waffle_shop.raw__payments"
+     ]
+    }
+   },
+   "seed.waffle_shop.waffle_types": {
+    "database": null,
+    "schema": "dev",
+    "name": "waffle_types",
+    "resource_type": "seed",
+    "package_name": "waffle_shop",
+    "path": "seeds/waffle_types.csv",
+    "original_file_path": "seeds/waffle_types.csv",
+    "unique_id": "seed.waffle_shop.waffle_types",
+    "fqn": [
+     "waffle_shop",
+     "seeds",
+     "waffle_types"
+    ],
+    "alias": "waffle_types",
+    "config": {
+     "enabled": true,
+     "alias": null,
+     "schema": "dev",
+     "database": null,
+     "tags": [],
+     "meta": {},
+     "group": null,
+     "materialized": "seed",
+     "persist_docs": {},
+     "post-hook": [],
+     "pre-hook": [],
+     "quoting": {},
+     "column_types": {},
+     "full_refresh": null,
+     "unique_key": null,
+     "on_schema_change": "ignore",
+     "on_configuration_change": "apply",
+     "grants": {},
+     "packages": [],
+     "docs": {
+      "show": true,
+      "node_color": null
+     },
+     "contract": {
+      "enforced": false,
+      "alias_types": true
+     },
+     "delimiter": ",",
+     "quote_columns": null
+    },
+    "tags": [],
+    "description": "Waffle menu items with pricing.",
+    "columns": {
+     "waffle_type_id": {
+      "name": "waffle_type_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "waffle_name": {
+      "name": "waffle_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "category": {
+      "name": "category",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "price_cents": {
+      "name": "price_cents",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "group": null,
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "build_path": null,
+    "unrendered_config": {},
+    "config_call_dict": {},
+    "unrendered_config_call_dict": {},
+    "relation_name": "dev.waffle_types",
+    "root_path": null,
+    "depends_on": {
+     "macros": []
+    }
+   }
+  },
+  "sources": {
+   "source.waffle_shop.raw__customers": {
+    "database": null,
+    "schema": "dev",
+    "name": "raw__customers",
+    "resource_type": "source",
+    "package_name": "waffle_shop",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.waffle_shop.raw__customers",
+    "fqn": [
+     "waffle_shop",
+     "raw__customers"
+    ],
+    "source_name": "raw__customers",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw__customers",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Raw customer records loaded by the Python loader",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "first_name": {
+      "name": "first_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "last_name": {
+      "name": "last_name",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "email": {
+      "name": "email",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "created_at": {
+      "name": "created_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw__customers",
+      "auto_load": false,
+      "write_strategy": "table"
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.waffle_shop.raw__orders": {
+    "database": null,
+    "schema": "dev",
+    "name": "raw__orders",
+    "resource_type": "source",
+    "package_name": "waffle_shop",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.waffle_shop.raw__orders",
+    "fqn": [
+     "waffle_shop",
+     "raw__orders"
+    ],
+    "source_name": "raw__orders",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw__orders",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Raw order records loaded by the Python loader",
+    "columns": {
+     "id": {
+      "name": "id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "customer_id": {
+      "name": "customer_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "waffle_type_id": {
+      "name": "waffle_type_id",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "quantity": {
+      "name": "quantity",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "ordered_at": {
+      "name": "ordered_at",
+      "description": "",
+      "meta": {},
+      "data_type": "TIMESTAMP",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     },
+     "status": {
+      "name": "status",
+      "description": "",
+      "meta": {},
+      "data_type": "VARCHAR",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {
+     "sqlbuild": {
+      "loader": "raw__orders",
+      "auto_load": false,
+      "write_strategy": "delete_insert",
+      "cursor_column": "ordered_at"
+     }
+    },
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   },
+   "source.waffle_shop.raw__payments": {
+    "database": null,
+    "schema": "",
+    "name": "raw__payments",
+    "resource_type": "source",
+    "package_name": "waffle_shop",
+    "path": "sources/raw.yml",
+    "original_file_path": "sources/raw.yml",
+    "unique_id": "source.waffle_shop.raw__payments",
+    "fqn": [
+     "waffle_shop",
+     "raw__payments"
+    ],
+    "source_name": "raw__payments",
+    "source_description": "",
+    "loader": "",
+    "identifier": "raw__payments",
+    "quoting": {},
+    "loaded_at_field": null,
+    "freshness": null,
+    "external": null,
+    "description": "Payment records for each order, defined inline",
+    "columns": {
+     "amount_cents": {
+      "name": "amount_cents",
+      "description": "",
+      "meta": {},
+      "data_type": "INTEGER",
+      "constraints": [],
+      "quote": null,
+      "tags": []
+     }
+    },
+    "meta": {},
+    "source_meta": {},
+    "tags": [],
+    "config": {},
+    "patch_path": null,
+    "unrendered_config": {},
+    "relation_name": null
+   }
+  },
+  "macros": {
+   "macro.waffle_shop.line_total_cents": {
+    "name": "line_total_cents",
+    "resource_type": "macro",
+    "package_name": "waffle_shop",
+    "path": "macros/currency.py",
+    "original_file_path": "macros/currency.py",
+    "unique_id": "macro.waffle_shop.line_total_cents",
+    "macro_sql": "\"\"\"Project-wide currency macros.\"\"\"\n\n\ndef line_total_cents(price_cents: str, quantity: str) -> str:\n    \"\"\"Calculate line total cents from a unit price and quantity.\"\"\"\n    return f\"{price_cents} * {quantity}\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "global",
+     "sqlbuild_scope_path": null
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.waffle_shop.cents_to_dollars": {
+    "name": "cents_to_dollars",
+    "resource_type": "macro",
+    "package_name": "waffle_shop",
+    "path": "models/marts/_sqlbuild/_macros/currency.py",
+    "original_file_path": "models/marts/_sqlbuild/_macros/currency.py",
+    "unique_id": "macro.waffle_shop.cents_to_dollars",
+    "macro_sql": "\"\"\"Currency formatting macros.\"\"\"\n\n\ndef cents_to_dollars(column: str) -> str:\n    \"\"\"Convert a cents integer column to a dollars decimal with two decimal places.\"\"\"\n    return f\"ROUND(({column}) / 100.0, 2)\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "models/marts"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   },
+   "macro.waffle_shop.timestamp_trunc": {
+    "name": "timestamp_trunc",
+    "resource_type": "macro",
+    "package_name": "waffle_shop",
+    "path": "models/marts/_sqlbuild/_macros/datetime.py",
+    "original_file_path": "models/marts/_sqlbuild/_macros/datetime.py",
+    "unique_id": "macro.waffle_shop.timestamp_trunc",
+    "macro_sql": "\"\"\"Datetime portability macros.\"\"\"\n\n\ndef timestamp_trunc(ctx, grain: str, expr: str) -> str:\n    if ctx.adapter_name == \"bigquery\":\n        return f\"TIMESTAMP_TRUNC({expr}, {grain.upper()})\"\n    return f\"DATE_TRUNC('{grain}', {expr})\"\n",
+    "depends_on": {
+     "macros": []
+    },
+    "description": "",
+    "meta": {
+     "sqlbuild_visibility": "local",
+     "sqlbuild_scope_path": "models/marts"
+    },
+    "docs": {
+     "show": true,
+     "node_color": null
+    },
+    "patch_path": null,
+    "arguments": [],
+    "supported_languages": null
+   }
+  },
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {
+   "model.waffle_shop.customer_status_snapshot": [
+    "model.waffle_shop.fact_orders"
+   ],
+   "model.waffle_shop.order_status_index": [
+    "model.waffle_shop.fact_orders"
+   ],
+   "model.waffle_shop.daily_order_partitioned": [
+    "model.waffle_shop.stg_orders"
+   ],
+   "model.waffle_shop.daily_order_rollup": [
+    "model.waffle_shop.hourly_order_activity"
+   ],
+   "model.waffle_shop.daily_revenue": [
+    "model.waffle_shop.stg_orders",
+    "model.waffle_shop.stg_payments"
+   ],
+   "model.waffle_shop.dim_customers": [
+    "model.waffle_shop.stg_customers",
+    "model.waffle_shop.stg_orders",
+    "model.waffle_shop.stg_payments"
+   ],
+   "model.waffle_shop.fact_orders": [
+    "model.waffle_shop.udf__is_completed_order",
+    "model.waffle_shop.stg_orders",
+    "seed.waffle_shop.waffle_types",
+    "model.waffle_shop.stg_payments"
+   ],
+   "model.waffle_shop.hourly_activity_with_daily_context": [
+    "model.waffle_shop.hourly_order_activity",
+    "model.waffle_shop.daily_order_rollup"
+   ],
+   "model.waffle_shop.hourly_order_activity": [
+    "model.waffle_shop.fact_orders"
+   ],
+   "model.waffle_shop.stg_customers": [
+    "source.waffle_shop.raw__customers"
+   ],
+   "model.waffle_shop.stg_orders": [
+    "source.waffle_shop.raw__orders"
+   ],
+   "model.waffle_shop.stg_payments": [
+    "source.waffle_shop.raw__payments"
+   ],
+   "source.waffle_shop.raw__customers": [],
+   "source.waffle_shop.raw__orders": [],
+   "source.waffle_shop.raw__payments": [],
+   "seed.waffle_shop.waffle_types": [],
+   "model.waffle_shop.table_fn__customer_orders": [
+    "model.waffle_shop.fact_orders"
+   ],
+   "model.waffle_shop.udf__is_completed_order": []
+  },
+  "group_map": {},
+  "docs": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D001",
+     "message": "<project>/sqlbuild_project.toml contains invalid TOML: Invalid statement (at line 1, column 1)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "C601",
+     "message": "unknown adapter 'warehouse9000'. Available built-in adapters: bigquery, databricks, duckdb, motherduck, postgres, snowflake, sqlserver. Project-local adapters are discovered from adapters/**/*.py."
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

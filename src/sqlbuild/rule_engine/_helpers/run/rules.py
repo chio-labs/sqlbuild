@@ -231,6 +231,7 @@ def evaluate_rules(
         unevaluated_resources=len({item.path for item in findings if item.unevaluated}),
         built_in_ms=sql_ms + result.built_in_ms,
         custom_ms=result.custom_ms,
+        custom_cpu_ms=result.custom_cpu_ms,
         cache_hits=result.cache_hits + sql_result.cache_hits,
         cache_misses=result.cache_misses + sql_result.cache_misses,
         skipped_type_proof_rules=skipped_type_proof_rules,

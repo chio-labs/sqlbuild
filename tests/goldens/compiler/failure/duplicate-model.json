@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D007",
+     "message": "Duplicate model file name found for 'stg_orders' in models/marts/stg_orders.sql and models/staging/stg_orders.sql"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

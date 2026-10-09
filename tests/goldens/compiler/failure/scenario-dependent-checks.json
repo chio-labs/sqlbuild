@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL scenario 'tests/scenarios/orders.sql' check CTE '__expected__stg_orders' must not depend on '__assert__no_rows'; expected results and assertions must be independent"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

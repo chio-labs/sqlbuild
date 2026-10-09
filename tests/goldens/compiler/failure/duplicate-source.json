@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D007",
+     "message": "Duplicate source declaration found for 'raw_orders' in sources/more.yml and sources/raw.yml"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

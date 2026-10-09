@@ -95,3 +95,92 @@ pub(crate) const RENDERED_TYPE_NAMES: [(&str, &str); 12] = [
 ];
 /// The stack a standalone dynamic pivot proof parses on, as the analysis workers have.
 pub(crate) const PIVOT_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+/// Python's `COMPACT_RELATION_STUB_PREFIX`: the relation name a shared query binds instead.
+pub(crate) const RELATION_STUB_PREFIX: &str = "__sqlbuild_project_input_";
+/// Python's `COMPACT_REFERENCE_MARKER_PATTERN`: a reference call and the name it reads.
+pub(crate) const REFERENCE_MARKER_PATTERN: &str =
+    r#"__(ref|seed|source|dbt_ref)\((?:"[^"]+"\s*,\s*)?"([^"]+)"\)"#;
+/// Python's `COMPACT_UNSTUBBED_REFERENCE_KIND`, a reference kind sharing never stubs.
+pub(crate) const UNSTUBBED_REFERENCE_KIND: &str = "dbt_ref";
+/// Python's `MIN_SHARED_BINDING_QUERY_MEMBERS`.
+pub(crate) const MIN_SHARED_MEMBERS: usize = 2;
+/// Text whose presence sends Python's qualifier search to its token scanner.
+pub(crate) const QUALIFIED_SCAN_TOKENS: [&str; 5] = ["\"", "`", "[", "--", "/*"];
+/// Python's `str.isspace` over ASCII.
+pub(crate) const PYTHON_ASCII_SPACES: &str = " \t\n\r\x0b\x0c\x1c\x1d\x1e\x1f";
+/// Stack for one standalone CTE fact recovery, whose AST walks recurse with query depth.
+pub(crate) const CTE_FACT_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+/// The wheel's node kinds Python's CTE fact recovery reads.
+pub(crate) const ANNOTATED_AST_KIND: &str = "annotated";
+pub(crate) const LITERAL_AST_KIND: &str = "literal";
+pub(crate) const NULL_AST_KIND: &str = "null";
+pub(crate) const CONCAT_AST_KIND: &str = "concat";
+pub(crate) const SUBSTRING_AST_KIND: &str = "substring";
+pub(crate) const COALESCE_AST_KIND: &str = "coalesce";
+pub(crate) const IF_FUNC_AST_KIND: &str = "if_func";
+pub(crate) const CASE_AST_KIND: &str = "case";
+pub(crate) const TRY_CAST_AST_KIND: &str = "try_cast";
+pub(crate) const COUNT_AST_KIND: &str = "count";
+pub(crate) const IS_NULL_AST_KIND: &str = "is_null";
+pub(crate) const SET_OPERATION_AST_KINDS: [&str; 3] = ["union", "intersect", "except"];
+pub(crate) const CAST_AST_KINDS: [&str; 2] = ["cast", "try_cast"];
+pub(crate) const TYPE_PASSTHROUGH_AST_KINDS: [&str; 4] =
+    ["max", "min", "window_function", "within_group"];
+/// Python's `POLYGLOT_BOOLEAN_RESULT_KINDS`.
+pub(crate) const BOOLEAN_RESULT_AST_KINDS: [&str; 18] = [
+    "boolean",
+    "and",
+    "between",
+    "eq",
+    "exists",
+    "gt",
+    "gte",
+    "ilike",
+    "in",
+    "is",
+    "is_null",
+    "like",
+    "lt",
+    "lte",
+    "neq",
+    "not",
+    "or",
+    "regexp_like",
+];
+pub(crate) const NULLIF_FUNCTION_NAME: &str = "NULLIF";
+pub(crate) const STRING_LITERAL_TYPE: &str = "string";
+pub(crate) const BINARY_OPERAND_COUNT: usize = 2;
+/// The type Python's set operation slots give a bare NULL.
+pub(crate) const NULL_SET_OPERATION_TYPE: &str = "__SQLBUILD_NULL_SET_OPERATION_TYPE__";
+pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";
+pub(crate) const TEXT_TYPE: &str = "TEXT";
+pub(crate) const CUSTOM_TYPE_NAME: &str = "CUSTOM";
+pub(crate) const TIMESTAMP_TYPE_NAME: &str = "timestamp";
+pub(crate) const TIMESTAMP_TZ_TYPE: &str = "TIMESTAMPTZ";
+pub(crate) const DECIMAL_TYPE: &str = "DECIMAL";
+pub(crate) const VARCHAR_DATA_TYPES: [&str; 2] = ["var_char", "varchar"];
+/// Python's `_polyglot_type_name` names, matched case-sensitively as Python's dict is.
+pub(crate) const POLYGLOT_TYPE_NAMES: [(&str, &str); 13] = [
+    ("big_int", "BIGINT"),
+    ("bool", "BOOLEAN"),
+    ("boolean", "BOOLEAN"),
+    ("date", "DATE"),
+    ("decimal", "DECIMAL"),
+    ("double", "DOUBLE"),
+    ("float", "FLOAT"),
+    ("int", "INT"),
+    ("integer", "INT"),
+    ("text", "TEXT"),
+    ("timestamp", "TIMESTAMP"),
+    ("var_char", "TEXT"),
+    ("varchar", "TEXT"),
+];
+/// Python's join sides that make relations nullable.
+pub(crate) const JOIN_LEFT: &str = "LEFT";
+pub(crate) const JOIN_RIGHT: &str = "RIGHT";
+pub(crate) const JOIN_FULL: &str = "FULL";
+/// Ids of the adapter nullability rules Python registers, by the function it calls.
+pub(crate) const FIRST_ARG_RULE: &str = "first_arg";
+pub(crate) const CONDITIONAL_RESULT_RULE: &str = "conditional_result";
+pub(crate) const NON_NULL_NULLABILITY: &str = "non_null";
+pub(crate) const NULLABLE_NULLABILITY: &str = "nullable";

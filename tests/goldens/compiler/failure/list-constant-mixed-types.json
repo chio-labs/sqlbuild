@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "D013",
+     "message": "<project>/models/staging/_sqlbuild/_constants/statuses.sql constant 'kept_statuses'[1] has type integer; expected string"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

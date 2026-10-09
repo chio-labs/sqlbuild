@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL test file tests/unit/test_stg_orders.sql mocks unknown source 'raw_payments'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

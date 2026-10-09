@@ -1,11 +1,13 @@
-use crate::assembly::analysis_session::main::prove_dynamic_contract::prove_dynamic_contract;
+use crate::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
+use crate::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, failed, model_requests, orders_request, pivot_request, proven, session_lines,
+    catalog, expected_facts, fact_lines, failed, finished_session, model_requests, orders_request,
+    pivot_request, proven, recovered_facts, session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    PivotTestCase, SessionTestCase, UnscheduledTestCase,
+    CteRecoveryTestCase, PivotTestCase, SessionFactsTestCase, SessionTestCase, UnscheduledTestCase,
 };
 
 #[test]
@@ -119,6 +121,64 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
         assert_eq!(steps, test_case.expected_steps, "{}", test_case.description);
         assert_eq!(
             outcomes, test_case.expected_outcomes,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_successes() {
+    let test_cases = [
+        SessionFactsTestCase {
+            description: "native lineage keeps output names and sources",
+            models: &[
+                (
+                    "stg_orders",
+                    "SELECT order_id, amount * 2 AS doubled FROM __source(\"raw_orders\")",
+                    &["raw_orders"],
+                    &[],
+                ),
+                (
+                    "orders_bad",
+                    "SELECT missing_column FROM __source(\"raw_orders\")",
+                    &["raw_orders"],
+                    &[],
+                ),
+            ],
+            expected_facts: &[
+                "Some([\"order_id\", \"doubled\"]) \
+                 order_id<-[(\"raw_orders\", \"order_id\")] \
+                 doubled<-[(\"raw_orders\", \"amount\")]",
+                "Some([\"missing_column\"]) missing_column<-[(\"raw_orders\", \"missing_column\")]",
+            ],
+        },
+        SessionFactsTestCase {
+            description: "a model Python analysed keeps no session facts",
+            models: &[
+                (
+                    "events",
+                    "SELECT event_id FROM __source(\"raw_events\")",
+                    &["raw_events"],
+                    &[],
+                ),
+                (
+                    "events_mart",
+                    "SELECT event_id, 1 AS one FROM __ref(\"events\")",
+                    &[],
+                    &["events"],
+                ),
+            ],
+            expected_facts: &[
+                "Some([\"event_id\"]) event_id<-[(\"raw_events\", \"event_id\")]",
+                "none",
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            fact_lines(test_case.models),
+            test_case.expected_facts,
             "{}",
             test_case.description
         );
@@ -281,11 +341,86 @@ fn given_dynamic_pivots_when_proving_then_matches_python_or_defers() {
     ];
     for test_case in test_cases {
         let request = pivot_request(test_case.dialect, test_case.sql, test_case.family);
+        let session = finished_session(request.tables.clone());
 
-        let outcome = prove_dynamic_contract(&request).expect("the proof runs");
+        let standalone = prove_dynamic_contracts(&request).expect("the proofs run");
+        let in_session =
+            prove_finished_dynamic_contracts(&session, &request.models).expect("the proofs run");
 
         assert_eq!(
-            outcome, test_case.expected_outcome,
+            standalone,
+            vec![test_case.expected_outcome.clone(), PivotOutcome::Absent],
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            in_session,
+            vec![test_case.expected_outcome, PivotOutcome::Absent],
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_cte_reads_when_recovering_facts_then_matches_python_or_defers() {
+    let test_cases = [
+        CteRecoveryTestCase {
+            description: "direct CTE reads keep input and cast types",
+            sql: "WITH base AS (SELECT order_id, CAST(amount AS DECIMAL(10, 2)) AS amount \
+                  FROM orders) SELECT order_id, amount FROM base",
+            expected_facts: Some((
+                &[("order_id", "INTEGER"), ("amount", "DECIMAL(10, 2)")],
+                &[],
+                &["amount", "order_id"],
+                &[],
+            )),
+        },
+        CteRecoveryTestCase {
+            description: "literals and filtered columns are non-null through an aliased CTE",
+            sql: "WITH base AS (SELECT 'x' AS tag, UPPER(status) AS up, order_id FROM orders \
+                  WHERE order_id IS NOT NULL) SELECT b.tag, b.up, b.order_id FROM base AS b",
+            expected_facts: Some((
+                &[("order_id", "INTEGER")],
+                &[("tag", "non_null"), ("order_id", "non_null")],
+                &["order_id", "tag", "up"],
+                &[],
+            )),
+        },
+        CteRecoveryTestCase {
+            description: "a set operation branch with an unnamed NULL proves nothing",
+            sql: "WITH u AS (SELECT order_id AS k, status AS s FROM orders UNION ALL \
+                  SELECT NULL, 'y') SELECT k, s FROM u",
+            expected_facts: Some((&[], &[], &["k", "s"], &[])),
+        },
+        CteRecoveryTestCase {
+            description: "a star with EXCLUDE and a joined relation",
+            sql: "WITH a AS (SELECT * EXCLUDE (amount) FROM orders) SELECT o.status, a.order_id \
+                  FROM a LEFT JOIN orders AS o ON a.order_id = o.order_id",
+            expected_facts: Some((
+                &[("status", "VARCHAR"), ("order_id", "INTEGER")],
+                &[],
+                &["order_id", "status"],
+                &[],
+            )),
+        },
+        CteRecoveryTestCase {
+            description: "no CTE leaves only the filtered non-null outputs",
+            sql: "SELECT order_id, status FROM orders WHERE order_id IS NOT NULL",
+            expected_facts: Some((&[], &[], &[], &["order_id"])),
+        },
+        CteRecoveryTestCase {
+            description: "non-ASCII names Python casefolds differently",
+            sql: "WITH b\u{e4}se AS (SELECT order_id FROM orders) SELECT order_id FROM b\u{e4}se",
+            expected_facts: None,
+        },
+    ];
+    for test_case in test_cases {
+        let facts = recovered_facts(test_case.sql);
+
+        assert_eq!(
+            facts,
+            expected_facts(test_case.expected_facts),
             "{}",
             test_case.description
         );

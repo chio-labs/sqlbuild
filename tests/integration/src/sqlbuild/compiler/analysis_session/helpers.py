@@ -15,6 +15,7 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.analysis_session.classes.native_model_analysis as native_model_analysis
+import sqlbuild.compiler.compile._helpers.analysis.compact as compact_analysis
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -25,10 +26,14 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
 )
-from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contract import (
-    prove_native_dynamic_contract,
+from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contracts import (
+    prove_native_dynamic_contracts,
 )
-from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
+from sqlbuild.compiler.analysis_session.models import (
+    NativeModelAnalyses,
+    NativeModelAnalysisRequest,
+    NativePivotTables,
+)
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     get_expression_source_shapes,
 )
@@ -40,6 +45,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompileProjectInputs,
     DynamicColumnContractProof,
+    InferredColumn,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -171,6 +177,8 @@ def _pivot_models(rng: random.Random) -> dict[str, str]:
     return files
 
 
+_PYTHON_CTE_RECOVERY: Callable[..., Any] = compact_analysis._polyglot_cte_passthrough_facts
+
 type _Relation = tuple[str, tuple[str, ...]]
 type _Template = Callable[[random.Random, list[_Relation]], tuple[str, str, tuple[str, ...]]]
 
@@ -258,6 +266,35 @@ def _contract(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tu
     return header, sql, ("contract_key", "contract_label")
 
 
+_CTE_CONTRACT_BODIES: tuple[str, ...] = (
+    "WITH base AS (\n  SELECT {a}, {b} FROM {left}\n)\nSELECT {a}, {b} FROM base",
+    "WITH base AS (\n  SELECT CAST({a} AS VARCHAR(12)) AS label, COALESCE({b}, {a}) AS filled,\n"
+    "    'fixed' AS tag, CAST(1.5 AS DECIMAL(10, 2)) AS ratio, {a} IS NULL AS missing\n"
+    "  FROM {left}\n  WHERE {a} IS NOT NULL\n)\n"
+    "SELECT label, filled, tag, ratio, missing FROM base",
+    "WITH base AS (\n  SELECT CASE WHEN {a} IS NULL THEN 'none' ELSE 'some' END AS state,\n"
+    "    UPPER(CAST({b} AS VARCHAR)) AS upper_b, CAST({a} AS TEXT) || '-x' AS joined\n"
+    "  FROM {left}\n)\nSELECT state, upper_b, joined FROM base",
+    "WITH unioned AS (\n  SELECT {a} AS shared FROM {left}\n  UNION ALL\n"
+    "  SELECT {c} FROM {right}\n)\nSELECT shared FROM unioned",
+    "WITH base AS (\n  SELECT * EXCLUDE ({a}) FROM {left}\n)\nSELECT {b} FROM base",
+    "WITH lhs AS (\n  SELECT {a}, {b} FROM {left}\n),\nrhs AS (\n  SELECT {c} FROM {right}\n)\n"
+    "SELECT l.{a}, r.{c}\nFROM lhs l\nLEFT JOIN rhs r ON l.{a} = r.{c}",
+    "WITH outer_cte AS (\n  WITH inner_cte AS (SELECT {a}, {b} FROM {left})\n"
+    "  SELECT {a}, {b} FROM inner_cte\n)\nSELECT {a}, {b} FROM outer_cte",
+    "WITH base AS (\n  SELECT {a}, NULLIF({b}, {b}) AS cleared, MAX({b}) AS latest FROM {left}\n"
+    "  GROUP BY {a}\n)\nSELECT {a}, cleared, latest FROM base WHERE {a} IS NOT NULL",
+)
+
+
+def _cte_contract(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tuple[str, ...]]:
+    (left, left_columns), (right, right_columns) = inputs[0], inputs[-1]
+    first, second = rng.sample(list(left_columns), k=2)
+    body: str = rng.choice(_CTE_CONTRACT_BODIES)
+    sql: str = body.format(a=first, b=second, c=right_columns[0], left=left, right=right)
+    return "  contract enforced,\n", sql, (first, second)
+
+
 def _unknown_column(
     rng: random.Random, inputs: list[_Relation]
 ) -> tuple[str, str, tuple[str, ...]]:
@@ -282,6 +319,7 @@ _TEMPLATES: tuple[_Template, ...] = (
     _aggregate,
     _quoted,
     _contract,
+    _cte_contract,
     _unknown_column,
     _subquery,
 )
@@ -301,19 +339,28 @@ def pivot_project_files() -> dict[str, str]:
     }
 
 
-def native_pivot_proofs(
-    *, monkeypatch: pytest.MonkeyPatch
-) -> list[DynamicColumnContractProof | None]:
-    """Record every standalone native pivot proof assembly takes, failing any wheel pivot proof."""
+@dataclass
+class NativePivotProofs:
+    """Every native pivot proof assembly took, and how many a finished session proved."""
 
-    proofs: list[DynamicColumnContractProof | None] = []
-    native_proof: Callable[..., DynamicColumnContractProof | None] = (
-        native_stage_assembly.prove_native_dynamic_contract
+    proofs: list[DynamicColumnContractProof | None] = field(default_factory=list)
+    session_proofs: int = 0
+
+
+def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs:
+    """Record every batch of native pivot proofs assembly takes, failing any wheel pivot proof."""
+
+    recorded_proofs: NativePivotProofs = NativePivotProofs()
+    native_proofs: Callable[..., tuple[DynamicColumnContractProof | None, ...]] = (
+        native_stage_assembly.prove_native_dynamic_contracts
     )
 
-    def recorded(**keywords: Any) -> DynamicColumnContractProof | None:
-        proofs.append(native_proof(**keywords))
-        return proofs[-1]
+    def recorded(**keywords: Any) -> tuple[DynamicColumnContractProof | None, ...]:
+        proofs: tuple[DynamicColumnContractProof | None, ...] = native_proofs(**keywords)
+        recorded_proofs.proofs.extend(proofs)
+        proven: int = sum(proof is not None for proof in proofs)
+        recorded_proofs.session_proofs += proven * (keywords["session"] is not None)
+        return proofs
 
     python_proof: Callable[..., DynamicColumnContractProof | None] = (
         project_assembly.analyze_dynamic_column_contract
@@ -323,9 +370,9 @@ def native_pivot_proofs(
         assert not keywords["families"], "the Python wheel proved a pivot native should prove"
         return python_proof(**keywords)
 
-    monkeypatch.setattr(native_stage_assembly, "prove_native_dynamic_contract", recorded)
+    monkeypatch.setattr(native_stage_assembly, "prove_native_dynamic_contracts", recorded)
     monkeypatch.setattr(project_assembly, "analyze_dynamic_column_contract", wheel_not_expected)
-    return proofs
+    return recorded_proofs
 
 
 def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[str, str]:
@@ -347,6 +394,60 @@ def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[st
         )
         relations.append((f'__ref("{name}")', columns))
     return files
+
+
+def shared_analysis_files(
+    *, regions: tuple[str, ...], inexact_regions: tuple[str, ...]
+) -> dict[str, str]:
+    """Equal regional models and rollups, missing-column readers and one unshared summary."""
+
+    regional: dict[str, str] = {
+        f"models/staging/orders_{region}.sql": (
+            f'MODEL (description "Orders in {region}");\n\n'
+            'SELECT order_id, customer_id, amount FROM __source("raw_orders")\n'
+        )
+        for region in regions
+    }
+    rollups: dict[str, str] = {
+        f"models/marts/totals_{region}.sql": (
+            f'MODEL (description "Customer totals in {region}");\n\n'
+            "SELECT customer_id, SUM(amount) AS total_amount\n"
+            f'FROM __ref("orders_{region}")\nGROUP BY customer_id\n'
+        )
+        for region in regions
+    }
+    inexact: dict[str, str] = {
+        f"models/marts/missing_{region}.sql": (
+            f'MODEL (description "Orders in {region} with an unknown column");\n\n'
+            f'SELECT customer_id, missing_column FROM __ref("orders_{region}")\n'
+        )
+        for region in inexact_regions
+    }
+    return {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": _SOURCES,
+        **regional,
+        **rollups,
+        **inexact,
+        "models/marts/orders_summary.sql": (
+            'MODEL (description "Order count");\n\n'
+            f'SELECT COUNT(*) AS order_count FROM __ref("orders_{regions[0]}")\n'
+        ),
+    }
+
+
+def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """Record every native session started; return the list they are appended to."""
+
+    started: list[Any] = []
+    original: Callable[..., Any] = native_module.start_model_analysis_session
+
+    def start(catalog: object, request: tuple[object, ...]) -> Any:
+        started.append(original(catalog, request))
+        return started[-1]
+
+    monkeypatch.setattr(native_module, "start_model_analysis_session", start)
+    return started
 
 
 def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjectInputs:
@@ -373,9 +474,13 @@ class AnalysisParity:
     analysed_models: int = 0
     expression_shapes: int = 0
     pivot_proofs: int = 0
+    python_cte_recoveries: int = 0
     standalone_proofs: int = 0
+    session_proofs: int = 0
     proven_pivots: int = 0
     native_enrichments: int = 0
+    native_column_objects: int = 0
+    native_column_values: int = 0
 
 
 def compare_analyses(
@@ -387,15 +492,17 @@ def compare_analyses(
 ) -> None:
     """Assemble `inputs`, analysing every seam call with both engines into `parity`."""
 
+    sessions: list[Any] = []
+
     def models_by_both(
         *,
         python_analysis: partial[dict[str, ModelSqlAnalysis]],
         dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
-    ) -> dict[str, ModelSqlAnalysis]:
+    ) -> tuple[dict[str, ModelSqlAnalysis], Any]:
         keywords: dict[str, Any] = {**python_analysis.keywords, "analysis_cache": None}
         profile: ExpressionInferenceProfile = keywords["inference_profile"]
         native_catalog: Any = profile.binding_catalog.with_relations({})
-        native: dict[str, ModelSqlAnalysis] | None = analyze_native_model_sql(
+        native_result: NativeModelAnalyses | None = analyze_native_model_sql(
             request=NativeModelAnalysisRequest(
                 **{
                     **keywords,
@@ -404,7 +511,20 @@ def compare_analyses(
                 dynamic_families_by_table=dynamic_families_by_table,
             )
         )
-        python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
+        native: dict[str, ModelSqlAnalysis] | None = getattr(native_result, "analyses", None)
+        sessions.append(getattr(native_result, "session", None))
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                compact_analysis,
+                "_polyglot_cte_passthrough_facts",
+                partial(_counted_cte_recovery, parity=parity),
+            )
+            python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
+        columns: list[InferredColumn] = list(
+            chain.from_iterable(map(_native_columns, (native or {}).values()))
+        )
+        parity.native_column_objects += len(set(map(id, columns)))
+        parity.native_column_values += len(set(columns))
         parity.analysed_models += len(python)
         _append(parity, "model analyses", _analysis_views(python), _analysis_views(native))
         _append(
@@ -413,25 +533,32 @@ def compare_analyses(
             _catalog_view(profile.binding_catalog),
             _catalog_view(native_catalog),
         )
-        return native or python
+        return native or python, sessions[-1]
 
     def proofs_by_both(
         *,
         sql_analysis: ModelSqlAnalysis | None,
+        native_proof: DynamicColumnContractProof | None,
         python_proof: partial[DynamicColumnContractProof | None],
     ) -> DynamicColumnContractProof | None:
         native: DynamicColumnContractProof | None = getattr(
             sql_analysis, "dynamic_column_contract", None
         )
         python: DynamicColumnContractProof | None = python_proof()
-        standalone: DynamicColumnContractProof | None = prove_native_dynamic_contract(
-            **python_proof.keywords
+        session: Any = (sessions or [None])[-1]
+        standalone: DynamicColumnContractProof | None = _batched_proof(
+            session=None, python_proof=python_proof
         )
+        in_session: DynamicColumnContractProof | None = _batched_proof(
+            session=session, python_proof=python_proof
+        )
+        parity.session_proofs += in_session is not None and session is not None
         parity.pivot_proofs += native is not None
         parity.proven_pivots += native is not None and native.output_proven
         parity.standalone_proofs += standalone is not None
         _append(parity, "dynamic pivot proof", python, native or python)
         _append(parity, "standalone dynamic pivot proof", python, standalone or python)
+        _append(parity, "session dynamic pivot proof", python, in_session or python)
         return python
 
     def shapes_by_both(
@@ -485,13 +612,13 @@ def analysis_request(
         *,
         python_analysis: partial[dict[str, ModelSqlAnalysis]],
         dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
-    ) -> dict[str, ModelSqlAnalysis]:
+    ) -> tuple[dict[str, ModelSqlAnalysis], None]:
         requests.append(
             NativeModelAnalysisRequest(
                 **python_analysis.keywords, dynamic_families_by_table=dynamic_families_by_table
             )
         )
-        return python_analysis()
+        return python_analysis(), None
 
     with monkeypatch.context() as patch, suppress(CompileInputError):
         patch.setattr(project_assembly, "analyze_model_sql_by_engine", captured)
@@ -513,6 +640,33 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
     )
     records: list[dict[str, str]] = [json.loads(line) for line in lines]
     return Counter(f"{record['site']}:{record['kind']}" for record in records)
+
+
+def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
+    return analysis.polyglot_analysis.columns or ()
+
+
+def _counted_cte_recovery(*, parity: AnalysisParity, **arguments: Any) -> Any:
+    recovered: Any = _PYTHON_CTE_RECOVERY(**arguments)
+    parity.python_cte_recoveries += bool(recovered[2])
+    return recovered
+
+
+def _batched_proof(
+    *, session: Any, python_proof: partial[DynamicColumnContractProof | None]
+) -> DynamicColumnContractProof | None:
+    keywords: dict[str, Any] = python_proof.keywords
+    return prove_native_dynamic_contracts(
+        session=session,
+        tables=NativePivotTables(
+            dialect=keywords["dialect"],
+            column_types_by_table=keywords["column_types_by_table"],
+            authoritative_column_types_by_table=keywords["authoritative_column_types_by_table"],
+            column_nullability_by_table=keywords["column_nullability_by_table"],
+            dynamic_families_by_table=keywords["dynamic_families_by_table"],
+        ),
+        models=((keywords["query_sql"], keywords["families"]),),
+    )[0]
 
 
 def _append(parity: AnalysisParity, name: str, python: object, native: object) -> None:

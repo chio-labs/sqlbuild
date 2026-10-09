@@ -10,6 +10,7 @@ from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 class DynamicColumnContractDispatchTestCase:
     description: str
     sql_analysis: ModelSqlAnalysis | None
+    native_proof: DynamicColumnContractProof | None
     dialect: str
     families: tuple[SchemaDynamicColumnFamily, ...]
     expected_proof: DynamicColumnContractProof | None

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import replace
+from typing import Any
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
@@ -28,6 +29,7 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
     complete_native_semantic_diagnostics,
@@ -44,6 +46,7 @@ def complete_semantic_diagnostics(
     profile: ExpressionInferenceProfile,
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
     resource_sql_analysis: bool = True,
+    native_session: Any | None = None,
 ) -> CompiledProject:
     """Recover type facts before metadata checks, then explain retained root diagnostics."""
     if native_stage_enabled(NativeStage.SEMANTIC_CHECKS):
@@ -52,8 +55,10 @@ def complete_semantic_diagnostics(
             profile=profile,
             binding_results=binding_results,
             resource_sql_analysis=resource_sql_analysis,
+            session=native_session,
         )
         if native_project is not None:
+            report_native_answer(stage=NativeStage.SEMANTIC_CHECKS, kind="semantic_completions")
             return native_project
     project = recover_output_types(project=project, binding_results=binding_results)
     project = replace(

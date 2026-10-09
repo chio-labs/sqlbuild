@@ -15,6 +15,7 @@ class GeneratedAnalysisParityTestCase:
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
+    expected_minimum_python_cte_recoveries: int
     expected_minimum_proven_pivots: int
     expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int
@@ -48,4 +49,31 @@ class StandalonePivotProofTestCase:
     description: str
     analysed_models: frozenset[str]
     expected_native_proofs: int
+    expected_session_proofs: int
     expected_proven_by_model: dict[str, bool | None]
+
+
+@dataclass(frozen=True)
+class SharedAnalysisTestCase:
+    """Models whose equal queries share one analysis, some inexact and so re-analysed alone."""
+
+    description: str
+    regions: tuple[str, ...]
+    inexact_regions: tuple[str, ...]
+    dialects: tuple[str | None, ...]
+    expected_analysed: int
+    expected_shared: int
+    expected_reanalysed: int
+    expected_unshared: int
+    expected_column_values: int
+
+
+@dataclass(frozen=True)
+class CteFactRecoveryParityTestCase:
+    """Seeded CTE queries whose native and Python CTE fact recoveries must agree."""
+
+    description: str
+    seed: int
+    count: int
+    expected_minimum_compared: int
+    expected_minimum_recovered: dict[str, int]

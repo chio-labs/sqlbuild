@@ -6,6 +6,7 @@ use crate::assembly::project::_helpers::deps::audit_deps;
 use crate::assembly::project::_helpers::syntax::syntax_valid;
 use crate::assembly::project::_helpers::targets::{managed_source, seed_target};
 use crate::assembly::project::_helpers::templates::TemplateInputs;
+use crate::assembly::project::main::check_sql_syntax::check_sql_syntax;
 use crate::assembly::project::models::{
     AuditFacts, InputRead, Namespace, Reference, SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck,
     TargetNamespace, Variable,
@@ -112,6 +113,17 @@ pub(crate) fn valid(sql: &str, placeholders: &[(&str, &str)], dialect: &str) -> 
         dialect,
     )
     .ok()
+}
+
+pub(crate) fn all_valid(sqls: &[&str]) -> Option<bool> {
+    let checks: Vec<SyntaxCheck> = sqls
+        .iter()
+        .map(|sql| SyntaxCheck {
+            sql: (*sql).to_owned(),
+            placeholders: vec![("x".to_owned(), "1".to_owned())],
+        })
+        .collect();
+    check_sql_syntax("generic", &checks).ok()
 }
 
 pub(crate) fn namespace(expected: ExpectedNamespace) -> Namespace {

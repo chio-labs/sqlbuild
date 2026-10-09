@@ -4,10 +4,11 @@ from collections.abc import Sequence
 from typing import Any, TypedDict
 
 from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestAssemblyRequest,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
+from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 
 BUILD_IDENTITY: str
 
@@ -349,7 +350,22 @@ def normalize_type(
 # Native analysis: model analysis session.
 type _AnalysisDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
 
+type _PivotContractRow = tuple[
+    str,
+    tuple[
+        bool,
+        list[tuple[str, str | None, str]],
+        list[tuple[str, str | None]],
+        list[str],
+        str | None,
+        bool,
+    ]
+    | None,
+]
+
 class NativeModelAnalysisSession:
+    @property
+    def fact_models(self) -> list[str]: ...
     def run(
         self,
     ) -> (
@@ -420,38 +436,43 @@ class NativeModelAnalysisSession:
         ]
         | None
     ): ...
+    def prove_dynamic_contracts(
+        self, models: list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]], /
+    ) -> list[_PivotContractRow] | None: ...
     @property
     def failure(self) -> str | None: ...
+    @property
+    def sharing(self) -> tuple[int, int]: ...
 
 def start_model_analysis_session(
     catalog: object, request: tuple[object, ...], /
 ) -> NativeModelAnalysisSession | None: ...
-def prove_dynamic_column_contract(
+def prove_dynamic_column_contracts(
     request: tuple[
         str,
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
-        str,
-        list[tuple[str, str, str, str, str, str | None]],
+        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
     ],
     /,
-) -> tuple[
-    str,
-    tuple[
-        bool,
-        list[tuple[str, str | None, str]],
-        list[tuple[str, str | None]],
-        list[str],
-        str | None,
-        bool,
-    ]
-    | None,
-]: ...
+) -> list[_PivotContractRow] | None: ...
 def infer_expression_source_shapes(
     catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
 ) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
+def _oracle_cte_fact_recovery(
+    request: tuple[
+        str,
+        str,
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, str]],
+        list[tuple[str, str]] | None,
+        bool,
+        bool,
+    ],
+    /,
+) -> tuple[str | None, list[tuple[str, str]], list[tuple[str, str]], list[str], list[str]]: ...
 
 # Native analysis: semantic completion.
 class SemanticTypeRecovery:
@@ -477,13 +498,14 @@ def plan_semantic_type_recovery(
                 str,
                 list[str] | None,
                 list[str],
-                list[tuple[str, list[tuple[str, str]]]],
+                list[tuple[str, list[tuple[str, str]]]] | None,
                 list[tuple[int, str, str, bool]],
                 list[tuple[int, str, str, int | None, int | None]],
             ]
         ],
         list[tuple[int, str, bool, str | None]],
     ],
+    session: NativeModelAnalysisSession | None = None,
     /,
 ) -> SemanticTypeRecovery: ...
 def check_semantic_metadata_rows(
@@ -540,14 +562,15 @@ def complete_semantic_checks(
                 str,
                 str,
                 str,
-                list[str],
-                list[tuple[str, list[tuple[str, str]]]],
+                list[str] | None,
+                list[tuple[str, list[tuple[str, str]]]] | None,
                 list[str],
                 str | None,
             ]
         ],
         list[tuple[str, list[tuple[str, str]]]],
     ],
+    session: NativeModelAnalysisSession | None = None,
     /,
 ) -> tuple[
     str | None,
@@ -620,8 +643,14 @@ def plan_compiled_sql_tests(
     request: NativeSqlTestPlanningRequest, /
 ) -> tuple[list[NativeSqlTestPlanRow], int, int]: ...
 def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
+def assemble_compiled_sql_tests(
+    request: NativeSqlTestAssemblyRequest, /
+) -> list[NativeSqlTestAssemblyRow]: ...
 
 # Native analysis: compiled project assembly.
+def check_native_sql_syntax(
+    request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
+) -> tuple[bool | None, str | None]: ...
 def assemble_project_resource_facts(
     request: tuple[
         str,

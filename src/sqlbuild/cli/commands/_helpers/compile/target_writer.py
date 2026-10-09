@@ -48,6 +48,7 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
@@ -544,19 +545,20 @@ def _partition_cached_static_tests(
             )
             cached_record: SqlTestArtifactCacheRecord | None = cached_records.get(record_key)
             if cached_record is not None:
-                cached_path: Path | None = artifact_matches_cache_record(
+                reusable_record: SqlTestArtifactCacheRecord | None = artifact_matches_cache_record(
                     tests_root=tests_root,
                     record=cached_record,
                     identity=artifact_identity,
                 )
-                if cached_path is not None:
+                if reusable_record is not None:
+                    cached_path: Path = tests_root / reusable_record.relative_path
                     COMPILE_ARTIFACT_WRITES.kept(
                         path=cached_path,
-                        size=cached_record.size,
-                        mtime_ns=cached_record.mtime_ns,
+                        size=reusable_record.size,
+                        mtime_ns=reusable_record.mtime_ns,
                     )
                     managed_paths.add(cached_path)
-                    current_records[record_key] = cached_record
+                    current_records[record_key] = reusable_record
                     continue
         pending.append(
             PendingStaticSqlTest(
@@ -574,9 +576,10 @@ def _plan_static_test_artifacts(
     with OperationLifecycle(
         operation_kind="project", operation_name="sql_test_planning"
     ) as lifecycle:
+        native_planning: bool = native_stage_enabled(NativeStage.SQL_TEST_GLUE)
         plan_artifacts: Callable[..., tuple[NativeSqlTestArtifact, ...]] = (
             plan_native_sql_test_artifacts
-            if native_stage_enabled(NativeStage.SQL_TEST_GLUE)
+            if native_planning
             else plan_and_render_sql_test_artifacts
         )
         native_artifacts: tuple[NativeSqlTestArtifact, ...] = plan_artifacts(
@@ -585,6 +588,8 @@ def _plan_static_test_artifacts(
             adapter=adapter,
             sql_analysis_enabled=project.settings.sql_analysis,
         )
+        if native_planning:
+            report_native_answer(stage=NativeStage.SQL_TEST_GLUE, kind="sql_test_plans")
         lifecycle.completed(metadata={"item_count": len(native_artifacts)})
     return native_artifacts
 

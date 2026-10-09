@@ -186,3 +186,9 @@ pub(crate) struct GlueErrorProjectionTestCase {
     pub(crate) warnings: &'static [(&'static str, &'static str)],
     pub(crate) expected_messages: &'static [&'static str],
 }
+
+pub(crate) struct SqlTestAssemblyTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) batch: crate::compiler::models::SqlTestAssemblyBatch,
+    pub(crate) expected_outcomes: Vec<crate::compiler::models::SqlTestAssemblyOutcome>,
+}

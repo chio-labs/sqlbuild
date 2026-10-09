@@ -1,4 +1,4 @@
-"""Failure cases owned by the native SQL-test planning glue lane."""
+"""Failure cases owned by the native SQL-test planning and assembly glue lane."""
 
 from scripts.compiler_differential._helpers.corpus.case_builder import failure_case
 from scripts.compiler_differential.models import FailureCase
@@ -72,6 +72,25 @@ def sql_test_glue_failure_cases() -> tuple[FailureCase, ...]:
                 ctes=(
                     f"__source__raw_orders AS ({_ORDERS_FIXTURE}),\n"
                     f"__expected__stg_orders AS ({_ORDERS_FIXTURE})"
+                ),
+            ),
+        ),
+        failure_case(
+            name="sql-test-glue-mock-reads-referencing-helper",
+            expected_code="P013",
+            expected_message=(
+                "SQL test mock '__ref__stg_orders' reads helper CTE 'orders_feed', which calls "
+                '__source("raw_orders"); mocks and fixtures are defined before the models the '
+                "test runs, so the helper cannot be resolved for them"
+            ),
+            expected_location=(4, 31),
+            files=_test(
+                header='name "mock_reads_helper"',
+                ctes=(
+                    'orders_feed AS (SELECT * FROM __source("raw_orders")),\n'
+                    "__ref__stg_orders AS (SELECT * FROM orders_feed),\n"
+                    "__expected__customer_totals AS (\n"
+                    "  SELECT 10 AS customer_id, 5.0 AS total_amount\n)"
                 ),
             ),
         ),
