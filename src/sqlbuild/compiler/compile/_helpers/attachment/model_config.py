@@ -238,6 +238,7 @@ def build_model_header_schema_entry(
         column_locations=column_locations or {},
         file_path=file_path,
     )
+    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="header_metadata_parses")
     if native.columns_error is not None:
         raise native_config_error(error=native.columns_error)
     local_columns: tuple[SchemaColumn, ...] = native.columns

@@ -143,6 +143,13 @@ counts = { example = 29, failure = 273, fixture = 15, seed = 121 }
 engine = "native"
 stage = "model_config"
 site = "model_config.native"
+kind = "header_metadata_parses"
+counts = { example = 56, failure = 402, fixture = 60, seed = 1116 }
+
+[[entry]]
+engine = "native"
+stage = "model_config"
+site = "model_config.native"
 kind = "template_expansions"
 counts = { example = 230, failure = 1657, fixture = 333, seed = 1524 }
 
@@ -402,6 +409,13 @@ counts = { example = 29, failure = 273, fixture = 15, seed = 121 }
 engine = "native-preview"
 stage = "model_config"
 site = "model_config.native"
+kind = "header_metadata_parses"
+counts = { example = 56, failure = 402, fixture = 60, seed = 1116 }
+
+[[entry]]
+engine = "native-preview"
+stage = "model_config"
+site = "model_config.native"
 kind = "template_expansions"
 counts = { example = 214, failure = 1657, fixture = 333, seed = 1471 }
 
@@ -586,6 +600,13 @@ stage = "model_config"
 site = "model_config.native"
 kind = "effective_vars"
 counts = { example = 29, failure = 273, fixture = 15, seed = 121 }
+
+[[entry]]
+engine = "python"
+stage = "model_config"
+site = "model_config.native"
+kind = "header_metadata_parses"
+counts = { example = 56, failure = 402, fixture = 60, seed = 1116 }
 
 [[entry]]
 engine = "python"
